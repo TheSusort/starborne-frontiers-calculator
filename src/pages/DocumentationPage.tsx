@@ -3339,8 +3339,23 @@ const DocumentationPage: React.FC = () => {
                                     positioned battles, an area-of-effect attack now triggers the
                                     on-being-hit reactions of <strong>every</strong> ship caught in
                                     the blast — counter-attacks, retaliation buffs, and on-hit
-                                    repairs — not just the primary target, on both teams. More
-                                    implant and gear-set effects will be added in future updates.
+                                    repairs — not just the primary target, on both teams. A few more
+                                    ship passives are now modeled too: <strong>Nosorog</strong>{' '}
+                                    reflects a portion of the damage it takes back at an attacker
+                                    that hits it as its primary target (not on splash or
+                                    area-of-effect hits), <strong>Chakara&apos;s</strong> charged
+                                    skill bypasses part of the enemy&apos;s Defense, and{' '}
+                                    <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
+                                    <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
+                                    take reduced damage under their own stated conditions.{' '}
+                                    <strong>Anemone</strong> and <strong>Wusheng</strong> take less
+                                    direct damage (from an attacking enemy afflicted with a
+                                    damage-over-time effect, and while Stealthed, respectively),{' '}
+                                    <strong>Panon</strong> reduces all incoming damage — direct and
+                                    damage-over-time — while she has Barrier Recharging, and{' '}
+                                    <strong>Tormenter&apos;s</strong> reduction (direct and
+                                    damage-over-time) grows the lower her HP falls. More implant and
+                                    gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

@@ -99,12 +99,47 @@ export const ALLOWLIST: AllowEntry[] = [
     // "gains up to 30% damage reduction as its health decreases" matches the base-damage
     // keyword regex (contains "N% damage") but is HP-scaled incoming damage reduction, not an
     // attack — PR1 fixed parseSkillDamage to stop minting a phantom on-cast damage{30} ability
-    // from it. Modeling the actual incoming-reduction mechanic is deferred to epic PR12
-    // (incoming-reduction phrasings: Anemone/Panon/Wusheng/Tormenter).
+    // from it. The actual incoming-reduction mechanic is now modeled (epic PR12(C),
+    // hpScaling on the `incoming-reduction` ability config) — this entry stays because the
+    // `base-damage` rule's keyword still matches the "N% damage" substring and the clause is
+    // STILL correctly not a damage ability (it's incoming-reduction instead); the new
+    // `incoming-damage-reduction` rule confirms it IS handled.
     {
         ship: 'Tormenter',
         rules: ['base-damage'],
-        reason: 'passive2 "gains up to 30% damage reduction as its health decreases" is HP-scaled incoming damage reduction, not an attack — deferred to epic PR12 (incoming-reduction phrasings).',
+        reason: 'passive2 "gains up to 30% damage reduction as its health decreases" is HP-scaled incoming damage reduction, not an attack — modeled via `incoming-reduction`.hpScaling (epic PR12(C)), never a `damage` ability.',
+    },
+
+    // ── epic PR12(A): damage-reflection rule — audit-harness scoping false positive ──
+    // The audit's `abilitiesFor` helper always parses a slot's text as the ACTIVE skill
+    // (scripts/auditSkills.ts:113-117), regardless of the CSV column it came from — there is
+    // no slot-aware harness path (the same reason no `counter` rule exists for the
+    // Stalwart/Nyxen/Centurion passive-gated counterattacks). Nosorog's reflect wiring is
+    // correctly gated `slot === 'passive'` in buildShipAbilities (production routes it via the
+    // real ship's `secondPassiveSkillText`/`thirdPassiveSkillText`, verified in
+    // buildShipAbilities.test.ts's epic PR12(A) describe block) — it is simply invisible to
+    // this harness's active-only re-parse, not a missing gate (mirrors the Rikra
+    // clauseFor-scoping precedent above).
+    {
+        ship: 'Nosorog',
+        rules: ['damage-reflection'],
+        reason: "Passive-gated (buildShipAbilities checks slot === 'passive'); the audit harness's abilitiesFor always re-parses text as the ACTIVE slot, so the reflect ability never builds under audit even though production (real Ship with secondPassiveSkillText/thirdPassiveSkillText) handles it correctly — a harness scoping false flag, not a missing gate.",
+    },
+
+    // ── epic PR12(C): incoming-damage-reduction rule — additional un-wired phrasings ──
+    // The new rule's keyword is intentionally broad (catches the whole "takes/reduces …
+    // damage" corpus family, not just the four PR12(C) target ships) so future additions to
+    // this family surface automatically. It also caught two phrasings OUTSIDE PR12(C)'s scope
+    // (Anemone/Panon/Wusheng/Tormenter) — deferred, not fixed here.
+    {
+        ship: 'Malvex',
+        rules: ['incoming-damage-reduction'],
+        reason: 'passive2 "When Shielded, this Ship takes 10% less damage" — a self-shielded-gated incoming reduction, a DIFFERENT condition from all four epic PR12(C) target ships. Out of scope for PR12; revisit as a follow-up (would need a new self-shield IncomingCondition, distinct from the existing self-shield ConditionSubject used elsewhere for the standing-modifier fold).',
+    },
+    {
+        ship: 'Voron',
+        rules: ['incoming-damage-reduction'],
+        reason: 'passive2 "This Unit transforms the damage into a Damage over Time effect… takes 20% less damage from Damage over Time effects" — a reduction against the unit\'s OWN incoming DoT ticks (dot-scope, self-referential condition), a DIFFERENT shape from all four epic PR12(C) target ships and coupled to the (also unmodeled) damage-to-DoT transform clause. Out of scope for PR12; revisit as a follow-up.',
     },
 
     // ── shield-penetration-innate: handled at the DATA layer, not the parser ─────

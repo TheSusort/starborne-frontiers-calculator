@@ -15,6 +15,12 @@ function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): boolean
             return ctx.hitIndexThisRound >= 2;
         case 'dot-inferno-corrosion':
             return ctx.dotType === 'inferno' || ctx.dotType === 'corrosion';
+        case 'attacker-has-dot':
+            return ctx.attackerHasDot;
+        case 'self-barrier-recharging':
+            return ctx.victimHasBarrierRecharging;
+        case 'always':
+            return true;
     }
 }
 
@@ -33,11 +39,16 @@ export function incomingReductionForHit(
     let critFamilyMax = 0;
     for (const a of victimAbilities) {
         if (a.config.type !== 'incoming-reduction') continue;
-        const { scope, condition, pct, critFamily } = a.config;
+        const { scope, condition, pct, critFamily, hpScaling } = a.config;
         if ((scope === 'dot') !== isDot) continue;
         if (!conditionMet(condition, ctx)) continue;
-        if (critFamily) critFamilyMax = Math.max(critFamilyMax, pct);
-        else nonCritSum += pct;
+        // Epic PR12 (C): hpScaling REPLACES the flat pct with a continuous HP-proportional
+        // value (Tormenter) — perUnit per missing-HP-point, capped.
+        const effectivePct = hpScaling
+            ? Math.min(hpScaling.cap, hpScaling.perUnit * (100 - ctx.selfHpPct))
+            : pct;
+        if (critFamily) critFamilyMax = Math.max(critFamilyMax, effectivePct);
+        else nonCritSum += effectivePct;
     }
     return nonCritSum + critFamilyMax;
 }

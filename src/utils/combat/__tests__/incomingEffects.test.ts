@@ -8,6 +8,9 @@ const ctx = (over: Partial<IncomingHitContext> = {}): IncomingHitContext => ({
     victimStealthed: false,
     victimStasised: false,
     hitIndexThisRound: 1,
+    attackerHasDot: false,
+    victimHasBarrierRecharging: false,
+    selfHpPct: 100,
     ...over,
 });
 
@@ -23,6 +26,26 @@ const reduction = (
     trigger: 'on-cast',
     conditions: [],
     config: { type: 'incoming-reduction', scope, condition, pct, critFamily },
+});
+
+const hpScalingReduction = (
+    perUnit: number,
+    cap: number,
+    scope: 'direct' | 'dot' = 'direct'
+): Ability => ({
+    id: `r-hpscale-${scope}`,
+    type: 'incoming-reduction',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'incoming-reduction',
+        scope,
+        condition: 'always',
+        pct: 0,
+        critFamily: false,
+        hpScaling: { perUnit, cap },
+    },
 });
 
 const block = (
@@ -88,6 +111,38 @@ describe('incomingReductionForHit', () => {
         expect(
             incomingReductionForHit(a, ctx({ victimStealthed: true, dotType: 'corrosion' }))
         ).toBe(0);
+    });
+
+    // Epic PR12(C): the three new IncomingCondition values (attacker-has-dot,
+    // self-barrier-recharging, always+hpScaling). Would FAIL pre-epic-PR12: `conditionMet`'s
+    // switch had no case for any of these three, and `hpScaling` didn't exist on the
+    // incoming-reduction config at all (TypeScript would reject the fixture).
+    it('Anemone (attacker-has-dot): fires only when the ATTACKER carries a live DoT', () => {
+        const a = [reduction('attacker-has-dot', 25, false)];
+        expect(incomingReductionForHit(a, ctx({ attackerHasDot: true }))).toBe(25);
+        expect(incomingReductionForHit(a, ctx({ attackerHasDot: false }))).toBe(0);
+    });
+    it('Panon (self-barrier-recharging): fires only when the VICTIM carries the named self-status', () => {
+        const a = [reduction('self-barrier-recharging', 20, false)];
+        expect(incomingReductionForHit(a, ctx({ victimHasBarrierRecharging: true }))).toBe(20);
+        expect(incomingReductionForHit(a, ctx({ victimHasBarrierRecharging: false }))).toBe(0);
+    });
+    it('Tormenter (always + hpScaling): reduction scales linearly with missing HP, capped', () => {
+        const a = [hpScalingReduction(0.3, 30)];
+        // Full HP (0% missing) → 0 reduction.
+        expect(incomingReductionForHit(a, ctx({ selfHpPct: 100 }))).toBe(0);
+        // Half HP (50% missing) → 0.3 * 50 = 15.
+        expect(incomingReductionForHit(a, ctx({ selfHpPct: 50 }))).toBeCloseTo(15, 6);
+        // Zero HP (100% missing) → 0.3 * 100 = 30, exactly at the cap.
+        expect(incomingReductionForHit(a, ctx({ selfHpPct: 0 }))).toBeCloseTo(30, 6);
+        // A hypothetical steeper perUnit is still capped at 30 (cap wins over the raw formula).
+        expect(incomingReductionForHit([hpScalingReduction(1, 30)], ctx({ selfHpPct: 0 }))).toBe(
+            30
+        );
+    });
+    it('hpScaling on a "direct" scope entry is inert during a DoT tick (scope mismatch)', () => {
+        const a = [hpScalingReduction(0.3, 30, 'direct')];
+        expect(incomingReductionForHit(a, ctx({ selfHpPct: 0, dotType: 'inferno' }))).toBe(0);
     });
 });
 

@@ -17,11 +17,13 @@ import {
     ModifierChannel,
     ScalingRule,
     ControlEffect,
+    IncomingCondition,
 } from '../../types/abilities';
 import { getShipSkillRows, getSkillRowForSlot } from '../ship/skillRows';
 import {
     parseSkillDamage,
     parseCounterAbilities,
+    parseDamageReflection,
     parseSecondaryDamage,
     parseShieldStrip,
     parseConditionalDamage,
@@ -634,6 +636,27 @@ function parseModifiers(text: string): ParsedModifier[] {
                 target: 'self',
                 conditions: [],
             });
+        } else {
+            // Epic PR12(B) — Chakara's charged: "…bypassing 20% of the enemy Defense…". Distinct
+            // wording from "X% defense penetration" above; same defensePenetration modifier
+            // shape. Because parseModifiers runs PER SKILL ROW (abilitiesFromText is called once
+            // per Active/Charge/Passive text), this is inherently a PER-SKILL modifier — it only
+            // folds into `dmgStats.effectivePen` on the turn THIS skill fires (playerTurn.ts's
+            // `selfModifierAbilities = firingSkill.abilities + passiveSkill.abilities`), not a
+            // permanent standing pen like the flat-text branch above (which corpus rows only ever
+            // carry on a PASSIVE, so the distinction is inert there — passives fire every turn).
+            const bypassM = plain.match(
+                /bypassing\s+(\d+(?:\.\d+)?)%\s+of\s+the\s+enemy\s+defense/i
+            );
+            if (bypassM) {
+                out.push({
+                    channel: 'defensePenetration',
+                    value: parseFloat(bypassM[1]),
+                    isMultiplicative: false,
+                    target: 'self',
+                    conditions: [],
+                });
+            }
         }
     }
 
@@ -657,6 +680,98 @@ function parseIncomingCritReduction(text: string): number | null {
     const m = plain.match(/takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+critical\s+hits/i);
     if (!m) return null;
     return parseFloat(m[1]);
+}
+
+/** One parsed incoming-damage-reduction directive (epic PR12(C)). `scopes` lists every
+ *  incoming-reduction ability scope this phrasing should emit (most phrasings are
+ *  scope:'direct' only; "all incoming damage"/unscoped phrasings emit BOTH 'direct' and
+ *  'dot'). `pct` XOR `hpScaling` — never both. */
+interface ParsedIncomingDamageReduction {
+    scopes: ('direct' | 'dot')[];
+    condition: IncomingCondition;
+    pct?: number;
+    hpScaling?: { perUnit: number; cap: number };
+    matchIndex: number;
+}
+
+/**
+ * Epic PR12(C) — wires four corpus phrasings onto the existing `incoming-reduction`
+ * AbilityConfig / IncomingCondition (D-PR3: Iridium/Voidshade/Hyperion Gaze/Ironclad), which
+ * previously only covered "takes N% less damage from Critical hits" (parseIncomingCritReduction
+ * above):
+ *  - Anemone: "takes N% less direct damage from enemies debuffed with a Damage over Time
+ *    effect" — the ATTACKER carries a live DoT (new `attacker-has-dot` condition).
+ *  - Panon: "reduces all incoming damage by N% when affected by Barrier Recharging" — the
+ *    VICTIM carries its own named self-status (new `self-barrier-recharging` condition,
+ *    mirroring the self-stealth/self-stasis literal-name precedent). "ALL incoming damage"
+ *    (not "direct") → emits both scope:'direct' and scope:'dot'.
+ *  - Wusheng: "reduces direct damage by N% while Stealth is active" — reuses the EXISTING
+ *    `self-stealth` condition (previously only wired via the Voidshade implant, never a ship
+ *    skill-text phrasing).
+ *  - Tormenter: "gains up to N% damage reduction as its health decreases" — no status gate at
+ *    all, just continuous HP-proportional scaling (new `hpScaling` field, condition 'always').
+ *    perUnit = cap/100 so the reduction reaches exactly `cap`% at 0 HP (mirrors the Revenge
+ *    gear set's self-hp-missing-pct formula, `hpProportionalScaling` above). No explicit scope
+ *    word in the text → both 'direct' and 'dot', same as Panon.
+ */
+function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDamageReduction[] {
+    const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const out: ParsedIncomingDamageReduction[] = [];
+
+    const anemoneM =
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage\s+from\s+enemies\s+debuffed\s+with\s+a\s+damage\s+over\s+time\s+effect/i.exec(
+            plain
+        );
+    if (anemoneM) {
+        out.push({
+            scopes: ['direct'],
+            condition: 'attacker-has-dot',
+            pct: parseFloat(anemoneM[1]),
+            matchIndex: anemoneM.index,
+        });
+    }
+
+    const panonM =
+        /reduces\s+all\s+incoming\s+damage\s+by\s+(\d+(?:\.\d+)?)%\s+when\s+affected\s+by\s+barrier\s+recharging/i.exec(
+            plain
+        );
+    if (panonM) {
+        out.push({
+            scopes: ['direct', 'dot'],
+            condition: 'self-barrier-recharging',
+            pct: parseFloat(panonM[1]),
+            matchIndex: panonM.index,
+        });
+    }
+
+    const wushengM =
+        /reduces\s+direct\s+damage\s+by\s+(\d+(?:\.\d+)?)%\s+while\s+stealth\s+is\s+active/i.exec(
+            plain
+        );
+    if (wushengM) {
+        out.push({
+            scopes: ['direct'],
+            condition: 'self-stealth',
+            pct: parseFloat(wushengM[1]),
+            matchIndex: wushengM.index,
+        });
+    }
+
+    const tormenterM =
+        /gains\s+up\s+to\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+as\s+its\s+health\s+decreases/i.exec(
+            plain
+        );
+    if (tormenterM) {
+        const cap = parseFloat(tormenterM[1]);
+        out.push({
+            scopes: ['direct', 'dot'],
+            condition: 'always',
+            hpScaling: { perUnit: cap / 100, cap },
+            matchIndex: tormenterM.index,
+        });
+    }
+
+    return out;
 }
 
 function slotFor(label: string): SkillSlot | null {
@@ -949,6 +1064,36 @@ function abilitiesFromText(
             },
             pos,
         });
+    }
+
+    // Epic PR12(A) — Nosorog: "reflects X% of the Damage taken back to the enemy [when
+    // directly damaged as a primary target]." Self-scoped victim passive (mirrors the Reflect
+    // gear set's damage-reflection shape — top-level type:'modifier' is a placeholder, the
+    // engine keys on config.type:'damage-reflection', see buildEquipmentAbilities.ts REFLECT).
+    // The reflect verb carries no "damage" word inside a <unit-damage> tag, so it never
+    // collides with the base-damage `mult` parse above and is pushed independently, same
+    // pattern as Centurion's allySubject counter.
+    if (slot === 'passive') {
+        const reflect = parseDamageReflection(text);
+        if (reflect) {
+            const reflectPos = text.search(/reflects/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'modifier',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'damage-reflection',
+                        pct: reflect.pct,
+                        ...(reflect.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
+                    },
+                    autoFilled: true,
+                },
+                pos: reflectPos >= 0 ? reflectPos : MAX_POS,
+            });
+        }
     }
 
     const sec = parseSecondaryDamage(text);
@@ -1861,6 +2006,33 @@ function abilitiesFromText(
             },
             pos: critRedPos >= 0 ? critRedPos : MAX_POS,
         });
+    }
+
+    // Epic PR12(C): the four incoming-damage-reduction phrasings (Anemone/Panon/Wusheng/
+    // Tormenter). One or two abilities per directive (one per `scopes` entry — "all incoming
+    // damage"/unscoped phrasings emit both 'direct' and 'dot').
+    for (const dir of parseIncomingDamageReductionPhrasings(text)) {
+        for (const scope of dir.scopes) {
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'incoming-reduction',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'incoming-reduction',
+                        scope,
+                        condition: dir.condition,
+                        pct: dir.pct ?? 0,
+                        critFamily: false,
+                        ...(dir.hpScaling ? { hpScaling: dir.hpScaling } : {}),
+                    },
+                    autoFilled: true,
+                },
+                pos: dir.matchIndex >= 0 ? dir.matchIndex : MAX_POS,
+            });
+        }
     }
 
     // PR F4: permanent pre-fight base-stat passives ("At the start of combat, …" /

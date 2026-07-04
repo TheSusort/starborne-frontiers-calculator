@@ -2728,6 +2728,30 @@ export function runCombat(input: CombatEngineInput): {
     const isStealthed = (actorId: string): boolean =>
         selfBuffNamesForOwners(statusEngine, [actorId]).includes('Stealth');
 
+    // Epic PR12 (C): does the given actor currently carry a live Corrosion or Inferno DoT
+    // stack? (Anemone — "takes 25% less direct damage from enemies debuffed with a Damage
+    // over Time effect", evaluated against the ATTACKER of an incoming hit.) Sibling to
+    // isStealthed/isStasised; reads the DoT containers directly off the CombatActor.
+    const attackerHasDot = (actorId: string): boolean => {
+        const a = allActorsById.get(actorId);
+        return !!a && (a.corrosionEntries.length > 0 || a.infernoEntries.length > 0);
+    };
+    // Epic PR12 (C): does the given actor currently carry its own "Barrier Recharging"
+    // self-status? (Panon — "reduces all incoming damage by 20% when affected by Barrier
+    // Recharging.") Sibling to isStealthed — same selfBuffNamesForOwners lookup, different
+    // literal name.
+    const hasBarrierRecharging = (actorId: string): boolean =>
+        selfBuffNamesForOwners(statusEngine, [actorId]).includes('Barrier Recharging');
+    // Epic PR12 (C): the given actor's own live HP% (0..100) at this instant, for
+    // Tormenter's HP-proportional incoming-reduction scaling. Defaults 100 for an unresolvable
+    // actor/zero max HP (inert — no reduction).
+    const selfHpPctOf = (actorId: string): number => {
+        const a = allActorsById.get(actorId);
+        const maxHp = recipientMaxHp(actorId);
+        if (!a || maxHp <= 0) return 100;
+        return (100 * a.currentHp) / maxHp;
+    };
+
     // Proc an owner's standing leeches against a damage credit (heals immediately at
     // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
     // survival timing). Simplified drain-style fold (spec §4): healModifier only + a
@@ -3123,6 +3147,11 @@ export function runCombat(input: CombatEngineInput): {
                 /** G PR1: true when THIS application is a counterattack (Stalwart). The reflect
                  *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
                 isCounter?: boolean;
+                /** Epic PR12 (A): true when this victim IS the attacker's resolved anchor/primary
+                 *  target (Nosorog's `requirePrimaryTarget` reflect gate). Undefined/true for every
+                 *  non-positional (inherently single-target) call site; explicitly false only for
+                 *  a covered/splash footprint victim. */
+                isPrimaryTarget?: boolean;
             }
         ): VictimDamageOutcome => {
             // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
@@ -3165,6 +3194,9 @@ export function runCombat(input: CombatEngineInput): {
                             victimStealthed: isStealthed(victim.id),
                             victimStasised: isStasised(victim.id),
                             hitIndexThisRound: idx,
+                            attackerHasDot: attackerHasDot(cause?.killerId ?? ''),
+                            victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
+                            selfHpPct: selfHpPctOf(victim.id),
                         },
                         (abilityId, chance) => {
                             const cfg = blockAbilities.find((b) => b.id === abilityId)?.config;
@@ -3447,10 +3479,36 @@ export function runCombat(input: CombatEngineInput): {
                 const directFraction =
                     totalRaw > 0 ? Math.max(0, (totalRaw - bombPortion) / totalRaw) : 0;
                 const reflectBasis = hpDamage * directFraction;
+                // Epic PR12 (A): a requirePrimaryTarget reflect ability (Nosorog) only fires when
+                // this victim was the attacker's anchor — excluded for a covered/splash footprint
+                // victim (cause.isPrimaryTarget === false). Undefined/true (every non-positional
+                // call site, and every requirePrimaryTarget-less ability e.g. Reflect gear set)
+                // keeps it included — byte-identical there.
+                //
+                // NIT 4 (latent-safety): the `undefined → treated as primary` default is correct
+                // ONLY because every real-roster AoE path today is POSITIONAL — applyPositionalDamage
+                // threads isAnchor → applyIncomingToTarget/applyOutgoingToEnemy → isPrimaryTarget, so
+                // a covered victim always gets an explicit `false`. The remaining undefined callers are
+                // all inherently SINGLE-target (the legacy non-positional applyIncomingToTarget binds
+                // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
+                // have to pass isPrimaryTarget explicitly, or a covered victim would wrongly reflect.
+                //
+                // NIT 2 (reactive paths do not over-fire): a Nosorog taking REACTIVE damage does NOT
+                // reflect, by construction — (a) counterattacks reach applyVictimDamage with
+                // isCounter:true, which the `!cause?.isCounter` guard above skips entirely; and (b) the
+                // reactive-damage executor (applyReactiveDamage) is credit-only (creditDamage), never
+                // calling applyVictimDamage, so it never reaches this reflect block at all. Detonation/
+                // bomb reactive hits pass bombPortion===total → directFraction 0 → reflectBasis 0 (no
+                // reflect); DoT ticks pass byDirectDamage:false (guard above). So no reactive path
+                // leaves isPrimaryTarget undefined in a way that could wrongly reflect — no code change
+                // needed (see the PR12 review report for the full call-site enumeration).
                 const reflectAbilities =
                     reflectBasis > 0
                         ? incomingAbilitiesOf(victim.id).filter(
-                              (a) => a.config.type === 'damage-reflection'
+                              (a) =>
+                                  a.config.type === 'damage-reflection' &&
+                                  (!a.config.requirePrimaryTarget ||
+                                      cause?.isPrimaryTarget !== false)
                           )
                         : [];
                 if (reflectAbilities.length > 0) {
@@ -3491,6 +3549,11 @@ export function runCombat(input: CombatEngineInput): {
                                 victimStealthed: false,
                                 victimStasised: false,
                                 hitIndexThisRound: 0,
+                                // The reflected hit's "attacker" is the reflector (victim, outer
+                                // scope) and its "victim" is `attacker` (receiving the bounce-back).
+                                attackerHasDot: attackerHasDot(victim.id),
+                                victimHasBarrierRecharging: hasBarrierRecharging(attacker.id),
+                                selfHpPct: selfHpPctOf(attacker.id),
                             }
                         );
                         const reflected = reflectedDamageForHit({
@@ -3569,7 +3632,12 @@ export function runCombat(input: CombatEngineInput): {
             } = {
                 killerId: actingActorId,
                 byDirectDamage: true,
-            }
+            },
+            // Epic PR12 (A): forwarded to applyVictimDamage's cause.isPrimaryTarget (Nosorog's
+            // reflect gate). Undefined at every pre-PR12 call site → byte-identical (treated as
+            // primary, matching the existing behavior for every ability without
+            // requirePrimaryTarget).
+            isPrimaryTarget?: boolean
         ): VictimDamageOutcome =>
             applyVictimDamage(damage, victim, playerSink, {
                 ...cause,
@@ -3580,6 +3648,7 @@ export function runCombat(input: CombatEngineInput): {
                         ? 0
                         : attackerShieldPenOf(cause.killerId ?? actingActorId),
                 bombPortion: cause.bombPortion ?? 0,
+                isPrimaryTarget,
             });
         // Player→enemy intake (E1 — symmetric incoming surface). The symmetric THIN wrapper over
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
@@ -3603,7 +3672,10 @@ export function runCombat(input: CombatEngineInput): {
         };
         const applyOutgoingToEnemy = (
             damage: number,
-            enemyVictim: CombatActor
+            enemyVictim: CombatActor,
+            // Epic PR12 (A): forwarded to applyVictimDamage's cause.isPrimaryTarget (Nosorog's
+            // reflect gate). Undefined at every pre-PR12 call site → byte-identical.
+            isPrimaryTarget?: boolean
         ): VictimDamageOutcome =>
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
             // H1 T4: positional player→enemy hits are all-direct (no detonation slice here), so
@@ -3612,6 +3684,7 @@ export function runCombat(input: CombatEngineInput): {
                 killerId: actingActorId,
                 byDirectDamage: true,
                 shieldPenetrationPct: attackerShieldPenOf(actingActorId),
+                isPrimaryTarget,
             });
         // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
@@ -3967,7 +4040,11 @@ export function runCombat(input: CombatEngineInput): {
             ignoresForcedTargeting?: boolean;
             actingId: string;
             opposingLiving: CombatActor[];
-            applyToVictim: (victim: CombatActor, damage: number) => VictimDamageOutcome;
+            applyToVictim: (
+                victim: CombatActor,
+                damage: number,
+                isAnchor?: boolean
+            ) => VictimDamageOutcome;
             // E2 (per-victim leech): OPTIONAL per-direction hook. drivePositionalApply is ONE
             // helper shared by all three sites (focus / team / enemy); since standing (player→
             // enemy) and taken (enemy→player) leech need opposite logic, each site supplies its
@@ -4059,6 +4136,9 @@ export function runCombat(input: CombatEngineInput): {
                         victimStealthed: isStealthed(victim.id),
                         victimStasised: isStasised(victim.id),
                         hitIndexThisRound: 0, // unused by reduction (only block reads it)
+                        attackerHasDot: attackerHasDot(args.actingId),
+                        victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
+                        selfHpPct: selfHpPctOf(victim.id),
                     });
                     if (!didCrit) return equip;
                     // F3 crit-conditional pre-fight damage modifiers, gated per sub-hit on
@@ -4171,8 +4251,14 @@ export function runCombat(input: CombatEngineInput): {
             healEventOnly: boolean;
             // Matches drivePositionalApply's applyToVictim param type exactly. E2: returns the
             // resolved VictimDamageOutcome (both impls wrap applyOutgoingToEnemy /
-            // applyIncomingToTarget, which already surface it from E1).
-            applyToVictim: (victim: CombatActor, damage: number) => VictimDamageOutcome;
+            // applyIncomingToTarget, which already surface it from E1). Epic PR12 (A): third
+            // param forwards drivePositionalApply's isAnchor through to applyVictimDamage's
+            // cause.isPrimaryTarget (Nosorog's reflect gate).
+            applyToVictim: (
+                victim: CombatActor,
+                damage: number,
+                isAnchor?: boolean
+            ) => VictimDamageOutcome;
         }
         const playerTurnBindings: TurnBindings = {
             opposingRoster: enemyAttackerActors,
@@ -4183,7 +4269,8 @@ export function runCombat(input: CombatEngineInput): {
             enemyBuffNamesUnion: playerEnemyBuffNames,
             stealthedEnemyCount: playerStealthedEnemyCount,
             healEventOnly: false,
-            applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
+            applyToVictim: (victim, damage, isAnchor) =>
+                applyOutgoingToEnemy(damage, victim, isAnchor),
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
@@ -4202,7 +4289,8 @@ export function runCombat(input: CombatEngineInput): {
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
             // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
             // player actor (applyIncomingToTarget), not as a player damage row.
-            applyToVictim: (victim, damage) => applyIncomingToTarget(damage, victim),
+            applyToVictim: (victim, damage, isAnchor) =>
+                applyIncomingToTarget(damage, victim, undefined, isAnchor),
         };
         const turnBindings = (side: Side): TurnBindings =>
             side === 'player' ? playerTurnBindings : enemyTurnBindings;
@@ -5197,6 +5285,12 @@ export function runCombat(input: CombatEngineInput): {
                                     victimStasised: isStasised(healTarget.id),
                                     hitIndexThisRound: 0,
                                     dotType,
+                                    // A DoT tick has no single attacker (aggregate of appliers) —
+                                    // 'attacker-has-dot' abilities are scope:'direct' only, so this
+                                    // never matters (scope-filtered before conditionMet reads it).
+                                    attackerHasDot: false,
+                                    victimHasBarrierRecharging: hasBarrierRecharging(healTarget.id),
+                                    selfHpPct: selfHpPctOf(healTarget.id),
                                 }),
                             // PR I4b: the tank is the ticking victim.
                             dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
@@ -5267,6 +5361,11 @@ export function runCombat(input: CombatEngineInput): {
                                         victimStasised: isStasised(actor.id),
                                         hitIndexThisRound: 0,
                                         dotType,
+                                        // See the sibling tank-path call above: no single attacker
+                                        // on a DoT tick; harmless (scope:'direct'-only condition).
+                                        attackerHasDot: false,
+                                        victimHasBarrierRecharging: hasBarrierRecharging(actor.id),
+                                        selfHpPct: selfHpPctOf(actor.id),
                                     }),
                                 // PR I4b: this actor IS the ticking victim.
                                 dotMultFor: (ctx) => victimDotMult(ctx, actor),
@@ -6209,6 +6308,9 @@ export function runCombat(input: CombatEngineInput): {
                                           victimStealthed: isStealthed(tgt.id),
                                           victimStasised: isStasised(tgt.id),
                                           hitIndexThisRound: 0,
+                                          attackerHasDot: attackerHasDot(actor.id),
+                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
+                                          selfHpPct: selfHpPctOf(tgt.id),
                                       })
                                     : 0;
                                 const incomingReductionCritAll = tgtIncoming.length
@@ -6218,6 +6320,9 @@ export function runCombat(input: CombatEngineInput): {
                                           victimStealthed: isStealthed(tgt.id),
                                           victimStasised: isStasised(tgt.id),
                                           hitIndexThisRound: 0,
+                                          attackerHasDot: attackerHasDot(actor.id),
+                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
+                                          selfHpPct: selfHpPctOf(tgt.id),
                                       })
                                     : 0;
                                 // F3: crit-conditional pre-fight damage modifiers, mirrored from

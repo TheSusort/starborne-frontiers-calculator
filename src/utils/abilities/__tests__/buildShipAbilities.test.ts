@@ -136,14 +136,16 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    it('defensive-only passive (Anemone) produces no passive slot — the UI surfaces the slot from skill text instead', () => {
-        // Anemone's passive is pure mitigation/repair; nothing the ability parser models.
-        // buildShipAbilities yields no passive slot, so ShipConfigCard derives `hasPassive`
-        // from the ship's skill text (getSkillRowForSlot) to still show the Edit button.
+    it('a passive the ability parser models nothing from produces no passive slot — the UI surfaces the slot from skill text instead', () => {
+        // Hypothetical: a passive with no recognized mechanic at all. buildShipAbilities
+        // yields no passive slot, so ShipConfigCard derives `hasPassive` from the ship's skill
+        // text (getSkillRowForSlot) to still show the Edit button. (Formerly documented via
+        // Anemone's "takes 25% less direct damage from enemies debuffed with a DoT" passive —
+        // epic PR12(C) wired that phrasing onto `incoming-reduction`, so it now DOES produce a
+        // passive slot; see the epic PR12(C) describe block below for its coverage.)
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>140% damage</unit-damage>.',
-            thirdPassiveSkillText:
-                'This Unit takes 25% less direct damage from enemies debuffed with a Damage over Time effect.',
+            thirdPassiveSkillText: 'This Unit has an aura visible only to its allies.',
         });
 
         const { slots } = buildShipAbilities(s);
@@ -4960,5 +4962,207 @@ describe('buildShipAbilities — PR9b standalone shield-strip', () => {
         // The purge ability still carries stripsShield (I6, unaffected by this PR).
         const purge = allAbilities.find((a) => a.type === 'purge')!;
         expect(purge.config).toMatchObject({ stripsShield: true });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Epic PR12(A): damage-reflection phrasing — Nosorog "reflects 40% of the Damage taken back to
+// the enemy when directly damaged as a primary target." The `damage-reflection` type already
+// exists (Reflect gear set thorns); this wires the SKILL-TEXT phrasing, including the
+// primary-target gate the gear set never carries.
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — epic PR12(A) Nosorog damage-reflection phrasing', () => {
+    it('Nosorog second passive (40%): a damage-reflection ability with requirePrimaryTarget', () => {
+        const s = ship({
+            secondPassiveSkillText:
+                'This Unit reflects 40% of the Damage taken back to the enemy when directly damaged as a primary target.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const reflect = passive.abilities.find((a) => a.config.type === 'damage-reflection');
+        expect(reflect).toMatchObject({
+            type: 'modifier',
+            target: 'self',
+            config: { type: 'damage-reflection', pct: 40, requirePrimaryTarget: true },
+        });
+    });
+
+    it('Nosorog third passive (40%, verbatim CSV text with trailing Defense-Up clause): still emits the reflect ability', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'This Unit reflects 40% of the Damage taken back to the enemy when directly damaged as a primary target. Additionally, when this Unit removes a Debuff, it gains <unit-skill>Defense Up II</unit-skill> for 1 turn.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const reflect = passive.abilities.find((a) => a.config.type === 'damage-reflection');
+        expect(reflect).toMatchObject({
+            config: { type: 'damage-reflection', pct: 40, requirePrimaryTarget: true },
+        });
+    });
+
+    it('does NOT set requirePrimaryTarget for an unrelated reflect-shaped phrasing without the primary-target clause (regression guard)', () => {
+        // Hypothetical: same reflect verb, no "as a primary target" qualifier — should stay
+        // unconditional (mirrors the Reflect gear set's unconditional shape).
+        const s = ship({
+            secondPassiveSkillText: 'This Unit reflects 25% of the Damage taken back to the enemy.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const reflect = passive.abilities.find((a) => a.config.type === 'damage-reflection');
+        expect(reflect).toMatchObject({
+            config: { type: 'damage-reflection', pct: 25 },
+        });
+        expect(
+            (reflect!.config as { requirePrimaryTarget?: boolean }).requirePrimaryTarget
+        ).toBeFalsy();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Epic PR12(B): Chakara's charged "bypassing 20% of the enemy Defense" → a per-skill
+// defensePenetration modifier (the `defensePenetration` ModifierChannel already exists;
+// this wires the "bypassing X% of the enemy Defense" phrasing distinct from the existing
+// "X% defense penetration" wording). Because `abilitiesFromText` runs per skill ROW, the
+// resulting modifier ability is scoped to the CHARGED skill's own cast (folded via
+// `firingSkill.abilities` in playerTurn.ts) — not a standing self-buff.
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — epic PR12(B) Chakara "bypassing N% of the enemy Defense"', () => {
+    it('Chakara charged: a self defensePenetration modifier (value 20) alongside the damage + additional-damage + purge abilities', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>220% damage</unit-damage> with an additional amount equal to <unit-damage>100%</unit-damage> of its Defense, bypassing 20% of the enemy Defense, and <unit-aid>purges 1</unit-aid> buff from the enemy.',
+            chargeSkillCharge: 2,
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const pen = charged.abilities.find(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'defensePenetration'
+        );
+        expect(pen).toMatchObject({
+            type: 'modifier',
+            target: 'self',
+            config: {
+                type: 'modifier',
+                channel: 'defensePenetration',
+                value: 20,
+                isMultiplicative: false,
+            },
+        });
+        // The damage/additional-damage/purge abilities from the SAME text still build.
+        expect(abilityOfType(charged.abilities, 'damage')).toMatchObject({
+            config: { type: 'damage', multiplier: 220 },
+        });
+        expect(abilityOfType(charged.abilities, 'additional-damage')).toMatchObject({
+            config: { type: 'additional-damage', stat: 'defense', pct: 100 },
+        });
+        expect(abilityOfType(charged.abilities, 'purge')).toMatchObject({
+            config: { type: 'purge', count: 1 },
+        });
+    });
+
+    it('the defensePenetration modifier is scoped to the CHARGED row only (not duplicated onto an unrelated active-slot text)', () => {
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>160% damage</unit-damage>.',
+            chargeSkillText:
+                'This Unit deals <unit-damage>220% damage</unit-damage>, bypassing 20% of the enemy Defense.',
+            chargeSkillCharge: 2,
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        expect(
+            active.abilities.some(
+                (a) => a.config.type === 'modifier' && a.config.channel === 'defensePenetration'
+            )
+        ).toBe(false);
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        expect(
+            charged.abilities.some(
+                (a) => a.config.type === 'modifier' && a.config.channel === 'defensePenetration'
+            )
+        ).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Epic PR12(C): incoming-damage-reduction phrasings — Anemone, Panon, Wusheng, Tormenter.
+// The `incoming-reduction` AbilityConfig + IncomingCondition already exist (D-PR3, Iridium/
+// Voidshade/Hyperion Gaze/Ironclad); this wires four new corpus phrasings onto them.
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasings', () => {
+    it('Anemone second passive: 25% direct-scope reduction gated on attacker-has-dot', () => {
+        const s = ship({
+            secondPassiveSkillText:
+                'This Unit takes 25% less direct damage from enemies debuffed with a Damage over Time effect.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const reduction = passive.abilities.find((a) => a.config.type === 'incoming-reduction');
+        expect(reduction).toMatchObject({
+            type: 'incoming-reduction',
+            target: 'self',
+            config: {
+                type: 'incoming-reduction',
+                scope: 'direct',
+                condition: 'attacker-has-dot',
+                pct: 25,
+                critFamily: false,
+            },
+        });
+    });
+
+    it('Panon third passive: 20% reduction (both direct + dot scope) gated on self-barrier-recharging', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.<br /><br />This Unit reduces all incoming damage by 20% when affected by <unit-skill>Barrier Recharging</unit-skill>.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const reductions = passive.abilities.filter((a) => a.config.type === 'incoming-reduction');
+        expect(reductions).toHaveLength(2);
+        const scopes = reductions.map((a) =>
+            a.config.type === 'incoming-reduction' ? a.config.scope : undefined
+        );
+        expect(scopes.sort()).toEqual(['direct', 'dot']);
+        for (const r of reductions) {
+            expect(r.config).toMatchObject({
+                condition: 'self-barrier-recharging',
+                pct: 20,
+                critFamily: false,
+            });
+        }
+    });
+
+    it('Wusheng third passive: 25% direct-scope reduction gated on self-stealth (reuses the existing Voidshade condition)', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit reduces direct damage by 25% while <unit-skill>Stealth</unit-skill> is active. If directly damaged while <unit-skill>Stealth</unit-skill> is active, remove <unit-skill>Stealth</unit-skill>.<br /><br />This Unit starts combat fully charged.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const reduction = passive.abilities.find((a) => a.config.type === 'incoming-reduction');
+        expect(reduction).toMatchObject({
+            config: {
+                type: 'incoming-reduction',
+                scope: 'direct',
+                condition: 'self-stealth',
+                pct: 25,
+                critFamily: false,
+            },
+        });
+    });
+
+    it('Tormenter third passive: HP-proportional reduction (up to 30%) on BOTH scopes, condition always, no phantom base-damage ability', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        // PR1 regression guard: no phantom on-cast damage ability from this clause.
+        expect(abilityOfType(passive.abilities, 'damage')).toBeUndefined();
+        const reductions = passive.abilities.filter((a) => a.config.type === 'incoming-reduction');
+        expect(reductions).toHaveLength(2);
+        for (const r of reductions) {
+            expect(r.config).toMatchObject({
+                condition: 'always',
+                critFamily: false,
+                hpScaling: { perUnit: 0.3, cap: 30 },
+            });
+        }
+        const scopes = reductions.map((a) =>
+            a.config.type === 'incoming-reduction' ? a.config.scope : undefined
+        );
+        expect(scopes.sort()).toEqual(['direct', 'dot']);
     });
 });

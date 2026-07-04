@@ -770,3 +770,116 @@ describe('combatLog #3 — AoE per-victim breakdown (e2e via simulateBattle)', (
         expect(hasMid).toBe(true);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Epic PR12(A) — Nosorog SKILL-TEXT reflect + requirePrimaryTarget gate, END-TO-END.
+//
+// Parity gap the reviewer flagged: positionalApply.test.ts proves the isAnchor threading
+// and incomingEffects.test.ts covers the condition unit-level, but no integration test drove
+// a Nosorog as a COVERED AoE victim to confirm the requirePrimaryTarget gate SUPPRESSES the
+// reflect (the counterattack equivalent has this via requirePrimaryTarget in
+// counterAttack.test.ts). This mirrors the combatLog #3 AoE harness but flips direction: an
+// ENEMY AoE attacker hits a PLAYER Nosorog, staged once as the anchor (primary) and once as a
+// covered footprint victim.
+//
+// RED-IF-BROKEN: pre-epic-PR12 the `damage-reflection` config had no requirePrimaryTarget
+// field and the engine never read `cause.isPrimaryTarget`, so a covered Nosorog WOULD reflect
+// → the enemy would take damage → the "enemy takes 0" assertion fails. Wiring isAnchor wrong
+// (e.g. always true) likewise breaks the covered case; over-suppressing (always false) breaks
+// the anchor positive control.
+// ---------------------------------------------------------------------------
+
+/** Nosorog's verbatim reflect passive (docs/ship-skills.csv, Nosorog passive2/3). */
+const NOSOROG_REFLECT =
+    'This Unit reflects 40% of the Damage taken back to the enemy when directly damaged as a primary target.';
+
+/** A NON-DAMAGING player Nosorog: self-repair active (never deals direct damage to the enemy, so
+ *  any damage the enemy takes is PURELY reflected thorns) + the reflect passive on the R0 slot
+ *  (firstPassiveSkillText applies with no refits — slot fidelity is covered by the
+ *  buildShipAbilities unit tests; this test only needs the reflect ability to build). */
+function makeReflectNosorog(id: string, name: string, affinity: AffinityName): Ship {
+    return {
+        id,
+        name,
+        rarity: 'legendary',
+        faction: 'AURELIAN_SOVEREIGNTY',
+        type: 'DEFENDER',
+        baseStats: {} as Ship['baseStats'],
+        equipment: {} as Ship['equipment'],
+        implants: {},
+        refits: [],
+        affinity,
+        activeSkillText: 'This Unit repairs 30% of its Max HP.',
+        firstPassiveSkillText: NOSOROG_REFLECT,
+        chargeSkillCharge: 0,
+        activeTarget: 'allies',
+        activePattern: 'Pattern-Base',
+    } as Partial<Ship> as Ship;
+}
+
+/** Resolve a roster actorId by ship display name (the focus is 'attacker', others are
+ *  slot-suffixed `p:<id>:<i>` / `e:<id>:<i>`, so match on the stable name instead). */
+function actorIdByName(result: ReturnType<typeof simulateBattle>, name: string): string {
+    return result.roster.find((r) => r.name === name)!.actorId;
+}
+
+describe('Epic PR12(A) — Nosorog reflect requirePrimaryTarget gate (e2e via simulateBattle)', () => {
+    it('reflect FIRES when the Nosorog is the anchor (primary target) of an enemy AoE', () => {
+        // Nosorog at M4 (front → the enemy AoE anchors it) + an inert meatshield behind at M3.
+        // Both players are non-damaging, so the ONLY damage the enemy can take is reflected thorns.
+        const result = simulateBattle({
+            playerTeam: [
+                place(makeReflectNosorog('nosorog', 'Nosorog', 'thermal'), 'M4', {
+                    hp: 1_000_000,
+                    attack: 0,
+                }),
+                place(makeTank('shield', 'Shield', 'thermal'), 'M3', {
+                    hp: 1_000_000,
+                    attack: 0,
+                }),
+            ],
+            enemyTeam: [
+                place(makeAoeAttacker('foe', 'Foe', 'antimatter'), 'M4', {
+                    hp: 1_000_000,
+                    attack: 5000,
+                }),
+            ],
+            rounds: 3,
+        });
+        const foe = enemyId(result);
+        // Anchor Nosorog IS the primary target → reflect fires → the enemy takes reflected damage.
+        expect(totalDamageTaken(result, actorIdByName(result, 'Nosorog'))).toBeGreaterThan(0); // it WAS hit
+        expect(totalDamageTaken(result, foe)).toBeGreaterThan(0); // and it reflected
+    });
+
+    it('reflect is SUPPRESSED when the Nosorog is a COVERED (splash) footprint victim', () => {
+        // Meatshield at M4 (front → the enemy AoE anchors IT) + the Nosorog covered behind at M3
+        // (Line-Range-1 covers the cell one column back). The Nosorog is hit as a NON-primary
+        // (covered) victim, so its requirePrimaryTarget reflect must NOT fire. Both players are
+        // non-damaging → the enemy's only possible incoming is a Nosorog reflection.
+        const result = simulateBattle({
+            playerTeam: [
+                place(makeTank('shield', 'Shield', 'thermal'), 'M4', {
+                    hp: 1_000_000,
+                    attack: 0,
+                }),
+                place(makeReflectNosorog('nosorog', 'Nosorog', 'thermal'), 'M3', {
+                    hp: 1_000_000,
+                    attack: 0,
+                }),
+            ],
+            enemyTeam: [
+                place(makeAoeAttacker('foe', 'Foe', 'antimatter'), 'M4', {
+                    hp: 1_000_000,
+                    attack: 5000,
+                }),
+            ],
+            rounds: 3,
+        });
+        const foe = enemyId(result);
+        // Non-vacuous: the covered Nosorog WAS actually hit by the AoE splash…
+        expect(totalDamageTaken(result, actorIdByName(result, 'Nosorog'))).toBeGreaterThan(0);
+        // …yet it reflected NOTHING (requirePrimaryTarget gate suppresses the covered hit).
+        expect(totalDamageTaken(result, foe)).toBe(0);
+    });
+});

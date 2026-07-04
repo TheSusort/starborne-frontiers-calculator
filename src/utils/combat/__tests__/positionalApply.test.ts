@@ -190,6 +190,43 @@ describe('applyPositionalDamage', () => {
         expect(coveredCalls[0].damage).toBeCloseTo(originCalls[0].damage * 0.5, 6);
     });
 
+    // Epic PR12(A) — Nosorog's damage-reflection `requirePrimaryTarget` gate is enforced by the
+    // ENGINE (engine.ts's applyVictimDamage reflect block) reading `cause.isPrimaryTarget`, which
+    // is forwarded from `applyToVictim`'s THIRD param. This is the seam that supplies it: verify
+    // `applyPositionalDamage` calls `applyToVictim` with `isAnchor: true` for the origin cell and
+    // `isAnchor: false` for every covered footprint victim — WOULD FAIL pre-epic-PR12 (the
+    // pre-change `applyToVictim` signature took only `(victim, damage)`, so a caller reading a
+    // third argument would always see `undefined`, never `false`, for a covered victim).
+    it('AoE multi-hit: applyToVictim receives isAnchor true for the origin cell, false for covered cells', () => {
+        const pattern = parsePattern('Pattern-Line-Range-1');
+        const target = parseTarget('front');
+        const origin = actor('origin', 'M4', 1e9);
+        const covered = actor('covered', 'M3', 1e9);
+        const opposingLiving = [origin, covered];
+
+        const anchorFlagsById = new Map<string, boolean[]>();
+
+        applyPositionalDamage({
+            hitCrits: [false, false],
+            scalars: { ...scalars(), hits: 2 },
+            pattern,
+            actorPosition: 'M2',
+            target,
+            opposingLiving,
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage, isAnchor) => {
+                victim.currentHp -= damage;
+                const flags = anchorFlagsById.get(victim.id) ?? [];
+                flags.push(Boolean(isAnchor));
+                anchorFlagsById.set(victim.id, flags);
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
+            },
+        });
+
+        expect(anchorFlagsById.get('origin')).toEqual([true, true]);
+        expect(anchorFlagsById.get('covered')).toEqual([false, false]);
+    });
+
     it('incomingReductionFor threads per-victim reduction into the damage (vs an unsupplied baseline)', () => {
         const pattern = parsePattern('Pattern-Base');
         const target = parseTarget('front');

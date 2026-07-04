@@ -217,8 +217,32 @@ const RULES: Rule[] = [
     {
         id: 'defense-penetration',
         severity: 'medium',
-        keyword: (t) => /defense\s+penetration/i.test(t),
+        // Epic PR12(B): also matches "bypassing N% of the enemy Defense" (Chakara) — a
+        // differently-worded synonym for the same defensePenetration modifier as the
+        // "X% defense penetration" phrasing.
+        keyword: (t) => /defense\s+penetration/i.test(t) || /bypassing\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy\s+defense/i.test(t),
         handled: (a) => hasModifier(a, 'defensePenetration'),
+    },
+    {
+        id: 'incoming-damage-reduction',
+        severity: 'medium',
+        // Epic PR12(C): "takes N% less [direct] damage [from …]" (Iridium/Anemone/Wusheng),
+        // "reduces [all incoming/direct] damage by N%" (Panon), and "gains up to N% damage
+        // reduction as its health decreases" (Tormenter).
+        keyword: (t) =>
+            /takes?\s+\d+(?:\.\d+)?%\s+less\s+[a-z\s]*?damage\b/i.test(t) ||
+            /reduces?\s+(?:all\s+incoming\s+|direct\s+)?damage\s+by\s+\d+(?:\.\d+)?%/i.test(t) ||
+            /damage\s+reduction\s+as\s+its\s+health\s+decreases/i.test(t),
+        handled: (a) => hasType(a, 'incoming-reduction'),
+    },
+    {
+        id: 'damage-reflection',
+        severity: 'medium',
+        // Epic PR12(A): "reflects N% of the Damage taken back to the enemy" (Nosorog). Excludes
+        // the Reflect GEAR set (an equipment ability, never ship skill text) by construction —
+        // this audit only runs ship skill text.
+        keyword: (t) => /reflects\s+\d+(?:\.\d+)?%\s+of\s+the\s+damage\s+taken/i.test(t),
+        handled: (a) => a.some((x) => x.config.type === 'damage-reflection'),
     },
     {
         id: 'dot-application',
