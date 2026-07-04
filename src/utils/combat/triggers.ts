@@ -2019,12 +2019,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // Falls back to ownerId when healing is absent (e.g. Warpstrike in non-healing sim).
             const fallback = ctx.healing?.targetId ?? intent.ownerId;
             const recipients = reactiveRecipients(intent, ctx, fallback);
+            // PR11: count:'all' shrinks EVERY eligible debuff on each recipient (Heliodor/
+            // Pestilence's "reduces the duration of all active Debuffs … by 1 turn"), instead of
+            // Warpstrike's single newest-debuff shrink. Any other count value (today only the
+            // implicit default) keeps the pre-PR11 newest-only behavior — byte-identical for
+            // every existing reduce-duration ability.
+            const reduceOne =
+                cfg.count === 'all'
+                    ? ctx.statusEngine.reduceAllDebuffsDuration
+                    : ctx.statusEngine.reduceNewestDebuffDuration;
             let affected = 0;
-            for (const rid of recipients)
-                affected += ctx.statusEngine.reduceNewestDebuffDuration(
-                    rid,
-                    cfg.durationTurns ?? 1
-                );
+            for (const rid of recipients) affected += reduceOne(rid, cfg.durationTurns ?? 1);
             ctx.healing?.credit(intent.ownerId, 'cleanseCount', affected);
             return;
         }

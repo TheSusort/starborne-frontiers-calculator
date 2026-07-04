@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability, AbilityTarget, AbilityTrigger, ShipSkills } from '../../../types/abilities';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
 import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { makeRateGate, setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
@@ -269,22 +269,31 @@ function seedDebuffs(se: ReturnType<typeof createStatusEngine>, count: number): 
     }
 }
 
-/** Build a reactive reduce-duration Intent for the test owner. */
-function makeReduceDurationIntent(opts: { durationTurns?: number; procChance?: number }): Intent {
+/** Build a reactive reduce-duration Intent for the test owner. `count` defaults to 1 (the
+ *  pre-PR11 newest-only shape, e.g. Warpstrike); pass 'all' for PR11's Heliodor/Pestilence
+ *  ALL-debuffs shape. `trigger` defaults to 'on-attacked' (Heliodor's shape); pass
+ *  'on-debuff-inflicted' for Pestilence's shape. */
+function makeReduceDurationIntent(opts: {
+    durationTurns?: number;
+    procChance?: number;
+    count?: number | 'all';
+    trigger?: AbilityTrigger;
+    target?: AbilityTarget;
+}): Intent {
     return {
         ownerId: OWNER_ID,
         sourceSlot: 'passive',
         ability: {
             id: 'reactive-reduce-dur-ab',
             type: 'cleanse',
-            target: 'self',
-            trigger: 'on-attacked',
+            target: opts.target ?? 'self',
+            trigger: opts.trigger ?? 'on-attacked',
             conditions: [],
             ...(opts.procChance !== undefined ? { procChance: opts.procChance } : {}),
             config: {
                 type: 'cleanse',
                 mode: 'reduce-duration',
-                count: 1, // unused in reduce-duration mode but required by type
+                count: opts.count ?? 1, // unused in reduce-duration mode UNLESS 'all' (PR11)
                 ...(opts.durationTurns !== undefined ? { durationTurns: opts.durationTurns } : {}),
             },
         },
@@ -352,6 +361,102 @@ describe('Task 4: reactive cleanse executor — reduce-duration mode', () => {
         expect(() => executeIntent(intent, ctx)).not.toThrow();
         // affected = 0, so credit called with 0.
         expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 0);
+    });
+});
+
+// PR11 (epic PR11): reduce-duration mode with count:'all' — Heliodor/Pestilence's "reduces the
+// duration of all active Debuffs … by 1 turn". The defining behavioral difference from Task 4's
+// count:1 (newest-only) tests above is proven directly: with TWO debuffs present, count:1 only
+// ever touches the newest (Debuff-1, proven above), while count:'all' touches BOTH.
+describe("PR11: reactive cleanse executor — reduce-duration mode, count:'all'", () => {
+    it("I. count:'all': BOTH debuffs lose 1 turn (not just the newest); credits cleanseCount:2", () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-1', 5), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1, count: 'all' });
+        executeIntent(intent, ctx);
+
+        // Both debuffs affected — distinct from the count:1 case (Task 4 test 'F'), which
+        // credits 1 and leaves Debuff-0 untouched.
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 2);
+        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+        const byName = new Map(statuses.map((s) => [s.active.buffName, s.active.turnsRemaining]));
+        expect(byName.get('Debuff-1')).toBe(4);
+        expect(byName.get('Debuff-0')).toBe(2); // count:1 would have left this at 3
+    });
+
+    it("J. count:'all' removes every debuff whose reduced duration is <= 0", () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-Short', 1), 'attacker', TARGET_ID);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-Long', 3), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1, count: 'all' });
+        executeIntent(intent, ctx);
+
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 2);
+        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+        expect(statuses.find((s) => s.active.buffName === 'Debuff-Short')).toBeUndefined();
+        expect(
+            statuses.find((s) => s.active.buffName === 'Debuff-Long')?.active.turnsRemaining
+        ).toBe(2);
+    });
+
+    it("K. count:'all' on-debuff-inflicted trigger (Pestilence shape): the executor is trigger-agnostic — same reduction fires", () => {
+        // The reduce-duration branch does not inspect the intent's trigger at all (any live
+        // trigger reaches executeIntent identically) — this proves Pestilence's
+        // on-debuff-inflicted shape drives the SAME count:'all' behavior as Heliodor's
+        // on-attacked shape above, just via a different ability.trigger value.
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-1', 5), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({
+            durationTurns: 1,
+            count: 'all',
+            trigger: 'on-debuff-inflicted',
+            target: 'all-allies',
+        });
+        executeIntent(intent, ctx);
+
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 2);
+    });
+
+    it("L. count:'all' with no eligible debuffs: affected 0, no throw", () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1, count: 'all' });
+
+        expect(() => executeIntent(intent, ctx)).not.toThrow();
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 0);
+    });
+
+    it('M. count:1 (Warpstrike, unchanged) still reduces only the newest — byte-identical guard against PR11 regressing the pre-existing shape', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-1', 5), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1, count: 1 });
+        executeIntent(intent, ctx);
+
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 1);
+        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+        const byName = new Map(statuses.map((s) => [s.active.buffName, s.active.turnsRemaining]));
+        expect(byName.get('Debuff-1')).toBe(4);
+        expect(byName.get('Debuff-0')).toBe(3);
     });
 });
 

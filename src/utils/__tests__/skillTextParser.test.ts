@@ -12,6 +12,7 @@ import {
     parseHpThresholdCondition,
     parseExtendDoT,
     parseCritPowerExtend,
+    parseDebuffDurationReduction,
     parseAllyCritDot,
     parseNoCrit,
     parseDetonateDoT,
@@ -1277,6 +1278,76 @@ describe('parseCritPowerExtend', () => {
             parseCritPowerExtend('extends active Damage Over Time effects by 1 turn.')
         ).toBeNull();
         expect(parseCritPowerExtend('')).toBeNull();
+    });
+});
+
+// PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. All texts below are
+// real CSV rows (docs/ship-skills.csv).
+describe('parseDebuffDurationReduction', () => {
+    it('Heliodor FIRST passive: self damage-reaction, target self, 1 turn', () => {
+        expect(
+            parseDebuffDurationReduction(
+                'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on itself by 1 turn and <unit-damage>repairs itself for 8%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([{ turns: 1, target: 'self', isDamageReaction: true }]);
+    });
+
+    it('Heliodor SECOND passive: self damage-reaction, target all-allies, 1 turn', () => {
+        expect(
+            parseDebuffDurationReduction(
+                'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn and repairs them for 8% of its Max HP.'
+            )
+        ).toEqual([{ turns: 1, target: 'all-allies', isDamageReaction: true }]);
+    });
+
+    it('Pestilence passive: "On debuff infliction" gate, target all-allies, 1 turn (verbatim first_passive_skill_text)', () => {
+        expect(
+            parseDebuffDurationReduction(
+                'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn.'
+            )
+        ).toEqual([{ turns: 1, target: 'all-allies', onDebuffInflicted: true }]);
+    });
+
+    it('Pestilence refit passive (tagged, with the trailing cleanse-reaction clause): the reduction clause still isolates cleanly', () => {
+        expect(
+            parseDebuffDurationReduction(
+                'On debuff infliction this Unit reduces the duration of active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn.<br />When an enemy <unit-aid>cleanses a Debuff</unit-aid> this unit inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on all cleansed enemies.'
+            )
+        ).toEqual([{ turns: 1, target: 'all-allies', onDebuffInflicted: true }]);
+    });
+
+    it('does NOT match Lingshe\'s Bomb-duration reduction (structurally different mechanic — "Bombs", not "Debuffs")', () => {
+        expect(
+            parseDebuffDurationReduction(
+                'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate. This reduction effect requires hacking. This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.'
+            )
+        ).toEqual([]);
+    });
+
+    it('returns [] for text with no duration-reduction clause', () => {
+        expect(
+            parseDebuffDurationReduction('This Unit deals <unit-damage>200% damage</unit-damage>.')
+        ).toEqual([]);
+        expect(parseDebuffDurationReduction('')).toEqual([]);
+        expect(parseDebuffDurationReduction(null)).toEqual([]);
+    });
+
+    it('does not match a plain extend-dot clause (no cross-talk with the growth mechanic)', () => {
+        expect(
+            parseDebuffDurationReduction('extends active Damage Over Time effects by 1 turn.')
+        ).toEqual([]);
+    });
+
+    it('a reduction clause matching NEITHER gate (no "when directly damaged"/"on debuff infliction") carries NO trigger flag — the parse reports it, buildShipAbilities drops it', () => {
+        // A hypothetical on-cast phrasing: the clause parses (turns/target extracted) but sets
+        // neither isDamageReaction nor onDebuffInflicted. This is the signal buildShipAbilities
+        // keys off to SKIP emission (rather than silently defaulting to on-attacked). No corpus
+        // ship hits this today; the test locks the classification contract explicitly.
+        expect(
+            parseDebuffDurationReduction(
+                'This Unit reduces the duration of all active Debuffs on all allies by 1 turn.'
+            )
+        ).toEqual([{ turns: 1, target: 'all-allies' }]);
     });
 });
 

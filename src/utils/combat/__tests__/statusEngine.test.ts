@@ -1727,6 +1727,102 @@ describe('reduceNewestDebuffDuration', () => {
     );
 });
 
+// PR11 (epic PR11): reduceAllDebuffsDuration — the ALL-scoped sibling of
+// reduceNewestDebuffDuration (Heliodor/Pestilence's "reduces the duration of all active
+// Debuffs … by 1 turn", vs Warpstrike's single-newest reduce above). The defining behavioral
+// difference from reduceNewestDebuffDuration is proven directly: with TWO removable timed
+// debuffs present, reduceNewestDebuffDuration only ever touches one (asserted above), while
+// reduceAllDebuffsDuration touches BOTH.
+describe('reduceAllDebuffsDuration', () => {
+    const timedEnemyStatus = (
+        buffName: string,
+        duration: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration,
+        payload: { buffName, stacks: 1, parsedEffects: { defense: -5 } },
+    });
+
+    it('reduces EVERY removable timed debuff by `turns` — proves the ALL-scope, distinct from reduceNewestDebuffDuration (which would leave the older one untouched)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 3));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 4));
+
+        const result = eng.reduceAllDebuffsDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(2);
+        const timed = eng.timedAbilityStatuses('enemy');
+        const a = timed.find((s) => s.payload.buffName === 'Armor Break');
+        const b = timed.find((s) => s.payload.buffName === 'Defense Down');
+        // BOTH shrink by 1 turn — reduceNewestDebuffDuration would have left Armor Break at 3.
+        expect(a?.active.turnsRemaining).toBe(2);
+        expect(b?.active.turnsRemaining).toBe(3);
+    });
+
+    it('removes every debuff whose reduced duration is <= 0, leaves longer ones standing', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 1));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 3));
+
+        const result = eng.reduceAllDebuffsDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(2);
+        const timed = eng.timedAbilityStatuses('enemy');
+        expect(timed.find((s) => s.payload.buffName === 'Defense Down')).toBeUndefined();
+        expect(timed.find((s) => s.payload.buffName === 'Armor Break')?.active.turnsRemaining).toBe(
+            2
+        );
+    });
+
+    it('skips UNREMOVABLE_STATUSES, still reduces the other eligible debuffs', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // 'Acidic Decay' is a real member of UNREMOVABLE_STATUSES.
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+        const result = eng.reduceAllDebuffsDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(1);
+        const timed = eng.timedAbilityStatuses('enemy');
+        expect(
+            timed.find((s) => s.payload.buffName === 'Acidic Decay')?.active.turnsRemaining
+        ).toBe(3);
+        expect(
+            timed.find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining
+        ).toBe(2);
+    });
+
+    it('returns 0 for an unknown actor id without throwing', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+
+        expect(eng.reduceAllDebuffsDuration('no-such-actor', 1)).toBe(0);
+    });
+
+    it.each([0, -1, NaN, Infinity])(
+        'rejects a non-positive / non-finite turns (%s) → returns 0, debuffs untouched',
+        (turns) => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+            const result = eng.reduceAllDebuffsDuration(DEFAULT_ENEMY_TARGET, turns);
+
+            expect(result).toBe(0);
+            expect(
+                eng.timedAbilityStatuses('enemy').find((s) => s.payload.buffName === 'Defense Down')
+                    ?.active.turnsRemaining
+            ).toBe(3);
+        }
+    );
+});
+
 describe('clearRemovable', () => {
     // A persistent-stacking debuff fixture (Defense Shred) on the default enemy target.
     const persistentShred = (): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({

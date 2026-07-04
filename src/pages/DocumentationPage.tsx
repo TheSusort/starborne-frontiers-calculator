@@ -2540,7 +2540,15 @@ const DocumentationPage: React.FC = () => {
                                         Defense, or the recipient&apos;s max HP) by the parsed
                                         percentage; shields and cleanse counts are editable too.
                                         Heal modifier, Outgoing Repair, and Incoming Repair all feed
-                                        in as separate multipliers.
+                                        in as separate multipliers. Support ships that shorten
+                                        debuff durations rather than removing them outright —
+                                        Heliodor (reducing its own or all allies&apos; active debuff
+                                        durations by 1 turn when directly damaged) and Pestilence
+                                        (reducing all allies&apos; active debuff durations by 1 turn
+                                        after it inflicts a debuff) — are modeled too: each affected
+                                        debuff loses a turn (a debuff reduced to zero expires
+                                        early), and the effect is tallied in the round&apos;s
+                                        Cleanses count.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

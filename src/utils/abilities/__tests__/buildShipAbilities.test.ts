@@ -1668,6 +1668,113 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    // PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. The heal half of
+    // Heliodor's sentence is covered above; these assert the CO-LOCATED reduction half, which
+    // previously emitted nothing (see skillTextParser.test.ts's "the debuff-duration clause
+    // emits nothing" note on parseHealAbilities — that note is about the HEAL parser only; the
+    // reduction now lives in its own ability, added alongside, not folded into the heal).
+    describe('debuff-duration reduction (PR11, inverse of extend-dot)', () => {
+        it('Heliodor first passive: self damage-reaction reduces ALL active debuffs on itself by 1 turn', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on itself by 1 turn and <unit-damage>repairs itself for 8%</unit-damage> of its Max HP.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const reduce = passive?.abilities.find((a) => a.type === 'cleanse');
+            expect(reduce).toMatchObject({
+                type: 'cleanse',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'cleanse',
+                    count: 'all',
+                    mode: 'reduce-duration',
+                    durationTurns: 1,
+                },
+            });
+            // Both halves of the sentence coexist — the heal ability is untouched.
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toBeDefined();
+        });
+
+        it('Heliodor SECOND passive: self damage-reaction reduces ALL active debuffs on all allies by 1 turn', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn and repairs them for 8% of its Max HP.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const reduce = passive?.abilities.find((a) => a.type === 'cleanse');
+            expect(reduce).toMatchObject({
+                type: 'cleanse',
+                target: 'all-allies',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'cleanse',
+                    count: 'all',
+                    mode: 'reduce-duration',
+                    durationTurns: 1,
+                },
+            });
+        });
+
+        it('Pestilence passive: on-debuff-inflicted reduces ALL active debuffs on all allies by 1 turn (verbatim first_passive_skill_text)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const reduce = passive?.abilities.find((a) => a.type === 'cleanse');
+            expect(reduce).toMatchObject({
+                type: 'cleanse',
+                target: 'all-allies',
+                trigger: 'on-debuff-inflicted',
+                conditions: [],
+                config: {
+                    type: 'cleanse',
+                    count: 'all',
+                    mode: 'reduce-duration',
+                    durationTurns: 1,
+                },
+            });
+        });
+
+        it('Lingshe charge skill (Bomb-duration reduction): does NOT emit a debuff-duration-reduction cleanse — deliberately deferred (see auditSkills.allowlist.ts)', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
+            });
+            const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
+            const reduce = charged?.abilities.find(
+                (a) =>
+                    a.type === 'cleanse' &&
+                    a.config.type === 'cleanse' &&
+                    a.config.mode === 'reduce-duration'
+            );
+            expect(reduce).toBeUndefined();
+        });
+
+        it('an un-gated reduction clause (no "when directly damaged"/"on debuff infliction") is DROPPED, not emitted as a phantom on-attacked ability', () => {
+            // The clause parses (parseDebuffDurationReduction returns turns/target) but carries
+            // neither reactive gate flag → buildShipAbilities must NOT emit it (a silent on-cast /
+            // on-attacked default would fire an all-debuff reduction with no real trigger). No
+            // corpus ship hits this branch; the test locks the drop behaviour of option (a).
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const reduce = passive?.abilities.find(
+                (a) =>
+                    a.type === 'cleanse' &&
+                    a.config.type === 'cleanse' &&
+                    a.config.mode === 'reduce-duration'
+            );
+            expect(reduce).toBeUndefined();
+        });
+    });
+
     // Combat G PR1 (Task 5): Stalwart's counterattack passive — "When directly damaged as a
     // primary target, it deals X% damage to that enemy" — auto-produces a reactive `counter`
     // ability (on-attacked, requirePrimaryTarget) instead of a plain on-cast `damage`, while the

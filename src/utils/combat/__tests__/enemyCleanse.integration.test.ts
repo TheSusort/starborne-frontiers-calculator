@@ -200,3 +200,105 @@ describe('enemy on-cast cleanse: drives a focus on-enemy-cleansed (Grif) proc on
         expect(grifDamage).toBeGreaterThan(0);
     });
 });
+
+// PR11 (epic PR11) team-symmetry: an ENEMY carrying the debuff-duration-reduction reactive
+// (Heliodor's shape: on-attacked, target self, count:'all') behaves identically to a player-side
+// carrier — proving the mechanic is not player-only. The reduce-duration branch is a "pure status
+// mutation" (triggers.ts) that credits `cleanseCount` via `ctx.healing.credit(intent.ownerId, …)`
+// regardless of side — empirically confirmed this credits the ENEMY's OWN `perActor` bucket (NOT
+// suppressed the way E5's player-facing heal metric is for enemy heals). Distinguishing
+// observable: the player applies TWO distinct debuffs to the enemy each round ('Older','Newer').
+// count:1 (Warpstrike's newest-only shape) can only ever touch ONE of them; count:'all' (this
+// PR's Heliodor/Pestilence shape) touches BOTH — proven on an ENEMY owner exactly as the
+// player-side unit tests (cleanseReactivePath.test.ts) proved it on a player owner.
+describe('PR11: enemy-side debuff-duration reduction (team symmetry — Heliodor shape)', () => {
+    const debuffAbility = (name: string): Ability =>
+        ({
+            id: `sym-debuff-${name}`,
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: name,
+                parsedEffects: { attack: -10 },
+                stacks: 1,
+                isStackable: false,
+                application: 'apply',
+                duration: 5,
+            },
+        }) as unknown as Ability;
+
+    // Player active: 100% damage + TWO distinct always-landing debuffs on the enemy.
+    const damageThenTwoDebuffs = (): ShipSkills['slots'][number] => ({
+        slot: 'active',
+        abilities: [
+            {
+                id: 'sym-basic',
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'damage', multiplier: 100 },
+            },
+            debuffAbility('Older'),
+            debuffAbility('Newer'),
+        ],
+    });
+
+    // Enemy: a plain 100% damage active, paired with an on-attacked self reduce-duration passive
+    // whose `count` is the parameter under test (1 = pre-PR11 newest-only; 'all' = PR11's shape).
+    const enemyReduceDurationSkills = (count: number | 'all'): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-basic',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    {
+                        id: 'enemy-reduce-duration',
+                        type: 'cleanse',
+                        target: 'self',
+                        trigger: 'on-attacked',
+                        conditions: [],
+                        config: {
+                            type: 'cleanse',
+                            count,
+                            mode: 'reduce-duration',
+                            durationTurns: 1,
+                        },
+                    } as unknown as Ability,
+                ],
+            },
+        ],
+    });
+
+    const foeCleanseCount = (count: number | 'all'): number | undefined => {
+        const result = runCombat(
+            playerVsEnemy(damageThenTwoDebuffs(), [
+                enemyAt('foe', 'M4', enemyReduceDurationSkills(count)),
+            ])
+        );
+        return result.healing?.rounds[0]?.perActor.get('foe')?.cleanseCount;
+    };
+
+    it("CONTROL (count:1, newest-only): the enemy's reactive touches exactly ONE of its two debuffs", () => {
+        expect(foeCleanseCount(1)).toBe(1);
+    });
+
+    it("TREATMENT (count:'all', PR11): the SAME enemy reactive touches BOTH debuffs — the defining team-symmetry observable", () => {
+        expect(foeCleanseCount('all')).toBe(2);
+    });
+});
