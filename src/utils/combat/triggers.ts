@@ -2290,7 +2290,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 intent.ownerId,
                 sourceId,
                 intent.ability.id,
-                cfg.multiplier,
+                cfg.multiplier, // inert on this path — the engine reads hpBasisPct, not multiplier, when set
                 cfg.hits ?? 1,
                 cfg.noCrit ?? false,
                 cfg.hpBasisPct
