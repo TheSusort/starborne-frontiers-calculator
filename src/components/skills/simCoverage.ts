@@ -61,6 +61,7 @@ export const PASSIVE_NOOP_TYPES: ReadonlySet<AbilityType> = new Set([
     'detonate-dot',
     'accumulate-detonate',
     'additional-damage',
+    'shield-strip',
 ]);
 
 export const NOT_SIMULATED_NOTE = 'Not simulated in the calculators yet.';
