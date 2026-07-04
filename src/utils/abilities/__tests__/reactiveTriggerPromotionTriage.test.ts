@@ -73,12 +73,18 @@ describe('cluster 1 — on-attacked', () => {
     const QUIXILVER_PASSIVE =
         'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.';
 
-    it('Quixilver: reactive shield-on-hit rides on-attacked', () => {
+    it('Quixilver: damage-taken leech shield with the requiresHpDamage punch-through gate (FP — engine-modeled)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: QUIXILVER_PASSIVE }, 'passive');
         const shield = abilities.find((a) => a.type === 'shield');
-        expect(shield?.trigger).toBe('on-attacked');
-        // GAP: tag-only — the shield builder never calls detectDamageReactionTrigger at all
-        // (no reaction path), unlike the buff/debuff/heal builders which already fall back to it.
+        // FP (re-classified PR-A): NOT a trigger gap. This is a `damage-taken` leech shield the
+        // engine procs per enemy attack via its dedicated leech block (engine.ts ~2627/2887),
+        // which IGNORES the ability trigger. The "when taking HP damage and still having Shield"
+        // clause is modeled by requiresHpDamage (punch-through gate — leech.test.ts locks it).
+        // Promoting the trigger to on-attacked would partition it OFF the leech path onto the
+        // reactive path (no requiresHpDamage gate there), REGRESSING behavior — so it correctly
+        // stays on-cast at the model level. The lock asserts the leech modeling instead.
+        expect(shield?.config).toMatchObject({ basis: 'damage-taken', requiresHpDamage: true });
+        expect(shield?.trigger).toBe('on-cast');
     });
 
     const IRIDIUM_PASSIVE =
@@ -95,13 +101,16 @@ describe('cluster 1 — on-attacked', () => {
     const MALVEX_PASSIVE =
         'When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.';
 
-    it('Malvex: reactive shield-on-hit (primary-target clause) rides on-attacked', () => {
+    it('Malvex: damage-taken leech shield (FP — engine-modeled, same leech path as Quixilver)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: MALVEX_PASSIVE }, 'passive');
         const shield = abilities.find((a) => a.type === 'shield');
-        expect(shield?.trigger).toBe('on-attacked');
-        // GAP: tag-only — same shield-builder-has-no-reaction-path gap as Quixilver. (The
-        // "as a primary target" qualifier is a separate, not-yet-modeled condition/capture
-        // concern for a follow-on fix-PR, out of scope for this trigger probe.)
+        // FP (re-classified PR-A): same as Quixilver — a `damage-taken` leech shield procced per
+        // attack by the engine's leech block ("15% of the Damage dealt to them"; leech.test.ts
+        // locks it), NOT a trigger gap. No "still having Shield" clause, so no requiresHpDamage
+        // gate. Trigger stays on-cast (leech path ignores it); promoting it would regress.
+        expect(shield?.config).toMatchObject({ basis: 'damage-taken' });
+        expect(shield?.config).not.toHaveProperty('requiresHpDamage');
+        expect(shield?.trigger).toBe('on-cast');
     });
 
     const WARDEN_PASSIVE =
