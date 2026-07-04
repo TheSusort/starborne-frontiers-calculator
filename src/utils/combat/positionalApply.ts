@@ -105,8 +105,12 @@ export function applyPositionalDamage(args: {
     /**
      * Engine wrapper — decrements the victim's currentHp (Task 8 passes applyOutgoingToEnemy)
      * and returns the resolved {@link VictimDamageOutcome} (shield-before / HP-damage / barriered).
+     * Epic PR12 (A): the third param is `isAnchor` — true when this victim IS the attacker's
+     * resolved anchor/primary target, false for a covered/splash footprint victim (Nosorog's
+     * "reflects damage taken … as a PRIMARY TARGET" requirePrimaryTarget gate). Optional so
+     * every pre-PR12 caller keeps compiling unchanged (JS simply drops the extra arg).
      */
-    applyToVictim: (victim: CombatActor, damage: number) => VictimDamageOutcome;
+    applyToVictim: (victim: CombatActor, damage: number, isAnchor?: boolean) => VictimDamageOutcome;
     emitHit?: (victim: CombatActor, damage: number, didCrit: boolean) => void;
     /**
      * OPTIONAL per-victim hook (E2 — per-victim leech). Invoked once per footprint victim AFTER
@@ -205,7 +209,7 @@ export function applyPositionalDamage(args: {
             );
             const ampPct = outgoingAmplificationFor?.(victim, didCrit) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
-            const outcome = applyToVictim(victim, dmg);
+            const outcome = applyToVictim(victim, dmg, isAnchor);
             emitHit?.(victim, dmg, didCrit);
             onVictimResolved?.(victim, dmg, outcome, didCrit);
         }

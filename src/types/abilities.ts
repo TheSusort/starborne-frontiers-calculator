@@ -291,12 +291,24 @@ export interface Condition {
  *  IncomingHitContext at the victim apply site — NOT a ConditionSubject (those are
  *  attacker-turn standing facts; these are per-incoming-hit facts). */
 export type IncomingCondition =
-    | 'self-stealth' // Voidshade (reduction), Shadowguard (block)
+    | 'self-stealth' // Voidshade (reduction), Shadowguard (block); Wusheng (epic PR12)
     | 'self-stasis' // Nebula Nullifier (Disable folds in here when modeled)
     | 'incoming-crit' // Hardened set, Iridium
     | 'incoming-crit-by-stealthed' // Hyperion Gaze
     | 'nth-hit-2plus' // Ironclad (block)
-    | 'dot-inferno-corrosion'; // Vortex Veil
+    | 'dot-inferno-corrosion' // Vortex Veil
+    // Epic PR12 (C): the ATTACKER carries a live Corrosion/Inferno DoT stack (Anemone —
+    // "takes 25% less direct damage from enemies debuffed with a Damage over Time effect").
+    // Distinct from `dot-inferno-corrosion` (a fact about THIS hit being a DoT tick); this is a
+    // fact about the ATTACKER's own status, checked on an ordinary direct hit.
+    | 'attacker-has-dot'
+    // Epic PR12 (C): the VICTIM currently carries its own "Barrier Recharging" self-status
+    // (Panon — "reduces all incoming damage by 20% when affected by Barrier Recharging").
+    // A literal named-status check, mirroring the self-stealth/self-stasis precedent.
+    | 'self-barrier-recharging'
+    // Epic PR12 (C): unconditional — used with `hpScaling` (Tormenter's HP-proportional
+    // reduction, which carries no trigger/status gate, only continuous HP scaling).
+    | 'always';
 
 /** Per-incoming-hit context assembled by the engine at each victim apply site. */
 export interface IncomingHitContext {
@@ -308,6 +320,18 @@ export interface IncomingHitContext {
     hitIndexThisRound: number;
     /** Set only on the DoT-tick path (Vortex Veil). */
     dotType?: 'inferno' | 'corrosion';
+    /** Epic PR12 (C): true when the ATTACKER of this hit carries a live Corrosion or Inferno
+     *  stack (Anemone). Live-derived by the engine; defaults false everywhere no such ability
+     *  is present → byte-identical. */
+    attackerHasDot: boolean;
+    /** Epic PR12 (C): true when the VICTIM currently carries its own "Barrier Recharging"
+     *  self-status (Panon). Live-derived by the engine; defaults false. */
+    victimHasBarrierRecharging: boolean;
+    /** Epic PR12 (C): the VICTIM's own live HP% (0..100) at hit time, for HP-proportional
+     *  incoming-reduction scaling (Tormenter's `hpScaling`). Live-derived by the engine;
+     *  defaults 100 (full HP) where unused/inapplicable — inert unless an ability's config
+     *  carries `hpScaling`. */
+    selfHpPct: number;
 }
 
 /**
@@ -536,11 +560,20 @@ export type AbilityConfig =
           type: 'incoming-reduction';
           scope: 'direct' | 'dot';
           condition: IncomingCondition;
-          /** Positive magnitude (percentage points); folded as a reduction into the incoming channel. */
+          /** Positive magnitude (percentage points); folded as a reduction into the incoming channel.
+           *  IGNORED when `hpScaling` is set (Tormenter) — the effective reduction is computed
+           *  from `hpScaling` instead. */
           pct: number;
           /** Grouping ONLY: true → take-max crit-reduction family; false → additive.
            *  Orthogonal to the gate — the crit gate is enforced by condition='incoming-crit*'. */
           critFamily: boolean;
+          /** Epic PR12 (C): HP-proportional reduction (Tormenter — "gains up to 30% damage
+           *  reduction as its health decreases"). When set, the effective pct is
+           *  `min(cap, perUnit * (100 - victim's live HP%))` — mirrors the Revenge gear set's
+           *  self-hp-missing-pct formula (perUnit = cap/100 reaches the cap exactly at 0 HP).
+           *  Requires `condition: 'always'`. Absent → flat `pct` (unchanged for every ability
+           *  without it). */
+          hpScaling?: { perUnit: number; cap: number };
       }
     // D-PR3 victim-side proc block (rolled at the applyVictimDamage funnel, byDirectDamage only).
     | {
@@ -598,6 +631,12 @@ export type AbilityConfig =
           type: 'damage-reflection';
           /** Percentage of incoming direct damage reflected back to the attacker (e.g. 10). */
           pct: number;
+          /** Epic PR12 (A) — Nosorog: "reflects 40% of the Damage taken back to the enemy when
+           *  directly damaged AS A PRIMARY TARGET." Mirrors counter's `requirePrimaryTarget`
+           *  (Stalwart): fires only when this hit's victim was the attacker's anchor/primary
+           *  target, not a splash/covered footprint victim. Absent → unconditional (Reflect
+           *  gear set, byte-identical). */
+          requirePrimaryTarget?: boolean;
       }
     // Boost gear set: caster-side +1-turn extension on every buff the wearer applies.
     // No-op marker config (mirrors damage-reflection) — read by the engine when building

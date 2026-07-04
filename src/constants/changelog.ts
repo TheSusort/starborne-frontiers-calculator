@@ -29,6 +29,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Malvex's, Quixilver's, and FrontLine's bonus damage that scales with their own current Shield is now modeled — it uses their live Shield pool at the moment they attack, so it grows as their Shield does over the fight. Also added: APEX, Laika, and Malvex now strip a percentage of the target's Shield on cast (separate from Lodolite's full-strip-on-purge refit).",
     "Combat sim: added buff steal. Pallas's and Thresh's charged skills now actually steal a buff from their target instead of doing nothing extra, and Tithonus's charged skill steals a buff and grants it to herself and all adjacent allies (alongside her existing purge and damage). The stolen buff keeps its remaining duration.",
     "Combat sim: Heliodor's and Pestilence's debuff-duration-reduction passives are now modeled — when directly damaged (Heliodor) or after inflicting a debuff (Pestilence), all active debuffs on the affected ship(s) now actually lose 1 turn of duration, instead of only the paired repair effect applying.",
+    "Combat sim: several defensive passives are now modeled. Nosorog reflects damage back at an attacker that directly hits her as its primary target; Chakara's charged skill now bypasses part of the enemy's Defense; and Anemone, Panon, Wusheng, and Tormenter each take less direct damage under their stated conditions (an enemy afflicted with a damage-over-time effect, her own Barrier Recharging status, being Stealthed, and losing HP, respectively).",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
