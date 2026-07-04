@@ -3354,8 +3354,11 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Panon</strong> reduces all incoming damage — direct and
                                     damage-over-time — while she has Barrier Recharging, and{' '}
                                     <strong>Tormenter&apos;s</strong> reduction (direct and
-                                    damage-over-time) grows the lower her HP falls. More implant and
-                                    gear-set effects will be added in future updates.
+                                    damage-over-time) grows the lower her HP falls.{' '}
+                                    <strong>Vindicator</strong> retaliates when it resists an enemy
+                                    debuff, dealing damage equal to 30% of its own max HP back to
+                                    the ship that attempted it. More implant and gear-set effects
+                                    will be added in future updates.
                                 </p>
                             </div>
                         </div>
