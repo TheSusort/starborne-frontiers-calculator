@@ -335,8 +335,6 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
         const ab = abilitiesFor({ firstPassiveSkillText: CROCUS_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-ally-crit-dot');
-        // GAP: tag-only — self-target heal; on-ally-crit-dot trigger exists (triggers.ts:379) but the
-        // heal builder doesn't derive it.
     });
 
     const VINDICATOR_P3 =
@@ -344,8 +342,12 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     it('Vindicator: reactive damage on debuff-resisted rides on-debuff-resisted', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VINDICATOR_P3 }, 'passive');
         expect(ab.some((a) => a.type === 'damage' && a.trigger === 'on-debuff-resisted')).toBe(true);
-        // GAP: tag-only — emits NO ability; the damage builder has no reaction path (only round-boundary).
-        // on-debuff-resisted trigger exists in the union. Damage targets "that enemy" (the resisted attacker).
+        // GAP: DEFERRED (Phase 3 PR-C, 2026-07-04) — two independent infra gaps beyond Layer-1 tag
+        // inheritance: (1) no maxHP-scaled damage model — the 'damage' AbilityConfig only carries an
+        // attack%-based multiplier (applyReactiveDamage sources ownerStats.attack), so "30% of max HP"
+        // cannot be emitted faithfully; (2) no-capturable-actor — the debuff-resisted event carries only
+        // targetId (the resister), no source/attacker id, so "that enemy" cannot be resolved. Spec-locked
+        // out-of-scope (no-capturable-actor → candidate future work). Probe intentionally left RED.
     });
 
     const AMARTYA_P2 =

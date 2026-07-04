@@ -400,8 +400,11 @@ describe('buildShipAbilities', () => {
         // ally's OUTGOING crit — if detectDamageReactionTrigger ever reads it as the ally
         // BEING crit-hit, the Task 8 name-only-debuff pass adds a phantom on-ally-attacked
         // Corrosion II debuff card on top of these two.
+        // Phase 3 PR-C: the heal now also rides on-ally-crit-dot (detectAllyCritDotTrigger)
+        // instead of the stale on-cast default — it repairs Crocus reactively, on an ALLY's
+        // crit-DoT infliction, not on Crocus's own cast.
         expect(abilities.map((a) => [a.type, a.trigger])).toEqual([
-            ['heal', 'on-cast'],
+            ['heal', 'on-ally-crit-dot'],
             ['dot', 'on-ally-crit-dot'],
         ]);
     });

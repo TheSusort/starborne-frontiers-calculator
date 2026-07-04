@@ -1325,6 +1325,22 @@ export function parseAllyCritDot(text: string | null | undefined): boolean {
     return !!text && ALLY_CRIT_DOT_RE.test(stripUnitTags(text));
 }
 
+/**
+ * Returns 'on-ally-crit-dot' when `anchorPos` (the ability's raw-text anchor position) falls
+ * inside the sentence carrying the "when (an/another) ally inflicts a DoT effect with a
+ * critical hit" phrase; otherwise undefined. Position-scoped on the RAW text (mirrors
+ * detectCritRepairTrigger). This is the HEAL-builder counterpart to parseAllyCritDot's
+ * DoT-infliction reading of the same phrase (Crocus p1: self-repair; Crocus p3/refit-passive
+ * additionally chains a DoT infliction on the same trigger, handled separately in
+ * buildShipAbilities' dot-effects branch). Reference data: docs/ship-skills.csv (Crocus).
+ */
+export function detectAllyCritDotTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_CRIT_DOT_RE, anchorPos, 'on-ally-crit-dot');
+}
+
 // Pallas's TWO ally-crit reactive phrasings (live triggers; see types/abilities.ts):
 //  - "when this unit critically repairs an ally / allies" → on-ally-critically-repaired (the
 //    OWNER's own crit-repair fires it; stamped onto heal/shield/cleanse abilities in that

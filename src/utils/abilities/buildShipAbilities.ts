@@ -45,6 +45,7 @@ import {
     parseCritPowerExtend,
     parseDebuffDurationReduction,
     parseAllyCritDot,
+    detectAllyCritDotTrigger,
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
     detectStasisAppliedTrigger,
@@ -1476,6 +1477,10 @@ function abilitiesFromText(
               // on-enemy-destroyed reactive trigger (position-scoped). The ENEMY-death
               // counterpart to detectDestroyedTrigger's SELF-death case above.
               detectEnemyDestroyedTrigger(text, healPos) ??
+              // Crocus (Phase 3 PR-C): a self-repair anchored in the "when another ally
+              // inflicts a Damage Over Time (DoT) effect with a critical hit" sentence rides
+              // the on-ally-crit-dot reactive trigger (self-target heal; position-scoped).
+              detectAllyCritDotTrigger(text, healPos) ??
               // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
               // sentence rides the on-enemy-purged reactive trigger (position-scoped).
               detectEnemyPurgedTrigger(text, healPos) ??
