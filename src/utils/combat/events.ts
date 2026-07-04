@@ -97,6 +97,9 @@ export type CombatEvent =
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
+          /** The inflicting actor (Vindicator on-resist retaliation routes here). Optional: a
+           *  display-only resist path may omit it; a source-requiring reaction no-ops when absent. */
+          sourceId?: string;
           targetId: string;
           round: number;
           buffName: string;

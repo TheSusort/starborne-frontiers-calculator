@@ -3825,3 +3825,65 @@ describe('on-deal-damage live trigger', () => {
         expect(reactiveAbilities[0].ability.trigger).toBe('on-deal-damage');
     });
 });
+
+describe('on-debuff-resisted listener — source routing', () => {
+    const onResistDamage = (): ReactiveAbility => ({
+        sourceSlot: 'passive',
+        ability: ab({
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-debuff-resisted',
+            config: { type: 'damage', multiplier: 0, hits: 1, hpBasisPct: 30 },
+        }),
+    });
+
+    function emitResist(sourceId: string | undefined): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'vindi', reactiveAbilities: [onResistDamage()] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy1' || id === 'enemy2',
+        });
+        bus.emit({
+            type: 'debuff-resisted',
+            sourceId,
+            targetId: 'vindi',
+            round: 1,
+            buffName: 'Def Down',
+        });
+        return intents;
+    }
+
+    it('routes the inflictor as counterTargetId when the resist carries a source', () => {
+        const intents = emitResist('enemy1');
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBe('enemy1');
+    });
+
+    it('enqueues without counterTargetId when the resist has no source', () => {
+        const intents = emitResist(undefined);
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBeUndefined();
+    });
+
+    it('does not fire for a resist on a different unit', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'vindi', reactiveAbilities: [onResistDamage()] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy1',
+        });
+        bus.emit({
+            type: 'debuff-resisted',
+            sourceId: 'enemy1',
+            targetId: 'someoneElse',
+            round: 1,
+            buffName: 'Def Down',
+        });
+        expect(intents).toHaveLength(0);
+    });
+});

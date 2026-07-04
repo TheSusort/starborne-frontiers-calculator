@@ -588,9 +588,22 @@ export function registerReactiveListeners(args: {
                     bus.on('debuff-resisted', (e) => {
                         // Self-scoped on the RESISTER. `debuff-resisted` carries targetId = the
                         // unit that resisted (either side: cast-side, reactive-side, and the
-                        // D-PR15 Block-Debuff auto-resist all emit it). all-allies recipient
-                        // routing happens in the buff executor.
-                        if (e.targetId === ownerId) enqueue(intent);
+                        // D-PR15 Block-Debuff auto-resist all emit it). Route the inflictor
+                        // (e.sourceId) as counterTargetId so a damage reaction (Vindicator's
+                        // on-resist HP proc) retaliates against THAT enemy. When the resist carries
+                        // no source, enqueue the bare intent — buff consumers (Lockdown) are
+                        // source-agnostic and still fire; a source-requiring damage reaction no-ops
+                        // downstream (triggers.ts damage branch). all-allies recipient routing
+                        // happens in the buff executor.
+                        if (e.targetId !== ownerId) return;
+                        enqueue(
+                            e.sourceId !== undefined
+                                ? {
+                                      ...intent,
+                                      eventCtx: { ...intent.eventCtx, counterTargetId: e.sourceId },
+                                  }
+                                : intent
+                        );
                     });
                     break;
                 case 'on-ally-attacked':
@@ -1928,6 +1941,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining });
                 ctx.bus.emit({
                     type: 'debuff-resisted',
+                    // sourceId = the inflictor (PR-J) so an on-debuff-resisted reaction (Vindicator)
+                    // can route retaliation back at it; the round display ignores it.
+                    sourceId: intent.ownerId,
                     // debuff-resisted feeds the round display only — no per-target counter
                     // routing needed (unchanged even for the recipient-targeted fan-out above).
                     targetId: ctx.enemy.id,
@@ -1948,6 +1964,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (targetCarriesBlockDebuff(ctx.statusEngine, ctx.enemy.id)) {
             emitBlockDebuffResist(
                 ctx.bus,
+                intent.ownerId,
                 ctx.enemy.id,
                 ctx.round,
                 dotResistLabel(cfg.dotType, cfg.tier)
