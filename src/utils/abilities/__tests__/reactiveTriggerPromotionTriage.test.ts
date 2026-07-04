@@ -293,8 +293,9 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
         const ab = abilitiesFor({ firstPassiveSkillText: HOWLER_P2 }, 'passive');
         const cleanse = ab.find((a) => a.type === 'cleanse');
         expect(cleanse?.trigger).toBe('on-ally-crit');
-        // GAP: needs-capture — cleanse target is "that ally" (the crit-er); on-ally-crit (triggers.ts:441)
-        // captures no actor. Cleanse builder only derives on-ally-critically-repaired. Needs which-ally capture.
+        // Fixed (Phase 3 PR-G): the on-ally-crit listener now stamps damagedAllyId = the crit-ing
+        // ally (triggers.ts), and the cleanse builder derives on-ally-crit via detectAllyCritTrigger
+        // — the cleanse lands on "that ally" (the crit-er), not a fallback.
     });
 
     const CULTIVATOR_P2 =

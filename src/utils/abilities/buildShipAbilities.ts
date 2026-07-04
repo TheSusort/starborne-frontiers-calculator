@@ -1605,6 +1605,9 @@ function abilitiesFromText(
         const cleansePos = text.search(/cleanse/i);
         // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
         // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
+        // Howler (Phase 3 PR-G): "cleanses 1 debuff from an ally when that ally crits an enemy" —
+        // rides on-ally-crit instead (a DIFFERENT ally does the critting, not the owner) — routed
+        // to the crit-er via eventCtx.damagedAllyId (triggers.ts on-ally-crit listener).
         // Purifier (Phase 3 PR-A): a PASSIVE-slot "cleanses N debuff when directly damaged" cleanse
         // rides on-attacked — the cleanse builder previously derived ONLY the crit-repair reaction,
         // so a direct-damage cleanse fell through to on-cast. Gated to passive (an active/charged
@@ -1613,6 +1616,7 @@ function abilitiesFromText(
         // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
         const reactiveTrigger =
             detectCritRepairTrigger(text, cleansePos) ??
+            detectAllyCritTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
