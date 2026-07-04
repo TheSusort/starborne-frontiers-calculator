@@ -49,6 +49,7 @@ export interface ChargeGain {
         | 'on-debuff-inflicted'
         | 'on-ally-debuff-inflicted'
         | 'on-enemy-repaired'
+        | 'on-enemy-destroyed'
         | 'start-of-turn';
     // Explicit gate conditions applied alongside `trigger` (start-of-turn + full-HP, Cobalt).
     // When present, buildShipAbilities uses these verbatim instead of deriving a single

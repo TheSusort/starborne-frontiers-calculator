@@ -50,6 +50,7 @@ import {
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
+    detectEnemyDestroyedTrigger,
     detectEnemyCleanseTrigger,
     detectEnemyPurgedTrigger,
     detectAllyPurgedTrigger,
@@ -1470,6 +1471,11 @@ function abilitiesFromText(
               // position-scoped). The parser only emits this all-allies heal when that shape is
               // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
               detectDestroyedTrigger(text, healPos) ??
+              // Madax/Rikra (Phase 3 PR-B): a self-repair anchored in an enemy-kill sentence
+              // ("when an enemy dies" / "destroyed … upon killing them") rides the
+              // on-enemy-destroyed reactive trigger (position-scoped). The ENEMY-death
+              // counterpart to detectDestroyedTrigger's SELF-death case above.
+              detectEnemyDestroyedTrigger(text, healPos) ??
               // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
               // sentence rides the on-enemy-purged reactive trigger (position-scoped).
               detectEnemyPurgedTrigger(text, healPos) ??

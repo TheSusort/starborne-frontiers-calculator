@@ -609,14 +609,16 @@ export function detectIgnoresForcedTargeting(
     return skillTexts.some((t) => !!t && IGNORES_FORCED_TARGETING_RE.test(stripUnitTags(t)));
 }
 
-// Phrases that disqualify a charge phrase from being a self-gain we model:
-// ally-grant to others, on-kill (enemy never dies). The enemy-REPAIR phrasings were
-// lifted OUT (Phase 4c PR 4): a self charge gain "when an enemy repairs" now rides the
-// LIVE on-enemy-repaired trigger (Zosimos) — handled in parseChargeGain below — instead
-// of being dropped. "when an enemy dies" still routes here (an on-kill charge never fires
-// in the single-ship sim; Liberator's all-allies death charge is handled separately).
-const CHARGE_DISQUALIFY_RE =
-    /all allies|their charged skill|charged skill of all allies|upon killing|killing an enemy|when an enemy dies/i;
+// Phrases that disqualify a charge phrase from being a self-gain we model: ally-grant to
+// others only. The enemy-REPAIR phrasings were lifted OUT (Phase 4c PR 4): a self charge
+// gain "when an enemy repairs" now rides the LIVE on-enemy-repaired trigger (Zosimos) —
+// handled in parseChargeGain below — instead of being dropped. Phase 3 PR-B (reactive-
+// trigger promotion): the on-kill phrasings ("upon killing", "killing an enemy", "when an
+// enemy dies") were ALSO lifted out — a self charge gain on killing an enemy now rides the
+// LIVE on-enemy-destroyed trigger (Obsidian/Valiant), handled in parseChargeGain below,
+// instead of being dropped. Liberator's all-allies death charge stays disqualified here via
+// "all allies" (its own dedicated parser, parseAllyChargeOnEnemyDeath, handles it).
+const CHARGE_DISQUALIFY_RE = /all allies|their charged skill|charged skill of all allies/i;
 
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
@@ -1554,6 +1556,33 @@ export function detectDestroyedTrigger(
     return phrasePosTrigger(text, DESTROYED_ALLY_REPAIR_RE, anchorPos, 'on-destroyed');
 }
 
+// Rikra's per-kill self-heal phrasing: "for each enemy Unit destroyed by the attack upon
+// killing them" — the object is "them", not "an enemy"/"an opponent", so it does NOT match
+// KILL_TRIGGER_RE's "killing an (enemy|opponent)" alternate. Verified unique to Rikra in
+// docs/ship-skills.csv (grep "killing them"). Kept as a separate, narrowly-scoped alternate
+// rather than broadening the shared KILL_TRIGGER_RE (which also feeds buff-grant/removal
+// trigger resolution elsewhere).
+const ENEMY_DESTROYED_BY_ATTACK_RE = /\bdestroyed\b[^.;]*\bkilling\s+them\b/i;
+
+/**
+ * Returns 'on-enemy-destroyed' when `anchorPos` (the ability's raw-text anchor position)
+ * falls inside the sentence carrying an enemy-kill phrasing (KILL_TRIGGER_RE's "on kill" /
+ * "killing an enemy/opponent" / "when an enemy dies", OR Rikra's "destroyed … killing them"
+ * shape); otherwise undefined. Position-scoped on the RAW text (mirrors detectDestroyedTrigger)
+ * so an unrelated heal in another sentence isn't co-triggered. This is the SELF-heal-on-
+ * ENEMY-death counterpart to detectDestroyedTrigger (self-heal on SELF-death). Reference data:
+ * docs/ship-skills.csv (Madax, Rikra).
+ */
+export function detectEnemyDestroyedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return (
+        phrasePosTrigger(text, KILL_TRIGGER_RE, anchorPos, 'on-enemy-destroyed') ??
+        phrasePosTrigger(text, ENEMY_DESTROYED_BY_ATTACK_RE, anchorPos, 'on-enemy-destroyed')
+    );
+}
+
 /**
  * Returns 'on-enemy-cleansed' when `anchorPos` (the ability's raw-text anchor position) falls
  * inside the sentence carrying the "when an enemy cleanses a Debuff" phrase; otherwise undefined.
@@ -2360,6 +2389,15 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     // +amount), so it pre-empts the always-true default and any debuff-inflict classification.
     if (ENEMY_REPAIRS_RE.test(plain)) {
         return { amount, condition: 'always', derivable: true, trigger: 'on-enemy-repaired' };
+    }
+    // On-kill reactive (Phase 3 PR-B: Obsidian/Valiant): a self charge gain that fires per
+    // enemy kill. Checked alongside the enemy-repair branch, BEFORE the inflict-debuff
+    // classification — the on-enemy-destroyed trigger IS the gate (per-event +amount), same
+    // shape as on-enemy-repaired above. KILL_TRIGGER_RE covers "on kill" / "killing an
+    // enemy/opponent" / "when an enemy dies"; no corpus self-charge ship's text also mentions
+    // debuff-infliction, so ordering relative to that branch is inert.
+    if (KILL_TRIGGER_RE.test(plain)) {
+        return { amount, condition: 'always', derivable: true, trigger: 'on-enemy-destroyed' };
     }
 
     const low = plain.toLowerCase();
