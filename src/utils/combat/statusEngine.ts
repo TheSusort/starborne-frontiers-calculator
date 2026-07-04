@@ -193,6 +193,19 @@ export interface StatusEngine {
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
+    /** PR10 (buff steal): move up to `count` removable TIMED self-buffs from `sourceId` to
+     *  EVERY id in `recipientIds`, newest-applied first (same ordering as purge). The REMAINING
+     *  duration travels with each moved buff — NOT reset to a fresh window. Skips the same
+     *  per-buff-name exclusions purge does (UNREMOVABLE_STATUSES + 'permanent' sentinels) but
+     *  does NOT consult the Buff Protection holder-guard — buff-steal is a distinct removal
+     *  mechanism from purge (see buffProtectionBuffs.ts's purge-only note). Only the TIMED
+     *  self-buff store is considered (accumulating/persistent statuses have no finite duration
+     *  to "travel"). Each recipient gets an INDEPENDENT copy of every stolen buff (same payload
+     *  + remaining duration) — `count` buffs disappear from the source, but `count` buffs
+     *  appear on EVERY recipient (Tithonus grants the same stolen buff to itself AND all
+     *  adjacent allies, not a fan-out split). Returns the buff names actually moved. Unknown
+     *  `sourceId`, or a source with no eligible buffs → [] (no-op). */
+    steal(sourceId: string, recipientIds: string[], count: number): string[];
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -1144,6 +1157,65 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return removeNewestFirst(actorId, 'buffs', count);
     };
 
+    /** PR10: move up to `count` removable TIMED self-buffs from `sourceId` to EVERY id in
+     *  `recipientIds`, newest-applied first (mirrors removeNewestFirst's ordering, but
+     *  restricted to the TIMED map only — accumulating/persistent statuses have no finite
+     *  duration to carry over). Deliberately does NOT consult the Buff Protection holder-guard
+     *  (purge-only, see buffProtectionBuffs.ts) — buff-steal is a distinct removal mechanism.
+     *  Each recipient receives an independent copy of every stolen entry (same payload +
+     *  REMAINING turnsRemaining, routed through the same family-tier-win rule a normal
+     *  applyTimedAbilityStatus write uses) — a stolen buff can still be absorbed if the
+     *  recipient already holds a stronger/longer version of the same buff family. Returns the
+     *  buff names actually removed from the source (grants are best-effort per recipient and do
+     *  not affect this return value). Unknown sourceId / nothing eligible → []. */
+    const steal = (sourceId: string, recipientIds: string[], count: number): string[] => {
+        const timedMap = selfMaps.get(sourceId);
+        if (!timedMap) return [];
+        const candidates: { seq: number; key: string; s: BuffState }[] = [];
+        for (const [key, s] of timedMap) {
+            if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+            candidates.push({ seq: s.appliedSeq, key, s });
+        }
+        candidates.sort((a, b) => b.seq - a.seq);
+        const limit = Math.max(0, Math.min(count, candidates.length));
+        if (limit === 0) return [];
+        const stolen = candidates.slice(0, limit).map(({ key, s }) => {
+            timedMap.delete(key);
+            return {
+                buffName: s.buffName,
+                turnsRemaining: s.turnsRemaining,
+                payload: s.payload,
+                casterId: s.casterId,
+            };
+        });
+        for (const recipientId of recipientIds) {
+            const recipientMap = getSelfMap(recipientId);
+            for (const st of stolen) {
+                const { familyKey, tier } = deriveFamilyKey(st.buffName);
+                const existing = recipientMap.get(familyKey);
+                if (!familyApplicationWins(existing, tier, st.turnsRemaining)) continue;
+                recipientMap.set(familyKey, {
+                    buffName: st.buffName,
+                    turnsRemaining: st.turnsRemaining,
+                    tier,
+                    payload: st.payload,
+                    casterId: st.casterId,
+                    appliedSeq: nextAppliedSeq(),
+                    // Own-turn reprieve (Finding 2): a buff granted to the actor whose turn is
+                    // executing is protected from that same turn's Post-Turn decrement — its
+                    // REMAINING duration must travel intact per the ratified rule. Identical rule
+                    // to applyTimedAbilityStatus's self-side write: reprieve iff the recipient IS
+                    // the active actor. The caster (recipientIds[0], stealing on its own turn) gets
+                    // it; adjacent-ally recipients are not the active actor → no reprieve, they
+                    // decrement normally on their own turn (their duration was already preserved by
+                    // the transfer).
+                    appliedThisTurn: recipientId === currentTurnActorId,
+                });
+            }
+        }
+        return stolen.map((s) => s.buffName);
+    };
+
     // --- Ability-status API (Task 6) ---
 
     const registerAbilityStatuses = (
@@ -1372,6 +1444,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         cleanse,
         reduceNewestDebuffDuration,
         purge,
+        steal,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,

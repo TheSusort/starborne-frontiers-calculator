@@ -247,6 +247,20 @@ const RULES: Rule[] = [
         handled: (a) => hasType(a, 'accumulate-detonate'),
     },
     {
+        id: 'buff-steal',
+        severity: 'high',
+        // "steals N buff(s)" (Pallas/Thresh/Tithonus charged skills) — active-verb only, mirrors
+        // parseBuffSteal's STEAL_RE. Deliberately requires the "buff(s)" token so Meatshield's
+        // named-buff-count steal ("it steals Protection until this Unit has 3 stacks of
+        // Protection" — no digit+buff(s) shape, no explicit source) does NOT match: that's a
+        // distinct mechanic (steals a specific NAMED buff up to a stack threshold) left
+        // deliberately unmodeled — see parseBuffSteal's doc comment. Confirmed via
+        // `grep -io "steal[a-z]*[^.]*" docs/ship-skills.csv`: exactly 4 "steal" occurrences in
+        // the whole corpus (Pallas/Thresh/Tithonus/Meatshield), so no allowlist entry is needed.
+        keyword: (t) => /\bsteals?\s+(?:\d+|an?)\s+buffs?\b/i.test(t),
+        handled: (a) => hasType(a, 'buff-steal'),
+    },
+    {
         id: 'pre-combat-stat',
         severity: 'high',
         // PR F4: permanent pre-fight base-stat passives. Hits exactly the corpus shapes —

@@ -3086,6 +3086,52 @@ export function parsePurge(text: string | null | undefined): {
     return results;
 }
 
+// PR10: "steals N buff(s)" / "steals a/an buff" — active-verb only, mirrors PURGE_RE's shape.
+// Corpus (Pallas/Thresh/Tithonus charged skills) always carries count 1, but a digit is
+// captured generically like purge's count for future-proofing. Deliberately requires the
+// "buff(s)" token so Meatshield's NAMED-buff steal ("it steals Protection until this Unit has
+// 3 stacks of Protection" — no "buff" token, no count) does NOT match: that clause is a
+// distinct shape (steals a specific named buff up to a stack threshold, no explicit source),
+// left unmodeled by this mechanic (see parseBuffSteal's doc comment).
+const STEAL_RE = /\bsteals?\s+(\d+|an?)\s+buffs?\b/gi;
+
+// "granting it to self and all adjacent allies" — Tithonus's charged skill: the stolen buff is
+// also granted to every living adjacent ally of the caster (not a fan-out split — every
+// recipient gets the SAME stolen buff). Sentence-scoped to the steal's own clause.
+const STEAL_GRANT_ADJACENT_RE = /granting\s+it\s+to\s+self\s+and\s+all\s+adjacent\s+allies\b/i;
+
+/**
+ * Parses buff-steal grants ("steals N buff(s) from the primary target[, granting it to self and
+ * all adjacent allies]"). Corpus: Pallas/Thresh/Tithonus charged skills — "This Unit steals 1
+ * buff from the primary target, then/and deals N% damage." The stolen buff always comes from
+ * "the primary target" (the caster's normal cast target) — no all-enemies variant exists in the
+ * corpus, so unlike parsePurge there is no `target` field; callers route the steal against the
+ * same `targetId` a purge/damage ability would use.
+ *
+ * Does NOT match Meatshield's "it steals Protection until this Unit has 3 stacks of Protection"
+ * (a NAMED-buff, stack-threshold steal with no explicit source and no "buff(s)" token) — a
+ * distinct shape deliberately left unmodeled by this mechanic (see the skill-model-gap-sweep
+ * epic notes). Reference data: docs/ship-skills.csv.
+ */
+export function parseBuffSteal(
+    text: string | null | undefined
+): { count: number; grantAdjacentAllies: boolean }[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const results: { count: number; grantAdjacentAllies: boolean }[] = [];
+    STEAL_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = STEAL_RE.exec(plain)) !== null) {
+        const raw = m[1].toLowerCase();
+        const count = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+        if (!count || isNaN(count)) continue;
+        const sentence = sentenceAround(plain, m.index);
+        const grantAdjacentAllies = STEAL_GRANT_ADJACENT_RE.test(sentence);
+        results.push({ count, grantAdjacentAllies });
+    }
+    return results;
+}
+
 // I6: "<subject> is Purged of (N|all) buffs" — Lodolite's charged skill: "Then, the enemy with
 // the most Buffs is Purged of all buffs." No "purges" verb token, so the active-verb-only
 // PURGE_RE does not match it (by design — see PURGE_RE's comment). Kept as a SEPARATE detector

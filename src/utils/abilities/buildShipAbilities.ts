@@ -74,6 +74,7 @@ import {
     parseHealAbilities,
     parseCleanse,
     parsePurge,
+    parseBuffSteal,
     detectPassiveVoicePurge,
     detectPurgeStripsShield,
     parseHealNoCrit,
@@ -1448,6 +1449,33 @@ function abilitiesFromText(
             },
             pos: cleansePos >= 0 ? cleansePos : MAX_POS,
         });
+    }
+
+    // PR10: buff steal — active/charged (on-cast) ONLY, mirroring purge's slot-gate below.
+    // Corpus (Pallas/Thresh/Tithonus) always carries the steal on the charged skill, always
+    // targeting "the primary target" (single enemy, no all-enemies variant). Independent of the
+    // sibling purge/damage clauses in the same sentence (Tithonus) — parseBuffSteal's STEAL_RE
+    // and parsePurge's PURGE_RE match distinct verbs and never cannibalize each other.
+    if (slot === 'active' || slot === 'charged') {
+        for (const st of parseBuffSteal(text)) {
+            const stealPos = text.search(/steal/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'buff-steal',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'buff-steal',
+                        count: st.count,
+                        ...(st.grantAdjacentAllies ? { grantAdjacentAllies: true } : {}),
+                    },
+                    autoFilled: true,
+                },
+                pos: stealPos >= 0 ? stealPos : MAX_POS,
+            });
+        }
     }
 
     // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge

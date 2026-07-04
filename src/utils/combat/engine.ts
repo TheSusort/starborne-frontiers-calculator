@@ -4409,6 +4409,12 @@ export function runCombat(input: CombatEngineInput): {
                 runtime: rt,
                 enemy: tgt,
                 enemyMostBuffsId,
+                // PR10 (buff steal): THIS caster's own living adjacent allies, resolved fresh
+                // per turn from its own side's roster — same adjacentAllyIdsFor helper
+                // 'adjacent-allies' targets use elsewhere (adjacency.ts). Team-symmetric via
+                // bySide(a.side) (identical for player and enemy casters). Consumed only by a
+                // buff-steal ability whose config carries grantAdjacentAllies.
+                adjacentAllyIds: bySide(a.side).adjacentAllyIdsFor(a.id),
                 // B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route
                 // to the resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId;
                 // the aggregate ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows

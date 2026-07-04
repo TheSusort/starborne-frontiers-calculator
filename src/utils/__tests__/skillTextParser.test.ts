@@ -35,6 +35,7 @@ import {
     parseHealAbilities,
     parseCleanse,
     parsePurge,
+    parseBuffSteal,
     detectPassiveVoicePurge,
     detectPurgeStripsShield,
     parseShieldStrip,
@@ -3762,6 +3763,64 @@ describe('parsePurge — E4 crit-power scaling', () => {
         const [p] = parsePurge('This Unit purges 2 buffs from the enemy.');
         expect(p.count).toBe(2);
         expect(p.countScaling).toBeUndefined();
+    });
+});
+
+// PR10: buff steal. RAW strings verbatim from docs/ship-skills.csv (Pallas/Thresh/Tithonus
+// charged-skill text). Confirmed via `grep -iE "^(Pallas|Thresh|Tithonus|Meatshield),"
+// docs/ship-skills.csv` (2026-07-04).
+const PALLAS_CHARGED_RAW =
+    'This Unit steals 1 buff from the primary target, then deals <unit-damage>260% damage</unit-damage>.';
+const THRESH_CHARGED_RAW =
+    'This Unit steals 1 buff from the primary target and deals <unit-damage>300% damage</unit-damage>. When targeting a Defender, this Unit gains <unit-skill>Crit Power Up II</unit-skill> for 1 turn.';
+const TITHONUS_CHARGED_RAW =
+    'This Unit <unit-aid>steals 1 buff</unit-aid> from the primary target, granting it to self and all adjacent allies, then <unit-aid>purges 2 buffs</unit-aid> from the enemy and deals <unit-damage>190% damage</unit-damage>.';
+const MEATSHIELD_PASSIVE_RAW =
+    'This Unit <unit-damage>repairs 1.5%</unit-damage> of its max HP for each <unit-aid>debuff</unit-aid> on itself.<br /><br />If this Unit has less than 3 stacks of <unit-skill>Protection</unit-skill>, it steals <unit-skill>Protection</unit-skill> until this Unit has 3 stacks of <unit-skill>Protection</unit-skill>.';
+
+describe('parseBuffSteal (PR10)', () => {
+    it('parses Pallas charged RAW text: count 1, no adjacent-ally grant', () => {
+        expect(parseBuffSteal(PALLAS_CHARGED_RAW)).toEqual([
+            { count: 1, grantAdjacentAllies: false },
+        ]);
+    });
+
+    it('parses Thresh charged RAW text: count 1, no adjacent-ally grant (steal clause is independent of the trailing Defender-gated buff sentence)', () => {
+        expect(parseBuffSteal(THRESH_CHARGED_RAW)).toEqual([
+            { count: 1, grantAdjacentAllies: false },
+        ]);
+    });
+
+    it('parses Tithonus charged RAW text: count 1, grantAdjacentAllies true — and does NOT cannibalize the sibling purge clause', () => {
+        expect(parseBuffSteal(TITHONUS_CHARGED_RAW)).toEqual([
+            { count: 1, grantAdjacentAllies: true },
+        ]);
+        // The "purges 2 buffs from the enemy" clause in the SAME sentence is parsed
+        // independently by parsePurge — the two verbs (steals/purges) must not cannibalize
+        // each other's matches.
+        expect(parsePurge(TITHONUS_CHARGED_RAW)).toEqual([
+            { count: 2, target: 'enemy', explicitTarget: true },
+        ]);
+    });
+
+    it('does NOT match Meatshield\'s named-buff-count steal ("it steals Protection until…") — a distinct shape with no "N buff(s)" token', () => {
+        expect(parseBuffSteal(MEATSHIELD_PASSIVE_RAW)).toEqual([]);
+    });
+
+    it('parses a plain "steals a buff" (article, not digit) as count 1', () => {
+        expect(parseBuffSteal('This Unit steals a buff from the enemy.')).toEqual([
+            { count: 1, grantAdjacentAllies: false },
+        ]);
+    });
+
+    it('does not match "purges" as a steal', () => {
+        expect(parseBuffSteal('This Unit purges 2 buffs from the enemy.')).toEqual([]);
+    });
+
+    it('returns [] for null/undefined/empty text', () => {
+        expect(parseBuffSteal(null)).toEqual([]);
+        expect(parseBuffSteal(undefined)).toEqual([]);
+        expect(parseBuffSteal('')).toEqual([]);
     });
 });
 

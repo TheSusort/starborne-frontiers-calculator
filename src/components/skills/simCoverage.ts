@@ -62,6 +62,10 @@ export const PASSIVE_NOOP_TYPES: ReadonlySet<AbilityType> = new Set([
     'accumulate-detonate',
     'additional-damage',
     'shield-strip',
+    // PR10: buff-steal is read only from the FIRING skill's abilities (gatedSkill in
+    // playerTurn.ts — active/charged), mirroring the on-cast purge loop it's modeled after.
+    // A hand-configured passive-slot buff-steal never reaches that loop.
+    'buff-steal',
 ]);
 
 export const NOT_SIMULATED_NOTE = 'Not simulated in the calculators yet.';
