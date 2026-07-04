@@ -21,6 +21,11 @@ export type AbilityType =
     | 'shield'
     | 'cleanse'
     | 'purge'
+    // PR10: buff steal (Pallas/Thresh/Tithonus charged skills) — moves the target's newest
+    // stealable buff(s) to the caster (remaining duration travels with each), optionally also
+    // granting them to the caster's adjacent allies (Tithonus). Reuses purge's stealable/
+    // unremovable classification; see AbilityConfig's 'buff-steal' variant.
+    | 'buff-steal'
     | 'control'
     | 'remove-self-buff'
     | 'incoming-reduction'
@@ -505,6 +510,19 @@ export type AbilityConfig =
            *  purge-performed apply site in playerTurn.ts, same victim id, right after the purge
            *  resolves. Absent → byte-identical (no ship besides Lodolite carries it today). */
           stripsShield?: boolean;
+      }
+    // PR10: buff steal — moves `count` of the target's newest stealable buffs to the caster,
+    // remaining duration intact (statusEngine.steal, keyed off the ability's `target` like purge:
+    // 'enemy' in every corpus case — "the primary target"). Does NOT check the Buff Protection
+    // holder-guard (purge-only per buffProtectionBuffs.ts); DOES skip UNREMOVABLE_STATUSES/
+    // 'permanent' entries, same as purge.
+    | {
+          type: 'buff-steal';
+          count: number;
+          /** Tithonus: also grant the stolen buff(s) to every living adjacent ally of the caster
+           *  (same application, same remaining duration — NOT a fan-out split). Absent → caster
+           *  only (Pallas/Thresh). */
+          grantAdjacentAllies?: boolean;
       }
     | {
           type: 'control';

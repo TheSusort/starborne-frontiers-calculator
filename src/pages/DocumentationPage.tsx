@@ -2435,6 +2435,21 @@ const DocumentationPage: React.FC = () => {
                                         the existing manual-condition behavior.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Buff Steal:</span> Skills
+                                        that &quot;steal a buff from the target&quot; (Pallas,
+                                        Thresh, Tithonus) are now modeled as a dedicated Buff Steal
+                                        ability in the editor. In a positioned battle the caster
+                                        removes the newest buff from its target and takes it for
+                                        itself, keeping that buff&apos;s remaining duration &mdash;
+                                        buffs the target can&apos;t lose (like Protection) are
+                                        skipped. Tithonus&apos; charged skill also grants the stolen
+                                        buff to every adjacent ally, and steals before its own purge
+                                        resolves, so it takes the newest buff before the purge
+                                        strips the rest. Works for both teams. In the single-target
+                                        DPS calculator there is no target holding buffs to steal, so
+                                        the ability is inert and does not change DPS.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Shields:</span> Shields build
                                         an untimed absorption pool on the holder, capped at its max
                                         HP, that soaks incoming damage before HP is touched and does

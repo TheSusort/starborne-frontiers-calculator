@@ -450,6 +450,14 @@ export interface PlayerTurnArgs {
      *  supply it — the purge loop then falls back to the anchor `targetId` (byte-identical to
      *  pre-I6 behavior for every ship without an enemy-most-buffs on-cast purge). */
     enemyMostBuffsId?: string;
+    /** PR10 (buff steal): living adjacent allies of THIS acting actor, resolved fresh per turn
+     *  from its own side's roster (engine.ts's buildTurnArgs: `bySide(a.side).adjacentAllyIdsFor
+     *  (a.id)` — team-symmetric for free, same helper 'adjacent-allies' targets use elsewhere).
+     *  Consumed ONLY by a `buff-steal` ability whose config carries `grantAdjacentAllies` — the
+     *  stolen buff is additionally granted to every id here (alongside the caster itself).
+     *  Absent/[] → the grant is caster-only (byte-identical for every ship without that flag,
+     *  and for non-positional/DPS callers that never supply it). */
+    adjacentAllyIds?: string[];
     /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
      *  gathered from THIS actor's living same-side allies (source excluded — see
      *  engine.ts's `buildTurnArgs`). Merged into `modifierAbilities` below alongside the
@@ -837,6 +845,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
         enemyMostBuffsId,
+        adjacentAllyIds,
         enemyBuffNames: enemyBuffNamesArg = [],
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -2019,6 +2028,34 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
         if (dotsLanded) {
             applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
+        }
+    }
+
+    // On-cast buff-steal (PR10): move the newest removable TIMED buff(s) held by the acting
+    // actor's target onto the caster — and, when the ability says so, every living adjacent
+    // ally of the caster (Tithonus) — via statusEngine.steal. Keyed off targetId, same
+    // side-symmetric pattern as the on-cast purge loop below (works for player AND enemy
+    // casters; no healEventOnly gate — a buff transfer, not a heal/shield/cleanse consumption).
+    // DPS mode (dummy target, no buffs on the anchor `enemy` sink's empty self-store) →
+    // statusEngine.steal finds nothing → [] → no-op → byte-identical.
+    //
+    // ORDER (Finding 1): this block runs BEFORE the on-cast purge block below. The sole corpus
+    // ship carrying both in one skill (Tithonus) reads "steals 1 buff ... THEN purges 2 buffs",
+    // so the steal must see the target's FULL buff set and take its NEWEST buff; the purge then
+    // strips from what remains. Running purge first would let it remove the newest buffs before
+    // the steal, handing the caster a stale/older buff (or nothing).
+    if (targetId !== undefined) {
+        for (const ab of gatedSkill?.abilities ?? []) {
+            if (
+                ab.config.type === 'buff-steal' &&
+                ab.trigger === 'on-cast' &&
+                conditionsMet(ab.conditions, ctx)
+            ) {
+                const recipients = ab.config.grantAdjacentAllies
+                    ? [actor.id, ...(adjacentAllyIds ?? [])]
+                    : [actor.id];
+                statusEngine.steal(targetId, recipients, ab.config.count);
+            }
         }
     }
 

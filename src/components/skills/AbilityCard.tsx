@@ -55,6 +55,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     shield: 'Shield',
     cleanse: 'Cleanse',
     purge: 'Purge',
+    'buff-steal': 'Buff Steal',
     control: 'Control',
     'remove-self-buff': 'Remove Self Buff',
     'incoming-reduction': 'Incoming Reduction',
@@ -722,6 +723,31 @@ export const AbilityCard: React.FC<Props> = ({
                             updateConfig({ ...config, count: toNumber(e.target.value) })
                         }
                     />
+                );
+
+            case 'buff-steal':
+                return (
+                    <div className="flex flex-wrap items-end gap-2">
+                        <Input
+                            label="Count"
+                            type="number"
+                            min={1}
+                            value={config.count}
+                            onChange={(e) =>
+                                updateConfig({ ...config, count: toNumber(e.target.value) })
+                            }
+                        />
+                        <Checkbox
+                            label="Also grant to adjacent allies"
+                            checked={config.grantAdjacentAllies ?? false}
+                            onChange={(checked) =>
+                                updateConfig({
+                                    ...config,
+                                    grantAdjacentAllies: checked ? true : undefined,
+                                })
+                            }
+                        />
+                    </div>
                 );
 
             case 'pre-combat-stat':

@@ -25,6 +25,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     shield: 'Shield',
     cleanse: 'Cleanse',
     purge: 'Purge',
+    'buff-steal': 'Buff Steal',
     control: 'Control',
     'remove-self-buff': 'Remove Self Buff',
     'incoming-reduction': 'Incoming Reduction',
@@ -53,7 +54,7 @@ const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
     { label: 'Charge & Turns', types: ['charge', 'extra-action'] },
     {
         label: 'Utility',
-        types: ['heal', 'shield', 'cleanse', 'purge', 'control'],
+        types: ['heal', 'shield', 'cleanse', 'purge', 'buff-steal', 'control'],
         note: NOT_SIMULATED_NOTE,
     },
     {
