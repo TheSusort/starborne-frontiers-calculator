@@ -160,6 +160,60 @@ describe('Nuqtu self-cleanse + Terran Bolster III — extracted ability shape (m
     });
 });
 
+// =============================================================================
+// Nuqtu — REFIT (2nd) passive: "This Unit Cleanses 1 debuff from itself (once per round) and
+// gains Terran Bolster III for 1 turn, and gains 1 stack of Core Charge I when an enemy gets
+// buffed" (docs/ship-skills.csv, verbatim — refit-active passive). Per this project's convention
+// only the refit-active passive applies in-game — getShipSkillRows resolves refitCount >= 2 to
+// `secondPassiveSkillText` (src/utils/ship/skillRows.ts) — so THIS is the passive a real,
+// refitted Nuqtu actually runs. It adds a THIRD clause over the base passive above: a Core
+// Charge I stack grant, sharing the same "when an enemy gets buffed" trigger clause.
+// =============================================================================
+
+const NUQTU_P2_REFIT =
+    'This Unit <unit-aid>Cleanses 1</unit-aid> debuff from itself (once per round) and gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn, and gains 1 stack of <unit-skill>Core Charge I</unit-skill> when an enemy gets buffed.';
+
+/**
+ * Extracts Nuqtu's REAL production REFIT passive slot. `ship()` defaults to 4 refits, so with
+ * only `secondPassiveSkillText` set (no thirdPassiveSkillText), getShipSkillRows's refitCount >= 2
+ * branch resolves this text as the active passive row — exactly what a refitted Nuqtu runs.
+ */
+function nuqtuRefitPassiveAbilities(): Ability[] {
+    return (
+        buildShipAbilities(ship({ secondPassiveSkillText: NUQTU_P2_REFIT })).slots.find(
+            (s) => s.slot === 'passive'
+        )?.abilities ?? []
+    );
+}
+
+describe('Nuqtu REFIT passive — self-cleanse + Terran Bolster III + Core Charge I stack — extracted ability shape (mutation guard)', () => {
+    it('all THREE effects ride on-enemy-buffed, self-target; only the cleanse carries the once-per-round cap', () => {
+        const abilities = nuqtuRefitPassiveAbilities();
+        const cleanse = abilities.find((a) => a.type === 'cleanse');
+        const bolster = abilities.find(
+            (a) =>
+                a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Terran Bolster III'
+        );
+        const coreCharge = abilities.find(
+            (a) => a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Core Charge I'
+        );
+        if (!cleanse) throw new Error('mutation guard: Nuqtu refit self-cleanse not found');
+        if (!bolster) throw new Error('mutation guard: Nuqtu refit Terran Bolster III grant not found');
+        if (!coreCharge) throw new Error('mutation guard: Nuqtu refit Core Charge I stack grant not found');
+
+        for (const ability of [cleanse, bolster, coreCharge]) {
+            expect(ability.trigger).toBe('on-enemy-buffed');
+            expect(ability.target).toBe('self');
+            // COLLISION-SCOPE: none of the three promoted effects may carry the now-redundant
+            // manual enemy-buff condition (double-gating would silently suppress the reactive).
+            expect(ability.conditions.some((c) => c.subject === 'enemy-buff')).toBe(false);
+        }
+        expect(cleanse.oncePerRound).toBe(true);
+        expect(bolster.oncePerRound).toBeUndefined();
+        expect(coreCharge.oncePerRound).toBeUndefined();
+    });
+});
+
 describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terran Bolster III grant', () => {
     const nuqtuFocusSkills = (): ShipSkills => ({
         slots: [noopActiveSlot(), { slot: 'passive', abilities: nuqtuPassiveAbilities() }],
