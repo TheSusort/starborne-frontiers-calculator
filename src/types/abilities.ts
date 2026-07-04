@@ -707,6 +707,20 @@ export interface Ability {
      *  Gated executor-side via IntentExecContext.oncePerRoundConsumed, keyed with the
      *  ally id (distinct from the plain `oncePerRound` flag above). Absent → no cap. */
     oncePerRoundPerAlly?: boolean;
+    /** Phase 3 PR-F: this reactive applies at most once per round PER ENEMY (keyed on
+     *  (owner, ability, eventCtx.repairerId)), rather than once per round overall. Ruiner's
+     *  "once per round per enemy" Bomb-on-repair: a DIFFERENT enemy repairing still procs
+     *  even if one enemy already consumed the cap this round. Gated executor-side via
+     *  IntentExecContext.oncePerRoundConsumed (mirrors oncePerRoundPerAlly above, keyed with
+     *  the repairer id instead of an ally id). Absent → no cap. */
+    oncePerRoundPerEnemy?: boolean;
+    /** Phase 3 PR-F: an on-enemy-repaired debuff lands on the REPAIRED RECIPIENT(S)
+     *  (eventCtx.repairedEnemyIds — "that defender", Amartya's Defense Shred) instead of the
+     *  default single counterTargetId/ctx.enemy.id route every other debuff applier uses
+     *  (including Ruiner's REPAIRER-targeted Bomb sharing the same trigger + event). A
+     *  multi-recipient heal fans the debuff out to EVERY repaired recipient. Absent → the
+     *  normal single-target route. */
+    repairedRecipientTargeted?: boolean;
     /** D-PR14 Bulwark: an on-ally-attacked reactive fires only when the DAMAGED ally is
      *  adjacent to this owner (board neighbours; non-positional → any living same-side ally).
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →

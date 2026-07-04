@@ -65,6 +65,8 @@ import {
     detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
     detectRepairedThisRoundCondition,
+    detectEnemyRepairedTrigger,
+    ONCE_PER_ROUND_PER_ENEMY_RE,
     PURGE_MORE_RE,
     parseControlInflicts,
     detectAllyCritTrigger,
@@ -2315,7 +2317,11 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
             // oncePerRound flag) so a different ally inflicting a debuff still procs even if
             // another ally already consumed the cap this round.
-            if (reactiveTrigger === 'on-ally-debuff-inflicted' && rowText && ONCE_PER_ALLY_PER_ROUND_RE.test(rowText)) {
+            if (
+                reactiveTrigger === 'on-ally-debuff-inflicted' &&
+                rowText &&
+                ONCE_PER_ALLY_PER_ROUND_RE.test(rowText)
+            ) {
                 ability.oncePerRoundPerAlly = true;
             }
         } else if (
@@ -2404,6 +2410,24 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                         },
                     ];
                 }
+            } else if (target === 'enemy' && rowText && pos >= 0) {
+                // Phase 3 PR-F: Amartya's "when an enemy defender is directly repaired, …
+                // inflicts 1 stack of Defense Shred on that defender" — NOT a damage reaction
+                // (detectDamageReactionTrigger above returns undefined), so it falls through
+                // here. Enemy-target-only: Ruiner's SAME-family "on any enemy performing a
+                // repair" phrasing never reaches this branch because it names a DoT (Bomb),
+                // which mergeBuff never sees (isDoTBuffName excludes it — handled separately by
+                // the passive DoT-reaction loop below).
+                const enemyRepairedReaction = detectEnemyRepairedTrigger(rowText, pos);
+                if (enemyRepairedReaction) {
+                    ability.trigger = enemyRepairedReaction.trigger;
+                    // "That defender" = the REPAIRED RECIPIENT, not the repairer — route via
+                    // eventCtx.repairedEnemyIds (fans out over every healed enemy) instead of
+                    // the default single counterTargetId route.
+                    if (enemyRepairedReaction.recipientTargeted) {
+                        ability.repairedRecipientTargeted = true;
+                    }
+                }
             }
         }
         // Epic PR4 (start-of-combat one-time grant family): a still-on-cast, NON-STACKING buff
@@ -2460,9 +2484,16 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             const pos = passiveRowText.indexOf(eff.buffName);
             const reaction =
                 pos >= 0 ? detectDamageReactionTrigger(passiveRowText, pos) : undefined;
-            if (!reaction) continue;
+            // Phase 3 PR-F: Ruiner's "This Unit inflicts Bomb II … on any enemy performing a
+            // repair, once per round per enemy" is the SAME name-only-DEBUFF shape as the
+            // Warden/Shepherd damage-reaction case above, but the reaction is an on-enemy-repaired
+            // one instead of on-attacked — checked only when the damage-reaction detector found
+            // nothing, so the two phrasing families stay mutually exclusive.
+            const enemyRepairedReaction =
+                !reaction && pos >= 0 ? detectEnemyRepairedTrigger(passiveRowText, pos) : undefined;
+            if (!reaction && !enemyRepairedReaction) continue;
             const dotReactionConditions: Condition[] =
-                reaction.hpBelowPct !== undefined
+                reaction?.hpBelowPct !== undefined
                     ? [
                           {
                               subject: 'hp-threshold',
@@ -2477,8 +2508,15 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 id: nextId(),
                 type: 'debuff',
                 target: 'enemy',
-                trigger: reaction.trigger,
-                ...(reaction.critFilter ? { triggerCritFilter: reaction.critFilter } : {}),
+                trigger: reaction?.trigger ?? enemyRepairedReaction!.trigger,
+                ...(reaction?.critFilter ? { triggerCritFilter: reaction.critFilter } : {}),
+                // "once per round per enemy" (Ruiner) — a DIFFERENT repairing enemy still procs.
+                // Tested against the whole passive row rather than a sentence scope: the phrase
+                // is corpus-unique to Ruiner (docs/ship-skills.csv), so there is no cross-talk
+                // risk from a broader match.
+                ...(enemyRepairedReaction && ONCE_PER_ROUND_PER_ENEMY_RE.test(passiveRowText)
+                    ? { oncePerRoundPerEnemy: true }
+                    : {}),
                 conditions: dotReactionConditions,
                 config: {
                     type: 'debuff',
