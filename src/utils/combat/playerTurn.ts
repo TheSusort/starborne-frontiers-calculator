@@ -793,6 +793,20 @@ function applyAccumulators(args: {
 }
 
 /**
+ * Reduces `victim.shieldPool` by `pct`% of its CURRENT value (the locked H shield rule: an
+ * untimed maxHP-capped pool; a percentage strip removes a share of whatever is currently in
+ * the pool, not of its max). `pct: 100` fully zeroes it — the same numeric result as the
+ * pre-PR9 `victim.shieldPool = 0` it replaces at the I6 (Lodolite) purge-coupled call site.
+ * Shared by BOTH strip mechanics so there is one strip-apply site, not two:
+ *   - I6: the `stripsShield` flag on a 'purge' ability (gated on the purge landing).
+ *   - PR9(b): the standalone `type:'shield-strip'` ability (APEX/Laika/Malvex, unconditional
+ *     on-cast — see parseShieldStrip's doc comment for why these stay mutually exclusive).
+ */
+function stripShieldPct(victim: CombatActor, pct: number): void {
+    victim.shieldPool = Math.max(0, victim.shieldPool * (1 - pct / 100));
+}
+
+/**
  * One player actor's turn: the full damage/buff/DoT-application pipeline (combat-system.md
  * §10), minus the DoT-processing calls (tickDoTs / processBombs / processAccumulators) which
  * run on the enemy turn. Returns everything the round's RoundData row needs from this turn; the
@@ -1677,7 +1691,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     let secondaryStatValue = 0;
     if (secondary) {
-        const source = secondary.stat === 'defense' ? effectiveDefence : effectiveHp;
+        // PR9(a): 'shield' reads the caster's own LIVE shieldPool at cast time (the SAME field
+        // the I6 shield-strip mechanic reads/writes) — 0 by default (no starting pool), grown
+        // only by the caster's own prior shield grants (self-cast or pre-combat seeding). No
+        // DPS-mode special-casing needed: a solo DPS run without a healing-mode target never
+        // processes on-cast self-shield grants (that block is gated on args.healing), so
+        // shieldPool naturally stays 0 there too, EXCEPT for a "start of combat" pre-combat
+        // shield seed (unconditional, seedPreCombatShields), which correctly still counts.
+        const source =
+            secondary.stat === 'defense'
+                ? effectiveDefence
+                : secondary.stat === 'shield'
+                  ? actor.shieldPool
+                  : effectiveHp;
         secondaryStatValue = source * (secondary.pct / 100);
     }
 
@@ -2076,9 +2102,31 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             const victim =
                                 opposingVictimById?.get(vid) ??
                                 (vid === enemy.id ? enemy : undefined);
-                            if (victim) victim.shieldPool = 0;
+                            if (victim) stripShieldPct(victim, 100);
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // PR9(b): standalone "removes X% of the enemy Shield" (APEX/Laika/Malvex) — NOT gated on a
+    // purge landing (that's the I6 branch above). Fires on-cast against the skill's own
+    // damage target(s), side-symmetric for the same reason as the purge block above (this
+    // function runs identically for player and enemy casters).
+    if (targetId !== undefined) {
+        for (const ab of gatedSkill?.abilities ?? []) {
+            if (
+                ab.config.type === 'shield-strip' &&
+                ab.trigger === 'on-cast' &&
+                conditionsMet(ab.conditions, ctx)
+            ) {
+                const recipients =
+                    ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+                for (const vid of recipients) {
+                    const victim =
+                        opposingVictimById?.get(vid) ?? (vid === enemy.id ? enemy : undefined);
+                    if (victim) stripShieldPct(victim, ab.config.pct);
                 }
             }
         }

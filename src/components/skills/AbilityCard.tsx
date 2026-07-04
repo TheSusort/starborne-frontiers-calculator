@@ -41,6 +41,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     damage: 'Damage',
     counter: 'Counterattack',
     'additional-damage': 'Additional Damage',
+    'shield-strip': 'Shield Strip',
     modifier: 'Modifier',
     buff: 'Buff',
     debuff: 'Debuff',
@@ -92,6 +93,7 @@ const MODIFIER_CHANNEL_OPTIONS: { value: ModifierChannel; label: string }[] = [
 const ADDITIONAL_DAMAGE_STAT_OPTIONS = [
     { value: 'hp', label: 'HP' },
     { value: 'defense', label: 'Defense' },
+    { value: 'shield', label: 'Shield' },
 ];
 
 const DOT_TYPE_OPTIONS: { value: DoTType; label: string }[] = [
@@ -314,7 +316,10 @@ export const AbilityCard: React.FC<Props> = ({
                             value={config.stat}
                             options={ADDITIONAL_DAMAGE_STAT_OPTIONS}
                             onChange={(value) =>
-                                updateConfig({ ...config, stat: value as 'hp' | 'defense' })
+                                updateConfig({
+                                    ...config,
+                                    stat: value as 'hp' | 'defense' | 'shield',
+                                })
                             }
                         />
                         <Input
@@ -326,6 +331,16 @@ export const AbilityCard: React.FC<Props> = ({
                             }
                         />
                     </div>
+                );
+
+            case 'shield-strip':
+                return (
+                    <Input
+                        label="Percent of enemy Shield removed"
+                        type="number"
+                        value={config.pct}
+                        onChange={(e) => updateConfig({ ...config, pct: toNumber(e.target.value) })}
+                    />
                 );
 
             case 'modifier':

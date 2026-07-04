@@ -37,6 +37,7 @@ import {
     parsePurge,
     detectPassiveVoicePurge,
     detectPurgeStripsShield,
+    parseShieldStrip,
     parseHealNoCrit,
     statusEffectCondition,
     parseControlInflicts,
@@ -1025,6 +1026,60 @@ describe('parseSecondaryDamage', () => {
     it('parseSkillDamage still returns the primary multiplier for a secondary-damage skill', () => {
         expect(parseSkillDamage(chakara)).toBe(180);
         expect(parseSkillDamage(lodolite)).toBe(240);
+    });
+
+    // PR9(a): "additional damage equal to X% of its/their current Shield" — Malvex, Quixilver,
+    // Xcellence, FrontLine. RAW CSV rows (docs/ship-skills.csv), verbatim.
+    describe('shield-basis secondary damage (PR9a)', () => {
+        it('parses FrontLine\'s "of their current Shield" (pronoun "their", not "its")', () => {
+            const frontLineActive =
+                'This Unit deals <unit-damage>80% damage</unit-damage> with additional damage equal to <unit-damage>60%</unit-damage> of their current Shield, and gains a <unit-damage>Shield equal to 30%</unit-damage> of the damage dealt.';
+            expect(parseSecondaryDamage(frontLineActive)).toEqual({ stat: 'shield', pct: 60 });
+        });
+
+        it('parses Malvex\'s "of its current Shield" (active skill)', () => {
+            const malvexActive =
+                'This Unit deals <unit-damage>100% damage</unit-damage> with an additional damage equal to <unit-damage>5%</unit-damage> of its current Shield. If the target has a Shield this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of its Max HP.';
+            expect(parseSecondaryDamage(malvexActive)).toEqual({ stat: 'shield', pct: 5 });
+        });
+
+        it("parses Malvex's charged skill (shield-basis secondary damage co-located with a shield strip)", () => {
+            const malvexCharged =
+                'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>12%</unit-damage> of its current Shield and removes 30% of the enemy’s Shield. If the target has a Shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.';
+            expect(parseSecondaryDamage(malvexCharged)).toEqual({ stat: 'shield', pct: 12 });
+        });
+
+        it('parses Quixilver\'s "plus an additional damage equal to X% of its current Shield"', () => {
+            const quixilverActive =
+                'This unit deals <unit-damage>100% damage</unit-damage> plus an additional damage equal to <unit-damage>14%</unit-damage> of its current Shield, and gains <unit-damage>Shield equal to 20%</unit-damage> of the damage dealt..';
+            expect(parseSecondaryDamage(quixilverActive)).toEqual({ stat: 'shield', pct: 14 });
+        });
+
+        // Xcellence's clause is a DIFFERENT shape: a reactive proc ("When an enemy resists a
+        // debuff infliction, this Unit deals damage equal to 115% of this Unit's current
+        // shield") — not additional damage tied to this unit's OWN skill cast. The existing
+        // Phase-4 reactive guard (line ~316, "resists...debuff") intentionally excludes this
+        // clause from parseSecondaryDamage both BEFORE and AFTER the shield-basis addition —
+        // it stays an unmodeled/deferred reactive proc (same bucket as "upon being killed").
+        // This is a protective regression test, not a red-to-green test: it passes identically
+        // pre- and post-change, proving the shield-basis addition does not accidentally widen
+        // the guard's scope.
+        it("does NOT treat Xcellence's on-enemy-resist-debuff reactive proc as on-cast secondary damage", () => {
+            const xcellencePassive2 =
+                "This Unit has 20% Shield Penetration.<br /><br />At the start of each turn this Unit gains <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.<br /><br />When an enemy resists a debuff infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield..";
+            expect(parseSecondaryDamage(xcellencePassive2)).toBeNull();
+        });
+
+        it('still returns null for a shield-GRANT clause ("gains a Shield equal to X% of Max HP") — not a damage basis', () => {
+            const grantOnly =
+                'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.';
+            expect(parseSecondaryDamage(grantOnly)).toBeNull();
+        });
+
+        // FrontLine's own active row (tested above) already proves the ADDITIONAL-DAMAGE
+        // shield clause ("60% of their current Shield") is picked over the co-located
+        // shield-GRANT clause ("Shield equal to 30% of the damage dealt") in the SAME text —
+        // both clauses share the raw row, and only the damage-basis one is a SecondaryDamage.
     });
 });
 
@@ -3791,6 +3846,63 @@ describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
     it('returns false for null/undefined', () => {
         expect(detectPurgeStripsShield(null)).toBe(false);
         expect(detectPurgeStripsShield(undefined)).toBe(false);
+    });
+});
+
+describe('parseShieldStrip (PR9b — standalone "removes X% of the enemy Shield")', () => {
+    // RAW CSV rows (docs/ship-skills.csv), verbatim — the "other 3" rows referenced by
+    // detectPurgeStripsShield's comment ("the other 3 corpus rows carry no purge language
+    // at all"). This is a STANDALONE on-cast strip, never gated on a purge landing.
+    it('parses APEX\'s active skill ("removes 30% of the enemy Shield")', () => {
+        const apexActive =
+            'This Unit deals <unit-damage>100% damage</unit-damage>, removes <unit-damage>30%</unit-damage> of the enemy Shield, and inflicts <unit-skill>Speed Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns.';
+        expect(parseShieldStrip(apexActive)).toEqual({ pct: 30 });
+    });
+
+    it('parses Laika\'s charged skill ("removes 40% of the enemy Shield")', () => {
+        const laikaCharged =
+            'This Unit removes 40% of the enemy Shield and deals <unit-damage>150% damage</unit-damage>.';
+        expect(parseShieldStrip(laikaCharged)).toEqual({ pct: 40 });
+    });
+
+    it('parses Malvex\'s charged skill ("removes 30% of the enemy\'s Shield", curly apostrophe, co-located with a shield-basis secondary damage clause)', () => {
+        const malvexCharged =
+            'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>12%</unit-damage> of its current Shield and removes 30% of the enemy’s Shield. If the target has a Shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.';
+        expect(parseShieldStrip(malvexCharged)).toEqual({ pct: 30 });
+    });
+
+    it("does NOT fire for Malvex's active skill (no strip clause there — only the charged skill carries it)", () => {
+        const malvexActive =
+            'This Unit deals <unit-damage>100% damage</unit-damage> with an additional damage equal to <unit-damage>5%</unit-damage> of its current Shield. If the target has a Shield this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of its Max HP.';
+        expect(parseShieldStrip(malvexActive)).toBeNull();
+    });
+
+    // Negative: Lodolite's I6 clause carries "removes 100% of the enemy's shield" too, but it
+    // is PURGE-COUPLED ("When this Unit Purges a buff from an enemy, it removes...") — that
+    // stays modeled exclusively by detectPurgeStripsShield's `stripsShield` flag (gated on the
+    // purge landing). parseShieldStrip must NOT also mint a standalone ability for it, or the
+    // strip would double-apply (100% + another 100%).
+    it('does NOT fire for the Lodolite purge-coupled clause (guard against double-modeling with I6)', () => {
+        const lodoliteR4Passive =
+            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+        expect(parseShieldStrip(lodoliteR4Passive)).toBeNull();
+        expect(
+            parseShieldStrip(
+                "When this Unit purges a buff from an enemy, it removes 100% of the enemy's shield."
+            )
+        ).toBeNull();
+    });
+
+    it('returns null for text with no shield-removal clause', () => {
+        expect(
+            parseShieldStrip('This Unit deals <unit-damage>180% damage</unit-damage>.')
+        ).toBeNull();
+    });
+
+    it('returns null for null/undefined/empty', () => {
+        expect(parseShieldStrip(null)).toBeNull();
+        expect(parseShieldStrip(undefined)).toBeNull();
+        expect(parseShieldStrip('')).toBeNull();
     });
 });
 

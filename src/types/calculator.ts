@@ -4,7 +4,7 @@ import type { Condition, ShipSkills } from './abilities';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
-export type SecondaryDamageStat = 'defense' | 'hp';
+export type SecondaryDamageStat = 'defense' | 'hp' | 'shield';
 
 export interface SecondaryDamage {
     stat: SecondaryDamageStat;

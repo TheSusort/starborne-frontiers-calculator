@@ -12,6 +12,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'counter', multiplier: 100 };
         case 'additional-damage':
             return { type: 'additional-damage', stat: 'hp', pct: 10 };
+        case 'shield-strip':
+            return { type: 'shield-strip', pct: 10 };
         case 'modifier':
             return {
                 type: 'modifier',
@@ -98,6 +100,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     damage: 'enemy',
     counter: 'enemy',
     'additional-damage': 'enemy',
+    'shield-strip': 'enemy',
     modifier: 'self',
     buff: 'self',
     debuff: 'enemy',

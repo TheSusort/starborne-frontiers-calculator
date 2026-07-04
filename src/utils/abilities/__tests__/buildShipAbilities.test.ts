@@ -4725,7 +4725,9 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
                 'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
-        const heal = passive.abilities.find((a) => a.config.type === 'heal' && a.config.pct === 20)!;
+        const heal = passive.abilities.find(
+            (a) => a.config.type === 'heal' && a.config.pct === 20
+        )!;
         expect(heal).toBeDefined();
         expect(heal.trigger).toBe('on-attacked');
         expect(heal.conditions).toEqual([
@@ -4737,5 +4739,119 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
                 hpSubject: 'self',
             },
         ]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// PR9(a): shield-basis "additional damage equal to X% of its/their current Shield" —
+// Malvex, Quixilver, FrontLine. RAW CSV rows (docs/ship-skills.csv), verbatim.
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — PR9a shield-basis additional-damage', () => {
+    it('FrontLine active: additional-damage stat "shield", pct 60 (pronoun "their")', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>80% damage</unit-damage> with additional damage equal to <unit-damage>60%</unit-damage> of their current Shield, and gains a <unit-damage>Shield equal to 30%</unit-damage> of the damage dealt.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const add = abilityOfType(active.abilities, 'additional-damage');
+        expect(add).toMatchObject({
+            type: 'additional-damage',
+            target: 'enemy',
+            config: { type: 'additional-damage', stat: 'shield', pct: 60 },
+            autoFilled: true,
+        });
+    });
+
+    it('Malvex active: additional-damage stat "shield", pct 5', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>100% damage</unit-damage> with an additional damage equal to <unit-damage>5%</unit-damage> of its current Shield. If the target has a Shield this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of its Max HP.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const add = abilityOfType(active.abilities, 'additional-damage');
+        expect(add).toMatchObject({
+            config: { type: 'additional-damage', stat: 'shield', pct: 5 },
+        });
+    });
+
+    it('Quixilver active: additional-damage stat "shield", pct 14', () => {
+        const s = ship({
+            activeSkillText:
+                'This unit deals <unit-damage>100% damage</unit-damage> plus an additional damage equal to <unit-damage>14%</unit-damage> of its current Shield, and gains <unit-damage>Shield equal to 20%</unit-damage> of the damage dealt..',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const add = abilityOfType(active.abilities, 'additional-damage');
+        expect(add).toMatchObject({
+            config: { type: 'additional-damage', stat: 'shield', pct: 14 },
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// PR9(b): standalone "removes X% of the enemy Shield" — APEX, Laika, Malvex. NOT gated on a
+// purge landing (distinct from the I6 Lodolite `stripsShield` purge flag above).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — PR9b standalone shield-strip', () => {
+    it('APEX active: a shield-strip ability, pct 30, target enemy, trigger on-cast (alongside the primary damage)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>100% damage</unit-damage>, removes <unit-damage>30%</unit-damage> of the enemy Shield, and inflicts <unit-skill>Speed Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const strip = abilityOfType(active.abilities, 'shield-strip');
+        expect(strip).toMatchObject({
+            type: 'shield-strip',
+            target: 'enemy',
+            trigger: 'on-cast',
+            config: { type: 'shield-strip', pct: 30 },
+            autoFilled: true,
+        });
+        // The primary damage ability still builds independently (not displaced by the strip).
+        const dmg = abilityOfType(active.abilities, 'damage');
+        expect(dmg).toMatchObject({ config: { type: 'damage', multiplier: 100 } });
+    });
+
+    it('Laika charged: a shield-strip ability, pct 40', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit removes 40% of the enemy Shield and deals <unit-damage>150% damage</unit-damage>.',
+            chargeSkillCharge: 2,
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const strip = abilityOfType(charged.abilities, 'shield-strip');
+        expect(strip).toMatchObject({ config: { type: 'shield-strip', pct: 40 } });
+    });
+
+    it('Malvex charged: a shield-strip ability (pct 30) co-existing with the shield-basis additional-damage ability (pct 12) in the SAME skill', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>12%</unit-damage> of its current Shield and removes 30% of the enemy’s Shield. If the target has a Shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.',
+            chargeSkillCharge: 3,
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const strip = abilityOfType(charged.abilities, 'shield-strip');
+        expect(strip).toMatchObject({ config: { type: 'shield-strip', pct: 30 } });
+        const add = abilityOfType(charged.abilities, 'additional-damage');
+        expect(add).toMatchObject({
+            config: { type: 'additional-damage', stat: 'shield', pct: 12 },
+        });
+    });
+
+    it('does NOT emit a shield-strip ability for the Lodolite I6 purge-coupled clause (guard against double-modeling)', () => {
+        const LODOLITE_CHARGED_RAW =
+            "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
+        const LODOLITE_R4_PASSIVE_RAW =
+            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+        const s = ship({
+            chargeSkillText: LODOLITE_CHARGED_RAW,
+            chargeSkillCharge: 3,
+            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+        });
+        const { slots } = buildShipAbilities(s);
+        const allAbilities = slots.flatMap((sk) => sk.abilities);
+        expect(allAbilities.filter((a) => a.type === 'shield-strip')).toHaveLength(0);
+        // The purge ability still carries stripsShield (I6, unaffected by this PR).
+        const purge = allAbilities.find((a) => a.type === 'purge')!;
+        expect(purge.config).toMatchObject({ stripsShield: true });
     });
 });

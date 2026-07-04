@@ -23,6 +23,7 @@ import {
     parseSkillDamage,
     parseCounterAbilities,
     parseSecondaryDamage,
+    parseShieldStrip,
     parseConditionalDamage,
     parseEnemyEffectDamageBonus,
     parseConditionalStasisApplied,
@@ -971,6 +972,27 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: secondIdx >= 0 ? secondIdx : firstIdx >= 0 ? firstIdx : MAX_POS,
+        });
+    }
+
+    // PR9(b): standalone "removes X% of the enemy Shield" (APEX/Laika/Malvex) — coordinate
+    // with this same row's own damage, NOT gated on a purge landing (that's the I6
+    // `stripsShield` purge-config flag below, which parseShieldStrip's sentence-scoped purge
+    // guard deliberately excludes — see its doc comment).
+    const strip = parseShieldStrip(text);
+    if (strip) {
+        const stripPos = text.search(/removes/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'shield-strip',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'shield-strip', pct: strip.pct },
+                autoFilled: true,
+            },
+            pos: stripPos >= 0 ? stripPos : MAX_POS,
         });
     }
 

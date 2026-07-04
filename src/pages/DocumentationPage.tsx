@@ -2257,11 +2257,22 @@ const DocumentationPage: React.FC = () => {
                                         </span>{' '}
                                         Ships like Chakara (&quot;+80% of Defense&quot;) and
                                         Lodolite (&quot;+10% of max HP&quot;) deal extra damage
-                                        equal to a percentage of their Defense or max HP stat. This
-                                        is auto-detected from the skill text and shown as an
-                                        editable field in each skill row. The secondary damage is
-                                        added to the base hit before crit and defense reduction, and
-                                        scales with Defense Up / HP buffs.
+                                        equal to a percentage of their Defense or max HP stat.
+                                        Malvex, Quixilver, and FrontLine instead scale off their own
+                                        current Shield pool at the moment they attack &mdash; zero
+                                        if they haven&apos;t gained any Shield yet. This is
+                                        auto-detected from the skill text and shown as an editable
+                                        field in each skill row. The secondary damage is added to
+                                        the base hit before crit and defense reduction, and scales
+                                        with Defense Up / HP buffs (or, for the Shield basis, with
+                                        the ship&apos;s live Shield pool).
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Shield Strip:</span> APEX,
+                                        Laika, and Malvex remove a percentage of the target&apos;s
+                                        current Shield on cast (e.g. &quot;removes 30% of the enemy
+                                        Shield&quot;), separate from Lodolite&apos;s legendary refit
+                                        that fully strips a purged enemy&apos;s Shield.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

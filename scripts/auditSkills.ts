@@ -270,6 +270,41 @@ const RULES: Rule[] = [
             ),
         handled: (a) => hasType(a, 'pre-combat-stat'),
     },
+    {
+        id: 'shield-basis-secondary-damage',
+        severity: 'high',
+        // PR9(a): "additional damage equal to X% of its/their/this Unit's current Shield"
+        // (Malvex, Quixilver, FrontLine). Excludes Xcellence's differently-shaped reactive proc
+        // ("when an enemy resists a debuff infliction, this Unit deals damage equal to X% of
+        // this Unit's current shield") — the same "resists...debuff" exclusion parseSecondaryDamage
+        // itself applies, since that clause is an intentionally deferred Phase-4 reactive proc,
+        // not this on-cast mechanic (see parseSecondaryDamage's doc comment).
+        keyword: (t) =>
+            /additional\s+damage\s+equal\s+to\s+\d+(?:\.\d+)?%\s+of\s+(?:its|their|this\s+unit'?s)\s+current\s+shield/i.test(
+                t
+            ) && !/\bresists?\b[^.]*\bdebuff/i.test(t),
+        handled: (a) =>
+            a.some(
+                (x) =>
+                    x.config.type === 'additional-damage' &&
+                    (x.config as { stat?: string }).stat === 'shield'
+            ),
+    },
+    {
+        id: 'shield-strip-standalone',
+        severity: 'high',
+        // PR9(b): "removes X% of the enemy['s] Shield" as a STANDALONE on-cast strip (APEX,
+        // Laika, Malvex) — NOT coupled to a purge landing. Excludes Lodolite's I6 legendary-refit
+        // clause ("when this Unit Purges a buff from an enemy, it removes 100% of the enemy's
+        // shield"), modeled separately via the `stripsShield` flag on the purge ability
+        // (detectPurgeStripsShield) — every corpus row carrying BOTH "purge" and "removes N% …
+        // shield" is that one clause (see detectPurgeStripsShield's doc comment), so excluding
+        // any row that mentions "purge" anywhere is safe for the current corpus.
+        keyword: (t) =>
+            /removes\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy(?:['’]s)?\s+shield/i.test(t) &&
+            !/purge/i.test(t),
+        handled: (a) => hasType(a, 'shield-strip'),
+    },
 ];
 
 // Trigger phrasing that should produce a gating condition on a granted buff/debuff.

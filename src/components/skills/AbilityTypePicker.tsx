@@ -11,6 +11,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     damage: 'Damage',
     counter: 'Counterattack',
     'additional-damage': 'Additional Damage',
+    'shield-strip': 'Shield Strip',
     modifier: 'Modifier',
     buff: 'Buff',
     debuff: 'Debuff',
@@ -36,7 +37,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
-    { label: 'Damage', types: ['damage', 'additional-damage'] },
+    { label: 'Damage', types: ['damage', 'additional-damage', 'shield-strip'] },
     {
         label: 'Modify',
         types: [
