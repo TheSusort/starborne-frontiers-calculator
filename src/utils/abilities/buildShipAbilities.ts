@@ -25,6 +25,7 @@ import {
     parseCounterAbilities,
     parseDamageReflection,
     parseSecondaryDamage,
+    parseOnResistHpDamage,
     parseShieldStrip,
     parseConditionalDamage,
     parseEnemyEffectDamageBonus,
@@ -1130,6 +1131,35 @@ function abilitiesFromText(
             },
             pos: secondIdx >= 0 ? secondIdx : firstIdx >= 0 ? firstIdx : MAX_POS,
         });
+    }
+
+    // Vindicator p2: "When this Unit resists a debuff infliction from an enemy, it deals damage
+    // equal to X% of this Unit's max HP to that enemy." A standalone HP-scaled REACTIVE damage
+    // proc on the on-debuff-resisted trigger (passive slot only). multiplier:0 — the amount is
+    // carried by hpBasisPct, read by the reactive-damage executor. Routes to the resisted debuff's
+    // inflictor via eventCtx.counterTargetId (set by the on-debuff-resisted listener).
+    if (slot === 'passive') {
+        const onResist = parseOnResistHpDamage(text);
+        if (onResist) {
+            const onResistIdx = text.search(/<unit-damage>/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-debuff-resisted',
+                    conditions: [],
+                    config: {
+                        type: 'damage',
+                        multiplier: 0,
+                        hits: 1,
+                        hpBasisPct: onResist.pct,
+                    },
+                    autoFilled: true,
+                },
+                pos: onResistIdx >= 0 ? onResistIdx : MAX_POS,
+            });
+        }
     }
 
     // PR9(b): standalone "removes X% of the enemy Shield" (APEX/Laika/Malvex) — coordinate

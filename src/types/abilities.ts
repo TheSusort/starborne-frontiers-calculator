@@ -412,7 +412,17 @@ export type ModifierChannel =
     | 'incomingDamage';
 
 export type AbilityConfig =
-    | { type: 'damage'; multiplier: number; hits?: number; noCrit?: boolean }
+    | {
+          type: 'damage';
+          multiplier: number;
+          hits?: number;
+          noCrit?: boolean;
+          /** Vindicator on-resist: when set, the REACTIVE damage executor computes the
+           *  pre-mitigation raw from the owner's effective max HP × hpBasisPct (percent) instead
+           *  of attack × multiplier. Reactive-damage path only (applyReactiveDamage); the on-cast
+           *  damage path ignores it. */
+          hpBasisPct?: number;
+      }
     | {
           type: 'counter';
           /** raw percentage of the OWNER's effective attack, e.g. 30/70/100/200. */
