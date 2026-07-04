@@ -3015,6 +3015,78 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
     return results;
 }
 
+// PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N turn(s)"
+// — the inverse of extend-dot: SHRINKS every standing debuff's remaining window rather than
+// growing a DoT's. Distinct mechanism from extend-dot (which only touches the Corrosion/Inferno
+// containers and only grows) — this touches the GENERIC debuff store (any timed debuff, not
+// just DoTs) and only shrinks. Heliodor's two mutually-exclusive passives (only one is
+// refit-active at a time — see getShipSkillRows) differ ONLY in recipient: "on itself" (self)
+// vs "on all allies" (all-allies), both gated by the SAME "When directly damaged" self-subject
+// reaction (Heliodor is never the ally-subject shape — the unit being damaged is always itself;
+// only the healed/reduced RECIPIENT varies, mirroring parseHealAbilities' identical Heliodor
+// treatment). Pestilence's passive is gated on "On debuff infliction" (this Unit inflicting a
+// debuff), a DIFFERENT phrasing from APPLYING_DEBUFF_RE's "on inflicting a debuff" — the noun
+// form ("debuff infliction") reverses the word order, so it needs its own check here rather than
+// reusing that regex. Deliberately excludes "Bombs" (Lingshe's charge-skill "reduces all Bombs
+// on the enemy targets by 1 turn" is a structurally different mechanic — a hacking-gated,
+// enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-zero rider — tracked
+// as a documented, allowlisted gap; see scripts/auditSkills.allowlist.ts). Reference data:
+// docs/ship-skills.csv.
+const REDUCE_DEBUFF_DURATION_RE =
+    /reduces?\s+the\s+duration\s+of\s+(?:all\s+)?active\s+debuffs\s+on\s+([^,.]+?)\s+by\s+(\d+)\s+turns?/gi;
+// "On debuff infliction" (Pestilence) — noun-phrase form, distinct from APPLYING_DEBUFF_RE's
+// verb-phrase form ("on inflicting a debuff"). Scoped to the reduction's own sentence.
+const ON_DEBUFF_INFLICTION_RE = /\bon\s+debuff\s+infliction\b/i;
+
+export interface ParsedDebuffDurationReduction {
+    turns: number;
+    target: 'self' | 'all-allies';
+    /** Present when the reducing clause is itself a self-subject damage reaction ("when
+     *  directly damaged …") — buildShipAbilities maps it to trigger 'on-attacked' (Heliodor).
+     *  buildShipAbilities keys off this flag EXPLICITLY (not the absence of onDebuffInflicted):
+     *  a clause matching NEITHER gate carries no recognized reactive trigger and is dropped
+     *  rather than silently defaulting to on-attacked. Mutually exclusive with `onDebuffInflicted`
+     *  — no corpus ship carries both. */
+    isDamageReaction?: boolean;
+    /** Present when the clause is gated on THIS unit inflicting a debuff ("on debuff
+     *  infliction") — buildShipAbilities maps it to trigger 'on-debuff-inflicted' (Pestilence). */
+    onDebuffInflicted?: boolean;
+}
+
+/**
+ * Parses "reduces the duration of [all] active Debuffs on <recipient> by N turn(s)" clauses.
+ * Returns one entry per match, each carrying the shrink amount, the RECIPIENT (self vs
+ * all-allies — never a singular ally in the corpus today), and which reactive gate governs it
+ * (a self damage-reaction, or this unit's own debuff infliction). Reference data:
+ * docs/ship-skills.csv.
+ */
+export function parseDebuffDurationReduction(
+    text: string | null | undefined
+): ParsedDebuffDurationReduction[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const out: ParsedDebuffDurationReduction[] = [];
+    REDUCE_DEBUFF_DURATION_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = REDUCE_DEBUFF_DURATION_RE.exec(plain)) !== null) {
+        const turns = parseInt(m[2], 10);
+        if (!Number.isFinite(turns) || turns <= 0) continue;
+        const targetPhrase = m[1].toLowerCase();
+        const target: 'self' | 'all-allies' = /all\s+allies|\bthem\b/.test(targetPhrase)
+            ? 'all-allies'
+            : 'self';
+        const { text: sentence } = sentenceBoundsAround(plain, m.index);
+        const entry: ParsedDebuffDurationReduction = { turns, target };
+        if (ON_DEBUFF_INFLICTION_RE.test(sentence)) {
+            entry.onDebuffInflicted = true;
+        } else if (HEAL_DAMAGE_REACTION_RE.test(sentence)) {
+            entry.isDamageReaction = true;
+        }
+        out.push(entry);
+    }
+    return out;
+}
+
 // "purges N" / "purges a/an" — active-verb only; naturally excludes "is Purged of all buffs"
 // (no "purges" token). Must NOT match "cleanses".
 const PURGE_RE = /\bpurges?\s+(?:(\d+|all)|an?\b)/gi;

@@ -97,3 +97,79 @@ describe('parser → simulator integration (real ship)', () => {
         expect(withoutDD).toBeLessThan(withDD);
     });
 });
+
+// PR11 (epic PR11): debuff-duration reduction has no single-ship DPS number — the mechanic
+// lives entirely in the combat sim's status store (statusEngine), which the DPS calculator
+// never touches. This locks that the NEW 'cleanse'/reduce-duration ability the parser now
+// emits for Heliodor/Pestilence-shaped ships is fully DPS-inert: total damage output is
+// byte-identical with or without it present.
+describe('debuff-duration reduction is DPS-inert (PR11 parity)', () => {
+    // A synthetic ship pairing a damaging active skill with Heliodor's EXACT verbatim
+    // first-passive text (docs/ship-skills.csv) — the reactive heal + duration-reduction pair.
+    const heliodorShape = ship({
+        activeSkillText: 'This Unit deals <unit-damage>200% damage</unit-damage>.',
+        firstPassiveSkillText:
+            'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on itself by 1 turn and <unit-damage>repairs itself for 8%</unit-damage> of its Max HP.',
+    });
+
+    it('parses BOTH the heal and the NEW cleanse/reduce-duration ability from the passive', () => {
+        const shipSkills = buildShipAbilities(heliodorShape);
+        const passive = shipSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive?.abilities.some((a) => a.type === 'heal')).toBe(true);
+        expect(
+            passive?.abilities.some(
+                (a) =>
+                    a.type === 'cleanse' &&
+                    a.config.type === 'cleanse' &&
+                    a.config.mode === 'reduce-duration'
+            )
+        ).toBe(true);
+    });
+
+    it('simulateDPS total damage is IDENTICAL with vs without the reduce-duration ability present', () => {
+        const full = buildShipAbilities(heliodorShape);
+        const withoutReduction: ShipSkills = {
+            slots: full.slots.map((s) => ({
+                ...s,
+                abilities: s.abilities.filter(
+                    (a) =>
+                        !(
+                            a.type === 'cleanse' &&
+                            a.config.type === 'cleanse' &&
+                            a.config.mode === 'reduce-duration'
+                        )
+                ),
+            })),
+        };
+
+        const input = (skills: ShipSkills): DPSSimulationInput => ({
+            attack: 15000,
+            crit: 100,
+            critDamage: 0,
+            defensePenetration: 0,
+            activeMultiplier: 0,
+            chargedMultiplier: 0,
+            chargeCount: 0,
+            activeDoTs: [],
+            chargedDoTs: [],
+            enemyDefense: 0,
+            enemyHp: 500000,
+            rounds: 10,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            defence: 5000,
+            hp: 100000,
+            shipSkills: skills,
+        });
+
+        const withReduction = simulateDPS(input(full));
+        const withoutReductionResult = simulateDPS(input(withoutReduction));
+
+        expect(withReduction.rounds.map((r) => r.directDamage)).toEqual(
+            withoutReductionResult.rounds.map((r) => r.directDamage)
+        );
+        expect(withReduction.summary.totalDamage).toEqual(
+            withoutReductionResult.summary.totalDamage
+        );
+    });
+});

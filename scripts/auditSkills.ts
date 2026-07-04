@@ -168,6 +168,28 @@ const RULES: Rule[] = [
         handled: (a) => hasType(a, 'extend-dot'),
     },
     {
+        id: 'debuff-duration-reduction',
+        severity: 'high',
+        // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N
+        // turn(s)" (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's
+        // structurally different "reduces all Bombs on the enemy targets by N turn(s)" clause
+        // (a hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-
+        // at-zero rider) so that mechanic surfaces here too — it is deliberately allowlisted
+        // below rather than parsed (see the allowlist entry's reason).
+        keyword: (t) =>
+            /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs)\s+on\b/i.test(
+                t
+            ),
+        handled: (a) =>
+            a.some(
+                (x) =>
+                    x.type === 'cleanse' &&
+                    x.config.type === 'cleanse' &&
+                    x.config.mode === 'reduce-duration' &&
+                    x.config.count === 'all'
+            ),
+    },
+    {
         id: 'no-crit',
         severity: 'high',
         // Matches "cannot"/"cannont" (source-data misspelling), but only when the subject is
@@ -606,7 +628,9 @@ function run() {
     // the allowlist honest after the reference CSV is refreshed and a source issue is fixed.
     const unused = unusedAllowlistPairs();
     if (unused.length) {
-        console.log(`\n⚠ ${unused.length} STALE allowlist entr${unused.length === 1 ? 'y' : 'ies'} (no longer produce a finding — remove from auditSkills.allowlist.ts):`);
+        console.log(
+            `\n⚠ ${unused.length} STALE allowlist entr${unused.length === 1 ? 'y' : 'ies'} (no longer produce a finding — remove from auditSkills.allowlist.ts):`
+        );
         for (const u of unused) console.log(`  - ${u.ship} · ${u.rule}`);
     }
 

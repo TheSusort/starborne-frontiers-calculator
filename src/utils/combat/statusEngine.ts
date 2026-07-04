@@ -190,6 +190,14 @@ export interface StatusEngine {
      *  eligible; 'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with
      *  cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
     reduceNewestDebuffDuration(actorId: string, turns: number): number;
+    /** PR11: reduce the duration of EVERY eligible timed debuff on `actorId` by `turns` —
+     *  the ALL-scoped sibling of reduceNewestDebuffDuration (Heliodor/Pestilence's "reduces the
+     *  duration of all active Debuffs … by 1 turn", vs Warpstrike's single-newest reduce).
+     *  Same eligibility rules as reduceNewestDebuffDuration (timed only; skips 'recurring'/
+     *  'permanent' and UNREMOVABLE_STATUSES) and the same non-positive/non-finite `turns`
+     *  rejection. Returns the number of debuffs affected (removed early if their reduced
+     *  duration is <= 0). Unknown id → 0. */
+    reduceAllDebuffsDuration(actorId: string, turns: number): number;
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
@@ -1139,6 +1147,30 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return 1;
     };
 
+    /** PR11: ALL-scoped sibling of reduceNewestDebuffDuration — shrinks EVERY eligible timed
+     *  debuff on `actorId` by `turns` rather than just the newest. Same store (per-victim
+     *  `enemyMaps`) and eligibility rules (numeric turnsRemaining only, skip
+     *  isUnremovable(name, turnsRemaining)); a reduced entry <= 0 is deleted (expired). Collects
+     *  keys to delete in a separate pass so mutating the map mid-iteration is safe. Returns the
+     *  count of debuffs affected; a non-positive/non-finite `turns` or unknown id returns 0. */
+    const reduceAllDebuffsDuration = (actorId: string, turns: number): number => {
+        const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
+        if (delta <= 0) return 0;
+        const timedMap = enemyMaps.get(actorId);
+        if (!timedMap) return 0;
+        let affected = 0;
+        const toDelete: string[] = [];
+        for (const [key, s] of timedMap) {
+            if (typeof s.turnsRemaining !== 'number') continue;
+            if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+            s.turnsRemaining -= delta;
+            affected++;
+            if (s.turnsRemaining <= 0) toDelete.push(key);
+        }
+        for (const key of toDelete) timedMap.delete(key);
+        return affected;
+    };
+
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
      *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
      *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
@@ -1443,6 +1475,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         removeSelfBuffByName,
         cleanse,
         reduceNewestDebuffDuration,
+        reduceAllDebuffsDuration,
         purge,
         steal,
         registerAbilityStatuses,

@@ -41,6 +41,7 @@ import {
     parseHpThresholdCondition,
     parseExtendDoT,
     parseCritPowerExtend,
+    parseDebuffDurationReduction,
     parseAllyCritDot,
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
@@ -1476,6 +1477,56 @@ function abilitiesFromText(
                 pos: stealPos >= 0 ? stealPos : MAX_POS,
             });
         }
+    }
+
+    // PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. Modeled as a
+    // 'cleanse' ability with mode:'reduce-duration' + count:'all' (shrinks EVERY eligible
+    // debuff on the recipient by durationTurns, not just the newest — the Warpstrike implant's
+    // count:0/mode:'reduce-duration' shape stays newest-only and is unaffected by count:'all'
+    // being a new, distinct value). Two corpus shapes:
+    //  - Heliodor: a self-subject damage reaction ("When directly damaged, this Unit reduces
+    //    the duration of all active Debuffs on itself/all allies …") → trigger 'on-attacked'.
+    //    The unit being damaged is always itself (never the ally-subject shape) — only the
+    //    RECIPIENT (self vs all-allies) varies, mirroring parseHealAbilities' identical
+    //    treatment of Heliodor's co-occurring repair clause in the same sentence.
+    //  - Pestilence: gated on this unit's OWN debuff infliction ("On debuff infliction this
+    //    Unit reduces …") → trigger 'on-debuff-inflicted', target all-allies.
+    // Lingshe's charge-skill Bomb-countdown reduction is a structurally different mechanic
+    // (enemy-targeted, hacking-gated, PendingBomb countdown with a forced-detonation-at-zero
+    // rider — not the generic timed-debuff store this touches) and is deliberately NOT parsed
+    // here; see scripts/auditSkills.allowlist.ts.
+    for (const dr of parseDebuffDurationReduction(text)) {
+        // Map the parsed gate to a reactive trigger EXPLICITLY (not by absence): Pestilence's
+        // "on debuff infliction" → on-debuff-inflicted; Heliodor's "when directly damaged" self
+        // reaction → on-attacked. A clause matching NEITHER gate carries no recognized reactive
+        // trigger — it is NOT emitted (a silent on-cast default would fire an all-debuff reduction
+        // every round, phantom behaviour). No corpus ship hits this branch today (both shapes are
+        // reactive); the audit's debuff-duration-reduction rule would flag such a future ship so
+        // its trigger can be modelled here.
+        const trigger: AbilityTrigger | undefined = dr.onDebuffInflicted
+            ? 'on-debuff-inflicted'
+            : dr.isDamageReaction
+              ? 'on-attacked'
+              : undefined;
+        if (!trigger) continue;
+        const reducePos = text.search(/reduces?\s+the\s+duration/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'cleanse',
+                target: dr.target,
+                trigger,
+                conditions: [],
+                config: {
+                    type: 'cleanse',
+                    count: 'all',
+                    mode: 'reduce-duration',
+                    durationTurns: dr.turns,
+                },
+                autoFilled: true,
+            },
+            pos: reducePos >= 0 ? reducePos : MAX_POS,
+        });
     }
 
     // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge

@@ -28,6 +28,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Skill parsing: per-count repairs now scale in the skill model — Oleander's active repair gains an extra 8.5% per debuffed enemy, and Meatshield's charged repair scales at 1.5% per debuff on itself, instead of showing a flat repair.",
     "Combat sim: Malvex's, Quixilver's, and FrontLine's bonus damage that scales with their own current Shield is now modeled — it uses their live Shield pool at the moment they attack, so it grows as their Shield does over the fight. Also added: APEX, Laika, and Malvex now strip a percentage of the target's Shield on cast (separate from Lodolite's full-strip-on-purge refit).",
     "Combat sim: added buff steal. Pallas's and Thresh's charged skills now actually steal a buff from their target instead of doing nothing extra, and Tithonus's charged skill steals a buff and grants it to herself and all adjacent allies (alongside her existing purge and damage). The stolen buff keeps its remaining duration.",
+    "Combat sim: Heliodor's and Pestilence's debuff-duration-reduction passives are now modeled — when directly damaged (Heliodor) or after inflicting a debuff (Pestilence), all active debuffs on the affected ship(s) now actually lose 1 turn of duration, instead of only the paired repair effect applying.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
