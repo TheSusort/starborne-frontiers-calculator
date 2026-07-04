@@ -369,6 +369,22 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     return { stat, pct };
 }
 
+/**
+ * Vindicator p2 reactive proc: "When this Unit resists a debuff infliction from an enemy, it deals
+ * <unit-damage>damage equal to X%</unit-damage> of this Unit's max HP to that enemy." Standalone
+ * HP-scaled REACTIVE damage — NOT an on-cast rider (parseSecondaryDamage deliberately parks the
+ * "resists … debuff" clause at its sentence guard). Returns { pct } or null.
+ */
+export function parseOnResistHpDamage(text: string | null | undefined): { pct: number } | null {
+    if (!text) return null;
+    const re =
+        /when\s+this\s+unit\s+resists\s+a\s+debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
+    const m = re.exec(text);
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    return isNaN(pct) ? null : { pct };
+}
+
 // Matches "X% ... for each <phrase>" where no other % sits between the number and
 // "for each". Global so we can skip repair/heal contexts and unknown phrases.
 const CONDITIONAL_RE = /(\d+(?:\.\d+)?)\s*%[^%]*?for each\s+([^.,;<]+)/gi;
