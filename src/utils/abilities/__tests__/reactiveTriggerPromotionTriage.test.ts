@@ -304,8 +304,9 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
         const ab = abilitiesFor({ firstPassiveSkillText: CULTIVATOR_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).not.toBe('on-cast');
-        // GAP: needs-capture (NEW trigger) — "when this Unit cleanses a debuff" has no self-cleanse
-        // reactive trigger; heal targets "that ally" (the cleansed ally) → also needs which-ally capture.
+        // Fixed (Phase 3 PR-H): NEW on-own-cleanse trigger — the heal builder's ownCleanseReaction
+        // annotation routes this repair there, and triggers.ts's on-own-cleanse listener stamps
+        // eventCtx.cleansedAllyIds so the ally-target heal lands on "that ally" (the cleansed one).
     });
 
     const HAYYAN_P3 =
@@ -318,14 +319,31 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
         // targetId is the debuffed ally; mirrors self-scoped `on-debuffed`).
     });
 
+    // Hayyan's SIBLING clause (same passive, first sentence — PR-E's on-ally-debuffed fix
+    // deliberately left this one "untouched" per its own commit message, deferring it here):
+    // "When cleansing a Debuff from an Ally, this Unit repairs the ally for 4% of this Unit's
+    // Max HP." Identical shape to Cultivator's own-cleanse repair (ally-target, "the ally" =
+    // the cleansed one) — added as a regression-lock alongside Cultivator/Morao (Phase 3 PR-H),
+    // since the natural on-own-cleanse regex covers all three with no ship-specific carve-out.
+    const HAYYAN_P2_CLEANSE =
+        "When <unit-aid>cleansing a</unit-aid> Debuff from an Ally, this Unit <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP.";
+    it('Hayyan: repair-on-own-cleanse (sibling clause) rides on-own-cleanse (Phase 3 PR-H)', () => {
+        const ab = abilitiesFor({ firstPassiveSkillText: HAYYAN_P2_CLEANSE }, 'passive');
+        const heal = ab.find((a) => a.type === 'heal');
+        expect(heal?.trigger).toBe('on-own-cleanse');
+        expect(heal?.target).toBe('ally');
+    });
+
     const MORAO_P3 =
         "This Unit <unit-damage>repairs 5%</unit-damage> of its Max HP every turn and, upon <unit-aid>Cleansing a</unit-aid> Debuff, repairs an additional <unit-damage>5%</unit-damage> of its Max HP while gaining <unit-skill>Defense Up II</unit-skill> for 2 turns.";
     it('Morao: repair/buff-on-own-cleanse is reactive, not on-cast', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: MORAO_P3 }, 'passive');
         // Both the extra repair and Defense Up ride "upon cleansing"; today everything is on-cast.
         expect(ab.some((a) => a.trigger !== 'on-cast')).toBe(true);
-        // GAP: needs-capture (NEW trigger on-own-cleanse; self-target so no actor). The "every turn"
-        // repair is a separate recurring-trigger gap, out of this family.
+        // Fixed (Phase 3 PR-H): both the extra repair AND Defense Up II ride the NEW
+        // on-own-cleanse trigger (self-target, no actor capture needed). The "every turn" repair
+        // is a SEPARATE recurring-trigger gap (out of this family) and correctly stays on-cast —
+        // see the dedicated integration test for the precise per-ability assertion.
     });
 
     const CROCUS_P2 =

@@ -3055,17 +3055,25 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         ]);
     });
 
-    it('Cultivator p2: ally-damage clause → ally-target heal with allySubject damageReaction; 4% cleanse clause unchanged', () => {
+    it('Cultivator p2: ally-damage clause → ally-target heal with allySubject damageReaction; 4% cleanse clause carries ownCleanseReaction (Phase 3 PR-H)', () => {
         // Full CSV p2 text (tags stripped; <br /><br /> → '. ' via the plain pipeline).
-        // The 4% cleanse-reaction clause is pinned to its pre-Task-8 shape (on-cast ally
-        // heal, NO damageReaction — "cleanses" is not a damage-reaction shape); the 8%
-        // ally-damaged clause was PR 1-disqualified and now parses with allySubject.
+        // The 4% cleanse-reaction clause now carries `ownCleanseReaction` (Phase 3 PR-H: routes
+        // to the NEW on-own-cleanse trigger — "cleanses" is NOT a damageReaction shape, a
+        // SEPARATE parser-level annotation, see its doc comment); the 8% ally-damaged clause was
+        // PR 1-disqualified and parses with allySubject (unrelated, unaffected by PR-H).
         expect(
             parseHealAbilities(
                 "When this Unit cleanses a Debuff, it also repairs that ally for 4% of this Unit's Max HP. Additionally, when an ally is directly damaged within the active pattern, this Unit repairs that ally for 8% of this Unit's Max HP."
             )
         ).toEqual([
-            { kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true },
+            {
+                kind: 'heal',
+                pct: 4,
+                basis: 'hp',
+                target: 'ally',
+                explicitTarget: true,
+                ownCleanseReaction: true,
+            },
             {
                 kind: 'heal',
                 pct: 8,

@@ -120,6 +120,14 @@ export type AbilityTrigger =
     // actor other than the owner). The ally counterpart of `on-debuffed`. Does NOT fire for
     // DoTs (dot-applied), matching on-debuffed's debuff-applied-only scoping.
     | 'on-ally-debuffed'
+    // Phase 3 PR-H: fires when THIS unit performs a cleanse that actually removes >= 1 debuff
+    // (rides the existing `cleanse-performed` event, self-scoped on casterId === ownerId).
+    // Cultivator ("when this Unit cleanses a Debuff, it also repairs that ally") is 'ally'-target
+    // — routed to the cleansed ally via eventCtx.cleansedAllyIds; Morao ("upon Cleansing a
+    // Debuff, repairs an additional 5% ... and gains Defense Up II") is 'self'-target — no
+    // capture needed. Distinct from `on-enemy-cleansed` (opposing-scoped) — this is the
+    // OWN-cleanse counterpart, mirroring on-debuffed/on-ally-debuffed's self/ally pairing.
+    | 'on-own-cleanse'
     // D-PR16 Lockdown: fires when THIS unit resists an incoming debuff (rides the existing
     // `debuff-resisted` event, self-scoped on targetId === ownerId). Chains off D-PR15's
     // Block-Debuff auto-resist emission AND normal hacking/affinity resists.
@@ -152,6 +160,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-debuff-inflicted',
     // Phase 3 PR-E: ally-scoped counterpart of on-debuffed.
     'on-ally-debuffed',
+    // Phase 3 PR-H: self-scoped reaction to THIS unit's own cleanse actually removing a debuff.
+    'on-own-cleanse',
     'on-ally-crit-dot',
     'on-ally-critically-repaired',
     'on-ally-crit',

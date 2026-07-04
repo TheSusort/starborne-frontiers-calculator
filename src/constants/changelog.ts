@@ -38,6 +38,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Hayyan now repairs an ally for 6% of her Max HP whenever a debuff is inflicted on that ally, matching her skill text, instead of the repair never firing.",
     "Combat sim: Ruiner now inflicts Bomb II on any enemy that performs a repair (once per round per enemy), matching her skill text, instead of never firing. Amartya now inflicts a stack of Defense Shred on the specific enemy defender that was just repaired, instead of never firing.",
     "Combat sim: Howler now cleanses a debuff from (and, with her refit, grants a stack of Blast to) the specific ally who just landed a critical hit, matching her skill text, instead of never firing.",
+    "Combat sim: Cultivator now repairs the specific ally whose debuff she just cleansed for 4% of her Max HP, and Hayyan does the same for 4%, matching their skill text instead of never firing. Morao now repairs an extra 5% of her Max HP and gains Defense Up II whenever her own cleanse actually removes a debuff, instead of always firing regardless.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

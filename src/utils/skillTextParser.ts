@@ -1039,6 +1039,18 @@ const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes|explodes on (?:an|t
 // Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
 // buff/debuff grant onto the LIVE on-enemy-cleansed trigger. Reference data: docs/ship-skills.csv.
 const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuff/i;
+// Phase 3 PR-H: "when this Unit cleanses a Debuff" (Cultivator) / "(when|upon) cleansing a
+// Debuff" (Morao, Hayyan) — the reactive TRIGGER verb ("this unit"/implicit-self
+// cleanses/CLEANSING), not a cleanse EFFECT riding a DIFFERENT reaction (Hermes'
+// on-ally-critically-repaired "it Cleanses 1 debuff from itself" — numeral form, no "a") nor a
+// plain cleanse ACTION on an active/charged cast (Nyxen/Makoli/Nosorog/Nuqtu's "Cleanses 1/2/all"
+// numeral forms) nor an ENEMY-subject reaction ("when an enemy cleanses a Debuff" — Arum/Grif/
+// Larkspur/Pestilence/Yarrow, verb form "cleanses" with subject "an enemy", never matched by this
+// "this unit"/subjectless-gerund phrasing — see ENEMY_CLEANSE_RE above, checked first). Corpus-
+// verified (docs/ship-skills.csv, grep "cleanses? a\b"/"cleansing a"): ONLY Cultivator, Hayyan,
+// Morao match; every enemy-subject/numeral-cleanse row above does not.
+const OWN_CLEANSE_TRIGGER_RE =
+    /\b(?:when\s+this\s+unit\s+cleanses\s+a\s+debuff|(?:when|upon)\s+cleansing\s+a\s+debuff)\b/i;
 // Overload lifecycle (Task 4) — kill/apply-debuff reactive phrasings for buff grants/removals.
 // Kept SEPARATE from the shared ENEMY_DEATH_PHRASING_RE used by parseExtraAction (do NOT broaden
 // that one). "on kill" (Mangler/Butcher), "upon killing an enemy/opponent" (Mangler/Ravager/
@@ -1070,6 +1082,8 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
  *    detectEnemyCleanseTrigger (sentence-scoped) since it has no buffName to key on.
  *  - "when an enemy performs a repair" → 'on-enemy-repaired' (Overload lifecycle, Task 4).
  *    Checked BEFORE the kill rule so Ruiner's comma-joined grant resolves correctly.
+ *  - "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" → 'on-own-cleanse'
+ *    (Phase 3 PR-H: Morao's Defense Up II grant).
  *  - "on kill" / "upon killing an enemy" / "when an enemy dies" → 'on-enemy-destroyed'
  *    (Overload lifecycle, Task 4: Mangler/Ravager/Asphyxiator/Butcher).
  *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
@@ -1107,6 +1121,11 @@ export function detectReactiveTrigger(
     // for the named buff/debuff grant in its clause (Arum Out. Damage Down I, Yarrow/Larkspur
     // Gelecek Contagion, Arum-refit all-allies Gelecek Contagion II).
     if (ENEMY_CLEANSE_RE.test(clause)) return 'on-enemy-cleansed';
+    // Phase 3 PR-H: "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" — Morao's
+    // Defense Up II grant. Clause-scoped by buffName (resolveBuffClause) so no anchor-position
+    // ambiguity — a buff name is unique per grant, unlike the heal-side same-pct collision (see
+    // ParsedHealAbility.ownCleanseReaction in parseHealAbilities for that case).
+    if (OWN_CLEANSE_TRIGGER_RE.test(clause)) return 'on-own-cleanse';
     // Overload lifecycle (Task 4). REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
     // kill-removal share one comma-joined sentence ("gains Overload when an enemy performs a repair,
     // upon killing an enemy, this Unit removes Overload") — the grant must resolve to
@@ -2797,6 +2816,18 @@ export interface ParsedHealAbility {
          *  Add the channel if such a ship ever appears. */
         allySubject?: boolean;
     };
+    /** Phase 3 PR-H: this specific repair match is the reactive component of an own-cleanse
+     *  sentence ("when this Unit cleanses a Debuff, it ALSO repairs that ally" / "…every turn
+     *  and, upon Cleansing a Debuff, repairs an ADDITIONAL 5%…"). buildShipAbilities maps it to
+     *  trigger 'on-own-cleanse'. A PARSER-level (match-position-relative) annotation rather than
+     *  a position-scoped detector call in buildShipAbilities — Morao's sentence carries TWO
+     *  same-pct repair matches ("repairs 5% … every turn" AND "repairs an additional 5%
+     *  … upon Cleansing"), and buildShipAbilities' shared healTagPos anchor (keyed only on pct)
+     *  collapses both onto the FIRST occurrence, so a sentence-scoped phrasePosTrigger detector
+     *  would incorrectly promote the "every turn" heal too. Set only when THIS match's own
+     *  position (m.index, known precisely here) falls AFTER the cleanse-trigger phrase within the
+     *  sentence — mirrors the instead-on-crit split's inInstead position comparison. */
+    ownCleanseReaction?: true;
     /** PR6b: per-count repair scaling — the repair grows by `perUnit`% per matched `condition`
      *  count (Oleander "additional 8.5% repair for each debuffed enemy" → base kept + perUnit
      *  bonus; Meatshield "repairs 1.5% … for each debuff on itself" → pure per-count, `pct` is
@@ -3113,6 +3144,22 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                     };
                 }
             }
+            // Phase 3 PR-H: own-cleanse reactive annotation (Cultivator/Morao). Gated the same as
+            // damageReaction (no leech, no damage-reaction) — no corpus row combines an own-cleanse
+            // repair with either. Position-relative (not sentence-only) — see
+            // ParsedHealAbility.ownCleanseReaction's doc comment for why Morao needs this instead
+            // of a plain position-scoped detector: only the match whose OWN position (m.index)
+            // falls AFTER the cleanse-trigger phrase's own position is the reactive one.
+            let ownCleanseReaction: true | undefined;
+            if (!leechBasis && !damageReaction) {
+                const cleanseTriggerMatch = OWN_CLEANSE_TRIGGER_RE.exec(sentence);
+                if (
+                    cleanseTriggerMatch &&
+                    m.index - sentenceStart > cleanseTriggerMatch.index
+                ) {
+                    ownCleanseReaction = true;
+                }
+            }
             const rawBasis = leechBasis ?? resolveHealBasis(basisScope);
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
@@ -3152,6 +3199,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 ...(leechScope ? { leechScope } : {}),
                 ...(requiresHpDamage ? { requiresHpDamage } : {}),
                 ...(damageReaction ? { damageReaction } : {}),
+                ...(ownCleanseReaction ? { ownCleanseReaction } : {}),
                 ...(countScaling
                     ? {
                           scaling: {
@@ -3201,6 +3249,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                             // continuation with the instead-on-crit split, so the inherited
                             // critFilter is always absent today).
                             ...(damageReaction ? { damageReaction } : {}),
+                            ...(ownCleanseReaction ? { ownCleanseReaction } : {}),
                         });
                     }
                 }
