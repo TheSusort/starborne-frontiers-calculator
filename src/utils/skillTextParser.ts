@@ -1023,7 +1023,13 @@ const START_OF_ROUND_RE =
 // phrase uses no application verb (Chakara's R2 passive; unique in the corpus). findVerb treats
 // it as a self-receive ('gains') so the buff segments extract.
 const STARTS_ROUND_WITH_RE = /\bstarts?\s+(?:each|every|the)\s+round\s+with\b/i;
-const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
+// Phase 3 PR-D: "explodes on (an|the) enemy" generalises the trigger beyond the literal word
+// "bomb" so Valkyrie's named bomb-type effect ("an Echoing Burst explodes on an enemy") also
+// rides on-bomb-detonated. Verified against docs/ship-skills.csv (grep "explod"): Demolisher
+// ("a/A bomb explodes on an enemy", already covered by the "bomb explodes" alternate) and
+// Valkyrie are the ONLY two rows using "explod" in the whole corpus, so this alternate cannot
+// co-trigger any other ship's kit.
+const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes|explodes on (?:an|the) enemy)/i;
 // "when an enemy cleanses a debuff" — a player reaction to an ENEMY cleanse (Phase 4c PR 4):
 // Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
 // buff/debuff grant onto the LIVE on-enemy-cleansed trigger. Reference data: docs/ship-skills.csv.
@@ -1339,6 +1345,22 @@ export function detectAllyCritDotTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ALLY_CRIT_DOT_RE, anchorPos, 'on-ally-crit-dot');
+}
+
+/**
+ * Returns 'on-bomb-detonated' when `anchorPos` (the ability's raw-text anchor position) falls
+ * inside the sentence carrying a bomb-detonation phrase (BOMB_DETONATE_RE — "detonates a bomb" /
+ * "bomb explodes" / "explodes on an enemy"); otherwise undefined. Position-scoped on the RAW
+ * text (mirrors detectAllyCritDotTrigger). This is the HEAL-builder counterpart to the existing
+ * buff (detectReactiveTrigger, Lingshe) and charge-removal (parseChargeRemoval, Demolisher)
+ * on-bomb-detonated readings of the same phrasing (Phase 3 PR-D: Valkyrie's self+lowest-HP-ally
+ * repair on Echoing Burst detonation). Reference data: docs/ship-skills.csv.
+ */
+export function detectBombDetonatedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, BOMB_DETONATE_RE, anchorPos, 'on-bomb-detonated');
 }
 
 // Pallas's TWO ally-crit reactive phrasings (live triggers; see types/abilities.ts):
