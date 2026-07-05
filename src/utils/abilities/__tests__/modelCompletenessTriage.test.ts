@@ -515,3 +515,234 @@ describe('SP-E — DoT transforms & conversions', () => {
         }
     );
 });
+
+describe('SP-F — deep one-offs', () => {
+    // ── Part A: the two KNOWN SP-F ships (allowlist: instead-replacement / detonation +
+    // debuff-duration-reduction) ──────────────────────────────────────────────────────
+
+    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    const PANON_ACTIVE =
+        'This Unit grants all allies <unit-skill>Terran Guard II</unit-skill> for 2 turns and deals <unit-damage>80% damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its Defense.<br /><br />If this Unit is Provoked or Taunted, this Unit instead gains <unit-skill>Terran Guard III</unit-skill> for 2 turns and deals <unit-damage>120% damage</unit-damage> with an additional Damage equal to <unit-damage>90%</unit-damage> of its Defense.';
+
+    it.fails(
+        'Panon: active "instead" branch does not replace the base 80%/70% damage numbers with 120%/90%',
+        () => {
+            const abilities = abilitiesFor({ activeSkillText: PANON_ACTIVE }, 'active');
+            // GAP: SP-F (allowlist: instead-replacement). Dry-run: 4 abilities build — the
+            // all-allies Terran Guard II buff (unconditioned), the base 80% damage
+            // (unconditioned), the base 70% defense-scaled additional-damage (unconditioned),
+            // and a SELF-target Terran Guard III buff correctly GATED on `{ subject:
+            // 'self-buff', buffName: 'Taunt', anyOf }` / `{ subject: 'self-debuff', buffName:
+            // 'Provoke', anyOf }` (statusEffectCondition — this half is already faithfully
+            // modeled, matching the allowlist's "base branch is already correct in single-ship
+            // DPS" note, since self is never Provoked/Taunted in DPS mode). The enhanced
+            // 120%/90% numbers from the "instead" branch are NOT built as abilities AT ALL —
+            // no damage or additional-damage ability carries them, and the base 80%/70% pair
+            // carries no NEGATED equivalent condition, so nothing in this array can ever
+            // represent "if Provoked/Taunted, deal 120% instead of 80%". No AbilityConfig
+            // field exists for a conditional/alternate multiplier (verified against the full
+            // 'damage'/'additional-damage' config shapes in src/types/abilities.ts — neither
+            // carries anything beyond multiplier/stat/pct/hits/noCrit/hpBasisPct), so a
+            // faithful fix needs a SP-F-authored mechanism; not predictable whether it lands as
+            // a second conditioned damage/additional-damage ability (mirroring how the buff
+            // half already does it) or a negate on the existing pair. Proxy: pinned to the
+            // top-level `type` field (present regardless of `config` shape) — some ability of
+            // type 'damage' or 'additional-damage' carries a non-empty `conditions` array;
+            // false now (both are `conditions: []`), true once SP-F lands either shape.
+            const damageLike = abilities.filter(
+                (a) => a.type === 'damage' || a.type === 'additional-damage'
+            );
+            expect(damageLike.some((a) => a.conditions.length > 0)).toBe(true);
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field) — the SAME "instead"
+    // structure as the active skill above, on the charged skill (Barrier grant + 170%/130%).
+    const PANON_CHARGED =
+        'This Unit deals <unit-damage>140% damage</unit-damage> plus an additional <unit-damage>100%</unit-damage> of its Defense.<br /><br />If this Unit is affected by <unit-skill>Provoke</unit-skill> or <unit-skill>Taunt</unit-skill>, it instead gains <unit-skill>Barrier</unit-skill> for 1 hit and deals <unit-damage>170% damage</unit-damage> with an additional Damage equal to <unit-damage>130%</unit-damage> of its Defense.';
+
+    it.fails(
+        'Panon: charged "instead" branch does not replace the base 140%/100% damage numbers with 170%/130%',
+        () => {
+            const abilities = abilitiesFor({ chargeSkillText: PANON_CHARGED }, 'charged');
+            // GAP: SP-F (allowlist: instead-replacement) — the charged-skill sibling of the
+            // active-skill probe above; same shape, same reasoning. Dry-run: base 140% damage
+            // and 100% additional-damage build unconditioned; the self-target Barrier grant is
+            // correctly gated on the Taunt/Provoke `affectedByConditions` pair (anyOf); the
+            // enhanced 170%/130% numbers are dropped entirely. Same proxy for the same reason
+            // (no AbilityConfig field exists to carry an alternate/conditional multiplier).
+            const damageLike = abilities.filter(
+                (a) => a.type === 'damage' || a.type === 'additional-damage'
+            );
+            expect(damageLike.some((a) => a.conditions.length > 0)).toBe(true);
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field). Lingshe's clause is a
+    // CHARGED skill → slot 'charged' (not 'active').
+    const LINGSHE_CHARGED =
+        'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.';
+
+    it.fails(
+        'Lingshe: charged "reduces all Bombs on the enemy targets by 1 turn ... will detonate" countdown-reduction+forced-detonate rider builds nothing',
+        () => {
+            const abilities = abilitiesFor({ chargeSkillText: LINGSHE_CHARGED }, 'charged');
+            // GAP: SP-F (allowlist: detonation / debuff-duration-reduction). Dry-run: exactly
+            // ONE ability builds for this whole charged-skill text — the "inflicts Bomb III for
+            // 3 turns" DoT-apply from the SECOND sentence. The FIRST sentence (countdown
+            // reduction of the ENEMY's existing Bomb stacks + hacking-gated landing + forced
+            // immediate detonation when a Bomb's countdown reaches 0) produces ZERO abilities.
+            // Per the allowlist's own reasoning this is a STRUCTURALLY DIFFERENT mechanism from
+            // the generic `{ type: 'cleanse', mode: 'reduce-duration', debuffType: 'bomb' }`
+            // shape (that shape shrinks a duration in the OWNER's own/ally debuff store; this
+            // clause targets the ENEMY's separate PendingBomb countdown container, needs a
+            // hacking-vs-security landing gate with no duration-MODIFYING precedent, and a
+            // forced-detonate-at-zero rider reaching into the detonation payout pipeline
+            // outside the normal per-round tick) — so predicting the exact AbilityType/config
+            // SP-F will land is not possible today. Proxy: the total ability COUNT for this
+            // text (a top-level array-size fact, immune to whatever shape the new ability
+            // takes) — false now (exactly 1), true once SP-F adds ANY ability object for the
+            // countdown-reduction/forced-detonate sentence, mirroring how Voron's probe (SP-E)
+            // uses count/field facts rather than a guessed config shape.
+            expect(abilities.length).toBeGreaterThan(1);
+        }
+    );
+
+    // ── Part B: discovery — 5 unpinned one-off mechanics, ship(s) identified by corpus
+    // keyword search (docs/ship-skills.csv), cross-checked against `npm run audit:skills`
+    // (0 findings — none of these mechanics trip the rule-based audit; confirmed genuinely
+    // unpinned) and scripts/auditSkills.allowlist.ts (no existing entries for any of the five).
+    // ──────────────────────────────────────────────────────────────────────────────────
+
+    // overheal-redirect: NO CARRIER FOUND. Exhaustive keyword search across every text column
+    // (overheal, excess heal/repair, heal/repair beyond|over|above max, redirect, spillover,
+    // overflow, surplus, wasted heal, capped heal, heal-to-shield, repair-to-shield) turned up
+    // no ship whose clause converts healing that would exceed max HP into a shield or any other
+    // redirected effect. The closest false-hit was Hemlock's "Toxic Overflow" (a DoT name, not
+    // an overheal mechanic) and Lionheart's "damage redirected through Protection" (a damage
+    // -redirect shield-stack mechanic, unrelated to healing). DROPPED from SP-F — no probe.
+
+    // defense-substitution — CARRIER: Meatshield (third_passive_skill_text, R4/refit-active;
+    // second_passive_skill_text at R2 lacks the substitution sentence). Verbatim from
+    // docs/ship-skills.csv.
+    const MEATSHIELD_P4 =
+        "At the start of combat, this Unit gains 3 stacks of <unit-skill>Protection</unit-skill>.<br /><br />Any damage this Unit takes from <unit-skill>Protection</unit-skill> is transformed into a <unit-aid>Damage over Time effect</unit-aid> for 2 turns.<br /><br />Any direct damage dealt to a non-defender ally that is not transferred by <unit-skill>Protection</unit-skill> is dealt as if that ally had this Unit's defense.";
+
+    it.fails(
+        'Meatshield: "dealt as if that ally had this Unit\'s defense" defense-substitution for non-defender allies builds nothing',
+        () => {
+            const abilities = abilitiesFor({ thirdPassiveSkillText: MEATSHIELD_P4 }, 'passive');
+            // GAP: SP-F (defense-substitution, newly discovered — no allowlist entry existed
+            // before this task). Dry-run: exactly ONE ability builds for the WHOLE 3-sentence
+            // text — the self-target "gains 3 stacks of Protection" buff (auto-filled,
+            // recurring). The OTHER two sentences both build nothing: the "damage taken from
+            // Protection transforms into a DoT" sentence (a SEPARATE, SP-E-shaped gap — same
+            // family as the Voron probe above, deliberately NOT asserted on here to avoid
+            // conflating two different SPs' completion signals if a future generic SP-E fix
+            // happens to also match this phrasing) and the defense-substitution sentence this
+            // probe targets. No AbilityConfig/ConditionSubject/IncomingCondition anywhere in
+            // src/types/abilities.ts represents "ally takes damage calculated against a
+            // DIFFERENT unit's defense stat" — a wholly new mechanic. Proxy: NOT a raw count
+            // (which the sibling DoT-transform gap could also satisfy) — instead, `target`, a
+            // top-level Ability field independent of whatever config shape SP-F picks. The
+            // defense-substitution effect necessarily targets Meatshield's ALLIES (it changes
+            // how THEY take damage), so a faithful ability must carry `target: 'ally'` or
+            // `'all-allies'` — distinct from the self-target DoT-transform sibling gap (which,
+            // mirroring Voron's `on-attacked`/`target: 'self'` shape, would stay self-target).
+            // False now (the sole ability present is self-target); true once SP-F lands an
+            // ally-scoped ability for this sentence, and NOT flippable by the sibling gap.
+            const allyScoped = abilities.filter(
+                (a) => a.target === 'ally' || a.target === 'all-allies'
+            );
+            expect(allyScoped.length).toBeGreaterThan(0);
+        }
+    );
+
+    // forced-affinity — CARRIER: Wusheng (charge_skill_text) — the cleanest single-clause,
+    // single-ship instance ("deals damage WITH affinity advantage", no team-composition
+    // dependency). RELATED but NOT separately probed: Isha ("gains Offensive Affinity
+    // Override" / "gains Defensive Affinity Override") and Nayra (the reciprocal grant, "if
+    // Isha is on the same team, it also gains Offensive Affinity Override") carry the SAME
+    // underlying gap (no engine consumption of an "Affinity Override" buff name anywhere in
+    // src/utils/combat/*.ts's affinity-advantage/-disadvantage resolution), but as a two-ship,
+    // team-composition-gated synergy rather than a one-off — out of scope for this probe, flagged
+    // here for SP-F's awareness.
+    const WUSHENG_CHARGED =
+        'This Unit deals <unit-damage>220% damage</unit-damage> with affinity advantage and inflicts <unit-skill>Stasis</unit-skill> for 2 turns.';
+
+    it.fails(
+        'Wusheng: charged "deals 220% damage with affinity advantage" does not force the affinity outcome on this hit',
+        () => {
+            const abilities = abilitiesFor({ chargeSkillText: WUSHENG_CHARGED }, 'charged');
+            // GAP: SP-F (forced-affinity, newly discovered — no allowlist entry existed before
+            // this task). Dry-run: 3 abilities build (140%→220% damage, a 'control' Stasis
+            // effect, and the Stasis 'debuff' apply) — all IDENTICAL to how a plain
+            // damage+Stasis charged skill would build with NO "affinity advantage" text at
+            // all; the phrase is silently dropped. This is a live, consumed engine concept
+            // (src/utils/combat/{playerTurn,engine,triggers}.ts compute affinity
+            // advantage/disadvantage for crit chance and debuff-landing from the REAL
+            // attacker/target ship-class matchup) — but there is no FORCE/override surface
+            // anywhere: not in ConditionSubject, not in IncomingCondition/OutgoingCondition, not
+            // as an AbilityTrigger, not as an AbilityType, not as a ModifierChannel (all four
+            // unions checked in full against src/types/abilities.ts — none mention "affinity").
+            // A faithful fix therefore has NO existing field to reuse (unlike Malvex's
+            // 'incoming-reduction' type or Voron's 'on-attacked' trigger); it must add wholly
+            // new type surface, and this task cannot predict its literal name without
+            // violating the "never assert an absent literal" rule. Proxy: mirrors the Lingshe
+            // probe above — the total ability COUNT for this exact, ship-unique text, since
+            // this corpus's convention (evident in this very dump: separate ability objects for
+            // the damage/control/debuff-apply pieces of one sentence) is one ability per
+            // distinct effect, not one shared config growing new fields. False now (exactly 3
+            // abilities), true once SP-F adds any ability/modifier object representing the
+            // forced-affinity effect.
+            expect(abilities.length).toBeGreaterThan(3);
+        }
+    );
+
+    // charge-loss-immunity — CARRIER: Lev (second_passive_skill_text, R2/refit-active;
+    // third_passive_skill_text is the CSV's literal "null" placeholder, i.e. no R4 passive
+    // text exists for this ship). Verbatim from docs/ship-skills.csv.
+    const LEV_P2 =
+        "This Unit is immune to charge loss effects. This Unit's Crit Rate and Crit Power are increased by 20%.<br />This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.";
+
+    it('Lev: "immune to charge loss effects" already sets ship.chargeLossImmune (FP — already modeled)', () => {
+        // FALSE POSITIVE, not an SP-F gap: parseChargeLossImmune (skillTextParser.ts) +
+        // buildShipAbilities' `chargeLossImmune` fold (buildShipAbilities.ts ~L2669-2674,
+        // consumed by the engine as CombatActor.chargeLossImmune) already model this literal
+        // phrase end to end. Dry-run confirmed `buildShipAbilities(...).chargeLossImmune ===
+        // true` for this exact text. Locked as a regression guard, not wrapped in it.fails.
+        const built = buildShipAbilities({
+            refits: [{}, {}, {}, {}],
+            secondPassiveSkillText: LEV_P2,
+        } as never);
+        expect(built.chargeLossImmune).toBe(true);
+    });
+
+    // on-ally-shield-destroyed — CARRIER: AEGIS (second_passive_skill_text, R2/refit-active;
+    // third_passive_skill_text is the CSV's literal "null" placeholder). Verbatim from
+    // docs/ship-skills.csv.
+    const AEGIS_P2 =
+        'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their Shield destroyed.';
+
+    it.fails(
+        'AEGIS: "when an ally ... has their Shield destroyed" does not ride a reactive shield-destroyed trigger',
+        () => {
+            const abilities = abilitiesFor({ secondPassiveSkillText: AEGIS_P2 }, 'passive');
+            // GAP: SP-F (on-ally-shield-destroyed, newly discovered — no allowlist entry
+            // existed before this task). Dry-run: 2 abilities build — an all-allies "Defense Up
+            // II" buff and an ally-target "cleanses all" — BOTH auto-filled as unconditioned
+            // `trigger: 'on-cast'`, as if this were a plain active/charged-style grant, not a
+            // reaction to a specific ally's shield being destroyed. No `on-ally-shield-destroyed`
+            // (or any shield-DESTRUCTION-scoped) literal exists in AbilityTrigger — the only
+            // shield-related trigger is `on-shield-applied` (the opposite direction, fired when
+            // a shield is GRANTED, not lost) — so this task cannot predict the new trigger's
+            // exact name without violating the "never assert an absent literal" rule. Proxy:
+            // checked against the ONE trigger literal that DOES exist and IS what's wrongly
+            // applied today — 'on-cast' — an existing, type-valid literal. False now (both
+            // abilities are on-cast); true once SP-F reroutes at least one of them onto
+            // whatever new reactive trigger it adds (any trigger other than 'on-cast' satisfies
+            // this, regardless of its name).
+            expect(abilities.some((a) => a.trigger !== 'on-cast')).toBe(true);
+        }
+    );
+});
