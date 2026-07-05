@@ -417,3 +417,74 @@ describe('SP-D — count-based gates', () => {
         }
     );
 });
+
+describe('SP-E — DoT transforms & conversions', () => {
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — the SAME text as
+    // SP-A's Voron probe (Task 2): split A+E. SP-A owns the "takes 20% less damage from Damage
+    // over Time effects" reduction half; this probe owns ONLY the "transforms the damage into a
+    // Damage over Time effect" conversion half. SP-A's reduction is only faithful once this
+    // transform actually exists (today Voron never generates the DoT the reduction would apply
+    // to), so the two halves are coupled even though each ships its own ability.
+    const VORON_P2 =
+        'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.';
+
+    it.fails(
+        'Voron: "transforms the damage into a Damage over Time effect" builds a reactive self-DoT conversion',
+        () => {
+            const abilities = abilitiesFor({ secondPassiveSkillText: VORON_P2 }, 'passive');
+            // GAP: SP-E — dry-run confirmed: today the WHOLE passive slot builds NO abilities at
+            // all for this text (same empty-array finding SP-A's probe already made), so neither
+            // half of the clause exists yet. No damage-to-DoT transform/conversion config exists
+            // in AbilityConfig (verified against the full union in src/types/abilities.ts) — and
+            // the clause names no specific DoT family (unlike Corrosion/Inferno/Bomb), so the
+            // existing `{ type: 'dot'; dotType: DoTType; ... }` shape (DoTType is only
+            // 'corrosion' | 'inferno' | 'bomb') cannot represent it without SP-E ALSO widening
+            // DoTType — a shape we can't predict or assert on today. What IS certain regardless of
+            // that shape choice: this is a REACTIVE conversion fired when Voron itself takes
+            // damage, applied to ITSELF — i.e. it must ride the EXISTING, already-wired
+            // `on-attacked` trigger (used throughout buildShipAbilities.ts for every "when
+            // directly damaged" passive reaction: Stalwart's counter, Cultivator's heal,
+            // Purifier's cleanse) with `target: 'self'`. This is distinct from SP-A's reduction
+            // (a passive stat modifier, `trigger: 'on-cast'`, per the existing incoming-reduction
+            // build sites at buildShipAbilities.ts ~L2082-2117) and from the `counter` ability
+            // shape (also `on-attacked` but `target: 'enemy'`) — so the proxy below cannot be
+            // trivially satisfied by either sibling mechanic landing first. Proxy: an ability with
+            // `trigger === 'on-attacked' && target === 'self'` — false now (array is empty), true
+            // once SP-E's transform ships, survives whatever config.type/DoTType shape it lands on.
+            expect(abilities.some((a) => a.trigger === 'on-attacked' && a.target === 'self')).toBe(
+                true
+            );
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: Belladonna also
+    // appears in SP-D (Task 5) for the charge skill's "3+ Acidic Decay" count-gate clause — a
+    // DISTINCT clause. This probe is ONLY the passive's Corrosion→Acidic Decay conversion.
+    const BELLADONNA_P2 =
+        'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance to equal to its crit power.';
+
+    it.fails(
+        'Belladonna: "convert the Corrosion into Acidic Decay" does not ride the live ally-inflicts-debuff reactive trigger',
+        () => {
+            const abilities = abilitiesFor({ secondPassiveSkillText: BELLADONNA_P2 }, 'passive');
+            const acidicDecay = abilities.find(
+                (a) => a.config.type === 'debuff' && a.config.buffName === 'Acidic Decay'
+            );
+            // GAP: SP-E — dry-run: today this clause auto-fills a bare, UNGATED "Acidic Decay"
+            // debuff-application ability (trigger 'on-cast', conditions: []) — a spurious
+            // artifact of the generic buff/debuff-name auto-fill picking up "Acidic Decay" from
+            // the text, unconnected to the ally's Corrosion cast. No 'convert'/'transform'
+            // AbilityConfig exists (verified against the full union). The live, already-wired
+            // `on-ally-debuff-inflicted` trigger (Oleander's ally-target RoT grant,
+            // buildShipAbilities.ts ~L2351-2362) is EXACTLY this "when an ally inflicts a debuff"
+            // phrasing family — but its gate is hardcoded to `target === 'ally' && config.type ===
+            // 'buff'`, and the code's own comment there calls out "Provider's enemy-target Crit
+            // Rate Down II counter-debuff in the same phrasing family stays on-cast (a deferred
+            // deep one-off)" — Belladonna's enemy-target 'debuff' config is that exact same
+            // deferred case. Proxy: the Acidic Decay ability's trigger equals the EXISTING literal
+            // 'on-ally-debuff-inflicted' — false now ('on-cast'), true once SP-E widens that gate
+            // to cover enemy-target debuff conversions too.
+            expect(acidicDecay?.trigger).toBe('on-ally-debuff-inflicted');
+        }
+    );
+});
