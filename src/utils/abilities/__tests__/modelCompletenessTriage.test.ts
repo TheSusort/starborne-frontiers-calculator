@@ -685,17 +685,39 @@ describe('SP-F — deep one-offs', () => {
             // anywhere: not in ConditionSubject, not in IncomingCondition/OutgoingCondition, not
             // as an AbilityTrigger, not as an AbilityType, not as a ModifierChannel (all four
             // unions checked in full against src/types/abilities.ts — none mention "affinity").
-            // A faithful fix therefore has NO existing field to reuse (unlike Malvex's
-            // 'incoming-reduction' type or Voron's 'on-attacked' trigger); it must add wholly
-            // new type surface, and this task cannot predict its literal name without
-            // violating the "never assert an absent literal" rule. Proxy: mirrors the Lingshe
-            // probe above — the total ability COUNT for this exact, ship-unique text, since
-            // this corpus's convention (evident in this very dump: separate ability objects for
-            // the damage/control/debuff-apply pieces of one sentence) is one ability per
-            // distinct effect, not one shared config growing new fields. False now (exactly 3
-            // abilities), true once SP-F adds any ability/modifier object representing the
-            // forced-affinity effect.
-            expect(abilities.length).toBeGreaterThan(3);
+            // A faithful fix has NO existing field to reuse (unlike Malvex's 'incoming-reduction'
+            // type or Voron's 'on-attacked' trigger). It plausibly lands one of two ways: (a) a
+            // one-off flag bolted onto the EXISTING 'damage' and/or 'debuff' config — the
+            // noCrit/hpBasisPct precedent (Pallas/Tithonus/Vindicator) for ship-specific
+            // one-offs riding the SAME config shape, since affinity here scopes crit chance
+            // (damage) AND debuff-landing (the Stasis apply) for this one hit, not a persistent
+            // buff; or (b) a wholly new ability/modifier object, mirroring this corpus's
+            // one-ability-per-effect convention. Raw `abilities.length` alone is NOT flip-valid:
+            // route (a) leaves the count at 3 forever. Proxy is the OR of a shape-independent
+            // config-field check (covers route a) and an unrecognised-ability-type check (covers
+            // route b, generalising past a bare count so it also catches a same-count RESHAPE of
+            // an existing ability into a new type). RESIDUAL ASSUMPTION: the field-name list
+            // below (forcedAffinity/affinity/affinityOverride/affinityAdvantage/forceAdvantage)
+            // is this task's best guess at SP-F's literal name — if SP-F lands via route (a)
+            // under a field name NOT in this list, only the route-(b) disjunct will save the
+            // flip, and route (a) implementations by definition don't touch route (b); SP-F
+            // should reconcile this list against whatever field name it actually lands on.
+            // False now (config carries none of these fields, and every ability's `type` is one
+            // of the three baseline types 'damage'/'control'/'debuff' built for a plain
+            // damage+Stasis charged skill); true once SP-F lands either route.
+            const candidateFields = [
+                'forcedAffinity',
+                'affinity',
+                'affinityOverride',
+                'affinityAdvantage',
+                'forceAdvantage',
+            ];
+            const baselineTypes = new Set(['damage', 'control', 'debuff']);
+            const hasForcedAffinityField = abilities.some((a) =>
+                candidateFields.some((f) => f in a.config)
+            );
+            const hasUnrecognisedAbilityType = abilities.some((a) => !baselineTypes.has(a.type));
+            expect(hasForcedAffinityField || hasUnrecognisedAbilityType).toBe(true);
         }
     );
 
