@@ -115,6 +115,11 @@ export type AbilityTrigger =
     // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
     // (separate `dot-applied` event) — matches "when debuffed".
     | 'on-debuffed'
+    // Phase 3 PR-E: fires when a same-side ALLY (not the owner) receives a timed debuff
+    // (rides the existing `debuff-applied` event, ally-scoped on targetId being a same-side
+    // actor other than the owner). The ally counterpart of `on-debuffed`. Does NOT fire for
+    // DoTs (dot-applied), matching on-debuffed's debuff-applied-only scoping.
+    | 'on-ally-debuffed'
     // D-PR16 Lockdown: fires when THIS unit resists an incoming debuff (rides the existing
     // `debuff-resisted` event, self-scoped on targetId === ownerId). Chains off D-PR15's
     // Block-Debuff auto-resist emission AND normal hacking/affinity resists.
@@ -145,6 +150,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-crit',
     'on-debuff-inflicted',
     'on-ally-debuff-inflicted',
+    // Phase 3 PR-E: ally-scoped counterpart of on-debuffed.
+    'on-ally-debuffed',
     'on-ally-crit-dot',
     'on-ally-critically-repaired',
     'on-ally-crit',
@@ -693,6 +700,13 @@ export interface Ability {
      *  AbilityConfig variants — this is the top-level Ability flag (read via
      *  `intent.ability.oncePerRound`), honoring the spec's "no AbilityConfig change". */
     oncePerRound?: boolean;
+    /** Phase 3 PR-E: this reactive applies at most once per round PER ALLY (keyed on
+     *  (owner, ability, eventCtx.damagedAllyId)), rather than once per round overall.
+     *  Oleander's "once per ally per round" RoT grant: a different ally inflicting a
+     *  debuff still procs even if another ally already consumed the cap this round.
+     *  Gated executor-side via IntentExecContext.oncePerRoundConsumed, keyed with the
+     *  ally id (distinct from the plain `oncePerRound` flag above). Absent → no cap. */
+    oncePerRoundPerAlly?: boolean;
     /** D-PR14 Bulwark: an on-ally-attacked reactive fires only when the DAMAGED ally is
      *  adjacent to this owner (board neighbours; non-positional → any living same-side ally).
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →

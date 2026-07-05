@@ -104,7 +104,10 @@ export interface Intent {
      *  branch routes the application to THIS enemy's per-target store.
      *  `damagedAllyId`: the DAMAGED ally's actor id (on-ally-attacked) — the heal and
      *  buff branches route an 'ally'-target payload to exactly this recipient
-     *  (Cultivator's repair, Refine/Graphite's grants) instead of the default.
+     *  (Cultivator's repair, Refine/Graphite's grants) instead of the default. Generic
+     *  "route reactive ally-support here" field: also carries the inflicting/victim ally
+     *  for debuff-event reactions (Oleander's on-ally-debuff-inflicted RoT grant routes to
+     *  the inflicting ally; Hayyan's on-ally-debuffed repair routes to the debuffed ally).
      *  `fromPurgeEvent`: depth-1 purge chain guard — a purge triggered by a
      *  purge-performed event does not re-emit purge-performed, preventing infinite chains. */
     eventCtx?: {
@@ -207,6 +210,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
  *    PLAYER's infliction; for the ENEMY registration this is any other enemy actor's infliction.
  *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
+ *  - on-ally-debuffed → debuff-applied where the TARGET is a same-side ally (not opposing, not
+ *    the owner itself) — the ally counterpart of on-debuffed (Hayyan). Does NOT subscribe to
+ *    dot-applied, matching on-debuffed's scoping.
  *  - on-ally-crit-dot → dot-applied with viaCrit from any same-side ally (opposing sources
  *    excluded, own casts excluded)
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
@@ -367,13 +373,15 @@ export function registerReactiveListeners(args: {
                         // Ally = any OTHER same-side actor's infliction. Exclude this owner
                         // (own inflictions go to on-debuff-inflicted) AND every opposing actor
                         // (an opposing actor is never an ally).
-                        if (isSameSideAlly(e.sourceId, ownerId)) enqueue(intent);
+                        if (isSameSideAlly(e.sourceId, ownerId))
+                            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId } });
                     });
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications now emit dot-applied with the team sourceId
                         // (Task 4 seam, live since Task 6) — an ally DoT infliction triggers
                         // this listener exactly as an ally debuff does.
-                        if (isSameSideAlly(e.sourceId, ownerId)) enqueue(intent);
+                        if (isSameSideAlly(e.sourceId, ownerId))
+                            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId } });
                     });
                     break;
                 case 'on-ally-crit-dot':
@@ -519,6 +527,16 @@ export function registerReactiveListeners(args: {
                         // on-attacked's targetId === ownerId scoping. DoTs use dot-applied (not
                         // this event) → Firewall does not fire on DoT application, by design.
                         if (e.targetId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-debuffed':
+                    bus.on('debuff-applied', (e) => {
+                        // Victim-scoped: a timed debuff landed on MY ally (Hayyan). The ally counterpart of
+                        // on-debuffed (which is targetId === ownerId). Route the reactive repair to that ally
+                        // via damagedAllyId. Excludes the owner (that is on-debuffed) and DoTs (dot-applied),
+                        // matching on-debuffed's debuff-applied-only scoping.
+                        if (isSameSideAlly(e.targetId, ownerId))
+                            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId } });
                     });
                     break;
                 case 'on-debuff-resisted':
@@ -1579,6 +1597,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const key = `${intent.ownerId}:${intent.ability.id}`;
             if (ctx.oncePerCombatFired?.has(key)) return;
             ctx.oncePerCombatFired?.add(key);
+        }
+        // Phase 3 PR-E: "once per ally per round" cap (Oleander's RoT-to-ally grant). A DEDICATED
+        // flag — not the plain oncePerRound gate above, which has no gate in THIS branch today
+        // (adding one there would newly cap every other reactive buff and drift goldens). Keyed
+        // on (owner, ability, damagedAllyId) so a DIFFERENT ally still procs this round.
+        // NOTE: consumes the cap BEFORE the procChance gate below. Inert today (Oleander's grant
+        // has no procChance), but if a future oncePerRoundPerAlly ability ALSO carries a
+        // procChance, move this below passesProcChanceGate so a failed proc does not burn the cap
+        // (matching the plain oncePerRound "mark only on a successful proc" contract).
+        if (intent.ability.oncePerRoundPerAlly) {
+            const key = `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.damagedAllyId ?? ''}`;
+            if (ctx.oncePerRoundConsumed?.has(key)) return;
+            ctx.oncePerRoundConsumed?.add(key);
         }
         // D-PR8: procChance gate for reactive buff grants (Ambush 5-16%, Alacrity 12-20%).
         // De-Morgan pass-through — true when procChance is undefined/≤0/≥1, so every existing

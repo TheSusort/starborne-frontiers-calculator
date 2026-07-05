@@ -309,11 +309,12 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
 
     const HAYYAN_P3 =
         "When a debuff is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's Max HP.";
-    it('Hayyan: repair-on-ally-debuffed rides on-ally-debuff-inflicted', () => {
+    it('Hayyan: repair-on-ally-debuffed rides on-ally-debuffed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: HAYYAN_P3 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
-        expect(heal?.trigger).toBe('on-ally-debuff-inflicted');
-        // GAP: needs-capture — same which-ally gap as Oleander (heal targets "the ally").
+        expect(heal?.trigger).toBe('on-ally-debuffed');
+        // GAP: needs-capture — NEW `on-ally-debuffed` trigger (victim-scoped `debuff-applied`,
+        // targetId is the debuffed ally; mirrors self-scoped `on-debuffed`).
     });
 
     const MORAO_P3 =

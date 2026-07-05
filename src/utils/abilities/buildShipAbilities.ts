@@ -35,6 +35,7 @@ import {
     parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
+    detectAllyInflictsGrantTrigger,
     detectPreCombatBuffTrigger,
     detectPreCombatShieldTrigger,
     detectDamageReactionTrigger,
@@ -56,6 +57,7 @@ import {
     detectEnemyCleanseTrigger,
     detectEnemyPurgedTrigger,
     detectAllyPurgedTrigger,
+    detectAllyDebuffedTrigger,
     detectEndOfRoundPurgeTrigger,
     detectStartOfRoundTrigger,
     detectEndOfRoundDamageTrigger,
@@ -73,6 +75,7 @@ import {
     parseSelfBuffRemovals,
     parseEnemyChargedCastReaction,
     REMOVE_CHARGE_RE,
+    ONCE_PER_ALLY_PER_ROUND_RE,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
@@ -1494,6 +1497,11 @@ function abilitiesFromText(
               // Salvation p3: a repair anchored in the "when a buff is purged from an ally"
               // sentence rides the on-ally-purged reactive trigger (position-scoped).
               detectAllyPurgedTrigger(text, healPos) ??
+              // Hayyan p2: a repair anchored in the "when a debuff is inflicted on an ally"
+              // sentence rides the on-ally-debuffed reactive trigger (victim-scoped; position-
+              // scoped). Position-scoping keeps Hayyan's sibling on-own-cleanse repair (a
+              // different sentence) untouched.
+              detectAllyDebuffedTrigger(text, healPos) ??
               (h.kind === 'shield'
                   ? (detectDebuffInflictedTrigger(text, healPos) ??
                     // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
@@ -2289,9 +2297,27 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (reactiveTrigger === undefined && rowText && pos >= 0) {
             reactiveTrigger = detectRoundStartContinuationTrigger(rowText, pos);
         }
+        // Oleander: an ally-target buff granted "when an ally inflicts a debuff" rides
+        // on-ally-debuff-inflicted, routed to the inflicting ally via eventCtx.damagedAllyId. Gated on
+        // target==='ally' + type 'buff' so Provider's enemy-target Crit Rate Down II counter-debuff in the
+        // same phrasing family stays on-cast (a deferred deep one-off).
+        if (
+            reactiveTrigger === undefined &&
+            target === 'ally' &&
+            ability.config.type === 'buff' &&
+            rowText
+        ) {
+            reactiveTrigger = detectAllyInflictsGrantTrigger(rowText, buff.buffName);
+        }
         if (reactiveTrigger) {
             ability.trigger = reactiveTrigger;
             ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
+            // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
+            // oncePerRound flag) so a different ally inflicting a debuff still procs even if
+            // another ally already consumed the cap this round.
+            if (reactiveTrigger === 'on-ally-debuff-inflicted' && rowText && ONCE_PER_ALLY_PER_ROUND_RE.test(rowText)) {
+                ability.oncePerRoundPerAlly = true;
+            }
         } else if (
             // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives
             // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger.
