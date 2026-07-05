@@ -32,6 +32,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: several defensive passives are now modeled. Nosorog reflects damage back at an attacker that directly hits her as its primary target; Chakara's charged skill now bypasses part of the enemy's Defense; and Anemone, Panon, Wusheng, and Tormenter each take reduced damage under their stated conditions — Anemone and Wusheng take less direct damage (from an enemy afflicted with a damage-over-time effect, and while Stealthed, respectively), while Panon reduces all incoming damage (direct and damage-over-time) while she has Barrier Recharging, and Tormenter's reduction (both direct and damage-over-time) grows as her HP drops.",
     "Combat sim: several \"when hit\" passives now actually trigger on being attacked instead of never firing. Bizon gains XAOC Swiftness on receiving direct damage, Sansi inflicts Inc. Repair Down when hit, and Purifier cleanses a debuff when directly damaged.",
     "Combat sim: several \"on killing an enemy\" passives now actually trigger on a kill instead of never firing. Madax and Rikra repair themselves when an enemy dies, and Obsidian and Valiant gain charges for their Charged Skill on a kill.",
+    "Combat sim: Crocus now repairs herself when another ally lands a critical Damage Over Time hit, matching her skill text, instead of only healing on her own turn.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
