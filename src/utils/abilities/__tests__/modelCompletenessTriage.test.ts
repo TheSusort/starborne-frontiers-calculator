@@ -199,3 +199,76 @@ describe('SP-B — new reactive trigger families', () => {
         }
     );
 });
+
+describe('SP-C — stat-comparison gates', () => {
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    const BAYAH_CHARGE =
+        'This Unit deals <unit-damage>150% damage</unit-damage> plus an additional amount equal to <unit-damage>30%</unit-damage> of its Defense and inflicts <unit-skill>Crit Rate Down II</unit-skill> for 2 turns. If this Unit has more Crit Power than the target, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn.';
+
+    it.fails(
+        'Bayah: "If this Unit has more Crit Power than the target, inflicts Stasis" is not gated on a Crit Power comparison',
+        () => {
+            const abilities = abilitiesFor(
+                { chargeSkillText: BAYAH_CHARGE, chargeSkillCharge: 2 },
+                'charged'
+            );
+            const stasis = abilities.find(
+                (a) => a.config.type === 'control' && a.config.effect === 'stasis'
+            );
+            // GAP: SP-C — no owner-vs-target stat-comparison ConditionSubject exists yet (verified:
+            // `ConditionSubject` in src/types/abilities.ts has no "self stat greater than target
+            // stat" literal; the nearest analogues, `OutgoingCondition['amplify-vs-higher-attack']`
+            // and `HealAmpCondition['target-hp-below-self']`, are narrow single-purpose comparisons
+            // wired only to the Giant Slayer implant / heal-amp seam, not a general gate usable
+            // here). Today the Stasis inflict builds fully ungated (conditions: []). Proxy per the
+            // decision rule: conditions.length, which is 0 now and must be >0 once SP-C models the
+            // Crit-Power-vs-target gate.
+            expect(stasis?.conditions.length).toBeGreaterThan(0);
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    const CHAKARA_ACTIVE =
+        'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+
+    it.fails(
+        'Chakara: "If all damaged enemies have more Speed than this Unit, adds 1 charge" is not gated on a Speed comparison',
+        () => {
+            const abilities = abilitiesFor({ activeSkillText: CHAKARA_ACTIVE }, 'active');
+            const chargeGain = abilities.find((a) => a.config.type === 'charge');
+            // GAP: SP-C — same missing-comparison-subject gap as Bayah, distinct proxy: this charge
+            // grant already carries a condition, but it's the default unconditional annotation
+            // (subject: 'always', derivable: true) applied to every auto-filled ability, NOT the
+            // "enemies have more Speed than this Unit" comparison from the clause. Proxy: assert a
+            // NON-'always' condition subject is present, false now (only 'always' present), true
+            // once SP-C adds the real Speed-comparison subject.
+            expect(chargeGain?.conditions.some((c) => c.subject !== 'always')).toBe(true);
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (active_skill_text field). NOTE: Cobalt also appears in
+    // SP-G (Task 8) for its passive "adds 1 charge ... at the start of the turn if it is at full
+    // HP" start-of-turn charge drain-ordering clauses — a DISTINCT engine-timing limitation. This
+    // probe is ONLY the active skill's owner-vs-target HP comparison.
+    const COBALT_ACTIVE =
+        "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.";
+
+    it.fails(
+        'Cobalt: "If this Unit has more HP than the enemy, deals additional damage equal to 25% of max HP" is not gated on an HP comparison',
+        () => {
+            const abilities = abilitiesFor({ activeSkillText: COBALT_ACTIVE }, 'active');
+            const bonusDamage = abilities.find(
+                (a) =>
+                    a.config.type === 'additional-damage' &&
+                    a.config.stat === 'hp' &&
+                    a.config.pct === 25
+            );
+            // GAP: SP-C — same missing-comparison-subject gap as Bayah/Chakara. Today the 25%-max-HP
+            // additional-damage ability builds fully ungated (conditions: []). Proxy: conditions.length,
+            // 0 now, must be >0 once SP-C models the owner-HP-vs-target-HP gate. Distinct from the
+            // SP-G start-of-turn full-HP self-check on this same ship's passives (a self-only
+            // threshold, not an owner-vs-target comparison) — no overlap in mechanism.
+            expect(bonusDamage?.conditions.length).toBeGreaterThan(0);
+        }
+    );
+});
