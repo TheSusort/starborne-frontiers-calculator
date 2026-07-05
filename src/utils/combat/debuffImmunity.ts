@@ -43,9 +43,10 @@ export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFF
  *  normal DoT landing-roll failures stay silent (byte-identical). */
 export function emitBlockDebuffResist(
     bus: CombatEventBus,
+    sourceId: string,
     targetId: string,
     round: number,
     buffName: string
 ): void {
-    bus.emit({ type: 'debuff-resisted', targetId, round, buffName });
+    bus.emit({ type: 'debuff-resisted', sourceId, targetId, round, buffName });
 }

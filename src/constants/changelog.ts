@@ -40,6 +40,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Howler now cleanses a debuff from (and, with her refit, grants a stack of Blast to) the specific ally who just landed a critical hit, matching her skill text, instead of never firing.",
     "Combat sim: Cultivator now repairs the specific ally whose debuff she just cleansed for 4% of her Max HP, and Hayyan does the same for 4%, matching their skill text instead of never firing. Morao now repairs an extra 5% of her Max HP and gains Defense Up II whenever her own cleanse actually removes a debuff, instead of always firing regardless.",
     'Combat sim: Nuqtu now cleanses a debuff from herself (once per round) and gains Terran Bolster III whenever an enemy actually gets buffed, matching her skill text, instead of always firing on her own turn regardless of enemy buffs.',
+    'Combat sim: Vindicator now retaliates when it resists an enemy debuff, dealing damage equal to 30% of its max HP to that enemy.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

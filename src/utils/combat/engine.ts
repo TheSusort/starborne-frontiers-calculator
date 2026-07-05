@@ -3791,7 +3791,8 @@ export function runCombat(input: CombatEngineInput): {
             abilityId: string,
             multiplier: number,
             hits: number,
-            noCrit: boolean
+            noCrit: boolean,
+            hpBasisPct?: number
         ): void => {
             const owner = allActorsById.get(ownerId);
             const victim = allActorsById.get(victimId);
@@ -3826,12 +3827,18 @@ export function runCombat(input: CombatEngineInput): {
                     ownerStats.crit / 100
                 );
 
+            // Vindicator on-resist: raw = owner effective max HP × hpBasisPct% (mitigated below the
+            // same as any direct hit — defence + affinity + crit). Otherwise attack × multiplier.
+            const basisStat =
+                hpBasisPct !== undefined ? recipientMaxHp(ownerId) : ownerStats.attack;
+            const basisPct = hpBasisPct !== undefined ? hpBasisPct : multiplier;
+
             const raw = victimHitDamage(
                 {
-                    effectiveAttack: ownerStats.attack,
+                    effectiveAttack: basisStat,
                     // Fold hit count into the multiplier and pass hits:1 (mirrors
                     // applyCounterAttack) — models the reactive proc as ONE consolidated hit.
-                    multiplierPct: multiplier * hits,
+                    multiplierPct: basisPct * hits,
                     secondaryStatValue: 0,
                     hits: 1,
                     effectiveCritDamage: ownerStats.critDamage,

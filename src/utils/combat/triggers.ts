@@ -588,9 +588,22 @@ export function registerReactiveListeners(args: {
                     bus.on('debuff-resisted', (e) => {
                         // Self-scoped on the RESISTER. `debuff-resisted` carries targetId = the
                         // unit that resisted (either side: cast-side, reactive-side, and the
-                        // D-PR15 Block-Debuff auto-resist all emit it). all-allies recipient
-                        // routing happens in the buff executor.
-                        if (e.targetId === ownerId) enqueue(intent);
+                        // D-PR15 Block-Debuff auto-resist all emit it). Route the inflictor
+                        // (e.sourceId) as counterTargetId so a damage reaction (Vindicator's
+                        // on-resist HP proc) retaliates against THAT enemy. When the resist carries
+                        // no source, enqueue the bare intent — buff consumers (Lockdown) are
+                        // source-agnostic and still fire; a source-requiring damage reaction no-ops
+                        // downstream (triggers.ts damage branch). all-allies recipient routing
+                        // happens in the buff executor.
+                        if (e.targetId !== ownerId) return;
+                        enqueue(
+                            e.sourceId !== undefined
+                                ? {
+                                      ...intent,
+                                      eventCtx: { ...intent.eventCtx, counterTargetId: e.sourceId },
+                                  }
+                                : intent
+                        );
                     });
                     break;
                 case 'on-ally-attacked':
@@ -957,7 +970,8 @@ export interface IntentExecContext {
         abilityId: string,
         multiplier: number,
         hits: number,
-        noCrit: boolean
+        noCrit: boolean,
+        hpBasisPct?: number
     ) => void;
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
@@ -1928,6 +1942,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining });
                 ctx.bus.emit({
                     type: 'debuff-resisted',
+                    // sourceId = the inflictor (PR-J) so an on-debuff-resisted reaction (Vindicator)
+                    // can route retaliation back at it; the round display ignores it.
+                    sourceId: intent.ownerId,
                     // debuff-resisted feeds the round display only — no per-target counter
                     // routing needed (unchanged even for the recipient-targeted fan-out above).
                     targetId: ctx.enemy.id,
@@ -1948,6 +1965,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (targetCarriesBlockDebuff(ctx.statusEngine, ctx.enemy.id)) {
             emitBlockDebuffResist(
                 ctx.bus,
+                intent.ownerId,
                 ctx.enemy.id,
                 ctx.round,
                 dotResistLabel(cfg.dotType, cfg.tier)
@@ -2256,6 +2274,29 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
+        // HP-basis reactive (Vindicator on-resist): REQUIRES a routed inflictor (counterTargetId)
+        // — no fallback to ctx.enemy (you cannot retaliate against no-one). Frequency: one proc per
+        // triggering enemy action, keyed (owner, ability, round, source) so multiple debuffs
+        // resisted from ONE cast collapse to a single proc while two DIFFERENT enemies each proc.
+        // (oncePerRoundConsumed is the per-round set; a 3-part key never collides with the 2-part
+        // keys passesOncePerRoundGate uses.)
+        if (cfg.hpBasisPct !== undefined) {
+            const sourceId = intent.eventCtx?.counterTargetId;
+            if (sourceId === undefined) return;
+            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}`;
+            if (ctx.oncePerRoundConsumed?.has(onceKey)) return;
+            ctx.oncePerRoundConsumed?.add(onceKey);
+            ctx.applyReactiveDamage?.(
+                intent.ownerId,
+                sourceId,
+                intent.ability.id,
+                cfg.multiplier, // inert on this path — the engine reads hpBasisPct, not multiplier, when set
+                cfg.hits ?? 1,
+                cfg.noCrit ?? false,
+                cfg.hpBasisPct
+            );
+            return;
+        }
         if (!passesOncePerRoundGate(intent, ctx)) return;
         // PR4b: reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
         // on-enemy-charged-cast 80%, and epic PR4's re-tagged Judge/Chakara/Incinerator/Rhodium

@@ -50,6 +50,7 @@ import {
     parseCounterAbilities,
     parseSelfBuffRemovals,
     parsePreCombatStatGrants,
+    parseOnResistHpDamage,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -4790,5 +4791,35 @@ describe('parseControlInflicts', () => {
 
     it('returns [] for non-control text', () => {
         expect(parseControlInflicts('Deals 300% damage')).toEqual([]);
+    });
+});
+
+describe('parseOnResistHpDamage (Vindicator p2 reactive)', () => {
+    const VINDICATOR_P2 =
+        "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
+
+    it('parses the on-resist max-HP damage percentage', () => {
+        expect(parseOnResistHpDamage(VINDICATOR_P2)).toEqual({ pct: 30 });
+    });
+
+    it('returns null for an on-death max-HP proc (Paracelsus p1 — different trigger)', () => {
+        expect(
+            parseOnResistHpDamage(
+                'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.'
+            )
+        ).toBeNull();
+    });
+
+    it('returns null for an on-cast secondary-damage rider (Chakara active)', () => {
+        expect(
+            parseOnResistHpDamage(
+                'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense.'
+            )
+        ).toBeNull();
+    });
+
+    it('returns null for empty input', () => {
+        expect(parseOnResistHpDamage('')).toBeNull();
+        expect(parseOnResistHpDamage(null)).toBeNull();
     });
 });

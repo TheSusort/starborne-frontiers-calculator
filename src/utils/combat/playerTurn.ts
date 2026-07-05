@@ -946,7 +946,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const hasDamageAbility = damageAbility !== undefined;
 
     const emitDebuffResisted = (buffName: string, victimId: string = enemy.id) =>
-        bus.emit({ type: 'debuff-resisted', targetId: victimId, round: r, buffName });
+        bus.emit({
+            type: 'debuff-resisted',
+            sourceId: actor.id,
+            targetId: victimId,
+            round: r,
+            buffName,
+        });
     // emitDebuffApplied: discrete-infliction-only (Phase 3 retiming). `sourceId` is the
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
     // or for every round a standing timed status is active — only at the infliction site.
@@ -1972,7 +1978,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // NOTE: a blocked `bomb` DoT emits the resist event but has NO `resistedDots`
             // row — the engine's resistedDots derivation filters to corrosion/inferno only
             // (bombs are display-only elsewhere too). Event-yes/surface-no is intentional.
-            emitBlockDebuffResist(bus, enemy.id, r, dotResistLabel(dot.type, dot.tier));
+            emitBlockDebuffResist(bus, actor.id, enemy.id, r, dotResistLabel(dot.type, dot.tier));
         }
     } else {
         // DoTs gate at application: draw the shared per-round roll only when there are
