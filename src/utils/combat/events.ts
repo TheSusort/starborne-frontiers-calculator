@@ -156,18 +156,26 @@ export type CombatEvent =
            *  recipient. Always populated by the engine; absent only in hand-crafted test emits. */
           perTarget?: { targetId: string; amount: number }[];
       } & ReactiveStamp)
-    /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
-     *  number of debuffs actually removed (player-side) or the nominal cfg.count
-     *  (enemy-side, event-only path). Asymmetry: player-side performs REAL removal
-     *  and suppresses the event when 0 debuffs were removed; enemy-side fires on
-     *  every qualifying cast regardless of whether a debuff existed (removal is
-     *  deferred — reactors such as Arum/Grif fire on the cast, not the removal).
-     *  The `on-enemy-cleansed` listener filters by `isOpposing(casterId)`. */
+    /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the number of
+     *  debuffs ACTUALLY removed. Team-symmetric (the enemy-cleanse-lift, #166-era): BOTH the
+     *  player path and the enemy (event-only) path perform REAL removal via the side-agnostic
+     *  `statusEngine.cleanse` over `recipientsFor`'s side-aware recipients, and the event is
+     *  suppressed on both sides when 0 debuffs were removed. The `on-enemy-cleansed` listener
+     *  filters by `isOpposing(casterId)`; the `on-own-cleanse` listener (Phase 3 PR-H) filters by
+     *  `casterId === ownerId`. */
     | ({
           type: 'cleanse-performed';
           casterId: string;
           count: number;
           round: number;
+          /** Phase 3 PR-H: the recipient ids that ACTUALLY had >= 1 debuff removed (a subset of
+           *  the cleanse ability's targeted recipients — e.g. an `all-allies` cleanse where only
+           *  some allies carried a debuff), in application order. Read by the `on-own-cleanse`
+           *  listener to stamp `eventCtx.cleansedAllyIds`, routing an `ally`-target reactive
+           *  repair (Cultivator's "that ally") to exactly these ids instead of the default heal
+           *  target. Mirrors `heal-performed.targets`/`shield-applied.recipientIds`. Always
+           *  populated by the engine; absent only in hand-crafted test emits. */
+          targets?: string[];
       } & ReactiveStamp)
     /** A purge resolved. `casterId` = the purging actor; `targetId` = the VICTIM whose
      *  buffs were removed (REQUIRED — `on-ally-purged` is victim-scoped, unlike the

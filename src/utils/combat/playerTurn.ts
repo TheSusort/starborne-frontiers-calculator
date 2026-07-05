@@ -2407,6 +2407,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Carried on heal-performed.overheal for an `overheal`-basis reactive shield (Abundant Renewal).
         let overhealSum = 0;
         let cleansePerformedCount = 0;
+        // Phase 3 PR-H: recipient ids that ACTUALLY had >= 1 debuff removed this cast (a subset
+        // of recipientsFor's targeted recipients — e.g. an `all-allies` cleanse where only some
+        // allies carried a debuff). Carried on cleanse-performed.targets for the on-own-cleanse
+        // listener's ally-routing (mirrors healTargets, gated the same way as shieldRecipientIds:
+        // only entries where something actually happened are included).
+        const cleansedRecipientIds: string[] = [];
         // Per-recipient breakdown for heal-performed.perTarget (additive — one entry per recipient).
         const healPerTarget: {
             targetId: string;
@@ -2577,7 +2583,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
                 let removed = 0;
                 for (const rid of recipientsFor(ability.target)) {
-                    removed += statusEngine.cleanse(rid, cfg.count);
+                    const removedForRid = statusEngine.cleanse(rid, cfg.count);
+                    removed += removedForRid;
+                    // Phase 3 PR-H: only recipients with a REAL removal are on-own-cleanse's
+                    // ally-routing candidates (mirrors shieldRecipientIds' granted>0 gate) — a
+                    // targeted-but-untouched ally (e.g. an all-allies cleanse hitting a debuff-free
+                    // ally) must not appear in cleanse-performed.targets.
+                    if (removedForRid > 0) cleansedRecipientIds.push(rid);
                 }
                 cleansePerformedCount += removed;
                 if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', removed);
@@ -2601,14 +2613,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
 
-        // ONE cleanse-performed per cast that cleansed (BOTH modes — the on-enemy-cleansed
-        // listener filters by side, so the player-side emit is inert without an enemy reactor).
+        // ONE cleanse-performed per cast that cleansed (BOTH modes — the on-enemy-cleansed AND
+        // on-own-cleanse listeners filter by side/owner, so an inert emit is harmless without a
+        // matching reactor).
         if (cleansePerformedCount > 0) {
             bus.emit({
                 type: 'cleanse-performed',
                 casterId: actor.id,
                 count: cleansePerformedCount,
                 round: r,
+                targets: cleansedRecipientIds,
             });
         }
     }

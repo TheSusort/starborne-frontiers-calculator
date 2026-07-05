@@ -165,6 +165,13 @@ export interface Intent {
          *  must still resolve, whereas a stale listener firing on some LATER event (e.g. a
          *  dead Curator reacting to an enemy charge rounds after dying) is suppressed. */
         fromOwnDeath?: boolean;
+        /** Phase 3 PR-H: the recipient ids ACTUALLY cleansed by the owner's OWN cleanse-performed
+         *  event (cleanse-performed.targets — a subset of the cleanse's targeted recipients,
+         *  only those with a real removal). The `on-own-cleanse` listener stamps this so an
+         *  `ally`-target reactive repair (Cultivator's "that ally") fans out to exactly these ids
+         *  via `reactiveRecipients`, instead of the default heal target. Mirrors
+         *  repairedAllyIds/shieldRecipientIds. A `self`-target reaction (Morao) ignores it. */
+        cleansedAllyIds?: string[];
     };
 }
 
@@ -263,6 +270,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    former (counterTargetId), Amartya's Defense Shred fans out over the latter.
  *  - on-enemy-cleansed → cleanse-performed where isOpposing(casterId)
  *    (any opposing-side actor's cleanse cast). One enqueue per cast.
+ *  - on-own-cleanse → cleanse-performed where casterId === ownerId (Phase 3 PR-H: Cultivator's
+ *    ally-repair, Morao's self-repair + Defense Up II). Self-scoped — the OWN-cleanse counterpart
+ *    of on-enemy-cleansed. Stamps eventCtx.cleansedAllyIds = e.targets (the actually-cleansed
+ *    recipients) so an 'ally'-target reaction fans out to exactly those ids (reactiveRecipients);
+ *    a 'self'-target reaction ignores it. One enqueue per qualifying (>= 1 real removal) cast.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -694,6 +706,22 @@ export function registerReactiveListeners(args: {
                         // call: enemy side. For the enemy call: player side.
                         // One enqueue per cast.
                         if (isOpposing(e.casterId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-own-cleanse':
+                    bus.on('cleanse-performed', (e) => {
+                        // Self-scoped: THIS owner performed the cleanse (Cultivator/Morao). Stamp
+                        // cleansedAllyIds = e.targets (the actually-cleansed recipient ids,
+                        // unfiltered) so an 'ally'-target repair (Cultivator's "that ally") fans
+                        // out to exactly those recipients via reactiveRecipients; a 'self'-target
+                        // repair/buff (Morao) routes to the owner regardless and ignores it. One
+                        // enqueue per qualifying cast (cleanse-performed is already suppressed
+                        // when 0 debuffs were removed on both sides — see events.ts).
+                        if (e.casterId === ownerId)
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, cleansedAllyIds: e.targets },
+                            });
                     });
                     break;
                 case 'on-enemy-purged':
@@ -1350,9 +1378,10 @@ function payloadFromConfig(cfg: {
 
 /**
  * Resolve the recipient id list for a reactive heal/cleanse/purge intent.
- * 'ally'-target: prefers eventCtx.damagedAllyId (the ally that was hit), falls
- * back to fallbackTargetId (the heal target). 'all-allies': fans out to every
- * same-side id (ctx.playerIds). Anything else (self, enemy, …): the owner only.
+ * 'ally'-target: prefers eventCtx.cleansedAllyIds (Phase 3 PR-H: fans out over EVERY actually-
+ * cleansed ally — Cultivator's "that ally"), then eventCtx.damagedAllyId (the ally that was hit),
+ * falling back to fallbackTargetId (the heal target). 'all-allies': fans out to every same-side
+ * id (ctx.playerIds). Anything else (self, enemy, …): the owner only.
  */
 export function reactiveRecipients(
     intent: Intent,
@@ -1361,7 +1390,9 @@ export function reactiveRecipients(
 ): string[] {
     const base =
         intent.ability.target === 'ally'
-            ? [intent.eventCtx?.damagedAllyId ?? fallbackTargetId]
+            ? intent.eventCtx?.cleansedAllyIds?.length
+                ? intent.eventCtx.cleansedAllyIds
+                : [intent.eventCtx?.damagedAllyId ?? fallbackTargetId]
             : intent.ability.target === 'all-allies'
               ? ctx.playerIds
               : intent.ability.target === 'adjacent-allies'

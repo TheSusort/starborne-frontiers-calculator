@@ -1443,7 +1443,14 @@ function abilitiesFromText(
             ? h.damageReaction.allySubject
                 ? ('on-ally-attacked' as const)
                 : ('on-attacked' as const)
-            : // Epic PR4: Chimei's "At the start of the round, all allies with Stealth repairs
+            : // Phase 3 PR-H: Cultivator ("when this Unit cleanses a Debuff, it also repairs that
+              // ally") / Morao ("upon Cleansing a Debuff, repairs an additional 5%") — the
+              // `ownCleanseReaction` parser annotation (match-position-relative, see its doc
+              // comment for why a position-scoped detector can't disambiguate Morao's two
+              // same-pct repairs) takes the SAME precedence as damageReaction above.
+              h.ownCleanseReaction
+              ? ('on-own-cleanse' as const)
+              : // Epic PR4: Chimei's "At the start of the round, all allies with Stealth repairs
               // 10% of this unit's max HP" parsed on-cast — the SAME phrase already resolves to
               // start-of-round for buff grants (detectReactiveTrigger) and Judge's passive
               // damage (detectStartOfRoundTrigger, added alongside this call). Checked for
