@@ -2061,6 +2061,52 @@ export function detectDamageReactionTrigger(
     return undefined;
 }
 
+// Phase 3 PR-F: two DISTINCT "enemy repair" reaction phrasings that both ride the LIVE
+// on-enemy-repaired trigger but route to DIFFERENT actors:
+//  - Ruiner's Bomb infliction ("on any enemy performing a repair") has NO leading "when" (so
+//    ENEMY_REPAIRS_RE in detectReactiveTrigger — which requires "when a[n] enemy … repairs" —
+//    does not match it) and lands on the REPAIRER (eventCtx.repairerId), like every other
+//    "on that enemy" counter-infliction.
+//  - Amartya's Defense Shred ("when an enemy defender is directly repaired … on that
+//    defender") uses the past-participle "repaired" (ENEMY_REPAIRS_RE's `repairs?\b` does not
+//    match "repaired") and lands on the REPAIRED RECIPIENT ("that defender"), NOT the healer —
+//    flagged `recipientTargeted` so the caller routes via eventCtx.repairedEnemyIds instead.
+// Corpus-verified unique phrasings (docs/ship-skills.csv): grep for "performing a repair" and
+// "defender is directly repaired" each return exactly one ship.
+const ENEMY_PERFORMING_REPAIR_RE = /\bon\s+any\s+enemy\s+performing\s+an?\s+repairs?\b/i;
+const ENEMY_DEFENDER_DIRECTLY_REPAIRED_RE =
+    /\bwhen\s+an?\s+enemy\s+defender\s+is\s+directly\s+repaired\b/i;
+
+/**
+ * Sentence-scoped (mirrors detectDamageReactionTrigger/detectHpCrossingTrigger) detector for
+ * the two "enemy repair" reaction phrasings above. Returns undefined outside their sentence.
+ * Reference data: docs/ship-skills.csv (Ruiner, Amartya).
+ */
+export function detectEnemyRepairedTrigger(
+    text: string,
+    pos: number
+): { trigger: 'on-enemy-repaired'; recipientTargeted?: boolean } | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    // Ruiner's "repair" is itself <unit-aid>-tagged ("performing a <unit-aid>repair</unit-aid>"),
+    // which the RAW phrase regex below does not span — strip tags before testing (position
+    // alignment is not needed here, only the boolean match, so this is safe unlike
+    // phrasePosTrigger's raw-text scoping).
+    const stripped = stripUnitTags(sentence);
+    if (ENEMY_DEFENDER_DIRECTLY_REPAIRED_RE.test(stripped)) {
+        return { trigger: 'on-enemy-repaired', recipientTargeted: true };
+    }
+    if (ENEMY_PERFORMING_REPAIR_RE.test(stripped)) {
+        return { trigger: 'on-enemy-repaired' };
+    }
+    return undefined;
+}
+
+// Once-per-round-per-ENEMY cap on a reactive debuff (Ruiner's Bomb: "once per round per
+// enemy") — distinct from the plain "once per round" cap (which caps once per round OVERALL).
+// Exported: buildShipAbilities.ts's passive DoT-reaction loop tests it directly.
+export const ONCE_PER_ROUND_PER_ENEMY_RE = /\bonce per round per enemy\b/i;
+
 // Phase 4c PR 3 (Task 6): "when HP drops/falls below N%" buff-grant reactives
 // (Tycho/Shelter/Los/Kafa/Redeemer). The (drops|falls) VERB is what distinguishes a
 // threshold-CROSSING reactive from the static "while/if below N% HP" gates handled

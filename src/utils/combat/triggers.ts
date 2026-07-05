@@ -101,7 +101,8 @@ export interface Intent {
     /** Event context captured by the listener at enqueue time (per-event intents).
      *  `counterTargetId`: the attacking enemy's actor id for "on that enemy"
      *  counter-inflictions (Warden, Guardian's ally-Provoke) — the executor's debuff
-     *  branch routes the application to THIS enemy's per-target store.
+     *  branch routes the application to THIS enemy's per-target store. Phase 3 PR-F:
+     *  on-enemy-repaired also stamps this with the REPAIRER's id (Ruiner's Bomb).
      *  `damagedAllyId`: the DAMAGED ally's actor id (on-ally-attacked) — the heal and
      *  buff branches route an 'ally'-target payload to exactly this recipient
      *  (Cultivator's repair, Refine/Graphite's grants) instead of the default. Generic
@@ -139,8 +140,15 @@ export interface Intent {
         repairedAllyIds?: string[];
         /** The repairing actor's id (heal-performed.casterId), captured by the on-enemy-repaired
          *  listener. Used by the charge branch as the per-source key for an `everyNthEvent` gate
-         *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). */
+         *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). Phase 3 PR-F:
+         *  ALSO used to key the debuff branch's oncePerRoundPerEnemy cap (Ruiner). */
         repairerId?: string;
+        /** Phase 3 PR-F: the recipients of an on-enemy-repaired heal-performed event
+         *  (heal-performed.targets — every healed enemy, unfiltered). Read by a
+         *  `repairedRecipientTargeted` debuff (Amartya's "on that defender" Defense Shred),
+         *  which fans out to EACH of these instead of routing to the repairer. Mirrors
+         *  repairedAllyIds/shieldRecipientIds but for the OPPOSING side. */
+        repairedEnemyIds?: string[];
         /** The clipped overheal (heal-performed.overheal) carried from an own-repair-to-ally
          *  event, read by an `overheal`-basis reactive shield to scale off the over-repaired
          *  amount rather than the owner's max HP (Abundant Renewal). */
@@ -250,7 +258,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    (any opposing-side actor — for players: dummy wall + walked enemy attackers;
  *    for enemy owners: any player actor).
  *  - on-enemy-repaired → heal-performed where isOpposing(casterId)
- *    (any opposing-side actor's repair cast). One enqueue per cast.
+ *    (any opposing-side actor's repair cast). One enqueue per cast. Stamps repairerId (the
+ *    caster) AND repairedEnemyIds (e.targets, unfiltered) — Ruiner's Bomb routes to the
+ *    former (counterTargetId), Amartya's Defense Shred fans out over the latter.
  *  - on-enemy-cleansed → cleanse-performed where isOpposing(casterId)
  *    (any opposing-side actor's cleanse cast). One enqueue per cast.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
@@ -374,14 +384,20 @@ export function registerReactiveListeners(args: {
                         // (own inflictions go to on-debuff-inflicted) AND every opposing actor
                         // (an opposing actor is never an ally).
                         if (isSameSideAlly(e.sourceId, ownerId))
-                            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId } });
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId },
+                            });
                     });
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications now emit dot-applied with the team sourceId
                         // (Task 4 seam, live since Task 6) — an ally DoT infliction triggers
                         // this listener exactly as an ally debuff does.
                         if (isSameSideAlly(e.sourceId, ownerId))
-                            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId } });
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId },
+                            });
                     });
                     break;
                 case 'on-ally-crit-dot':
@@ -536,7 +552,10 @@ export function registerReactiveListeners(args: {
                         // via damagedAllyId. Excludes the owner (that is on-debuffed) and DoTs (dot-applied),
                         // matching on-debuffed's debuff-applied-only scoping.
                         if (isSameSideAlly(e.targetId, ownerId))
-                            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId } });
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId },
+                            });
                     });
                     break;
                 case 'on-debuff-resisted':
@@ -642,10 +661,20 @@ export function registerReactiveListeners(args: {
                         // Opposing-scoped. Capture the repairer id so the charge branch can (a)
                         // count repairs per source for an everyNthEvent gate and (b) target THAT
                         // enemy. Harmless for Zosimos's self-gain intent (it ignores repairerId).
+                        // Phase 3 PR-F: ALSO stamp counterTargetId = the repairer (Ruiner's Bomb
+                        // routes here like every other "on that enemy" counter-infliction — the
+                        // debuff branch's existing `counterTargetId ?? ctx.enemy.id` fallback picks
+                        // this up for free) and repairedEnemyIds = e.targets (Amartya's "that
+                        // defender" Defense Shred fans out to every healed enemy instead).
                         if (isOpposing(e.casterId))
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, repairerId: e.casterId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    repairerId: e.casterId,
+                                    counterTargetId: e.casterId,
+                                    repairedEnemyIds: e.targets,
+                                },
                             });
                     });
                     break;
@@ -1745,6 +1774,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // a future ability combines them, move this mark below the target-resolution guard so a
         // no-living-target round doesn't burn the charge.
         if (intent.ability.oncePerRound) ctx.oncePerRoundConsumed?.add(onceKey);
+        // Phase 3 PR-F: "once per round per enemy" cap (Ruiner's Bomb-on-repair). A DEDICATED
+        // flag — not the plain oncePerRound gate above, which caps once per round OVERALL — so a
+        // DIFFERENT enemy repairing still procs even if one enemy already consumed the cap this
+        // round. Keyed on (owner, ability, repairerId), mirroring the buff branch's
+        // oncePerRoundPerAlly. Consumed BEFORE the procChance gate above already ran (Ruiner's
+        // Bomb has no procChance today; see oncePerRoundPerAlly's NOTE for the ordering caveat).
+        if (intent.ability.oncePerRoundPerEnemy) {
+            const key = `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.repairerId ?? ''}`;
+            if (ctx.oncePerRoundConsumed?.has(key)) return;
+            ctx.oncePerRoundConsumed?.add(key);
+        }
 
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
             payload: payloadFromConfig(cfg),
@@ -1777,46 +1817,69 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // No living highest-attack enemy → no-op (don't fall back to the default enemy).
         if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined)
             return;
-        // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists every
-        // incoming timed debuff. Gate immunity into the landing condition so the EXISTING resist
-        // `else` handles it (no duplicated resist code). `&&` short-circuits when not immune →
-        // byte-identical to the original `landsTimedEnemyApplication`-only condition.
-        const debuffTargetId = counterTargetId ?? ctx.enemy.id;
-        const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
-        // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
-        // NOT a global one — a team ship's debuff lands at ITS landing chance.
-        // Task A: re-resolve an 'apply' debuff's landing vs the ACTUAL target's affinity (not the
-        // applier's precomputed-vs-representative static flag). affinityOf is absent in unit-test
-        // ctxs → undefined target affinity → static fallback (byte-identical for single-opponent).
-        if (
-            !blockedByImmunity &&
-            owner.landsTimedEnemyApplication(cfg.application, ctx.affinityOf?.(debuffTargetId))
-        ) {
-            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, undefined, counterTargetId);
-            // Discrete infliction event — sourceId = the owner so the application is chainable.
-            ctx.bus.emit({
-                type: 'debuff-applied',
-                sourceId: intent.ownerId,
-                targetId: counterTargetId ?? ctx.enemy.id,
-                round: ctx.round,
-                buffName: cfg.buffName,
-            });
-        } else {
-            // A persistent-stacking name (would have landed as a never-expiring stack)
-            // surfaces its resisted display row as 'permanent', not its turn count.
-            const turnsRemaining: ActiveBuff['turnsRemaining'] = PERSISTENT_STACKING_BUFFS.has(
-                cfg.buffName
-            )
-                ? 'permanent'
-                : status.duration;
-            ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining });
-            ctx.bus.emit({
-                type: 'debuff-resisted',
-                // debuff-resisted feeds the round display only — no per-target counter routing needed.
-                targetId: ctx.enemy.id,
-                round: ctx.round,
-                buffName: cfg.buffName,
-            });
+        // Phase 3 PR-F: Amartya's recipient-targeted repair reaction fans the debuff out to
+        // EVERY repaired enemy from the triggering heal-performed event ("that defender"
+        // distributes across a multi-target heal) — mirrors the buff branch's repairedAllyIds
+        // fan-out, but for enemy-side recipients. Distinct from Ruiner's REPAIRER-targeted Bomb
+        // (same on-enemy-repaired trigger, same event), which stays on the singular
+        // counterTargetId route below (an empty list falls back to it defensively).
+        const applicationTargetIds: (string | undefined)[] =
+            intent.ability.repairedRecipientTargeted && intent.eventCtx?.repairedEnemyIds?.length
+                ? intent.eventCtx.repairedEnemyIds
+                : [counterTargetId];
+        for (const applicationTargetId of applicationTargetIds) {
+            // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists
+            // every incoming timed debuff. Gate immunity into the landing condition so the
+            // EXISTING resist `else` handles it (no duplicated resist code). `&&`
+            // short-circuits when not immune → byte-identical to the original
+            // `landsTimedEnemyApplication`-only condition.
+            const debuffTargetId = applicationTargetId ?? ctx.enemy.id;
+            const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
+            // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
+            // NOT a global one — a team ship's debuff lands at ITS landing chance. One draw PER
+            // TARGET (per-victim landing, matching the established per-victim precedent) — for
+            // every pre-existing single-target caller applicationTargetIds has exactly one
+            // element, so this is still exactly one draw, byte-identical to before the loop.
+            // Task A: re-resolve an 'apply' debuff's landing vs the ACTUAL target's affinity (not
+            // the applier's precomputed-vs-representative static flag). affinityOf is absent in
+            // unit-test ctxs → undefined target affinity → static fallback (byte-identical for
+            // single-opponent).
+            if (
+                !blockedByImmunity &&
+                owner.landsTimedEnemyApplication(cfg.application, ctx.affinityOf?.(debuffTargetId))
+            ) {
+                ctx.statusEngine.applyTimedAbilityStatus(
+                    ctx.round,
+                    status,
+                    undefined,
+                    applicationTargetId
+                );
+                // Discrete infliction event — sourceId = the owner so the application is chainable.
+                ctx.bus.emit({
+                    type: 'debuff-applied',
+                    sourceId: intent.ownerId,
+                    targetId: debuffTargetId,
+                    round: ctx.round,
+                    buffName: cfg.buffName,
+                });
+            } else {
+                // A persistent-stacking name (would have landed as a never-expiring stack)
+                // surfaces its resisted display row as 'permanent', not its turn count.
+                const turnsRemaining: ActiveBuff['turnsRemaining'] = PERSISTENT_STACKING_BUFFS.has(
+                    cfg.buffName
+                )
+                    ? 'permanent'
+                    : status.duration;
+                ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining });
+                ctx.bus.emit({
+                    type: 'debuff-resisted',
+                    // debuff-resisted feeds the round display only — no per-target counter
+                    // routing needed (unchanged even for the recipient-targeted fan-out above).
+                    targetId: ctx.enemy.id,
+                    round: ctx.round,
+                    buffName: cfg.buffName,
+                });
+            }
         }
         return;
     }
