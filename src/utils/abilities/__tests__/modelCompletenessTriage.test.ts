@@ -467,23 +467,50 @@ describe('SP-E — DoT transforms & conversions', () => {
         'Belladonna: "convert the Corrosion into Acidic Decay" does not ride the live ally-inflicts-debuff reactive trigger',
         () => {
             const abilities = abilitiesFor({ secondPassiveSkillText: BELLADONNA_P2 }, 'passive');
+            // Anchor by `buffName` across ALL `config.type` values — NOT restricted to
+            // `config.type === 'debuff'` (review finding). SP-E's family is literally "DoT
+            // transforms & conversions": a faithful fix may retype this ability away from the
+            // generic auto-filled `'debuff'` config into a dedicated conversion AbilityConfig.
+            // If the finder stayed pinned to `config.type === 'debuff'`, that reshape would make
+            // `.find()` return undefined FOREVER and this `it.fails` would never flip, silently
+            // orphaning the gap. `buffName` is carried by both the 'buff' and 'debuff' config
+            // members today (src/types/abilities.ts ~L453/479) and is the value the clause names
+            // explicitly ("into Acidic Decay"), so it's far more likely to survive a config
+            // reshape than the `type` discriminant — mirrors the config-agnostic discipline the
+            // Voron probe above already uses (asserts on the top-level `target` field, not
+            // `config.type`).
             const acidicDecay = abilities.find(
-                (a) => a.config.type === 'debuff' && a.config.buffName === 'Acidic Decay'
+                (a) => 'buffName' in a.config && a.config.buffName === 'Acidic Decay'
             );
             // GAP: SP-E — dry-run: today this clause auto-fills a bare, UNGATED "Acidic Decay"
-            // debuff-application ability (trigger 'on-cast', conditions: []) — a spurious
-            // artifact of the generic buff/debuff-name auto-fill picking up "Acidic Decay" from
-            // the text, unconnected to the ally's Corrosion cast. No 'convert'/'transform'
-            // AbilityConfig exists (verified against the full union). The live, already-wired
-            // `on-ally-debuff-inflicted` trigger (Oleander's ally-target RoT grant,
-            // buildShipAbilities.ts ~L2351-2362) is EXACTLY this "when an ally inflicts a debuff"
-            // phrasing family — but its gate is hardcoded to `target === 'ally' && config.type ===
-            // 'buff'`, and the code's own comment there calls out "Provider's enemy-target Crit
-            // Rate Down II counter-debuff in the same phrasing family stays on-cast (a deferred
-            // deep one-off)" — Belladonna's enemy-target 'debuff' config is that exact same
-            // deferred case. Proxy: the Acidic Decay ability's trigger equals the EXISTING literal
-            // 'on-ally-debuff-inflicted' — false now ('on-cast'), true once SP-E widens that gate
-            // to cover enemy-target debuff conversions too.
+            // debuff-application ability (`config.type: 'debuff'`, trigger 'on-cast', conditions:
+            // []) — a spurious artifact of the generic buff/debuff-name auto-fill picking up
+            // "Acidic Decay" from the text, unconnected to the ally's Corrosion cast. No
+            // 'convert'/'transform' AbilityConfig exists yet (verified against the full union).
+            // The live, already-wired `on-ally-debuff-inflicted` trigger (Oleander's ally-target
+            // RoT grant, buildShipAbilities.ts ~L2351-2362) is EXACTLY this "when an ally inflicts
+            // a debuff" phrasing family — but its gate is hardcoded to `target === 'ally' &&
+            // config.type === 'buff'`, and the code's own comment there calls out "Provider's
+            // enemy-target Crit Rate Down II counter-debuff in the same phrasing family stays
+            // on-cast (a deferred deep one-off)" — Belladonna's enemy-target 'debuff' config is
+            // that exact same deferred case. Intended faithful shape: SP-E widens that gate (or
+            // adds a parallel one) so an enemy-target 'debuff'/conversion config named "Acidic
+            // Decay" also rides `on-ally-debuff-inflicted`. Proxy: the located ability's `trigger`
+            // — a top-level `Ability` field present regardless of `config` shape — equals the
+            // EXISTING literal 'on-ally-debuff-inflicted'; false now ('on-cast' on the located
+            // ability, confirmed via dry-run), true once SP-E lands the widened gate, REGARDLESS
+            // of whether the ability stays `config.type: 'debuff'` or becomes a new dedicated
+            // conversion config. RESIDUAL ASSUMPTION: this still relies on a faithful fix
+            // preserving a `buffName`/name anchor of 'Acidic Decay' somewhere on the ability's
+            // config — if SP-E instead models the conversion with no buffName-like field at all
+            // (e.g. keyed only by a DoT-type pair), this finder would return undefined and the
+            // probe would need a position/text anchor instead; not expected given the clause
+            // names the debuff explicitly, but flagged per review.
+            // MINOR (not asserted here, no proxy change): the widened `on-ally-debuff-inflicted`
+            // gate will likely also need a Corrosion-specific debuff-name FILTER (fire only when
+            // the ally's inflicted debuff is Corrosion, not any ally-inflicted debuff) — a bare
+            // trigger widening alone would over-fire on unrelated ally debuffs; an SP-E
+            // implementation detail.
             expect(acidicDecay?.trigger).toBe('on-ally-debuff-inflicted');
         }
     );
