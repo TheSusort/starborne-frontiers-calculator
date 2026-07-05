@@ -83,13 +83,19 @@ describe('on-enemy-charged-cast (opposing-scoped charged-cast reaction)', () => 
 // and the on-enemy-charged-cast ability shapes are the REAL ones — NOT hand-written copies.
 //
 // DOCUMENTED DEVIATION: `buildShipAbilities` ALSO emits generic-auto-fill `on-cast` siblings
-// from the same clauses (a duplicate Block-Buff inflict for Curator; the start-of-combat 25%
-// shield + a 30% on-cast damage for FrontLine). Those `on-cast` siblings fire on the reacting
-// ship's OWN turn regardless of any enemy charged cast — they would pollute the gate-flip
-// controls (e.g. FrontLine would gain a shield with NO enemy charged cast). So we take the
-// real built passive slot and KEEP ONLY the `on-enemy-charged-cast` abilities for the engine
-// run. This isolates the reaction under test while still locking in the genuine real-corpus
-// parse (the abilities themselves are the production output, asserted shape-for-shape).
+// from FrontLine's clauses (the start-of-combat 25% shield + a 30% on-cast damage). Those
+// `on-cast` siblings fire on the reacting ship's OWN turn regardless of any enemy charged cast —
+// they would pollute the gate-flip controls (e.g. FrontLine would gain a shield with NO enemy
+// charged cast). So we take the real built passive slot and KEEP ONLY the `on-enemy-charged-cast`
+// abilities for the engine run. This isolates the reaction under test while still locking in the
+// genuine real-corpus parse (the abilities themselves are the production output, asserted
+// shape-for-shape).
+//
+// NOTE: Curator's duplicate on-cast Block-Buff sibling — which previously fired on Curator's own
+// turn regardless of any enemy charged cast — is now suppressed at the source (buildShipAbilities
+// enemyDebuffs auto-fill skips a debuff name already claimed by parseEnemyChargedCastReaction;
+// regression-locked in buildShipAbilities.test.ts). The KEEP-ONLY filter below is thus a no-op for
+// Curator today and remains only for FrontLine's damage/shield siblings above.
 
 const CURATOR_R0_TEXT =
     'This Unit has 20% Shield Penetration. <br /><br />\nWhen an enemy uses their charged skill, this unit <unit-aid>purges 1 buffs</unit-aid> from that enemy.';
