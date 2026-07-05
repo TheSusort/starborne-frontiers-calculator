@@ -5168,4 +5168,23 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
         );
         expect(scopes.sort()).toEqual(['direct', 'dot']);
     });
+
+    it('Curator passive: the enemy-charged-cast Block Buff builds EXACTLY ONCE (on on-enemy-charged-cast), with no duplicate on-cast sibling', () => {
+        // parseEnemyChargedCastReaction emits the Block Buff on on-enemy-charged-cast; the generic
+        // enemyDebuffs auto-fill would ALSO extract "Block Buff" and emit a second, ungated on-cast
+        // debuff that fires on Curator's OWN turn regardless of any enemy charged cast. Guard against
+        // that double-emission.
+        const s = ship({
+            thirdPassiveSkillText:
+                'This Unit has 20% Shield Penetration. <br /><br />\nWhen an enemy uses their charged skill, this unit <unit-aid>purges 1 buffs</unit-aid> from that enemy, and inflicts <unit-skill>Block Buff</unit-skill> for 1 turns.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const blockBuffs = passive.abilities.filter(
+            (a) => 'buffName' in a.config && a.config.buffName === 'Block Buff'
+        );
+        expect(blockBuffs).toHaveLength(1);
+        expect(blockBuffs[0].trigger).toBe('on-enemy-charged-cast');
+        // No on-cast Block Buff sibling that would fire on Curator's own turn.
+        expect(blockBuffs.some((a) => a.trigger === 'on-cast')).toBe(false);
+    });
 });

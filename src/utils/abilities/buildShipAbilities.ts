@@ -1483,72 +1483,72 @@ function abilitiesFromText(
               h.ownCleanseReaction
               ? ('on-own-cleanse' as const)
               : // Epic PR4: Chimei's "At the start of the round, all allies with Stealth repairs
-              // 10% of this unit's max HP" parsed on-cast — the SAME phrase already resolves to
-              // start-of-round for buff grants (detectReactiveTrigger) and Judge's passive
-              // damage (detectStartOfRoundTrigger, added alongside this call). Checked for
-              // heals only (no corpus shield carries this phrase — Xcellence/Volk's start-of-
-              // turn shield/heal use a DIFFERENT phrase and stay untouched).
-              ((h.kind === 'heal' ? detectStartOfRoundTrigger(text, healPos) : undefined) ??
-              // Epic PR4 (start-of-combat one-time grant family): Crucialis's "At the start of
-              // combat, this Unit gains a Shield equal to 20% of its Max HP …" and FrontLine's
-              // "This Unit gains Shield equal to 25% of its Max HP at the start of combat" parsed
-              // on-cast — the shield would re-grant the pool on every skill use instead of once
-              // at combat start. Position-scoped (no buff name to resolve a clause on), checked
-              // for shields only (no corpus heal carries this phrase — verified ship-skills.csv;
-              // Lionheart's start-of-combat "grants adjacent allies 10% of its HP" is a HEAL, not
-              // a shield, and is out of this PR's named scope). The engine seeds the pool exactly
-              // once via seedPreCombatShields (round 1, before any turn); the cast path
-              // (runPlayerTurn) skips pre-combat abilities entirely.
-              // basis GUARD (#210 review): the engine's seedPreCombatShields only seeds
-              // hp-basis pools — tagging a non-hp pre-combat shield would strip it from the
-              // cast path (notPreCombat filter) AND skip it at the seed = silently dropped
-              // entirely. Gate here so a future non-hp phrasing keeps legacy on-cast behavior
-              // instead. Corpus today (Crucialis/FrontLine/IonScorp) is 100% hp-basis.
-              (h.kind === 'shield' && h.basis === 'hp'
-                  ? detectPreCombatShieldTrigger(text, healPos)
-                  : undefined) ??
-              detectCritRepairTrigger(text, healPos) ??
-              // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
-              // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
-              // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
-              detectCheatDeathActivatedTrigger(text, healPos) ??
-              // Salvation: a repair anchored in the "when this Unit is destroyed … repairs … to
-              // all allies" sentence rides the on-destroyed reactive trigger (self-death scoped;
-              // position-scoped). The parser only emits this all-allies heal when that shape is
-              // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
-              detectDestroyedTrigger(text, healPos) ??
-              // Madax/Rikra (Phase 3 PR-B): a self-repair anchored in an enemy-kill sentence
-              // ("when an enemy dies" / "destroyed … upon killing them") rides the
-              // on-enemy-destroyed reactive trigger (position-scoped). The ENEMY-death
-              // counterpart to detectDestroyedTrigger's SELF-death case above.
-              detectEnemyDestroyedTrigger(text, healPos) ??
-              // Crocus (Phase 3 PR-C): a self-repair anchored in the "when another ally
-              // inflicts a Damage Over Time (DoT) effect with a critical hit" sentence rides
-              // the on-ally-crit-dot reactive trigger (self-target heal; position-scoped).
-              detectAllyCritDotTrigger(text, healPos) ??
-              // Valkyrie (Phase 3 PR-D): a self+lowest-HP-ally repair anchored in the "when an
-              // Echoing Burst explodes on an enemy" sentence rides the on-bomb-detonated
-              // reactive trigger (position-scoped). The HEAL-builder counterpart to Demolisher's
-              // charge removal (parseChargeRemoval) and Lingshe's buff grant (detectReactiveTrigger)
-              // readings of the same bomb-detonation phrasing.
-              detectBombDetonatedTrigger(text, healPos) ??
-              // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
-              // sentence rides the on-enemy-purged reactive trigger (position-scoped).
-              detectEnemyPurgedTrigger(text, healPos) ??
-              // Salvation p3: a repair anchored in the "when a buff is purged from an ally"
-              // sentence rides the on-ally-purged reactive trigger (position-scoped).
-              detectAllyPurgedTrigger(text, healPos) ??
-              // Hayyan p2: a repair anchored in the "when a debuff is inflicted on an ally"
-              // sentence rides the on-ally-debuffed reactive trigger (victim-scoped; position-
-              // scoped). Position-scoping keeps Hayyan's sibling on-own-cleanse repair (a
-              // different sentence) untouched.
-              detectAllyDebuffedTrigger(text, healPos) ??
-              (h.kind === 'shield'
-                  ? (detectDebuffInflictedTrigger(text, healPos) ??
-                    // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
-                    // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
-                    detectStasisAppliedTrigger(text, healPos))
-                  : undefined));
+                // 10% of this unit's max HP" parsed on-cast — the SAME phrase already resolves to
+                // start-of-round for buff grants (detectReactiveTrigger) and Judge's passive
+                // damage (detectStartOfRoundTrigger, added alongside this call). Checked for
+                // heals only (no corpus shield carries this phrase — Xcellence/Volk's start-of-
+                // turn shield/heal use a DIFFERENT phrase and stay untouched).
+                ((h.kind === 'heal' ? detectStartOfRoundTrigger(text, healPos) : undefined) ??
+                // Epic PR4 (start-of-combat one-time grant family): Crucialis's "At the start of
+                // combat, this Unit gains a Shield equal to 20% of its Max HP …" and FrontLine's
+                // "This Unit gains Shield equal to 25% of its Max HP at the start of combat" parsed
+                // on-cast — the shield would re-grant the pool on every skill use instead of once
+                // at combat start. Position-scoped (no buff name to resolve a clause on), checked
+                // for shields only (no corpus heal carries this phrase — verified ship-skills.csv;
+                // Lionheart's start-of-combat "grants adjacent allies 10% of its HP" is a HEAL, not
+                // a shield, and is out of this PR's named scope). The engine seeds the pool exactly
+                // once via seedPreCombatShields (round 1, before any turn); the cast path
+                // (runPlayerTurn) skips pre-combat abilities entirely.
+                // basis GUARD (#210 review): the engine's seedPreCombatShields only seeds
+                // hp-basis pools — tagging a non-hp pre-combat shield would strip it from the
+                // cast path (notPreCombat filter) AND skip it at the seed = silently dropped
+                // entirely. Gate here so a future non-hp phrasing keeps legacy on-cast behavior
+                // instead. Corpus today (Crucialis/FrontLine/IonScorp) is 100% hp-basis.
+                (h.kind === 'shield' && h.basis === 'hp'
+                    ? detectPreCombatShieldTrigger(text, healPos)
+                    : undefined) ??
+                detectCritRepairTrigger(text, healPos) ??
+                // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
+                // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
+                // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
+                detectCheatDeathActivatedTrigger(text, healPos) ??
+                // Salvation: a repair anchored in the "when this Unit is destroyed … repairs … to
+                // all allies" sentence rides the on-destroyed reactive trigger (self-death scoped;
+                // position-scoped). The parser only emits this all-allies heal when that shape is
+                // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
+                detectDestroyedTrigger(text, healPos) ??
+                // Madax/Rikra (Phase 3 PR-B): a self-repair anchored in an enemy-kill sentence
+                // ("when an enemy dies" / "destroyed … upon killing them") rides the
+                // on-enemy-destroyed reactive trigger (position-scoped). The ENEMY-death
+                // counterpart to detectDestroyedTrigger's SELF-death case above.
+                detectEnemyDestroyedTrigger(text, healPos) ??
+                // Crocus (Phase 3 PR-C): a self-repair anchored in the "when another ally
+                // inflicts a Damage Over Time (DoT) effect with a critical hit" sentence rides
+                // the on-ally-crit-dot reactive trigger (self-target heal; position-scoped).
+                detectAllyCritDotTrigger(text, healPos) ??
+                // Valkyrie (Phase 3 PR-D): a self+lowest-HP-ally repair anchored in the "when an
+                // Echoing Burst explodes on an enemy" sentence rides the on-bomb-detonated
+                // reactive trigger (position-scoped). The HEAL-builder counterpart to Demolisher's
+                // charge removal (parseChargeRemoval) and Lingshe's buff grant (detectReactiveTrigger)
+                // readings of the same bomb-detonation phrasing.
+                detectBombDetonatedTrigger(text, healPos) ??
+                // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
+                // sentence rides the on-enemy-purged reactive trigger (position-scoped).
+                detectEnemyPurgedTrigger(text, healPos) ??
+                // Salvation p3: a repair anchored in the "when a buff is purged from an ally"
+                // sentence rides the on-ally-purged reactive trigger (position-scoped).
+                detectAllyPurgedTrigger(text, healPos) ??
+                // Hayyan p2: a repair anchored in the "when a debuff is inflicted on an ally"
+                // sentence rides the on-ally-debuffed reactive trigger (victim-scoped; position-
+                // scoped). Position-scoping keeps Hayyan's sibling on-own-cleanse repair (a
+                // different sentence) untouched.
+                detectAllyDebuffedTrigger(text, healPos) ??
+                (h.kind === 'shield'
+                    ? (detectDebuffInflictedTrigger(text, healPos) ??
+                      // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
+                      // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
+                      detectStasisAppliedTrigger(text, healPos))
+                    : undefined));
         // The "while below N% HP" gate is DERIVABLE: the executor evaluates the self
         // hp-threshold against live tank HP at drain time (Phase 4c Task 6).
         const damageReactionConditions: Condition[] =
@@ -2522,6 +2522,27 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     // the effect isn't double-listed in the editor.
     for (const buff of enemyDebuffs) {
         if (isAccumulateDetonateEffect(buff.buffName)) continue;
+        // Curator: "When an enemy uses their charged skill, … inflicts Block Buff" is already
+        // emitted as an on-enemy-charged-cast debuff by parseEnemyChargedCastReaction (in
+        // abilitiesFromText). The generic auto-fill would ALSO extract that name and emit a
+        // SECOND, ungated on-cast debuff that fires on the reacting ship's OWN turn regardless of
+        // any enemy charged cast — a double-application bug. Skip a debuff name already claimed by
+        // the enemy-charged-cast reaction on its own slot's clause (same-name/same-slot scope: the
+        // corpus carries only Curator with this trigger + a debuff, and it has no unrelated
+        // Block-Buff clause). Mirrors the isAccumulateDetonateEffect skip above.
+        const eccSlotText =
+            getSkillRowForSlot(ship, slotForBuffSource(buff.skillSource))?.text ?? '';
+        const eccReactions = parseEnemyChargedCastReaction(eccSlotText);
+        if (
+            eccReactions?.some(
+                (a) =>
+                    a.config.type === 'debuff' &&
+                    'buffName' in a.config &&
+                    a.config.buffName === buff.buffName
+            )
+        ) {
+            continue;
+        }
         mergeBuff(buff, 'enemy');
     }
 
