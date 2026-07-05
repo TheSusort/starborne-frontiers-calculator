@@ -272,3 +272,128 @@ describe('SP-C — stat-comparison gates', () => {
         }
     );
 });
+
+describe('SP-D — count-based gates', () => {
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: CSV typo
+    // "3 ore more" preserved verbatim (not "or more").
+    const BERSERKER_P2 =
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
+
+    it.fails(
+        'Berserker: "gains Marauder Rage II when hitting 3 ore more enemies" is not gated on a hit-count threshold',
+        () => {
+            const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
+            const rageBuff = abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
+            );
+            // GAP: SP-D — no hit-count ConditionSubject exists (verified: ConditionSubject in
+            // src/types/abilities.ts has no "N enemies hit this cast" literal). Today the
+            // Marauder Rage II grant builds fully ungated (conditions: []). Proxy per the
+            // decision rule: conditions.length, 0 now, must be >0 once SP-D models the
+            // "hitting 3+ enemies" gate.
+            expect(rageBuff?.conditions.length).toBeGreaterThan(0);
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    const TYGR_ACTIVE =
+        'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down II</unit-skill> for 2 turns. If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+
+    it.fails(
+        'Tygr: "If it damages 2 or more enemies, adds 1 charge" is not gated on an actual ≥2 hit-count threshold',
+        () => {
+            const abilities = abilitiesFor({ activeSkillText: TYGR_ACTIVE }, 'active');
+            const chargeGain = abilities.find((a) => a.config.type === 'charge');
+            // GAP: SP-D — dry-run curiosity, NOT a clean FP: classifyChargeCondition
+            // (skillTextParser.ts, matching literal "damages 2") already attaches a non-default
+            // `enemy-adjacent` condition here, reusing the splash-adjacency count as a coarse
+            // presence-only proxy for "hit multiple enemies" — so the naive "a non-'always'
+            // subject is present" proxy (the one used for Chakara/Cobalt in SP-C) is ALREADY
+            // TRUE today and would be a trivially-true trap if used here. Neither call site that
+            // emits 'enemy-adjacent' (skillTextParser.ts) ever sets countComparator/countThreshold
+            // — so today ANY adjacent enemy satisfies the gate (presence, count>0), not the
+            // clause's actual "2 or more". Proxy: countThreshold on the condition, undefined now,
+            // must be set once SP-D models the real ≥N hit-count threshold.
+            const cond = chargeGain?.conditions.find((c) => c.subject !== 'always');
+            expect(cond?.countThreshold).toBeDefined();
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field). NOTE: Belladonna also
+    // appears in SP-E (Task 6) for its passive "convert Corrosion into Acidic Decay" clause —
+    // a DISTINCT clause. This probe is ONLY the charge skill's Acidic-Decay-count → Stasis gate.
+    const BELLADONNA_CHARGE =
+        'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
+
+    it.fails(
+        'Belladonna: "If the enemy has 3 or more Acidic Decay, inflict Stasis" is not gated on a named-DoT-stack-count threshold',
+        () => {
+            const abilities = abilitiesFor(
+                { chargeSkillText: BELLADONNA_CHARGE, chargeSkillCharge: 3 },
+                'charged'
+            );
+            const stasis = abilities.find(
+                (a) => a.config.type === 'control' && a.config.effect === 'stasis'
+            );
+            // GAP: SP-D — no named-DoT-stack-count ConditionSubject exists (verified:
+            // countGateCondition in skillTextParser.ts only recognises the literal words
+            // "buffs?"/"debuffs?" in its count-threshold regexes — "Acidic Decay" never matches,
+            // so this clause reaches no count-gate classifier at all). Today the Stasis inflict
+            // builds fully ungated (conditions: []). Proxy: conditions.length, 0 now, must be
+            // >0 once SP-D models the "3+ Acidic Decay stacks on target" gate.
+            expect(stasis?.conditions.length).toBeGreaterThan(0);
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    const ANEMONE_CHARGE =
+        'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
+
+    it.fails(
+        'Anemone: "If the primary enemy has 3 or more Damage over Time effects, gains Taunt" is not gated on a DoT-stack-count threshold',
+        () => {
+            const abilities = abilitiesFor(
+                { chargeSkillText: ANEMONE_CHARGE, chargeSkillCharge: 3 },
+                'charged'
+            );
+            const taunt = abilities.find(
+                (a) => a.config.type === 'control' && a.config.effect === 'taunt'
+            );
+            // GAP: SP-D — dry-run curiosity, NOT a clean ungated-array case: this ability already
+            // carries ONE condition, `{ subject: 'self-buff', buffName: 'Taunt', derivable: true }`
+            // — but that is a SPURIOUS artifact of an unrelated detector (skillTextParser.ts's
+            // Taunt/Provoke self-status rule matches the bare word "Taunt" anywhere in the
+            // sentence, including in the granted-effect verb "gains Taunt", not just in an actual
+            // "if this Unit is Taunted" gate). It has nothing to do with the "3+ Damage over Time
+            // effects on the primary enemy" count clause, which no ConditionSubject models today
+            // (verified against the full ConditionSubject union). Proxy: a condition whose subject
+            // is something OTHER than that spurious 'self-buff' entry — false now (only the
+            // spurious one is present), true once SP-D adds the real DoT-count gate (regardless
+            // of whether the spurious entry is also cleaned up).
+            expect(taunt?.conditions.some((c) => c.subject !== 'self-buff')).toBe(true);
+        }
+    );
+
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    const SNAKEROOT_P2 =
+        'This Unit deals <unit-damage>120% damage</unit-damage> for every 4 stacks of damage over time inflicted on to a single enemy.';
+
+    it.fails(
+        'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is not gated/scaled on a DoT-stack count',
+        () => {
+            const abilities = abilitiesFor({ secondPassiveSkillText: SNAKEROOT_P2 }, 'passive');
+            const dmg = abilities.find(
+                (a) => a.config.type === 'damage' && a.config.multiplier === 120
+            );
+            // GAP: SP-D — this is a per-stack SCALING gate, not a binary threshold: `scaling`
+            // (ScalingRule: `{ conditionIndex, perUnit, cap? }`) is the EXISTING type-valid field
+            // for this shape (used by the self-crit-power/enemy-stealth-count scaling sources) —
+            // this is the faithful final shape, not a proxy. It requires BOTH a DoT-stack-count
+            // Condition (which does not exist — same gap as Belladonna/Anemone) AND a `scaling`
+            // rule referencing it. Today the 120%-damage ability builds fully flat: no `scaling`
+            // field at all. Proxy: `.scaling`, undefined now, must be defined once SP-D models
+            // the "per 4 DoT stacks on target" scaling gate.
+            expect(dmg?.scaling).toBeDefined();
+        }
+    );
+});
