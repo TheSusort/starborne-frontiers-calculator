@@ -314,6 +314,12 @@ describe('SP-D — count-based gates', () => {
             // — so today ANY adjacent enemy satisfies the gate (presence, count>0), not the
             // clause's actual "2 or more". Proxy: countThreshold on the condition, undefined now,
             // must be set once SP-D models the real ≥N hit-count threshold.
+            // ASSUMPTION: `.find()` takes the first non-'always' condition — valid only if SP-D
+            // augments this existing single condition in place (sets countThreshold on it) rather
+            // than appending a second condition object. The charge-condition slot is single-
+            // condition today (in-place augmentation is the natural extension), so risk is low,
+            // but an append-a-second-condition fix would leave this `.find()` still pointing at
+            // the untouched original and the proxy would never flip.
             const cond = chargeGain?.conditions.find((c) => c.subject !== 'always');
             expect(cond?.countThreshold).toBeDefined();
         }
@@ -382,18 +388,32 @@ describe('SP-D — count-based gates', () => {
         'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is not gated/scaled on a DoT-stack count',
         () => {
             const abilities = abilitiesFor({ secondPassiveSkillText: SNAKEROOT_P2 }, 'passive');
-            const dmg = abilities.find(
-                (a) => a.config.type === 'damage' && a.config.multiplier === 120
-            );
             // GAP: SP-D — this is a per-stack SCALING gate, not a binary threshold: `scaling`
-            // (ScalingRule: `{ conditionIndex, perUnit, cap? }`) is the EXISTING type-valid field
-            // for this shape (used by the self-crit-power/enemy-stealth-count scaling sources) —
-            // this is the faithful final shape, not a proxy. It requires BOTH a DoT-stack-count
-            // Condition (which does not exist — same gap as Belladonna/Anemone) AND a `scaling`
-            // rule referencing it. Today the 120%-damage ability builds fully flat: no `scaling`
-            // field at all. Proxy: `.scaling`, undefined now, must be defined once SP-D models
-            // the "per 4 DoT stacks on target" scaling gate.
-            expect(dmg?.scaling).toBeDefined();
+            // (ScalingRule: `{ conditionIndex, perUnit, cap? }`, a top-level Ability field) is
+            // the EXISTING type-valid mechanism for this shape (used by the self-crit-power/
+            // enemy-stealth-count/conditional-damage scaling sources). It requires BOTH a
+            // DoT-stack-count Condition (which does not exist — same gap as Belladonna/Anemone)
+            // AND a `scaling` rule referencing it. Today the sole ability this clause builds is
+            // flat: `type: 'damage'`, `config.multiplier: 120`, no `scaling` field at all
+            // (verified via dry-run dump of buildShipAbilities' output for this text — one
+            // ability, no scaling). NOT matched on `multiplier === 120`: the faithful fix may
+            // either (a) attach conditions+scaling directly to this same `type: 'damage'`
+            // ability — the parseConditionalDamage precedent (buildShipAbilities.ts ~L1186) — or
+            // (b) reshape the clause into a `type: 'modifier'` ability with a 0 base value and
+            // `scaling.perUnit` carrying the 120 (the "X% (more) damage for each <thing>"
+            // convention, buildShipAbilities.ts ~L403-420); either shape keeps `scaling` as a
+            // top-level Ability field, so the proxy below is flip-valid under both. Proxy:
+            // any damage/modifier/additional-damage-typed ability with `.scaling` defined —
+            // false now (no ability here has `.scaling`), true once SP-D models the "per 4 DoT
+            // stacks on target" scaling gate regardless of which of the two shapes it lands on.
+            const scaled = abilities.find(
+                (a) =>
+                    (a.config.type === 'damage' ||
+                        a.config.type === 'modifier' ||
+                        a.config.type === 'additional-damage') &&
+                    a.scaling !== undefined
+            );
+            expect(scaled).toBeDefined();
         }
     );
 });
