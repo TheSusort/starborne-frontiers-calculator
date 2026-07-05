@@ -1577,7 +1577,18 @@ function abilitiesFromText(
         const cleansePos = text.search(/cleanse/i);
         // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
         // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
-        const reactiveTrigger = detectCritRepairTrigger(text, cleansePos);
+        // Purifier (Phase 3 PR-A): a PASSIVE-slot "cleanses N debuff when directly damaged" cleanse
+        // rides on-attacked — the cleanse builder previously derived ONLY the crit-repair reaction,
+        // so a direct-damage cleanse fell through to on-cast. Gated to passive (an active/charged
+        // cleanse is on-cast) and position-scoped, so only a passive cleanse whose own sentence
+        // carries the reaction phrase flips (corpus: Purifier alone — Makoli/Nosorog/Nyxen's
+        // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
+        const reactiveTrigger =
+            detectCritRepairTrigger(text, cleansePos) ??
+            (slot === 'passive' &&
+            detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
+                ? ('on-attacked' as const)
+                : undefined);
         const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
         out.push({
             ability: {

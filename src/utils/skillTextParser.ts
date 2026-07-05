@@ -1868,10 +1868,12 @@ const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
 // must not reuse it.
 const DR_ALLY_CRIT_HIT_RE = /\bis\s+criticall?y?\s+hit\b/i;
 // Self-subject direct-damage reaction: "when (this Unit is) directly damaged" (leading OR
-// trailing clause) / "when attacked". "If directly damaged" (Panon) is deliberately NOT
-// matched — only the "when" phrasing classifies this phase.
+// trailing clause) / "when attacked" / bare "when hit" (Sansi) / "upon receiving direct
+// damage" (Bizon — the one non-"when" phrasing; corpus-unique so no over-match). "If directly
+// damaged" (Panon) is deliberately NOT matched — the conditional "if" phrasing is out of scope
+// for this reaction phase.
 const DR_DIRECT_DAMAGE_RE =
-    /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b/i;
+    /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b|when\s+hit\b|upon\s+receiving\s+direct\s+damage\b/i;
 // "while below N% HP" HP gate on a damage-reaction sentence (Makoli: "when directly damaged
 // while below 40% HP, …"). The same regex form as Task 7's parseHealAbilities annotation
 // (/while\s+below\s+(\d+)\s*%\s*hp/i) — kept here in the detector so ALL sentence-scoped
