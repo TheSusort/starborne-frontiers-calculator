@@ -470,7 +470,17 @@ export function registerReactiveListeners(args: {
                         // walked enemy now emits ability-performed.
                         if (!isSameSideAlly(e.actorId, ownerId)) return;
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
-                        for (let i = 0; i < n; i++) enqueue(intent);
+                        // Stamp the crit-ing ally via damagedAllyId (Phase 3 PR-G, Howler) so an
+                        // 'ally'-target reactive (cleanse/buff) lands on THAT ally, mirroring the
+                        // on-ally-debuffed/on-ally-purged siblings. Zero-collateral for existing
+                        // on-ally-crit riders (Hermes's charge + Everliving Regeneration buff are
+                        // both 'self'-target, which never reads damagedAllyId — see
+                        // reactiveRecipients/the buff branch's recipient resolution).
+                        for (let i = 0; i < n; i++)
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.actorId },
+                            });
                     });
                     break;
                 case 'start-of-round':

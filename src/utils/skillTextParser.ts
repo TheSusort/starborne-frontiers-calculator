@@ -1395,7 +1395,10 @@ export function detectBombDetonatedTrigger(
 // carrying the phrase. So an unrelated heal/charge in a DIFFERENT sentence is never mis-triggered,
 // even when it shares the anchor keyword. Reference data: docs/ship-skills.csv.
 const CRIT_REPAIR_RE = /when this unit critically repairs (?:an ally|allies)/i;
-const ALLY_CRIT_HIT_RE = /when an ally critically hits/i;
+// "when an ally critically hits" (Hermes/Sentinel) and "when that ally crits" (Howler) are the
+// same reactive trigger under two phrasings — verified zero-collateral: across all 147 ships in
+// docs/ship-skills.csv, "ally crit(ically hits/s)" appears ONLY on these three ships.
+const ALLY_CRIT_HIT_RE = /when (?:an|that) ally (?:critically hits|crits)/i;
 
 /**
  * Returns 'on-ally-critically-repaired' when `anchorPos` (the ability's raw-text anchor position)
