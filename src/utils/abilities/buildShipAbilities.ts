@@ -46,6 +46,7 @@ import {
     parseDebuffDurationReduction,
     parseAllyCritDot,
     detectAllyCritDotTrigger,
+    detectBombDetonatedTrigger,
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
     detectStasisAppliedTrigger,
@@ -1481,6 +1482,12 @@ function abilitiesFromText(
               // inflicts a Damage Over Time (DoT) effect with a critical hit" sentence rides
               // the on-ally-crit-dot reactive trigger (self-target heal; position-scoped).
               detectAllyCritDotTrigger(text, healPos) ??
+              // Valkyrie (Phase 3 PR-D): a self+lowest-HP-ally repair anchored in the "when an
+              // Echoing Burst explodes on an enemy" sentence rides the on-bomb-detonated
+              // reactive trigger (position-scoped). The HEAL-builder counterpart to Demolisher's
+              // charge removal (parseChargeRemoval) and Lingshe's buff grant (detectReactiveTrigger)
+              // readings of the same bomb-detonation phrasing.
+              detectBombDetonatedTrigger(text, healPos) ??
               // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
               // sentence rides the on-enemy-purged reactive trigger (position-scoped).
               detectEnemyPurgedTrigger(text, healPos) ??

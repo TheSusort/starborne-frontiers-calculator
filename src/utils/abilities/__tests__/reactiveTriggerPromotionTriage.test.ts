@@ -274,9 +274,6 @@ describe('cluster 6 — on-bomb-detonated', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VALKYRIE_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-bomb-detonated');
-        // GAP: tag-only — heal builder doesn't pick up on-bomb-detonated (and "Echoing Burst"
-        // may need recognition as a bomb-type). Trigger exists (BOMB_DETONATE_RE). The
-        // "ally with lowest HP" target selection is a separate targeting concern for the fix-PR.
     });
 
     const LINGSHE_P3 =
