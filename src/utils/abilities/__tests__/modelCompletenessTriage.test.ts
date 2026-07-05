@@ -768,3 +768,135 @@ describe('SP-F — deep one-offs', () => {
         }
     );
 });
+
+describe('SP-G — engine known-limitations', () => {
+    // These six mechanics are ENGINE-TIMING limitations, not `buildShipAbilities` output gaps —
+    // `buildShipAbilities` already emits the "faithful" ability shape (correct trigger, correct
+    // config); the bug lives entirely in how the COMBAT ENGINE consumes that trigger at runtime
+    // (drain ordering, eventCtx amount plumbing, missing recurring cadence, positional-path event
+    // wiring). So none of these are `it.fails` build-proxy probes — each `it` below is a
+    // KNOWN-LIMITATION MARKER: it asserts a real, CURRENTLY-TRUE fact about the production build
+    // output (the shape SP-G will fix the CONSUMPTION of), and points at the actual integration
+    // test where the limitation itself is pinned/exercised end-to-end. This mirrors the design
+    // doc's guidance (`docs/superpowers/specs/2026-07-05-sp0-triage-design.md`, "SP-G
+    // known-limitations": "the pin references the existing integration test rather than
+    // duplicating it").
+
+    // ── Cobalt: start-of-turn charge drain-ordering ─────────────────────────────────────
+    // Verbatim from docs/ship-skills.csv (first_passive_skill_text field).
+    const COBALT_P1_SPG =
+        'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.';
+
+    it('Cobalt: start-of-turn charge ability builds correctly; the KNOWN LIMITATION is the engine drain-ordering, not this shape', () => {
+        const abilities = abilitiesFor({ firstPassiveSkillText: COBALT_P1_SPG }, 'passive');
+        const charge = abilities.find((a) => a.type === 'charge' && a.trigger === 'start-of-turn');
+        // TRUE TODAY: buildShipAbilities already resolves this clause into a self-target,
+        // start-of-turn, full-HP-gated charge ability. See
+        // src/utils/combat/__tests__/cobaltStartOfTurnCharge.integration.test.ts — its final
+        // describe block ("Cobalt Out. Damage Up II — engine consumption (recurring; alternating
+        // cadence pinned)") is the actual KNOWN-LIMITATION pin: the start-of-turn grant DRAINS
+        // after the owner's own cast (not before), so a sibling start-of-turn buff on this same
+        // passive boosts only every OTHER turn instead of every turn. That test explicitly says
+        // "When the ordering fix lands, the alternation assertions below MUST flip to
+        // every-turn — that is the point of pinning them." SP-G's job is that ordering fix;
+        // this probe just anchors the ability shape the fix operates on.
+        expect(charge).toBeDefined();
+    });
+
+    // ── FrontLine: charged-cast-reaction shield amount plumbing ─────────────────────────
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — the SAME text
+    // already used by SP-B's FrontLine reactive-trigger FP probe above (that probe covers only
+    // the trigger; this one covers only the shield's magnitude).
+    const FRONTLINE_P2_SPG =
+        'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+
+    it('FrontLine: on-enemy-charged-cast shield ability builds; the KNOWN LIMITATION is its flat attack-basis amount, not the trigger', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: FRONTLINE_P2_SPG }, 'passive');
+        const shieldReaction = abilities.find(
+            (a) => a.type === 'shield' && a.trigger === 'on-enemy-charged-cast'
+        );
+        // TRUE TODAY: the reaction correctly rides on-enemy-charged-cast (SP-B's FP finding
+        // above) and today builds as `config: { type: 'shield', basis: 'attack', pct: 24 }` — a
+        // flat approximation of "gains a Shield equal to 30% of the damage dealt" (30% of the
+        // clause's own 80%-damage hit ≈ 24% of attack), NOT the actual per-cast dealt amount. See
+        // src/utils/combat/__tests__/enemyChargedCast.integration.test.ts, describe('FrontLine
+        // damage+shield-on-enemy-charged (engine integration)'), it('the shield magnitude tracks
+        // attack (basis attack × 24%): a 2× attack FrontLine yields ~2× shield') — that test pins
+        // the CURRENT (limited) attack-proportional behaviour end to end. SP-G needs to plumb the
+        // real eventCtx dealt-amount into the reactive-shield executor so the shield instead
+        // tracks the ACTUAL damage dealt by this specific cast (which can diverge from a flat
+        // attack% under crit, affinity, or incoming-amplification modifiers).
+        expect(shieldReaction).toBeDefined();
+    });
+
+    // ── Meatshield / Kinetik / Cinya: recurring per-turn grants (no recurring trigger today) ──
+    // Verbatim from docs/ship-skills.csv (first_passive_skill_text field, all three).
+    const MEATSHIELD_P1_SPG =
+        'At the start of combat, this Unit gains 3 stacks of <unit-skill>Protection</unit-skill>.';
+    const KINETIK_P1_SPG =
+        'This Unit gains a <unit-damage>Shield equal to 4%</unit-damage> of its Max HP every turn.';
+    const CINYA_P1_SPG =
+        'This Unit <unit-damage>repairs 3.5%</unit-damage> of its Max HP every turn.';
+
+    it('Meatshield: "gains 3 stacks of Protection" still rides on-cast — DELIBERATELY UNCHANGED (deferred)', () => {
+        const abilities = abilitiesFor({ firstPassiveSkillText: MEATSHIELD_P1_SPG }, 'passive');
+        const protection = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
+        );
+        // TRUE TODAY: pinned verbatim by
+        // src/utils/abilities/__tests__/roundBoundaryTriggerConsistency.test.ts, describe
+        // ('Meatshield: start-of-combat Protection stacks — DELIBERATELY UNCHANGED (deferred)') —
+        // that test's own name documents this as a CONSCIOUS deferral (the parser's stack-climb
+        // behaviour is keyed off the on-cast shape; relabeling only the trigger without also
+        // reworking the stack accumulation would misrepresent the mechanic). No recurring
+        // per-turn trigger exists today — this is the SP-G mechanic to add.
+        expect(protection?.trigger).toBe('on-cast');
+    });
+
+    it('Kinetik: "gains a Shield ... every turn" still rides on-cast — no recurring trigger exists yet', () => {
+        const abilities = abilitiesFor({ firstPassiveSkillText: KINETIK_P1_SPG }, 'passive');
+        const shield = abilities.find((a) => a.type === 'shield');
+        // TRUE TODAY: pinned verbatim by
+        // src/utils/abilities/__tests__/roundBoundaryTriggerConsistency.test.ts, describe
+        // ('Kinetik / Cinya: "every turn" (no "at the start of" phrase) — out of PR4 scope,
+        // unaffected'), it('Kinetik: the per-turn shield stays on-cast (no start-of-X phrase to
+        // detect)'). "Every turn" (unlike "at the start of the turn") has no detector at all —
+        // SP-G needs a genuine recurring trigger, not just a relabel.
+        expect(shield?.trigger).toBe('on-cast');
+    });
+
+    it('Cinya: "repairs ... every turn" still rides on-cast — no recurring trigger exists yet', () => {
+        const abilities = abilitiesFor({ firstPassiveSkillText: CINYA_P1_SPG }, 'passive');
+        const heal = abilities.find((a) => a.type === 'heal');
+        // TRUE TODAY: pinned verbatim by the same roundBoundaryTriggerConsistency.test.ts
+        // describe block as Kinetik above, it('Cinya: the per-turn heal stays on-cast (no
+        // start-of-X phrase to detect)'). Same "every turn" gap, distinct ship/ability.
+        expect(heal?.trigger).toBe('on-cast');
+    });
+
+    // ── Butcher: positional-path Rage sourceId — NO CORPUS PROBE (see reconciliation doc) ──
+    // Butcher's "On inflicting a debuff, this Unit gains Marauder Rage II" (second_passive_skill_
+    // text) already has a build-output probe (buildShipAbilities.test.ts, "Butcher p2: remove
+    // Overload on kill + Marauder Rage II on debuff-inflicted") AND an engine-level integration
+    // pin (overloadLifecycle.test.ts, "3. Butcher gains Marauder Rage II when it inflicts a
+    // debuff (on-debuff-inflicted)") — but that integration pin runs ONLY through Channel (A),
+    // `runCombat` (DPS/healing mode), per the file's own docstring. It does NOT exercise the
+    // POSITIONAL two-team path (`simulateBattle`).
+    //
+    // EMPIRICALLY VERIFIED during this task (throwaway probe, not committed): a Butcher placed in
+    // a real `simulateBattle` two-team battle, casting an active that inflicts Inferno II every
+    // round, DOES emit a `dot-applied` combat-log entry (the debuff infliction lands, sourceId
+    // correctly attributed to the caster) — but NO `buff` combat-log entry for Marauder Rage II
+    // ever appears anywhere across the whole battle. So the on-debuff-inflicted → Marauder Rage II
+    // reaction that works on Channel (A) does NOT fire on the positional path. This is a genuine,
+    // currently-unpinned gap.
+    //
+    // No `buildShipAbilities`-observable proxy exists for this (the built ability object is
+    // byte-identical regardless of which engine channel consumes it — the bug is purely in the
+    // positional path's reactive-listener/event wiring, invisible to a build-output assertion).
+    // No existing integration test exercises this exact failure either (the closest one,
+    // overloadLifecycle.test.ts's Channel-B tests, only covers KILL reactives, not
+    // on-debuff-inflicted) — so, per the task protocol, this is recorded as MISSING in the
+    // reconciliation doc (`docs/model-completeness-triage-2026-07-05.md`) rather than fabricated
+    // a path here. SP-G will need to author a new positional-path integration test for this.
+});
