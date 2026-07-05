@@ -92,6 +92,13 @@ export type AbilityTrigger =
     // repair; Arum/Yarrow/Larkspur/Grif reactions on enemy cleanse. Phase 4c PR 4.
     | 'on-enemy-repaired'
     | 'on-enemy-cleansed'
+    // Phase 3 PR-I: fires when an OPPOSING-side actor receives a timed buff (rides the
+    // existing `buff-applied` event, opposing-scoped on actorId — the buff RECIPIENT).
+    // Nuqtu's self-cleanse + Terran Bolster III grant ("when an enemy gets buffed"),
+    // promoted from a manual, non-derivable `enemy-buff` CONDITION (single-ship DPS has
+    // no enemy casting buffs, so it never fires there) to a live reactive trigger for the
+    // team simulator. Both effects are self-target — no capture needed.
+    | 'on-enemy-buffed'
     // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
     | 'on-enemy-purged'
     | 'on-ally-purged'
@@ -176,6 +183,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-hp-threshold-crossed',
     'on-enemy-repaired',
     'on-enemy-cleansed',
+    // Phase 3 PR-I: opposing-scoped reaction to an enemy actor receiving a timed buff.
+    'on-enemy-buffed',
     // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
     'on-enemy-purged',
     'on-ally-purged',

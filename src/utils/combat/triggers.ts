@@ -275,6 +275,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    of on-enemy-cleansed. Stamps eventCtx.cleansedAllyIds = e.targets (the actually-cleansed
  *    recipients) so an 'ally'-target reaction fans out to exactly those ids (reactiveRecipients);
  *    a 'self'-target reaction ignores it. One enqueue per qualifying (>= 1 real removal) cast.
+ *  - on-enemy-buffed → buff-applied where isOpposing(actorId) (Phase 3 PR-I: Nuqtu's
+ *    self-cleanse + Terran Bolster III grant, "when an enemy gets buffed"). actorId is the
+ *    buff RECIPIENT (events.ts), so this fires once per opposing-side buff application. Both
+ *    effects are self-target — no eventCtx capture needed.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -706,6 +710,16 @@ export function registerReactiveListeners(args: {
                         // call: enemy side. For the enemy call: player side.
                         // One enqueue per cast.
                         if (isOpposing(e.casterId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-buffed':
+                    bus.on('buff-applied', (e) => {
+                        // Opposing-scoped: any opposing-side actor RECEIVING a timed buff
+                        // (e.actorId is the recipient — events.ts). For the player call: an
+                        // enemy attacker gaining a self-buff. For the enemy call: a player actor
+                        // gaining one. Nuqtu's self-cleanse + Terran Bolster III are both
+                        // self-target — no eventCtx capture needed. One enqueue per application.
+                        if (isOpposing(e.actorId)) enqueue(intent);
                     });
                     break;
                 case 'on-own-cleanse':
@@ -2173,6 +2187,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // gate tick the healing-on pass does not, desynchronizing the proc stream across sims.
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         if (!passesProcChanceGate(intent, ctx)) return;
+        // Phase 3 PR-I: "(once per round)" cap (Nuqtu's self-cleanse). Mirrors the heal/shield
+        // branch's ordering (procChance, THEN oncePerRound) — this branch previously had NO
+        // oncePerRound consult at all (no shipped cleanse set the flag pre-PR-I), so this is
+        // additive: every other cleanse ability leaves `oncePerRound` unset and passes through.
+        if (!passesOncePerRoundGate(intent, ctx)) return;
         // ctx.playerIds is the SAME-SIDE ally id order (sideCtx.recipientIds) — side-correct for
         // both player and enemy reactive drains. ctx.statusEngine is the live store. Mirrors the
         // reactive heal branch's recipient resolution: an 'ally'-target cleanse prefers the

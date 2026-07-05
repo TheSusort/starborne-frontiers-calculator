@@ -70,6 +70,8 @@ import {
     PURGE_MORE_RE,
     parseControlInflicts,
     detectAllyCritTrigger,
+    detectEnemyBuffedTrigger,
+    detectCleanseOncePerRound,
     parseNoCrit,
     parseDoesntBreakStasis,
     parseChargeLossImmune,
@@ -1621,14 +1623,19 @@ function abilitiesFromText(
         // cleanse is on-cast) and position-scoped, so only a passive cleanse whose own sentence
         // carries the reaction phrase flips (corpus: Purifier alone — Makoli/Nosorog/Nyxen's
         // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
+        // Nuqtu (Phase 3 PR-I): "Cleanses 1 debuff from itself (once per round) ... when an enemy
+        // gets buffed" rides on-enemy-buffed (position-scoped; opposing-scoped trigger).
         const reactiveTrigger =
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
+            detectEnemyBuffedTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
                 : undefined);
         const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
+        // Nuqtu's "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag.
+        const cleanseOncePerRound = detectCleanseOncePerRound(text, cleansePos);
         out.push({
             ability: {
                 id: nextId(),
@@ -1641,6 +1648,7 @@ function abilitiesFromText(
                     count: c.count,
                     ...(c.debuffType ? { debuffType: c.debuffType } : {}),
                 },
+                ...(cleanseOncePerRound ? { oncePerRound: true } : {}),
                 autoFilled: true,
             },
             pos: cleansePos >= 0 ? cleansePos : MAX_POS,
@@ -2324,7 +2332,18 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         }
         if (reactiveTrigger) {
             ability.trigger = reactiveTrigger;
-            ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
+            ability.conditions = ability.conditions.filter(
+                (c) =>
+                    c.subject !== 'self-crit' &&
+                    // Phase 3 PR-I (COLLISION-SCOPE / "PR-E Provider lesson"): drop the now-
+                    // redundant manual enemy-buff condition once the clause is promoted to the
+                    // on-enemy-buffed trigger — the trigger IS the gate. Without this, Nuqtu's
+                    // Terran Bolster III would carry BOTH the reactive trigger AND the stale
+                    // manual condition (harmless today since a manual condition with no
+                    // manualCount defaults to "met", but leaving it is misleading and the
+                    // brief calls it out explicitly).
+                    !(reactiveTrigger === 'on-enemy-buffed' && c.subject === 'enemy-buff')
+            );
             // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
             // oncePerRound flag) so a different ally inflicting a debuff still procs even if
             // another ally already consumed the cap this round.
