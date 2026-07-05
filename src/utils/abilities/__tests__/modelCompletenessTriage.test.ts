@@ -900,3 +900,152 @@ describe('SP-G — engine known-limitations', () => {
     // reconciliation doc (`docs/model-completeness-triage-2026-07-05.md`) rather than fabricated
     // a path here. SP-G will need to author a new positional-path integration test for this.
 });
+
+describe('confirm-GREEN-only — locked FPs', () => {
+    // These mechanics stay allowlisted (NOT epic work) — they are data-layer facts or
+    // harness/clause-scoping false positives, not `buildShipAbilities` gaps. Each `it` below is
+    // a PLAIN green regression guard (not `it.fails`): if any of these goes RED, it is NOT an FP
+    // — it is a real gap that must be pulled out and reassigned to a sub-project, not forced
+    // green. Two mechanics from the allowlist (shield-penetration-innate × 10 ships, Nosorog
+    // damage-reflection) have NO production probe here — see
+    // `docs/model-completeness-triage-2026-07-05.md` for why (data-layer stat fill / harness-only
+    // misfire, nothing for `buildShipAbilities` to assert on).
+
+    // ── Asphodel: "always critical" is a data-layer fact (import sets crit 100%) ──────────
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    const ASPHODEL_P2 =
+        "This Unit's attacks are always critical and <unit-aid>adds 1 charge</unit-aid> to its Charged Skill after critically damaging an enemy.";
+
+    it('Asphodel: "attacks are always critical" mints no phantom always-crit ability — only the self-crit-conditioned charge grant builds (FP: crit is a data-layer stat, not a parser flag)', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: ASPHODEL_P2 }, 'passive');
+        // Dry-run confirmed: exactly ONE ability builds for this whole two-clause text — the
+        // "adds 1 charge after critically damaging an enemy" grant, self-crit-conditioned. The
+        // "attacks are always critical" clause mints NOTHING (no ability of any type carries an
+        // always-crit/guaranteed-crit flag — verified no such field/type exists anywhere in
+        // src/types/abilities.ts or buildShipAbilities.ts/skillTextParser.ts). This is correct:
+        // the import pipeline sets this ship's `crit` stat to 100 directly (CritChance mapping,
+        // see CLAUDE.md); a parser-minted always-crit modifier would double-count.
+        expect(abilities).toHaveLength(1);
+        expect(abilities[0].type).toBe('charge');
+        expect(abilities[0].conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+    });
+
+    // ── Tormenter: "always lands critical hits" (same data-layer fact) + base-damage clause ──
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    const TORMENTER_P2 =
+        'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.';
+
+    it('Tormenter: "always lands critical hits" mints no phantom always-crit ability — only the two hp-scaled incoming-reduction abilities build (FP: same data-layer fact as Asphodel)', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: TORMENTER_P2 }, 'passive');
+        // Dry-run confirmed: exactly TWO abilities build (a 'direct'-scope and a 'dot'-scope
+        // incoming-reduction, both carrying the same hpScaling) — nothing else. The "always
+        // lands critical hits" clause contributes no third ability and no crit-flag field on
+        // either of these two.
+        expect(abilities.length).toBeGreaterThan(0);
+        expect(abilities.every((a) => a.type === 'incoming-reduction')).toBe(true);
+    });
+
+    it('Tormenter: "gains up to 30% damage reduction as its health decreases" builds an hp-scaled incoming-reduction ability, not a phantom damage ability', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: TORMENTER_P2 }, 'passive');
+        // FP (base-damage bucket): the clause is a self-mitigation stat modifier, not a damage
+        // dealt to an enemy — buildShipAbilities correctly routes it onto the EXISTING
+        // `incoming-reduction` ability type with an hpScaling rule (perUnit 0.3, cap 30 — i.e.
+        // "up to 30%... as health decreases"), never as a `type: 'damage'` ability.
+        const reduction = abilities.find(
+            (a) => a.config.type === 'incoming-reduction' && a.config.hpScaling?.perUnit === 0.3
+        );
+        expect(reduction).toBeDefined();
+        expect(abilities.every((a) => a.type !== 'damage')).toBe(true);
+    });
+
+    // ── Rikra: clause-scoping — the Taunt/Provoke gate scopes the damage bonus, not the buff ──
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    const RIKRA_CHARGE =
+        'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns, and deals <unit-damage>180% damage</unit-damage> with additional <unit-damage>80%</unit-damage> damage against Taunted or Provoked enemies.';
+
+    it('Rikra: charged "gains Defense Up II ... deals 180% damage with additional 80% damage against Taunted or Provoked enemies" grants Defense Up II unconditionally — only the damage bonus is Taunt/Provoke-gated (FP: correct clause scoping)', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: RIKRA_CHARGE, chargeSkillCharge: 2 },
+            'charged'
+        );
+        const buff = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Defense Up II'
+        );
+        // FP: "against Taunted or Provoked enemies" grammatically attaches only to the trailing
+        // damage clause, not to the co-located "gains Defense Up II" grant earlier in the
+        // sentence. buildShipAbilities scopes it correctly: the buff builds fully unconditional.
+        expect(buff?.conditions).toEqual([]);
+        const damage = abilities.find((a) => a.type === 'damage');
+        expect(damage?.conditions.length).toBeGreaterThan(0);
+    });
+
+    // ── Madax: "while this Unit deals..." is simultaneity, not a gate on the buff ───────────
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    const MADAX_CHARGE =
+        "All allies are granted <unit-skill>Terran Bolster II</unit-skill> for 3 turns, while this Unit deals <unit-damage>130% damage</unit-damage>, including additional damage equal to <unit-damage>80%</unit-damage> of this Unit's Defense.";
+
+    it('Madax: charged "All allies are granted Terran Bolster II for 3 turns, while this Unit deals 130% damage..." grants the buff unconditionally — "while" is simultaneity, not a gate (FP: correct clause scoping)', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: MADAX_CHARGE, chargeSkillCharge: 4 },
+            'charged'
+        );
+        const buff = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster II'
+        );
+        // FP: "while this Unit deals..." describes two things happening AT THE SAME TIME (the
+        // buff grant and the damage), not a conditional dependency of one on the other.
+        // buildShipAbilities builds both fully unconditional — no spurious gate is minted.
+        expect(buff?.conditions).toEqual([]);
+        const damage = abilities.find((a) => a.type === 'damage');
+        expect(damage?.conditions).toEqual([]);
+    });
+
+    // ── Oleander: "per debuffed enemy" scopes the repair, not the co-granted buff ───────────
+    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    const OLEANDER_ACTIVE =
+        'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 2 turns and <unit-damage>repairs 100%</unit-damage> of its Max HP, with an additional <unit-damage>8.5%</unit-damage> repair for each debuffed enemy.';
+
+    it('Oleander: active "grants Hacking Up III ... repairs 100% of its Max HP, with an additional 8.5% repair for each debuffed enemy" scopes the per-debuffed-enemy scaling to the repair only — Hacking Up III builds ungated (FP: already modeled)', () => {
+        const abilities = abilitiesFor({ activeSkillText: OLEANDER_ACTIVE }, 'active');
+        const buff = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Hacking Up III'
+        );
+        // FP: "with an additional 8.5% repair for each debuffed enemy" modifies only the
+        // trailing "repairs 100%" clause, not the "grants Hacking Up III" buff earlier in the
+        // sentence. buildShipAbilities already scopes the per-debuffed-enemy scaling onto the
+        // heal ability alone; the buff builds fully unconditional (no spurious ungated-buff FP).
+        expect(buff?.conditions).toEqual([]);
+        const heal = abilities.find((a) => a.type === 'heal');
+        expect(heal?.scaling?.perUnit).toBe(8.5);
+        expect(heal?.conditions.some((c) => c.subject === 'enemy-debuff')).toBe(true);
+    });
+
+    // ── Valkyrie: the passive's "Echoing Burst explodes" REFERENCE is parser-guard-filtered ──
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    const VALKYRIE_P2 =
+        'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.<br /><br />This Unit starts combat fully Charged.';
+
+    it('Valkyrie: passive "When an Echoing Burst explodes on an enemy, ... repair 5% of damage dealt" does NOT mint a second accumulate-detonate application — it is a reactive heal off the existing on-bomb-detonated trigger (FP: parser-guard-filtered)', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: VALKYRIE_P2 }, 'passive');
+        // FP: the passive merely REFERENCES an Echoing Burst detonating (to react with a heal);
+        // it does not itself INFLICT Echoing Burst, so it must not mint its own
+        // accumulate-detonate application. Dry-run confirmed: this text builds a start-of-round
+        // Speed Up II buff plus two `on-bomb-detonated` heal reactions (ally + self) — no
+        // accumulate-detonate ability anywhere in the passive slot.
+        expect(abilities.length).toBeGreaterThan(0);
+        expect(abilities.every((a) => a.type !== 'accumulate-detonate')).toBe(true);
+        expect(abilities.filter((a) => a.trigger === 'on-bomb-detonated')).toHaveLength(2);
+    });
+
+    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    const VALKYRIE_CHARGE =
+        "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, deals <unit-damage>240% damage</unit-damage>, and inflicts <unit-skill>Inc. Damage Up II</unit-skill> and <unit-skill>Echoing Burst</unit-skill> for 2 turns.";
+
+    it('Valkyrie: charged "...inflicts Inc. Damage Up II and Echoing Burst for 2 turns" correctly builds the accumulate-detonate application (the ACTUAL inflict, distinct from the passive\'s mere reference above)', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: VALKYRIE_CHARGE, chargeSkillCharge: 2 },
+            'charged'
+        );
+        expect(abilities.some((a) => a.type === 'accumulate-detonate')).toBe(true);
+    });
+});
