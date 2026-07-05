@@ -37,9 +37,17 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
     return (
         <div className="card">
             <h2 className="text-lg font-semibold mb-2">{title}</h2>
-            <div role="grid" aria-label={`${title} battle board`} className="flex flex-col gap-1">
+            <div
+                role="grid"
+                aria-label={`${title} battle board`}
+                className={`flex flex-col gap-1 ${mirrored ? 'mr-16' : 'ml-16'}`}
+            >
                 {ROWS.map((row) => (
-                    <div key={row} role="row" className="grid grid-cols-4 gap-1">
+                    <div
+                        key={row}
+                        role="row"
+                        className={`grid grid-cols-4 gap-1 ${mirrored ? 'even:translate-x-[12.5%]' : 'even:translate-x-[-12.5%]'}`}
+                    >
                         {cols.map((col) => {
                             const position = `${row}${col}` as Position;
                             const overlay = overlays[position];
@@ -115,10 +123,16 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
                                     </div>
                                     {overlay.currentShieldPool > 0 && (
                                         <div
-                                            className="text-[10px] text-blue-400 mt-0.5 truncate"
+                                            className="mt-1 h-1.5 w-full bg-dark-border rounded overflow-hidden"
                                             aria-label={`${fmt(overlay.currentShieldPool)} shield remaining`}
                                         >
-                                            {fmt(overlay.currentShieldPool)} shield
+                                            <div
+                                                className={`h-full bg-blue-400`}
+                                                data-testid={`shield-bar-${position}`}
+                                                style={{
+                                                    width: `${overlay.shieldPct}%`,
+                                                }}
+                                            />
                                         </div>
                                     )}
                                     {!overlay.alive && (

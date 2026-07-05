@@ -15,6 +15,7 @@ const shipState = (over: Partial<ShipRoundState> & { actorId: string }): ShipRou
     incomingShieldAbsorbed: 0,
     incomingBarrierAbsorbed: 0,
     hpPct: 100,
+    shieldPct: 0,
     alive: true,
     activeBuffs: [],
     activeDebuffs: [],

@@ -107,6 +107,7 @@ export interface ShipRoundState {
     incomingBarrierAbsorbed: number;
     /** End-of-round HP%, from maxHp minus cumulative HP loss (incoming HP damage, net of healing). */
     hpPct: number;
+    shieldPct: number;
     alive: boolean;
     activeBuffs: string[];
     /**
@@ -368,6 +369,8 @@ export function assembleBattleResult(args: {
                     entry.maxHp > 0
                         ? clampPct((100 * (entry.maxHp - hpLost + healed)) / entry.maxHp)
                         : 0,
+                shieldPct:
+                    shield?.pool > 0 ? clampPct((100 * (shield?.pool ?? 0)) / entry.maxHp) : 0,
                 alive,
                 activeBuffs: [...(activeBuffs.get(entry.actorId) ?? [])],
                 activeDebuffs: [...(activeDebuffs.get(entry.actorId) ?? [])],
