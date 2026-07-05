@@ -1702,10 +1702,15 @@ describe('parseChargeGain', () => {
         expect(parseChargeGain(text)).toBeNull();
     });
 
-    it('returns null for on-kill gain — Valiant', () => {
+    it('parses on-kill gain as on-enemy-destroyed trigger — Valiant (Phase 3 PR-B)', () => {
         const text =
             'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.';
-        expect(parseChargeGain(text)).toBeNull();
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'always',
+            derivable: true,
+            trigger: 'on-enemy-destroyed',
+        });
     });
 
     it('returns null for ally-grant — Liberator', () => {
