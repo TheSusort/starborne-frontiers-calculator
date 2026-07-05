@@ -32,6 +32,13 @@ export function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
     return slot(buildShipAbilities(ship(over)).slots, name)?.abilities ?? [];
 }
 
+// Ships probed from two SP angles share ONE verbatim text constant (single source of truth → no
+// drift between the two probes; both must stay byte-identical to docs/ship-skills.csv).
+const VORON_PASSIVE2 =
+    'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.';
+const FRONTLINE_PASSIVE2 =
+    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+
 describe('SP0 triage — corpus scaffold', () => {
     it('abilitiesFor helper is available', () => {
         expect(typeof abilitiesFor).toBe('function');
@@ -63,9 +70,8 @@ describe('SP-A — incoming-reduction condition gates', () => {
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: split A+E —
     // this probe owns only the reduction half; the "transforms the damage into a Damage over
-    // Time effect" transform is SP-E (Task 6).
-    const VORON_P2 =
-        'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.';
+    // Time effect" transform is SP-E (Task 6). Text shared with the SP-E probe (VORON_PASSIVE2).
+    const VORON_P2 = VORON_PASSIVE2;
 
     it.fails(
         'Voron: "takes 20% less damage from Damage over Time effects" builds a DoT-scoped incoming-reduction',
@@ -145,9 +151,8 @@ describe('SP-B — new reactive trigger families', () => {
         expect(abilities.some((a) => a.trigger === 'on-enemy-charged-cast')).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
-    const FRONTLINE_P2 =
-        'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+    // Text shared with the SP-G FrontLine shield-amount probe (FRONTLINE_PASSIVE2).
+    const FRONTLINE_P2 = FRONTLINE_PASSIVE2;
 
     // FALSE POSITIVE — locked as a regression guard, NOT assigned to SP-B. Dry-run (plain `it`)
     // against production PASSES today: the same "Phase 4 (Curator / FrontLine)" block already
@@ -425,8 +430,8 @@ describe('SP-E — DoT transforms & conversions', () => {
     // Damage over Time effect" conversion half. SP-A's reduction is only faithful once this
     // transform actually exists (today Voron never generates the DoT the reduction would apply
     // to), so the two halves are coupled even though each ships its own ability.
-    const VORON_P2 =
-        'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.';
+    // Text shared with the SP-A probe (VORON_PASSIVE2).
+    const VORON_P2 = VORON_PASSIVE2;
 
     it.fails(
         'Voron: "transforms the damage into a Damage over Time effect" builds a reactive self-DoT conversion',
@@ -733,10 +738,7 @@ describe('SP-F — deep one-offs', () => {
         // consumed by the engine as CombatActor.chargeLossImmune) already model this literal
         // phrase end to end. Dry-run confirmed `buildShipAbilities(...).chargeLossImmune ===
         // true` for this exact text. Locked as a regression guard, not wrapped in it.fails.
-        const built = buildShipAbilities({
-            refits: [{}, {}, {}, {}],
-            secondPassiveSkillText: LEV_P2,
-        } as never);
+        const built = buildShipAbilities(ship({ secondPassiveSkillText: LEV_P2 }));
         expect(built.chargeLossImmune).toBe(true);
     });
 
@@ -804,14 +806,10 @@ describe('SP-G — engine known-limitations', () => {
     });
 
     // ── FrontLine: charged-cast-reaction shield amount plumbing ─────────────────────────
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — the SAME text
-    // already used by SP-B's FrontLine reactive-trigger FP probe above (that probe covers only
-    // the trigger; this one covers only the shield's magnitude).
-    const FRONTLINE_P2_SPG =
-        'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
-
+    // SAME text as SP-B's FrontLine reactive-trigger FP probe above (that probe covers only the
+    // trigger; this one covers only the shield's magnitude). Single-sourced via FRONTLINE_PASSIVE2.
     it('FrontLine: on-enemy-charged-cast shield ability builds; the KNOWN LIMITATION is its flat attack-basis amount, not the trigger', () => {
-        const abilities = abilitiesFor({ secondPassiveSkillText: FRONTLINE_P2_SPG }, 'passive');
+        const abilities = abilitiesFor({ secondPassiveSkillText: FRONTLINE_PASSIVE2 }, 'passive');
         const shieldReaction = abilities.find(
             (a) => a.type === 'shield' && a.trigger === 'on-enemy-charged-cast'
         );
