@@ -766,6 +766,27 @@ const capType = (s: string): EnemyBaseClass =>
  */
 function countGateCondition(clause: string): Condition | null {
     const low = clause.toLowerCase();
+
+    // SP-D: DoT-stack-count gates. Generic "N or more Damage over Time effects" (Anemone) and
+    // named families "N or more Acidic Decay" (Belladonna). Emit enemy-dot-count; carry the
+    // family name as buffName when a specific DoT is named. Checked FIRST (before the buffs?/
+    // debuffs? matches below) so DoT phrasings never fall through to the generic buff/debuff
+    // classifier (which doesn't recognise "Damage over Time effects"/"Acidic Decay" as a kind)
+    // or further down to the Taunt/Provoke self-status detector (rule 5 in detectGrantConditions,
+    // which would otherwise match the bare word "Taunt" in "gains Taunt" and emit a spurious
+    // self-buff condition instead of the real DoT-count gate).
+    let dotMatch: RegExpMatchArray | null;
+    if ((dotMatch = low.match(/(\d+)\s+or\s+more\s+(damage over time effects?|acidic decay)/))) {
+        const dotFamily = /acidic decay/.test(dotMatch[2]) ? 'Acidic Decay' : undefined;
+        return {
+            subject: 'enemy-dot-count',
+            derivable: true,
+            countComparator: 'gte',
+            countThreshold: parseInt(dotMatch[1], 10),
+            ...(dotFamily ? { buffName: dotFamily } : {}),
+        };
+    }
+
     let comparator: 'gte' | 'lte' | 'eq' | null = null;
     let threshold = 0;
     let kind: string | null = null;

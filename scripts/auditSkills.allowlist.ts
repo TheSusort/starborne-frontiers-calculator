@@ -38,11 +38,6 @@ export const ALLOWLIST: AllowEntry[] = [
     // stat-vs-target detector — so its entry is likewise removed.)
     // Niche counts / conversions / clause-split false positives.
     {
-        ship: 'Belladonna',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Crit-power extension now parsed; remaining: named-DoT count (3+ Acidic Decay → Stasis) + Corrosion→Acidic Decay conversion (team mode).',
-    },
-    {
         ship: 'Oleander',
         rules: ['ungated-effect-with-trigger'],
         reason: 'Trigger ("per debuffed enemy") scopes the repair, not the buff.',

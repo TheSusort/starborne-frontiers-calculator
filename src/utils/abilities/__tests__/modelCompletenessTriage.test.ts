@@ -299,54 +299,50 @@ describe('SP-D — count-based gates', () => {
     const BELLADONNA_CHARGE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
 
-    it.fails(
-        'Belladonna: "If the enemy has 3 or more Acidic Decay, inflict Stasis" is not gated on a named-DoT-stack-count threshold',
-        () => {
-            const abilities = abilitiesFor(
-                { chargeSkillText: BELLADONNA_CHARGE, chargeSkillCharge: 3 },
-                'charged'
-            );
-            const stasis = abilities.find(
-                (a) => a.config.type === 'control' && a.config.effect === 'stasis'
-            );
-            // GAP: SP-D — no named-DoT-stack-count ConditionSubject exists (verified:
-            // countGateCondition in skillTextParser.ts only recognises the literal words
-            // "buffs?"/"debuffs?" in its count-threshold regexes — "Acidic Decay" never matches,
-            // so this clause reaches no count-gate classifier at all). Today the Stasis inflict
-            // builds fully ungated (conditions: []). Proxy: conditions.length, 0 now, must be
-            // >0 once SP-D models the "3+ Acidic Decay stacks on target" gate.
-            expect(stasis?.conditions.length).toBeGreaterThan(0);
-        }
-    );
+    it('Belladonna: "If the enemy has 3 or more Acidic Decay, inflict Stasis" is gated on a named-DoT-stack-count threshold', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: BELLADONNA_CHARGE, chargeSkillCharge: 3 },
+            'charged'
+        );
+        const stasis = abilities.find(
+            (a) => a.config.type === 'control' && a.config.effect === 'stasis'
+        );
+        // CLOSED (SP-D): countGateCondition now recognises "N or more Acidic Decay" and emits a
+        // real enemy-dot-count condition carrying the family name — the Stasis inflict is gated
+        // on the ACTUAL 3+ Acidic Decay threshold. Runtime-inert until SP-E introduces the Acidic
+        // Decay DoT family (enemyDotFamilyCounts defaults every family to 0 until then).
+        expect(
+            stasis?.conditions.some(
+                (c) =>
+                    c.subject === 'enemy-dot-count' &&
+                    c.buffName === 'Acidic Decay' &&
+                    c.countThreshold === 3
+            )
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (charge_skill_text field).
     const ANEMONE_CHARGE =
         'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 
-    it.fails(
-        'Anemone: "If the primary enemy has 3 or more Damage over Time effects, gains Taunt" is not gated on a DoT-stack-count threshold',
-        () => {
-            const abilities = abilitiesFor(
-                { chargeSkillText: ANEMONE_CHARGE, chargeSkillCharge: 3 },
-                'charged'
-            );
-            const taunt = abilities.find(
-                (a) => a.config.type === 'control' && a.config.effect === 'taunt'
-            );
-            // GAP: SP-D — dry-run curiosity, NOT a clean ungated-array case: this ability already
-            // carries ONE condition, `{ subject: 'self-buff', buffName: 'Taunt', derivable: true }`
-            // — but that is a SPURIOUS artifact of an unrelated detector (skillTextParser.ts's
-            // Taunt/Provoke self-status rule matches the bare word "Taunt" anywhere in the
-            // sentence, including in the granted-effect verb "gains Taunt", not just in an actual
-            // "if this Unit is Taunted" gate). It has nothing to do with the "3+ Damage over Time
-            // effects on the primary enemy" count clause, which no ConditionSubject models today
-            // (verified against the full ConditionSubject union). Proxy: a condition whose subject
-            // is something OTHER than that spurious 'self-buff' entry — false now (only the
-            // spurious one is present), true once SP-D adds the real DoT-count gate (regardless
-            // of whether the spurious entry is also cleaned up).
-            expect(taunt?.conditions.some((c) => c.subject !== 'self-buff')).toBe(true);
-        }
-    );
+    it('Anemone: "If the primary enemy has 3 or more Damage over Time effects, gains Taunt" is gated on a DoT-stack-count threshold', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: ANEMONE_CHARGE, chargeSkillCharge: 3 },
+            'charged'
+        );
+        const taunt = abilities.find(
+            (a) => a.config.type === 'control' && a.config.effect === 'taunt'
+        );
+        // CLOSED (SP-D): countGateCondition now recognises "N or more Damage over Time effects"
+        // and emits a real enemy-dot-count condition (no buffName — generic, sums all DoT
+        // families) BEFORE detectGrantConditions' Taunt/Provoke self-status rule ever runs, so
+        // the previously-spurious `{subject:'self-buff', buffName:'Taunt'}` artifact (matched
+        // from the bare word "Taunt" in the granted-effect verb "gains Taunt") no longer appears
+        // at all — countGateCondition returns early with the real gate instead.
+        expect(
+            taunt?.conditions.some((c) => c.subject === 'enemy-dot-count' && c.countThreshold === 3)
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const SNAKEROOT_P2 =

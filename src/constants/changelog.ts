@@ -52,6 +52,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Chakara's active skill now gains a Charged Skill charge only when all damaged enemies have more Speed than her, instead of always granting the charge.",
     "Combat sim: Berserker's Marauder Rage passives now only trigger when its attack actually hits 3 or more enemies, instead of always applying.",
     "Combat sim: Tygr's active skill now adds a Charged Skill charge only when it actually damages 2 or more enemies, instead of always granting the charge (including against a single target).",
+    "Combat sim: Anemone's charged skill now gains Taunt only when the primary enemy actually has 3 or more Damage over Time effects, instead of always granting it. Belladonna's charged skill now models its \"3 or more Acidic Decay\" Stasis gate too, though it won't actually trigger in combat until the Acidic Decay status itself is added in a future update.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
