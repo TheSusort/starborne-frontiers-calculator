@@ -30,6 +30,7 @@ import {
     parseShieldStrip,
     parseConditionalDamage,
     parseEnemyEffectDamageBonus,
+    parseDotEntryDamageScaling,
     parseConditionalStasisApplied,
     parseChargeGain,
     parseAllyChargeOnEnemyDeath,
@@ -1159,7 +1160,10 @@ function abilitiesFromText(
                 type: 'additional-damage',
                 target: 'enemy',
                 trigger: 'on-cast',
-                conditions: [],
+                // SP-C: Cobalt's "If this Unit has more HP than the enemy, it additionally
+                // deals …" owner-vs-target gate, detected clause-scoped by parseSecondaryDamage
+                // (sec.condition). Unconditional riders (the common case) get [].
+                conditions: sec.condition ? [sec.condition] : [],
                 config: { type: 'additional-damage', stat: sec.stat, pct: sec.pct },
                 autoFilled: true,
             },
@@ -1287,6 +1291,32 @@ function abilitiesFromText(
                 perUnit: enemyBonus.pct,
                 cap: enemyBonus.pct,
             };
+        }
+    }
+
+    // SP-D (Task 4/PR-D3): "deals X% damage for every N stacks of damage over time inflicted
+    // on[to] a single enemy" (Snakeroot p1/p2) — an OPEN-ENDED per-DoT-entry SCALING multiplier.
+    // Unlike the enemy-effect BONUS above (a flat, capped add-on to a standing base), the WHOLE
+    // X% here IS the per-N-entries rate, so the base multiplier this row's <unit-damage> tag
+    // parsed into `mult` must be zeroed and replaced entirely by the scaling bonus (0 tracked
+    // DoT entries → 0% damage). Attaches a bare `enemy-dot-count` condition (Task 3) as the
+    // scaling source — bare so `evaluateCondition` returns the raw entry count, not a
+    // threshold-gated 0/1 (see docs/model-completeness-triage… SP-D). Only when no scaling was
+    // attached above (mirrors the other conditional-scaling attach points' precedence).
+    if (
+        out[0]?.ability.type === 'damage' &&
+        out[0].ability.config.type === 'damage' &&
+        !out[0].ability.scaling
+    ) {
+        const dotScaling = parseDotEntryDamageScaling(text);
+        if (dotScaling) {
+            const idx = out[0].ability.conditions.length;
+            out[0].ability.conditions = [
+                ...out[0].ability.conditions,
+                { subject: 'enemy-dot-count', derivable: true },
+            ];
+            out[0].ability.config.multiplier = 0;
+            out[0].ability.scaling = { conditionIndex: idx, perUnit: dotScaling.perUnit };
         }
     }
 

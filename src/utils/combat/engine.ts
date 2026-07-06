@@ -1848,6 +1848,17 @@ export function runCombat(input: CombatEngineInput): {
     // The focus actor's ctx feeds the row exactly as the old single `lastAttackerCtx` did. An
     // entry whose applier has not yet acted this run (faster-enemy round 1) has no ctx → skip.
     const lastTurnCtxByActor = new Map<string, PlayerRoundCtx>();
+    // SP-D: per-actor count of enemies DAMAGED by that actor's most recent cast this round,
+    // for the `enemies-hit-this-cast` gate at REACTIVE drain time (Berserker's Marauder Rage,
+    // drained via the on-deal-damage trigger — a passive-sourced timed self-buff can otherwise
+    // only be seeded once at combat start, before any cast has fired). Sourced from the SAME
+    // `aoeVictimIds` footprint buildTurnArgs already computes for the AoE-purge fan-out (E3) —
+    // the actor's own splash pattern from its resolved anchor position against the LIVE
+    // opposing roster, known BEFORE runPlayerTurn returns (unlike the actual HP application,
+    // which drivePositionalApply performs AFTER). Set at each of the three turn-firing call
+    // sites (focus/team/enemy), mirroring lastTurnCtxByActor's per-turn update. Absent id (no
+    // cast yet) → the enemiesHitThisCastFor delegate below defaults to 1.
+    const enemiesHitThisCastByActor = new Map<string, number>();
 
     // --- Healing mode (healing calc) ---
     // Resolve the heal target up front (throw on an unknown id — the switch must name a
@@ -4963,6 +4974,13 @@ export function runCombat(input: CombatEngineInput): {
                         // every-n-turns). allActorsById covers both sides in a single combat-wide
                         // map — no per-side sideCtx field needed (mirrors wasHitThisRoundFor).
                         turnsTakenFor: (ownerId) => allActorsById.get(ownerId)?.turnsTaken ?? 0,
+                        // SP-D: live per-actor count of enemies damaged by that actor's most
+                        // recent cast this round (Berserker's Marauder Rage, drained via
+                        // on-deal-damage). Combat-wide map — no per-side sideCtx field needed
+                        // (mirrors turnsTakenFor/wasHitThisRoundFor). Absent id → default 1
+                        // (buildDrainContext).
+                        enemiesHitThisCastFor: (ownerId) =>
+                            enemiesHitThisCastByActor.get(ownerId) ?? 1,
                         // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
@@ -5507,8 +5525,9 @@ export function runCombat(input: CombatEngineInput): {
                             // not retroactively satisfy its own per-victim outgoing gate.
                             const preTurnVictimStatus =
                                 snapshotPreTurnVictimStatus(enemyAttackerActors);
+                            const focusTurnArgs = buildTurnArgs(actor, tgt);
                             const turn = runPlayerTurn({
-                                ...buildTurnArgs(actor, tgt),
+                                ...focusTurnArgs,
                                 deferAbilityPerformedToEngine: willApplyPositionally,
                                 onHitBreakStasis: tgtWasStasised
                                     ? (targetId: string) => {
@@ -5739,6 +5758,13 @@ export function runCombat(input: CombatEngineInput): {
 
                             // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
                             lastTurnCtxByActor.set(actor.id, turn.turnCtx);
+                            // SP-D: record this cast's footprint size (aoeVictimIds — undefined in
+                            // DPS/non-positional mode → default 1) for the enemies-hit-this-cast
+                            // drain-time gate.
+                            enemiesHitThisCastByActor.set(
+                                actor.id,
+                                focusTurnArgs.aoeVictimIds?.length ?? 1
+                            );
 
                             // Extra-action grants from this turn bump the attacker's pending-action
                             // count, so selectNextBySpeed re-picks it at its live speed-rank (full extra
@@ -5831,8 +5857,9 @@ export function runCombat(input: CombatEngineInput): {
                             // Sub-project I, PR I2: pre-turn snapshot (mirrors the focus site).
                             const teamPreTurnVictimStatus =
                                 snapshotPreTurnVictimStatus(enemyAttackerActors);
+                            const teamTurnArgs = buildTurnArgs(actor, tgt);
                             const teamTurn = runPlayerTurn({
-                                ...buildTurnArgs(actor, tgt),
+                                ...teamTurnArgs,
                                 deferAbilityPerformedToEngine: teamWillApplyPositionally,
                                 onHitBreakStasis: teamTgtWasStasised
                                     ? (targetId: string) => {
@@ -6034,6 +6061,11 @@ export function runCombat(input: CombatEngineInput): {
                             // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
                             // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
                             lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
+                            // SP-D: record this cast's footprint size (mirrors the focus site).
+                            enemiesHitThisCastByActor.set(
+                                actor.id,
+                                teamTurnArgs.aoeVictimIds?.length ?? 1
+                            );
 
                             // Heal-target buffs: a walked team actor that IS the heal target surfaces its
                             // own comprehensive activeSelfBuffs (incl. recurring Cheat Death/Everliving Regen).
@@ -6369,8 +6401,9 @@ export function runCombat(input: CombatEngineInput): {
                                 // opposing roster is the PLAYER team — allPlayerActors).
                                 enemyPreTurnVictimStatus =
                                     snapshotPreTurnVictimStatus(allPlayerActors);
+                                const enemyTurnArgs = buildTurnArgs(actor, tgt);
                                 const enemyTurn = runPlayerTurn({
-                                    ...buildTurnArgs(actor, tgt),
+                                    ...enemyTurnArgs,
                                     deferAbilityPerformedToEngine: enemyWillApplyPositionally,
                                     onHitBreakStasis: enemyBreakHook,
                                     incomingReductionNonCritPct,
@@ -6427,6 +6460,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                                 // its own future DoT entries would tick with this ctx).
                                 lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
+                                // SP-D: record this cast's footprint size (mirrors the focus/team sites).
+                                enemiesHitThisCastByActor.set(
+                                    actor.id,
+                                    enemyTurnArgs.aoeVictimIds?.length ?? 1
+                                );
                                 // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
                                 // its own active self-buffs and the debuffs it landed on the heal target,
                                 // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded

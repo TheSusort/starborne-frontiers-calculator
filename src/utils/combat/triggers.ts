@@ -977,6 +977,12 @@ export interface IntentExecContext {
     /** The owner's current own-turn counter (CombatActor.turnsTaken). Engine-populated;
      *  absent in DPS mode → defaults 0 (every-n-turns inert). */
     turnsTakenFor?: (ownerId: string) => number;
+    /** SP-D: number of enemies damaged by `ownerId`'s most recent cast this round, feeding the
+     *  `enemies-hit-this-cast` gate at drain time (Berserker's Marauder Rage, drained via the
+     *  on-deal-damage reactive trigger). Engine-populated from the per-turn footprint size;
+     *  absent → buildDrainContext defaults to 1 (no cast yet / DPS mode — a >=2/>=3 gate is
+     *  inert, byte-identical). */
+    enemiesHitThisCastFor?: (ownerId: string) => number;
     /** PR4b: apply a full mitigated/crit-eligible reactive damage hit from `ownerId` against
      *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
      *  on-enemy-cleansed, FrontLine's on-enemy-charged-cast). `abilityId` keys the dedicated
@@ -1102,6 +1108,12 @@ export function buildActorConditionContext(
         /** Owner's own-turn counter (CombatActor.turnsTaken). Default 0 (DPS-assumption).
          *  Populated by buildDrainContext (Phase 0 Task 4). */
         turnsTaken?: number;
+        /** SP-D: number of enemies damaged by the owner's most recent cast this round. Default 1
+         *  (no cast yet / DPS mode). Populated by buildDrainContext from the engine's per-actor
+         *  enemiesHitThisCastFor delegate — REQUIRED for a passive-sourced timed self-buff gated
+         *  on this subject (Berserker's Marauder Rage) to actually re-evaluate on-cast instead of
+         *  only at the one-time combat-start seed (see seedPassiveTimedStatuses). */
+        enemiesHitThisCast?: number;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -1132,6 +1144,7 @@ export function buildActorConditionContext(
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,
         turnsTaken: shared.turnsTaken,
+        enemiesHitThisCast: shared.enemiesHitThisCast,
     });
 }
 
@@ -1186,6 +1199,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // paths read 0 and stay byte-identical (the evaluator's t<=0 guard blocks ALL
         // periods at turn 0, so every-n-turns is never met).
         turnsTaken: ctx.turnsTakenFor?.(ownerId) ?? 0,
+        // SP-D: live enemies-hit-this-cast gate (Berserker's Marauder Rage). Default 1 → DPS /
+        // no-delegate paths keep the single-target assumption (a >=2/>=3 gate stays inert) and
+        // stay byte-identical.
+        enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId) ?? 1,
     });
 }
 

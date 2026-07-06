@@ -47,6 +47,13 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: Voron now correctly takes 20% less damage from Damage-over-Time effects.',
     "Combat sim: Nosorog's Defense Up II now triggers when it removes a debuff (previously fired on every cast).",
     'Combat sim: Malvex now takes 10% less damage while it has an active shield.',
+    "Combat sim: Bayah's charged skill now inflicts Stasis only when she has more Crit Power than the target, instead of always applying it.",
+    "Combat sim: Cobalt's active skill now deals its extra damage (25% of max HP) only when it has more HP than the enemy, instead of always applying the bonus.",
+    "Combat sim: Chakara's active skill now gains a Charged Skill charge only when all damaged enemies have more Speed than her, instead of always granting the charge.",
+    "Combat sim: Berserker's Marauder Rage passives now only trigger when its attack actually hits 3 or more enemies, instead of always applying.",
+    "Combat sim: Tygr's active skill now adds a Charged Skill charge only when it actually damages 2 or more enemies, instead of always granting the charge (including against a single target).",
+    "Combat sim: Anemone's charged skill now gains Taunt only when the primary enemy actually has 3 or more Damage over Time effects, instead of always granting it. Belladonna's charged skill now models its \"3 or more Acidic Decay\" Stasis gate too, though it won't actually trigger in combat until the Acidic Decay status itself is added in a future update.",
+    "Combat sim: Snakeroot's passive bonus damage now actually scales with the number of Damage-over-Time effects on the target (30% per stack, up from a flat 120% regardless of stacks), instead of always applying the full amount.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

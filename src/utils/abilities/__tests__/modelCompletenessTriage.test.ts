@@ -193,46 +193,39 @@ describe('SP-C — stat-comparison gates', () => {
     const BAYAH_CHARGE =
         'This Unit deals <unit-damage>150% damage</unit-damage> plus an additional amount equal to <unit-damage>30%</unit-damage> of its Defense and inflicts <unit-skill>Crit Rate Down II</unit-skill> for 2 turns. If this Unit has more Crit Power than the target, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn.';
 
-    it.fails(
-        'Bayah: "If this Unit has more Crit Power than the target, inflicts Stasis" is not gated on a Crit Power comparison',
-        () => {
-            const abilities = abilitiesFor(
-                { chargeSkillText: BAYAH_CHARGE, chargeSkillCharge: 2 },
-                'charged'
-            );
-            const stasis = abilities.find(
-                (a) => a.config.type === 'control' && a.config.effect === 'stasis'
-            );
-            // GAP: SP-C — no owner-vs-target stat-comparison ConditionSubject exists yet (verified:
-            // `ConditionSubject` in src/types/abilities.ts has no "self stat greater than target
-            // stat" literal; the nearest analogues, `OutgoingCondition['amplify-vs-higher-attack']`
-            // and `HealAmpCondition['target-hp-below-self']`, are narrow single-purpose comparisons
-            // wired only to the Giant Slayer implant / heal-amp seam, not a general gate usable
-            // here). Today the Stasis inflict builds fully ungated (conditions: []). Proxy per the
-            // decision rule: conditions.length, which is 0 now and must be >0 once SP-C models the
-            // Crit-Power-vs-target gate.
-            expect(stasis?.conditions.length).toBeGreaterThan(0);
-        }
-    );
+    it('Bayah: "If this Unit has more Crit Power than the target, inflicts Stasis" is gated on a Crit Power comparison', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: BAYAH_CHARGE, chargeSkillCharge: 2 },
+            'charged'
+        );
+        const stasis = abilities.find(
+            (a) => a.config.type === 'control' && a.config.effect === 'stasis'
+        );
+        // CLOSED (SP-C): the Stasis inflict now carries a real owner-vs-target
+        // stat-vs-target/crit-power/gt condition (detectGrantConditions' new SP-C detector).
+        expect(
+            stasis?.conditions.some(
+                (c) => c.subject === 'stat-vs-target' && c.compareStat === 'crit-power'
+            )
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (active_skill_text field).
     const CHAKARA_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 
-    it.fails(
-        'Chakara: "If all damaged enemies have more Speed than this Unit, adds 1 charge" is not gated on a Speed comparison',
-        () => {
-            const abilities = abilitiesFor({ activeSkillText: CHAKARA_ACTIVE }, 'active');
-            const chargeGain = abilities.find((a) => a.config.type === 'charge');
-            // GAP: SP-C — same missing-comparison-subject gap as Bayah, distinct proxy: this charge
-            // grant already carries a condition, but it's the default unconditional annotation
-            // (subject: 'always', derivable: true) applied to every auto-filled ability, NOT the
-            // "enemies have more Speed than this Unit" comparison from the clause. Proxy: assert a
-            // NON-'always' condition subject is present, false now (only 'always' present), true
-            // once SP-C adds the real Speed-comparison subject.
-            expect(chargeGain?.conditions.some((c) => c.subject !== 'always')).toBe(true);
-        }
-    );
+    it('Chakara: "If all damaged enemies have more Speed than this Unit, adds 1 charge" is gated on a Speed comparison', () => {
+        const abilities = abilitiesFor({ activeSkillText: CHAKARA_ACTIVE }, 'active');
+        const chargeGain = abilities.find((a) => a.config.type === 'charge');
+        // CLOSED (SP-C): parseChargeGain now detects the Speed-comparison clause and carries it
+        // via the existing `conditions` escape hatch (the same mechanism Cobalt's start-of-turn
+        // full-HP gate uses), instead of falling through to the 'always' placeholder.
+        expect(
+            chargeGain?.conditions.some(
+                (c) => c.subject === 'stat-vs-target' && c.compareStat === 'speed'
+            )
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (active_skill_text field). NOTE: Cobalt also appears in
     // SP-G (Task 8) for its passive "adds 1 charge ... at the start of the turn if it is at full
@@ -241,24 +234,24 @@ describe('SP-C — stat-comparison gates', () => {
     const COBALT_ACTIVE =
         "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.";
 
-    it.fails(
-        'Cobalt: "If this Unit has more HP than the enemy, deals additional damage equal to 25% of max HP" is not gated on an HP comparison',
-        () => {
-            const abilities = abilitiesFor({ activeSkillText: COBALT_ACTIVE }, 'active');
-            const bonusDamage = abilities.find(
-                (a) =>
-                    a.config.type === 'additional-damage' &&
-                    a.config.stat === 'hp' &&
-                    a.config.pct === 25
-            );
-            // GAP: SP-C — same missing-comparison-subject gap as Bayah/Chakara. Today the 25%-max-HP
-            // additional-damage ability builds fully ungated (conditions: []). Proxy: conditions.length,
-            // 0 now, must be >0 once SP-C models the owner-HP-vs-target-HP gate. Distinct from the
-            // SP-G start-of-turn full-HP self-check on this same ship's passives (a self-only
-            // threshold, not an owner-vs-target comparison) — no overlap in mechanism.
-            expect(bonusDamage?.conditions.length).toBeGreaterThan(0);
-        }
-    );
+    it('Cobalt: "If this Unit has more HP than the enemy, deals additional damage equal to 25% of max HP" is gated on an HP comparison', () => {
+        const abilities = abilitiesFor({ activeSkillText: COBALT_ACTIVE }, 'active');
+        const bonusDamage = abilities.find(
+            (a) =>
+                a.config.type === 'additional-damage' &&
+                a.config.stat === 'hp' &&
+                a.config.pct === 25
+        );
+        // CLOSED (SP-C): parseSecondaryDamage now detects the owner-vs-target HP comparison
+        // clause preceding this rider and carries it as a real condition. Distinct from the
+        // SP-G start-of-turn full-HP self-check on this same ship's passives (a self-only
+        // threshold, not an owner-vs-target comparison) — no overlap in mechanism.
+        expect(
+            bonusDamage?.conditions.some(
+                (c) => c.subject === 'stat-vs-target' && c.compareStat === 'hp'
+            )
+        ).toBe(true);
+    });
 });
 
 describe('SP-D — count-based gates', () => {
@@ -267,51 +260,38 @@ describe('SP-D — count-based gates', () => {
     const BERSERKER_P2 =
         'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
 
-    it.fails(
-        'Berserker: "gains Marauder Rage II when hitting 3 ore more enemies" is not gated on a hit-count threshold',
-        () => {
-            const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
-            const rageBuff = abilities.find(
-                (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
-            );
-            // GAP: SP-D — no hit-count ConditionSubject exists (verified: ConditionSubject in
-            // src/types/abilities.ts has no "N enemies hit this cast" literal). Today the
-            // Marauder Rage II grant builds fully ungated (conditions: []). Proxy per the
-            // decision rule: conditions.length, 0 now, must be >0 once SP-D models the
-            // "hitting 3+ enemies" gate.
-            expect(rageBuff?.conditions.length).toBeGreaterThan(0);
-        }
-    );
+    it('Berserker: "gains Marauder Rage II when hitting 3 ore more enemies" is gated on a hit-count threshold', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
+        const rageBuff = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
+        );
+        // CLOSED (SP-D): detectGrantConditions now detects the hit-count clause (matching both
+        // "or" and the CSV's "ore" typo) and carries it as a real enemies-hit-this-cast/gte
+        // condition on the buff grant.
+        expect(
+            rageBuff?.conditions.some(
+                (c) =>
+                    c.subject === 'enemies-hit-this-cast' &&
+                    c.countComparator === 'gte' &&
+                    c.countThreshold === 3
+            )
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (active_skill_text field).
     const TYGR_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down II</unit-skill> for 2 turns. If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 
-    it.fails(
-        'Tygr: "If it damages 2 or more enemies, adds 1 charge" is not gated on an actual ≥2 hit-count threshold',
-        () => {
-            const abilities = abilitiesFor({ activeSkillText: TYGR_ACTIVE }, 'active');
-            const chargeGain = abilities.find((a) => a.config.type === 'charge');
-            // GAP: SP-D — dry-run curiosity, NOT a clean FP: classifyChargeCondition
-            // (skillTextParser.ts, matching literal "damages 2") already attaches a non-default
-            // `enemy-adjacent` condition here, reusing the splash-adjacency count as a coarse
-            // presence-only proxy for "hit multiple enemies" — so the naive "a non-'always'
-            // subject is present" proxy (the one used for Chakara/Cobalt in SP-C) is ALREADY
-            // TRUE today and would be a trivially-true trap if used here. Neither call site that
-            // emits 'enemy-adjacent' (skillTextParser.ts) ever sets countComparator/countThreshold
-            // — so today ANY adjacent enemy satisfies the gate (presence, count>0), not the
-            // clause's actual "2 or more". Proxy: countThreshold on the condition, undefined now,
-            // must be set once SP-D models the real ≥N hit-count threshold.
-            // ASSUMPTION: `.find()` takes the first non-'always' condition — valid only if SP-D
-            // augments this existing single condition in place (sets countThreshold on it) rather
-            // than appending a second condition object. The charge-condition slot is single-
-            // condition today (in-place augmentation is the natural extension), so risk is low,
-            // but an append-a-second-condition fix would leave this `.find()` still pointing at
-            // the untouched original and the proxy would never flip.
-            const cond = chargeGain?.conditions.find((c) => c.subject !== 'always');
-            expect(cond?.countThreshold).toBeDefined();
-        }
-    );
+    it('Tygr: "If it damages 2 or more enemies, adds 1 charge" is gated on an actual ≥2 hit-count threshold', () => {
+        const abilities = abilitiesFor({ activeSkillText: TYGR_ACTIVE }, 'active');
+        const chargeGain = abilities.find((a) => a.config.type === 'charge');
+        // CLOSED (SP-D): parseChargeGain now routes this clause through hitCountConditionFromClause
+        // + the `conditions` escape hatch (the same mechanism Chakara's SP-C stat-vs-target gate
+        // uses) — a real enemies-hit-this-cast/gte/2 condition, replacing the old coarse
+        // 'enemy-adjacent' presence-only proxy that never modeled the actual ≥N threshold.
+        const cond = chargeGain?.conditions.find((c) => c.subject !== 'always');
+        expect(cond?.subject === 'enemies-hit-this-cast' && cond?.countThreshold === 2).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (charge_skill_text field). NOTE: Belladonna also
     // appears in SP-E (Task 6) for its passive "convert Corrosion into Acidic Decay" clause —
@@ -319,81 +299,65 @@ describe('SP-D — count-based gates', () => {
     const BELLADONNA_CHARGE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
 
-    it.fails(
-        'Belladonna: "If the enemy has 3 or more Acidic Decay, inflict Stasis" is not gated on a named-DoT-stack-count threshold',
-        () => {
-            const abilities = abilitiesFor(
-                { chargeSkillText: BELLADONNA_CHARGE, chargeSkillCharge: 3 },
-                'charged'
-            );
-            const stasis = abilities.find(
-                (a) => a.config.type === 'control' && a.config.effect === 'stasis'
-            );
-            // GAP: SP-D — no named-DoT-stack-count ConditionSubject exists (verified:
-            // countGateCondition in skillTextParser.ts only recognises the literal words
-            // "buffs?"/"debuffs?" in its count-threshold regexes — "Acidic Decay" never matches,
-            // so this clause reaches no count-gate classifier at all). Today the Stasis inflict
-            // builds fully ungated (conditions: []). Proxy: conditions.length, 0 now, must be
-            // >0 once SP-D models the "3+ Acidic Decay stacks on target" gate.
-            expect(stasis?.conditions.length).toBeGreaterThan(0);
-        }
-    );
+    it('Belladonna: "If the enemy has 3 or more Acidic Decay, inflict Stasis" is gated on a named-DoT-stack-count threshold', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: BELLADONNA_CHARGE, chargeSkillCharge: 3 },
+            'charged'
+        );
+        const stasis = abilities.find(
+            (a) => a.config.type === 'control' && a.config.effect === 'stasis'
+        );
+        // CLOSED (SP-D): countGateCondition now recognises "N or more Acidic Decay" and emits a
+        // real enemy-dot-count condition carrying the family name — the Stasis inflict is gated
+        // on the ACTUAL 3+ Acidic Decay threshold. Runtime-inert until SP-E introduces the Acidic
+        // Decay DoT family (enemyDotFamilyCounts defaults every family to 0 until then).
+        expect(
+            stasis?.conditions.some(
+                (c) =>
+                    c.subject === 'enemy-dot-count' &&
+                    c.buffName === 'Acidic Decay' &&
+                    c.countThreshold === 3
+            )
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (charge_skill_text field).
     const ANEMONE_CHARGE =
         'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 
-    it.fails(
-        'Anemone: "If the primary enemy has 3 or more Damage over Time effects, gains Taunt" is not gated on a DoT-stack-count threshold',
-        () => {
-            const abilities = abilitiesFor(
-                { chargeSkillText: ANEMONE_CHARGE, chargeSkillCharge: 3 },
-                'charged'
-            );
-            const taunt = abilities.find(
-                (a) => a.config.type === 'control' && a.config.effect === 'taunt'
-            );
-            // GAP: SP-D — dry-run curiosity, NOT a clean ungated-array case: this ability already
-            // carries ONE condition, `{ subject: 'self-buff', buffName: 'Taunt', derivable: true }`
-            // — but that is a SPURIOUS artifact of an unrelated detector (skillTextParser.ts's
-            // Taunt/Provoke self-status rule matches the bare word "Taunt" anywhere in the
-            // sentence, including in the granted-effect verb "gains Taunt", not just in an actual
-            // "if this Unit is Taunted" gate). It has nothing to do with the "3+ Damage over Time
-            // effects on the primary enemy" count clause, which no ConditionSubject models today
-            // (verified against the full ConditionSubject union). Proxy: a condition whose subject
-            // is something OTHER than that spurious 'self-buff' entry — false now (only the
-            // spurious one is present), true once SP-D adds the real DoT-count gate (regardless
-            // of whether the spurious entry is also cleaned up).
-            expect(taunt?.conditions.some((c) => c.subject !== 'self-buff')).toBe(true);
-        }
-    );
+    it('Anemone: "If the primary enemy has 3 or more Damage over Time effects, gains Taunt" is gated on a DoT-stack-count threshold', () => {
+        const abilities = abilitiesFor(
+            { chargeSkillText: ANEMONE_CHARGE, chargeSkillCharge: 3 },
+            'charged'
+        );
+        const taunt = abilities.find(
+            (a) => a.config.type === 'control' && a.config.effect === 'taunt'
+        );
+        // CLOSED (SP-D): countGateCondition now recognises "N or more Damage over Time effects"
+        // and emits a real enemy-dot-count condition (no buffName — generic, sums all DoT
+        // families) BEFORE detectGrantConditions' Taunt/Provoke self-status rule ever runs, so
+        // the previously-spurious `{subject:'self-buff', buffName:'Taunt'}` artifact (matched
+        // from the bare word "Taunt" in the granted-effect verb "gains Taunt") no longer appears
+        // at all — countGateCondition returns early with the real gate instead.
+        expect(
+            taunt?.conditions.some((c) => c.subject === 'enemy-dot-count' && c.countThreshold === 3)
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const SNAKEROOT_P2 =
         'This Unit deals <unit-damage>120% damage</unit-damage> for every 4 stacks of damage over time inflicted on to a single enemy.';
 
-    it.fails(
-        'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is not gated/scaled on a DoT-stack count',
+    it(
+        'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is gated/scaled ' +
+            'on the enemy-dot-count entry count (SP-D, PR-D3 — closed)',
         () => {
             const abilities = abilitiesFor({ secondPassiveSkillText: SNAKEROOT_P2 }, 'passive');
-            // GAP: SP-D — this is a per-stack SCALING gate, not a binary threshold: `scaling`
-            // (ScalingRule: `{ conditionIndex, perUnit, cap? }`, a top-level Ability field) is
-            // the EXISTING type-valid mechanism for this shape (used by the self-crit-power/
-            // enemy-stealth-count/conditional-damage scaling sources). It requires BOTH a
-            // DoT-stack-count Condition (which does not exist — same gap as Belladonna/Anemone)
-            // AND a `scaling` rule referencing it. Today the sole ability this clause builds is
-            // flat: `type: 'damage'`, `config.multiplier: 120`, no `scaling` field at all
-            // (verified via dry-run dump of buildShipAbilities' output for this text — one
-            // ability, no scaling). NOT matched on `multiplier === 120`: the faithful fix may
-            // either (a) attach conditions+scaling directly to this same `type: 'damage'`
-            // ability — the parseConditionalDamage precedent (buildShipAbilities.ts ~L1186) — or
-            // (b) reshape the clause into a `type: 'modifier'` ability with a 0 base value and
-            // `scaling.perUnit` carrying the 120 (the "X% (more) damage for each <thing>"
-            // convention, buildShipAbilities.ts ~L403-420); either shape keeps `scaling` as a
-            // top-level Ability field, so the proxy below is flip-valid under both. Proxy:
-            // any damage/modifier/additional-damage-typed ability with `.scaling` defined —
-            // false now (no ability here has `.scaling`), true once SP-D models the "per 4 DoT
-            // stacks on target" scaling gate regardless of which of the two shapes it lands on.
+            // CLOSED: SP-D — attaches conditions+scaling directly to the same `type: 'damage'`
+            // ability (the parseConditionalDamage precedent, buildShipAbilities.ts), zeroing the
+            // base multiplier since the whole 120% IS the per-4-entries rate (0 entries → 0%
+            // damage) — see src/utils/abilities/__tests__/snakerootScaling.test.ts for the full
+            // build-output coverage (base-zeroing + perUnit=30 percentage-points-per-entry).
             const scaled = abilities.find(
                 (a) =>
                     (a.config.type === 'damage' ||
@@ -401,7 +365,10 @@ describe('SP-D — count-based gates', () => {
                         a.config.type === 'additional-damage') &&
                     a.scaling !== undefined
             );
-            expect(scaled).toBeDefined();
+            expect(scaled?.scaling).toBeDefined();
+            expect(scaled!.conditions[scaled!.scaling!.conditionIndex].subject).toBe(
+                'enemy-dot-count'
+            );
         }
     );
 });

@@ -32,6 +32,30 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // by the engine drain context's turnsTakenFor delegate). Evaluated literally so the modulo
     // period gate fires only when turnsTaken % period === offset.
     'every-n-turns',
+    // SP-C: owner-vs-target stat comparison is live-derivable from the acting actor's own
+    // stats vs its target's (ConditionContext.self{CritPower|Speed|CurrentHp}/target{...},
+    // populated by playerTurn.ts's preDebuffGateCtx/postDebuffGateCtx/ctx). Needed here for
+    // Bayah's crit-power-gated Stasis INFLICT — a named timed enemy debuff, gated at
+    // application via this liveGateConditions rewrite, not just the payload `ctx` that drives
+    // the `type:'control'` ability's `control-applied` reaction event.
+    'stat-vs-target',
+    // SP-D: number of enemies damaged by this cast is live-derivable — the positional engine
+    // knows the firing actor's per-cast footprint size (ConditionContext.enemiesHitThisCast,
+    // populated at reactive drain time by buildDrainContext/buildActorConditionContext, and at
+    // cast time by playerTurn.ts's ctx builders). Needed here for Berserker's Marauder Rage I/II
+    // — a timed self-buff gated on "hitting 3+ enemies", drained via the on-deal-damage reactive
+    // trigger (a passive-sourced timed self-buff can otherwise only be seeded once at combat
+    // start, before any cast has happened — see seedPassiveTimedStatuses).
+    'enemies-hit-this-cast',
+    // SP-D: per-target DoT-only entry count is live-derivable — buildRoundContext derives
+    // ConditionContext.enemyDotCount from the SAME corrosionEntryCount/infernoEntryCount/
+    // bombCount already threaded through preDebuffGateCtx/postDebuffGateCtx (populated at cast
+    // time by playerTurn.ts's ctx builders, and at reactive drain time by
+    // buildDrainContext/buildActorConditionContext). Needed here for Anemone's Taunt (a timed
+    // SELF-buff gated on "3+ Damage over Time effects on the primary enemy") and Belladonna's
+    // Stasis (a timed ENEMY debuff gated on "3+ Acidic Decay") — without this, both conditions
+    // would be neutralized to 'always' and grant/inflict unconditionally.
+    'enemy-dot-count',
 ]);
 
 /**

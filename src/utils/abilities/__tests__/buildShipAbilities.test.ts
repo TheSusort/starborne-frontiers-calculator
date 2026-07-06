@@ -81,8 +81,15 @@ describe('buildShipAbilities', () => {
         const charge = abilityOfType(active!.abilities, 'charge');
         expect(charge).toBeDefined();
         expect(charge!.config).toMatchObject({ type: 'charge', amount: 1 });
-        // Speed condition is classified 'always'/derivable by parseChargeGain.
-        expect(charge!.conditions[0]).toMatchObject({ subject: 'always', derivable: true });
+        // SP-C: "If all damaged enemies have more Speed than this Unit" is now modelled as a
+        // real owner-vs-target stat-comparison gate (previously fell through to the
+        // 'always'/derivable placeholder — see modelCompletenessTriage.test.ts SP-C).
+        expect(charge!.conditions[0]).toMatchObject({
+            subject: 'stat-vs-target',
+            derivable: true,
+            compareStat: 'speed',
+            statComparator: 'lt',
+        });
     });
 
     it('Cobalt passive: start-of-turn self-charge gated by full HP (Phase 3)', () => {

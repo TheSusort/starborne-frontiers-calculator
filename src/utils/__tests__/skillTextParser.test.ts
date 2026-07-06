@@ -1557,13 +1557,23 @@ describe('parseHpThresholdCondition', () => {
 });
 
 describe('parseChargeGain', () => {
-    it('parses always-true (speed) self gain — Chakara', () => {
+    it('parses the Speed-comparison self gain as a stat-vs-target gate — Chakara', () => {
         const text =
             'This Unit deals <unit-damage>180% damage</unit-damage>. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+        // SP-C: 'always'/derivable is a placeholder (mirrors the Cobalt start-of-turn shape
+        // below) — the real gate rides `conditions`.
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'always',
             derivable: true,
+            conditions: [
+                {
+                    subject: 'stat-vs-target',
+                    derivable: true,
+                    compareStat: 'speed',
+                    statComparator: 'lt',
+                },
+            ],
         });
     });
 
@@ -1655,13 +1665,24 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('parses "2 or more enemies" as enemy-adjacent (manual) — Tygr', () => {
+    it('parses "2 or more enemies" as a real enemies-hit-this-cast gate — Tygr', () => {
         const text =
             'If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+        // SP-D: 'always'/derivable is a placeholder (mirrors the Chakara stat-vs-target shape
+        // above) — the real gate rides `conditions`. Previously fell through to a coarse
+        // 'enemy-adjacent' presence-only proxy that never modeled the actual ≥2 threshold.
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
-            condition: 'enemy-adjacent',
-            derivable: false,
+            condition: 'always',
+            derivable: true,
+            conditions: [
+                {
+                    subject: 'enemies-hit-this-cast',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 2,
+                },
+            ],
         });
     });
 

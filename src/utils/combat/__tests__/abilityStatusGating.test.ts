@@ -94,3 +94,34 @@ describe('liveGateConditions — not-hit-this-round (D-PR8)', () => {
         expect(out[0].subject).toBe('not-hit-this-round');
     });
 });
+
+describe('liveGateConditions — enemy-dot-count (SP-D)', () => {
+    // Guards the LIVE_SUBJECTS membership: if this subject is ever dropped from LIVE_SUBJECTS,
+    // Anemone's Taunt (a timed self-buff) and Belladonna's Stasis (a timed enemy debuff) would
+    // both neutralize to 'always' and fire/land unconditionally, ignoring the "3+ DoT effects"
+    // gate entirely.
+    it('keeps a derivable enemy-dot-count condition (does NOT neutralize to always)', () => {
+        const conds: Condition[] = [
+            {
+                subject: 'enemy-dot-count',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 3,
+            },
+        ];
+        expect(liveGateConditions(conds)).toEqual(conds);
+    });
+
+    it('keeps a derivable named-family enemy-dot-count condition (Belladonna Acidic Decay)', () => {
+        const conds: Condition[] = [
+            {
+                subject: 'enemy-dot-count',
+                derivable: true,
+                buffName: 'Acidic Decay',
+                countComparator: 'gte',
+                countThreshold: 3,
+            },
+        ];
+        expect(liveGateConditions(conds)).toEqual(conds);
+    });
+});

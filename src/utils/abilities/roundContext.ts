@@ -62,6 +62,25 @@ export function buildRoundContext(state: {
      *  power known to this caller — DPS-safe / inert for every ship besides Wildfire). Only
      *  runPlayerTurn's modifierCtx passes a real value. See ConditionContext.selfCritPower. */
     selfCritPower?: number;
+    /** SP-C — target's crit power. Default 0 (no enemy crit-power config). */
+    targetCritPower?: number;
+    /** SP-C — owner Speed. Default 0. */
+    selfSpeed?: number;
+    /** SP-C — comparison target Speed (DPS: enemySpeed; engine: min damaged-enemy speed). Default 0. */
+    targetSpeed?: number;
+    /** SP-C — owner absolute current HP. Default 0 (DPS callers pass ship max HP). */
+    selfCurrentHp?: number;
+    /** SP-C — target absolute current HP (DPS: enemyHp). Default 0. */
+    targetCurrentHp?: number;
+    /** SP-D — number of enemies damaged by this cast. Default 1 (DPS single-target mode).
+     *  Positional callers pass the real per-cast footprint size (0 is a real value — an
+     *  empty/whiffed footprint — and is NOT re-defaulted here). See
+     *  ConditionContext.enemiesHitThisCast. */
+    enemiesHitThisCast?: number;
+    /** SP-D — optional per-family DoT entry count lookup (Belladonna's named "3+ Acidic Decay"
+     *  gate). Default undefined (no family tracking today — every family reads 0 via
+     *  ConditionContext.enemyDotFamilyCounts' own fallback). See ConditionContext.enemyDotFamilyCounts. */
+    enemyDotFamilyCounts?: Record<string, number>;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -90,6 +109,19 @@ export function buildRoundContext(state: {
         turnsTaken: state.turnsTaken ?? 0,
         stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
         selfCritPower: state.selfCritPower ?? 0,
+        targetCritPower: state.targetCritPower ?? 0,
+        selfSpeed: state.selfSpeed ?? 0,
+        targetSpeed: state.targetSpeed ?? 0,
+        selfCurrentHp: state.selfCurrentHp ?? 0,
+        targetCurrentHp: state.targetCurrentHp ?? 0,
+        enemiesHitThisCast: state.enemiesHitThisCast ?? 1,
+        // SP-D — DoT-ONLY subtotal, derived from the SAME entry counts already folded into
+        // enemyDebuffCount above. Deliberately excludes landedEnemyDebuffCount (control/marker
+        // debuffs) — that is the whole DoT-ONLY point of this subject vs `enemy-debuff`.
+        enemyDotCount: state.corrosionEntryCount + state.infernoEntryCount + state.bombCount,
+        ...(state.enemyDotFamilyCounts !== undefined
+            ? { enemyDotFamilyCounts: state.enemyDotFamilyCounts }
+            : {}),
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
         // Sentinel spread (sub-project I, PR I1): only set the key when the caller passed a
         // real array — an explicit `undefined` value would collapse to the same runtime

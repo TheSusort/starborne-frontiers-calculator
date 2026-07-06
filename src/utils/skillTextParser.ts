@@ -366,7 +366,12 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
         : statRaw.includes('shield')
           ? 'shield'
           : 'defense';
-    return { stat, pct };
+    // SP-C: a leading "If this Unit has more HP/Crit Power than the target/enemy, it
+    // additionally deals …" gate on THIS rider (Cobalt). sentencePrefix is exactly the clause
+    // text preceding the secondary-damage tag within the same sentence, so this is naturally
+    // scoped to the rider's own gate and can't pick up an unrelated earlier-sentence comparison.
+    const condition = statVsTargetConditionFromClause(sentencePrefix);
+    return { stat, pct, ...(condition ? { condition } : {}) };
 }
 
 /**
@@ -596,6 +601,33 @@ export function parseEnemyEffectDamageBonus(
     return null;
 }
 
+// "deals X% damage for every N stacks/entries of damage over time inflicted on[to] a single
+// enemy" (Snakeroot p1/p2: "100% damage for every 7 stacks…" / "120% damage for every 4
+// stacks…") — an OPEN-ENDED per-DoT-entry SCALING multiplier, distinct from
+// parseConditionalDamage's "for each" additive-bonus shape (CONDITIONAL_RE only matches
+// "for each", never "for every" — no collision). Here the WHOLE X% IS the per-N-entries rate:
+// with 0 tracked DoT entries on the target the ability deals 0% damage, so the base multiplier
+// the caller parsed from the same <unit-damage> tag must be zeroed and replaced by a `scaling`
+// rule against the (Task 3) `enemy-dot-count` condition, perUnit = X / N (matches the
+// enemy-stealth-count/self-crit-power precedent: bare `enemy-dot-count` resolves to the raw
+// integer DoT-entry count, so perUnit is expressed in full percentage points per entry, NOT a
+// 0..1 fraction — that fractional form is reserved for the 0..100-scaled enemy-hp-pct/
+// enemy-hp-missing-pct scaling sources).
+const DOT_ENTRY_SCALING_RE =
+    /(\d+(?:\.\d+)?)%\s*damage\s+for every\s+(\d+)\s+stacks?\s+of\s+damage over time\s+inflicted\s+on\s*to?\s+a\s+single\s+enemy/i;
+
+export function parseDotEntryDamageScaling(
+    text: string | null | undefined
+): { perUnit: number } | null {
+    if (!text) return null;
+    const m = DOT_ENTRY_SCALING_RE.exec(stripUnitTags(text));
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    const n = parseInt(m[2], 10);
+    if (!n) return null;
+    return { perUnit: pct / n };
+}
+
 // "if/when [this unit|it is] critical[ly hits], … additional[ly] … N% damage" — extra damage
 // dealt on a crit. Covers Crucialis active ("if critical, additionally deals 75%") and its
 // charged "deals and additional" typo phrasing ("when it is critical, deals and additional 190%").
@@ -725,12 +757,10 @@ function classifyChargeCondition(
         p.includes('number of buffs')
     )
         return { condition: 'enemy-buff', derivable: false };
-    if (
-        p.includes('2 or more enemies') ||
-        p.includes('two or more enemies') ||
-        p.includes('damages 2')
-    )
-        return { condition: 'enemy-adjacent', derivable: false };
+    // NOTE: "N or more enemies" / "damages N" hit-count phrasings (Tygr) are handled upstream
+    // in parseChargeGain via hitCountConditionFromClause + the `conditions` escape hatch (SP-D)
+    // — they used to fall through to a coarse 'enemy-adjacent' presence proxy here, which never
+    // modeled the actual ≥N threshold; that branch was removed rather than left dead/misleading.
     // speed / full-HP / lowest-speed and anything else → always-true under sim assumptions
     return { condition: 'always', derivable: true };
 }
@@ -763,6 +793,27 @@ const capType = (s: string): EnemyBaseClass =>
  */
 function countGateCondition(clause: string): Condition | null {
     const low = clause.toLowerCase();
+
+    // SP-D: DoT-stack-count gates. Generic "N or more Damage over Time effects" (Anemone) and
+    // named families "N or more Acidic Decay" (Belladonna). Emit enemy-dot-count; carry the
+    // family name as buffName when a specific DoT is named. Checked FIRST (before the buffs?/
+    // debuffs? matches below) so DoT phrasings never fall through to the generic buff/debuff
+    // classifier (which doesn't recognise "Damage over Time effects"/"Acidic Decay" as a kind)
+    // or further down to the Taunt/Provoke self-status detector (rule 5 in detectGrantConditions,
+    // which would otherwise match the bare word "Taunt" in "gains Taunt" and emit a spurious
+    // self-buff condition instead of the real DoT-count gate).
+    let dotMatch: RegExpMatchArray | null;
+    if ((dotMatch = low.match(/(\d+)\s+or\s+more\s+(damage over time effects?|acidic decay)/))) {
+        const dotFamily = /acidic decay/.test(dotMatch[2]) ? 'Acidic Decay' : undefined;
+        return {
+            subject: 'enemy-dot-count',
+            derivable: true,
+            countComparator: 'gte',
+            countThreshold: parseInt(dotMatch[1], 10),
+            ...(dotFamily ? { buffName: dotFamily } : {}),
+        };
+    }
+
     let comparator: 'gte' | 'lte' | 'eq' | null = null;
     let threshold = 0;
     let kind: string | null = null;
@@ -878,6 +929,56 @@ function resolveBuffClause(skillText: string, buffName: string): string {
     return clauseMasked.split(ABBR_MARK).join(' ');
 }
 
+/**
+ * SP-C: owner-vs-target stat comparison gate, matched against an already-lowercased clause/
+ * sentence. "If this Unit has more Crit Power/HP than the target/enemy" (owner greater → gt);
+ * "If all damaged enemies have more Speed than this Unit" (owner slower → speed lt). Shared by
+ * `detectGrantConditions` (buff/debuff clauses, scoped via resolveBuffClause) and
+ * `parseSecondaryDamage` (Cobalt's nameless 25%-max-HP additional-damage rider, which has no
+ * buffName to drive that clause-scoping — it scopes to the SENTENCE preceding the secondary-
+ * damage match instead). Returns null when no comparison phrasing is present.
+ */
+function statVsTargetConditionFromClause(low: string): Condition | null {
+    if (/this unit has more crit power than the (?:target|enemy)/i.test(low))
+        return {
+            subject: 'stat-vs-target',
+            derivable: true,
+            compareStat: 'crit-power',
+            statComparator: 'gt',
+        };
+    if (/this unit has more hp than the (?:target|enemy)/i.test(low))
+        return {
+            subject: 'stat-vs-target',
+            derivable: true,
+            compareStat: 'hp',
+            statComparator: 'gt',
+        };
+    if (/(?:all\s+)?(?:damaged\s+)?enemies have more speed than this unit/i.test(low))
+        return {
+            subject: 'stat-vs-target',
+            derivable: true,
+            compareStat: 'speed',
+            statComparator: 'lt',
+        };
+    return null;
+}
+
+// SP-D: "hitting N or more enemies" / "damages N or more enemies" — a real hit-count gate on
+// THIS cast (Berserker's passive Marauder Rage grants; Tygr's self-charge-gain). Shared by
+// `detectGrantConditions` (buff clauses) and `parseChargeGain` (Tygr's charge-gain, via the same
+// `conditions` escape hatch statVsTargetConditionFromClause uses for Chakara) — CSV note:
+// Berserker's text has a typo "N ore more" — the `or?e?` group matches both "or" and "ore".
+function hitCountConditionFromClause(low: string): Condition | null {
+    const m = low.match(/(?:hitting|damages?|damaging)\s+(\d+)\s+or?e?\s+more\s+enemies/);
+    if (!m) return null;
+    return {
+        subject: 'enemies-hit-this-cast',
+        derivable: true,
+        countComparator: 'gte',
+        countThreshold: parseInt(m[1], 10),
+    };
+}
+
 export function detectGrantConditions(
     skillText: string | null | undefined,
     buffName: string
@@ -967,6 +1068,17 @@ export function detectGrantConditions(
     if (/\blowest\s+speed\s+among\s+(?:all\s+)?allies\b/i.test(low)) {
         return [{ subject: 'lowest-speed-ally', derivable: true }];
     }
+
+    // SP-C: owner-vs-target stat comparison (Bayah's Crit-Power-gated Stasis inflict). Shared
+    // with parseSecondaryDamage below (Cobalt's nameless additional-damage rider has no buffName
+    // to drive this function's clause-scoping, so it calls the extracted helper directly).
+    const statVsTarget = statVsTargetConditionFromClause(low);
+    if (statVsTarget) return [statVsTarget];
+
+    // SP-D: hit-count gate (Berserker's "gains Marauder Rage ... when hitting 3 or more
+    // enemies"). Shared with parseChargeGain below (Tygr's charge-gain analog).
+    const hitCount = hitCountConditionFromClause(low);
+    if (hitCount) return [hitCount];
 
     // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
     const countGate = countGateCondition(clause);
@@ -1154,6 +1266,13 @@ export function detectReactiveTrigger(
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
     if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
+    // SP-D (Berserker): "gains <Buff> for N turns when hitting 3 ore more enemies" is a
+    // reaction to THIS UNIT's own damage-dealing action (same family as the self-crit rule
+    // above), not a combat-start-only fact — route it through on-deal-damage so the drain-time
+    // enemies-hit-this-cast gate (still carried in `conditions`, untouched here) re-evaluates on
+    // every damage-dealing cast instead of being seeded once at combat start (which can never
+    // observe a real hit count before any turn has fired).
+    if (hitCountConditionFromClause(clause.toLowerCase())) return 'on-deal-damage';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
     // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
     // shares its governing trailing phrase with its sibling charge ability (already
@@ -2675,6 +2794,27 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
                 },
             ],
         };
+    }
+
+    // SP-C (Chakara): "If all damaged enemies have more Speed than this Unit, it adds 1 charge
+    // to its Charged Skill" — an owner-vs-target stat-comparison gate on a self-charge-gain.
+    // Same `conditions` escape hatch as the Cobalt start-of-turn branch above (condition:'always'
+    // is a placeholder; the real gate rides `conditions`) — this avoids widening
+    // `ConditionalCondition` (a closed union with no general stat-comparison member) for a gate
+    // that already has a dedicated, richer `Condition` representation.
+    const statVsTarget = statVsTargetConditionFromClause(low);
+    if (statVsTarget) {
+        return { amount, condition: 'always', derivable: true, conditions: [statVsTarget] };
+    }
+
+    // SP-D (Tygr): "If it damages 2 or more enemies, it adds 1 charge to its Charged Skill" —
+    // a real hit-count gate on THIS cast's self-charge-gain. Same `conditions` escape hatch as
+    // the Chakara branch above. Previously fell through to classifyChargeCondition's
+    // 'enemy-adjacent' branch (a coarse presence-only proxy that never modeled the actual ≥N
+    // threshold — removed there since this is now the sole route for that phrasing).
+    const hitCount = hitCountConditionFromClause(low);
+    if (hitCount) {
+        return { amount, condition: 'always', derivable: true, conditions: [hitCount] };
     }
 
     const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);
