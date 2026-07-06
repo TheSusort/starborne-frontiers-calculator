@@ -295,7 +295,14 @@ export type ConditionSubject =
     // defaults compare the acting ship's stats against the CONFIGURED enemy (unset stat → 0);
     // the positional engine uses real actor stats (Chakara's aggregate: targetSpeed = MIN speed
     // among damaged enemies). Always derivable:true.
-    | 'stat-vs-target';
+    | 'stat-vs-target'
+    // Model-completeness SP-D: COUNT subject — the number of enemies DAMAGED by THIS cast
+    // (Berserker's "gains Marauder Rage II ... when hitting 3 or more enemies"; Tygr's "if it
+    // damages 2 or more enemies, adds 1 charge"). DPS mode has no multi-target concept → defaults
+    // to 1 (the single configured enemy), so a ≥2/≥3 gate is inert (not met) in single-target DPS
+    // — the faithful behaviour (Tygr genuinely doesn't add charge against a single target). The
+    // positional engine live-derives the real per-cast footprint size. Always derivable:true.
+    | 'enemies-hit-this-cast';
 
 export interface Condition {
     subject: ConditionSubject;

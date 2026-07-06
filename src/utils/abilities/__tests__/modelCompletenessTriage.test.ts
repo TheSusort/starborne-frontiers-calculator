@@ -260,51 +260,38 @@ describe('SP-D — count-based gates', () => {
     const BERSERKER_P2 =
         'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
 
-    it.fails(
-        'Berserker: "gains Marauder Rage II when hitting 3 ore more enemies" is not gated on a hit-count threshold',
-        () => {
-            const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
-            const rageBuff = abilities.find(
-                (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
-            );
-            // GAP: SP-D — no hit-count ConditionSubject exists (verified: ConditionSubject in
-            // src/types/abilities.ts has no "N enemies hit this cast" literal). Today the
-            // Marauder Rage II grant builds fully ungated (conditions: []). Proxy per the
-            // decision rule: conditions.length, 0 now, must be >0 once SP-D models the
-            // "hitting 3+ enemies" gate.
-            expect(rageBuff?.conditions.length).toBeGreaterThan(0);
-        }
-    );
+    it('Berserker: "gains Marauder Rage II when hitting 3 ore more enemies" is gated on a hit-count threshold', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
+        const rageBuff = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
+        );
+        // CLOSED (SP-D): detectGrantConditions now detects the hit-count clause (matching both
+        // "or" and the CSV's "ore" typo) and carries it as a real enemies-hit-this-cast/gte
+        // condition on the buff grant.
+        expect(
+            rageBuff?.conditions.some(
+                (c) =>
+                    c.subject === 'enemies-hit-this-cast' &&
+                    c.countComparator === 'gte' &&
+                    c.countThreshold === 3
+            )
+        ).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (active_skill_text field).
     const TYGR_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down II</unit-skill> for 2 turns. If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 
-    it.fails(
-        'Tygr: "If it damages 2 or more enemies, adds 1 charge" is not gated on an actual ≥2 hit-count threshold',
-        () => {
-            const abilities = abilitiesFor({ activeSkillText: TYGR_ACTIVE }, 'active');
-            const chargeGain = abilities.find((a) => a.config.type === 'charge');
-            // GAP: SP-D — dry-run curiosity, NOT a clean FP: classifyChargeCondition
-            // (skillTextParser.ts, matching literal "damages 2") already attaches a non-default
-            // `enemy-adjacent` condition here, reusing the splash-adjacency count as a coarse
-            // presence-only proxy for "hit multiple enemies" — so the naive "a non-'always'
-            // subject is present" proxy (the one used for Chakara/Cobalt in SP-C) is ALREADY
-            // TRUE today and would be a trivially-true trap if used here. Neither call site that
-            // emits 'enemy-adjacent' (skillTextParser.ts) ever sets countComparator/countThreshold
-            // — so today ANY adjacent enemy satisfies the gate (presence, count>0), not the
-            // clause's actual "2 or more". Proxy: countThreshold on the condition, undefined now,
-            // must be set once SP-D models the real ≥N hit-count threshold.
-            // ASSUMPTION: `.find()` takes the first non-'always' condition — valid only if SP-D
-            // augments this existing single condition in place (sets countThreshold on it) rather
-            // than appending a second condition object. The charge-condition slot is single-
-            // condition today (in-place augmentation is the natural extension), so risk is low,
-            // but an append-a-second-condition fix would leave this `.find()` still pointing at
-            // the untouched original and the proxy would never flip.
-            const cond = chargeGain?.conditions.find((c) => c.subject !== 'always');
-            expect(cond?.countThreshold).toBeDefined();
-        }
-    );
+    it('Tygr: "If it damages 2 or more enemies, adds 1 charge" is gated on an actual ≥2 hit-count threshold', () => {
+        const abilities = abilitiesFor({ activeSkillText: TYGR_ACTIVE }, 'active');
+        const chargeGain = abilities.find((a) => a.config.type === 'charge');
+        // CLOSED (SP-D): parseChargeGain now routes this clause through hitCountConditionFromClause
+        // + the `conditions` escape hatch (the same mechanism Chakara's SP-C stat-vs-target gate
+        // uses) — a real enemies-hit-this-cast/gte/2 condition, replacing the old coarse
+        // 'enemy-adjacent' presence-only proxy that never modeled the actual ≥N threshold.
+        const cond = chargeGain?.conditions.find((c) => c.subject !== 'always');
+        expect(cond?.subject === 'enemies-hit-this-cast' && cond?.countThreshold === 2).toBe(true);
+    });
 
     // Verbatim from docs/ship-skills.csv (charge_skill_text field). NOTE: Belladonna also
     // appears in SP-E (Task 6) for its passive "convert Corrosion into Acidic Decay" clause —

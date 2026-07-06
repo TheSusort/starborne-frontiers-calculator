@@ -730,12 +730,10 @@ function classifyChargeCondition(
         p.includes('number of buffs')
     )
         return { condition: 'enemy-buff', derivable: false };
-    if (
-        p.includes('2 or more enemies') ||
-        p.includes('two or more enemies') ||
-        p.includes('damages 2')
-    )
-        return { condition: 'enemy-adjacent', derivable: false };
+    // NOTE: "N or more enemies" / "damages N" hit-count phrasings (Tygr) are handled upstream
+    // in parseChargeGain via hitCountConditionFromClause + the `conditions` escape hatch (SP-D)
+    // — they used to fall through to a coarse 'enemy-adjacent' presence proxy here, which never
+    // modeled the actual ≥N threshold; that branch was removed rather than left dead/misleading.
     // speed / full-HP / lowest-speed and anything else → always-true under sim assumptions
     return { condition: 'always', derivable: true };
 }
@@ -917,6 +915,22 @@ function statVsTargetConditionFromClause(low: string): Condition | null {
     return null;
 }
 
+// SP-D: "hitting N or more enemies" / "damages N or more enemies" — a real hit-count gate on
+// THIS cast (Berserker's passive Marauder Rage grants; Tygr's self-charge-gain). Shared by
+// `detectGrantConditions` (buff clauses) and `parseChargeGain` (Tygr's charge-gain, via the same
+// `conditions` escape hatch statVsTargetConditionFromClause uses for Chakara) — CSV note:
+// Berserker's text has a typo "N ore more" — the `or?e?` group matches both "or" and "ore".
+function hitCountConditionFromClause(low: string): Condition | null {
+    const m = low.match(/(?:hitting|damages?|damaging)\s+(\d+)\s+or?e?\s+more\s+enemies/);
+    if (!m) return null;
+    return {
+        subject: 'enemies-hit-this-cast',
+        derivable: true,
+        countComparator: 'gte',
+        countThreshold: parseInt(m[1], 10),
+    };
+}
+
 export function detectGrantConditions(
     skillText: string | null | undefined,
     buffName: string
@@ -1012,6 +1026,11 @@ export function detectGrantConditions(
     // to drive this function's clause-scoping, so it calls the extracted helper directly).
     const statVsTarget = statVsTargetConditionFromClause(low);
     if (statVsTarget) return [statVsTarget];
+
+    // SP-D: hit-count gate (Berserker's "gains Marauder Rage ... when hitting 3 or more
+    // enemies"). Shared with parseChargeGain below (Tygr's charge-gain analog).
+    const hitCount = hitCountConditionFromClause(low);
+    if (hitCount) return [hitCount];
 
     // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
     const countGate = countGateCondition(clause);
@@ -2731,6 +2750,16 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     const statVsTarget = statVsTargetConditionFromClause(low);
     if (statVsTarget) {
         return { amount, condition: 'always', derivable: true, conditions: [statVsTarget] };
+    }
+
+    // SP-D (Tygr): "If it damages 2 or more enemies, it adds 1 charge to its Charged Skill" —
+    // a real hit-count gate on THIS cast's self-charge-gain. Same `conditions` escape hatch as
+    // the Chakara branch above. Previously fell through to classifyChargeCondition's
+    // 'enemy-adjacent' branch (a coarse presence-only proxy that never modeled the actual ≥N
+    // threshold — removed there since this is now the sole route for that phrasing).
+    const hitCount = hitCountConditionFromClause(low);
+    if (hitCount) {
+        return { amount, condition: 'always', derivable: true, conditions: [hitCount] };
     }
 
     const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);

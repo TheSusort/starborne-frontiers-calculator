@@ -72,6 +72,11 @@ export function buildRoundContext(state: {
     selfCurrentHp?: number;
     /** SP-C — target absolute current HP (DPS: enemyHp). Default 0. */
     targetCurrentHp?: number;
+    /** SP-D — number of enemies damaged by this cast. Default 1 (DPS single-target mode).
+     *  Positional callers pass the real per-cast footprint size (0 is a real value — an
+     *  empty/whiffed footprint — and is NOT re-defaulted here). See
+     *  ConditionContext.enemiesHitThisCast. */
+    enemiesHitThisCast?: number;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -105,6 +110,7 @@ export function buildRoundContext(state: {
         targetSpeed: state.targetSpeed ?? 0,
         selfCurrentHp: state.selfCurrentHp ?? 0,
         targetCurrentHp: state.targetCurrentHp ?? 0,
+        enemiesHitThisCast: state.enemiesHitThisCast ?? 1,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
         // Sentinel spread (sub-project I, PR I1): only set the key when the caller passed a
         // real array — an explicit `undefined` value would collapse to the same runtime

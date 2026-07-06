@@ -85,6 +85,10 @@ export interface ConditionContext {
     selfCurrentHp?: number;
     /** SP-C — target's ABSOLUTE current HP (not %). Default 0. DPS: configured enemyHp. */
     targetCurrentHp?: number;
+    /** SP-D — the number of enemies DAMAGED by THIS cast (Berserker/Tygr's "hitting N or more
+     *  enemies" gates). Default 1 (DPS single-target mode — a ≥2/≥3 gate is inert, the faithful
+     *  behaviour). Live-derived by the positional engine from the firing actor's footprint. */
+    enemiesHitThisCast?: number;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -131,6 +135,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.stealthedEnemyCount ?? 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
+        case 'enemies-hit-this-cast':
+            return ctx.enemiesHitThisCast ?? 1;
         case 'stat-vs-target': {
             const self =
                 cond.compareStat === 'crit-power'

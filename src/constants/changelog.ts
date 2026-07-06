@@ -50,6 +50,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Bayah's charged skill now inflicts Stasis only when she has more Crit Power than the target, instead of always applying it.",
     "Combat sim: Cobalt's active skill now deals its extra damage (25% of max HP) only when it has more HP than the enemy, instead of always applying the bonus.",
     "Combat sim: Chakara's active skill now gains a Charged Skill charge only when all damaged enemies have more Speed than her, instead of always granting the charge.",
+    "Combat sim: Berserker's Marauder Rage passives now only trigger when its attack actually hits 3 or more enemies, instead of always applying.",
+    "Combat sim: Tygr's active skill now adds a Charged Skill charge only when it actually damages 2 or more enemies, instead of always granting the charge (including against a single target).",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
