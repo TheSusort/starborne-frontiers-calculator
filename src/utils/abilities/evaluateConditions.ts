@@ -72,6 +72,19 @@ export interface ConditionContext {
      *  critDamage itself). Defaults to 0 everywhere else (DPS-safe: no other ConditionContext
      *  builder populates it, so it's inert for every ship besides Wildfire). */
     selfCritPower?: number;
+    /** SP-C — the acting unit's target's effective crit power. Default 0 (no enemy crit-power
+     *  config in DPS → an owner with any crit power out-competes it). Live-derived in the engine. */
+    targetCritPower?: number;
+    /** SP-C — the acting unit's own Speed. Default 0. Live-derived (ship stat / real actor). */
+    selfSpeed?: number;
+    /** SP-C — comparison target Speed. DPS: configured enemySpeed. Positional: MIN Speed among
+     *  damaged enemies (Chakara "all damaged enemies have more Speed"). Default 0. */
+    targetSpeed?: number;
+    /** SP-C — the acting unit's ABSOLUTE current HP (not %). Default 0. DPS: ship max HP
+     *  (full-HP assumption). Live-derived in the engine. */
+    selfCurrentHp?: number;
+    /** SP-C — target's ABSOLUTE current HP (not %). Default 0. DPS: configured enemyHp. */
+    targetCurrentHp?: number;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -118,6 +131,21 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.stealthedEnemyCount ?? 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
+        case 'stat-vs-target': {
+            const self =
+                cond.compareStat === 'crit-power'
+                    ? (ctx.selfCritPower ?? 0)
+                    : cond.compareStat === 'speed'
+                      ? (ctx.selfSpeed ?? 0)
+                      : (ctx.selfCurrentHp ?? 0);
+            const target =
+                cond.compareStat === 'crit-power'
+                    ? (ctx.targetCritPower ?? 0)
+                    : cond.compareStat === 'speed'
+                      ? (ctx.targetSpeed ?? 0)
+                      : (ctx.targetCurrentHp ?? 0);
+            return (cond.statComparator === 'lt' ? self < target : self > target) ? 1 : 0;
+        }
         case 'hp-threshold':
             return evalHpThreshold(cond, ctx) ? 1 : 0;
         // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as

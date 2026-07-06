@@ -287,7 +287,15 @@ export type ConditionSubject =
     // ConditionContext.selfCritPower (runPlayerTurn's modifierCtx only); defaults to 0
     // elsewhere (no other ConditionContext builder populates it — inert/byte-identical
     // for every ship that doesn't reference this subject). Always derivable:true.
-    | 'self-crit-power';
+    | 'self-crit-power'
+    // Model-completeness SP-C: owner-vs-target stat comparison gate. `Condition.compareStat`
+    // picks the stat (crit power / speed / absolute current HP); `Condition.statComparator`
+    // the direction ('gt' = owner's stat strictly greater than target's, 'lt' = strictly less).
+    // Reads ctx.self{CritPower|Speed|CurrentHp} vs ctx.target{CritPower|Speed|CurrentHp}. DPS
+    // defaults compare the acting ship's stats against the CONFIGURED enemy (unset stat → 0);
+    // the positional engine uses real actor stats (Chakara's aggregate: targetSpeed = MIN speed
+    // among damaged enemies). Always derivable:true.
+    | 'stat-vs-target';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -317,6 +325,11 @@ export interface Condition {
     /** For 'every-n-turns': the residue to match, in [0, period-1] (default 0). E.g.
      *  period 3 + offset 1 → turns 1, 4, 7, …. Out-of-range values never match. */
     offset?: number;
+    /** For 'stat-vs-target': which stat to compare (owner vs target). */
+    compareStat?: 'crit-power' | 'speed' | 'hp';
+    /** For 'stat-vs-target': direction of the OWNER-vs-target comparison.
+     *  'gt' = owner's stat strictly greater; 'lt' = owner's stat strictly less. */
+    statComparator?: 'gt' | 'lt';
 }
 
 /** Gate for a victim-side incoming-effect ability (D-PR3). Evaluated against an

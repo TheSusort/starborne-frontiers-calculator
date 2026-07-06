@@ -62,6 +62,16 @@ export function buildRoundContext(state: {
      *  power known to this caller — DPS-safe / inert for every ship besides Wildfire). Only
      *  runPlayerTurn's modifierCtx passes a real value. See ConditionContext.selfCritPower. */
     selfCritPower?: number;
+    /** SP-C — target's crit power. Default 0 (no enemy crit-power config). */
+    targetCritPower?: number;
+    /** SP-C — owner Speed. Default 0. */
+    selfSpeed?: number;
+    /** SP-C — comparison target Speed (DPS: enemySpeed; engine: min damaged-enemy speed). Default 0. */
+    targetSpeed?: number;
+    /** SP-C — owner absolute current HP. Default 0 (DPS callers pass ship max HP). */
+    selfCurrentHp?: number;
+    /** SP-C — target absolute current HP (DPS: enemyHp). Default 0. */
+    targetCurrentHp?: number;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -90,6 +100,11 @@ export function buildRoundContext(state: {
         turnsTaken: state.turnsTaken ?? 0,
         stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
         selfCritPower: state.selfCritPower ?? 0,
+        targetCritPower: state.targetCritPower ?? 0,
+        selfSpeed: state.selfSpeed ?? 0,
+        targetSpeed: state.targetSpeed ?? 0,
+        selfCurrentHp: state.selfCurrentHp ?? 0,
+        targetCurrentHp: state.targetCurrentHp ?? 0,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
         // Sentinel spread (sub-project I, PR I1): only set the key when the caller passed a
         // real array — an explicit `undefined` value would collapse to the same runtime
