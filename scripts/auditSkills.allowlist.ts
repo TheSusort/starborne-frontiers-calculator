@@ -33,12 +33,9 @@ export const ALLOWLIST: AllowEntry[] = [
     },
     // Self-HP / stat-comparison gates — not modelled (sim assumes full HP, no stat comparisons).
     // (Hermes's "If the target has less than N% HP" Cheat-Death gate is now parser-modeled —
-    // Phase 4c PR 3, detectTargetHpGate — so it no longer needs an allowlist entry.)
-    {
-        ship: 'Bayah',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Stat comparison gate (Crit Power vs target).',
-    },
+    // Phase 4c PR 3, detectTargetHpGate — so it no longer needs an allowlist entry. Bayah's
+    // Crit-Power-vs-target Stasis gate is now parser-modeled too — SP-C, detectGrantConditions'
+    // stat-vs-target detector — so its entry is likewise removed.)
     // Niche counts / conversions / clause-split false positives.
     {
         ship: 'Belladonna',

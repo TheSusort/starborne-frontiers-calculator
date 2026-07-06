@@ -167,8 +167,8 @@ const BAYAH_CHARGE =
     'This Unit deals <unit-damage>150% damage</unit-damage> plus an additional amount equal to <unit-damage>30%</unit-damage> of its Defense and inflicts <unit-skill>Crit Rate Down II</unit-skill> for 2 turns. If this Unit has more Crit Power than the target, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn.';
 
 function bayahShip(): Ship {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...({} as any),
         refits: [{}, {}, {}, {}],
         chargeSkillText: BAYAH_CHARGE,

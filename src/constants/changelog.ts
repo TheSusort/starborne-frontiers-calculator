@@ -47,6 +47,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: Voron now correctly takes 20% less damage from Damage-over-Time effects.',
     "Combat sim: Nosorog's Defense Up II now triggers when it removes a debuff (previously fired on every cast).",
     'Combat sim: Malvex now takes 10% less damage while it has an active shield.',
+    "Combat sim: Bayah's charged skill now inflicts Stasis only when she has more Crit Power than the target, instead of always applying it.",
+    "Combat sim: Cobalt's active skill now deals its extra damage (25% of max HP) only when it has more HP than the enemy, instead of always applying the bonus.",
+    "Combat sim: Chakara's active skill now gains a Charged Skill charge only when all damaged enemies have more Speed than her, instead of always granting the charge.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
