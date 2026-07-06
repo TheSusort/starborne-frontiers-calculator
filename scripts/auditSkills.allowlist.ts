@@ -22,11 +22,6 @@ export const ALLOWLIST: AllowEntry[] = [
     // Reactive triggers (on-cleanse / on-kill / on-damaged / enemy-uses-charged / on-resist /
     // on-death) — modelled manually by the user, never auto-derived in single-ship DPS.
     {
-        ship: 'Curator',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when an enemy uses its Charged skill.',
-    },
-    {
         ship: 'Panon',
         rules: ['instead-replacement'],
         reason: 'Active + charged carry an "If this Unit is Provoked or Taunted, it instead gains <buff> and deals <higher>% damage" full-branch replacement (the only such shape in the corpus). Deferred (PR6b, user decision): a faithful model needs complementary/negated self-conditions AND sim damage-branch selection (the sim reads only the first damage ability) — bespoke infra for one ship. The base branch is already correct in single-ship DPS (self never Provoked/Taunted); only the combat-sim Provoked/Taunted state is imperfect. Revisit as a dedicated design if a second "instead"-branch ship appears.',
