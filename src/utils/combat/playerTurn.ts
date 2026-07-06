@@ -1192,6 +1192,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
+        // SP-C: owner-vs-target stat comparison. REQUIRED here (not just at the payload
+        // hard-gate `ctx` further down) — this is the gate for TIMED ENEMY DEBUFF application
+        // (the `conditionsMet(status.conditions, preDebuffGateCtx)` check just below), which is
+        // how Bayah's crit-power-gated Stasis INFLICT actually lands (the `type:'control'`
+        // ability gated by the later `ctx` only drives the `control-applied` reaction event, not
+        // the debuff status itself). Same live actor/enemy sourcing as `ctx` (team-symmetric,
+        // DPS-safe); selfCritPower is a layer-1-only estimate here (critDamageForGates hasn't
+        // folded layers 2+3 yet at this point in the turn) — matching this ctx's existing
+        // effectiveCritRate, which is the same partial-fold convention.
+        selfSpeed: actor.stats.speed,
+        selfCurrentHp: actor.currentHp,
+        selfCritPower: critDamage + critDamageForGates,
+        targetSpeed: enemy.stats.speed,
+        targetCurrentHp: enemy.currentHp,
+        targetCritPower: enemy.stats.critDamage,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
@@ -1649,6 +1664,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
         // (end-of-turn) drain path, which already reads it via the turnsTakenFor delegate.
         turnsTaken: actor.turnsTaken,
+        // SP-C: owner-vs-target stat comparison (Bayah/Cobalt/Chakara), gating THIS cast's
+        // payload abilities via gateFiringAbilities below. Sourced directly from the live
+        // `actor`/`enemy` CombatActor pair — the SAME pairing every call site (focus/team/
+        // enemy-walk) passes via buildTurnArgs's `runtime`/`enemy` — so this is team-symmetric
+        // with zero player/enemy branching, and DPS-safe: the single-ship DPS dummy `enemy` is
+        // itself a real CombatActor (stats.critDamage hardcoded 0 — no enemy crit-power config;
+        // stats.speed/stats.hp/currentHp from the configured enemySpeed/enemyHp inputs), so no
+        // special-casing is needed for that mode either.
+        selfSpeed: actor.stats.speed,
+        selfCurrentHp: actor.currentHp,
+        // Mirrors modifierCtx's existing selfCritPower estimate (layers 1+2+3, pre-modifier) —
+        // both this ctx and modifierCtx sit AFTER critDamageForGates' final += (line ~1431), so
+        // the value is identical and stable here.
+        selfCritPower: critDamage + critDamageForGates,
+        // Cobalt/Bayah are single-target casts, so the primary `enemy` IS "the target". Chakara's
+        // charge gate ("all damaged enemies have more Speed") is also single-target in the
+        // corpus today — the MIN-across-damaged-enemies aggregate the game text describes
+        // degenerates to this one target's speed. A future multi-target stat-vs-target ship
+        // would need real per-victim aggregation; out of scope here (no corpus ship needs it).
+        targetSpeed: enemy.stats.speed,
+        targetCurrentHp: enemy.currentHp,
+        targetCritPower: enemy.stats.critDamage,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
