@@ -39,6 +39,14 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // application via this liveGateConditions rewrite, not just the payload `ctx` that drives
     // the `type:'control'` ability's `control-applied` reaction event.
     'stat-vs-target',
+    // SP-D: number of enemies damaged by this cast is live-derivable — the positional engine
+    // knows the firing actor's per-cast footprint size (ConditionContext.enemiesHitThisCast,
+    // populated at reactive drain time by buildDrainContext/buildActorConditionContext, and at
+    // cast time by playerTurn.ts's ctx builders). Needed here for Berserker's Marauder Rage I/II
+    // — a timed self-buff gated on "hitting 3+ enemies", drained via the on-deal-damage reactive
+    // trigger (a passive-sourced timed self-buff can otherwise only be seeded once at combat
+    // start, before any cast has happened — see seedPassiveTimedStatuses).
+    'enemies-hit-this-cast',
 ]);
 
 /**

@@ -1686,6 +1686,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetSpeed: enemy.stats.speed,
         targetCurrentHp: enemy.currentHp,
         targetCritPower: enemy.stats.critDamage,
+        // SP-D: enemies-hit-this-cast, gating Tygr's self-charge-gain (a `type:'charge'` on-cast
+        // ability evaluated via gateFiringAbilities below, NOT a timed self-buff — so it needs
+        // THIS ctx, distinct from Berserker's Marauder Rage which drains via the on-deal-damage
+        // reactive path instead). aoeVictimIds is the actor's own splash-pattern footprint
+        // (already computed pre-turn by buildTurnArgs for the AoE-purge fan-out, E3) — undefined
+        // in DPS/non-positional mode → default 1 (single-target DPS, the faithful "Tygr doesn't
+        // add charge against one target" behaviour).
+        enemiesHitThisCast: aoeVictimIds?.length,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this

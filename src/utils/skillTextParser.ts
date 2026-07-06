@@ -1218,6 +1218,13 @@ export function detectReactiveTrigger(
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
     if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
+    // SP-D (Berserker): "gains <Buff> for N turns when hitting 3 ore more enemies" is a
+    // reaction to THIS UNIT's own damage-dealing action (same family as the self-crit rule
+    // above), not a combat-start-only fact — route it through on-deal-damage so the drain-time
+    // enemies-hit-this-cast gate (still carried in `conditions`, untouched here) re-evaluates on
+    // every damage-dealing cast instead of being seeded once at combat start (which can never
+    // observe a real hit count before any turn has fired).
+    if (hitCountConditionFromClause(clause.toLowerCase())) return 'on-deal-damage';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
     // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
     // shares its governing trailing phrase with its sibling charge ability (already
