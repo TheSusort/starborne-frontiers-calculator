@@ -1557,13 +1557,23 @@ describe('parseHpThresholdCondition', () => {
 });
 
 describe('parseChargeGain', () => {
-    it('parses always-true (speed) self gain — Chakara', () => {
+    it('parses the Speed-comparison self gain as a stat-vs-target gate — Chakara', () => {
         const text =
             'This Unit deals <unit-damage>180% damage</unit-damage>. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+        // SP-C: 'always'/derivable is a placeholder (mirrors the Cobalt start-of-turn shape
+        // below) — the real gate rides `conditions`.
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'always',
             derivable: true,
+            conditions: [
+                {
+                    subject: 'stat-vs-target',
+                    derivable: true,
+                    compareStat: 'speed',
+                    statComparator: 'lt',
+                },
+            ],
         });
     });
 

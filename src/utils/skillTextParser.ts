@@ -366,7 +366,12 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
         : statRaw.includes('shield')
           ? 'shield'
           : 'defense';
-    return { stat, pct };
+    // SP-C: a leading "If this Unit has more HP/Crit Power than the target/enemy, it
+    // additionally deals …" gate on THIS rider (Cobalt). sentencePrefix is exactly the clause
+    // text preceding the secondary-damage tag within the same sentence, so this is naturally
+    // scoped to the rider's own gate and can't pick up an unrelated earlier-sentence comparison.
+    const condition = statVsTargetConditionFromClause(sentencePrefix);
+    return { stat, pct, ...(condition ? { condition } : {}) };
 }
 
 /**
@@ -878,6 +883,40 @@ function resolveBuffClause(skillText: string, buffName: string): string {
     return clauseMasked.split(ABBR_MARK).join(' ');
 }
 
+/**
+ * SP-C: owner-vs-target stat comparison gate, matched against an already-lowercased clause/
+ * sentence. "If this Unit has more Crit Power/HP than the target/enemy" (owner greater → gt);
+ * "If all damaged enemies have more Speed than this Unit" (owner slower → speed lt). Shared by
+ * `detectGrantConditions` (buff/debuff clauses, scoped via resolveBuffClause) and
+ * `parseSecondaryDamage` (Cobalt's nameless 25%-max-HP additional-damage rider, which has no
+ * buffName to drive that clause-scoping — it scopes to the SENTENCE preceding the secondary-
+ * damage match instead). Returns null when no comparison phrasing is present.
+ */
+function statVsTargetConditionFromClause(low: string): Condition | null {
+    if (/this unit has more crit power than the (?:target|enemy)/i.test(low))
+        return {
+            subject: 'stat-vs-target',
+            derivable: true,
+            compareStat: 'crit-power',
+            statComparator: 'gt',
+        };
+    if (/this unit has more hp than the (?:target|enemy)/i.test(low))
+        return {
+            subject: 'stat-vs-target',
+            derivable: true,
+            compareStat: 'hp',
+            statComparator: 'gt',
+        };
+    if (/(?:all\s+)?(?:damaged\s+)?enemies have more speed than this unit/i.test(low))
+        return {
+            subject: 'stat-vs-target',
+            derivable: true,
+            compareStat: 'speed',
+            statComparator: 'lt',
+        };
+    return null;
+}
+
 export function detectGrantConditions(
     skillText: string | null | undefined,
     buffName: string
@@ -967,6 +1006,12 @@ export function detectGrantConditions(
     if (/\blowest\s+speed\s+among\s+(?:all\s+)?allies\b/i.test(low)) {
         return [{ subject: 'lowest-speed-ally', derivable: true }];
     }
+
+    // SP-C: owner-vs-target stat comparison (Bayah's Crit-Power-gated Stasis inflict). Shared
+    // with parseSecondaryDamage below (Cobalt's nameless additional-damage rider has no buffName
+    // to drive this function's clause-scoping, so it calls the extracted helper directly).
+    const statVsTarget = statVsTargetConditionFromClause(low);
+    if (statVsTarget) return [statVsTarget];
 
     // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
     const countGate = countGateCondition(clause);
@@ -2675,6 +2720,17 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
                 },
             ],
         };
+    }
+
+    // SP-C (Chakara): "If all damaged enemies have more Speed than this Unit, it adds 1 charge
+    // to its Charged Skill" — an owner-vs-target stat-comparison gate on a self-charge-gain.
+    // Same `conditions` escape hatch as the Cobalt start-of-turn branch above (condition:'always'
+    // is a placeholder; the real gate rides `conditions`) — this avoids widening
+    // `ConditionalCondition` (a closed union with no general stat-comparison member) for a gate
+    // that already has a dedicated, richer `Condition` representation.
+    const statVsTarget = statVsTargetConditionFromClause(low);
+    if (statVsTarget) {
+        return { amount, condition: 'always', derivable: true, conditions: [statVsTarget] };
     }
 
     const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);

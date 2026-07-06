@@ -1159,7 +1159,10 @@ function abilitiesFromText(
                 type: 'additional-damage',
                 target: 'enemy',
                 trigger: 'on-cast',
-                conditions: [],
+                // SP-C: Cobalt's "If this Unit has more HP than the enemy, it additionally
+                // deals …" owner-vs-target gate, detected clause-scoped by parseSecondaryDamage
+                // (sec.condition). Unconditional riders (the common case) get [].
+                conditions: sec.condition ? [sec.condition] : [],
                 config: { type: 'additional-damage', stat: sec.stat, pct: sec.pct },
                 autoFilled: true,
             },

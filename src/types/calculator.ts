@@ -9,6 +9,11 @@ export type SecondaryDamageStat = 'defense' | 'hp' | 'shield';
 export interface SecondaryDamage {
     stat: SecondaryDamageStat;
     pct: number; // e.g. 80 for "80% of Defense"
+    /** SP-C — an owner-vs-target stat-comparison gate on THIS secondary-damage rider (Cobalt's
+     *  "If this Unit has more HP than the enemy, it additionally deals damage equal to 25% of
+     *  max HP"). Detected clause-scoped in parseSecondaryDamage (the rider has no buffName to
+     *  drive detectGrantConditions' scoping); undefined when the rider is unconditional. */
+    condition?: Condition;
 }
 
 export type ConditionalCondition =
