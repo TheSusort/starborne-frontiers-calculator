@@ -89,6 +89,18 @@ export interface ConditionContext {
      *  enemies" gates). Default 1 (DPS single-target mode — a ≥2/≥3 gate is inert, the faithful
      *  behaviour). Live-derived by the positional engine from the firing actor's footprint. */
     enemiesHitThisCast?: number;
+    /** SP-D — per-target DoT-ONLY entry subtotal (corrosion + inferno + bomb entry-array
+     *  lengths, +acidicDecay once SP-E adds it). Distinct from `enemyDebuffCount`, which also
+     *  folds in landed CONTROL/marker debuffs — `enemy-dot-count` must never be satisfied by a
+     *  non-DoT debuff (e.g. Stasis). Default 0 (DPS-safe / no DoTs). Derived by buildRoundContext
+     *  from the SAME corrosionEntryCount/infernoEntryCount/bombCount already threaded through the
+     *  funnel for `enemyDebuffCount` — no new engine seam required. */
+    enemyDotCount?: number;
+    /** SP-D — optional per-family DoT entry count lookup, for `enemy-dot-count` conditions that
+     *  carry a `buffName` (Belladonna's "3+ Acidic Decay"). Absent/missing family → 0 (the
+     *  Acidic Decay DoT family does not exist until SP-E introduces it, so Belladonna's gate is
+     *  runtime-inert today by design, not a bug). */
+    enemyDotFamilyCounts?: Record<string, number>;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -137,6 +149,9 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.selfCritPower ?? 0;
         case 'enemies-hit-this-cast':
             return ctx.enemiesHitThisCast ?? 1;
+        case 'enemy-dot-count':
+            if (cond.buffName) return ctx.enemyDotFamilyCounts?.[cond.buffName] ?? 0;
+            return ctx.enemyDotCount ?? 0;
         case 'stat-vs-target': {
             const self =
                 cond.compareStat === 'crit-power'

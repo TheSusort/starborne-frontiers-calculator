@@ -77,6 +77,10 @@ export function buildRoundContext(state: {
      *  empty/whiffed footprint — and is NOT re-defaulted here). See
      *  ConditionContext.enemiesHitThisCast. */
     enemiesHitThisCast?: number;
+    /** SP-D — optional per-family DoT entry count lookup (Belladonna's named "3+ Acidic Decay"
+     *  gate). Default undefined (no family tracking today — every family reads 0 via
+     *  ConditionContext.enemyDotFamilyCounts' own fallback). See ConditionContext.enemyDotFamilyCounts. */
+    enemyDotFamilyCounts?: Record<string, number>;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -111,6 +115,13 @@ export function buildRoundContext(state: {
         selfCurrentHp: state.selfCurrentHp ?? 0,
         targetCurrentHp: state.targetCurrentHp ?? 0,
         enemiesHitThisCast: state.enemiesHitThisCast ?? 1,
+        // SP-D — DoT-ONLY subtotal, derived from the SAME entry counts already folded into
+        // enemyDebuffCount above. Deliberately excludes landedEnemyDebuffCount (control/marker
+        // debuffs) — that is the whole DoT-ONLY point of this subject vs `enemy-debuff`.
+        enemyDotCount: state.corrosionEntryCount + state.infernoEntryCount + state.bombCount,
+        ...(state.enemyDotFamilyCounts !== undefined
+            ? { enemyDotFamilyCounts: state.enemyDotFamilyCounts }
+            : {}),
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
         // Sentinel spread (sub-project I, PR I1): only set the key when the caller passed a
         // real array — an explicit `undefined` value would collapse to the same runtime

@@ -302,7 +302,19 @@ export type ConditionSubject =
     // to 1 (the single configured enemy), so a ≥2/≥3 gate is inert (not met) in single-target DPS
     // — the faithful behaviour (Tygr genuinely doesn't add charge against a single target). The
     // positional engine live-derives the real per-cast footprint size. Always derivable:true.
-    | 'enemies-hit-this-cast';
+    | 'enemies-hit-this-cast'
+    // Model-completeness SP-D: COUNT subject — per-target DoT ENTRY count (corrosion + inferno +
+    // bomb entry-array lengths, +acidicDecay once SP-E adds it). Bare (no buffName) = the sum of
+    // ALL DoT entries, regardless of family (Anemone's charged "If the primary enemy has 3 or
+    // more Damage over Time effects" — generic). With `buffName` set = ONE named family only
+    // (Belladonna's charged "If the enemy has 3 or more Acidic Decay" — runtime-inert until SP-E
+    // actually introduces the Acidic Decay DoT family; ConditionContext.enemyDotFamilyCounts
+    // defaults every family to 0 until then, so this gate never fires yet). DoT-ONLY — distinct
+    // from `enemy-debuff`, whose legacy count also folds in landed CONTROL/marker debuffs; this
+    // subject must never be satisfied by e.g. a landed Stasis. Also a SCALING source (Snakeroot's
+    // "for every 4 stacks of damage over time" — reads the raw count, not just a gate). Always
+    // derivable:true.
+    | 'enemy-dot-count';
 
 export interface Condition {
     subject: ConditionSubject;
