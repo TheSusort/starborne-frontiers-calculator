@@ -348,28 +348,16 @@ describe('SP-D — count-based gates', () => {
     const SNAKEROOT_P2 =
         'This Unit deals <unit-damage>120% damage</unit-damage> for every 4 stacks of damage over time inflicted on to a single enemy.';
 
-    it.fails(
-        'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is not gated/scaled on a DoT-stack count',
+    it(
+        'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is gated/scaled ' +
+            'on the enemy-dot-count entry count (SP-D, PR-D3 — closed)',
         () => {
             const abilities = abilitiesFor({ secondPassiveSkillText: SNAKEROOT_P2 }, 'passive');
-            // GAP: SP-D — this is a per-stack SCALING gate, not a binary threshold: `scaling`
-            // (ScalingRule: `{ conditionIndex, perUnit, cap? }`, a top-level Ability field) is
-            // the EXISTING type-valid mechanism for this shape (used by the self-crit-power/
-            // enemy-stealth-count/conditional-damage scaling sources). It requires BOTH a
-            // DoT-stack-count Condition (which does not exist — same gap as Belladonna/Anemone)
-            // AND a `scaling` rule referencing it. Today the sole ability this clause builds is
-            // flat: `type: 'damage'`, `config.multiplier: 120`, no `scaling` field at all
-            // (verified via dry-run dump of buildShipAbilities' output for this text — one
-            // ability, no scaling). NOT matched on `multiplier === 120`: the faithful fix may
-            // either (a) attach conditions+scaling directly to this same `type: 'damage'`
-            // ability — the parseConditionalDamage precedent (buildShipAbilities.ts ~L1186) — or
-            // (b) reshape the clause into a `type: 'modifier'` ability with a 0 base value and
-            // `scaling.perUnit` carrying the 120 (the "X% (more) damage for each <thing>"
-            // convention, buildShipAbilities.ts ~L403-420); either shape keeps `scaling` as a
-            // top-level Ability field, so the proxy below is flip-valid under both. Proxy:
-            // any damage/modifier/additional-damage-typed ability with `.scaling` defined —
-            // false now (no ability here has `.scaling`), true once SP-D models the "per 4 DoT
-            // stacks on target" scaling gate regardless of which of the two shapes it lands on.
+            // CLOSED: SP-D — attaches conditions+scaling directly to the same `type: 'damage'`
+            // ability (the parseConditionalDamage precedent, buildShipAbilities.ts), zeroing the
+            // base multiplier since the whole 120% IS the per-4-entries rate (0 entries → 0%
+            // damage) — see src/utils/abilities/__tests__/snakerootScaling.test.ts for the full
+            // build-output coverage (base-zeroing + perUnit=30 percentage-points-per-entry).
             const scaled = abilities.find(
                 (a) =>
                     (a.config.type === 'damage' ||
@@ -377,7 +365,10 @@ describe('SP-D — count-based gates', () => {
                         a.config.type === 'additional-damage') &&
                     a.scaling !== undefined
             );
-            expect(scaled).toBeDefined();
+            expect(scaled?.scaling).toBeDefined();
+            expect(scaled!.conditions[scaled!.scaling!.conditionIndex].subject).toBe(
+                'enemy-dot-count'
+            );
         }
     );
 });

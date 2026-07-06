@@ -601,6 +601,33 @@ export function parseEnemyEffectDamageBonus(
     return null;
 }
 
+// "deals X% damage for every N stacks/entries of damage over time inflicted on[to] a single
+// enemy" (Snakeroot p1/p2: "100% damage for every 7 stacks…" / "120% damage for every 4
+// stacks…") — an OPEN-ENDED per-DoT-entry SCALING multiplier, distinct from
+// parseConditionalDamage's "for each" additive-bonus shape (CONDITIONAL_RE only matches
+// "for each", never "for every" — no collision). Here the WHOLE X% IS the per-N-entries rate:
+// with 0 tracked DoT entries on the target the ability deals 0% damage, so the base multiplier
+// the caller parsed from the same <unit-damage> tag must be zeroed and replaced by a `scaling`
+// rule against the (Task 3) `enemy-dot-count` condition, perUnit = X / N (matches the
+// enemy-stealth-count/self-crit-power precedent: bare `enemy-dot-count` resolves to the raw
+// integer DoT-entry count, so perUnit is expressed in full percentage points per entry, NOT a
+// 0..1 fraction — that fractional form is reserved for the 0..100-scaled enemy-hp-pct/
+// enemy-hp-missing-pct scaling sources).
+const DOT_ENTRY_SCALING_RE =
+    /(\d+(?:\.\d+)?)%\s*damage\s+for every\s+(\d+)\s+stacks?\s+of\s+damage over time\s+inflicted\s+on\s*to?\s+a\s+single\s+enemy/i;
+
+export function parseDotEntryDamageScaling(
+    text: string | null | undefined
+): { perUnit: number } | null {
+    if (!text) return null;
+    const m = DOT_ENTRY_SCALING_RE.exec(stripUnitTags(text));
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    const n = parseInt(m[2], 10);
+    if (!n) return null;
+    return { perUnit: pct / n };
+}
+
 // "if/when [this unit|it is] critical[ly hits], … additional[ly] … N% damage" — extra damage
 // dealt on a crit. Covers Crucialis active ("if critical, additionally deals 75%") and its
 // charged "deals and additional" typo phrasing ("when it is critical, deals and additional 190%").
