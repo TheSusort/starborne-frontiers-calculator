@@ -12,3 +12,7 @@ video/
 
 # husky internals (generated; symlinked in worktrees)
 .husky/_
+
+# local editor/backup artifacts (never commit)
+.env.bak
+.cursor/

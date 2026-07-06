@@ -385,6 +385,23 @@ export function parseOnResistHpDamage(text: string | null | undefined): { pct: n
     return isNaN(pct) ? null : { pct };
 }
 
+/**
+ * "Upon being killed by direct Damage, this Unit deals Damage equal to N% of its max HP"
+ * — Paracelsus on-destroyed HP-scaled retaliation. Mirrors parseOnResistHpDamage; the amount
+ * rides hpBasisPct (multiplier:0), executed by the reactive-damage executor on on-destroyed.
+ */
+export function parseKilledByDirectHpDamage(
+    text: string | null | undefined
+): { pct: number } | null {
+    if (!text) return null;
+    const re =
+        /(?:when|upon\s+being)\s+killed\s+by\s+direct\s+damage\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
+    const m = re.exec(text);
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    return isNaN(pct) ? null : { pct };
+}
+
 // Matches "X% ... for each <phrase>" where no other % sits between the number and
 // "for each". Global so we can skip repair/heal contexts and unknown phrases.
 const CONDITIONAL_RE = /(\d+(?:\.\d+)?)\s*%[^%]*?for each\s+([^.,;<]+)/gi;
@@ -1064,9 +1081,10 @@ const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuf
 // Larkspur/Pestilence/Yarrow, verb form "cleanses" with subject "an enemy", never matched by this
 // "this unit"/subjectless-gerund phrasing — see ENEMY_CLEANSE_RE above, checked first). Corpus-
 // verified (docs/ship-skills.csv, grep "cleanses? a\b"/"cleansing a"): ONLY Cultivator, Hayyan,
-// Morao match; every enemy-subject/numeral-cleanse row above does not.
+// Morao match; every enemy-subject/numeral-cleanse row above does not. Task 1 (2026-07-06):
+// Nosorog's "when this Unit removes a Debuff" phrasing is now also covered.
 const OWN_CLEANSE_TRIGGER_RE =
-    /\b(?:when\s+this\s+unit\s+cleanses\s+a\s+debuff|(?:when|upon)\s+cleansing\s+a\s+debuff)\b/i;
+    /\b(?:when\s+this\s+unit\s+cleanses\s+a\s+debuff|(?:when|upon)\s+cleansing\s+a\s+debuff|when\s+this\s+unit\s+removes\s+a\s+debuff)\b/i;
 // Phase 3 PR-I: "when an enemy gets/is/becomes buffed" — Nuqtu's self-cleanse + Terran Bolster
 // III grant. Promoted from a manual, non-derivable `enemy-buff` CONDITION (detectGrantConditions
 // rule 4b below, which the single-ship DPS sim still consumes as a manual toggle — no enemy casts
@@ -1086,6 +1104,10 @@ const KILL_TRIGGER_RE =
     /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
+// "If its debuff is resisted" — Ravager's INFLICTOR-side reaction (the debuff THIS unit
+// inflicted got resisted). Distinct from the resister-side "when this Unit resists a debuff"
+// (parseOnResistHpDamage). Corpus-verified: Ravager is the only "its debuff is resisted" row.
+const OWN_DEBUFF_RESISTED_RE = /\bits\s+debuff\s+is\s+resisted\b/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -1115,6 +1137,8 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
  *    (Overload lifecycle, Task 4: Mangler/Ravager/Asphyxiator/Butcher).
  *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
  *    (Overload lifecycle, Task 4: Butcher Marauder Rage II).
+ *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (PR-B2: Ravager's Hacking Module
+ *    Overdrive grant; inflictor-scoped mirror of the resister-side on-debuff-resisted).
  *
  * Other reactive phrasings (when-attacked, ally-crit, …) are NOT derivable this phase and stay
  * undefined (manual modelling). Reference data: docs/ship-skills.csv.
@@ -1165,6 +1189,12 @@ export function detectReactiveTrigger(
     if (ENEMY_REPAIRS_RE.test(clause)) return 'on-enemy-repaired';
     if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
+    // Paracelsus: "Upon being killed by direct Damage … grants allies <buff>" — the named-buff
+    // half of an on-destroyed clause. Mirrors Faust's detectKilledByDirectDamageTrigger (which
+    // routes the purge half); here the buffName-scoped clause carries the same phrase.
+    if (KILLED_BY_DIRECT_RE.test(clause)) return 'on-destroyed';
+    // Ravager: "If its debuff is resisted, it gains <buff>" — inflictor-side reaction.
+    if (OWN_DEBUFF_RESISTED_RE.test(clause)) return 'on-own-debuff-resisted';
     return undefined;
 }
 
@@ -1916,8 +1946,10 @@ export function detectRoundStartContinuationTrigger(
 }
 
 // "… when killed by direct Damage" — Faust on-destroyed purge (killer-targeted, direct-only).
-// Crosses tags; "direct" guards against a future DoT-kill phrasing.
-const KILLED_BY_DIRECT_RE = /\bwhen\s+killed\s+by\s+direct\b[^.;]*\bdamage\b/i;
+// Crosses tags; "direct" guards against a future DoT-kill phrasing. Widened (PR-B1) to also
+// match "upon being killed by direct Damage" (Paracelsus's retaliation + ally-buff clause) —
+// the alternation only ADDS a case, so Faust's "when killed by direct Damage" still matches.
+const KILLED_BY_DIRECT_RE = /\b(?:when|upon\s+being)\s+killed\s+by\s+direct\b[^.;]*\bdamage\b/i;
 
 /**
  * Returns 'on-destroyed' when `anchorPos` falls inside the sentence carrying the
@@ -3218,10 +3250,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             let ownCleanseReaction: true | undefined;
             if (!leechBasis && !damageReaction) {
                 const cleanseTriggerMatch = OWN_CLEANSE_TRIGGER_RE.exec(sentence);
-                if (
-                    cleanseTriggerMatch &&
-                    m.index - sentenceStart > cleanseTriggerMatch.index
-                ) {
+                if (cleanseTriggerMatch && m.index - sentenceStart > cleanseTriggerMatch.index) {
                     ownCleanseReaction = true;
                 }
             }

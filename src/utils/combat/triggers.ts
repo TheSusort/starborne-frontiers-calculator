@@ -606,6 +606,24 @@ export function registerReactiveListeners(args: {
                         );
                     });
                     break;
+                case 'on-own-debuff-resisted':
+                    bus.on('debuff-resisted', (e) => {
+                        // Inflictor-scoped mirror of on-debuff-resisted above: fires when a debuff
+                        // THIS unit inflicted (e.sourceId === ownerId) is resisted by its target.
+                        // Route the resister (e.targetId) as counterTargetId so a reaction could
+                        // target them; Ravager's Hacking Module Overdrive grant is self-target and
+                        // ignores this, but future inflictor-side reactions may need it.
+                        if (e.sourceId !== ownerId) return; // inflictor-scoped (the mirror)
+                        enqueue(
+                            e.targetId !== undefined
+                                ? {
+                                      ...intent,
+                                      eventCtx: { ...intent.eventCtx, counterTargetId: e.targetId },
+                                  }
+                                : intent
+                        );
+                    });
+                    break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
                         // Ally-scoped: fires when ANY OTHER same-side actor is hit — per HIT
@@ -650,17 +668,20 @@ export function registerReactiveListeners(args: {
                 case 'on-destroyed':
                     bus.on('ship-destroyed', (e) => {
                         // Self-scoped: THIS owner was destroyed (mirrors on-crit's own-id scoping).
-                        // Killer-targeted reactions (Faust's PURGE, Martyrdom's DEBUFF) fire only when
-                        // killed by DIRECT damage and route to the killer (counterTargetId = e.killerId).
-                        // Salvation's self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
+                        // Killer-targeted reactions (Faust's PURGE, Martyrdom's DEBUFF, Paracelsus's
+                        // HP-scaled retaliation DAMAGE — PR-B1) fire only when killed by DIRECT damage
+                        // and route to the killer (counterTargetId = e.killerId). Salvation's
+                        // self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
                         // death, unchanged.
                         if (e.actorId !== ownerId) return;
                         // fromOwnDeath: marks this as the owner's OWN death reaction so the
                         // dead-owner drain gate (executeIntent) lets it through even though the
-                        // owner is now destroyed (Martyrdom's killer-Disable, Salvation's heal).
+                        // owner is now destroyed (Martyrdom's killer-Disable, Salvation's heal,
+                        // Paracelsus's retaliation).
                         if (
                             ra.ability.config.type === 'purge' ||
-                            ra.ability.config.type === 'debuff'
+                            ra.ability.config.type === 'debuff' ||
+                            ra.ability.config.type === 'damage'
                         ) {
                             if (!e.byDirectDamage) return;
                             enqueue({
@@ -963,7 +984,9 @@ export interface IntentExecContext {
      *  entirely. Mirrors `applyCounterAttack`'s mitigated/crit walk but credits the owner's round
      *  damage-dealt bucket (creditDamage) instead of applying real HP damage — this executor
      *  never mutated a specific victim's HP (was credit-only pre-fix). Absent → the damage
-     *  branch is inert (unit fixtures / DPS mode w/o delegate). */
+     *  branch is inert (unit fixtures / DPS mode w/o delegate). `allowDeadOwner` (PR-B1,
+     *  Paracelsus) lets an on-destroyed retaliation fire even though its owner is already
+     *  stamped destroyedRound — the reaction is BORN of that same death. */
     applyReactiveDamage?: (
         ownerId: string,
         victimId: string,
@@ -971,7 +994,8 @@ export interface IntentExecContext {
         multiplier: number,
         hits: number,
         noCrit: boolean,
-        hpBasisPct?: number
+        hpBasisPct?: number,
+        allowDeadOwner?: boolean
     ) => void;
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
@@ -2293,7 +2317,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 cfg.multiplier, // inert on this path — the engine reads hpBasisPct, not multiplier, when set
                 cfg.hits ?? 1,
                 cfg.noCrit ?? false,
-                cfg.hpBasisPct
+                cfg.hpBasisPct,
+                // PR-B1 (Paracelsus): an on-destroyed retaliation's owner is already dead by the
+                // time this drains — fromOwnDeath (stamped by the on-destroyed listener) lets the
+                // executor's owner-alive gate stand aside for this one reaction, same exemption the
+                // dead-owner drain gate above already grants.
+                intent.eventCtx?.fromOwnDeath === true
             );
             return;
         }
