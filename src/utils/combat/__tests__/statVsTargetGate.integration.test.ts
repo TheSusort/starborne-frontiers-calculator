@@ -234,3 +234,66 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
         expect(disadvantagedNames).toContain('Crit Rate Down II');
     });
 });
+
+// Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
+// SP-C Chakara triage probe / statVsTarget.test.ts parser block.
+const CHAKARA_ACTIVE =
+    'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+
+function chakaraShip(): Ship {
+    return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...({} as any),
+        refits: [{}, {}, {}, {}],
+        activeSkillText: CHAKARA_ACTIVE,
+    } as Ship;
+}
+
+const chakaraActiveAbilities = (): Ability[] => {
+    const built = buildShipAbilities(chakaraShip());
+    const active = built.slots.find((s) => s.slot === 'active');
+    if (!active) throw new Error('no active slot built from Chakara text');
+    return active.abilities;
+};
+
+const chakaraShipSkills = (): ShipSkills =>
+    ({ slots: [{ slot: 'active', abilities: chakaraActiveAbilities() }] }) as ShipSkills;
+
+describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', () => {
+    it('the charge gain lands only when the (dummy) enemy is faster than Chakara', () => {
+        // chargeCount kept high so the ship never actually reaches its charged skill (stays on
+        // 'active' every round) — isolating the charge-count delta as the only observable signal.
+        const makeInput = (speed: number, enemySpeed: number): CombatEngineInput => ({
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 5,
+            shipSkills: chakaraShipSkills(),
+            enemyDefense: 0,
+            enemyHp: 1_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: true,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 10_000,
+            speed,
+            enemySpeed,
+        });
+
+        // Both runs bank the engine's unconditional per-turn charge (advanceChargeCadence) —
+        // Chakara's ability grant is an ADDITIONAL +1 on top of that baseline, only when the
+        // gate is met. Slower than the enemy (enemy has MORE Speed) → gate met → baseline + 1.
+        const advantaged = runCombat(makeInput(40, 60));
+        // Chakara faster than the enemy → gate NOT met → baseline only.
+        const disadvantaged = runCombat(makeInput(60, 40));
+        expect(advantaged.rounds[0].charges).toBe(disadvantaged.rounds[0].charges + 1);
+    });
+});
