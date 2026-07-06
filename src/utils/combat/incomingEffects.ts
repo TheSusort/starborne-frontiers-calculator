@@ -19,6 +19,8 @@ function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): boolean
             return ctx.attackerHasDot;
         case 'self-barrier-recharging':
             return ctx.victimHasBarrierRecharging;
+        case 'self-shielded':
+            return ctx.victimHasShield;
         case 'always':
             return true;
     }

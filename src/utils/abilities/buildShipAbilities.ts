@@ -26,6 +26,7 @@ import {
     parseDamageReflection,
     parseSecondaryDamage,
     parseOnResistHpDamage,
+    parseKilledByDirectHpDamage,
     parseShieldStrip,
     parseConditionalDamage,
     parseEnemyEffectDamageBonus,
@@ -782,6 +783,39 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
+    // Voron: "This Unit takes N% less damage from Damage over Time effects" — a flat
+    // reduction against the unit's OWN incoming DoT ticks. scope:'dot' + condition:'always'
+    // are both existing type-valid values (Tormenter uses the same pair via hpScaling).
+    const voronM =
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+damage\s+over\s+time\s+effects/i.exec(
+            plain
+        );
+    if (voronM) {
+        out.push({
+            scopes: ['dot'],
+            condition: 'always',
+            pct: parseFloat(voronM[1]),
+            matchIndex: voronM.index,
+        });
+    }
+
+    // Malvex: "When Shielded, this Ship takes N% less damage" — a self-shield-gated flat
+    // reduction. New self-shielded IncomingCondition (evaluated per-hit against the victim's
+    // live shieldPool). Anchored on "when shielded" so it never matches Voron's DoT phrasing
+    // or a bare "takes N% less damage".
+    const malvexM =
+        /when\s+shielded,?\s+this\s+(?:ship|unit)\s+takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage/i.exec(
+            plain
+        );
+    if (malvexM) {
+        out.push({
+            scopes: ['direct'],
+            condition: 'self-shielded',
+            pct: parseFloat(malvexM[1]),
+            matchIndex: malvexM.index,
+        });
+    }
+
     return out;
 }
 
@@ -1158,6 +1192,31 @@ function abilitiesFromText(
                     autoFilled: true,
                 },
                 pos: onResistIdx >= 0 ? onResistIdx : MAX_POS,
+            });
+        }
+
+        // Paracelsus p2: "Upon being killed by direct Damage, this Unit deals Damage equal to
+        // N% of its max HP." on-destroyed HP-scaled retaliation — composes the existing
+        // on-destroyed trigger with hpBasisPct (multiplier:0), same executor shape as Vindicator.
+        const onKilled = parseKilledByDirectHpDamage(text);
+        if (onKilled) {
+            const onKilledIdx = text.search(/<unit-damage>/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-destroyed',
+                    conditions: [],
+                    config: {
+                        type: 'damage',
+                        multiplier: 0,
+                        hits: 1,
+                        hpBasisPct: onKilled.pct,
+                    },
+                    autoFilled: true,
+                },
+                pos: onKilledIdx >= 0 ? onKilledIdx : MAX_POS,
             });
         }
     }

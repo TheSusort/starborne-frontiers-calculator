@@ -42,6 +42,11 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: Nuqtu now cleanses a debuff from herself (once per round) and gains Terran Bolster III whenever an enemy actually gets buffed, matching her skill text, instead of always firing on her own turn regardless of enemy buffs.',
     'Combat sim: Vindicator now retaliates when it resists an enemy debuff, dealing damage equal to 30% of its max HP to that enemy.',
     'Combat sim: Curator now inflicts Block Buff only when an enemy uses its Charged skill (its intended reaction), instead of also inflicting it on every one of its own turns — a duplicate application has been removed.',
+    'Combat sim: Paracelsus now retaliates for 50% of its max HP and grants allies Everliving Regeneration II when killed by direct damage (previously the regen buff fired on every cast and the retaliation was missing).',
+    'Combat sim: Ravager now gains Hacking Module Overdrive when a debuff it inflicts is resisted (previously the buff was granted on every cast).',
+    'Combat sim: Voron now correctly takes 20% less damage from Damage-over-Time effects.',
+    "Combat sim: Nosorog's Defense Up II now triggers when it removes a debuff (previously fired on every cast).",
+    'Combat sim: Malvex now takes 10% less damage while it has an active shield.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

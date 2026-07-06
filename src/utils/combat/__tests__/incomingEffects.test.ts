@@ -10,6 +10,7 @@ const ctx = (over: Partial<IncomingHitContext> = {}): IncomingHitContext => ({
     hitIndexThisRound: 1,
     attackerHasDot: false,
     victimHasBarrierRecharging: false,
+    victimHasShield: false,
     selfHpPct: 100,
     ...over,
 });

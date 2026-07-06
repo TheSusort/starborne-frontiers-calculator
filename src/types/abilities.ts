@@ -139,6 +139,10 @@ export type AbilityTrigger =
     // `debuff-resisted` event, self-scoped on targetId === ownerId). Chains off D-PR15's
     // Block-Debuff auto-resist emission AND normal hacking/affinity resists.
     | 'on-debuff-resisted'
+    // Fires when a debuff THIS unit inflicted is RESISTED by its target (inflictor-scoped on
+    // sourceId === ownerId). Mirror of on-debuff-resisted (resister-scoped). Ravager's Hacking
+    // Module Overdrive grant.
+    | 'on-own-debuff-resisted'
     // Fired once per shield-application CAST. Reaction is keyed on the granter (acting actor)
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
@@ -198,6 +202,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-debuffed',
     // D-PR16 Lockdown: self-scoped reaction to RESISTING an incoming debuff.
     'on-debuff-resisted',
+    // PR-B2: inflictor-scoped mirror — reaction to a debuff THIS unit inflicted being resisted.
+    'on-own-debuff-resisted',
     // Warpstrike: owner dealt direct damage on its turn.
     'on-deal-damage',
     // Resonating Fury: granter-scoped reaction fired once per shield-application cast.
@@ -332,6 +338,10 @@ export type IncomingCondition =
     // (Panon — "reduces all incoming damage by 20% when affected by Barrier Recharging").
     // A literal named-status check, mirroring the self-stealth/self-stasis precedent.
     | 'self-barrier-recharging'
+    // Model-completeness epic (SP-A): the VICTIM currently holds an active shield pool
+    // (Malvex — "When Shielded, this Ship takes 10% less damage"). Context-driven, not
+    // side-gated — evaluated per-hit against the victim's live shieldPool.
+    | 'self-shielded'
     // Epic PR12 (C): unconditional — used with `hpScaling` (Tormenter's HP-proportional
     // reduction, which carries no trigger/status gate, only continuous HP scaling).
     | 'always';
@@ -353,6 +363,8 @@ export interface IncomingHitContext {
     /** Epic PR12 (C): true when the VICTIM currently carries its own "Barrier Recharging"
      *  self-status (Panon). Live-derived by the engine; defaults false. */
     victimHasBarrierRecharging: boolean;
+    /** Victim currently holds an active shield pool (shieldPool > 0) — gates self-shielded. */
+    victimHasShield: boolean;
     /** Epic PR12 (C): the VICTIM's own live HP% (0..100) at hit time, for HP-proportional
      *  incoming-reduction scaling (Tormenter's `hpScaling`). Live-derived by the engine;
      *  defaults 100 (full HP) where unused/inapplicable — inert unless an ability's config

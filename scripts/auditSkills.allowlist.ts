@@ -22,24 +22,9 @@ export const ALLOWLIST: AllowEntry[] = [
     // Reactive triggers (on-cleanse / on-kill / on-damaged / enemy-uses-charged / on-resist /
     // on-death) — modelled manually by the user, never auto-derived in single-ship DPS.
     {
-        ship: 'Ravager',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when its debuff is resisted.',
-    },
-    {
         ship: 'Curator',
         rules: ['ungated-effect-with-trigger'],
         reason: 'Reactive: when an enemy uses its Charged skill.',
-    },
-    {
-        ship: 'Paracelsus',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: on being killed.',
-    },
-    {
-        ship: 'Nosorog',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when this Unit removes a debuff.',
     },
     {
         ship: 'Panon',
@@ -124,22 +109,6 @@ export const ALLOWLIST: AllowEntry[] = [
         ship: 'Nosorog',
         rules: ['damage-reflection'],
         reason: "Passive-gated (buildShipAbilities checks slot === 'passive'); the audit harness's abilitiesFor always re-parses text as the ACTIVE slot, so the reflect ability never builds under audit even though production (real Ship with secondPassiveSkillText/thirdPassiveSkillText) handles it correctly — a harness scoping false flag, not a missing gate.",
-    },
-
-    // ── epic PR12(C): incoming-damage-reduction rule — additional un-wired phrasings ──
-    // The new rule's keyword is intentionally broad (catches the whole "takes/reduces …
-    // damage" corpus family, not just the four PR12(C) target ships) so future additions to
-    // this family surface automatically. It also caught two phrasings OUTSIDE PR12(C)'s scope
-    // (Anemone/Panon/Wusheng/Tormenter) — deferred, not fixed here.
-    {
-        ship: 'Malvex',
-        rules: ['incoming-damage-reduction'],
-        reason: 'passive2 "When Shielded, this Ship takes 10% less damage" — a self-shielded-gated incoming reduction, a DIFFERENT condition from all four epic PR12(C) target ships. Out of scope for PR12; revisit as a follow-up (would need a new self-shield IncomingCondition, distinct from the existing self-shield ConditionSubject used elsewhere for the standing-modifier fold).',
-    },
-    {
-        ship: 'Voron',
-        rules: ['incoming-damage-reduction'],
-        reason: 'passive2 "This Unit transforms the damage into a Damage over Time effect… takes 20% less damage from Damage over Time effects" — a reduction against the unit\'s OWN incoming DoT ticks (dot-scope, self-referential condition), a DIFFERENT shape from all four epic PR12(C) target ships and coupled to the (also unmodeled) damage-to-DoT transform clause. Out of scope for PR12; revisit as a follow-up.',
     },
 
     // ── shield-penetration-innate: handled at the DATA layer, not the parser ─────

@@ -2742,6 +2742,11 @@ export function runCombat(input: CombatEngineInput): {
     // literal name.
     const hasBarrierRecharging = (actorId: string): boolean =>
         selfBuffNamesForOwners(statusEngine, [actorId]).includes('Barrier Recharging');
+    // Model-completeness epic (SP-A): does the given actor currently hold an active shield
+    // pool? (Malvex — "When Shielded, this Ship takes 10% less damage.") Reads the live
+    // absorption pool directly off the CombatActor, mirroring hasBarrierRecharging.
+    const hasShield = (actorId: string): boolean =>
+        (allActorsById.get(actorId)?.shieldPool ?? 0) > 0;
     // Epic PR12 (C): the given actor's own live HP% (0..100) at this instant, for
     // Tormenter's HP-proportional incoming-reduction scaling. Defaults 100 for an unresolvable
     // actor/zero max HP (inert — no reduction).
@@ -3196,6 +3201,7 @@ export function runCombat(input: CombatEngineInput): {
                             hitIndexThisRound: idx,
                             attackerHasDot: attackerHasDot(cause?.killerId ?? ''),
                             victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
+                            victimHasShield: hasShield(victim.id),
                             selfHpPct: selfHpPctOf(victim.id),
                         },
                         (abilityId, chance) => {
@@ -3553,6 +3559,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // scope) and its "victim" is `attacker` (receiving the bounce-back).
                                 attackerHasDot: attackerHasDot(victim.id),
                                 victimHasBarrierRecharging: hasBarrierRecharging(attacker.id),
+                                victimHasShield: hasShield(attacker.id),
                                 selfHpPct: selfHpPctOf(attacker.id),
                             }
                         );
@@ -3792,11 +3799,18 @@ export function runCombat(input: CombatEngineInput): {
             multiplier: number,
             hits: number,
             noCrit: boolean,
-            hpBasisPct?: number
+            hpBasisPct?: number,
+            allowDeadOwner?: boolean
         ): void => {
             const owner = allActorsById.get(ownerId);
             const victim = allActorsById.get(victimId);
-            if (!owner || owner.destroyedRound !== undefined) return;
+            // allowDeadOwner (PR-B1, Paracelsus): an on-destroyed retaliation is BORN of the
+            // owner's own death — the owner is already stamped destroyedRound by the time this
+            // drains (recordDestroyed runs before the ship-destroyed emit that enqueues this
+            // intent), so the plain "owner must be alive" gate would always no-op it. Mirrors the
+            // fromOwnDeath exemption the dead-owner drain gate already grants in triggers.ts
+            // (executeIntent) for Martyrdom's killer-Disable / Salvation's heal.
+            if (!owner || (owner.destroyedRound !== undefined && !allowDeadOwner)) return;
             // A missing/already-destroyed victim has no defense to mitigate against — skip
             // rather than crediting an un-mitigated number. BEHAVIOR CHANGE vs the pre-#211
             // formula (which never referenced a victim and credited unconditionally): for the
@@ -4145,6 +4159,7 @@ export function runCombat(input: CombatEngineInput): {
                         hitIndexThisRound: 0, // unused by reduction (only block reads it)
                         attackerHasDot: attackerHasDot(args.actingId),
                         victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
+                        victimHasShield: hasShield(victim.id),
                         selfHpPct: selfHpPctOf(victim.id),
                     });
                     if (!didCrit) return equip;
@@ -5297,6 +5312,7 @@ export function runCombat(input: CombatEngineInput): {
                                     // never matters (scope-filtered before conditionMet reads it).
                                     attackerHasDot: false,
                                     victimHasBarrierRecharging: hasBarrierRecharging(healTarget.id),
+                                    victimHasShield: hasShield(healTarget.id),
                                     selfHpPct: selfHpPctOf(healTarget.id),
                                 }),
                             // PR I4b: the tank is the ticking victim.
@@ -5372,6 +5388,7 @@ export function runCombat(input: CombatEngineInput): {
                                         // on a DoT tick; harmless (scope:'direct'-only condition).
                                         attackerHasDot: false,
                                         victimHasBarrierRecharging: hasBarrierRecharging(actor.id),
+                                        victimHasShield: hasShield(actor.id),
                                         selfHpPct: selfHpPctOf(actor.id),
                                     }),
                                 // PR I4b: this actor IS the ticking victim.
@@ -6317,6 +6334,7 @@ export function runCombat(input: CombatEngineInput): {
                                           hitIndexThisRound: 0,
                                           attackerHasDot: attackerHasDot(actor.id),
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
+                                          victimHasShield: hasShield(tgt.id),
                                           selfHpPct: selfHpPctOf(tgt.id),
                                       })
                                     : 0;
@@ -6329,6 +6347,7 @@ export function runCombat(input: CombatEngineInput): {
                                           hitIndexThisRound: 0,
                                           attackerHasDot: attackerHasDot(actor.id),
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
+                                          victimHasShield: hasShield(tgt.id),
                                           selfHpPct: selfHpPctOf(tgt.id),
                                       })
                                     : 0;
