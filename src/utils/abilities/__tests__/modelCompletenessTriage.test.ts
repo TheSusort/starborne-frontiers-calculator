@@ -94,13 +94,14 @@ describe('SP-B — new reactive trigger families', () => {
 
     it('Paracelsus: "Upon being killed by direct Damage, deals damage equal to 50% of its max HP" builds an on-destroyed HP-scaled retaliation', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: PARACELSUS_P2 }, 'passive');
-        // Retaliation: on-destroyed HP-scaled damage.
+        // Retaliation: on-destroyed HP-scaled damage. Assert the exact basis (skill text says
+        // "Damage equal to 50% of its max HP") so a wrong-scaling regression is caught.
         expect(
             abilities.some(
                 (a) =>
                     a.trigger === 'on-destroyed' &&
                     a.config.type === 'damage' &&
-                    a.config.hpBasisPct != null
+                    a.config.hpBasisPct === 50
             )
         ).toBe(true);
         // Ally-buff half: Everliving Regeneration II must also fire on-destroyed
