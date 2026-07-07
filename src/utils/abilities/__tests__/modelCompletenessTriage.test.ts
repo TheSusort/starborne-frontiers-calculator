@@ -569,35 +569,25 @@ describe('SP-F — deep one-offs', () => {
     const MEATSHIELD_P4 =
         "At the start of combat, this Unit gains 3 stacks of <unit-skill>Protection</unit-skill>.<br /><br />Any damage this Unit takes from <unit-skill>Protection</unit-skill> is transformed into a <unit-aid>Damage over Time effect</unit-aid> for 2 turns.<br /><br />Any direct damage dealt to a non-defender ally that is not transferred by <unit-skill>Protection</unit-skill> is dealt as if that ally had this Unit's defense.";
 
-    it.fails(
-        'Meatshield: "dealt as if that ally had this Unit\'s defense" defense-substitution for non-defender allies builds nothing',
-        () => {
-            const abilities = abilitiesFor({ thirdPassiveSkillText: MEATSHIELD_P4 }, 'passive');
-            // GAP: SP-F (defense-substitution, newly discovered — no allowlist entry existed
-            // before this task). Dry-run: exactly ONE ability builds for the WHOLE 3-sentence
-            // text — the self-target "gains 3 stacks of Protection" buff (auto-filled,
-            // recurring). The OTHER two sentences both build nothing: the "damage taken from
-            // Protection transforms into a DoT" sentence (a SEPARATE, SP-E-shaped gap — same
-            // family as the Voron probe above, deliberately NOT asserted on here to avoid
-            // conflating two different SPs' completion signals if a future generic SP-E fix
-            // happens to also match this phrasing) and the defense-substitution sentence this
-            // probe targets. No AbilityConfig/ConditionSubject/IncomingCondition anywhere in
-            // src/types/abilities.ts represents "ally takes damage calculated against a
-            // DIFFERENT unit's defense stat" — a wholly new mechanic. Proxy: NOT a raw count
-            // (which the sibling DoT-transform gap could also satisfy) — instead, `target`, a
-            // top-level Ability field independent of whatever config shape SP-F picks. The
-            // defense-substitution effect necessarily targets Meatshield's ALLIES (it changes
-            // how THEY take damage), so a faithful ability must carry `target: 'ally'` or
-            // `'all-allies'` — distinct from the self-target DoT-transform sibling gap (which,
-            // mirroring Voron's `on-attacked`/`target: 'self'` shape, would stay self-target).
-            // False now (the sole ability present is self-target); true once SP-F lands an
-            // ally-scoped ability for this sentence, and NOT flippable by the sibling gap.
-            const allyScoped = abilities.filter(
-                (a) => a.target === 'ally' || a.target === 'all-allies'
-            );
-            expect(allyScoped.length).toBeGreaterThan(0);
-        }
-    );
+    it('Meatshield: "dealt as if that ally had this Unit\'s defense" builds an ally-scoped defense-substitution ability (SP-F F5)', () => {
+        const abilities = abilitiesFor({ thirdPassiveSkillText: MEATSHIELD_P4 }, 'passive');
+        // SHIPPED: SP-F F5 (defense-substitution, approximation — Protection-transfer
+        // itself stays deferred; see the docs/superpowers spec §6 and the
+        // 'transform-incoming-to-dot' allowlist row below for the sibling DoT-transform
+        // clause, which remains deliberately unmodelled). buildShipAbilities now emits a
+        // dedicated `{ type: 'defense-substitution' }` config for this sentence, ally-
+        // scoped (`target: 'all-allies'`) — distinct from the self-target
+        // "gains 3 stacks of Protection" buff (auto-filled, recurring) that already built,
+        // and from the still-unbuilt "damage taken from Protection transforms into a DoT"
+        // sibling sentence (deliberately deferred — no assertion on it here).
+        const substitution = abilities.filter(
+            (a) =>
+                a.config.type === 'defense-substitution' &&
+                (a.target === 'ally' || a.target === 'all-allies')
+        );
+        expect(substitution).toHaveLength(1);
+        expect(substitution[0].target).toBe('all-allies');
+    });
 
     // forced-affinity — CARRIER: Wusheng (charge_skill_text) — the cleanest single-clause,
     // single-ship instance ("deals damage WITH affinity advantage", no team-composition

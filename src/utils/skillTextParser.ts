@@ -2602,6 +2602,26 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
     return !!text && CHARGE_LOSS_IMMUNE_RE.test(stripUnitTags(text));
 }
 
+// SP-F F5 (Meatshield, R4 refit-active passive) — "Any direct damage dealt to a non-defender
+// ally that is not transferred by Protection is dealt as if that ally had this Unit's defense."
+// APPROXIMATION (locked, see AbilityType's 'defense-substitution' doc comment): Protection-as-
+// damage-transfer is a DEFERRED mechanic, so nothing is ever "transferred by Protection" in this
+// model — the "not transferred" gate is vacuously satisfied, and this detector is deliberately
+// gate-blind (it does not attempt to parse the Protection-transfer clause at all). Matches
+// "non-defender ally" ... "dealt as if" ... "this Unit's defense" within the SAME sentence
+// (`[^.]*` bounded on both sides) so an unrelated sentence elsewhere in the text can't false-hit.
+const DEFENSE_SUBSTITUTION_RE =
+    /non-defender\s+ally\b[^.]*\bdealt\s+as\s+if\b[^.]*\bthis\s+unit\x27?s\s+defen[cs]e\b/i;
+/** True iff this skill text declares that direct damage to a non-defender ally is calculated
+ *  against THIS unit's defense instead of the ally's own (Meatshield's R4 substitution clause).
+ *  Boolean only — the sibling "damage taken from Protection transforms into a DoT" sentence is a
+ *  SEPARATE, deliberately-unmodelled clause and is never matched here. */
+export function parseDefenseSubstitution(text: string | null | undefined): boolean {
+    if (!text) return false;
+    const normalised = stripUnitTags(text).replace(/[‘’]/g, '\x27');
+    return DEFENSE_SUBSTITUTION_RE.test(normalised);
+}
+
 /**
  * Parses an enemy-targeted charge removal from skill text. Returns
  * `{ amount, trigger, everyNthEvent?, requiredEnemyType? }` or null if no removal clause is

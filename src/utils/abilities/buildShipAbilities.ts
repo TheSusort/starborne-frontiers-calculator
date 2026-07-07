@@ -101,6 +101,7 @@ import {
     detectTransformToDot,
     detectConvertDot,
     parseInsteadDamageReplacement,
+    parseDefenseSubstitution,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -2295,6 +2296,32 @@ function abilitiesFromText(
                 pos: dir.matchIndex >= 0 ? dir.matchIndex : MAX_POS,
             });
         }
+    }
+
+    // SP-F F5 (Meatshield, R4 refit-active passive — APPROXIMATION): "Any direct damage dealt
+    // to a non-defender ally that is not transferred by Protection is dealt as if that ally
+    // had this Unit's defense." Protection-as-damage-transfer is deferred (design doc §1), so
+    // nothing is ever "transferred by Protection" in this model — the "not transferred" gate is
+    // vacuously satisfied, and this substitutes for EVERY living non-defender ally,
+    // unconditionally (`conditions: []`). No-op marker config (mirrors damage-reflection /
+    // buff-duration-extension above) — the engine collects every carrier into a dedicated map
+    // and substitutes at the defence-read sites; this ability is NEVER read by the on-cast
+    // ability-fold/executor pipeline. Ally-scoped (`target: 'all-allies'`) — distinct from the
+    // self-target "gains 3 stacks of Protection" buff this same text also carries.
+    if (parseDefenseSubstitution(text)) {
+        const substitutionPos = text.search(/dealt\s+as\s+if/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'defense-substitution',
+                target: 'all-allies',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'defense-substitution' },
+                autoFilled: true,
+            },
+            pos: substitutionPos >= 0 ? substitutionPos : MAX_POS,
+        });
     }
 
     // PR F4: permanent pre-fight base-stat passives ("At the start of combat, …" /

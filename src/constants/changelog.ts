@@ -57,6 +57,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Voron and Orel now convert incoming direct damage into a Damage-over-Time effect (spread over 3 turns) instead of taking it all up front — Orel only against attackers affected by Taunt or Provoke. Combined with Voron's existing 20%-less-from-DoT reduction, this smooths and softens the hits it takes.",
     'Combat sim: Belladonna now converts an ally\'s Corrosion into Acidic Decay of the same level (chance scaling with her Hacking) and can extend the new Acidic Decay by a turn, matching her skill text. Her charged skill\'s "3 or more Acidic Decay" Stasis gate now actually triggers in combat.',
     'Panon now deals its boosted damage (120%/170%) when Provoked or Taunted, matching its in-game "instead" effect.',
+    "Meatshield now shields non-defender allies — direct damage to them is calculated against Meatshield's much higher defense.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

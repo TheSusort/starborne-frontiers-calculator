@@ -45,7 +45,17 @@ export type AbilityType =
     | 'transform-incoming-to-dot'
     // SP-E, Task E4: Belladonna's ally-Corrosion→Acidic-Decay conversion — reactive enemy-target
     // ability (trigger:'on-ally-debuff-inflicted'). See AbilityConfig's 'convert-dot' variant.
-    | 'convert-dot';
+    | 'convert-dot'
+    // SP-F F5 (Meatshield, R4 refit-active passive — APPROXIMATION): "Any direct damage dealt
+    // to a non-defender ally that is not transferred by Protection is dealt as if that ally
+    // had this Unit's defense." Protection-as-damage-transfer (a Defender intercepting ally
+    // damage) is a DEFERRED mechanic, so nothing is ever "transferred by Protection" in this
+    // model — the "not transferred" gate is vacuously satisfied, and ALL direct damage to a
+    // living non-defender ally is mitigated using the carrier's effective defence instead of
+    // the ally's own. Always-on passive, target:'all-allies'. See AbilityConfig's
+    // 'defense-substitution' variant (a no-op marker — consumed at the engine's defence-read
+    // sites, never through the ability-fold/executor pipeline).
+    | 'defense-substitution';
 
 export type AbilityTarget =
     | 'self'
@@ -783,7 +793,14 @@ export type AbilityConfig =
           chanceFromStat: { stat: 'hacking'; pctPerPoint: number };
           extendTurns?: number;
           extendChanceFromCritPower?: boolean;
-      };
+      }
+    // SP-F F5 (Meatshield defense-substitution, approximation — see AbilityType's
+    // 'defense-substitution' doc comment for the full rule + the deferred-Protection
+    // rationale). No fields: a bare presence marker, mirroring 'damage-reflection'/
+    // 'buff-duration-extension'. The engine collects every carrier of this config into a
+    // dedicated per-owner set and substitutes the carrier's effective defence for a living
+    // non-defender ally's own defence at every defence-read site.
+    | { type: 'defense-substitution' };
 
 /** Crowd-control effects a `control` ability can apply. The combat effect of each
  *  (Stasis/Disable turn-lockout, Provoke/Taunt/Concentrate-Fire forced-targeting) is

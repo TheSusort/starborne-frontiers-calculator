@@ -37,6 +37,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'pre-combat-stat': 'Pre-Combat Stat',
     'transform-incoming-to-dot': 'Transform Incoming to DoT',
     'convert-dot': 'Convert DoT',
+    'defense-substitution': 'Defense Substitution',
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [

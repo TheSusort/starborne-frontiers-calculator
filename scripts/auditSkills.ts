@@ -375,6 +375,17 @@ const RULES: Rule[] = [
             !/purge/i.test(t),
         handled: (a) => hasType(a, 'shield-strip'),
     },
+    {
+        id: 'transform-incoming-to-dot',
+        severity: 'medium',
+        // SP-E: "[transforms/is transformed into] the damage ... into a ... Damage over Time
+        // effect" (Voron: "this Unit transforms the damage into a Damage over Time effect";
+        // Orel: same shape; Meatshield R4: "Any damage this Unit takes from Protection is
+        // transformed into a Damage over Time effect"). Narrow — corpus-wide this phrasing
+        // matches exactly these three ships (verified via `grep -io` across every text column).
+        keyword: (t) => /transform[a-z]*[^.]*\bdamage over time\b/i.test(t),
+        handled: (a) => hasType(a, 'transform-incoming-to-dot'),
+    },
 ];
 
 // Trigger phrasing that should produce a gating condition on a granted buff/debuff.
