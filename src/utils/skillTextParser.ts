@@ -375,6 +375,39 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
 }
 
 /**
+ * SP-F F1 — Panon's self-scoped "instead"-branch damage replacement: "… deals <unit-damage>80%
+ * damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its
+ * Defense. If this Unit is Provoked or Taunted, this Unit instead gains … and deals
+ * <unit-damage>120% damage</unit-damage> with an additional Damage equal to <unit-damage>90%
+ * </unit-damage> of its Defense." (charged: 140/100 → 170/130, "affected by Provoke or Taunt"
+ * phrasing). Returns the REPLACEMENT branch's multiplier + secondary only — the BASE 80%/70%
+ * (140%/100%) is unchanged, still read by parseSkillDamage/parseSecondaryDamage on the full text
+ * (both always return the FIRST tag, which precedes "instead"). Guarded to a SELF-scoped
+ * Provoke/Taunt gate in the clause immediately preceding "instead" (no "target"/"enemy" subject)
+ * so this can never fire on an unrelated enemy-conditional "instead" clause — the same self-vs-
+ * enemy disambiguation ENEMY_AFFECTED_BONUS_RE's doc comment above already relies on. Returns
+ * null when no such replacement clause is present (every other ship in the corpus today).
+ */
+export function parseInsteadDamageReplacement(
+    text: string | null | undefined
+): { mult: number; secondary: SecondaryDamage | null } | null {
+    if (!text) return null;
+    const insteadIdx = text.search(/\binstead\b/i);
+    if (insteadIdx < 0) return null;
+    const priorPeriod = text.lastIndexOf('.', insteadIdx);
+    const clause = stripUnitTags(text.slice(priorPeriod + 1, insteadIdx));
+    const selfGated =
+        /\bthis\s+unit\b[^.]*?\b(?:provoke[ds]?|taunt(?:ed)?)\b/i.test(clause) &&
+        !/\btarget\b|\benem(?:y|ies)\b/i.test(clause);
+    if (!selfGated) return null;
+    const after = text.slice(insteadIdx);
+    const mult = parseSkillDamage(after);
+    if (!mult) return null;
+    const secondary = parseSecondaryDamage(after);
+    return { mult, secondary };
+}
+
+/**
  * Vindicator p2 reactive proc: "When this Unit resists a debuff infliction from an enemy, it deals
  * <unit-damage>damage equal to X%</unit-damage> of this Unit's max HP to that enemy." Standalone
  * HP-scaled REACTIVE damage — NOT an on-cast rider (parseSecondaryDamage deliberately parks the

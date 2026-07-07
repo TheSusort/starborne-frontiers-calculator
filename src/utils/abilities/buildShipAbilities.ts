@@ -100,6 +100,7 @@ import {
     parsePreCombatStatGrants,
     detectTransformToDot,
     detectConvertDot,
+    parseInsteadDamageReplacement,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -207,6 +208,22 @@ function affectedByConditions(sentence: string): Condition[] {
     return [m[1], m[2]]
         .filter((n): n is string => !!n)
         .map((name) => statusEffectCondition(name.trim(), true));
+}
+
+/**
+ * SP-F F1 — Panon's "instead"-branch BASE gate: fires only when the acting Unit currently
+ * carries NEITHER Taunt NOR Provoke — the negated complement of the replacement branch's
+ * `statusEffectCondition(name, true)` anyOf pair. `Condition.negate` is a false friend here
+ * (evaluateConditions.ts only honors it for the 'enemy-type' subject); `countComparator:'eq',
+ * countThreshold:0` is the real negation idiom for self-buff/self-debuff subjects (both must
+ * hold — AND, not anyOf — since the base branch is the "neither" case).
+ */
+function tauntProvokeAbsentConditions(): Condition[] {
+    return ['Taunt', 'Provoke'].map((name) => ({
+        ...statusEffectCondition(name),
+        countComparator: 'eq' as const,
+        countThreshold: 0,
+    }));
 }
 
 /**
@@ -998,6 +1015,9 @@ function abilitiesFromText(
     const out: PositionedAbility[] = [];
 
     const mult = parseSkillDamage(text);
+    // SP-F F1 — Panon's self-scoped "instead" replacement branch (active 80%/70% → 120%/90%,
+    // charged 140%/100% → 170%/130% when Provoked/Taunted). Null for every other ship's text.
+    const instead = parseInsteadDamageReplacement(text);
     // Anchor at the tag carrying THIS multiplier — the first <unit-damage> tag in the
     // row may be something else entirely (e.g. "20% defense penetration" before the
     // damage), which would wrongly sort the damage ahead of a dot the text puts first.
@@ -1050,13 +1070,16 @@ function abilitiesFromText(
             detectEndOfRoundDamageTrigger(text, damagePos) ??
             detectRoundStartContinuationTrigger(text, damagePos) ??
             'on-cast';
+        // SP-F F1: emit the BASE branch FIRST (out[0]) so the ungated `.find`-first reads of
+        // noCrit/hits below resolve sensibly, and so it stays out[0] for the conditional-scaling
+        // attach points further down this function.
         out.push({
             ability: {
                 id: nextId(),
                 type: 'damage',
                 target: 'enemy',
                 trigger: damageTrigger,
-                conditions: [],
+                conditions: instead ? tauntProvokeAbsentConditions() : [],
                 config: {
                     type: 'damage',
                     multiplier: mult,
@@ -1067,6 +1090,35 @@ function abilitiesFromText(
             },
             pos: damagePos >= 0 ? damagePos : MAX_POS,
         });
+        if (instead) {
+            // Replacement branch (Provoked/Taunted): reuses the base's hits/noCrit — both
+            // Panon branches share the same values (neither text carries a multi-hit or
+            // no-crit phrase), matching the existing anyOf Taunt/Provoke shape the self-target
+            // Terran Guard III/Barrier grant already uses.
+            const replPos = text.search(
+                new RegExp(`<unit-damage>\\s*${escNum(instead.mult)}%\\s*damage`, 'i')
+            );
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: damageTrigger,
+                    conditions: [
+                        statusEffectCondition('Taunt', true),
+                        statusEffectCondition('Provoke', true),
+                    ],
+                    config: {
+                        type: 'damage',
+                        multiplier: instead.mult,
+                        ...(hits !== undefined ? { hits } : {}),
+                        ...(noCrit ? { noCrit: true } : {}),
+                    },
+                    autoFilled: true,
+                },
+                pos: replPos >= 0 ? replPos : MAX_POS,
+            });
+        }
     }
 
     // Combat G PR2 (Centurion): "When this Unit OR AN ADJACENT ALLY is directly damaged, this
@@ -1156,6 +1208,9 @@ function abilitiesFromText(
         const fallbackIdx =
             firstIdx >= 0 ? text.indexOf(firstDmgTag, firstIdx + firstDmgTag.length) : -1;
         const secondIdx = secTagIdx >= 0 ? secTagIdx : fallbackIdx;
+        // SP-F F1: base branch — emitted FIRST, same ordering rationale as the damage ability
+        // above. Folds the negated Taunt/Provoke-absent gate in alongside any existing SP-C
+        // owner-vs-target condition (Panon's own text never combines both).
         out.push({
             ability: {
                 id: nextId(),
@@ -1165,12 +1220,36 @@ function abilitiesFromText(
                 // SP-C: Cobalt's "If this Unit has more HP than the enemy, it additionally
                 // deals …" owner-vs-target gate, detected clause-scoped by parseSecondaryDamage
                 // (sec.condition). Unconditional riders (the common case) get [].
-                conditions: sec.condition ? [sec.condition] : [],
+                conditions: [
+                    ...(sec.condition ? [sec.condition] : []),
+                    ...(instead ? tauntProvokeAbsentConditions() : []),
+                ],
                 config: { type: 'additional-damage', stat: sec.stat, pct: sec.pct },
                 autoFilled: true,
             },
             pos: secondIdx >= 0 ? secondIdx : firstIdx >= 0 ? firstIdx : MAX_POS,
         });
+        if (instead?.secondary) {
+            const replSec = instead.secondary;
+            const replSecTagIdx = text.search(
+                new RegExp(`<unit-damage>(?:damage equal to\\s*)?${escNum(replSec.pct)}%`, 'i')
+            );
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'additional-damage',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [
+                        statusEffectCondition('Taunt', true),
+                        statusEffectCondition('Provoke', true),
+                    ],
+                    config: { type: 'additional-damage', stat: replSec.stat, pct: replSec.pct },
+                    autoFilled: true,
+                },
+                pos: replSecTagIdx >= 0 ? replSecTagIdx : MAX_POS,
+            });
+        }
     }
 
     // Vindicator p2: "When this Unit resists a debuff infliction from an enemy, it deals damage

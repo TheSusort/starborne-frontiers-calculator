@@ -480,59 +480,44 @@ describe('SP-F — deep one-offs', () => {
     const PANON_ACTIVE =
         'This Unit grants all allies <unit-skill>Terran Guard II</unit-skill> for 2 turns and deals <unit-damage>80% damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its Defense.<br /><br />If this Unit is Provoked or Taunted, this Unit instead gains <unit-skill>Terran Guard III</unit-skill> for 2 turns and deals <unit-damage>120% damage</unit-damage> with an additional Damage equal to <unit-damage>90%</unit-damage> of its Defense.';
 
-    it.fails(
-        'Panon: active "instead" branch does not replace the base 80%/70% damage numbers with 120%/90%',
-        () => {
-            const abilities = abilitiesFor({ activeSkillText: PANON_ACTIVE }, 'active');
-            // GAP: SP-F (allowlist: instead-replacement). Dry-run: 4 abilities build — the
-            // all-allies Terran Guard II buff (unconditioned), the base 80% damage
-            // (unconditioned), the base 70% defense-scaled additional-damage (unconditioned),
-            // and a SELF-target Terran Guard III buff correctly GATED on `{ subject:
-            // 'self-buff', buffName: 'Taunt', anyOf }` / `{ subject: 'self-debuff', buffName:
-            // 'Provoke', anyOf }` (statusEffectCondition — this half is already faithfully
-            // modeled, matching the allowlist's "base branch is already correct in single-ship
-            // DPS" note, since self is never Provoked/Taunted in DPS mode). The enhanced
-            // 120%/90% numbers from the "instead" branch are NOT built as abilities AT ALL —
-            // no damage or additional-damage ability carries them, and the base 80%/70% pair
-            // carries no NEGATED equivalent condition, so nothing in this array can ever
-            // represent "if Provoked/Taunted, deal 120% instead of 80%". No AbilityConfig
-            // field exists for a conditional/alternate multiplier (verified against the full
-            // 'damage'/'additional-damage' config shapes in src/types/abilities.ts — neither
-            // carries anything beyond multiplier/stat/pct/hits/noCrit/hpBasisPct), so a
-            // faithful fix needs a SP-F-authored mechanism; not predictable whether it lands as
-            // a second conditioned damage/additional-damage ability (mirroring how the buff
-            // half already does it) or a negate on the existing pair. Proxy: pinned to the
-            // top-level `type` field (present regardless of `config` shape) — some ability of
-            // type 'damage' or 'additional-damage' carries a non-empty `conditions` array;
-            // false now (both are `conditions: []`), true once SP-F lands either shape.
-            const damageLike = abilities.filter(
-                (a) => a.type === 'damage' || a.type === 'additional-damage'
-            );
-            expect(damageLike.some((a) => a.conditions.length > 0)).toBe(true);
-        }
-    );
+    it('Panon active: emits a gated replacement damage branch (120%/90%) when Provoked/Taunted', () => {
+        const abilities = abilitiesFor({ activeSkillText: PANON_ACTIVE }, 'active');
+        const dmg = abilities.filter((a) => a.config.type === 'damage');
+        const add = abilities.filter((a) => a.config.type === 'additional-damage');
+        // base + replacement of each
+        expect(dmg).toHaveLength(2);
+        expect(add).toHaveLength(2);
+        const base = dmg.find((a) => (a.config as { multiplier: number }).multiplier === 80)!;
+        const repl = dmg.find((a) => (a.config as { multiplier: number }).multiplier === 120)!;
+        // replacement gated anyOf Taunt/Provoke
+        expect(repl.conditions.some((c) => c.buffName === 'Taunt' && c.anyOf)).toBe(true);
+        // base gated on BOTH absent (eq 0)
+        expect(
+            base.conditions.filter((c) => c.countComparator === 'eq' && c.countThreshold === 0)
+        ).toHaveLength(2);
+    });
 
     // Verbatim from docs/ship-skills.csv (charge_skill_text field) — the SAME "instead"
     // structure as the active skill above, on the charged skill (Barrier grant + 170%/130%).
     const PANON_CHARGED =
         'This Unit deals <unit-damage>140% damage</unit-damage> plus an additional <unit-damage>100%</unit-damage> of its Defense.<br /><br />If this Unit is affected by <unit-skill>Provoke</unit-skill> or <unit-skill>Taunt</unit-skill>, it instead gains <unit-skill>Barrier</unit-skill> for 1 hit and deals <unit-damage>170% damage</unit-damage> with an additional Damage equal to <unit-damage>130%</unit-damage> of its Defense.';
 
-    it.fails(
-        'Panon: charged "instead" branch does not replace the base 140%/100% damage numbers with 170%/130%',
-        () => {
-            const abilities = abilitiesFor({ chargeSkillText: PANON_CHARGED }, 'charged');
-            // GAP: SP-F (allowlist: instead-replacement) — the charged-skill sibling of the
-            // active-skill probe above; same shape, same reasoning. Dry-run: base 140% damage
-            // and 100% additional-damage build unconditioned; the self-target Barrier grant is
-            // correctly gated on the Taunt/Provoke `affectedByConditions` pair (anyOf); the
-            // enhanced 170%/130% numbers are dropped entirely. Same proxy for the same reason
-            // (no AbilityConfig field exists to carry an alternate/conditional multiplier).
-            const damageLike = abilities.filter(
-                (a) => a.type === 'damage' || a.type === 'additional-damage'
-            );
-            expect(damageLike.some((a) => a.conditions.length > 0)).toBe(true);
-        }
-    );
+    it('Panon charged: emits a gated replacement damage branch (170%/130%) when Provoked/Taunted', () => {
+        const abilities = abilitiesFor({ chargeSkillText: PANON_CHARGED }, 'charged');
+        const dmg = abilities.filter((a) => a.config.type === 'damage');
+        const add = abilities.filter((a) => a.config.type === 'additional-damage');
+        // base + replacement of each
+        expect(dmg).toHaveLength(2);
+        expect(add).toHaveLength(2);
+        const base = dmg.find((a) => (a.config as { multiplier: number }).multiplier === 140)!;
+        const repl = dmg.find((a) => (a.config as { multiplier: number }).multiplier === 170)!;
+        // replacement gated anyOf Taunt/Provoke
+        expect(repl.conditions.some((c) => c.buffName === 'Taunt' && c.anyOf)).toBe(true);
+        // base gated on BOTH absent (eq 0)
+        expect(
+            base.conditions.filter((c) => c.countComparator === 'eq' && c.countThreshold === 0)
+        ).toHaveLength(2);
+    });
 
     // Verbatim from docs/ship-skills.csv (charge_skill_text field). Lingshe's clause is a
     // CHARGED skill → slot 'charged' (not 'active').
