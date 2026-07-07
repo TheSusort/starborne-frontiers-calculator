@@ -21,6 +21,14 @@
  * exercises an ENEMY-side Meatshield substituting for an ENEMY non-defender ally, via the
  * POSITIONAL path (`defenseProfileOf`) — the sibling site the non-positional scenario above
  * does not reach.
+ *
+ * Critical-review fix (post be86b1f6): the unknown-role default was flipped. Substitution now
+ * requires PROVING the victim's role is a known non-defender — an absent role stays dormant (no
+ * substitution), matching `matchesRoleCategory(undefined, ...) === false`'s established
+ * convention elsewhere in this file (Graphite's role filter). The two "substitution fires"
+ * tests below now set an explicit `role: 'ATTACKER'` on the victim; the new
+ * "unknown role — dormant" tests cover the previously-silent-failure case (a role-less victim
+ * used to be substituted; it must NOT be, on either side).
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
@@ -134,12 +142,12 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
 });
 
 describe('Meatshield defense-substitution — PLAYER side (non-positional victimDefenceFor path)', () => {
-    it("a living non-defender ally takes LESS damage — mitigated by MEATSHIELD's defence, not its own (defence 0)", () => {
+    it("a living KNOWN non-defender ally takes LESS damage — mitigated by MEATSHIELD's defence, not its own (defence 0)", () => {
         const withMeatshield = landedDamagesFor(
             BASE_INPUT({
                 teamActors: [
                     teamActor('meatshield', MEATSHIELD_DEFENCE, { passive: [meatshieldPassive] }),
-                    teamActor('ally-1', 0),
+                    teamActor('ally-1', 0, { role: 'ATTACKER' }),
                 ],
                 enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
             }),
@@ -150,6 +158,20 @@ describe('Meatshield defense-substitution — PLAYER side (non-positional victim
         expect(withMeatshield[0]).toBeCloseTo(EXPECTED_SUBSTITUTED_DAMAGE, 5);
         // Strictly less than the ally's own (0-defence, unmitigated) damage.
         expect(withMeatshield[0]).toBeLessThan(ENEMY_ATTACK);
+    });
+
+    it('negative case (Critical fix): an ally with an UNKNOWN role is NOT substituted — the gate now requires proving a known non-defender role, not just "not proven DEFENDER"', () => {
+        const unknownRoleAlly = landedDamagesFor(
+            BASE_INPUT({
+                teamActors: [
+                    teamActor('meatshield', MEATSHIELD_DEFENCE, { passive: [meatshieldPassive] }),
+                    teamActor('ally-1', 0), // no role set
+                ],
+                enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+            }),
+            'ally-1'
+        );
+        expect(unknownRoleAlly).toEqual([ENEMY_ATTACK]);
     });
 
     it('control: WITHOUT Meatshield present, the ally takes the FULL unmitigated hit (its own 0 defence)', () => {
@@ -226,8 +248,14 @@ const enemyMeatshield = (id: string, position: Position, defence: number): Enemy
         shipSkills: { slots: [meatshieldPassive] },
     }) as EnemyAttacker;
 
-/** A positioned ENEMY non-defender ally victim — low (0) defence of its own. */
-const enemyAlly = (id: string, position: Position, defence: number): EnemyAttacker =>
+/** A positioned ENEMY ally victim — low (0) defence of its own. `role` optionally sets the
+ *  ShipTypeName for role-filtered classification (mirrors the player-side `teamActor` helper). */
+const enemyAlly = (
+    id: string,
+    position: Position,
+    defence: number,
+    role?: EnemyAttacker['role']
+): EnemyAttacker =>
     ({
         id,
         stats: { attack: 0, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 1 },
@@ -235,6 +263,7 @@ const enemyAlly = (id: string, position: Position, defence: number): EnemyAttack
         startCharged: false,
         position,
         shipSkills: { slots: [] },
+        role,
     }) as EnemyAttacker;
 
 const ENEMY_SIDE_BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
@@ -267,12 +296,12 @@ const ENEMY_SIDE_BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInp
 });
 
 describe('Meatshield defense-substitution — ENEMY side (positional defenseProfileOf path)', () => {
-    it("an enemy Meatshield substitutes for its living enemy non-defender ally: less damage than the ally's own (0) defence", () => {
+    it("an enemy Meatshield substitutes for its living enemy KNOWN non-defender ally: less damage than the ally's own (0) defence", () => {
         const landed = landedDamagesFor(
             ENEMY_SIDE_BASE({
                 enemyAttackers: [
                     enemyMeatshield('enemy-meatshield', 'M1', MEATSHIELD_DEFENCE),
-                    enemyAlly('enemy-ally', 'M4', 0),
+                    enemyAlly('enemy-ally', 'M4', 0, 'ATTACKER'),
                 ],
             }),
             'enemy-ally'
@@ -285,7 +314,20 @@ describe('Meatshield defense-substitution — ENEMY side (positional defenseProf
     it('control: WITHOUT the enemy Meatshield, the enemy ally takes the FULL unmitigated hit', () => {
         const landed = landedDamagesFor(
             ENEMY_SIDE_BASE({
-                enemyAttackers: [enemyAlly('enemy-ally', 'M4', 0)],
+                enemyAttackers: [enemyAlly('enemy-ally', 'M4', 0, 'ATTACKER')],
+            }),
+            'enemy-ally'
+        );
+        expect(landed).toEqual([ENEMY_ATTACK]);
+    });
+
+    it('negative case (Critical fix): an enemy ally with an UNKNOWN role is NOT substituted despite the enemy Meatshield being present', () => {
+        const landed = landedDamagesFor(
+            ENEMY_SIDE_BASE({
+                enemyAttackers: [
+                    enemyMeatshield('enemy-meatshield', 'M1', MEATSHIELD_DEFENCE),
+                    enemyAlly('enemy-ally', 'M4', 0), // no role set
+                ],
             }),
             'enemy-ally'
         );

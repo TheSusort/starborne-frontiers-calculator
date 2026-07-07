@@ -460,10 +460,9 @@ export interface EnemyActorInput {
     /** SP-F F5: this enemy attacker's ship role (Ship.type), for role-filtered classification —
      *  today only Meatshield's defense-substitution "non-defender ally" gate (roleByActorId,
      *  matchesRoleCategory(..., ['DEFENDER'])). Mirrors TeamActorInput.role's contract: absent →
-     *  never matches DEFENDER → treated as non-defender by the substitution gate (conservative
-     *  in the OPPOSITE direction from Graphite's role filter — here an unknown role means the
-     *  approximation still applies rather than staying dormant, since "prove it's a Defender to
-     *  exempt it" is the only correctness anchor the R4 text gives us). */
+     *  the substitution gate treats an unknown role as dormant (no substitution) rather than
+     *  assuming non-defender — consistent with Graphite's role-filtered reaction also staying
+     *  dormant on an unknown role (matchesRoleCategory(undefined, ...) is always false). */
     role?: ShipTypeName;
 }
 
@@ -2824,10 +2823,15 @@ export function runCombat(input: CombatEngineInput): {
     // carriers wins.
     const substitutedDefenceFor = (victim: CombatActor, fallback: number): number => {
         if (victim.currentHp <= 0) return fallback; // dead victims are never substituted
-        // DEFENDER victims are never substituted (R4 text: "non-defender ally"). An unknown role
-        // (no role data threaded for this actor) is treated as non-defender — see roleByActorId's
-        // contract above (matchesRoleCategory: undefined never matches DEFENDER).
-        if (matchesRoleCategory(roleByActorId.get(victim.id), ['DEFENDER'])) return fallback;
+        // DEFENDER victims are never substituted (R4 text: "non-defender ally"). Substitution
+        // requires PROVING the victim is a known non-defender role — an unknown/missing role
+        // (no role data threaded for this actor) stays dormant (no substitution), matching the
+        // codebase's established convention for this exact ambiguity: matchesRoleCategory(undefined,
+        // ...) always returns false, so an unknown role can never satisfy "is a non-defender" here
+        // either (mirrors Graphite's role-filtered reaction staying dormant on an unknown role —
+        // see triggers.ts's forced-targeting/role-filter gates).
+        const victimRole = roleByActorId.get(victim.id);
+        if (!victimRole || matchesRoleCategory(victimRole, ['DEFENDER'])) return fallback;
         let bestDefence: number | undefined;
         for (const carrierId of defenseSubstitutionCarrierIds) {
             if (carrierId === victim.id) continue; // a carrier never substitutes for itself
