@@ -1,5 +1,26 @@
 import { EnemyBaseClass } from '../../types/calculator';
+import type { ActiveDoTStack } from '../combat/state';
 import { ConditionContext } from './evaluateConditions';
+
+/**
+ * SP-E — sums live DoT entries by their `family` tag (e.g. Belladonna's named "Acidic
+ * Decay" gate). Untagged entries — every DoT stack in the game today, since only E4's
+ * Corrosion→Acidic-Decay conversion sets `family` — contribute to no named family, so this
+ * returns `{}` for every existing ship. That keeps `enemyDotFamilyCounts` (and therefore any
+ * `enemy-dot-count` named-family gate) DPS-byte-identical until a family-tagged stack actually
+ * exists at runtime.
+ */
+export function dotFamilyCounts(
+    corrosion: ActiveDoTStack[],
+    inferno: ActiveDoTStack[],
+    generic: ActiveDoTStack[]
+): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const e of [...corrosion, ...inferno, ...generic]) {
+        if (e.family) out[e.family] = (out[e.family] ?? 0) + 1;
+    }
+    return out;
+}
 
 /**
  * Assemble a {@link ConditionContext} from per-round DPS-sim state.
@@ -81,6 +102,10 @@ export function buildRoundContext(state: {
      *  gate). Default undefined (no family tracking today — every family reads 0 via
      *  ConditionContext.enemyDotFamilyCounts' own fallback). See ConditionContext.enemyDotFamilyCounts. */
     enemyDotFamilyCounts?: Record<string, number>;
+    /** SP-E — `genericDoTEntries.length` (Voron/Orel absolute-per-tick DoT). Default 0 (no
+     *  generic DoT tracking today for any DPS caller — every existing ship reports 0). Folded
+     *  into the bare `enemyDotCount` sum alongside corrosion/inferno/bomb. */
+    genericCount?: number;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -118,7 +143,11 @@ export function buildRoundContext(state: {
         // SP-D — DoT-ONLY subtotal, derived from the SAME entry counts already folded into
         // enemyDebuffCount above. Deliberately excludes landedEnemyDebuffCount (control/marker
         // debuffs) — that is the whole DoT-ONLY point of this subject vs `enemy-debuff`.
-        enemyDotCount: state.corrosionEntryCount + state.infernoEntryCount + state.bombCount,
+        enemyDotCount:
+            state.corrosionEntryCount +
+            state.infernoEntryCount +
+            state.bombCount +
+            (state.genericCount ?? 0),
         ...(state.enemyDotFamilyCounts !== undefined
             ? { enemyDotFamilyCounts: state.enemyDotFamilyCounts }
             : {}),

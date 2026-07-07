@@ -9,8 +9,14 @@ describe('generic DoT', () => {
             side: 'player',
             kind: 'team',
             stats: {
-                attack: 100, crit: 0, critDamage: 50, defensePenetration: 0,
-                shieldPenetration: 0, defence: 100, hp: 10000, speed: 100,
+                attack: 100,
+                crit: 0,
+                critDamage: 50,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                defence: 100,
+                hp: 10000,
+                speed: 100,
             },
         });
         expect(a.genericDoTEntries).toEqual([]);
@@ -97,5 +103,24 @@ describe('generic DoT', () => {
 
         // 100 * 2 stacks = 200 raw, halved by the 50% reduction → 100.
         expect(credited).toBe(100);
+    });
+
+    // SP-E, Task E2: `family`/`unremovable` are consumed by the Cheat-Death wipe filter
+    // (engine.ts) and the `dotFamilyCounts` family-count derivation (roundContext.ts) — see
+    // enemyDotFamilyCounts.test.ts / enemyDotFamilyCounts.integration.test.ts for those. This
+    // locks the plain field shape on a generic entry itself, matching the parallel corrosion/
+    // inferno coverage.
+    it('a generic DoT stack can carry family + unremovable (Acidic Decay shape)', () => {
+        const stack: ActiveDoTStack = {
+            stacks: 1,
+            tier: 0,
+            remainingRounds: 3,
+            sourceId: 'v',
+            perTickAmount: 300,
+            family: 'Acidic Decay',
+            unremovable: true,
+        };
+        expect(stack.family).toBe('Acidic Decay');
+        expect(stack.unremovable).toBe(true);
     });
 });

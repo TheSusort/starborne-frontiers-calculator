@@ -3403,14 +3403,19 @@ export function runCombat(input: CombatEngineInput): {
                         cheatDeathConsumedRound.set(targetId, r);
                     }
                     statusEngine.clearRemovable(targetId);
-                    // The tank's enemy-applied Corrosion/Inferno DoTs are actor-state stacks
-                    // (NOT StatusEngine entries), so clearRemovable doesn't touch them — empty
-                    // them here so the survivor takes no further ticks. These are the SAME arrays
-                    // the turn-start DoT-tick intake reads (healTarget.corrosion/infernoEntries).
-                    // Both DoT types are removable; bombs (Blast, treated as persistent here) and
-                    // accumulators are intentionally left untouched.
-                    victim.corrosionEntries.length = 0;
-                    victim.infernoEntries.length = 0;
+                    // The tank's enemy-applied Corrosion/Inferno/generic DoTs are actor-state
+                    // stacks (NOT StatusEngine entries), so clearRemovable doesn't touch them —
+                    // wipe them here so the survivor takes no further ticks. These are the SAME
+                    // arrays the turn-start DoT-tick intake reads (healTarget.corrosion/inferno/
+                    // genericDoTEntries). SP-E: an `unremovable` stack (Acidic Decay) survives
+                    // this wipe — filter, don't clear, so those entries keep ticking. Bombs
+                    // (Blast, treated as persistent here) and accumulators are intentionally left
+                    // untouched.
+                    victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
+                    victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
+                    victim.genericDoTEntries = victim.genericDoTEntries.filter(
+                        (e) => e.unremovable
+                    );
                     bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
@@ -4922,6 +4927,7 @@ export function runCombat(input: CombatEngineInput): {
                         duringTurnOf: actingActorId,
                         corrosionEntries,
                         infernoEntries,
+                        genericDoTEntries,
                         pendingBombs,
                         runtimes: sideCtx.runtimes,
                         grantAllyCharges: sideCtx.grantAllyCharges,

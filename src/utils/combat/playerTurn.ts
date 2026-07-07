@@ -1,6 +1,6 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
-import { buildRoundContext } from '../abilities/roundContext';
+import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
 import {
     DoTApplicationConfig,
     DoTType,
@@ -1202,6 +1202,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -1343,6 +1345,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 corrosionEntryCount: corrosionEntries.length,
                 infernoEntryCount: infernoEntries.length,
                 bombCount: pendingBombs.length,
+                genericCount: genericDoTEntries.length,
+                enemyDotFamilyCounts: dotFamilyCounts(
+                    corrosionEntries,
+                    infernoEntries,
+                    genericDoTEntries
+                ),
                 enemyType,
                 enemyHpPct,
                 // Include the foreign caster's ability-sourced self statuses (e.g. its self-granted
@@ -1412,6 +1420,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -1487,6 +1497,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -1670,6 +1682,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: effectiveCrit,
         enemyType,
         roundCrit,

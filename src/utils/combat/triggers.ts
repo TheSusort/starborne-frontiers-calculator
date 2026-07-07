@@ -5,7 +5,7 @@ import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types
 import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
-import { buildRoundContext } from '../abilities/roundContext';
+import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './buffTotals';
 // Call-time-safe cycle: debuffImmunity imports selfBuffNamesForOwners from this module and we
@@ -862,6 +862,10 @@ export interface IntentExecContext {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
+    /** SP-E — generic (absolute per-tick) DoT entries, for `enemyDotFamilyCounts`/`genericCount`
+     *  drain-time derivation. Optional: absent test fixtures fall back to `[]` (byte-identical —
+     *  no existing DoT carries a `family` tag, so the family map is always `{}` regardless). */
+    genericDoTEntries?: ActiveDoTStack[];
     /** Player actor runtimes keyed by owner id ('attacker' + every walked team id). The
      *  executor resolves the intent's owner from this map for per-owner landing gates,
      *  charge caps, etc. A missing owner is a bug (throws — see executeIntent). */
@@ -1114,6 +1118,13 @@ export function buildActorConditionContext(
          *  on this subject (Berserker's Marauder Rage) to actually re-evaluate on-cast instead of
          *  only at the one-time combat-start seed (see seedPassiveTimedStatuses). */
         enemiesHitThisCast?: number;
+        /** SP-E: `genericDoTEntries.length` at drain time. Default 0 (no generic DoT tracked
+         *  by this caller). Folded into `enemyDotCount` alongside corrosion/inferno/bomb. */
+        genericCount?: number;
+        /** SP-E: live per-family DoT entry counts (Belladonna's "3+ Acidic Decay" gate) at
+         *  drain time. Default undefined — every family reads 0 via
+         *  ConditionContext.enemyDotFamilyCounts' own fallback. */
+        enemyDotFamilyCounts?: Record<string, number>;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -1133,6 +1144,8 @@ export function buildActorConditionContext(
         corrosionEntryCount: shared.corrosionEntryCount,
         infernoEntryCount: shared.infernoEntryCount,
         bombCount: shared.bombCount,
+        genericCount: shared.genericCount,
+        enemyDotFamilyCounts: shared.enemyDotFamilyCounts,
         effectiveCritRate: shared.effectiveCritRate ?? 0,
         enemyType: shared.enemyType,
         enemyHpPct: shared.enemyHpPct,
@@ -1167,6 +1180,15 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         corrosionEntryCount: ctx.corrosionEntries.length,
         infernoEntryCount: ctx.infernoEntries.length,
         bombCount: ctx.pendingBombs.length,
+        // SP-E: live generic-DoT count + per-family map (Belladonna's "3+ Acidic Decay" gate) at
+        // drain time. `ctx.genericDoTEntries` is optional (test fixtures may omit it) → `[]`
+        // fallback, matching every other optional IntentExecContext field's default pattern.
+        genericCount: (ctx.genericDoTEntries ?? []).length,
+        enemyDotFamilyCounts: dotFamilyCounts(
+            ctx.corrosionEntries,
+            ctx.infernoEntries,
+            ctx.genericDoTEntries ?? []
+        ),
         enemyType: ctx.enemyType,
         enemyHpPct,
         // Task 6 (Phase 4c PR 1): live self-HP% for drain-time hp-threshold gates. The engine
