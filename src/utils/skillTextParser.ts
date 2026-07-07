@@ -2299,6 +2299,38 @@ export function detectDamageReactionTrigger(
     return undefined;
 }
 
+// SP-E: Voron/Orel "transforms the [incoming direct] damage into a Damage over Time effect
+// lasting for N turns". Deliberately requires the literal "the damage into a" phrase (NOT the
+// looser "is transformed into a") so Meatshield's UNRELATED "damage taken from Protection is
+// transformed into a Damage over Time effect" (a still-unmodelled SP-F-adjacent gap) never
+// matches — corpus-verified: only Voron/Orel (both refit stages) match today.
+const TRANSFORM_TO_DOT_RE =
+    /transform\w*\s+the\s+damage\s+into\s+a\s+.*?damage\s+over\s+time\s+effect\b[^.]*?\b(?:lasting\s+for|for)\s+(\d+)\s+turns?\b/i;
+// Orel's gate: "When directly damaged by an enemy affected/effected by Taunt or Provoke, …"
+// (the live CSV spells it "effected", tolerated alongside the correct "affected").
+const ATTACKER_TAUNT_PROVOKE_RE =
+    /when\s+directly\s+damaged\s+by\s+an?\s+enemy\s+(?:affected|effected)\s+by\s+.*?\b(?:taunt|provoke)\b/i;
+
+/**
+ * Detects the "transforms the damage into a DoT lasting N turns" reactive self-conversion
+ * (Voron unconditional; Orel gated on the attacker holding Taunt/Provoke). Operates on the
+ * WHOLE row text (not sentence-scoped like detectDamageReactionTrigger) since the clause is
+ * always its own self-contained sentence in the corpus. Reference data: docs/ship-skills.csv
+ * (Voron, Orel — both refit stages).
+ */
+export function detectTransformToDot(
+    text: string
+): { turns: number; condition: 'always' | 'attacker-taunted-or-provoke' } | undefined {
+    const plain = stripUnitTags(text);
+    const m = TRANSFORM_TO_DOT_RE.exec(plain);
+    if (!m) return undefined;
+    const turns = parseInt(m[1], 10);
+    const condition = ATTACKER_TAUNT_PROVOKE_RE.test(plain)
+        ? 'attacker-taunted-or-provoke'
+        : 'always';
+    return { turns, condition };
+}
+
 // Phase 3 PR-F: two DISTINCT "enemy repair" reaction phrasings that both ride the LIVE
 // on-enemy-repaired trigger but route to DIFFERENT actors:
 //  - Ruiner's Bomb infliction ("on any enemy performing a repair") has NO leading "when" (so

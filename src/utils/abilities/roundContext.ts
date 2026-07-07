@@ -113,7 +113,12 @@ export function buildRoundContext(state: {
             state.landedEnemyDebuffCount +
             state.corrosionEntryCount +
             state.infernoEntryCount +
-            state.bombCount,
+            state.bombCount +
+            // SP-E (Task E3 forward-note): now that generic DoTs become live (Voron/Orel
+            // transform), fold genericCount in here too — closes the DoT-vs-debuff asymmetry
+            // vs enemyDotCount below, which already includes it (E2). Inert (0) for every
+            // existing ship without a live generic DoT.
+            (state.genericCount ?? 0),
         effectiveCritRate: state.effectiveCritRate,
         enemyType: state.enemyType,
         // DPS-assumption defaults (overridable for live-engine population)

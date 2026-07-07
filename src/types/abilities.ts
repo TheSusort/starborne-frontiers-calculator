@@ -38,7 +38,11 @@ export type AbilityType =
     // Enforcer/Defiant/Stalwart "At the start of combat …" / "when adjacent to a Supporter …"
     // passives). Applied ONCE to PlacementPlan stats by the battle sim's pre-fight layer (F5) —
     // never a status (hidden, non-purgeable, not reset on death). DPS calculators ignore it.
-    | 'pre-combat-stat';
+    | 'pre-combat-stat'
+    // SP-E: Voron/Orel "transforms the [incoming direct] damage into a DoT lasting N turns" —
+    // reactive self-ability (trigger:'on-attacked', target:'self'). See AbilityConfig's
+    // 'transform-incoming-to-dot' variant.
+    | 'transform-incoming-to-dot';
 
 export type AbilityTarget =
     | 'self'
@@ -376,7 +380,11 @@ export type IncomingCondition =
     | 'self-shielded'
     // Epic PR12 (C): unconditional — used with `hpScaling` (Tormenter's HP-proportional
     // reduction, which carries no trigger/status gate, only continuous HP scaling).
-    | 'always';
+    | 'always'
+    // SP-E: Orel — the transform fires only when the ATTACKER of this hit currently carries
+    // Taunt (self-buff) or Provoke (debuff placed on it by someone else). Distinct from
+    // 'attacker-has-dot' (a DoT-status fact) — this checks control-status membership.
+    | 'attacker-taunted-or-provoke';
 
 /** Per-incoming-hit context assembled by the engine at each victim apply site. */
 export interface IncomingHitContext {
@@ -400,6 +408,12 @@ export interface IncomingHitContext {
     victimHasBarrierRecharging: boolean;
     /** Victim currently holds an active shield pool (shieldPool > 0) — gates self-shielded. */
     victimHasShield: boolean;
+    /** SP-E (Orel): the ATTACKER currently carries Taunt (self-buff) or Provoke (debuff).
+     *  Live-derived by the engine off the real attacker id where one exists (the block-step ctx,
+     *  the positional per-hit reduction ctx, the aggregate enemy-path ctx); defaults false at
+     *  sites with no single real attacker (reflect ping-back, DoT-tick reduction) — inert unless
+     *  an ability's config carries `condition:'attacker-taunted-or-provoke'`. */
+    attackerTauntedOrProvoked: boolean;
     /** Epic PR12 (C): the VICTIM's own live HP% (0..100) at hit time, for HP-proportional
      *  incoming-reduction scaling (Tormenter's `hpScaling`). Live-derived by the engine;
      *  defaults 100 (full HP) where unused/inapplicable — inert unless an ability's config
@@ -658,6 +672,11 @@ export type AbilityConfig =
            *  without it). */
           hpScaling?: { perUnit: number; cap: number };
       }
+    // SP-E: Voron/Orel "transforms the [incoming direct] damage into a DoT lasting N turns".
+    // Reactive self-ability (trigger:'on-attacked', target:'self'). At the apply site the direct
+    // hit is REPLACED by a generic self-DoT of perTickAmount = D/turns. `condition` gates the
+    // transform per-hit (Voron:'always', Orel:'attacker-taunted-or-provoke').
+    | { type: 'transform-incoming-to-dot'; turns: number; condition: IncomingCondition }
     // D-PR3 victim-side proc block (rolled at the applyVictimDamage funnel, byDirectDamage only).
     | {
           type: 'incoming-block';

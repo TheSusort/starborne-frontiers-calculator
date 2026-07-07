@@ -98,6 +98,7 @@ import {
     classifyEnemyEffect,
     statusEffectCondition,
     parsePreCombatStatGrants,
+    detectTransformToDot,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -2241,6 +2242,32 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: grant.pos,
+        });
+    }
+
+    // SP-E: Voron/Orel "transforms the [incoming direct] damage into a Damage over Time effect
+    // lasting for N turns" — a reactive self-conversion, distinct from the counter/incoming-*
+    // families above (no damage tag, no buff/debuff name to merge). Voron's is unconditional
+    // (condition:'always'); Orel's fires only vs a Taunted/Provoked attacker
+    // (condition:'attacker-taunted-or-provoke', detected in the same clause).
+    const transform = detectTransformToDot(text);
+    if (transform) {
+        const transformPos = text.search(/transform\w*\s+the\s+damage/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'transform-incoming-to-dot',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'transform-incoming-to-dot',
+                    turns: transform.turns,
+                    condition: transform.condition,
+                },
+                autoFilled: true,
+            },
+            pos: transformPos >= 0 ? transformPos : MAX_POS,
         });
     }
 

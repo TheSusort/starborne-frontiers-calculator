@@ -383,34 +383,27 @@ describe('SP-E — DoT transforms & conversions', () => {
     // Text shared with the SP-A probe (VORON_PASSIVE2).
     const VORON_P2 = VORON_PASSIVE2;
 
-    it.fails(
-        'Voron: "transforms the damage into a Damage over Time effect" builds a reactive self-DoT conversion',
-        () => {
-            const abilities = abilitiesFor({ secondPassiveSkillText: VORON_P2 }, 'passive');
-            // GAP: SP-E — dry-run confirmed: today the WHOLE passive slot builds NO abilities at
-            // all for this text (same empty-array finding SP-A's probe already made), so neither
-            // half of the clause exists yet. No damage-to-DoT transform/conversion config exists
-            // in AbilityConfig (verified against the full union in src/types/abilities.ts) — and
-            // the clause names no specific DoT family (unlike Corrosion/Inferno/Bomb), so the
-            // existing `{ type: 'dot'; dotType: DoTType; ... }` shape (DoTType is only
-            // 'corrosion' | 'inferno' | 'bomb') cannot represent it without SP-E ALSO widening
-            // DoTType — a shape we can't predict or assert on today. What IS certain regardless of
-            // that shape choice: this is a REACTIVE conversion fired when Voron itself takes
-            // damage, applied to ITSELF — i.e. it must ride the EXISTING, already-wired
-            // `on-attacked` trigger (used throughout buildShipAbilities.ts for every "when
-            // directly damaged" passive reaction: Stalwart's counter, Cultivator's heal,
-            // Purifier's cleanse) with `target: 'self'`. This is distinct from SP-A's reduction
-            // (a passive stat modifier, `trigger: 'on-cast'`, per the existing incoming-reduction
-            // build sites at buildShipAbilities.ts ~L2082-2117) and from the `counter` ability
-            // shape (also `on-attacked` but `target: 'enemy'`) — so the proxy below cannot be
-            // trivially satisfied by either sibling mechanic landing first. Proxy: an ability with
-            // `trigger === 'on-attacked' && target === 'self'` — false now (array is empty), true
-            // once SP-E's transform ships, survives whatever config.type/DoTType shape it lands on.
-            expect(abilities.some((a) => a.trigger === 'on-attacked' && a.target === 'self')).toBe(
-                true
-            );
-        }
-    );
+    it('Voron: "transforms the damage into a Damage over Time effect" builds a reactive self-DoT transform', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: VORON_P2 }, 'passive');
+        const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
+        expect(transform?.trigger).toBe('on-attacked');
+        expect(transform?.target).toBe('self');
+        expect(transform && 'turns' in transform.config && transform.config.turns).toBe(3);
+    });
+
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — Orel's variant of
+    // the SAME transform family, gated on the ATTACKER holding Taunt or Provoke.
+    const OREL_P2 =
+        'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 3 turns.';
+    it('Orel: transform is gated on the attacker being Taunted or Provoked', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: OREL_P2 }, 'passive');
+        const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
+        expect(transform?.trigger).toBe('on-attacked');
+        expect(transform?.target).toBe('self');
+        expect(transform && 'condition' in transform.config && transform.config.condition).toBe(
+            'attacker-taunted-or-provoke'
+        );
+    });
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: Belladonna also
     // appears in SP-D (Task 5) for the charge skill's "3+ Acidic Decay" count-gate clause — a

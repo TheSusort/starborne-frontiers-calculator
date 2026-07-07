@@ -6,7 +6,7 @@ import {
     TeamActorInput,
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { Ability, AbilityTarget, ShipSkills } from '../../types/abilities';
+import { Ability, AbilityTarget, IncomingHitContext, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
@@ -55,7 +55,7 @@ import {
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { victimHitDamage } from './victimDamage';
-import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
+import { incomingReductionForHit, incomingBlockForIntake, conditionMet } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
 import { detonateContainers, type DetonationRecipe } from './detonation';
@@ -2725,7 +2725,10 @@ export function runCombat(input: CombatEngineInput): {
                     a.config.type === 'incoming-reduction' ||
                     a.config.type === 'incoming-block' ||
                     a.config.type === 'incoming-shield-grant' ||
-                    a.config.type === 'damage-reflection'
+                    a.config.type === 'damage-reflection' ||
+                    // SP-E: Voron/Orel's reactive self-DoT transform, consumed at the
+                    // applyVictimDamage funnel below (direct intake only).
+                    a.config.type === 'transform-incoming-to-dot'
                 ) {
                     incoming.push(a);
                 }
@@ -2808,6 +2811,15 @@ export function runCombat(input: CombatEngineInput): {
         if (!a || maxHp <= 0) return 100;
         return (100 * a.currentHp) / maxHp;
     };
+    // SP-E (Orel): does the given actor (the ATTACKER of an incoming hit) currently carry Taunt
+    // (a self-buff it granted itself) or Provoke (a debuff placed on it by someone else)? Sibling
+    // to attackerHasDot — same "evaluated against the attacker" shape, different status family.
+    // An empty/unresolvable actorId (e.g. a DoT-tick batch with no single attacker) resolves via
+    // selfBuffNamesForOwners([]) → [] → false, and provokerOf on a nonexistent id → undefined →
+    // false — both branches degrade safely to "not gated" without a separate guard.
+    const attackerTauntedOrProvoked = (actorId: string): boolean =>
+        selfBuffNamesForOwners(statusEngine, [actorId]).includes('Taunt') ||
+        provokerOf(statusEngine, actorId) !== undefined;
 
     // Proc an owner's standing leeches against a damage credit (heals immediately at
     // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
@@ -3255,6 +3267,9 @@ export function runCombat(input: CombatEngineInput): {
                             victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
                             victimHasShield: hasShield(victim.id),
                             selfHpPct: selfHpPctOf(victim.id),
+                            attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                cause?.killerId ?? ''
+                            ),
                         },
                         (abilityId, chance) => {
                             const cfg = blockAbilities.find((b) => b.id === abilityId)?.config;
@@ -3285,6 +3300,57 @@ export function runCombat(input: CombatEngineInput): {
                 }
             }
             sink.addIncoming(damage, victim.id);
+            // SP-E: Voron/Orel — "when directly damaged, transforms the damage into a Damage over
+            // Time effect lasting N turns". DIRECT INTAKE ONLY (byDirectDamage) — a DoT tick never
+            // re-transforms (no recursive conversion). Never fires when Barrier is already
+            // nullifying the hit — same precedence the incoming-block step above enforces via its
+            // own `!carriesBarrier` guard (Barrier sits strictly in front of every other incoming-
+            // effect mechanism; a Barrier-immune hit deals no real damage, so there is nothing to
+            // convert). On a match, the FULL post-block direct amount is REPLACED — never drains
+            // shield/HP this turn — by a generic self-DoT of `damage / turns` per round for
+            // `turns` rounds, credited to the victim itself (sourceId: victim.id, ticked by the
+            // existing generic-DoT path both turn-start tick sites already read). Fully inert (no
+            // lookup beyond the empty-array default) for every actor without a
+            // 'transform-incoming-to-dot' ability → byte-identical for every existing fixture.
+            if (cause?.byDirectDamage && !carriesBarrier && damage > 0) {
+                const attackerId = cause?.killerId ?? '';
+                const transformAbilities = incomingAbilitiesOf(victim.id).filter(
+                    (a) => a.config.type === 'transform-incoming-to-dot'
+                );
+                if (transformAbilities.length > 0) {
+                    const hitCtx: IncomingHitContext = {
+                        // didCrit is irrelevant to both Voron ('always') and Orel
+                        // ('attacker-taunted-or-provoke') — no crit-gated transform exists in the
+                        // corpus, so this mirrors the block step's own unconditioned `false`.
+                        didCrit: false,
+                        attackerStealthed: isStealthed(attackerId),
+                        victimStealthed: isStealthed(victim.id),
+                        victimStasised: isStasised(victim.id),
+                        hitIndexThisRound: 0, // unused by this condition family
+                        attackerHasDot: attackerHasDot(attackerId),
+                        victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
+                        victimHasShield: hasShield(victim.id),
+                        selfHpPct: selfHpPctOf(victim.id),
+                        attackerTauntedOrProvoked: attackerTauntedOrProvoked(attackerId),
+                    };
+                    const transform = transformAbilities.find(
+                        (a) =>
+                            a.config.type === 'transform-incoming-to-dot' &&
+                            conditionMet(a.config.condition, hitCtx)
+                    );
+                    if (transform && transform.config.type === 'transform-incoming-to-dot') {
+                        const turns = transform.config.turns;
+                        victim.genericDoTEntries.push({
+                            stacks: 1,
+                            tier: 0,
+                            remainingRounds: turns,
+                            sourceId: victim.id,
+                            perTickAmount: damage / turns,
+                        });
+                        damage = 0; // the direct hit is replaced — no shield/HP drain this turn
+                    }
+                }
+            }
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
@@ -3618,6 +3684,10 @@ export function runCombat(input: CombatEngineInput): {
                                 victimHasBarrierRecharging: hasBarrierRecharging(attacker.id),
                                 victimHasShield: hasShield(attacker.id),
                                 selfHpPct: selfHpPctOf(attacker.id),
+                                // No 'transform-incoming-to-dot' ability reads the reflect ctx
+                                // (Voron/Orel's own incoming-reduction, not the reflected hit's
+                                // reduction) — default false, mirroring the pattern above.
+                                attackerTauntedOrProvoked: false,
                             }
                         );
                         const reflected = reflectedDamageForHit({
@@ -4218,6 +4288,7 @@ export function runCombat(input: CombatEngineInput): {
                         victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
                         victimHasShield: hasShield(victim.id),
                         selfHpPct: selfHpPctOf(victim.id),
+                        attackerTauntedOrProvoked: attackerTauntedOrProvoked(args.actingId),
                     });
                     if (!didCrit) return equip;
                     // F3 crit-conditional pre-fight damage modifiers, gated per sub-hit on
@@ -5381,6 +5452,11 @@ export function runCombat(input: CombatEngineInput): {
                                     victimHasBarrierRecharging: hasBarrierRecharging(healTarget.id),
                                     victimHasShield: hasShield(healTarget.id),
                                     selfHpPct: selfHpPctOf(healTarget.id),
+                                    // Same no-single-attacker reasoning as attackerHasDot above —
+                                    // 'attacker-taunted-or-provoke' abilities are 'transform-
+                                    // incoming-to-dot' (direct-only, gated inside applyVictimDamage
+                                    // itself), so this reduction-path ctx never reads it.
+                                    attackerTauntedOrProvoked: false,
                                 }),
                             // PR I4b: the tank is the ticking victim.
                             dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
@@ -5461,6 +5537,7 @@ export function runCombat(input: CombatEngineInput): {
                                         victimHasBarrierRecharging: hasBarrierRecharging(actor.id),
                                         victimHasShield: hasShield(actor.id),
                                         selfHpPct: selfHpPctOf(actor.id),
+                                        attackerTauntedOrProvoked: false,
                                     }),
                                 // PR I4b: this actor IS the ticking victim.
                                 dotMultFor: (ctx) => victimDotMult(ctx, actor),
@@ -6422,6 +6499,9 @@ export function runCombat(input: CombatEngineInput): {
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
                                           victimHasShield: hasShield(tgt.id),
                                           selfHpPct: selfHpPctOf(tgt.id),
+                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                              actor.id
+                                          ),
                                       })
                                     : 0;
                                 const incomingReductionCritAll = tgtIncoming.length
@@ -6435,6 +6515,9 @@ export function runCombat(input: CombatEngineInput): {
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
                                           victimHasShield: hasShield(tgt.id),
                                           selfHpPct: selfHpPctOf(tgt.id),
+                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                              actor.id
+                                          ),
                                       })
                                     : 0;
                                 // F3: crit-conditional pre-fight damage modifiers, mirrored from
