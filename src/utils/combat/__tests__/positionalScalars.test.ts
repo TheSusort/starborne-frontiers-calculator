@@ -118,6 +118,7 @@ function makeArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
         statusEngine,
         corrosionEntries: [],
         infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
         enemyDefense: ENEMY_DEFENCE,

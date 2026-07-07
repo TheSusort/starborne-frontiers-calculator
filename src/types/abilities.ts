@@ -38,7 +38,14 @@ export type AbilityType =
     // Enforcer/Defiant/Stalwart "At the start of combat …" / "when adjacent to a Supporter …"
     // passives). Applied ONCE to PlacementPlan stats by the battle sim's pre-fight layer (F5) —
     // never a status (hidden, non-purgeable, not reset on death). DPS calculators ignore it.
-    | 'pre-combat-stat';
+    | 'pre-combat-stat'
+    // SP-E: Voron/Orel "transforms the [incoming direct] damage into a DoT lasting N turns" —
+    // reactive self-ability (trigger:'on-attacked', target:'self'). See AbilityConfig's
+    // 'transform-incoming-to-dot' variant.
+    | 'transform-incoming-to-dot'
+    // SP-E, Task E4: Belladonna's ally-Corrosion→Acidic-Decay conversion — reactive enemy-target
+    // ability (trigger:'on-ally-debuff-inflicted'). See AbilityConfig's 'convert-dot' variant.
+    | 'convert-dot';
 
 export type AbilityTarget =
     | 'self'
@@ -376,7 +383,11 @@ export type IncomingCondition =
     | 'self-shielded'
     // Epic PR12 (C): unconditional — used with `hpScaling` (Tormenter's HP-proportional
     // reduction, which carries no trigger/status gate, only continuous HP scaling).
-    | 'always';
+    | 'always'
+    // SP-E: Orel — the transform fires only when the ATTACKER of this hit currently carries
+    // Taunt (self-buff) or Provoke (debuff placed on it by someone else). Distinct from
+    // 'attacker-has-dot' (a DoT-status fact) — this checks control-status membership.
+    | 'attacker-taunted-or-provoke';
 
 /** Per-incoming-hit context assembled by the engine at each victim apply site. */
 export interface IncomingHitContext {
@@ -386,8 +397,11 @@ export interface IncomingHitContext {
     victimStasised: boolean;
     /** 1-based direct-damage intake index for this victim this round (Ironclad). */
     hitIndexThisRound: number;
-    /** Set only on the DoT-tick path (Vortex Veil). */
-    dotType?: 'inferno' | 'corrosion';
+    /** Set only on the DoT-tick path (Vortex Veil). SP-E: widened to DoTType (was
+     *  'inferno' | 'corrosion') so a generic-DoT tick can flow through the same reduction path;
+     *  the 'dot-inferno-corrosion' condition still matches only inferno/corrosion (correctly
+     *  false for 'generic'/'bomb'). */
+    dotType?: DoTType;
     /** Epic PR12 (C): true when the ATTACKER of this hit carries a live Corrosion or Inferno
      *  stack (Anemone). Live-derived by the engine; defaults false everywhere no such ability
      *  is present → byte-identical. */
@@ -397,6 +411,12 @@ export interface IncomingHitContext {
     victimHasBarrierRecharging: boolean;
     /** Victim currently holds an active shield pool (shieldPool > 0) — gates self-shielded. */
     victimHasShield: boolean;
+    /** SP-E (Orel): the ATTACKER currently carries Taunt (self-buff) or Provoke (debuff).
+     *  Live-derived by the engine off the real attacker id where one exists (the block-step ctx,
+     *  the positional per-hit reduction ctx, the aggregate enemy-path ctx); defaults false at
+     *  sites with no single real attacker (reflect ping-back, DoT-tick reduction) — inert unless
+     *  an ability's config carries `condition:'attacker-taunted-or-provoke'`. */
+    attackerTauntedOrProvoked: boolean;
     /** Epic PR12 (C): the VICTIM's own live HP% (0..100) at hit time, for HP-proportional
      *  incoming-reduction scaling (Tormenter's `hpScaling`). Live-derived by the engine;
      *  defaults 100 (full HP) where unused/inapplicable — inert unless an ability's config
@@ -655,6 +675,11 @@ export type AbilityConfig =
            *  without it). */
           hpScaling?: { perUnit: number; cap: number };
       }
+    // SP-E: Voron/Orel "transforms the [incoming direct] damage into a DoT lasting N turns".
+    // Reactive self-ability (trigger:'on-attacked', target:'self'). At the apply site the direct
+    // hit is REPLACED by a generic self-DoT of perTickAmount = D/turns. `condition` gates the
+    // transform per-hit (Voron:'always', Orel:'attacker-taunted-or-provoke').
+    | { type: 'transform-incoming-to-dot'; turns: number; condition: IncomingCondition }
     // D-PR3 victim-side proc block (rolled at the applyVictimDamage funnel, byDirectDamage only).
     | {
           type: 'incoming-block';
@@ -741,6 +766,23 @@ export type AbilityConfig =
           perAdjacentAlly?: boolean;
           /** Gate: at least one adjacent ally of this role category (Enforcer/Defiant/Stalwart). */
           requiresAdjacentRole?: ShipRoleCategory;
+      }
+    // SP-E, Task E4 (Belladonna): "When an ally inflicts `fromDotType`, chance to convert it into
+    // a named DoT family `buffName` of the same level" — retags the ally's just-applied entries
+    // (family + unremovable), preserving tier/stacks/remainingRounds. Rides
+    // trigger:'on-ally-debuff-inflicted', target:'enemy' (widened gate — see buildShipAbilities'
+    // mergeBuff). `chanceFromStat` is the conversion-chance stat scaling (1% per 10 Hacking →
+    // pctPerPoint 0.1). `extendTurns`/`extendChanceFromCritPower` fold Belladonna's paired
+    // "extends the newly applied <family> for N turns, chance = crit power" clause (otherwise
+    // parsed standalone by parseCritPowerExtend into an `extend-dot` ability — suppressed for
+    // this row to avoid a double-extend) directly into the SAME conversion executor.
+    | {
+          type: 'convert-dot';
+          fromDotType: DoTType;
+          buffName: string;
+          chanceFromStat: { stat: 'hacking'; pctPerPoint: number };
+          extendTurns?: number;
+          extendChanceFromCritPower?: boolean;
       };
 
 /** Crowd-control effects a `control` ability can apply. The combat effect of each

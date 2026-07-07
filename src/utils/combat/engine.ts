@@ -1,11 +1,12 @@
 import {
     CombatStatBlock,
+    DoTType,
     EnemyBaseClass,
     SelectedGameBuff,
     TeamActorInput,
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { Ability, AbilityTarget, ShipSkills } from '../../types/abilities';
+import { Ability, AbilityTarget, IncomingHitContext, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
@@ -54,7 +55,7 @@ import {
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { victimHitDamage } from './victimDamage';
-import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
+import { incomingReductionForHit, incomingBlockForIntake, conditionMet } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
 import { detonateContainers, type DetonationRecipe } from './detonation';
@@ -675,7 +676,7 @@ function buildEnemyRoundEffects(
     // Sum active stacks per source → type → tier, preserving first-seen source order.
     const dotsBySource = new Map<string, Map<string, EnemyDoTState>>();
     const accumulate = (
-        type: 'corrosion' | 'inferno',
+        type: DoTType,
         entries: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[]
     ): void => {
         for (const e of entries) {
@@ -808,16 +809,23 @@ function processAccumulators(args: {
 // dotTypes — it re-folds any enemy-status-name-gated dotDamage modifier (Wildfire) against
 // THIS call's ticking victim, live, at tick time (see `victimDotMult`). Every call site that
 // doesn't pass it (or an applier ctx with no such modifier) is unaffected: `ctx.dotMult` alone.
-function tickDoTs(args: {
+/** DoT types `tickDoTs` handles as a per-round tick — everything except 'bomb' (bombs burst on a
+ *  timed countdown via `processBombs`, a separate mechanism, never a per-round tick). SP-E: added
+ *  'generic' alongside 'corrosion'/'inferno'. */
+type TickableDoTType = Exclude<DoTType, 'bomb'>;
+
+export function tickDoTs(args: {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
+    /** SP-E: absolute per-tick generic DoT entries (Voron/Orel transform, Acidic Decay family). */
+    genericDoTEntries: ActiveDoTStack[];
     enemyHp: number;
     ctxFor: (sourceId: string) => PlayerRoundCtx | undefined;
-    emitTicked: (dotType: 'corrosion' | 'inferno', damage: number) => void;
-    credit: (sourceId: string, dotType: 'corrosion' | 'inferno', damage: number) => void;
+    emitTicked: (dotType: TickableDoTType, damage: number) => void;
+    credit: (sourceId: string, dotType: TickableDoTType, damage: number) => void;
     /** D-PR3 (Vortex Veil): % reduction applied to this carrier's DoT ticks of the given type.
      *  Absent → 0 → byte-identical. */
-    incomingDotReductionPct?: (dotType: 'corrosion' | 'inferno') => number;
+    incomingDotReductionPct?: (dotType: TickableDoTType) => number;
     /** Sub-project I, PR I4b — resolves the EFFECTIVE dotMult for one applier's ctx, given the
      *  ticking VICTIM (this tickDoTs call's whole entries list belongs to ONE victim, so the
      *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to the
@@ -863,13 +871,31 @@ function tickDoTs(args: {
         args.emitTicked('inferno', infernoSum * factor);
     }
 
+    // SP-E: Tick generic DoTs — an ABSOLUTE per-tick amount, independent of stats/HP (no ctxFor
+    // gate: unlike corrosion/inferno, a generic tick doesn't need the applier's effective attack
+    // or affinity, so it ticks even before the applier's first turn this run).
+    let genericSum = 0;
+    const genericCredits: Array<{ sourceId: string; d: number }> = [];
+    for (const e of args.genericDoTEntries) {
+        const d = (e.perTickAmount ?? 0) * e.stacks;
+        genericCredits.push({ sourceId: e.sourceId, d });
+        genericSum += d;
+    }
+    if (genericSum > 0) {
+        const reductionPct = args.incomingDotReductionPct?.('generic') ?? 0;
+        const factor = 1 - reductionPct / 100;
+        for (const { sourceId, d } of genericCredits) args.credit(sourceId, 'generic', d * factor);
+        args.emitTicked('generic', genericSum * factor);
+    }
+
     // Expire DoT stacks after ticking
     expireStacks(args.corrosionEntries);
     expireStacks(args.infernoEntries);
+    expireStacks(args.genericDoTEntries);
 }
 
 /** Damage-credit channels the standing-leech hook distinguishes (damage-leech spec §4). */
-type LeechChannel = 'direct' | 'detonation' | 'corrosion' | 'inferno';
+type LeechChannel = 'direct' | 'detonation' | 'corrosion' | 'inferno' | 'generic';
 
 /** A team actor input as the ENGINE consumes it: the public TeamActorInput plus an
  *  optional `walk` bundle the adapter (simulateDPS) resolves when the actor carries
@@ -1086,7 +1112,8 @@ export interface CombatEngineInput {
      *  HP-based proxy. Never set by production code; inert when absent. */
     __testTapCreditDamage?: (
         sourceId: string,
-        channel: 'direct' | 'detonation' | 'corrosion' | 'inferno',
+        // SP-E: widened to include 'generic' (mirrors LeechChannel).
+        channel: 'direct' | 'detonation' | 'corrosion' | 'inferno' | 'generic',
         amount: number
     ) => void;
     /** TEST-ONLY tap (A2 Task 2): receives the full `allActors` roster once, right after actors
@@ -1155,7 +1182,10 @@ export interface EnemyRoundEffects {
 /** One enemy-applied DoT active on the heal target, attributed to its source enemy and summed per
  *  type+tier (mirrors the DPS `ActiveDoTState` shape, minus ticksRemaining which the panel omits). */
 export interface EnemyDoTState {
-    type: 'corrosion' | 'inferno';
+    // SP-E: widened to DoTType (was 'corrosion' | 'inferno') for forward-compat with a future
+    // generic-DoT healing-panel display; `accumulate` below is called only with 'corrosion'/
+    // 'inferno' today (generic DoTs are not auto-applied from skill text in this task).
+    type: DoTType;
     tier: number;
     stacks: number;
 }
@@ -1288,6 +1318,10 @@ export function runCombat(input: CombatEngineInput): {
         totalConditional: number;
         /** Total non-focus player (team) damage across all rounds — adapter summary. */
         teamTotal: number;
+        /** SP-E: total generic (absolute-per-tick) DoT damage across all rounds. Always 0 today
+         *  (generic DoTs are never auto-applied from skill text in this task) — not yet consumed
+         *  by DPSSimulationSummary; a future task can surface it as totalGenericDamage. */
+        generic: number;
     };
     /** Healing-mode accounting (additive — present ONLY when healTargetId is set). */
     healing?: { rounds: HealingRoundEngine[]; destroyedRound?: number };
@@ -1828,12 +1862,16 @@ export function runCombat(input: CombatEngineInput): {
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
+    // SP-E: total generic (absolute-per-tick) DoT damage — always 0 today (never auto-applied
+    // from skill text in this task); mirrors totalCorrosionRaw/totalInfernoRaw.
+    let totalGenericRaw = 0;
     let totalDetonationRaw = 0;
     let totalSecondaryRaw = 0;
     let totalConditionalRaw = 0;
     // DoT containers live on the enemy actor (were loop-locals in the old single-pass loop).
     const corrosionEntries = enemy.corrosionEntries;
     const infernoEntries = enemy.infernoEntries;
+    const genericDoTEntries = enemy.genericDoTEntries;
     const pendingBombs = enemy.pendingBombs;
     const pendingAccumulators = enemy.pendingAccumulators;
     // hp-changed event tracking (emission-only, no sim effect). ship-destroyed is owned by
@@ -1991,6 +2029,9 @@ export function runCombat(input: CombatEngineInput): {
         ...(target.infernoEntries.length > 0 ? ['Inferno'] : []),
         ...(target.corrosionEntries.length > 0 ? ['Corrosion'] : []),
         ...(target.pendingBombs.length > 0 ? ['Bomb'] : []),
+        // SP-E: generic DoTs have no single named type — synthesize a base "Damage over Time"
+        // buff-name so an `enemy-debuff` name-gate can still see them.
+        ...(target.genericDoTEntries.length > 0 ? ['Damage over Time'] : []),
     ];
     // Sub-project I, PR I4b/I4c — per-VICTIM, per-TICK resolution of an applier's dotMult.
     // Reads `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's cast
@@ -2304,7 +2345,7 @@ export function runCombat(input: CombatEngineInput): {
     // corrosion/inferno display + raw totals at post-round assembly WITHOUT feeding cumulativeDamage
     // (the per-victim HP already lands via applyVictimDamage — exact mirror of perActorDetonation).
     // Empty on non-positional rounds → byte-identical.
-    let perActorDot = new Map<string, { corrosion: number; inferno: number }>();
+    let perActorDot = new Map<string, { corrosion: number; inferno: number; generic: number }>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal %: the ctx value
@@ -2684,7 +2725,10 @@ export function runCombat(input: CombatEngineInput): {
                     a.config.type === 'incoming-reduction' ||
                     a.config.type === 'incoming-block' ||
                     a.config.type === 'incoming-shield-grant' ||
-                    a.config.type === 'damage-reflection'
+                    a.config.type === 'damage-reflection' ||
+                    // SP-E: Voron/Orel's reactive self-DoT transform, consumed at the
+                    // applyVictimDamage funnel below (direct intake only).
+                    a.config.type === 'transform-incoming-to-dot'
                 ) {
                     incoming.push(a);
                 }
@@ -2767,6 +2811,15 @@ export function runCombat(input: CombatEngineInput): {
         if (!a || maxHp <= 0) return 100;
         return (100 * a.currentHp) / maxHp;
     };
+    // SP-E (Orel): does the given actor (the ATTACKER of an incoming hit) currently carry Taunt
+    // (a self-buff it granted itself) or Provoke (a debuff placed on it by someone else)? Sibling
+    // to attackerHasDot — same "evaluated against the attacker" shape, different status family.
+    // An empty/unresolvable actorId (e.g. a DoT-tick batch with no single attacker) resolves via
+    // selfBuffNamesForOwners([]) → [] → false, and provokerOf on a nonexistent id → undefined →
+    // false — both branches degrade safely to "not gated" without a separate guard.
+    const attackerTauntedOrProvoked = (actorId: string): boolean =>
+        selfBuffNamesForOwners(statusEngine, [actorId]).includes('Taunt') ||
+        provokerOf(statusEngine, actorId) !== undefined;
 
     // Proc an owner's standing leeches against a damage credit (heals immediately at
     // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
@@ -3214,6 +3267,9 @@ export function runCombat(input: CombatEngineInput): {
                             victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
                             victimHasShield: hasShield(victim.id),
                             selfHpPct: selfHpPctOf(victim.id),
+                            attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                cause?.killerId ?? ''
+                            ),
                         },
                         (abilityId, chance) => {
                             const cfg = blockAbilities.find((b) => b.id === abilityId)?.config;
@@ -3244,6 +3300,57 @@ export function runCombat(input: CombatEngineInput): {
                 }
             }
             sink.addIncoming(damage, victim.id);
+            // SP-E: Voron/Orel — "when directly damaged, transforms the damage into a Damage over
+            // Time effect lasting N turns". DIRECT INTAKE ONLY (byDirectDamage) — a DoT tick never
+            // re-transforms (no recursive conversion). Never fires when Barrier is already
+            // nullifying the hit — same precedence the incoming-block step above enforces via its
+            // own `!carriesBarrier` guard (Barrier sits strictly in front of every other incoming-
+            // effect mechanism; a Barrier-immune hit deals no real damage, so there is nothing to
+            // convert). On a match, the FULL post-block direct amount is REPLACED — never drains
+            // shield/HP this turn — by a generic self-DoT of `damage / turns` per round for
+            // `turns` rounds, credited to the victim itself (sourceId: victim.id, ticked by the
+            // existing generic-DoT path both turn-start tick sites already read). Fully inert (no
+            // lookup beyond the empty-array default) for every actor without a
+            // 'transform-incoming-to-dot' ability → byte-identical for every existing fixture.
+            if (cause?.byDirectDamage && !carriesBarrier && damage > 0) {
+                const attackerId = cause?.killerId ?? '';
+                const transformAbilities = incomingAbilitiesOf(victim.id).filter(
+                    (a) => a.config.type === 'transform-incoming-to-dot'
+                );
+                if (transformAbilities.length > 0) {
+                    const hitCtx: IncomingHitContext = {
+                        // didCrit is irrelevant to both Voron ('always') and Orel
+                        // ('attacker-taunted-or-provoke') — no crit-gated transform exists in the
+                        // corpus, so this mirrors the block step's own unconditioned `false`.
+                        didCrit: false,
+                        attackerStealthed: isStealthed(attackerId),
+                        victimStealthed: isStealthed(victim.id),
+                        victimStasised: isStasised(victim.id),
+                        hitIndexThisRound: 0, // unused by this condition family
+                        attackerHasDot: attackerHasDot(attackerId),
+                        victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
+                        victimHasShield: hasShield(victim.id),
+                        selfHpPct: selfHpPctOf(victim.id),
+                        attackerTauntedOrProvoked: attackerTauntedOrProvoked(attackerId),
+                    };
+                    const transform = transformAbilities.find(
+                        (a) =>
+                            a.config.type === 'transform-incoming-to-dot' &&
+                            conditionMet(a.config.condition, hitCtx)
+                    );
+                    if (transform && transform.config.type === 'transform-incoming-to-dot') {
+                        const turns = transform.config.turns;
+                        victim.genericDoTEntries.push({
+                            stacks: 1,
+                            tier: 0,
+                            remainingRounds: turns,
+                            sourceId: victim.id,
+                            perTickAmount: damage / turns,
+                        });
+                        damage = 0; // the direct hit is replaced — no shield/HP drain this turn
+                    }
+                }
+            }
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
@@ -3362,14 +3469,19 @@ export function runCombat(input: CombatEngineInput): {
                         cheatDeathConsumedRound.set(targetId, r);
                     }
                     statusEngine.clearRemovable(targetId);
-                    // The tank's enemy-applied Corrosion/Inferno DoTs are actor-state stacks
-                    // (NOT StatusEngine entries), so clearRemovable doesn't touch them — empty
-                    // them here so the survivor takes no further ticks. These are the SAME arrays
-                    // the turn-start DoT-tick intake reads (healTarget.corrosion/infernoEntries).
-                    // Both DoT types are removable; bombs (Blast, treated as persistent here) and
-                    // accumulators are intentionally left untouched.
-                    victim.corrosionEntries.length = 0;
-                    victim.infernoEntries.length = 0;
+                    // The tank's enemy-applied Corrosion/Inferno/generic DoTs are actor-state
+                    // stacks (NOT StatusEngine entries), so clearRemovable doesn't touch them —
+                    // wipe them here so the survivor takes no further ticks. These are the SAME
+                    // arrays the turn-start DoT-tick intake reads (healTarget.corrosion/inferno/
+                    // genericDoTEntries). SP-E: an `unremovable` stack (Acidic Decay) survives
+                    // this wipe — filter, don't clear, so those entries keep ticking. Bombs
+                    // (Blast, treated as persistent here) and accumulators are intentionally left
+                    // untouched.
+                    victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
+                    victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
+                    victim.genericDoTEntries = victim.genericDoTEntries.filter(
+                        (e) => e.unremovable
+                    );
                     bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
@@ -3572,6 +3684,10 @@ export function runCombat(input: CombatEngineInput): {
                                 victimHasBarrierRecharging: hasBarrierRecharging(attacker.id),
                                 victimHasShield: hasShield(attacker.id),
                                 selfHpPct: selfHpPctOf(attacker.id),
+                                // No 'transform-incoming-to-dot' ability reads the reflect ctx
+                                // (Voron/Orel's own incoming-reduction, not the reflected hit's
+                                // reduction) — default false, mirroring the pattern above.
+                                attackerTauntedOrProvoked: false,
                             }
                         );
                         const reflected = reflectedDamageForHit({
@@ -4172,6 +4288,7 @@ export function runCombat(input: CombatEngineInput): {
                         victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
                         victimHasShield: hasShield(victim.id),
                         selfHpPct: selfHpPctOf(victim.id),
+                        attackerTauntedOrProvoked: attackerTauntedOrProvoked(args.actingId),
                     });
                     if (!didCrit) return equip;
                     // F3 crit-conditional pre-fight damage modifiers, gated per sub-hit on
@@ -4547,6 +4664,7 @@ export function runCombat(input: CombatEngineInput): {
                 statusEngine,
                 corrosionEntries: tgt.corrosionEntries,
                 infernoEntries: tgt.infernoEntries,
+                genericDoTEntries: tgt.genericDoTEntries,
                 pendingBombs: tgt.pendingBombs,
                 pendingAccumulators: tgt.pendingAccumulators,
                 enemyDefense: tb.victimDefenceFor(tgt),
@@ -4880,6 +4998,7 @@ export function runCombat(input: CombatEngineInput): {
                         duringTurnOf: actingActorId,
                         corrosionEntries,
                         infernoEntries,
+                        genericDoTEntries,
                         pendingBombs,
                         runtimes: sideCtx.runtimes,
                         grantAllyCharges: sideCtx.grantAllyCharges,
@@ -4959,6 +5078,22 @@ export function runCombat(input: CombatEngineInput): {
                         // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
                         // precomputed-vs-representative static disadvantage flag.
                         affinityOf: (id) => allActorsById.get(id)?.affinity,
+                        // SP-E, Task E4: resolve any actor (either side) by id — the convert-dot
+                        // executor uses this to find the ACTUAL victim of an ally's DoT
+                        // application (eventCtx.victimId) instead of the fixed enemy/
+                        // corrosionEntries closures above (side-biased to the player's single
+                        // opposing focus). Combat-wide map — no per-side sideCtx field needed.
+                        actorById: (id) => allActorsById.get(id),
+                        // SP-E, Task E4: live hacking/critDamage for `id` (either side), feeding
+                        // Belladonna's conversion-chance (hacking) and paired extend-chance
+                        // (critDamage) gates. Same statusEngine/selfBuffLookup every other
+                        // effectiveStatsOf call site in this scope uses (e.g. mostBuffsAmong).
+                        effectiveStatsFor: (id) => {
+                            const a = allActorsById.get(id);
+                            return a
+                                ? effectiveStatsOf(statusEngine, selfBuffLookup, a)
+                                : undefined;
+                        },
                         // D-PR14: Doomsayer enemy-highest-attack resolver, the round's first
                         // real activator id, and the shared once-per-round consume set. All
                         // inert today — only consumed by the next task's executor branch.
@@ -5297,6 +5432,7 @@ export function runCombat(input: CombatEngineInput): {
                         tickDoTs({
                             corrosionEntries: healTarget.corrosionEntries,
                             infernoEntries: healTarget.infernoEntries,
+                            genericDoTEntries: healTarget.genericDoTEntries,
                             // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
                             enemyHp: recipientMaxHp(healTarget.id),
                             ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
@@ -5332,6 +5468,11 @@ export function runCombat(input: CombatEngineInput): {
                                     victimHasBarrierRecharging: hasBarrierRecharging(healTarget.id),
                                     victimHasShield: hasShield(healTarget.id),
                                     selfHpPct: selfHpPctOf(healTarget.id),
+                                    // Same no-single-attacker reasoning as attackerHasDot above —
+                                    // 'attacker-taunted-or-provoke' abilities are 'transform-
+                                    // incoming-to-dot' (direct-only, gated inside applyVictimDamage
+                                    // itself), so this reduction-path ctx never reads it.
+                                    attackerTauntedOrProvoked: false,
                                 }),
                             // PR I4b: the tank is the ticking victim.
                             dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
@@ -5361,12 +5502,15 @@ export function runCombat(input: CombatEngineInput): {
                         const sideIsPlayer = actor.side === 'player';
                         const opposing = sideIsPlayer ? enemyAttackerActors : allPlayerActors;
                         const hasDots =
-                            actor.corrosionEntries.length > 0 || actor.infernoEntries.length > 0;
+                            actor.corrosionEntries.length > 0 ||
+                            actor.infernoEntries.length > 0 ||
+                            actor.genericDoTEntries.length > 0;
                         if (hasDots && isPositional(actor.position, opposing)) {
                             let total = 0;
                             tickDoTs({
                                 corrosionEntries: actor.corrosionEntries,
                                 infernoEntries: actor.infernoEntries,
+                                genericDoTEntries: actor.genericDoTEntries,
                                 // Corrosion scales with the AFFLICTED ship's own max HP.
                                 enemyHp: recipientMaxHp(actor.id),
                                 ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
@@ -5388,6 +5532,7 @@ export function runCombat(input: CombatEngineInput): {
                                         const e = perActorDot.get(sourceId) ?? {
                                             corrosion: 0,
                                             inferno: 0,
+                                            generic: 0,
                                         };
                                         e[dotType] += damage;
                                         perActorDot.set(sourceId, e);
@@ -5408,6 +5553,7 @@ export function runCombat(input: CombatEngineInput): {
                                         victimHasBarrierRecharging: hasBarrierRecharging(actor.id),
                                         victimHasShield: hasShield(actor.id),
                                         selfHpPct: selfHpPctOf(actor.id),
+                                        attackerTauntedOrProvoked: false,
                                     }),
                                 // PR I4b: this actor IS the ticking victim.
                                 dotMultFor: (ctx) => victimDotMult(ctx, actor),
@@ -6096,6 +6242,7 @@ export function runCombat(input: CombatEngineInput): {
                     tickDoTs({
                         corrosionEntries,
                         infernoEntries,
+                        genericDoTEntries,
                         enemyHp,
                         ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
                         emitTicked: (dotType, damage) =>
@@ -6368,6 +6515,9 @@ export function runCombat(input: CombatEngineInput): {
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
                                           victimHasShield: hasShield(tgt.id),
                                           selfHpPct: selfHpPctOf(tgt.id),
+                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                              actor.id
+                                          ),
                                       })
                                     : 0;
                                 const incomingReductionCritAll = tgtIncoming.length
@@ -6381,6 +6531,9 @@ export function runCombat(input: CombatEngineInput): {
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
                                           victimHasShield: hasShield(tgt.id),
                                           selfHpPct: selfHpPctOf(tgt.id),
+                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                              actor.id
+                                          ),
                                       })
                                     : 0;
                                 // F3: crit-conditional pre-fight damage modifiers, mirrored from
@@ -6970,6 +7123,9 @@ export function runCombat(input: CombatEngineInput): {
         const focusDot = perActorDot.get(focusActorId);
         const corrosionDamage = focus.corrosion + (focusDot?.corrosion ?? 0);
         const infernoDamage = focus.inferno + (focusDot?.inferno ?? 0);
+        // SP-E: mirrors corrosionDamage/infernoDamage. Always 0 today (generic DoTs are never
+        // auto-applied from skill text in this task) — real once E2/E3/E4 populate genericDoTEntries.
+        const genericDamage = focus.generic + (focusDot?.generic ?? 0);
         const focusPositionalDetonation = perActorDetonation.get(focusActorId) ?? 0;
         const detonationDamage = focus.detonation + focusPositionalDetonation;
 
@@ -6984,11 +7140,12 @@ export function runCombat(input: CombatEngineInput): {
             });
         }
 
-        // Deliberately uses focus.corrosion/focus.inferno ONLY (not the perActorDot-folded
-        // corrosionDamage/infernoDamage locals) — per-victim DoT ticks land via applyVictimDamage,
-        // so folding perActorDot here would double-drain the dummy HP overwrite (same guard as the
-        // focusPositionalDetonation/detonation comment below).
-        const totalRoundDamage = focus.direct + focus.corrosion + focus.inferno + focus.detonation;
+        // Deliberately uses focus.corrosion/focus.inferno/focus.generic ONLY (not the
+        // perActorDot-folded corrosionDamage/infernoDamage/genericDamage locals) — per-victim DoT
+        // ticks land via applyVictimDamage, so folding perActorDot here would double-drain the
+        // dummy HP overwrite (same guard as the focusPositionalDetonation/detonation comment below).
+        const totalRoundDamage =
+            focus.direct + focus.corrosion + focus.inferno + focus.detonation + focus.generic;
         cumulativeDamage += totalRoundDamage;
         // Row/summary rawTotals stay FOCUS-only — only the focus actor reaches summary DPS
         // and the damage-type breakdown (config comparison stays meaningful).
@@ -6997,6 +7154,7 @@ export function runCombat(input: CombatEngineInput): {
         totalConditionalRaw += focus.conditional;
         totalCorrosionRaw += corrosionDamage;
         totalInfernoRaw += infernoDamage;
+        totalGenericRaw += genericDamage;
         // Summary detonation reflects per-victim positional detonation too (focusPositionalDetonation
         // is 0 non-positionally → byte-identical). NOTE: cumulativeDamage/totalRoundDamage above
         // deliberately use focus.detonation ONLY — per-victim detonation lands via applyVictimDamage,
@@ -7009,7 +7167,7 @@ export function runCombat(input: CombatEngineInput): {
         let teamRoundDamage = 0;
         for (const [id, d] of roundDamage) {
             if (id === focusActorId) continue;
-            teamRoundDamage += d.direct + d.corrosion + d.inferno + d.detonation;
+            teamRoundDamage += d.direct + d.corrosion + d.inferno + d.detonation + d.generic;
         }
         cumulativeTeamDamage += teamRoundDamage;
         totalTeamRaw += teamRoundDamage;
@@ -7081,6 +7239,10 @@ export function runCombat(input: CombatEngineInput): {
             detonationDamage: Math.round(detonationDamage),
             totalRoundDamage: Math.round(totalRoundDamage),
             cumulativeDamage: Math.round(cumulativeDamage),
+            // genericDamage (SP-E): set ONLY when nonzero — generic DoTs are never auto-applied
+            // from skill text in this task, so every existing round/golden keeps the field absent
+            // (legacy RoundData shape preserved, byte-identical).
+            ...(genericDamage > 0 ? { genericDamage: Math.round(genericDamage) } : {}),
             // teamDamage set ONLY when walked team actors exist (undefined preserves the
             // legacy/attacker-only RoundData shape — goldens stay byte-identical).
             ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
@@ -7183,6 +7345,14 @@ export function runCombat(input: CombatEngineInput): {
                     stacks: b.stacks,
                     ticksRemaining: b.countdown,
                 })),
+                // SP-E: always [] today (generic DoTs are never auto-applied from skill text in
+                // this task) — a no-op spread, byte-identical.
+                ...genericDoTEntries.map((e) => ({
+                    type: 'generic' as const,
+                    tier: e.tier,
+                    stacks: e.stacks,
+                    ticksRemaining: e.remainingRounds,
+                })),
             ],
         });
 
@@ -7261,6 +7431,7 @@ export function runCombat(input: CombatEngineInput): {
             totalSecondary: totalSecondaryRaw,
             totalConditional: totalConditionalRaw,
             teamTotal: totalTeamRaw,
+            generic: totalGenericRaw,
         },
         // Additive — present ONLY in healing mode (DPS callers see the legacy shape).
         ...(healingMode

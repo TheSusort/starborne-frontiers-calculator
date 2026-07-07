@@ -18,6 +18,8 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ability, Skill } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
+import { dotFamilyCounts } from '../roundContext';
+import type { ActiveDoTStack } from '../../combat/state';
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -321,6 +323,34 @@ describe('SP-D — count-based gates', () => {
         ).toBe(true);
     });
 
+    it('SP-D follow-up: Acidic Decay is a populated DoT family whose key matches the charge gate', () => {
+        // 1. The charge-skill count gate emits buffName 'Acidic Decay' (SP-D, already shipped —
+        //    same assertion as the test above).
+        const charge = abilitiesFor(
+            { chargeSkillText: BELLADONNA_CHARGE, chargeSkillCharge: 3 },
+            'charged'
+        );
+        const stasis = charge.find((a) => a.config.type === 'control');
+        const gateKey = stasis?.conditions.find((c) => c.subject === 'enemy-dot-count')?.buffName;
+        expect(gateKey).toBe('Acidic Decay');
+        // 2. The runtime (SP-E) populates enemyDotFamilyCounts under the SAME key —
+        //    dotFamilyCounts counts live ActiveDoTStack entries by their `family` tag, which
+        //    Task E4's convert-dot executor stamps 'Acidic Decay' onto a just-converted corrosion
+        //    entry (the reactive conversion itself is proven end-to-end, both sides, by
+        //    corrosionToAcidicDecay.test.ts). Proving the emit-key (1, above) matches the
+        //    population-key (2, here) is the point of this follow-up — without it, the SP-D gate
+        //    would be inert forever even with live Acidic Decay entries present.
+        const acidicDecayEntry: ActiveDoTStack = {
+            stacks: 1,
+            tier: 6,
+            remainingRounds: 3,
+            sourceId: 'caster',
+            family: 'Acidic Decay',
+            unremovable: true,
+        };
+        expect(dotFamilyCounts([acidicDecayEntry], [], [])).toEqual({ [gateKey!]: 1 });
+    });
+
     // Verbatim from docs/ship-skills.csv (charge_skill_text field).
     const ANEMONE_CHARGE =
         'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
@@ -383,34 +413,27 @@ describe('SP-E — DoT transforms & conversions', () => {
     // Text shared with the SP-A probe (VORON_PASSIVE2).
     const VORON_P2 = VORON_PASSIVE2;
 
-    it.fails(
-        'Voron: "transforms the damage into a Damage over Time effect" builds a reactive self-DoT conversion',
-        () => {
-            const abilities = abilitiesFor({ secondPassiveSkillText: VORON_P2 }, 'passive');
-            // GAP: SP-E — dry-run confirmed: today the WHOLE passive slot builds NO abilities at
-            // all for this text (same empty-array finding SP-A's probe already made), so neither
-            // half of the clause exists yet. No damage-to-DoT transform/conversion config exists
-            // in AbilityConfig (verified against the full union in src/types/abilities.ts) — and
-            // the clause names no specific DoT family (unlike Corrosion/Inferno/Bomb), so the
-            // existing `{ type: 'dot'; dotType: DoTType; ... }` shape (DoTType is only
-            // 'corrosion' | 'inferno' | 'bomb') cannot represent it without SP-E ALSO widening
-            // DoTType — a shape we can't predict or assert on today. What IS certain regardless of
-            // that shape choice: this is a REACTIVE conversion fired when Voron itself takes
-            // damage, applied to ITSELF — i.e. it must ride the EXISTING, already-wired
-            // `on-attacked` trigger (used throughout buildShipAbilities.ts for every "when
-            // directly damaged" passive reaction: Stalwart's counter, Cultivator's heal,
-            // Purifier's cleanse) with `target: 'self'`. This is distinct from SP-A's reduction
-            // (a passive stat modifier, `trigger: 'on-cast'`, per the existing incoming-reduction
-            // build sites at buildShipAbilities.ts ~L2082-2117) and from the `counter` ability
-            // shape (also `on-attacked` but `target: 'enemy'`) — so the proxy below cannot be
-            // trivially satisfied by either sibling mechanic landing first. Proxy: an ability with
-            // `trigger === 'on-attacked' && target === 'self'` — false now (array is empty), true
-            // once SP-E's transform ships, survives whatever config.type/DoTType shape it lands on.
-            expect(abilities.some((a) => a.trigger === 'on-attacked' && a.target === 'self')).toBe(
-                true
-            );
-        }
-    );
+    it('Voron: "transforms the damage into a Damage over Time effect" builds a reactive self-DoT transform', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: VORON_P2 }, 'passive');
+        const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
+        expect(transform?.trigger).toBe('on-attacked');
+        expect(transform?.target).toBe('self');
+        expect(transform && 'turns' in transform.config && transform.config.turns).toBe(3);
+    });
+
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — Orel's variant of
+    // the SAME transform family, gated on the ATTACKER holding Taunt or Provoke.
+    const OREL_P2 =
+        'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 3 turns.';
+    it('Orel: transform is gated on the attacker being Taunted or Provoked', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: OREL_P2 }, 'passive');
+        const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
+        expect(transform?.trigger).toBe('on-attacked');
+        expect(transform?.target).toBe('self');
+        expect(transform && 'condition' in transform.config && transform.config.condition).toBe(
+            'attacker-taunted-or-provoke'
+        );
+    });
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: Belladonna also
     // appears in SP-D (Task 5) for the charge skill's "3+ Acidic Decay" count-gate clause — a
@@ -418,57 +441,35 @@ describe('SP-E — DoT transforms & conversions', () => {
     const BELLADONNA_P2 =
         'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance to equal to its crit power.';
 
-    it.fails(
-        'Belladonna: "convert the Corrosion into Acidic Decay" does not ride the live ally-inflicts-debuff reactive trigger',
-        () => {
-            const abilities = abilitiesFor({ secondPassiveSkillText: BELLADONNA_P2 }, 'passive');
-            // Anchor by `buffName` across ALL `config.type` values — NOT restricted to
-            // `config.type === 'debuff'` (review finding). SP-E's family is literally "DoT
-            // transforms & conversions": a faithful fix may retype this ability away from the
-            // generic auto-filled `'debuff'` config into a dedicated conversion AbilityConfig.
-            // If the finder stayed pinned to `config.type === 'debuff'`, that reshape would make
-            // `.find()` return undefined FOREVER and this `it.fails` would never flip, silently
-            // orphaning the gap. `buffName` is carried by both the 'buff' and 'debuff' config
-            // members today (src/types/abilities.ts ~L453/479) and is the value the clause names
-            // explicitly ("into Acidic Decay"), so it's far more likely to survive a config
-            // reshape than the `type` discriminant — mirrors the config-agnostic discipline the
-            // Voron probe above already uses (asserts on the top-level `target` field, not
-            // `config.type`).
-            const acidicDecay = abilities.find(
-                (a) => 'buffName' in a.config && a.config.buffName === 'Acidic Decay'
-            );
-            // GAP: SP-E — dry-run: today this clause auto-fills a bare, UNGATED "Acidic Decay"
-            // debuff-application ability (`config.type: 'debuff'`, trigger 'on-cast', conditions:
-            // []) — a spurious artifact of the generic buff/debuff-name auto-fill picking up
-            // "Acidic Decay" from the text, unconnected to the ally's Corrosion cast. No
-            // 'convert'/'transform' AbilityConfig exists yet (verified against the full union).
-            // The live, already-wired `on-ally-debuff-inflicted` trigger (Oleander's ally-target
-            // RoT grant, buildShipAbilities.ts ~L2351-2362) is EXACTLY this "when an ally inflicts
-            // a debuff" phrasing family — but its gate is hardcoded to `target === 'ally' &&
-            // config.type === 'buff'`, and the code's own comment there calls out "Provider's
-            // enemy-target Crit Rate Down II counter-debuff in the same phrasing family stays
-            // on-cast (a deferred deep one-off)" — Belladonna's enemy-target 'debuff' config is
-            // that exact same deferred case. Intended faithful shape: SP-E widens that gate (or
-            // adds a parallel one) so an enemy-target 'debuff'/conversion config named "Acidic
-            // Decay" also rides `on-ally-debuff-inflicted`. Proxy: the located ability's `trigger`
-            // — a top-level `Ability` field present regardless of `config` shape — equals the
-            // EXISTING literal 'on-ally-debuff-inflicted'; false now ('on-cast' on the located
-            // ability, confirmed via dry-run), true once SP-E lands the widened gate, REGARDLESS
-            // of whether the ability stays `config.type: 'debuff'` or becomes a new dedicated
-            // conversion config. RESIDUAL ASSUMPTION: this still relies on a faithful fix
-            // preserving a `buffName`/name anchor of 'Acidic Decay' somewhere on the ability's
-            // config — if SP-E instead models the conversion with no buffName-like field at all
-            // (e.g. keyed only by a DoT-type pair), this finder would return undefined and the
-            // probe would need a position/text anchor instead; not expected given the clause
-            // names the debuff explicitly, but flagged per review.
-            // MINOR (not asserted here, no proxy change): the widened `on-ally-debuff-inflicted`
-            // gate will likely also need a Corrosion-specific debuff-name FILTER (fire only when
-            // the ally's inflicted debuff is Corrosion, not any ally-inflicted debuff) — a bare
-            // trigger widening alone would over-fire on unrelated ally debuffs; an SP-E
-            // implementation detail.
-            expect(acidicDecay?.trigger).toBe('on-ally-debuff-inflicted');
-        }
-    );
+    it('Belladonna: "convert the Corrosion into Acidic Decay" rides the live ally-inflicts-debuff reactive trigger (SP-E, Task E4 — closed)', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: BELLADONNA_P2 }, 'passive');
+        // Anchor by `buffName` across ALL `config.type` values — NOT restricted to
+        // `config.type === 'debuff'` (review finding). SP-E's family is literally "DoT
+        // transforms & conversions": the faithful fix RETYPED this ability away from the
+        // generic auto-filled `'debuff'` config into a dedicated `'convert-dot'`
+        // AbilityConfig. If the finder stayed pinned to `config.type === 'debuff'`, that
+        // reshape would have made `.find()` return undefined FOREVER. `buffName` is carried
+        // by the new `'convert-dot'` config too (src/types/abilities.ts), so it survives the
+        // config reshape — mirrors the config-agnostic discipline the Voron probe above
+        // already uses (asserts on the top-level `target` field, not `config.type`).
+        const acidicDecay = abilities.find(
+            (a) => 'buffName' in a.config && a.config.buffName === 'Acidic Decay'
+        );
+        // CLOSED (SP-E, Task E4): the bare, ungated auto-filled "Acidic Decay" debuff is now
+        // replaced (buildShipAbilities.ts's mergeBuff) with a dedicated `'convert-dot'`
+        // AbilityConfig riding the live `on-ally-debuff-inflicted` trigger — an EXPLICIT
+        // trigger assignment for this enemy-target conversion case, alongside (not replacing)
+        // Oleander's existing target==='ally'-only gate for its own buff-grant case. The
+        // reactive `convert-dot` executor (triggers.ts) retags the ally's just-applied
+        // Corrosion entries (family:'Acidic Decay', unremovable:true, same tier), gated
+        // deterministically on the owner's live Hacking (1% per 10) via a RateGate, then
+        // folds the paired crit-power duration extension (parseCritPowerExtend) into the same
+        // executor — proven end-to-end (both directions) in corrosionToAcidicDecay.test.ts.
+        // A Corrosion-specific filter is enforced at drain time (intent.eventCtx.dotType !==
+        // cfg.fromDotType → no-op), so the widened routing does not over-fire on any other
+        // ally-inflicted debuff/DoT.
+        expect(acidicDecay?.trigger).toBe('on-ally-debuff-inflicted');
+    });
 });
 
 describe('SP-F — deep one-offs', () => {

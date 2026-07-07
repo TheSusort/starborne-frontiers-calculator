@@ -198,7 +198,9 @@ export type CombatEvent =
           type: 'dot-ticked';
           targetId: string;
           round: number;
-          dotType: 'corrosion' | 'inferno';
+          // SP-E: widened to DoTType (was 'corrosion' | 'inferno') — a generic-DoT tick emits
+          // this event too. 'bomb' never appears here (bombs burst via 'bomb-detonated').
+          dotType: DoTType;
           damage: number;
       }
     | { type: 'dot-detonated'; targetId: string; round: number; damage: number }

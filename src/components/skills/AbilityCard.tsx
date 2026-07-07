@@ -65,6 +65,8 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     'heal-amplification': 'Heal Amplification',
     'incoming-heal-amplification': 'Incoming Heal Amplification',
     'pre-combat-stat': 'Pre-Combat Stat',
+    'transform-incoming-to-dot': 'Transform Incoming to DoT',
+    'convert-dot': 'Convert DoT',
 };
 
 const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [

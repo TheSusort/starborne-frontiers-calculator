@@ -187,4 +187,32 @@ describe('buildActorConditionContext – condition-context plumbing', () => {
         expect(ctx.enemyBuffNames).toEqual([]);
         expect(ctx.selfDebuffNames).toEqual([]);
     });
+
+    // SP-E, Task E2: `genericCount`/`enemyDotFamilyCounts` thread through the drain-time
+    // (reactive) condition context the same way the four playerTurn.ts buildRoundContext calls
+    // do — a foreign-caster aura or a drain-time reactive gated on a named DoT family (or the
+    // bare enemy-dot-count subject) must see the SAME live counts a local cast-path gate does.
+    it('threads genericCount into enemyDotCount and enemyDotFamilyCounts through untouched', () => {
+        const ctx = buildActorConditionContext(makeStatusEngine() as never, 'attacker', {
+            ...sharedBase,
+            corrosionEntryCount: 1,
+            infernoEntryCount: 1,
+            bombCount: 1,
+            genericCount: 2,
+            enemyDotFamilyCounts: { 'Acidic Decay': 2 },
+        });
+        expect(ctx.enemyDotCount).toBe(5);
+        expect(ctx.enemyDotFamilyCounts).toEqual({ 'Acidic Decay': 2 });
+    });
+
+    it('defaults genericCount to 0 and leaves enemyDotFamilyCounts undefined when omitted', () => {
+        const ctx = buildActorConditionContext(makeStatusEngine() as never, 'attacker', {
+            ...sharedBase,
+            corrosionEntryCount: 1,
+            infernoEntryCount: 1,
+            bombCount: 1,
+        });
+        expect(ctx.enemyDotCount).toBe(3);
+        expect(ctx.enemyDotFamilyCounts).toBeUndefined();
+    });
 });

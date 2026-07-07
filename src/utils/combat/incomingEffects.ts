@@ -1,7 +1,9 @@
 import { Ability, IncomingCondition, IncomingHitContext } from '../../types/abilities';
 
-/** True when an incoming condition is satisfied by the hit context. */
-function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): boolean {
+/** True when an incoming condition is satisfied by the hit context. Exported (SP-E) so the
+ *  engine's applyVictimDamage transform hook can gate a 'transform-incoming-to-dot' ability's
+ *  `condition` the same way incomingReductionForHit/incomingBlockForIntake do internally. */
+export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): boolean {
     switch (cond) {
         case 'self-stealth':
             return ctx.victimStealthed;
@@ -21,6 +23,8 @@ function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): boolean
             return ctx.victimHasBarrierRecharging;
         case 'self-shielded':
             return ctx.victimHasShield;
+        case 'attacker-taunted-or-provoke':
+            return ctx.attackerTauntedOrProvoked;
         case 'always':
             return true;
     }

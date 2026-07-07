@@ -138,6 +138,7 @@ function makeArgs(
         statusEngine,
         corrosionEntries: [],
         infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
         enemyDefense: 0,

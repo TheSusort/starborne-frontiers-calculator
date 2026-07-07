@@ -348,6 +348,7 @@ function makeHitCritArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
         statusEngine,
         corrosionEntries: [],
         infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
         enemyDefense: 0,

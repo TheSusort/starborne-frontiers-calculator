@@ -126,6 +126,9 @@ describe('PR5d Task 1 — dummy-enemy death surface INVARIANT locks (GREEN now A
             totalSecondary: 0,
             totalConditional: 0,
             teamTotal: 0,
+            // SP-E: generic (absolute per-tick) DoT total — always 0 today (never auto-applied
+            // from skill text in this task).
+            generic: 0,
         });
     });
 

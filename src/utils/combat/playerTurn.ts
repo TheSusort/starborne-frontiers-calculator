@@ -1,7 +1,12 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
-import { buildRoundContext } from '../abilities/roundContext';
-import { DoTApplicationConfig, EnemyBaseClass, SelectedGameBuff } from '../../types/calculator';
+import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
+import {
+    DoTApplicationConfig,
+    DoTType,
+    EnemyBaseClass,
+    SelectedGameBuff,
+} from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedPattern } from '../targetingParser';
@@ -291,6 +296,8 @@ export interface PlayerTurnArgs {
     // DoT containers (live on the enemy actor; passed through for clarity).
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
+    /** SP-E: generic (absolute per-tick) DoT entries. */
+    genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     pendingAccumulators: PendingAccumulator[];
     enemyDefense: number;
@@ -745,8 +752,12 @@ function applyNewDoTs(args: {
     sourceId: string;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
+    /** SP-E: generic (absolute per-tick) DoT entries. Nothing in `dotsConfig` produces
+     *  `type:'generic'` today — the parser never emits it — but this branch exists so a future
+     *  transform (Voron/Orel, E3) can share this one apply entry point. */
+    genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
-    emitDotApplied: (dotType: 'corrosion' | 'inferno' | 'bomb', stacks: number) => void;
+    emitDotApplied: (dotType: DoTType, stacks: number) => void;
 }): void {
     for (const dot of args.dotsConfig) {
         if (dot.stacks <= 0 || dot.tier <= 0) continue;
@@ -778,6 +789,14 @@ function applyNewDoTs(args: {
                 splashModifier: args.splashModifier,
             });
             args.emitDotApplied('bomb', dot.stacks);
+        } else if (dot.type === 'generic') {
+            args.genericDoTEntries.push({
+                stacks: dot.stacks,
+                tier: dot.tier,
+                remainingRounds: dot.duration,
+                sourceId: args.sourceId,
+            });
+            args.emitDotApplied('generic', dot.stacks);
         }
     }
 }
@@ -831,6 +850,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         statusEngine,
         corrosionEntries,
         infernoEntries,
+        genericDoTEntries,
         pendingBombs,
         pendingAccumulators,
         enemyDefense,
@@ -1182,6 +1202,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -1323,6 +1345,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 corrosionEntryCount: corrosionEntries.length,
                 infernoEntryCount: infernoEntries.length,
                 bombCount: pendingBombs.length,
+                genericCount: genericDoTEntries.length,
+                enemyDotFamilyCounts: dotFamilyCounts(
+                    corrosionEntries,
+                    infernoEntries,
+                    genericDoTEntries
+                ),
                 enemyType,
                 enemyHpPct,
                 // Include the foreign caster's ability-sourced self statuses (e.g. its self-granted
@@ -1392,6 +1420,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -1467,6 +1497,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -1650,6 +1682,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
+        genericCount: genericDoTEntries.length,
+        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: effectiveCrit,
         enemyType,
         roundCrit,
@@ -2045,6 +2079,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 sourceId: actor.id,
                 corrosionEntries,
                 infernoEntries,
+                genericDoTEntries,
                 pendingBombs,
                 emitDotApplied: (dotType, stacks) =>
                     bus.emit({

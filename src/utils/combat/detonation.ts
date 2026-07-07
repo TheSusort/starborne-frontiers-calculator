@@ -1,3 +1,4 @@
+import type { DoTType } from '../../types/calculator';
 import type { ActiveDoTStack, PendingBomb } from './state';
 
 // Pure per-victim detonation math, lifted verbatim from playerTurn.ts detonate().
@@ -13,7 +14,11 @@ import type { ActiveDoTStack, PendingBomb } from './state';
 //          — per-bomb snapshots ONLY (NO dotMult/affinityMult/detonationMult).
 
 export interface DetonationRecipe {
-    dets: { dotType: 'corrosion' | 'inferno' | 'bomb'; powerPct: number }[];
+    // SP-E: widened to the full DoTType (generic never enters `dets` — no detonation ability
+    // targets it — but the config it's built from carries DoTType, so this must accept it too;
+    // the if/else-if chain below correctly no-ops for 'generic', same as it already does for any
+    // dotType it doesn't explicitly branch on).
+    dets: { dotType: DoTType; powerPct: number }[];
     effectiveAttack: number;
     dotMult: number;
     affinityMult: number;

@@ -95,6 +95,15 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type, ampPct: 0, procChance: 0 };
         case 'pre-combat-stat':
             return { type, stat: 'attack', value: 0, valueKind: 'flat' };
+        case 'transform-incoming-to-dot':
+            return { type, turns: 3, condition: 'always' };
+        case 'convert-dot':
+            return {
+                type,
+                fromDotType: 'corrosion',
+                buffName: '',
+                chanceFromStat: { stat: 'hacking', pctPerPoint: 0.1 },
+            };
     }
 };
 
@@ -126,6 +135,8 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'heal-amplification': 'self',
     'incoming-heal-amplification': 'self',
     'pre-combat-stat': 'self',
+    'transform-incoming-to-dot': 'self',
+    'convert-dot': 'enemy',
 };
 
 /**
@@ -143,8 +154,17 @@ export const makeDefaultAbility = (type: AbilityType, id: string = nextId()): Ab
     // currently parser-generated rather than authored via the picker. Likewise a
     // pre-combat-stat grant only ever rides the annotation-only 'pre-combat' trigger
     // (the battle sim's pre-fight layer reads it before any combat event exists).
+    // SP-E: a transform-incoming-to-dot ability, like counter, only ever rides the victim-side
+    // `on-attacked` path (see buildShipAbilities.ts's Voron/Orel emit site). SP-E Task E4: a
+    // convert-dot ability only ever rides on-ally-debuff-inflicted (Belladonna's emit site).
     trigger:
-        type === 'counter' ? 'on-attacked' : type === 'pre-combat-stat' ? 'pre-combat' : 'on-cast',
+        type === 'counter' || type === 'transform-incoming-to-dot'
+            ? 'on-attacked'
+            : type === 'pre-combat-stat'
+              ? 'pre-combat'
+              : type === 'convert-dot'
+                ? 'on-ally-debuff-inflicted'
+                : 'on-cast',
     conditions: [],
     config: makeDefaultConfig(type),
 });

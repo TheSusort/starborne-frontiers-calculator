@@ -14,10 +14,22 @@ export interface ActorDamage {
     corrosion: number;
     inferno: number;
     detonation: number;
+    /** SP-E: absolute-per-tick generic DoT channel (Voron/Orel damage-transform, Acidic Decay
+     *  family). Mirrors corrosion/inferno — an enemy-turn DoT-tick channel attributed to the
+     *  entry's applier. */
+    generic: number;
 }
 
 export function emptyActorDamage(): ActorDamage {
-    return { direct: 0, secondary: 0, conditional: 0, corrosion: 0, inferno: 0, detonation: 0 };
+    return {
+        direct: 0,
+        secondary: 0,
+        conditional: 0,
+        corrosion: 0,
+        inferno: 0,
+        detonation: 0,
+        generic: 0,
+    };
 }
 
 /** Per-actor healing contributions within one round (healing-calc adoption; mirrors
@@ -52,6 +64,13 @@ export interface ActiveDoTStack {
     tier: number;
     remainingRounds: number;
     sourceId: string;
+    /** SP-E generic DoT (Voron/Orel damage-transform): absolute damage per tick, independent
+     *  of stats/HP. Set only on 'generic'-type entries; corrosion/inferno compute from stats. */
+    perTickAmount?: number;
+    /** SP-E: named DoT family for counting/display (e.g. 'Acidic Decay'). Undefined = plain type. */
+    family?: string;
+    /** SP-E: survives the Cheat-Death DoT-array wipe and any DoT cleanse (Acidic Decay). */
+    unremovable?: boolean;
 }
 
 export interface PendingBomb {
@@ -124,6 +143,8 @@ export interface CombatActor {
     chargeCount: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
+    /** SP-E: generic (absolute per-tick) DoT entries — Voron/Orel transform, Acidic Decay family. */
+    genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     pendingAccumulators: PendingAccumulator[];
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
@@ -191,6 +212,7 @@ export function createActor(
         chargeCount,
         corrosionEntries: [],
         infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
         position: partial.position,

@@ -93,7 +93,7 @@ export interface Buff {
     value: number;
 }
 
-export type DoTType = 'corrosion' | 'inferno' | 'bomb';
+export type DoTType = 'corrosion' | 'inferno' | 'bomb' | 'generic';
 
 export interface DoTApplicationEntry {
     id: string;

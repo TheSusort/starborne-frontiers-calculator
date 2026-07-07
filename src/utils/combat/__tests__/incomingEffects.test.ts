@@ -11,6 +11,7 @@ const ctx = (over: Partial<IncomingHitContext> = {}): IncomingHitContext => ({
     attackerHasDot: false,
     victimHasBarrierRecharging: false,
     victimHasShield: false,
+    attackerTauntedOrProvoked: false,
     selfHpPct: 100,
     ...over,
 });
@@ -144,6 +145,14 @@ describe('incomingReductionForHit', () => {
     it('hpScaling on a "direct" scope entry is inert during a DoT tick (scope mismatch)', () => {
         const a = [hpScalingReduction(0.3, 30, 'direct')];
         expect(incomingReductionForHit(a, ctx({ selfHpPct: 0, dotType: 'inferno' }))).toBe(0);
+    });
+    // SP-E: Orel's transform gate — a bare incoming-reduction with this condition is a
+    // synthetic fixture (the real ability is 'transform-incoming-to-dot'), but conditionMet's
+    // arm is shared plumbing worth pinning directly.
+    it('Orel (attacker-taunted-or-provoke): fires only when the ATTACKER carries Taunt/Provoke', () => {
+        const a = [reduction('attacker-taunted-or-provoke', 25, false)];
+        expect(incomingReductionForHit(a, ctx({ attackerTauntedOrProvoked: true }))).toBe(25);
+        expect(incomingReductionForHit(a, ctx({ attackerTauntedOrProvoked: false }))).toBe(0);
     });
 });
 

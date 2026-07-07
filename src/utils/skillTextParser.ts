@@ -1542,6 +1542,32 @@ export function parseCritPowerExtend(
     return { turns: parseInt(m[1], 10), condition, scope };
 }
 
+// SP-E, Task E4: "convert the Corrosion into Acidic Decay of the same level, ... 1% per 10
+// Hacking" (Belladonna). Anchored on "of the same level" (not just a lazy `[^.]*?` scan) so the
+// named-family capture group stops at the right boundary — the family name can be multi-word
+// ("Acidic Decay") and a bare lazy match would otherwise capture only its first word.
+const CONVERT_DOT_RE =
+    /convert\s+the\s+(corrosion|inferno)\s+into\s+([\w\s]+?)\s+of\s+the\s+same\s+level[^.]*?(\d+(?:\.\d+)?)%\s+per\s+(\d+)\s+hacking/i;
+
+/**
+ * Parses a "convert the <DoT> into <family> of the same level ... N% per M Hacking" clause into
+ * its conversion descriptor, or undefined when absent. `pctPerPoint` is the %-per-Hacking-point
+ * rate (1% per 10 Hacking → 0.1). Reference data: docs/ship-skills.csv (Belladonna).
+ */
+export function detectConvertDot(
+    text: string | null | undefined
+): { fromDotType: DoTType; buffName: string; pctPerPoint: number } | undefined {
+    if (!text) return undefined;
+    const plain = stripUnitTags(text);
+    const m = CONVERT_DOT_RE.exec(plain);
+    if (!m) return undefined;
+    return {
+        fromDotType: m[1].toLowerCase() as DoTType,
+        buffName: m[2].trim(),
+        pctPerPoint: parseFloat(m[3]) / parseInt(m[4], 10),
+    };
+}
+
 // Crocus: "when (an/another) ally inflicts a Damage Over Time (DoT) effect with a critical hit".
 const ALLY_CRIT_DOT_RE =
     /\ball(?:y|ies)\b[^.]*\binflict\w*[^.]*\b(?:damage over time|dot)\b[^.]*\bcritical/i;
@@ -2297,6 +2323,38 @@ export function detectDamageReactionTrigger(
         };
     }
     return undefined;
+}
+
+// SP-E: Voron/Orel "transforms the [incoming direct] damage into a Damage over Time effect
+// lasting for N turns". Deliberately requires the literal "the damage into a" phrase (NOT the
+// looser "is transformed into a") so Meatshield's UNRELATED "damage taken from Protection is
+// transformed into a Damage over Time effect" (a still-unmodelled SP-F-adjacent gap) never
+// matches — corpus-verified: only Voron/Orel (both refit stages) match today.
+const TRANSFORM_TO_DOT_RE =
+    /transform\w*\s+the\s+damage\s+into\s+a\s+.*?damage\s+over\s+time\s+effect\b[^.]*?\b(?:lasting\s+for|for)\s+(\d+)\s+turns?\b/i;
+// Orel's gate: "When directly damaged by an enemy affected/effected by Taunt or Provoke, …"
+// (the live CSV spells it "effected", tolerated alongside the correct "affected").
+const ATTACKER_TAUNT_PROVOKE_RE =
+    /when\s+directly\s+damaged\s+by\s+an?\s+enemy\s+(?:affected|effected)\s+by\s+.*?\b(?:taunt|provoke)\b/i;
+
+/**
+ * Detects the "transforms the damage into a DoT lasting N turns" reactive self-conversion
+ * (Voron unconditional; Orel gated on the attacker holding Taunt/Provoke). Operates on the
+ * WHOLE row text (not sentence-scoped like detectDamageReactionTrigger) since the clause is
+ * always its own self-contained sentence in the corpus. Reference data: docs/ship-skills.csv
+ * (Voron, Orel — both refit stages).
+ */
+export function detectTransformToDot(
+    text: string
+): { turns: number; condition: 'always' | 'attacker-taunted-or-provoke' } | undefined {
+    const plain = stripUnitTags(text);
+    const m = TRANSFORM_TO_DOT_RE.exec(plain);
+    if (!m) return undefined;
+    const turns = parseInt(m[1], 10);
+    const condition = ATTACKER_TAUNT_PROVOKE_RE.test(plain)
+        ? 'attacker-taunted-or-provoke'
+        : 'always';
+    return { turns, condition };
 }
 
 // Phase 3 PR-F: two DISTINCT "enemy repair" reaction phrasings that both ride the LIVE

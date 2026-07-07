@@ -316,6 +316,7 @@ function makePr6bArgs(runtime: PlayerActorRuntime, enemyCurrentHp: number): Play
         statusEngine: eng,
         corrosionEntries: [],
         infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
         enemyDefense: 0,
