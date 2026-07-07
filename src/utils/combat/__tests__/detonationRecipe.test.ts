@@ -114,6 +114,7 @@ function makeArgs(runtime: PlayerActorRuntime, pendingBombs: PendingBomb[]): Pla
         statusEngine,
         corrosionEntries: [],
         infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs,
         pendingAccumulators: [],
         enemyDefense: ENEMY_DEFENCE,

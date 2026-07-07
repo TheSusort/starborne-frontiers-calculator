@@ -6,6 +6,8 @@ export const DOT_NAMES: Record<DoTType, Record<number, string>> = {
     corrosion: { 3: 'Corrosion I', 6: 'Corrosion II', 9: 'Corrosion III' },
     inferno: { 15: 'Inferno I', 30: 'Inferno II', 45: 'Inferno III' },
     bomb: { 100: 'Bomb I', 200: 'Bomb II', 300: 'Bomb III' },
+    /** SP-E generic DoT: an absolute per-tick amount, not a tiered %, so a single untiered label. */
+    generic: { 0: 'Damage over Time' },
 };
 
 /** The minimal `{ type, tier, stacks }` shape both DoT displays render (a superset of the engine's

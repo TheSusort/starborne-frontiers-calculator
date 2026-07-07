@@ -1,4 +1,5 @@
 import type { ControlEffect } from '../../types/abilities';
+import type { DoTType } from '../../types/calculator';
 import type { StatusEngine } from './statusEngine';
 // Call-time-safe cycle: triggers imports targetCarriesBlockDebuff from this module and we import
 // selfBuffNamesForOwners back. Both are used only inside function bodies (never at top-level
@@ -20,8 +21,11 @@ export function targetCarriesBlockDebuff(statusEngine: StatusEngine, targetId: s
 
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 /** Single source of truth for the resisted-debuff label of a blocked DoT, so the emit site and
- *  the test assertion agree. e.g. ('inferno', 3) -> 'Inferno III'; ('bomb', 0) -> 'Bomb'. */
-export function dotResistLabel(dotType: 'corrosion' | 'inferno' | 'bomb', tier: number): string {
+ *  the test assertion agree. e.g. ('inferno', 3) -> 'Inferno III'; ('bomb', 0) -> 'Bomb'.
+ *  SP-E: 'generic' is an absolute per-tick DoT, not tiered, so it always renders as the plain
+ *  'Damage over Time' label (no numeral) regardless of tier. */
+export function dotResistLabel(dotType: DoTType, tier: number): string {
+    if (dotType === 'generic') return 'Damage over Time';
     const kind = dotType.charAt(0).toUpperCase() + dotType.slice(1);
     const numeral = tier > 0 && tier < ROMAN.length ? ` ${ROMAN[tier]}` : '';
     return dotType === 'bomb' ? kind : `${kind}${numeral}`;

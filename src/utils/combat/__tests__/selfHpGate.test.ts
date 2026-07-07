@@ -118,6 +118,7 @@ function makeArgs(runtime: PlayerActorRuntime, selfHpPct: number): PlayerTurnArg
         statusEngine,
         corrosionEntries: [],
         infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
         enemyDefense: 0,

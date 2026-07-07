@@ -3,6 +3,7 @@ import {
     ConditionalDamage,
     DoTApplicationConfig,
     DoTApplicationEntry,
+    DoTType,
     EnemyBaseClass,
     SecondaryDamage,
     SelectedGameBuff,
@@ -108,6 +109,11 @@ export interface RoundData {
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;
+    /** SP-E: absolute-per-tick generic DoT damage this round (Voron/Orel transform, Acidic Decay
+     *  family). Optional and set ONLY when nonzero — generic DoTs are never auto-applied from
+     *  skill text in this task, so every existing round/golden stays byte-identical (field absent,
+     *  legacy RoundData shape preserved). Mirrors corrosionDamage/infernoDamage once populated. */
+    genericDamage?: number;
     /** Detonation damage this round: Bomb detonations + DoT detonations (game-categorised together). */
     detonationDamage: number;
     totalRoundDamage: number;
@@ -190,7 +196,9 @@ export interface DPSSimulationResult {
 }
 
 export interface ActiveDoTState {
-    type: 'corrosion' | 'inferno' | 'bomb';
+    // SP-E: widened to DoTType (was 'corrosion' | 'inferno' | 'bomb') so a generic entry can
+    // surface in the active-DoT display panel.
+    type: DoTType;
     tier: number;
     stacks: number;
     ticksRemaining: number;

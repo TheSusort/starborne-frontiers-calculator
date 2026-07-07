@@ -1,5 +1,5 @@
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
-import { DoTApplicationConfig, SecondaryDamage } from '../../types/calculator';
+import { DoTApplicationConfig, DoTType, SecondaryDamage } from '../../types/calculator';
 import {
     ConditionContext,
     conditionsMet,
@@ -233,12 +233,14 @@ export function controlAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
     return skill?.abilities.filter((a) => a.type === 'control' && a.trigger === 'on-cast') ?? [];
 }
 
-/** `detonate-dot` abilities on the skill, as {dotType, powerPct} pairs. */
+/** `detonate-dot` abilities on the skill, as {dotType, powerPct} pairs. SP-E: dotType widened to
+ *  the full DoTType (generic never appears here — no skill config produces a generic detonation —
+ *  but the underlying Ability config carries DoTType, so this collection must accept it too). */
 export function detonationsFromSkill(
     skill: Skill | undefined
-): { dotType: 'corrosion' | 'inferno' | 'bomb'; powerPct: number }[] {
+): { dotType: DoTType; powerPct: number }[] {
     if (!skill) return [];
-    const out: { dotType: 'corrosion' | 'inferno' | 'bomb'; powerPct: number }[] = [];
+    const out: { dotType: DoTType; powerPct: number }[] = [];
     for (const ability of skill.abilities) {
         if (ability.config.type === 'detonate-dot') {
             out.push({ dotType: ability.config.dotType, powerPct: ability.config.powerPct });

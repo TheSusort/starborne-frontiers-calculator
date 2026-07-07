@@ -386,8 +386,11 @@ export interface IncomingHitContext {
     victimStasised: boolean;
     /** 1-based direct-damage intake index for this victim this round (Ironclad). */
     hitIndexThisRound: number;
-    /** Set only on the DoT-tick path (Vortex Veil). */
-    dotType?: 'inferno' | 'corrosion';
+    /** Set only on the DoT-tick path (Vortex Veil). SP-E: widened to DoTType (was
+     *  'inferno' | 'corrosion') so a generic-DoT tick can flow through the same reduction path;
+     *  the 'dot-inferno-corrosion' condition still matches only inferno/corrosion (correctly
+     *  false for 'generic'/'bomb'). */
+    dotType?: DoTType;
     /** Epic PR12 (C): true when the ATTACKER of this hit carries a live Corrosion or Inferno
      *  stack (Anemone). Live-derived by the engine; defaults false everywhere no such ability
      *  is present → byte-identical. */
