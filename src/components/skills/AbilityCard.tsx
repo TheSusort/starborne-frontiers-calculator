@@ -68,6 +68,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     'transform-incoming-to-dot': 'Transform Incoming to DoT',
     'convert-dot': 'Convert DoT',
     'defense-substitution': 'Defense Substitution',
+    'bomb-countdown-reduce': 'Bomb Countdown Reduce',
 };
 
 const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [

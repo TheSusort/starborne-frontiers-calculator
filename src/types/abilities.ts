@@ -55,7 +55,17 @@ export type AbilityType =
     // the ally's own. Always-on passive, target:'all-allies'. See AbilityConfig's
     // 'defense-substitution' variant (a no-op marker — consumed at the engine's defence-read
     // sites, never through the ability-fold/executor pipeline).
-    | 'defense-substitution';
+    | 'defense-substitution'
+    // SP-F F3 (Lingshe): "reduces all Bombs on the enemy targets by N turn(s), Bombs reduced
+    // to 0 turns by this skill will detonate. This reduction effect requires hacking." Enemy-
+    // targeted (all-enemies), hacking-gated (runtime always draws the 'inflict' landing roll —
+    // see AbilityConfig's 'bomb-countdown-reduce' variant). Structurally distinct from the
+    // generic `cleanse`/`reduce-duration` primitive (which deliberately excludes bombs and only
+    // ever targets self/allies) — this shrinks the ENEMY's own PendingBomb.countdown, and any
+    // bomb reaching <= 0 detonates immediately (bespoke runtime loop in playerTurn.ts,
+    // `reduceEnemyBombs` — NOT detonateContainers/detonate(), which credit the CASTER
+    // unconditionally and ignore countdown).
+    | 'bomb-countdown-reduce';
 
 export type AbilityTarget =
     | 'self'
@@ -560,6 +570,13 @@ export type AbilityConfig =
           duration?: number | 'recurring';
       }
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
+    // SP-F F3 (Lingshe charged skill): shrinks every living enemy's PendingBomb.countdown by
+    // `turns`; any bomb reaching <= 0 detonates immediately, crediting the bomb's ORIGINAL
+    // applier (bomb.sourceId), not this ability's caster. Always hacking-gated at the runtime
+    // call site (`landsTimedEnemyApplicationLive('inflict')`) — no `application` field needed
+    // here since there is only one landing behavior for this ability (unlike 'debuff', which
+    // supports both 'inflict' and 'apply').
+    | { type: 'bomb-countdown-reduce'; turns: number }
     // `scope`: 'active'/undefined extends ALL standing DoT entries (Provider's
     // "extends active Damage Over Time effects"; default + back-compat for stored
     // configs). 'inflicted' extends ONLY the DoT entries this cast just applied

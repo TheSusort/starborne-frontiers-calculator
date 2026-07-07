@@ -3680,6 +3680,31 @@ export function parseDebuffDurationReduction(
     return out;
 }
 
+// SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s), Bombs
+// reduced to 0 turns by this skill will detonate. This reduction effect requires hacking." A
+// STRUCTURALLY DIFFERENT mechanic from REDUCE_DEBUFF_DURATION_RE above (which explicitly
+// excludes "Bombs" — see its own comment): that regex shrinks the GENERIC debuff store on
+// self/allies; this one targets the ENEMY's separate PendingBomb.countdown container. The
+// "requires hacking" / forced-detonate-at-zero riders are NOT parsed here — they are baked into
+// the fixed runtime behavior of the `bomb-countdown-reduce` ability (always hacking-gated,
+// always detonates a bomb that reaches <= 0 — see playerTurn.ts's reduceEnemyBombs). Deliberately
+// its own regex/function — do NOT fold into REDUCE_DEBUFF_DURATION_RE.
+const BOMB_COUNTDOWN_REDUCE_RE =
+    /reduces?\s+all\s+bombs\s+on\s+the\s+enemy\s+targets?\s+by\s+(\d+)\s+turns?/i;
+
+/**
+ * Parses "reduces all Bombs on the enemy targets by N turn(s)" (Lingshe). Returns the turn
+ * count, or null when the text carries no such clause. Reference data: docs/ship-skills.csv.
+ */
+export function parseBombCountdownReduce(text: string | null | undefined): number | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m = BOMB_COUNTDOWN_REDUCE_RE.exec(plain);
+    if (!m) return null;
+    const turns = parseInt(m[1], 10);
+    return Number.isFinite(turns) && turns > 0 ? turns : null;
+}
+
 // "purges N" / "purges a/an" — active-verb only; naturally excludes "is Purged of all buffs"
 // (no "purges" token). Must NOT match "cleanses".
 const PURGE_RE = /\bpurges?\s+(?:(\d+|all)|an?\b)/gi;

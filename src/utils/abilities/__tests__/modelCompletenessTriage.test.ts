@@ -524,30 +524,19 @@ describe('SP-F — deep one-offs', () => {
     const LINGSHE_CHARGED =
         'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.';
 
-    it.fails(
-        'Lingshe: charged "reduces all Bombs on the enemy targets by 1 turn ... will detonate" countdown-reduction+forced-detonate rider builds nothing',
-        () => {
-            const abilities = abilitiesFor({ chargeSkillText: LINGSHE_CHARGED }, 'charged');
-            // GAP: SP-F (allowlist: detonation / debuff-duration-reduction). Dry-run: exactly
-            // ONE ability builds for this whole charged-skill text — the "inflicts Bomb III for
-            // 3 turns" DoT-apply from the SECOND sentence. The FIRST sentence (countdown
-            // reduction of the ENEMY's existing Bomb stacks + hacking-gated landing + forced
-            // immediate detonation when a Bomb's countdown reaches 0) produces ZERO abilities.
-            // Per the allowlist's own reasoning this is a STRUCTURALLY DIFFERENT mechanism from
-            // the generic `{ type: 'cleanse', mode: 'reduce-duration', debuffType: 'bomb' }`
-            // shape (that shape shrinks a duration in the OWNER's own/ally debuff store; this
-            // clause targets the ENEMY's separate PendingBomb countdown container, needs a
-            // hacking-vs-security landing gate with no duration-MODIFYING precedent, and a
-            // forced-detonate-at-zero rider reaching into the detonation payout pipeline
-            // outside the normal per-round tick) — so predicting the exact AbilityType/config
-            // SP-F will land is not possible today. Proxy: the total ability COUNT for this
-            // text (a top-level array-size fact, immune to whatever shape the new ability
-            // takes) — false now (exactly 1), true once SP-F adds ANY ability object for the
-            // countdown-reduction/forced-detonate sentence, mirroring how Voron's probe (SP-E)
-            // uses count/field facts rather than a guessed config shape.
-            expect(abilities.length).toBeGreaterThan(1);
-        }
-    );
+    it('Lingshe: charged "reduces all Bombs on the enemy targets by 1 turn ... will detonate" countdown-reduction rider builds a bomb-countdown-reduce ability alongside the Bomb III DoT-apply', () => {
+        const abilities = abilitiesFor({ chargeSkillText: LINGSHE_CHARGED }, 'charged');
+        // SP-F F3: the countdown-reduction sentence now builds a dedicated
+        // `bomb-countdown-reduce` ability (all-enemies, hacking-gated at runtime via
+        // `landsTimedEnemyApplicationLive('inflict')`), alongside the existing Bomb III
+        // DoT-apply from the second sentence — so the array now has more than the lone
+        // Bomb III entry it had before this task.
+        expect(abilities.length).toBeGreaterThan(1);
+        const reduce = abilities.find((a) => a.config.type === 'bomb-countdown-reduce');
+        expect(reduce).toBeDefined();
+        expect(reduce?.target).toBe('all-enemies');
+        expect(reduce?.config).toMatchObject({ type: 'bomb-countdown-reduce', turns: 1 });
+    });
 
     // ── Part B: discovery — 5 unpinned one-off mechanics, ship(s) identified by corpus
     // keyword search (docs/ship-skills.csv), cross-checked against `npm run audit:skills`

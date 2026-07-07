@@ -834,6 +834,85 @@ function stripShieldPct(victim: CombatActor, pct: number): void {
 }
 
 /**
+ * SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s), Bombs
+ * reduced to 0 turns by this skill will detonate." Decrements EVERY pending bomb on `victim` by
+ * `turns`; any bomb reaching <= 0 detonates IMMEDIATELY using the EXACT `processBombs` burst
+ * formula (engine.ts) — stacks * damagePerStack * affinityMult * (1 + detonationDamageModifier
+ * / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`, NOT this ability's caster) via
+ * a `bomb-detonated` bus emission (one event per detonating entry, mirroring the enemy-turn
+ * `processBombs` shape) plus a direct shield-then-HP debit on `victim` (full drain, no
+ * penetration — the bomb-burst precedent; this bespoke path has no access to the engine-scoped
+ * `applyVictimDamage` sink, so Barrier/Cheat-Death/block interactions are out of scope for this
+ * one-off, consistent with the epic's other deep-one-off approximations). Deliberately NOT
+ * detonateContainers/detonate() — those credit the CASTER unconditionally and consume the WHOLE
+ * container regardless of countdown.
+ */
+function reduceBombsOnVictim(
+    victim: CombatActor,
+    turns: number,
+    round: number,
+    bus: CombatEventBus
+): void {
+    for (let i = victim.pendingBombs.length - 1; i >= 0; i--) {
+        const bomb = victim.pendingBombs[i];
+        bomb.countdown -= turns;
+        if (bomb.countdown > 0) continue;
+        const burst =
+            bomb.stacks *
+            bomb.damagePerStack *
+            bomb.affinityMult *
+            (1 + bomb.detonationDamageModifier / 100);
+        bus.emit({
+            type: 'bomb-detonated',
+            actorId: bomb.sourceId,
+            round,
+            stacks: bomb.stacks,
+            damage: burst,
+        });
+        const shieldDrain = Math.min(victim.shieldPool, burst);
+        victim.shieldPool -= shieldDrain;
+        victim.currentHp = Math.max(0, victim.currentHp - (burst - shieldDrain));
+        victim.pendingBombs.splice(i, 1);
+    }
+}
+
+/**
+ * SP-F F3: fans `reduceBombsOnVictim` over the firing skill's `bomb-countdown-reduce`
+ * ability/abilities (all-enemies), across the AoE footprint (`aoeVictimIds` when present, else
+ * the single anchor). Hacking-gated: reuses the SAME single-draw landing infra as every other
+ * ability-timed 'inflict' enemy application in this file (`landsTimedEnemyApplicationLive`) — one
+ * roll gates the whole cast, not a per-victim re-roll. Called BEFORE `applyNewDoTs` (mirrors
+ * `extendDoTs`'s ordering) so a Bomb III this SAME cast inflicts is never itself reduced.
+ */
+function reduceEnemyBombs(args: {
+    gatedSkill: Skill | undefined;
+    ctx: ConditionContext;
+    anchor: CombatActor;
+    targetId: string | undefined;
+    aoeVictimIds: string[] | undefined;
+    opposingVictimById: Map<string, CombatActor> | undefined;
+    round: number;
+    bus: CombatEventBus;
+    landsTimedEnemyApplicationLive: (application?: 'inflict' | 'apply') => boolean;
+}): void {
+    if (args.targetId === undefined) return;
+    for (const ab of args.gatedSkill?.abilities ?? []) {
+        if (ab.config.type !== 'bomb-countdown-reduce') continue;
+        if (!conditionsMet(ab.conditions, args.ctx)) continue;
+        if (!args.landsTimedEnemyApplicationLive('inflict')) continue;
+        const recipients =
+            ab.target === 'all-enemies' && args.aoeVictimIds ? args.aoeVictimIds : [args.targetId];
+        for (const vid of recipients) {
+            const victim =
+                args.opposingVictimById?.get(vid) ??
+                (vid === args.anchor.id ? args.anchor : undefined);
+            if (!victim) continue;
+            reduceBombsOnVictim(victim, ab.config.turns, args.round, args.bus);
+        }
+    }
+}
+
+/**
  * One player actor's turn: the full damage/buff/DoT-application pipeline (combat-system.md
  * §10), minus the DoT-processing calls (tickDoTs / processBombs / processAccumulators) which
  * run on the enemy turn. Returns everything the round's RoundData row needs from this turn; the
@@ -2008,6 +2087,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         extendChanceGate,
         corrosionEntries,
         infernoEntries,
+    });
+
+    // SP-F F3 (Lingshe): countdown-reduces + force-detonates enemy Bombs. Runs BEFORE
+    // applyNewDoTs (mirrors extendDoTs' ordering immediately above) so a Bomb III THIS cast
+    // inflicts is never itself reduced.
+    reduceEnemyBombs({
+        gatedSkill,
+        ctx,
+        anchor: enemy,
+        targetId,
+        aoeVictimIds,
+        opposingVictimById,
+        round: r,
+        bus,
+        landsTimedEnemyApplicationLive,
     });
 
     // += (not =): with a FASTER enemy, the enemy's bomb/accumulator bursts

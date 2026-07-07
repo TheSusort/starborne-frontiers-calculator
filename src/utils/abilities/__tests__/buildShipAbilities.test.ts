@@ -1752,12 +1752,14 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Lingshe charge skill (Bomb-duration reduction): does NOT emit a debuff-duration-reduction cleanse — deliberately deferred (see auditSkills.allowlist.ts)', () => {
+        it('Lingshe charge skill (Bomb-countdown reduction): emits a bomb-countdown-reduce ability, NOT a debuff-duration-reduction cleanse (SP-F F3 — see auditSkills.allowlist.ts history)', () => {
             const s = ship({
                 chargeSkillText:
                     'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
             });
             const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
+            // Still no generic duration-reduction cleanse — that primitive deliberately excludes
+            // bombs (see REDUCE_DEBUFF_DURATION_RE's own comment).
             const reduce = charged?.abilities.find(
                 (a) =>
                     a.type === 'cleanse' &&
@@ -1765,6 +1767,14 @@ describe('buildShipAbilities', () => {
                     a.config.mode === 'reduce-duration'
             );
             expect(reduce).toBeUndefined();
+            // SP-F F3: the dedicated bomb-countdown-reduce ability now builds instead.
+            const bombReduce = charged?.abilities.find((a) => a.type === 'bomb-countdown-reduce');
+            expect(bombReduce).toMatchObject({
+                type: 'bomb-countdown-reduce',
+                target: 'all-enemies',
+                trigger: 'on-cast',
+                config: { type: 'bomb-countdown-reduce', turns: 1 },
+            });
         });
 
         it('an un-gated reduction clause (no "when directly damaged"/"on debuff infliction") is DROPPED, not emitted as a phantom on-attacked ability', () => {

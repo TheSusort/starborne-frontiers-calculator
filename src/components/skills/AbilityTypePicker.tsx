@@ -38,6 +38,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'transform-incoming-to-dot': 'Transform Incoming to DoT',
     'convert-dot': 'Convert DoT',
     'defense-substitution': 'Defense Substitution',
+    'bomb-countdown-reduce': 'Bomb Countdown Reduce',
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [

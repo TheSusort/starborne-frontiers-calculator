@@ -172,10 +172,10 @@ const RULES: Rule[] = [
         severity: 'high',
         // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N
         // turn(s)" (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's
-        // structurally different "reduces all Bombs on the enemy targets by N turn(s)" clause
-        // (a hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-
-        // at-zero rider) so that mechanic surfaces here too — it is deliberately allowlisted
-        // below rather than parsed (see the allowlist entry's reason).
+        // structurally different "reduces all Bombs on the enemy targets by N turn(s)" clause (a
+        // hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-
+        // zero rider) — SP-F F3 models that shape as its own `bomb-countdown-reduce` ability
+        // (not the generic cleanse/reduce-duration primitive, which deliberately excludes bombs).
         keyword: (t) =>
             /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs)\s+on\b/i.test(
                 t
@@ -183,10 +183,11 @@ const RULES: Rule[] = [
         handled: (a) =>
             a.some(
                 (x) =>
-                    x.type === 'cleanse' &&
-                    x.config.type === 'cleanse' &&
-                    x.config.mode === 'reduce-duration' &&
-                    x.config.count === 'all'
+                    (x.type === 'cleanse' &&
+                        x.config.type === 'cleanse' &&
+                        x.config.mode === 'reduce-duration' &&
+                        x.config.count === 'all') ||
+                    x.type === 'bomb-countdown-reduce'
             ),
     },
     {

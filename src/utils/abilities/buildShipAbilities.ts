@@ -48,6 +48,7 @@ import {
     parseExtendDoT,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
+    parseBombCountdownReduce,
     parseAllyCritDot,
     detectAllyCritDotTrigger,
     detectBombDetonatedTrigger,
@@ -1461,6 +1462,29 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: extendPos >= 0 ? extendPos : MAX_POS,
+        });
+    }
+
+    // SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s),
+    // Bombs reduced to 0 turns by this skill will detonate. This reduction effect requires
+    // hacking." Builds a dedicated all-enemies ability; the hacking gate + forced-detonate-at-
+    // zero rider are fixed runtime behavior (playerTurn.ts's reduceEnemyBombs), not parsed here.
+    // Kept structurally separate from the "inflicts Bomb III" DoT-apply below (a different
+    // sentence, unaffected).
+    const bombCountdownReduceTurns = parseBombCountdownReduce(text);
+    if (bombCountdownReduceTurns) {
+        const bombReducePos = text.search(/reduces?\s+all\s+bombs/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'bomb-countdown-reduce',
+                target: 'all-enemies',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'bomb-countdown-reduce', turns: bombCountdownReduceTurns },
+                autoFilled: true,
+            },
+            pos: bombReducePos >= 0 ? bombReducePos : MAX_POS,
         });
     }
 

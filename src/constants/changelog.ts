@@ -58,6 +58,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: Belladonna now converts an ally\'s Corrosion into Acidic Decay of the same level (chance scaling with her Hacking) and can extend the new Acidic Decay by a turn, matching her skill text. Her charged skill\'s "3 or more Acidic Decay" Stasis gate now actually triggers in combat.',
     'Panon now deals its boosted damage (120%/170%) when Provoked or Taunted, matching its in-game "instead" effect.',
     "Meatshield now shields non-defender allies — direct damage to them is calculated against Meatshield's much higher defense.",
+    "Combat sim: Lingshe's charged skill now reduces enemy Bomb timers (hacking-gated), detonating any that reach zero.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

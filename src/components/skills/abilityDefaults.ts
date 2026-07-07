@@ -106,6 +106,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             };
         case 'defense-substitution':
             return { type };
+        case 'bomb-countdown-reduce':
+            return { type, turns: 1 };
     }
 };
 
@@ -140,6 +142,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'transform-incoming-to-dot': 'self',
     'convert-dot': 'enemy',
     'defense-substitution': 'all-allies',
+    'bomb-countdown-reduce': 'all-enemies',
 };
 
 /**
