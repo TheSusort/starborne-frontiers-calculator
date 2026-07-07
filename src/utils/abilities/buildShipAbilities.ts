@@ -99,6 +99,7 @@ import {
     statusEffectCondition,
     parsePreCombatStatGrants,
     detectTransformToDot,
+    detectConvertDot,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -1384,7 +1385,11 @@ function abilitiesFromText(
     }
 
     // Crit-power-chance extension (Valerian self-crit; Belladonna ally-inflicts → team).
-    const critExtend = parseCritPowerExtend(text);
+    // SP-E, Task E4: a row that ALSO carries a "convert the Corrosion into <family>" clause
+    // (Belladonna) folds this SAME crit-power extension into the convert-dot ability's
+    // extendTurns/extendChanceFromCritPower (see mergeBuff below) — emitting the standalone
+    // extend-dot here too would double-apply the extension on every successful conversion.
+    const critExtend = detectConvertDot(text) ? null : parseCritPowerExtend(text);
     if (critExtend) {
         const critExtendPos = text.search(/extend/i);
         out.push({
@@ -2425,9 +2430,37 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // defensive: round-trip buffs may lack the flag; parser buffs already set it
         if (ability.autoFilled === undefined) ability.autoFilled = true;
         const slot = slotForBuffSource(buff.skillSource);
+        const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
+        // SP-E, Task E4: Belladonna's "convert the Corrosion into Acidic Decay ... 1% per 10
+        // Hacking" clause auto-fills a bare, ungated enemy-target 'debuff' named after the
+        // conversion's TARGET family ("Acidic Decay") — the generic buff/debuff-name auto-fill
+        // has no notion of "conversion", it just sees a named status in the clause. Recognise
+        // that shape here (enemy-target + the row's own convert-dot clause names THIS buff) and
+        // replace the auto-filled debuff with the real convert-dot ability, riding the live
+        // on-ally-debuff-inflicted trigger — an EXPLICIT trigger assignment here, so it bypasses
+        // (rather than widens) Oleander's target==='ally'-only gate a few lines below, which
+        // stays untouched for its own buff-grant case. Folds in the paired crit-power duration
+        // extension (parseCritPowerExtend; the standalone extend-dot for this row is suppressed
+        // above in abilitiesFromText to avoid double-applying it).
+        const convertDot = target === 'enemy' && rowText ? detectConvertDot(rowText) : undefined;
+        if (convertDot && convertDot.buffName === buff.buffName) {
+            ability.type = 'convert-dot';
+            ability.config = {
+                type: 'convert-dot',
+                fromDotType: convertDot.fromDotType,
+                buffName: convertDot.buffName,
+                chanceFromStat: { stat: 'hacking', pctPerPoint: convertDot.pctPerPoint },
+                extendTurns: 1,
+                extendChanceFromCritPower: true,
+            };
+            ability.trigger = 'on-ally-debuff-inflicted';
+            ability.target = 'enemy';
+            const convertPos = rowText.indexOf(buff.buffName);
+            pushToSlot(bySlot, slot, [{ ability, pos: convertPos >= 0 ? convertPos : MAX_POS }]);
+            return;
+        }
         // Attach a gating condition parsed from the buff's clause (e.g. Thresh's
         // "When targeting a Defender, … gains Crit Power Up II" → enemy-type Defender).
-        const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
         const conditions = rowText ? detectGrantConditions(rowText, buff.buffName) : [];
         if (conditions.length) {
             ability.conditions = conditions;

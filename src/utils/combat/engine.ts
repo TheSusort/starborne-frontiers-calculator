@@ -5078,6 +5078,22 @@ export function runCombat(input: CombatEngineInput): {
                         // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
                         // precomputed-vs-representative static disadvantage flag.
                         affinityOf: (id) => allActorsById.get(id)?.affinity,
+                        // SP-E, Task E4: resolve any actor (either side) by id — the convert-dot
+                        // executor uses this to find the ACTUAL victim of an ally's DoT
+                        // application (eventCtx.victimId) instead of the fixed enemy/
+                        // corrosionEntries closures above (side-biased to the player's single
+                        // opposing focus). Combat-wide map — no per-side sideCtx field needed.
+                        actorById: (id) => allActorsById.get(id),
+                        // SP-E, Task E4: live hacking/critDamage for `id` (either side), feeding
+                        // Belladonna's conversion-chance (hacking) and paired extend-chance
+                        // (critDamage) gates. Same statusEngine/selfBuffLookup every other
+                        // effectiveStatsOf call site in this scope uses (e.g. mostBuffsAmong).
+                        effectiveStatsFor: (id) => {
+                            const a = allActorsById.get(id);
+                            return a
+                                ? effectiveStatsOf(statusEngine, selfBuffLookup, a)
+                                : undefined;
+                        },
                         // D-PR14: Doomsayer enemy-highest-attack resolver, the round's first
                         // real activator id, and the shared once-per-round consume set. All
                         // inert today — only consumed by the next task's executor branch.

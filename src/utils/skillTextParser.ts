@@ -1542,6 +1542,32 @@ export function parseCritPowerExtend(
     return { turns: parseInt(m[1], 10), condition, scope };
 }
 
+// SP-E, Task E4: "convert the Corrosion into Acidic Decay of the same level, ... 1% per 10
+// Hacking" (Belladonna). Anchored on "of the same level" (not just a lazy `[^.]*?` scan) so the
+// named-family capture group stops at the right boundary — the family name can be multi-word
+// ("Acidic Decay") and a bare lazy match would otherwise capture only its first word.
+const CONVERT_DOT_RE =
+    /convert\s+the\s+(corrosion|inferno)\s+into\s+([\w\s]+?)\s+of\s+the\s+same\s+level[^.]*?(\d+(?:\.\d+)?)%\s+per\s+(\d+)\s+hacking/i;
+
+/**
+ * Parses a "convert the <DoT> into <family> of the same level ... N% per M Hacking" clause into
+ * its conversion descriptor, or undefined when absent. `pctPerPoint` is the %-per-Hacking-point
+ * rate (1% per 10 Hacking → 0.1). Reference data: docs/ship-skills.csv (Belladonna).
+ */
+export function detectConvertDot(
+    text: string | null | undefined
+): { fromDotType: DoTType; buffName: string; pctPerPoint: number } | undefined {
+    if (!text) return undefined;
+    const plain = stripUnitTags(text);
+    const m = CONVERT_DOT_RE.exec(plain);
+    if (!m) return undefined;
+    return {
+        fromDotType: m[1].toLowerCase() as DoTType,
+        buffName: m[2].trim(),
+        pctPerPoint: parseFloat(m[3]) / parseInt(m[4], 10),
+    };
+}
+
 // Crocus: "when (an/another) ally inflicts a Damage Over Time (DoT) effect with a critical hit".
 const ALLY_CRIT_DOT_RE =
     /\ball(?:y|ies)\b[^.]*\binflict\w*[^.]*\b(?:damage over time|dot)\b[^.]*\bcritical/i;

@@ -1,7 +1,12 @@
 import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
+import {
+    DoTType,
+    EnemyBaseClass,
+    ParsedBuffEffects,
+    SelectedGameBuff,
+} from '../../types/calculator';
 import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
@@ -64,7 +69,8 @@ export type ReactiveAbilityType =
     | 'damage'
     | 'counter' // G PR1: counter-attack reactive (on-attacked) — no parser produces it until Task 5
     | 'purge' // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
-    | 'remove-self-buff'; // Overload lifecycle: reactive self-buff removal (on kill/repair/debuff)
+    | 'remove-self-buff' // Overload lifecycle: reactive self-buff removal (on kill/repair/debuff)
+    | 'convert-dot'; // SP-E, Task E4: Belladonna's ally-Corrosion→Acidic-Decay conversion
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -80,6 +86,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'counter', // G PR1: counter reactive — byte-identical (no fixture carries a counter ability)
     'purge', // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
     'remove-self-buff', // Overload lifecycle: reactive self-buff removal
+    'convert-dot', // SP-E, Task E4: Belladonna's ally-Corrosion→Acidic-Decay conversion
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -172,6 +179,18 @@ export interface Intent {
          *  via `reactiveRecipients`, instead of the default heal target. Mirrors
          *  repairedAllyIds/shieldRecipientIds. A `self`-target reaction (Morao) ignores it. */
         cleansedAllyIds?: string[];
+        /** SP-E, Task E4: the ACTUAL victim id (dot-applied.targetId) of the ally's DoT
+         *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
+         *  the convert-dot executor to resolve the correct CombatActor (via ctx.actorById) whose
+         *  entries to retag — NOT the fixed ctx.enemy/corrosionEntries, which are side-biased to
+         *  the PLAYER's single opposing focus and would be wrong for an ENEMY owner's ally
+         *  hitting a PLAYER actor. Absent for the debuff-applied branch of the same trigger
+         *  (Oleander's buff grant doesn't need a victim — it routes via damagedAllyId only). */
+        victimId?: string;
+        /** SP-E, Task E4: the DoT type of the ally's application (dot-applied.dotType), captured
+         *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
+         *  ally's Inferno (or any other DoT) never converts under a Corrosion-only ability. */
+        dotType?: DoTType;
     };
 }
 
@@ -412,7 +431,14 @@ export function registerReactiveListeners(args: {
                         if (isSameSideAlly(e.sourceId, ownerId))
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    damagedAllyId: e.sourceId,
+                                    // SP-E, Task E4: Belladonna's convert-dot executor needs the
+                                    // actual victim + DoT type of THIS application.
+                                    victimId: e.targetId,
+                                    dotType: e.dotType,
+                                },
                             });
                     });
                     break;
@@ -1033,6 +1059,18 @@ export interface IntentExecContext {
      *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
      *  flag, byte-identical for single-opponent fixtures). */
     affinityOf?: (actorId: string) => AffinityName | undefined;
+    /** SP-E, Task E4: resolve ANY actor (either side, from the combat-wide actor map) by id.
+     *  Used by the convert-dot executor to locate the ACTUAL victim of an ally's DoT infliction
+     *  (eventCtx.victimId) so it retags the right entries — team-symmetric (works whether the
+     *  victim is the singular DPS/team `enemy` dummy or a real player actor hit by an enemy
+     *  ally). Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
+     *  that don't exercise convert-dot. */
+    actorById?: (actorId: string) => CombatActor | undefined;
+    /** SP-E, Task E4: live (buff-folded) hacking/critDamage for `actorId`, either side. Used by
+     *  the convert-dot executor to compute the conversion chance (hacking) and the paired
+     *  crit-power extend chance (critDamage). Optional — absent in unit-test ctxs that don't
+     *  exercise convert-dot. */
+    effectiveStatsFor?: (actorId: string) => { hacking: number; critDamage: number } | undefined;
     /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
     /** D-PR16: id of the sole living actor on the drain owner's side (recomputed each drain),
@@ -2089,6 +2127,76 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             dotType: cfg.dotType,
             stacks: cfg.stacks,
         });
+        return;
+    }
+
+    // SP-E, Task E4 (Belladonna): "When an ally inflicts Corrosion, chance (1%/10 Hacking) to
+    // convert it into <buffName> of the same level; upon converting, extend the new entry N
+    // turns at crit-power chance." Team-symmetric: `owner` is Belladonna (either side); the
+    // victim is resolved via eventCtx.victimId (the ally's ACTUAL target), never the fixed
+    // ctx.enemy — the `dot` branch above is safe leaving that fixed (no shipped reactive `dot`
+    // applier targets the opposing side today), but a Belladonna reacting on the OPPOSING side
+    // to her OWN ally's cast must land on that ally's real victim, which can be a real player
+    // actor (enemy-owner case) — never the DPS/team `enemy` dummy.
+    if (cfg.type === 'convert-dot') {
+        // Gate 0: only the fromDotType this event carries (Corrosion) converts.
+        if (intent.eventCtx?.dotType !== cfg.fromDotType) return;
+        const allyId = intent.eventCtx?.damagedAllyId;
+        const victim = intent.eventCtx?.victimId
+            ? ctx.actorById?.(intent.eventCtx.victimId)
+            : undefined;
+        // No victim resolver / id (unit-test ctx without actorById, or a listener that somehow
+        // fired without a captured victim) → not-simulated follow-up, byte-identical no-op.
+        if (!allyId || !victim) return;
+        // Gate 1: conversion chance — 1% per 10 Hacking (pctPerPoint 0.1) of the OWNER's
+        // (Belladonna's) LIVE effective Hacking. Deterministic RateGate keyed by ability,
+        // mirroring passesProcChanceGate's `${ownerId}:${abilityId}` convention (reused here
+        // via ctx.procChanceGates so the accumulator persists combat-lifetime like every other
+        // proc gate).
+        const ownerStats = ctx.effectiveStatsFor?.(intent.ownerId);
+        const hacking = ownerStats?.hacking ?? 0;
+        const convertRate = Math.min(1, (cfg.chanceFromStat.pctPerPoint * hacking) / 100);
+        const convertKey = `${intent.ownerId}:${intent.ability.id}`;
+        let convertGate = ctx.procChanceGates?.get(convertKey);
+        if (ctx.procChanceGates && !convertGate) {
+            convertGate = makeRateGate();
+            ctx.procChanceGates.set(convertKey, convertGate);
+        }
+        const converts = convertGate ? convertGate(convertRate) : convertRate >= 1;
+        if (!converts) return;
+        // Retag the entries THIS ally just applied (not yet converted, same sourceId) — tier/
+        // stacks/remainingRounds are left untouched ("of the same level"); only family +
+        // unremovable change (E1/E2: family feeds enemyDotFamilyCounts/the SP-D charge gate,
+        // unremovable survives Cheat-Death + DoT cleanse).
+        const pool: ActiveDoTStack[] =
+            cfg.fromDotType === 'corrosion'
+                ? victim.corrosionEntries
+                : cfg.fromDotType === 'inferno'
+                  ? victim.infernoEntries
+                  : victim.genericDoTEntries;
+        const converted = pool.filter((e) => e.sourceId === allyId && e.family === undefined);
+        if (!converted.length) return;
+        for (const e of converted) {
+            e.family = cfg.buffName;
+            e.unremovable = true;
+        }
+        // Gate 2: the paired crit-power-chance duration extension (folded from
+        // parseCritPowerExtend — the standalone extend-dot for this row is suppressed in
+        // buildShipAbilities to avoid double-applying it). A SEPARATE keyed gate so its own
+        // accumulator schedule doesn't share draws with the conversion gate above.
+        if (cfg.extendTurns && cfg.extendChanceFromCritPower) {
+            const critPowerFactor = Math.min(1, (ownerStats?.critDamage ?? 0) / 100);
+            const extendKey = `${convertKey}:extend`;
+            let extendGate = ctx.procChanceGates?.get(extendKey);
+            if (ctx.procChanceGates && !extendGate) {
+                extendGate = makeRateGate();
+                ctx.procChanceGates.set(extendKey, extendGate);
+            }
+            const extends_ = extendGate ? extendGate(critPowerFactor) : critPowerFactor >= 1;
+            if (extends_) {
+                for (const e of converted) e.remainingRounds += cfg.extendTurns;
+            }
+        }
         return;
     }
 

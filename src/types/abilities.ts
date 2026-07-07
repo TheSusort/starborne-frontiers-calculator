@@ -42,7 +42,10 @@ export type AbilityType =
     // SP-E: Voron/Orel "transforms the [incoming direct] damage into a DoT lasting N turns" —
     // reactive self-ability (trigger:'on-attacked', target:'self'). See AbilityConfig's
     // 'transform-incoming-to-dot' variant.
-    | 'transform-incoming-to-dot';
+    | 'transform-incoming-to-dot'
+    // SP-E, Task E4: Belladonna's ally-Corrosion→Acidic-Decay conversion — reactive enemy-target
+    // ability (trigger:'on-ally-debuff-inflicted'). See AbilityConfig's 'convert-dot' variant.
+    | 'convert-dot';
 
 export type AbilityTarget =
     | 'self'
@@ -763,6 +766,23 @@ export type AbilityConfig =
           perAdjacentAlly?: boolean;
           /** Gate: at least one adjacent ally of this role category (Enforcer/Defiant/Stalwart). */
           requiresAdjacentRole?: ShipRoleCategory;
+      }
+    // SP-E, Task E4 (Belladonna): "When an ally inflicts `fromDotType`, chance to convert it into
+    // a named DoT family `buffName` of the same level" — retags the ally's just-applied entries
+    // (family + unremovable), preserving tier/stacks/remainingRounds. Rides
+    // trigger:'on-ally-debuff-inflicted', target:'enemy' (widened gate — see buildShipAbilities'
+    // mergeBuff). `chanceFromStat` is the conversion-chance stat scaling (1% per 10 Hacking →
+    // pctPerPoint 0.1). `extendTurns`/`extendChanceFromCritPower` fold Belladonna's paired
+    // "extends the newly applied <family> for N turns, chance = crit power" clause (otherwise
+    // parsed standalone by parseCritPowerExtend into an `extend-dot` ability — suppressed for
+    // this row to avoid a double-extend) directly into the SAME conversion executor.
+    | {
+          type: 'convert-dot';
+          fromDotType: DoTType;
+          buffName: string;
+          chanceFromStat: { stat: 'hacking'; pctPerPoint: number };
+          extendTurns?: number;
+          extendChanceFromCritPower?: boolean;
       };
 
 /** Crowd-control effects a `control` ability can apply. The combat effect of each
