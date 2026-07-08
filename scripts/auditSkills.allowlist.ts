@@ -14,18 +14,13 @@ export interface AllowEntry {
 export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
-        rules: ['detonation', 'ungated-effect-with-trigger', 'debuff-duration-reduction'],
-        reason: 'detonation: countdown-reduction + crit-scaling Bomb detonation (charged skill), plus the crit-power-scaled "detonation damage" modifier (passive2/3) — neither is a detonate-dot consumption. The passive2/3 "gains Stealth on detonating a Bomb" grant carries an on-bomb-detonated trigger (not ungated). ungated-effect-with-trigger: passive1\'s "When this Unit inflicts a Bomb it gains Stealth" is a reactive on-self-inflicting-a-DoT trigger the parser does not derive (distinct from the detonate trigger above) — modelled manually. debuff-duration-reduction (epic PR11): the charge skill\'s "reduces all Bombs on the enemy targets by 1 turn, Bombs reduced to 0 turns by this skill will detonate. This reduction effect requires hacking." is a STRUCTURALLY DIFFERENT mechanic from Heliodor/Pestilence\'s generic timed-debuff-store shrink this rule otherwise catches: it targets the ENEMY\'s PendingBomb countdown (a separate container from the generic debuff store the new engine primitive touches), carries a hacking-vs-security landing gate with no established precedent for a duration-MODIFYING (vs debuff-INFLICTING) action, and a forced-immediate-detonation-at-zero rider that would need to reach into the detonation payout/attribution pipeline outside the normal per-round tick cadence. Reducing the countdown WITHOUT the immediate-detonation rider is not a faithful partial model (the bomb would sit at 0 turns, undetonated, until an unrelated natural tick) — a "one-off too complex to generalise" per this file\'s own convention (mirrors the Panon instead-branch precedent, PR6b). Revisit if Lingshe becomes a priority ship.',
+        rules: ['detonation', 'ungated-effect-with-trigger'],
+        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is now modelled — SP-F F3, `bomb-countdown-reduce` — but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). The passive2/3 "gains Stealth on detonating a Bomb" grant carries an on-bomb-detonated trigger (not ungated). ungated-effect-with-trigger: passive1\'s "When this Unit inflicts a Bomb it gains Stealth" is a reactive on-self-inflicting-a-DoT trigger the parser does not derive (distinct from the detonate trigger above) — modelled manually.',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────
     // Reactive triggers (on-cleanse / on-kill / on-damaged / enemy-uses-charged / on-resist /
     // on-death) — modelled manually by the user, never auto-derived in single-ship DPS.
-    {
-        ship: 'Panon',
-        rules: ['instead-replacement'],
-        reason: 'Active + charged carry an "If this Unit is Provoked or Taunted, it instead gains <buff> and deals <higher>% damage" full-branch replacement (the only such shape in the corpus). Deferred (PR6b, user decision): a faithful model needs complementary/negated self-conditions AND sim damage-branch selection (the sim reads only the first damage ability) — bespoke infra for one ship. The base branch is already correct in single-ship DPS (self never Provoked/Taunted); only the combat-sim Provoked/Taunted state is imperfect. Revisit as a dedicated design if a second "instead"-branch ship appears.',
-    },
     {
         ship: 'Rikra',
         rules: ['ungated-effect-with-trigger'],
@@ -118,5 +113,17 @@ export const ALLOWLIST: AllowEntry[] = [
         ship: 'Valkyrie',
         rules: ['accumulate-detonate'],
         reason: 'Passive mentions "When an Echoing Burst explodes" as a heal-on-burst reaction, not an infliction. The charged skill correctly parses the accumulate-detonate; the passive reference is filtered by the parser guard.',
+    },
+
+    // ── SP-F F5: Meatshield — Protection→DoT sibling clause, DEFERRED ───────────
+    // Meatshield's R4 refit-active passive carries THREE sentences. SP-F F5 ships the
+    // defense-substitution clause ("dealt as if that ally had this Unit's defense" — the new
+    // `defense-substitution` ability, ally-scoped, target 'all-allies'). This entry covers the
+    // OTHER, still-unmodelled sentence: "Any damage this Unit takes from Protection is
+    // transformed into a Damage over Time effect for 2 turns."
+    {
+        ship: 'Meatshield',
+        rules: ['transform-incoming-to-dot'],
+        reason: "SP-F F5 SHIPPED the sibling defense-substitution clause (approximation — see AbilityType's 'defense-substitution' doc comment) but deliberately did NOT build this clause. It strictly requires the Protection-as-damage-transfer mechanic (a Defender intercepting ally damage) to exist first — no damage is ever \"transferred by Protection\" in this model, so there is nothing to convert into a DoT. Protection-transfer itself is deferred to a future SP pending a locked mitigation-ordering + speed-chained-redirect rule (design doc §1); it also affects Lionheart's Protection grant and Meatshield's own R3 \"steal Protection\". The generic self-DoT transform primitive (SP-E, `transform-incoming-to-dot` — Voron/Orel) is ready to receive this clause once Protection-transfer lands; both Meatshield skill-text columns (passive2/passive3) carry the clause, hence two raw findings suppressed by this one ship-scoped entry.",
     },
 ];

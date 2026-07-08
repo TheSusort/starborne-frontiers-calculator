@@ -104,6 +104,10 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
                 buffName: '',
                 chanceFromStat: { stat: 'hacking', pctPerPoint: 0.1 },
             };
+        case 'defense-substitution':
+            return { type };
+        case 'bomb-countdown-reduce':
+            return { type, turns: 1 };
     }
 };
 
@@ -137,6 +141,8 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'pre-combat-stat': 'self',
     'transform-incoming-to-dot': 'self',
     'convert-dot': 'enemy',
+    'defense-substitution': 'all-allies',
+    'bomb-countdown-reduce': 'all-enemies',
 };
 
 /**

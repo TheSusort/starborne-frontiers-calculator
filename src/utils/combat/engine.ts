@@ -6,6 +6,7 @@ import {
     TeamActorInput,
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
+import { matchesRoleCategory } from '../../constants/shipTypes';
 import { Ability, AbilityTarget, IncomingHitContext, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
@@ -456,6 +457,17 @@ export interface EnemyActorInput {
     /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
      *  channels for this enemy attacker. Absent → all folds inert (byte-identical). */
     preFight?: PreFightCombatModifiers;
+    /** SP-F F5: this enemy attacker's ship role (Ship.type), for role-filtered classification —
+     *  today only Meatshield's defense-substitution "non-defender ally" gate (roleByActorId,
+     *  matchesRoleCategory(..., ['DEFENDER'])). Mirrors TeamActorInput.role's contract: absent →
+     *  the substitution gate treats an unknown role as dormant (no substitution) rather than
+     *  assuming non-defender — consistent with Graphite's role-filtered reaction also staying
+     *  dormant on an unknown role (matchesRoleCategory(undefined, ...) is always false). */
+    role?: ShipTypeName;
+    /** SP-F F4: this enemy attacker's ship name, for the live `ally-on-team` roster check
+     *  (Isha/Nayra reciprocal Override gate). Absent → not added to the name map → the gate
+     *  falls back to assume-met (byte-identical). */
+    name?: string;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -997,6 +1009,9 @@ export interface CombatEngineInput {
      *  the focus actor never matches a role filter — the reaction stays dormant for
      *  hits on it (conservative; mirrors TeamActorInput.role's contract). */
     role?: ShipTypeName;
+    /** SP-F F4: FOCUS actor's ship name, for the live `ally-on-team` roster check (Isha/Nayra
+     *  reciprocal Override gate). Absent → assume-met fallback (byte-identical). */
+    name?: string;
     /** Healing mode switch (healing calc): the player actor id that heals/shields route to
      *  and consume against. Must be a player actor id (focus or a team actor). When set, the
      *  engine runs in healing mode — heals/shields/cleanses are consumed and a `healing`
@@ -1057,6 +1072,13 @@ export interface CombatEngineInput {
         /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
          *  channels for this enemy attacker. Absent → all folds inert (byte-identical). */
         preFight?: PreFightCombatModifiers;
+        /** SP-F F5: this enemy attacker's ship role (Ship.type) — see EnemyActorInput.role's doc
+         *  comment for the full contract (Meatshield defense-substitution's "non-defender ally"
+         *  classification, side-agnostic via roleByActorId). */
+        role?: ShipTypeName;
+        /** SP-F F4: this enemy attacker's ship name — see EnemyActorInput.name (live
+         *  `ally-on-team` roster check). Absent → assume-met fallback. */
+        name?: string;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
@@ -2590,9 +2612,22 @@ export function runCombat(input: CombatEngineInput): {
     // built for ALL player actors for uniformity even though in healing mode only the heal
     // target is ever attacked. An actor without a role stays OFF the map → roleOf returns
     // undefined → role-filtered reactions stay dormant for hits on it (conservative).
+    // SP-F F5: also seeded from enemyAttackers' own `role` (EnemyActorInput.role) — the map
+    // was already side-agnostic BY KEY (any actor id, either side); no enemy caller populated
+    // it before this task. Consumed today by Meatshield's defense-substitution gate (via
+    // matchesRoleCategory) on EITHER side, in addition to Graphite's existing player-only use.
     const roleByActorId = new Map<string, ShipTypeName>();
     if (input.role) roleByActorId.set(focusActorId, input.role);
     for (const t of teamActors) if (t.role) roleByActorId.set(t.id, t.role);
+    for (const e of input.enemyAttackers ?? []) if (e.role) roleByActorId.set(e.id, e.role);
+    // SP-F F4: actor id → ship name (mirrors roleByActorId, side-agnostic by key) for the live
+    // `ally-on-team` roster check (Isha/Nayra reciprocal Override gate). Only populated when a
+    // caller supplies ship names (team sim); left empty in single-ship DPS / manual runs → the
+    // gate keeps its assume-met fallback. Threaded into executeIntent's IntentExecContext below.
+    const nameByActorId = new Map<string, string>();
+    if (input.name) nameByActorId.set(focusActorId, input.name);
+    for (const t of teamActors) if (t.name) nameByActorId.set(t.id, t.name);
+    for (const e of input.enemyAttackers ?? []) if (e.name) nameByActorId.set(e.id, e.name);
     registerReactiveListeners({
         bus,
         perOwner: reactivePerOwner,
@@ -2776,6 +2811,57 @@ export function runCombat(input: CombatEngineInput): {
         if (outgoing.length) outgoingAbilitiesById.set(rt.actor.id, outgoing);
     }
     const outgoingAbilitiesOf = (id: string): Ability[] => outgoingAbilitiesById.get(id) ?? [];
+
+    // SP-F F5 (Meatshield, R4 refit-active passive — APPROXIMATION): per-actor set of ids
+    // carrying an active `defense-substitution` passive, side-agnostic (a carrier can be on
+    // either team — mirrors incomingAbilitiesById/outgoingAbilitiesById above). Built once from
+    // BOTH runtime maps; empty for actors without the ability → substitutedDefenceFor below is a
+    // no-op (byte-identical to every existing caller).
+    const defenseSubstitutionCarrierIds = new Set<string>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            if (slot.abilities.some((a) => a.config.type === 'defense-substitution')) {
+                defenseSubstitutionCarrierIds.add(rt.actor.id);
+                break;
+            }
+        }
+    }
+    // "Any direct damage dealt to a non-defender ally that is not transferred by Protection is
+    // dealt as if that ally had this Unit's defense." Protection-as-damage-transfer is DEFERRED
+    // (design doc §1) — nothing is ever "transferred by Protection" in this model, so the "not
+    // transferred" gate is vacuously satisfied: this substitutes for EVERY living non-defender
+    // ally of a living carrier, unconditionally. Called from EVERY defence-read site
+    // (defenseProfileOf, the reactive read, both victimDefenceFor bindings) so every attack type
+    // sees the same mitigation — wiring it into only one path would silently diverge across
+    // attack types. `fallback` is the site's OWN pre-substitution defence value (raw stats,
+    // buffed/effective, or a last-turn-ctx read — whichever that site already computed), so a
+    // victim with no applicable carrier is byte-identical to before this task. Multi-carrier tie-
+    // break (no known in-game dup case): the HIGHEST effective defence among living, same-side
+    // carriers wins.
+    const substitutedDefenceFor = (victim: CombatActor, fallback: number): number => {
+        if (victim.currentHp <= 0) return fallback; // dead victims are never substituted
+        // DEFENDER victims are never substituted (R4 text: "non-defender ally"). Substitution
+        // requires PROVING the victim is a known non-defender role — an unknown/missing role
+        // (no role data threaded for this actor) stays dormant (no substitution), matching the
+        // codebase's established convention for this exact ambiguity: matchesRoleCategory(undefined,
+        // ...) always returns false, so an unknown role can never satisfy "is a non-defender" here
+        // either (mirrors Graphite's role-filtered reaction staying dormant on an unknown role —
+        // see triggers.ts's forced-targeting/role-filter gates).
+        const victimRole = roleByActorId.get(victim.id);
+        if (!victimRole || matchesRoleCategory(victimRole, ['DEFENDER'])) return fallback;
+        let bestDefence: number | undefined;
+        for (const carrierId of defenseSubstitutionCarrierIds) {
+            if (carrierId === victim.id) continue; // a carrier never substitutes for itself
+            const carrier = allActorsById.get(carrierId);
+            if (!carrier || carrier.currentHp <= 0 || carrier.side !== victim.side) continue;
+            const carrierDefence = effectiveStatsOf(statusEngine, selfBuffLookup, carrier).defence;
+            if (bestDefence === undefined || carrierDefence > bestDefence) {
+                bestDefence = carrierDefence;
+            }
+        }
+        return bestDefence ?? fallback;
+    };
 
     // D-PR3: is this actor currently Stealthed? Sibling to isStasised — reads the actor's active
     // self-buff names (snapshot + timed + active ability statuses). 'Stealth' is the buff name the
@@ -3423,6 +3509,12 @@ export function runCombat(input: CombatEngineInput): {
                     );
                 }
             }
+            // SP-F F2 (AEGIS): the pre-absorb pool for the shield-destroyed emit below — read
+            // AFTER the Lifeline threshold-shield grant above (NOT the earlier `shieldBefore`,
+            // which is deliberately the PRE-Lifeline value other callers rely on) so a shield
+            // freshly granted mid-hit by Lifeline and immediately destroyed by the SAME hit still
+            // counts as "destroyed" (it went 0 → grant → 0 within this one resolution).
+            const shieldBeforeThisAbsorb = victim.shieldPool;
             const { absorbed, hpDamage } = shieldAbsorb({
                 damage,
                 shieldPool: victim.shieldPool,
@@ -3432,6 +3524,13 @@ export function runCombat(input: CombatEngineInput): {
             });
             victim.shieldPool -= absorbed;
             sink.addShieldAbsorbed(absorbed, victim.id);
+            // AEGIS (SP-F F2): a DIRECT hit that fully depletes a non-empty shield pool. Excludes
+            // DoT-tick batches (byDirectDamage:false) — a DoT zeroing a lingering shield is not a
+            // "destruction" the game reacts to; a Barrier-blocked hit already returned above and
+            // never reaches this line, so it can never false-positive here either.
+            if (cause?.byDirectDamage && shieldBeforeThisAbsorb > 0 && victim.shieldPool === 0) {
+                bus.emit({ type: 'shield-destroyed', victimId: victim.id, round: r });
+            }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
             // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
@@ -3989,7 +4088,9 @@ export function runCombat(input: CombatEngineInput): {
                     attackerAffinity: owner.affinity ?? 'antimatter',
                 },
                 {
-                    defence: victimStats.defence,
+                    // SP-F F5: Meatshield defense-substitution (approximation) — see the
+                    // substitutedDefenceFor doc comment above for the full rule.
+                    defence: substitutedDefenceFor(victim, victimStats.defence),
                     defenceModifierPct: 0,
                     affinity: victim.affinity ?? 'antimatter',
                 },
@@ -4235,7 +4336,9 @@ export function runCombat(input: CombatEngineInput): {
                 defenseProfileOf: (v) => {
                     const m = victimIncomingModifiers(v.id);
                     return {
-                        defence: v.stats.defence,
+                        // SP-F F5: Meatshield defense-substitution (approximation) — see the
+                        // substitutedDefenceFor doc comment above for the full rule.
+                        defence: substitutedDefenceFor(v, v.stats.defence),
                         // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
                         // Direction-agnostic — v.id keys the victim's own enemy-debuff store
                         // regardless of side.
@@ -4252,6 +4355,13 @@ export function runCombat(input: CombatEngineInput): {
                             args.preTurnVictimStatus,
                             v
                         ),
+                        // SP-F F4: this victim's 'Defensive Affinity Override' (Isha/Nayra) forces
+                        // the incoming attacker to affinity DISADVANTAGE against it. Detected per
+                        // victim (anchor AND covered) via the victim's own self-buff store — the
+                        // positional counterpart to playerTurn's `victimHasDefensiveOverride`.
+                        forceAffinityDisadvantage: selfBuffNamesForOwners(statusEngine, [
+                            v.id,
+                        ]).includes('Defensive Affinity Override'),
                     };
                 },
                 applyToVictim: args.applyToVictim,
@@ -4413,7 +4523,9 @@ export function runCombat(input: CombatEngineInput): {
         const playerTurnBindings: TurnBindings = {
             opposingRoster: enemyAttackerActors,
             legacyVictim: enemy,
-            victimDefenceFor: (tgt) => tgt.stats.defence,
+            // SP-F F5: Meatshield defense-substitution (approximation) — see the
+            // substitutedDefenceFor doc comment above for the full rule.
+            victimDefenceFor: (tgt) => substitutedDefenceFor(tgt, tgt.stats.defence),
             victimMaxHpFor: (tgt) => tgt.stats.hp,
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
@@ -4425,8 +4537,13 @@ export function runCombat(input: CombatEngineInput): {
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
             legacyVictim: healTarget!,
+            // SP-F F5: Meatshield defense-substitution (approximation) — see the
+            // substitutedDefenceFor doc comment above for the full rule.
             victimDefenceFor: (tgt) =>
-                lastTurnCtxByActor.get(tgt.id)?.effectiveDefence ?? baseDefenceFor(tgt.id),
+                substitutedDefenceFor(
+                    tgt,
+                    lastTurnCtxByActor.get(tgt.id)?.effectiveDefence ?? baseDefenceFor(tgt.id)
+                ),
             victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
             enemyTypeArg: undefined,
             // Opposing side from the ENEMY's view = the player team, so `enemyBuffNames` here is the
@@ -4505,6 +4622,38 @@ export function runCombat(input: CombatEngineInput): {
                     perActorDetonation.set(actorId, (perActorDetonation.get(actorId) ?? 0) + dealt);
                 }
             }
+        };
+
+        // SP-F F3 fix (Critical + Important): routes a FORCED bomb detonation (a caster's
+        // countdown-reduce ability driving an existing PendingBomb to <=0, e.g. Lingshe) through
+        // the SAME per-victim `applyVictimDamage` sink a natural countdown-0 burst uses
+        // (processBombs' `creditDetonation` — see `applyPositionedTimedBurst` above). This is the
+        // ONLY correct way to preserve Barrier full-damage-immunity, the Cheat-Death intercept,
+        // recordDestroyed/`ship-destroyed` emission (no zombie units), and incoming-block/Lifeline
+        // — all of which a hand-rolled shieldPool/currentHp debit would bypass. Credits the
+        // round's detonation tally (roundPerTargetDamage + perActorDetonation) to the bomb's
+        // ORIGINAL applier (`sourceId`), exactly like `applyPerVictimDetonation`/`creditDetonation`
+        // above — never the forcing caster. `sink` is chosen by the CALLER (buildTurnArgs) via the
+        // same enemySink/playerSink direction `applyPerVictimDetonation` uses (player caster →
+        // enemySink, enemy caster → playerSink) since a forced detonation's victim is an arbitrary
+        // opposing actor, not necessarily the bursting actor's own HP.
+        const forceDetonateBombOnVictim = (
+            victim: CombatActor,
+            sink: DamageAccountingSink,
+            sourceId: string,
+            damage: number
+        ): void => {
+            applyVictimDamage(damage, victim, sink, {
+                killerId: sourceId,
+                byDirectDamage: true,
+                bombPortion: damage, // full shield drain, no pen — bomb-burst precedent
+                shieldPenetrationPct: 0,
+            });
+            roundPerTargetDamage.set(
+                victim.id,
+                (roundPerTargetDamage.get(victim.id) ?? 0) + damage
+            );
+            perActorDetonation.set(sourceId, (perActorDetonation.get(sourceId) ?? 0) + damage);
         };
 
         // Shared positioned timed-burst loop. A POSITIONED actor carrying timed
@@ -4704,6 +4853,17 @@ export function runCombat(input: CombatEngineInput): {
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
+                // SP-F F3 fix: forced bomb-detonation sink (Lingshe's countdown-reduce-to-0),
+                // side-resolved exactly like applyPerVictimDetonation's sink argument (player
+                // caster → enemySink, enemy caster → playerSink) — a's opposing victims are
+                // ENEMY actors when a is a player, PLAYER actors when a is an enemy.
+                forceDetonateBomb: (victim: CombatActor, sourceId: string, damage: number) =>
+                    forceDetonateBombOnVictim(
+                        victim,
+                        a.side === 'player' ? enemySink : playerSink,
+                        sourceId,
+                        damage
+                    ),
                 // Positional detonation hint: when the engine will take the positional apply path
                 // (same predicate that computes aoeVictimIds — pattern + target + position all set),
                 // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead
@@ -5010,6 +5170,10 @@ export function runCombat(input: CombatEngineInput): {
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
                         enemyAttackerIds: enemyAttackerActorIds,
                         isActorAlive,
+                        // SP-F F4: name map for the live `ally-on-team` roster check. Empty in DPS
+                        // (no ship names supplied) → buildDrainContext leaves allyTeamNames
+                        // undefined → assume-met fallback (byte-identical).
+                        nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
                         lastTurnCtxByActor,
                         enemyType,
                         enemyHp,

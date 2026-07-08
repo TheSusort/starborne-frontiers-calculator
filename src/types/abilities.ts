@@ -45,7 +45,27 @@ export type AbilityType =
     | 'transform-incoming-to-dot'
     // SP-E, Task E4: Belladonna's ally-Corrosion→Acidic-Decay conversion — reactive enemy-target
     // ability (trigger:'on-ally-debuff-inflicted'). See AbilityConfig's 'convert-dot' variant.
-    | 'convert-dot';
+    | 'convert-dot'
+    // SP-F F5 (Meatshield, R4 refit-active passive — APPROXIMATION): "Any direct damage dealt
+    // to a non-defender ally that is not transferred by Protection is dealt as if that ally
+    // had this Unit's defense." Protection-as-damage-transfer (a Defender intercepting ally
+    // damage) is a DEFERRED mechanic, so nothing is ever "transferred by Protection" in this
+    // model — the "not transferred" gate is vacuously satisfied, and ALL direct damage to a
+    // living non-defender ally is mitigated using the carrier's effective defence instead of
+    // the ally's own. Always-on passive, target:'all-allies'. See AbilityConfig's
+    // 'defense-substitution' variant (a no-op marker — consumed at the engine's defence-read
+    // sites, never through the ability-fold/executor pipeline).
+    | 'defense-substitution'
+    // SP-F F3 (Lingshe): "reduces all Bombs on the enemy targets by N turn(s), Bombs reduced
+    // to 0 turns by this skill will detonate. This reduction effect requires hacking." Enemy-
+    // targeted (all-enemies), hacking-gated (runtime always draws the 'inflict' landing roll —
+    // see AbilityConfig's 'bomb-countdown-reduce' variant). Structurally distinct from the
+    // generic `cleanse`/`reduce-duration` primitive (which deliberately excludes bombs and only
+    // ever targets self/allies) — this shrinks the ENEMY's own PendingBomb.countdown, and any
+    // bomb reaching <= 0 detonates immediately (bespoke runtime loop in playerTurn.ts,
+    // `reduceEnemyBombs` — NOT detonateContainers/detonate(), which credit the CASTER
+    // unconditionally and ignore countdown).
+    | 'bomb-countdown-reduce';
 
 export type AbilityTarget =
     | 'self'
@@ -154,6 +174,12 @@ export type AbilityTrigger =
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
     | 'on-shield-applied'
+    // SP-F F2: fires when a same-side ALLY (not the owner) has their shield pool FULLY DEPLETED
+    // by a direct hit (rides the new `shield-destroyed` event, ally-scoped on victimId — mirrors
+    // on-ally-debuffed's ally scoping). AEGIS's "grants Defense Up II and cleanses all debuffs
+    // when an ally within the Active pattern has their Shield destroyed" — the sole corpus user.
+    // Opposite direction of on-shield-applied (grant vs loss).
+    | 'on-ally-shield-destroyed'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
     // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
@@ -215,6 +241,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-deal-damage',
     // Resonating Fury: granter-scoped reaction fired once per shield-application cast.
     'on-shield-applied',
+    // SP-F F2: ally-scoped reaction to an ally's shield pool being fully depleted (AEGIS).
+    'on-ally-shield-destroyed',
 ]);
 
 export type ConditionSubject =
@@ -486,6 +514,12 @@ export type AbilityConfig =
            *  of attack × multiplier. Reactive-damage path only (applyReactiveDamage); the on-cast
            *  damage path ignores it. */
           hpBasisPct?: number;
+          /** SP-F F4 (Wusheng): the charged skill "deals 220% damage WITH affinity advantage".
+           *  When set, this cast (and its paired 'apply' debuff landing) is forced to affinity
+           *  ADVANTAGE regardless of the real attacker/target matchup — damageMod +25, critCap
+           *  100, critPenalty 0, no debuff-landing disadvantage. Read at the three affinity seams
+           *  in playerTurn.ts. Absent → the real computed matchup (byte-identical default). */
+          forceAffinityAdvantage?: boolean;
       }
     | {
           type: 'counter';
@@ -550,6 +584,13 @@ export type AbilityConfig =
           duration?: number | 'recurring';
       }
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
+    // SP-F F3 (Lingshe charged skill): shrinks every living enemy's PendingBomb.countdown by
+    // `turns`; any bomb reaching <= 0 detonates immediately, crediting the bomb's ORIGINAL
+    // applier (bomb.sourceId), not this ability's caster. Always hacking-gated at the runtime
+    // call site (`landsTimedEnemyApplicationLive('inflict')`) — no `application` field needed
+    // here since there is only one landing behavior for this ability (unlike 'debuff', which
+    // supports both 'inflict' and 'apply').
+    | { type: 'bomb-countdown-reduce'; turns: number }
     // `scope`: 'active'/undefined extends ALL standing DoT entries (Provider's
     // "extends active Damage Over Time effects"; default + back-compat for stored
     // configs). 'inflicted' extends ONLY the DoT entries this cast just applied
@@ -783,7 +824,14 @@ export type AbilityConfig =
           chanceFromStat: { stat: 'hacking'; pctPerPoint: number };
           extendTurns?: number;
           extendChanceFromCritPower?: boolean;
-      };
+      }
+    // SP-F F5 (Meatshield defense-substitution, approximation — see AbilityType's
+    // 'defense-substitution' doc comment for the full rule + the deferred-Protection
+    // rationale). No fields: a bare presence marker, mirroring 'damage-reflection'/
+    // 'buff-duration-extension'. The engine collects every carrier of this config into a
+    // dedicated per-owner set and substitutes the carrier's effective defence for a living
+    // non-defender ally's own defence at every defence-read site.
+    | { type: 'defense-substitution' };
 
 /** Crowd-control effects a `control` ability can apply. The combat effect of each
  *  (Stasis/Disable turn-lockout, Provoke/Taunt/Concentrate-Fire forced-targeting) is

@@ -172,10 +172,10 @@ const RULES: Rule[] = [
         severity: 'high',
         // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N
         // turn(s)" (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's
-        // structurally different "reduces all Bombs on the enemy targets by N turn(s)" clause
-        // (a hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-
-        // at-zero rider) so that mechanic surfaces here too — it is deliberately allowlisted
-        // below rather than parsed (see the allowlist entry's reason).
+        // structurally different "reduces all Bombs on the enemy targets by N turn(s)" clause (a
+        // hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-
+        // zero rider) — SP-F F3 models that shape as its own `bomb-countdown-reduce` ability
+        // (not the generic cleanse/reduce-duration primitive, which deliberately excludes bombs).
         keyword: (t) =>
             /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs)\s+on\b/i.test(
                 t
@@ -183,10 +183,11 @@ const RULES: Rule[] = [
         handled: (a) =>
             a.some(
                 (x) =>
-                    x.type === 'cleanse' &&
-                    x.config.type === 'cleanse' &&
-                    x.config.mode === 'reduce-duration' &&
-                    x.config.count === 'all'
+                    (x.type === 'cleanse' &&
+                        x.config.type === 'cleanse' &&
+                        x.config.mode === 'reduce-duration' &&
+                        x.config.count === 'all') ||
+                    x.type === 'bomb-countdown-reduce'
             ),
     },
     {
@@ -220,7 +221,9 @@ const RULES: Rule[] = [
         // Epic PR12(B): also matches "bypassing N% of the enemy Defense" (Chakara) — a
         // differently-worded synonym for the same defensePenetration modifier as the
         // "X% defense penetration" phrasing.
-        keyword: (t) => /defense\s+penetration/i.test(t) || /bypassing\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy\s+defense/i.test(t),
+        keyword: (t) =>
+            /defense\s+penetration/i.test(t) ||
+            /bypassing\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy\s+defense/i.test(t),
         handled: (a) => hasModifier(a, 'defensePenetration'),
     },
     {
@@ -277,14 +280,22 @@ const RULES: Rule[] = [
         severity: 'medium',
         // "If <self condition>, this Unit INSTEAD gains <buff> and deals <higher>% damage" — a
         // mutually-exclusive full-branch replacement where BOTH the buff granted AND the damage
-        // change (Panon active/charged, the sole corpus case). Deferred (PR6b, user decision):
-        // modelling it faithfully needs complementary/negated self-conditions AND sim damage-branch
-        // selection (damageInputsFromSkill reads only the first damage ability) — bespoke infra for
-        // one ship. Scoped to "instead gains/deals" so Isha's handled "instead repairs" crit-filter
-        // swap does NOT match. A NEW ship matching this should get the branch model built, then be
-        // removed from the allowlist.
+        // change (Panon active/charged, the sole corpus case). SP-F F1: modelled as TWO damage/
+        // additional-damage abilities — the base carries the negated `countComparator:'eq',
+        // countThreshold:0` self-gate (fires when neither status is present), the replacement
+        // carries the `anyOf` Taunt/Provoke pair (parseInsteadDamageReplacement +
+        // buildShipAbilities' damage/additional-damage emit sites). Scoped to "instead
+        // gains/deals" so Isha's handled "instead repairs" crit-filter swap does NOT match. A NEW
+        // ship matching this should get the same branch model built.
         keyword: (t) => /\binstead\s+(?:gains?|deals?)\b/i.test(t),
-        handled: () => false,
+        handled: (a) => {
+            const dmg = a.filter((x) => x.config.type === 'damage');
+            const hasNegatedBase = dmg.some((x) =>
+                x.conditions.some((c) => c.countComparator === 'eq' && c.countThreshold === 0)
+            );
+            const hasAnyOfReplacement = dmg.some((x) => x.conditions.some((c) => c.anyOf));
+            return hasNegatedBase && hasAnyOfReplacement;
+        },
     },
     {
         id: 'accumulate-detonate',
@@ -364,6 +375,17 @@ const RULES: Rule[] = [
             /removes\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy(?:['’]s)?\s+shield/i.test(t) &&
             !/purge/i.test(t),
         handled: (a) => hasType(a, 'shield-strip'),
+    },
+    {
+        id: 'transform-incoming-to-dot',
+        severity: 'medium',
+        // SP-E: "[transforms/is transformed into] the damage ... into a ... Damage over Time
+        // effect" (Voron: "this Unit transforms the damage into a Damage over Time effect";
+        // Orel: same shape; Meatshield R4: "Any damage this Unit takes from Protection is
+        // transformed into a Damage over Time effect"). Narrow — corpus-wide this phrasing
+        // matches exactly these three ships (verified via `grep -io` across every text column).
+        keyword: (t) => /transform[a-z]*[^.]*\bdamage over time\b/i.test(t),
+        handled: (a) => hasType(a, 'transform-incoming-to-dot'),
     },
 ];
 

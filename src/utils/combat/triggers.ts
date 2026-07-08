@@ -610,6 +610,20 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     break;
+                case 'on-ally-shield-destroyed':
+                    bus.on('shield-destroyed', (e) => {
+                        // Victim-scoped: an ally's shield pool was fully depleted (AEGIS). Mirrors
+                        // on-ally-debuffed's ally scoping (excludes the owner itself — a shield
+                        // destroyed on the OWNER routes nowhere today, no corpus self-reaction
+                        // exists — and every opposing actor). Route the reactive grant/cleanse to
+                        // that ally via damagedAllyId (reused from on-ally-debuffed/on-ally-crit).
+                        if (isSameSideAlly(e.victimId, ownerId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.victimId },
+                            });
+                    });
+                    break;
                 case 'on-debuff-resisted':
                     bus.on('debuff-resisted', (e) => {
                         // Self-scoped on the RESISTER. `debuff-resisted` carries targetId = the
@@ -951,6 +965,11 @@ export interface IntentExecContext {
      *  drain-time `enemy-buff` gate (Graphite start-of-round Stealth check). Absent →
      *  all ids pass through (byte-identical for callers that omit it). */
     isActorAlive?: (actorId: string) => boolean;
+    /** SP-F F4: actor id → ship name, for the live `ally-on-team` roster check (Isha/Nayra's
+     *  reciprocal Override gate). Present ONLY in the team-sim (battle sim). Absent (single-ship
+     *  DPS / healing / any caller without ship names) → `ally-on-team` keeps its manual assume-met
+     *  fallback, byte-identical to before. */
+    nameByActorId?: Map<string, string>;
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
@@ -1163,6 +1182,10 @@ export function buildActorConditionContext(
          *  drain time. Default undefined — every family reads 0 via
          *  ConditionContext.enemyDotFamilyCounts' own fallback. */
         enemyDotFamilyCounts?: Record<string, number>;
+        /** SP-F F4: living same-team ally ship names for `ally-on-team` (Isha/Nayra reciprocal
+         *  Override gate). Default undefined → manual assume-met fallback (single-ship DPS / no
+         *  roster). Populated by buildDrainContext when the engine has a name map (team-sim). */
+        allyTeamNames?: string[];
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -1196,6 +1219,7 @@ export function buildActorConditionContext(
         lastStanding: shared.lastStanding,
         turnsTaken: shared.turnsTaken,
         enemiesHitThisCast: shared.enemiesHitThisCast,
+        allyTeamNames: shared.allyTeamNames,
     });
 }
 
@@ -1263,6 +1287,16 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // no-delegate paths keep the single-target assumption (a >=2/>=3 gate stays inert) and
         // stay byte-identical.
         enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId) ?? 1,
+        // SP-F F4: live same-team ally ship names (Isha/Nayra reciprocal Override gate). Only when
+        // the engine supplied a name map (team-sim). `playerIds` is the drain owner's OWN side; we
+        // exclude the owner itself (ALLY names, self-excluded — mirrors `isSameSideAlly`), keep only
+        // living members, and map ids → names. Absent map → undefined → assume-met fallback.
+        allyTeamNames: ctx.nameByActorId
+            ? ctx.playerIds
+                  .filter((id) => id !== ownerId && (ctx.isActorAlive?.(id) ?? true))
+                  .map((id) => ctx.nameByActorId?.get(id))
+                  .filter((n): n is string => n !== undefined)
+            : undefined,
     });
 }
 

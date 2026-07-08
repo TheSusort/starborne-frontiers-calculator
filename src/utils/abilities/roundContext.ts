@@ -106,6 +106,10 @@ export function buildRoundContext(state: {
      *  generic DoT tracking today for any DPS caller — every existing ship reports 0). Folded
      *  into the bare `enemyDotCount` sum alongside corrosion/inferno/bomb. */
     genericCount?: number;
+    /** SP-F F4 — living same-team ally ship names for `ally-on-team` (team-sim only). SENTINEL:
+     *  leave undefined (do NOT pass []) to keep the manual assume-met fallback (single-ship DPS).
+     *  Only the live combat engine's drain context supplies a real array. */
+    allyTeamNames?: string[];
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -164,5 +168,8 @@ export function buildRoundContext(state: {
         ...(state.enemyDebuffNames !== undefined
             ? { enemyDebuffNames: state.enemyDebuffNames }
             : {}),
+        // SP-F F4 — sentinel spread (mirrors enemyDebuffNames): set the key only when the caller
+        // supplied a real roster array, so absence keeps `ally-on-team`'s assume-met fallback.
+        ...(state.allyTeamNames !== undefined ? { allyTeamNames: state.allyTeamNames } : {}),
     };
 }

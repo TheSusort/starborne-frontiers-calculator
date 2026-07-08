@@ -20,7 +20,12 @@ import { DoTType } from '../../types/calculator';
  *  - `dot-applied`: carries `sourceId` identifying the inflicting actor.
  *  - `bomb-detonated`: asymmetric paths — `processBombs` (enemy turn) emits one event
  *    per pending bomb that detonates; `detonate()` bomb branch (attacker turn) emits one
- *    aggregate event for all consumed bombs. `actorId` is 'attacker' in both paths.
+ *    aggregate event for all consumed bombs. `actorId` = the bomb's ORIGINAL applier
+ *    (`PendingBomb.sourceId`) for `processBombs` AND for SP-F F3/Lingshe's forced early
+ *    detonation via `bomb-countdown-reduce`; the attacker-turn `detonate()` aggregate
+ *    branch instead emits the casting `actor.id`. Either way — any actor, not always
+ *    'attacker'. Only feeds log/attribution: the on-bomb-detonated listener is global
+ *    and ignores `actorId`.
  *  - `control-applied`: emitted on the CAST path when the firing skill carries a `control`
  *    ability (e.g. Defiant's charged Stasis inflict). `casterId` is the applying actor;
  *    `effect` is the control effect. Present-only-when-fired. Emitting it does NOT make the
@@ -211,7 +216,10 @@ export type CombatEvent =
      *    consumed bomb entries. `damage` = (Σ stacks × damagePerStack) × affinityMult × pct,
      *    where pct is the detonation skill's power multiplier.
      *  In both cases `damage` is the realized payout under that path's scaling, not a
-     *  normalized value. `actorId` is 'attacker' in both paths. */
+     *  normalized value. `actorId` = the bomb's ORIGINAL applier (`PendingBomb.sourceId`)
+     *  for `processBombs` and for SP-F F3/Lingshe's forced early detonation via
+     *  `bomb-countdown-reduce`; the attacker-turn `detonate()` aggregate branch emits the
+     *  casting `actor.id` instead. Any actor, not always 'attacker'. */
     | { type: 'bomb-detonated'; actorId: string; round: number; stacks: number; damage: number }
     /** A `control` ability resolved on the cast path. `casterId` is the applying actor;
      *  `effect` is the control effect (e.g. 'stasis'). Present-only-when-fired; emitting it
@@ -222,6 +230,16 @@ export type CombatEvent =
           effect: ControlEffect;
           round: number;
       } & ReactiveStamp)
+    /** A victim's shield pool was fully depleted by a DIRECT hit (SP-F F2, AEGIS). Emitted from
+     *  the shared `applyVictimDamage` immediately after the shield-drain line, ONLY when the pool
+     *  was > 0 immediately before this hit's absorb and reaches exactly 0 after it, AND the hit
+     *  is direct (`byDirectDamage`) — a DoT TICK that zeroes a lingering shield (`byDirectDamage:
+     *  false`) does NOT emit this. A bomb burst, by contrast, applies with `byDirectDamage: true`
+     *  (both the natural `processBombs` payout and F3's forced early detonation), so a bomb that
+     *  fully depletes an ally's shield DOES emit this and AEGIS reacts — behaviorally consistent
+     *  with any other direct hit. A Barrier-blocked hit never reaches the shield at all (the
+     *  Barrier early-return precedes this emit point), so it can never false-positive here. */
+    | ({ type: 'shield-destroyed'; victimId: string; round: number } & ReactiveStamp)
     /** A target's HP fraction changed. Emitted on TWO distinct paths with intended
      *  granularity asymmetry:
      *   - Tank-side (Phase 4c PR 3, LIVE): once per HP-INTAKE EVENT inside

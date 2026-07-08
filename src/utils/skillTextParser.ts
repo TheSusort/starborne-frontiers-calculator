@@ -375,6 +375,39 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
 }
 
 /**
+ * SP-F F1 — Panon's self-scoped "instead"-branch damage replacement: "… deals <unit-damage>80%
+ * damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its
+ * Defense. If this Unit is Provoked or Taunted, this Unit instead gains … and deals
+ * <unit-damage>120% damage</unit-damage> with an additional Damage equal to <unit-damage>90%
+ * </unit-damage> of its Defense." (charged: 140/100 → 170/130, "affected by Provoke or Taunt"
+ * phrasing). Returns the REPLACEMENT branch's multiplier + secondary only — the BASE 80%/70%
+ * (140%/100%) is unchanged, still read by parseSkillDamage/parseSecondaryDamage on the full text
+ * (both always return the FIRST tag, which precedes "instead"). Guarded to a SELF-scoped
+ * Provoke/Taunt gate in the clause immediately preceding "instead" (no "target"/"enemy" subject)
+ * so this can never fire on an unrelated enemy-conditional "instead" clause — the same self-vs-
+ * enemy disambiguation ENEMY_AFFECTED_BONUS_RE's doc comment above already relies on. Returns
+ * null when no such replacement clause is present (every other ship in the corpus today).
+ */
+export function parseInsteadDamageReplacement(
+    text: string | null | undefined
+): { mult: number; secondary: SecondaryDamage | null } | null {
+    if (!text) return null;
+    const insteadIdx = text.search(/\binstead\b/i);
+    if (insteadIdx < 0) return null;
+    const priorPeriod = text.lastIndexOf('.', insteadIdx);
+    const clause = stripUnitTags(text.slice(priorPeriod + 1, insteadIdx));
+    const selfGated =
+        /\bthis\s+unit\b[^.]*?\b(?:provoke[ds]?|taunt(?:ed)?)\b/i.test(clause) &&
+        !/\btarget\b|\benem(?:y|ies)\b/i.test(clause);
+    if (!selfGated) return null;
+    const after = text.slice(insteadIdx);
+    const mult = parseSkillDamage(after);
+    if (!mult) return null;
+    const secondary = parseSecondaryDamage(after);
+    return { mult, secondary };
+}
+
+/**
  * Vindicator p2 reactive proc: "When this Unit resists a debuff infliction from an enemy, it deals
  * <unit-damage>damage equal to X%</unit-damage> of this Unit's max HP to that enemy." Standalone
  * HP-scaled REACTIVE damage — NOT an on-cast rider (parseSecondaryDamage deliberately parks the
@@ -1220,6 +1253,10 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
 // inflicted got resisted). Distinct from the resister-side "when this Unit resists a debuff"
 // (parseOnResistHpDamage). Corpus-verified: Ravager is the only "its debuff is resisted" row.
 const OWN_DEBUFF_RESISTED_RE = /\bits\s+debuff\s+is\s+resisted\b/i;
+// SP-F F2: "when an ally [within the Active pattern] has their Shield destroyed" — AEGIS's sole
+// corpus reaction (docs/ship-skills.csv). The loose [^.]*? gaps cross the "within the Active
+// pattern" positional qualifier and any tag text between "ally" and "shield"/"destroyed".
+const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bdestroyed\b/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -1314,6 +1351,8 @@ export function detectReactiveTrigger(
     if (KILLED_BY_DIRECT_RE.test(clause)) return 'on-destroyed';
     // Ravager: "If its debuff is resisted, it gains <buff>" — inflictor-side reaction.
     if (OWN_DEBUFF_RESISTED_RE.test(clause)) return 'on-own-debuff-resisted';
+    // SP-F F2: "when an ally ... has their Shield destroyed" — AEGIS's Defense Up II grant.
+    if (ALLY_SHIELD_DESTROYED_RE.test(clause)) return 'on-ally-shield-destroyed';
     return undefined;
 }
 
@@ -1662,6 +1701,21 @@ export function detectEnemyBuffedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ENEMY_BUFFED_RE, anchorPos, 'on-enemy-buffed');
+}
+
+/**
+ * Returns 'on-ally-shield-destroyed' when `anchorPos` falls inside the sentence carrying the
+ * "when an ally ... has their Shield destroyed" phrase; otherwise undefined. Position-scoped on
+ * the RAW text (mirrors detectEnemyBuffedTrigger) — used by the CLEANSE builder (AEGIS's "cleanses
+ * all debuffs" half), which has no buff name to resolve a clause on (unlike the buff-grant path,
+ * which reuses ALLY_SHIELD_DESTROYED_RE directly inside detectReactiveTrigger for the "grants
+ * Defense Up II" half). Reference data: docs/ship-skills.csv (AEGIS only).
+ */
+export function detectAllyShieldDestroyedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_SHIELD_DESTROYED_RE, anchorPos, 'on-ally-shield-destroyed');
 }
 
 // Nuqtu's self-cleanse "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag
@@ -2545,6 +2599,15 @@ export function parseNoCrit(text: string | null | undefined): boolean {
     return false;
 }
 
+// SP-F F4 (Wusheng): "deals 220% damage WITH AFFINITY ADVANTAGE …" — the charged hit is forced
+// to affinity advantage regardless of the real matchup. Boolean only; the flag rides the damage
+// config (forceAffinityAdvantage) and is consumed at the affinity seams in playerTurn.ts.
+const FORCE_AFFINITY_ADVANTAGE_RE = /\bwith\s+affinity\s+advantage\b/i;
+export function parseForceAffinityAdvantage(text: string | null | undefined): boolean {
+    if (!text) return false;
+    return FORCE_AFFINITY_ADVANTAGE_RE.test(stripUnitTags(text));
+}
+
 // MATCHES "don’t"/"doesn’t"/"does not"/bare "do not" + "break stasis" ONLY. NOT "affected by
 // stasis" (parseExtraAction owns that), "damage to enemies under Stasis", or "inflicts Stasis".
 // Input is normalised (curly/smart apostrophes → ASCII \x27) before matching so both game-data
@@ -2567,6 +2630,26 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
     // No apostrophe-normalisation (unlike parseDoesntBreakStasis): the matched phrase
     // "immune to charge loss" contains no apostrophe, so curly/straight quotes can't affect it.
     return !!text && CHARGE_LOSS_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+// SP-F F5 (Meatshield, R4 refit-active passive) — "Any direct damage dealt to a non-defender
+// ally that is not transferred by Protection is dealt as if that ally had this Unit's defense."
+// APPROXIMATION (locked, see AbilityType's 'defense-substitution' doc comment): Protection-as-
+// damage-transfer is a DEFERRED mechanic, so nothing is ever "transferred by Protection" in this
+// model — the "not transferred" gate is vacuously satisfied, and this detector is deliberately
+// gate-blind (it does not attempt to parse the Protection-transfer clause at all). Matches
+// "non-defender ally" ... "dealt as if" ... "this Unit's defense" within the SAME sentence
+// (`[^.]*` bounded on both sides) so an unrelated sentence elsewhere in the text can't false-hit.
+const DEFENSE_SUBSTITUTION_RE =
+    /non-defender\s+ally\b[^.]*\bdealt\s+as\s+if\b[^.]*\bthis\s+unit\x27?s\s+defen[cs]e\b/i;
+/** True iff this skill text declares that direct damage to a non-defender ally is calculated
+ *  against THIS unit's defense instead of the ally's own (Meatshield's R4 substitution clause).
+ *  Boolean only — the sibling "damage taken from Protection transforms into a DoT" sentence is a
+ *  SEPARATE, deliberately-unmodelled clause and is never matched here. */
+export function parseDefenseSubstitution(text: string | null | undefined): boolean {
+    if (!text) return false;
+    const normalised = stripUnitTags(text).replace(/[‘’]/g, '\x27');
+    return DEFENSE_SUBSTITUTION_RE.test(normalised);
 }
 
 /**
@@ -3625,6 +3708,31 @@ export function parseDebuffDurationReduction(
         out.push(entry);
     }
     return out;
+}
+
+// SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s), Bombs
+// reduced to 0 turns by this skill will detonate. This reduction effect requires hacking." A
+// STRUCTURALLY DIFFERENT mechanic from REDUCE_DEBUFF_DURATION_RE above (which explicitly
+// excludes "Bombs" — see its own comment): that regex shrinks the GENERIC debuff store on
+// self/allies; this one targets the ENEMY's separate PendingBomb.countdown container. The
+// "requires hacking" / forced-detonate-at-zero riders are NOT parsed here — they are baked into
+// the fixed runtime behavior of the `bomb-countdown-reduce` ability (always hacking-gated,
+// always detonates a bomb that reaches <= 0 — see playerTurn.ts's reduceEnemyBombs). Deliberately
+// its own regex/function — do NOT fold into REDUCE_DEBUFF_DURATION_RE.
+const BOMB_COUNTDOWN_REDUCE_RE =
+    /reduces?\s+all\s+bombs\s+on\s+the\s+enemy\s+targets?\s+by\s+(\d+)\s+turns?/i;
+
+/**
+ * Parses "reduces all Bombs on the enemy targets by N turn(s)" (Lingshe). Returns the turn
+ * count, or null when the text carries no such clause. Reference data: docs/ship-skills.csv.
+ */
+export function parseBombCountdownReduce(text: string | null | undefined): number | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m = BOMB_COUNTDOWN_REDUCE_RE.exec(plain);
+    if (!m) return null;
+    const turns = parseInt(m[1], 10);
+    return Number.isFinite(turns) && turns > 0 ? turns : null;
 }
 
 // "purges N" / "purges a/an" — active-verb only; naturally excludes "is Purged of all buffs"

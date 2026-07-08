@@ -761,6 +761,12 @@ export function simulateBattle(
             target: plan.targeting?.target,
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
+            // SP-F F5: thread the ship role (Ship.type) for role-filtered classification
+            // (Meatshield defense-substitution's "non-defender ally" gate).
+            role: plan.role,
+            // SP-F F4: thread the ship name for the live `ally-on-team` roster check
+            // (Isha/Nayra reciprocal Affinity Override gate).
+            name: plan.name,
             // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
             doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
             chargeLossImmune: plan.shipSkills.chargeLossImmune,
@@ -789,6 +795,12 @@ export function simulateBattle(
                 startCharged: plan.startCharged,
                 shipSkills: plan.shipSkills,
                 ...preFightModifiersFor(plan.id),
+                // SP-F F5: thread the ship role (Ship.type) for role-filtered classification
+                // (Meatshield defense-substitution's "non-defender ally" gate). Team symmetry
+                // with the teamActors branch above.
+                role: plan.role,
+                // SP-F F4: thread the ship name for the live `ally-on-team` roster check.
+                name: plan.name,
                 // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills into the
                 // engine input so the break-mark gate reads the flag from the CombatActor.
                 doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
@@ -854,6 +866,12 @@ export function simulateBattle(
         target: focus.targeting?.target,
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,
+        // SP-F F5: thread the focus actor's ship role (Ship.type) for role-filtered
+        // classification (Meatshield defense-substitution's "non-defender ally" gate). Team
+        // symmetry with the teamActors/enemyAttackers branches above.
+        role: focus.role,
+        // SP-F F4: thread the focus actor's ship name for the live `ally-on-team` roster check.
+        name: focus.name,
         // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,

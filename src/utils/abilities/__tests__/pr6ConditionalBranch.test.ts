@@ -179,8 +179,10 @@ describe('PR6a conditional-branch phrasing', () => {
 
     // Regression guard: Panon's charged "If THIS UNIT is affected by Provoke or Taunt, it instead
     // … deals 170% … additional Damage equal to 130% of its Defense" is a SELF-gated replacement
-    // branch (a PR6b item), NOT an additive enemy-conditional bonus. The enemy-effect parser must
-    // NOT attach a +130% enemy-Taunt/Provoke scaling to Panon's 140% base damage.
+    // branch (SP-F F1), NOT an additive enemy-conditional bonus. The enemy-effect parser must
+    // NOT attach a +130% enemy-Taunt/Provoke scaling to Panon's 140% base damage — instead the
+    // base damage now carries the NEGATED self Taunt/Provoke-absent gate (both eq/0), and a
+    // second, replacement damage ability (built by SP-F F1) carries the anyOf pair.
     it('Panon charged: self-gated "instead" branch is NOT mis-parsed as an enemy-conditional bonus', () => {
         const s = ship({
             chargeSkillText:
@@ -191,7 +193,24 @@ describe('PR6a conditional-branch phrasing', () => {
         expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 140 });
         // No enemy-effect scaling attached, and no enemy Taunt/Provoke conditions leaked onto it.
         expect(dmg.scaling).toBeUndefined();
-        expect(dmg.conditions).toEqual([]);
+        // SP-F F1: the base branch now carries the NEGATED self-gate (fires when NEITHER status
+        // is present) instead of an empty array.
+        expect(dmg.conditions).toEqual([
+            {
+                subject: 'self-buff',
+                buffName: 'Taunt',
+                derivable: true,
+                countComparator: 'eq',
+                countThreshold: 0,
+            },
+            {
+                subject: 'self-debuff',
+                buffName: 'Provoke',
+                derivable: true,
+                countComparator: 'eq',
+                countThreshold: 0,
+            },
+        ]);
     });
 
     // Combat-integration + DPS-parity layer: prove the Rikra OR-gated bonus resolves through the

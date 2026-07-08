@@ -48,6 +48,7 @@ import {
     parseExtendDoT,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
+    parseBombCountdownReduce,
     parseAllyCritDot,
     detectAllyCritDotTrigger,
     detectBombDetonatedTrigger,
@@ -74,8 +75,10 @@ import {
     parseControlInflicts,
     detectAllyCritTrigger,
     detectEnemyBuffedTrigger,
+    detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
+    parseForceAffinityAdvantage,
     parseDoesntBreakStasis,
     parseChargeLossImmune,
     parseChargeRemoval,
@@ -100,6 +103,8 @@ import {
     parsePreCombatStatGrants,
     detectTransformToDot,
     detectConvertDot,
+    parseInsteadDamageReplacement,
+    parseDefenseSubstitution,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -207,6 +212,22 @@ function affectedByConditions(sentence: string): Condition[] {
     return [m[1], m[2]]
         .filter((n): n is string => !!n)
         .map((name) => statusEffectCondition(name.trim(), true));
+}
+
+/**
+ * SP-F F1 — Panon's "instead"-branch BASE gate: fires only when the acting Unit currently
+ * carries NEITHER Taunt NOR Provoke — the negated complement of the replacement branch's
+ * `statusEffectCondition(name, true)` anyOf pair. `Condition.negate` is a false friend here
+ * (evaluateConditions.ts only honors it for the 'enemy-type' subject); `countComparator:'eq',
+ * countThreshold:0` is the real negation idiom for self-buff/self-debuff subjects (both must
+ * hold — AND, not anyOf — since the base branch is the "neither" case).
+ */
+function tauntProvokeAbsentConditions(): Condition[] {
+    return ['Taunt', 'Provoke'].map((name) => ({
+        ...statusEffectCondition(name),
+        countComparator: 'eq' as const,
+        countThreshold: 0,
+    }));
 }
 
 /**
@@ -998,6 +1019,9 @@ function abilitiesFromText(
     const out: PositionedAbility[] = [];
 
     const mult = parseSkillDamage(text);
+    // SP-F F1 — Panon's self-scoped "instead" replacement branch (active 80%/70% → 120%/90%,
+    // charged 140%/100% → 170%/130% when Provoked/Taunted). Null for every other ship's text.
+    const instead = parseInsteadDamageReplacement(text);
     // Anchor at the tag carrying THIS multiplier — the first <unit-damage> tag in the
     // row may be something else entirely (e.g. "20% defense penetration" before the
     // damage), which would wrongly sort the damage ahead of a dot the text puts first.
@@ -1038,6 +1062,9 @@ function abilitiesFromText(
     } else if (mult > 0) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
+        // SP-F F4 (Wusheng): "deals 220% damage with affinity advantage" forces this on-cast hit
+        // (and its paired Stasis 'apply' landing) to affinity advantage at the engine seams.
+        const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
         // Epic PR4 (round-boundary trigger consistency): a base damage ability whose OWN
         // sentence carries "at the start of the round" (Judge, Chakara's "Then," continuation)
         // or "at the end of the round" (Incinerator, Rhodium p2's co-located 80%-no-crit hit)
@@ -1050,23 +1077,56 @@ function abilitiesFromText(
             detectEndOfRoundDamageTrigger(text, damagePos) ??
             detectRoundStartContinuationTrigger(text, damagePos) ??
             'on-cast';
+        // SP-F F1: emit the BASE branch FIRST (out[0]) so the ungated `.find`-first reads of
+        // noCrit/hits below resolve sensibly, and so it stays out[0] for the conditional-scaling
+        // attach points further down this function.
         out.push({
             ability: {
                 id: nextId(),
                 type: 'damage',
                 target: 'enemy',
                 trigger: damageTrigger,
-                conditions: [],
+                conditions: instead ? tauntProvokeAbsentConditions() : [],
                 config: {
                     type: 'damage',
                     multiplier: mult,
                     ...(hits !== undefined ? { hits } : {}),
                     ...(noCrit ? { noCrit: true } : {}),
+                    ...(forceAffinityAdvantage ? { forceAffinityAdvantage: true } : {}),
                 },
                 autoFilled: true,
             },
             pos: damagePos >= 0 ? damagePos : MAX_POS,
         });
+        if (instead) {
+            // Replacement branch (Provoked/Taunted): reuses the base's hits/noCrit — both
+            // Panon branches share the same values (neither text carries a multi-hit or
+            // no-crit phrase), matching the existing anyOf Taunt/Provoke shape the self-target
+            // Terran Guard III/Barrier grant already uses.
+            const replPos = text.search(
+                new RegExp(`<unit-damage>\\s*${escNum(instead.mult)}%\\s*damage`, 'i')
+            );
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: damageTrigger,
+                    conditions: [
+                        statusEffectCondition('Taunt', true),
+                        statusEffectCondition('Provoke', true),
+                    ],
+                    config: {
+                        type: 'damage',
+                        multiplier: instead.mult,
+                        ...(hits !== undefined ? { hits } : {}),
+                        ...(noCrit ? { noCrit: true } : {}),
+                    },
+                    autoFilled: true,
+                },
+                pos: replPos >= 0 ? replPos : MAX_POS,
+            });
+        }
     }
 
     // Combat G PR2 (Centurion): "When this Unit OR AN ADJACENT ALLY is directly damaged, this
@@ -1156,6 +1216,9 @@ function abilitiesFromText(
         const fallbackIdx =
             firstIdx >= 0 ? text.indexOf(firstDmgTag, firstIdx + firstDmgTag.length) : -1;
         const secondIdx = secTagIdx >= 0 ? secTagIdx : fallbackIdx;
+        // SP-F F1: base branch — emitted FIRST, same ordering rationale as the damage ability
+        // above. Folds the negated Taunt/Provoke-absent gate in alongside any existing SP-C
+        // owner-vs-target condition (Panon's own text never combines both).
         out.push({
             ability: {
                 id: nextId(),
@@ -1165,12 +1228,36 @@ function abilitiesFromText(
                 // SP-C: Cobalt's "If this Unit has more HP than the enemy, it additionally
                 // deals …" owner-vs-target gate, detected clause-scoped by parseSecondaryDamage
                 // (sec.condition). Unconditional riders (the common case) get [].
-                conditions: sec.condition ? [sec.condition] : [],
+                conditions: [
+                    ...(sec.condition ? [sec.condition] : []),
+                    ...(instead ? tauntProvokeAbsentConditions() : []),
+                ],
                 config: { type: 'additional-damage', stat: sec.stat, pct: sec.pct },
                 autoFilled: true,
             },
             pos: secondIdx >= 0 ? secondIdx : firstIdx >= 0 ? firstIdx : MAX_POS,
         });
+        if (instead?.secondary) {
+            const replSec = instead.secondary;
+            const replSecTagIdx = text.search(
+                new RegExp(`<unit-damage>(?:damage equal to\\s*)?${escNum(replSec.pct)}%`, 'i')
+            );
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'additional-damage',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [
+                        statusEffectCondition('Taunt', true),
+                        statusEffectCondition('Provoke', true),
+                    ],
+                    config: { type: 'additional-damage', stat: replSec.stat, pct: replSec.pct },
+                    autoFilled: true,
+                },
+                pos: replSecTagIdx >= 0 ? replSecTagIdx : MAX_POS,
+            });
+        }
     }
 
     // Vindicator p2: "When this Unit resists a debuff infliction from an enemy, it deals damage
@@ -1381,6 +1468,29 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: extendPos >= 0 ? extendPos : MAX_POS,
+        });
+    }
+
+    // SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s),
+    // Bombs reduced to 0 turns by this skill will detonate. This reduction effect requires
+    // hacking." Builds a dedicated all-enemies ability; the hacking gate + forced-detonate-at-
+    // zero rider are fixed runtime behavior (playerTurn.ts's reduceEnemyBombs), not parsed here.
+    // Kept structurally separate from the "inflicts Bomb III" DoT-apply below (a different
+    // sentence, unaffected).
+    const bombCountdownReduceTurns = parseBombCountdownReduce(text);
+    if (bombCountdownReduceTurns) {
+        const bombReducePos = text.search(/reduces?\s+all\s+bombs/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'bomb-countdown-reduce',
+                target: 'all-enemies',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'bomb-countdown-reduce', turns: bombCountdownReduceTurns },
+                autoFilled: true,
+            },
+            pos: bombReducePos >= 0 ? bombReducePos : MAX_POS,
         });
     }
 
@@ -1750,15 +1860,26 @@ function abilitiesFromText(
         // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
         // Nuqtu (Phase 3 PR-I): "Cleanses 1 debuff from itself (once per round) ... when an enemy
         // gets buffed" rides on-enemy-buffed (position-scoped; opposing-scoped trigger).
+        // AEGIS (SP-F F2): "cleanses all debuffs when an ally ... has their Shield destroyed"
+        // rides on-ally-shield-destroyed — position-scoped like the siblings above (this loop has
+        // no buff name to resolve a clause on).
         const reactiveTrigger =
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
             detectEnemyBuffedTrigger(text, cleansePos) ??
+            detectAllyShieldDestroyedTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
                 : undefined);
-        const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
+        // AEGIS's cleanse targets the ally whose shield was destroyed, NOT the bare-phrasing
+        // self default flipBareSupportTarget would otherwise resolve to (the clause "cleanses all
+        // debuffs" names no explicit receiver — the receiver is only named in the reactive
+        // TRIGGER clause, which flipBareSupportTarget/parseCleanse's target detection cannot see).
+        const cleanseTarget =
+            reactiveTrigger === 'on-ally-shield-destroyed'
+                ? 'ally'
+                : flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
         // Nuqtu's "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag.
         const cleanseOncePerRound = detectCleanseOncePerRound(text, cleansePos);
         out.push({
@@ -2218,6 +2339,32 @@ function abilitiesFromText(
         }
     }
 
+    // SP-F F5 (Meatshield, R4 refit-active passive — APPROXIMATION): "Any direct damage dealt
+    // to a non-defender ally that is not transferred by Protection is dealt as if that ally
+    // had this Unit's defense." Protection-as-damage-transfer is deferred (design doc §1), so
+    // nothing is ever "transferred by Protection" in this model — the "not transferred" gate is
+    // vacuously satisfied, and this substitutes for EVERY living non-defender ally,
+    // unconditionally (`conditions: []`). No-op marker config (mirrors damage-reflection /
+    // buff-duration-extension above) — the engine collects every carrier into a dedicated map
+    // and substitutes at the defence-read sites; this ability is NEVER read by the on-cast
+    // ability-fold/executor pipeline. Ally-scoped (`target: 'all-allies'`) — distinct from the
+    // self-target "gains 3 stacks of Protection" buff this same text also carries.
+    if (parseDefenseSubstitution(text)) {
+        const substitutionPos = text.search(/dealt\s+as\s+if/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'defense-substitution',
+                target: 'all-allies',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'defense-substitution' },
+                autoFilled: true,
+            },
+            pos: substitutionPos >= 0 ? substitutionPos : MAX_POS,
+        });
+    }
+
     // PR F4: permanent pre-fight base-stat passives ("At the start of combat, …" /
     // role-gated adjacency grants — Lionheart/Centurion/Enforcer/Defiant/Stalwart).
     // Annotation-only until the battle sim's pre-fight layer (F5) applies them to plan
@@ -2532,6 +2679,15 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 ONCE_PER_ALLY_PER_ROUND_RE.test(rowText)
             ) {
                 ability.oncePerRoundPerAlly = true;
+            }
+            // AEGIS (SP-F F2): "grants Defense Up II ... when an ally ... has their Shield
+            // destroyed" names no explicit receiver in its own object clause (detectGrantScope's
+            // receiver-less-grant default resolves it to 'all-allies') — the real receiver is the
+            // ally named only in the (stripped-for-scope-detection) reactive trigger clause.
+            // Override to 'ally' so reactiveRecipients routes the grant to the ally whose shield
+            // was destroyed (eventCtx.damagedAllyId), not the whole team.
+            if (reactiveTrigger === 'on-ally-shield-destroyed') {
+                ability.target = 'ally';
             }
         } else if (
             // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives
