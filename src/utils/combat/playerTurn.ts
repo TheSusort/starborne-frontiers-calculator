@@ -44,7 +44,11 @@ import {
 import { CombatEventBus } from './events';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { synthesizeResisted } from './shared';
-import { buildActorConditionContext, type ReactiveAbility } from './triggers';
+import {
+    buildActorConditionContext,
+    selfBuffNamesForOwners,
+    type ReactiveAbility,
+} from './triggers';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
@@ -1096,10 +1100,77 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // representative scalars (DPS byte-identical).
     const attackerAff = attackerAffinity ?? actor.affinity ?? 'antimatter';
     const positionalLanding = args.deferAbilityPerformedToEngine === true;
-    const landingAffinityMod = positionalLanding
-        ? computeAffinityModifiers(attackerAff, enemy.affinity ?? 'antimatter').damageModifier
-        : affinityDamageModifier;
-    const landingAtDisadvantage = positionalLanding ? landingAffinityMod < 0 : affinityDisadvantage;
+
+    // ── SP-F F4: forced-affinity override surface ──────────────────────────────────────────
+    // Two sources force this cast's affinity, superseding the real matchup / pre-baked adapter
+    // flat fields:
+    //  (1) the firing damage ability's `forceAffinityAdvantage` flag (Wusheng's charged "deals
+    //      220% damage WITH AFFINITY ADVANTAGE"); OR
+    //  (2) the acting unit carrying the 'Offensive Affinity Override' buff (Isha/Nayra).
+    //  Either forces this attacker's OUTGOING hits to affinity ADVANTAGE (+25 dmg, crit cap 100,
+    //  no crit penalty, 'apply' debuffs land).
+    //  (3) A VICTIM carrying 'Defensive Affinity Override' forces the incoming attacker to affinity
+    //      DISADVANTAGE against that victim ("advantage while getting attacked" = the defender
+    //      holds the advantage, so the attacker is disadvantaged): −25 dmg, crit cap 75, +25 crit
+    //      penalty, 'apply' debuffs resist.
+    //  PRECEDENCE: an outgoing-advantage force wins over a victim's defensive force (rare collision).
+    //  DEFAULT (no override, incl. single-ship DPS where the dummy enemy carries no buffs): the
+    //  effective values equal the destructured runtime scalars / real matchup — byte-identical.
+    //  SCOPE: the anchor (primary/bound target) path is fully covered. Per-covered-victim AoE
+    //  offensive/defensive forcing is a documented limitation (no corpus override ship is AoE).
+    const damageForcesAffinityAdvantage =
+        damageAbility !== undefined &&
+        damageAbility.config.type === 'damage' &&
+        damageAbility.config.forceAffinityAdvantage === true;
+    const forceOutgoingAdvantage =
+        damageForcesAffinityAdvantage ||
+        selfBuffNamesForOwners(statusEngine, [actor.id]).includes('Offensive Affinity Override');
+    const victimHasDefensiveOverride = (victim: CombatActor): boolean =>
+        selfBuffNamesForOwners(statusEngine, [victim.id]).includes('Defensive Affinity Override');
+    // Effective affinity modifiers vs a specific victim, applying the override precedence.
+    const affinityModsVsVictim = (
+        victim: CombatActor
+    ): { damageModifier: number; critCap: number; critPenalty: number } => {
+        if (forceOutgoingAdvantage) return { damageModifier: 25, critCap: 100, critPenalty: 0 };
+        if (victimHasDefensiveOverride(victim))
+            return { damageModifier: -25, critCap: 75, critPenalty: 25 };
+        return computeAffinityModifiers(attackerAff, victim.affinity ?? 'antimatter');
+    };
+    // Primary/bound-target effective scalars — supersede the pre-baked flat fields when an override
+    // is active; otherwise equal the destructured runtime values (byte-identical default).
+    const primaryDefensiveOverride = !forceOutgoingAdvantage && victimHasDefensiveOverride(enemy);
+    const affinityOverrideActive = forceOutgoingAdvantage || primaryDefensiveOverride;
+    const effAffinityDamageModifier = forceOutgoingAdvantage
+        ? 25
+        : primaryDefensiveOverride
+          ? -25
+          : affinityDamageModifier;
+    const effAffinityCritCap = forceOutgoingAdvantage
+        ? 100
+        : primaryDefensiveOverride
+          ? 75
+          : affinityCritCap;
+    const effAffinityCritPenalty = forceOutgoingAdvantage
+        ? 0
+        : primaryDefensiveOverride
+          ? 25
+          : affinityCritPenalty;
+    const effAffinityDisadvantage = forceOutgoingAdvantage
+        ? false
+        : primaryDefensiveOverride
+          ? true
+          : affinityDisadvantage;
+
+    const landingAffinityMod = affinityOverrideActive
+        ? effAffinityDamageModifier
+        : positionalLanding
+          ? computeAffinityModifiers(attackerAff, enemy.affinity ?? 'antimatter').damageModifier
+          : affinityDamageModifier;
+    const landingAtDisadvantage = affinityOverrideActive
+        ? effAffinityDisadvantage
+        : positionalLanding
+          ? landingAffinityMod < 0
+          : affinityDisadvantage;
     const liveLandingChance = liveDebuffLandingChance(
         statusEngine,
         selfBuffLookup,
@@ -1130,8 +1201,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         victim: CombatActor
     ): boolean => {
         if (targetCarriesBlockDebuff(statusEngine, victim.id)) return false;
-        const victimAff = victim.affinity ?? 'antimatter';
-        const victimAffinityMod = computeAffinityModifiers(attackerAff, victimAff).damageModifier;
+        // SP-F F4: per-victim affinity honours the override (offensive advantage / this victim's
+        // defensive override) before falling back to the real matchup.
+        const victimAffinityMod = affinityModsVsVictim(victim).damageModifier;
         if (application === 'apply') {
             return victimAffinityMod >= 0;
         }
@@ -1175,14 +1247,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Effective crit rate from a given crit-buff total, clamped by affinity.
     // Gate/context estimates use representative scalars (byte-identical to pre-SP1). The actual
     // per-hit roll below uses realAffinityCappedCrit when deferAbilityPerformedToEngine.
+    // SP-F F4: cap/penalty honour the forced-affinity override (effAffinity* equal the runtime
+    // scalars when no override is active → byte-identical default).
     const cappedCrit = (critBuffTotal: number) =>
-        Math.min(affinityCritCap, Math.max(0, crit + critBuffTotal - affinityCritPenalty));
+        Math.min(effAffinityCritCap, Math.max(0, crit + critBuffTotal - effAffinityCritPenalty));
 
     const realAffinityCappedCrit = (critBuffTotal: number) => {
-        const { critCap, critPenalty } = computeAffinityModifiers(
-            attackerAffinity ?? actor.affinity ?? 'antimatter',
-            enemy.affinity ?? 'antimatter'
-        );
+        // SP-F F4: the anchor's real matchup, overridden when this cast forces affinity.
+        const { critCap, critPenalty } = affinityModsVsVictim(enemy);
         return Math.min(critCap, Math.max(0, crit + critBuffTotal - critPenalty));
     };
 
@@ -1722,7 +1794,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // → anchorCrit false) and, critically, draw NOTHING so the RNG schedule stays
         // identical to the pre-per-victim behavior for noCrit AoE.
         if (damageNoCrit) return false;
-        const { critCap, critPenalty } = computeAffinityModifiers(attackerAff, victimAffinity);
+        // SP-F F4: an outgoing-advantage force lifts the cap for every victim; otherwise the real
+        // per-victim matchup (a covered victim's own Defensive Override is NOT resolved here —
+        // rollVictimCrit receives only the affinity, not the victim actor — a documented AoE
+        // limitation; no corpus override ship is AoE).
+        const { critCap, critPenalty } = forceOutgoingAdvantage
+            ? { critCap: 100, critPenalty: 0 }
+            : computeAffinityModifiers(attackerAff, victimAffinity);
         const rate = Math.min(critCap, Math.max(0, uncappedCritTotal - critPenalty)) / 100;
         return critGate(rate);
     };
@@ -1773,7 +1851,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Ability-status self Out. DoT folds in per-round (KNOWN-DIFF b). Enemy Inc. DoT is
     // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
     const dotMult = 1 + (selfDotModifier + enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
-    const affinityMult = 1 + affinityDamageModifier / 100;
+    // SP-F F4: the anchor damage mult honours the forced-affinity override (equals the runtime
+    // scalar when no override → byte-identical default).
+    const affinityMult = 1 + effAffinityDamageModifier / 100;
     const effectiveDefence = dmgStats.defence;
     const effectiveHp = dmgStats.hp;
 

@@ -60,6 +60,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Meatshield now shields non-defender allies — direct damage to them is calculated against Meatshield's much higher defense.",
     "Combat sim: Lingshe's charged skill now reduces enemy Bomb timers (hacking-gated), detonating any that reach zero.",
     "Combat sim: AEGIS now grants Defense Up II and cleanses all debuffs from an ally within its Active pattern when that ally's Shield is destroyed, matching its skill text, instead of always granting Defense Up II to the whole team and cleansing itself on every cast.",
+    "Combat sim: Wusheng's charged skill now always strikes with affinity advantage; Isha and Nayra's Affinity Override buffs now force affinity advantage on offense and defense, including their two-ship synergy (each grants the other its extra Override only when both are on the team).",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

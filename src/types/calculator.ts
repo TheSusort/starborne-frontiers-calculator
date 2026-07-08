@@ -331,4 +331,8 @@ export interface TeamActorInput {
      *  Auto-filled from ship data on the healing page; absent for manual actors →
      *  role-filtered reactions never fire for them (conservative). */
     role?: ShipTypeName;
+    /** SP-F F4: ship name, for the live `ally-on-team` roster check (Isha/Nayra reciprocal
+     *  Affinity Override gate). Auto-filled from ship data in the team sim; absent → the gate
+     *  falls back to assume-met (byte-identical, single-ship DPS). */
+    name?: string;
 }

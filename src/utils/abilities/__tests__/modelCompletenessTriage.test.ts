@@ -590,56 +590,71 @@ describe('SP-F — deep one-offs', () => {
     const WUSHENG_CHARGED =
         'This Unit deals <unit-damage>220% damage</unit-damage> with affinity advantage and inflicts <unit-skill>Stasis</unit-skill> for 2 turns.';
 
-    it.fails(
-        'Wusheng: charged "deals 220% damage with affinity advantage" does not force the affinity outcome on this hit',
-        () => {
-            const abilities = abilitiesFor({ chargeSkillText: WUSHENG_CHARGED }, 'charged');
-            // GAP: SP-F (forced-affinity, newly discovered — no allowlist entry existed before
-            // this task). Dry-run: 3 abilities build (140%→220% damage, a 'control' Stasis
-            // effect, and the Stasis 'debuff' apply) — all IDENTICAL to how a plain
-            // damage+Stasis charged skill would build with NO "affinity advantage" text at
-            // all; the phrase is silently dropped. This is a live, consumed engine concept
-            // (src/utils/combat/{playerTurn,engine,triggers}.ts compute affinity
-            // advantage/disadvantage for crit chance and debuff-landing from the REAL
-            // attacker/target ship-class matchup) — but there is no FORCE/override surface
-            // anywhere: not in ConditionSubject, not in IncomingCondition/OutgoingCondition, not
-            // as an AbilityTrigger, not as an AbilityType, not as a ModifierChannel (all four
-            // unions checked in full against src/types/abilities.ts — none mention "affinity").
-            // A faithful fix has NO existing field to reuse (unlike Malvex's 'incoming-reduction'
-            // type or Voron's 'on-attacked' trigger). It plausibly lands one of two ways: (a) a
-            // one-off flag bolted onto the EXISTING 'damage' and/or 'debuff' config — the
-            // noCrit/hpBasisPct precedent (Pallas/Tithonus/Vindicator) for ship-specific
-            // one-offs riding the SAME config shape, since affinity here scopes crit chance
-            // (damage) AND debuff-landing (the Stasis apply) for this one hit, not a persistent
-            // buff; or (b) a wholly new ability/modifier object, mirroring this corpus's
-            // one-ability-per-effect convention. Raw `abilities.length` alone is NOT flip-valid:
-            // route (a) leaves the count at 3 forever. Proxy is the OR of a shape-independent
-            // config-field check (covers route a) and an unrecognised-ability-type check (covers
-            // route b, generalising past a bare count so it also catches a same-count RESHAPE of
-            // an existing ability into a new type). RESIDUAL ASSUMPTION: the field-name list
-            // below (forcedAffinity/affinity/affinityOverride/affinityAdvantage/forceAdvantage)
-            // is this task's best guess at SP-F's literal name — if SP-F lands via route (a)
-            // under a field name NOT in this list, only the route-(b) disjunct will save the
-            // flip, and route (a) implementations by definition don't touch route (b); SP-F
-            // should reconcile this list against whatever field name it actually lands on.
-            // False now (config carries none of these fields, and every ability's `type` is one
-            // of the three baseline types 'damage'/'control'/'debuff' built for a plain
-            // damage+Stasis charged skill); true once SP-F lands either route.
-            const candidateFields = [
-                'forcedAffinity',
-                'affinity',
-                'affinityOverride',
-                'affinityAdvantage',
-                'forceAdvantage',
-            ];
-            const baselineTypes = new Set(['damage', 'control', 'debuff']);
-            const hasForcedAffinityField = abilities.some((a) =>
-                candidateFields.some((f) => f in a.config)
-            );
-            const hasUnrecognisedAbilityType = abilities.some((a) => !baselineTypes.has(a.type));
-            expect(hasForcedAffinityField || hasUnrecognisedAbilityType).toBe(true);
-        }
-    );
+    // CLOSED (SP-F F4): the parser now recognises "with affinity advantage" adjacent to the
+    // <unit-damage> tag and sets `forceAffinityAdvantage: true` on the damage config. The three
+    // affinity seams in playerTurn.ts (damage mult, crit cap/penalty, debuff-landing) read the
+    // flag off the firing damage ability and locally force affinity ADVANTAGE for that cast and
+    // its paired Stasis 'apply' landing. See forcedAffinityOverride.test.ts for the end-to-end
+    // engine proof (advantage-level damage + un-penalty-capped crit + Stasis lands even at a real
+    // disadvantage, player and enemy side).
+    it('Wusheng: charged "deals 220% damage with affinity advantage" sets forceAffinityAdvantage on the damage config', () => {
+        const abilities = abilitiesFor({ chargeSkillText: WUSHENG_CHARGED }, 'charged');
+        const damage = abilities.find(
+            (a) => a.config.type === 'damage' && a.config.multiplier === 220
+        );
+        expect(
+            damage?.config.type === 'damage' && damage.config.forceAffinityAdvantage === true
+        ).toBe(true);
+    });
+
+    // affinity-override (buff-driven, reciprocal) — CARRIERS: Isha + Nayra (second_passive,
+    // R2/refit-active). Verbatim from docs/ship-skills.csv. These build the correct ability
+    // SHAPE already (start-of-round self-buff grants + a reciprocal `ally-on-team` co-gate); the
+    // SP-F F4 work is the ENGINE CONSUMPTION of those Override buff names at the affinity seams
+    // + making `ally-on-team` a live roster check. Locked as regression guards on the shape; the
+    // runtime override + reciprocal gate are proven in forcedAffinityOverride.test.ts.
+    const ISHA_P2 =
+        'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.';
+    const NAYRA_P2 =
+        'This Unit gains <unit-skill>Defensive Affinity Override</unit-skill> at the start of the round, and if Isha is on the same team, it also gains <unit-skill>Offensive Affinity Override</unit-skill>.';
+
+    it('Isha: builds unconditional start-of-round Offensive Override + Nayra-gated Defensive Override', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: ISHA_P2 }, 'passive');
+        const offensive = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Offensive Affinity Override'
+        );
+        const defensive = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Defensive Affinity Override'
+        );
+        expect(offensive?.trigger === 'start-of-round' && offensive.conditions.length === 0).toBe(
+            true
+        );
+        expect(
+            defensive?.trigger === 'start-of-round' &&
+                defensive.conditions.some(
+                    (c) => c.subject === 'ally-on-team' && c.buffName === 'Nayra'
+                )
+        ).toBe(true);
+    });
+
+    it('Nayra: builds unconditional start-of-round Defensive Override + Isha-gated Offensive Override', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: NAYRA_P2 }, 'passive');
+        const defensive = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Defensive Affinity Override'
+        );
+        const offensive = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Offensive Affinity Override'
+        );
+        expect(defensive?.trigger === 'start-of-round' && defensive.conditions.length === 0).toBe(
+            true
+        );
+        expect(
+            offensive?.trigger === 'start-of-round' &&
+                offensive.conditions.some(
+                    (c) => c.subject === 'ally-on-team' && c.buffName === 'Isha'
+                )
+        ).toBe(true);
+    });
 
     // charge-loss-immunity — CARRIER: Lev (second_passive_skill_text, R2/refit-active;
     // third_passive_skill_text is the CSV's literal "null" placeholder, i.e. no R4 passive

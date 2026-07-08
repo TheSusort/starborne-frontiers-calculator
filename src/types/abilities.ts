@@ -514,6 +514,12 @@ export type AbilityConfig =
            *  of attack × multiplier. Reactive-damage path only (applyReactiveDamage); the on-cast
            *  damage path ignores it. */
           hpBasisPct?: number;
+          /** SP-F F4 (Wusheng): the charged skill "deals 220% damage WITH affinity advantage".
+           *  When set, this cast (and its paired 'apply' debuff landing) is forced to affinity
+           *  ADVANTAGE regardless of the real attacker/target matchup — damageMod +25, critCap
+           *  100, critPenalty 0, no debuff-landing disadvantage. Read at the three affinity seams
+           *  in playerTurn.ts. Absent → the real computed matchup (byte-identical default). */
+          forceAffinityAdvantage?: boolean;
       }
     | {
           type: 'counter';

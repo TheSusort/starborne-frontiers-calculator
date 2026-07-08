@@ -652,3 +652,50 @@ describe('lowest-speed-ally', () => {
         expect(evaluateCondition({ subject: 'lowest-speed-ally', derivable: true }, ctx)).toBe(1);
     });
 });
+
+describe("SP-F F4 — 'ally-on-team' live roster vs assume-met fallback", () => {
+    const allyGate = (name: string): Condition => ({
+        subject: 'ally-on-team',
+        derivable: false,
+        buffName: name,
+    });
+
+    it('team-sim (allyTeamNames supplied): met only when the named ally is on the roster', () => {
+        const withNayra = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+            allyTeamNames: ['Isha', 'Nayra'],
+        });
+        const withoutNayra = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+            allyTeamNames: ['Isha', 'Corvus'],
+        });
+        expect(evaluateCondition(allyGate('Nayra'), withNayra)).toBe(1);
+        expect(conditionMet(allyGate('Nayra'), withNayra)).toBe(true);
+        expect(evaluateCondition(allyGate('Nayra'), withoutNayra)).toBe(0);
+        expect(conditionMet(allyGate('Nayra'), withoutNayra)).toBe(false);
+    });
+
+    it('single-ship DPS (no allyTeamNames): assume-met fallback (byte-identical to before)', () => {
+        const ctx = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+        });
+        expect(ctx.allyTeamNames).toBeUndefined();
+        expect(evaluateCondition(allyGate('Nayra'), ctx)).toBe(1);
+        expect(conditionMet(allyGate('Nayra'), ctx)).toBe(true);
+    });
+});

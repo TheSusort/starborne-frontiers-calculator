@@ -101,10 +101,24 @@ export interface ConditionContext {
      *  Acidic Decay DoT family does not exist until SP-E introduces it, so Belladonna's gate is
      *  runtime-inert today by design, not a bug). */
     enemyDotFamilyCounts?: Record<string, number>;
+    /** SP-F F4 — ship names of the acting unit's LIVING same-team allies (team-sim only; the
+     *  drain context maps living same-side actor ids → ship names). Present ONLY when the sim
+     *  supplies a roster (battle sim). Absent (single-ship DPS / any caller without a roster) →
+     *  `ally-on-team` falls back to the manual assume-met path, byte-identical to before. */
+    allyTeamNames?: string[];
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
 export function evaluateCondition(cond: Condition, ctx: ConditionContext): number {
+    // SP-F F4: `ally-on-team` (Isha/Nayra's reciprocal Override gate) is a LIVE roster check when
+    // the team-sim provides ally ship names; otherwise it falls back to the manual assume-met path
+    // (single-ship DPS has no roster → a "if X is on the same team" gate is treated as met). Handled
+    // ahead of the `derivable:false` early-return since the parser emits it as `derivable:false`.
+    if (cond.subject === 'ally-on-team') {
+        if (ctx.allyTeamNames)
+            return cond.buffName && ctx.allyTeamNames.includes(cond.buffName) ? 1 : 0;
+        return Math.max(0, cond.manualCount ?? 1);
+    }
     if (!cond.derivable) return Math.max(0, cond.manualCount ?? 1);
 
     switch (cond.subject) {

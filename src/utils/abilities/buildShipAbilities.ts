@@ -78,6 +78,7 @@ import {
     detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
+    parseForceAffinityAdvantage,
     parseDoesntBreakStasis,
     parseChargeLossImmune,
     parseChargeRemoval,
@@ -1061,6 +1062,9 @@ function abilitiesFromText(
     } else if (mult > 0) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
+        // SP-F F4 (Wusheng): "deals 220% damage with affinity advantage" forces this on-cast hit
+        // (and its paired Stasis 'apply' landing) to affinity advantage at the engine seams.
+        const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
         // Epic PR4 (round-boundary trigger consistency): a base damage ability whose OWN
         // sentence carries "at the start of the round" (Judge, Chakara's "Then," continuation)
         // or "at the end of the round" (Incinerator, Rhodium p2's co-located 80%-no-crit hit)
@@ -1088,6 +1092,7 @@ function abilitiesFromText(
                     multiplier: mult,
                     ...(hits !== undefined ? { hits } : {}),
                     ...(noCrit ? { noCrit: true } : {}),
+                    ...(forceAffinityAdvantage ? { forceAffinityAdvantage: true } : {}),
                 },
                 autoFilled: true,
             },

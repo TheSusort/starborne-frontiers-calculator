@@ -2599,6 +2599,15 @@ export function parseNoCrit(text: string | null | undefined): boolean {
     return false;
 }
 
+// SP-F F4 (Wusheng): "deals 220% damage WITH AFFINITY ADVANTAGE …" — the charged hit is forced
+// to affinity advantage regardless of the real matchup. Boolean only; the flag rides the damage
+// config (forceAffinityAdvantage) and is consumed at the affinity seams in playerTurn.ts.
+const FORCE_AFFINITY_ADVANTAGE_RE = /\bwith\s+affinity\s+advantage\b/i;
+export function parseForceAffinityAdvantage(text: string | null | undefined): boolean {
+    if (!text) return false;
+    return FORCE_AFFINITY_ADVANTAGE_RE.test(stripUnitTags(text));
+}
+
 // MATCHES "don’t"/"doesn’t"/"does not"/bare "do not" + "break stasis" ONLY. NOT "affected by
 // stasis" (parseExtraAction owns that), "damage to enemies under Stasis", or "inflicts Stasis".
 // Input is normalised (curly/smart apostrophes → ASCII \x27) before matching so both game-data

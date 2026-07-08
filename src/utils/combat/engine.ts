@@ -464,6 +464,10 @@ export interface EnemyActorInput {
      *  assuming non-defender — consistent with Graphite's role-filtered reaction also staying
      *  dormant on an unknown role (matchesRoleCategory(undefined, ...) is always false). */
     role?: ShipTypeName;
+    /** SP-F F4: this enemy attacker's ship name, for the live `ally-on-team` roster check
+     *  (Isha/Nayra reciprocal Override gate). Absent → not added to the name map → the gate
+     *  falls back to assume-met (byte-identical). */
+    name?: string;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -1005,6 +1009,9 @@ export interface CombatEngineInput {
      *  the focus actor never matches a role filter — the reaction stays dormant for
      *  hits on it (conservative; mirrors TeamActorInput.role's contract). */
     role?: ShipTypeName;
+    /** SP-F F4: FOCUS actor's ship name, for the live `ally-on-team` roster check (Isha/Nayra
+     *  reciprocal Override gate). Absent → assume-met fallback (byte-identical). */
+    name?: string;
     /** Healing mode switch (healing calc): the player actor id that heals/shields route to
      *  and consume against. Must be a player actor id (focus or a team actor). When set, the
      *  engine runs in healing mode — heals/shields/cleanses are consumed and a `healing`
@@ -1069,6 +1076,9 @@ export interface CombatEngineInput {
          *  comment for the full contract (Meatshield defense-substitution's "non-defender ally"
          *  classification, side-agnostic via roleByActorId). */
         role?: ShipTypeName;
+        /** SP-F F4: this enemy attacker's ship name — see EnemyActorInput.name (live
+         *  `ally-on-team` roster check). Absent → assume-met fallback. */
+        name?: string;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
@@ -2610,6 +2620,14 @@ export function runCombat(input: CombatEngineInput): {
     if (input.role) roleByActorId.set(focusActorId, input.role);
     for (const t of teamActors) if (t.role) roleByActorId.set(t.id, t.role);
     for (const e of input.enemyAttackers ?? []) if (e.role) roleByActorId.set(e.id, e.role);
+    // SP-F F4: actor id → ship name (mirrors roleByActorId, side-agnostic by key) for the live
+    // `ally-on-team` roster check (Isha/Nayra reciprocal Override gate). Only populated when a
+    // caller supplies ship names (team sim); left empty in single-ship DPS / manual runs → the
+    // gate keeps its assume-met fallback. Threaded into executeIntent's IntentExecContext below.
+    const nameByActorId = new Map<string, string>();
+    if (input.name) nameByActorId.set(focusActorId, input.name);
+    for (const t of teamActors) if (t.name) nameByActorId.set(t.id, t.name);
+    for (const e of input.enemyAttackers ?? []) if (e.name) nameByActorId.set(e.id, e.name);
     registerReactiveListeners({
         bus,
         perOwner: reactivePerOwner,
@@ -5145,6 +5163,10 @@ export function runCombat(input: CombatEngineInput): {
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
                         enemyAttackerIds: enemyAttackerActorIds,
                         isActorAlive,
+                        // SP-F F4: name map for the live `ally-on-team` roster check. Empty in DPS
+                        // (no ship names supplied) → buildDrainContext leaves allyTeamNames
+                        // undefined → assume-met fallback (byte-identical).
+                        nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
                         lastTurnCtxByActor,
                         enemyType,
                         enemyHp,
