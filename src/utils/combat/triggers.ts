@@ -1289,10 +1289,11 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId) ?? 1,
         // SP-F F4: live same-team ally ship names (Isha/Nayra reciprocal Override gate). Only when
         // the engine supplied a name map (team-sim). `playerIds` is the drain owner's OWN side; we
-        // keep only living members and map ids → names. Absent map → undefined → assume-met fallback.
+        // exclude the owner itself (ALLY names, self-excluded — mirrors `isSameSideAlly`), keep only
+        // living members, and map ids → names. Absent map → undefined → assume-met fallback.
         allyTeamNames: ctx.nameByActorId
             ? ctx.playerIds
-                  .filter((id) => ctx.isActorAlive?.(id) ?? true)
+                  .filter((id) => id !== ownerId && (ctx.isActorAlive?.(id) ?? true))
                   .map((id) => ctx.nameByActorId?.get(id))
                   .filter((n): n is string => n !== undefined)
             : undefined,

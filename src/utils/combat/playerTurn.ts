@@ -2963,6 +2963,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               incomingDamageModifierPct: incomingDamageModifier,
               defensePenetrationPct: effectivePen,
               attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
+              // SP-F F4: carry the forced-affinity OFFENSIVE override to the positional apply path
+              // (Wusheng's forceAffinityAdvantage flag / Isha/Nayra 'Offensive Affinity Override').
+              // Without this the engine's per-victim `victimHitDamage` recomputes the REAL matchup
+              // from attackerAffinity and the forced advantage is lost on the production path.
+              ...(forceOutgoingAdvantage ? { forceAffinityAdvantage: true } : {}),
           }
         : undefined;
 

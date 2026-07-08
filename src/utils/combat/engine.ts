@@ -4355,6 +4355,13 @@ export function runCombat(input: CombatEngineInput): {
                             args.preTurnVictimStatus,
                             v
                         ),
+                        // SP-F F4: this victim's 'Defensive Affinity Override' (Isha/Nayra) forces
+                        // the incoming attacker to affinity DISADVANTAGE against it. Detected per
+                        // victim (anchor AND covered) via the victim's own self-buff store — the
+                        // positional counterpart to playerTurn's `victimHasDefensiveOverride`.
+                        forceAffinityDisadvantage: selfBuffNamesForOwners(statusEngine, [
+                            v.id,
+                        ]).includes('Defensive Affinity Override'),
                     };
                 },
                 applyToVictim: args.applyToVictim,

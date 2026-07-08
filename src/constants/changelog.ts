@@ -57,7 +57,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Voron and Orel now convert incoming direct damage into a Damage-over-Time effect (spread over 3 turns) instead of taking it all up front — Orel only against attackers affected by Taunt or Provoke. Combined with Voron's existing 20%-less-from-DoT reduction, this smooths and softens the hits it takes.",
     'Combat sim: Belladonna now converts an ally\'s Corrosion into Acidic Decay of the same level (chance scaling with her Hacking) and can extend the new Acidic Decay by a turn, matching her skill text. Her charged skill\'s "3 or more Acidic Decay" Stasis gate now actually triggers in combat.',
     'Panon now deals its boosted damage (120%/170%) when Provoked or Taunted, matching its in-game "instead" effect.',
-    "Meatshield now shields non-defender allies — direct damage to them is calculated against Meatshield's much higher defense.",
+    "Meatshield now protects non-defender allies — direct damage to them is calculated against Meatshield's much higher defense.",
     "Combat sim: Lingshe's charged skill now reduces enemy Bomb timers (hacking-gated), detonating any that reach zero.",
     "Combat sim: AEGIS now grants Defense Up II and cleanses all debuffs from an ally within its Active pattern when that ally's Shield is destroyed, matching its skill text, instead of always granting Defense Up II to the whole team and cleansing itself on every cast.",
     "Combat sim: Wusheng's charged skill now always strikes with affinity advantage; Isha and Nayra's Affinity Override buffs now force affinity advantage on offense and defense, including their two-ship synergy (each grants the other its extra Override only when both are on the team).",
