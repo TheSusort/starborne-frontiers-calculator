@@ -610,6 +610,20 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     break;
+                case 'on-ally-shield-destroyed':
+                    bus.on('shield-destroyed', (e) => {
+                        // Victim-scoped: an ally's shield pool was fully depleted (AEGIS). Mirrors
+                        // on-ally-debuffed's ally scoping (excludes the owner itself — a shield
+                        // destroyed on the OWNER routes nowhere today, no corpus self-reaction
+                        // exists — and every opposing actor). Route the reactive grant/cleanse to
+                        // that ally via damagedAllyId (reused from on-ally-debuffed/on-ally-crit).
+                        if (isSameSideAlly(e.victimId, ownerId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.victimId },
+                            });
+                    });
+                    break;
                 case 'on-debuff-resisted':
                     bus.on('debuff-resisted', (e) => {
                         // Self-scoped on the RESISTER. `debuff-resisted` carries targetId = the

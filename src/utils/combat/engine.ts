@@ -3491,6 +3491,12 @@ export function runCombat(input: CombatEngineInput): {
                     );
                 }
             }
+            // SP-F F2 (AEGIS): the pre-absorb pool for the shield-destroyed emit below — read
+            // AFTER the Lifeline threshold-shield grant above (NOT the earlier `shieldBefore`,
+            // which is deliberately the PRE-Lifeline value other callers rely on) so a shield
+            // freshly granted mid-hit by Lifeline and immediately destroyed by the SAME hit still
+            // counts as "destroyed" (it went 0 → grant → 0 within this one resolution).
+            const shieldBeforeThisAbsorb = victim.shieldPool;
             const { absorbed, hpDamage } = shieldAbsorb({
                 damage,
                 shieldPool: victim.shieldPool,
@@ -3500,6 +3506,13 @@ export function runCombat(input: CombatEngineInput): {
             });
             victim.shieldPool -= absorbed;
             sink.addShieldAbsorbed(absorbed, victim.id);
+            // AEGIS (SP-F F2): a DIRECT hit that fully depletes a non-empty shield pool. Excludes
+            // DoT-tick batches (byDirectDamage:false) — a DoT zeroing a lingering shield is not a
+            // "destruction" the game reacts to; a Barrier-blocked hit already returned above and
+            // never reaches this line, so it can never false-positive here either.
+            if (cause?.byDirectDamage && shieldBeforeThisAbsorb > 0 && victim.shieldPool === 0) {
+                bus.emit({ type: 'shield-destroyed', victimId: victim.id, round: r });
+            }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
             // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so

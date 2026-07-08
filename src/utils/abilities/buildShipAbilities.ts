@@ -75,6 +75,7 @@ import {
     parseControlInflicts,
     detectAllyCritTrigger,
     detectEnemyBuffedTrigger,
+    detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
     parseDoesntBreakStasis,
@@ -1854,15 +1855,26 @@ function abilitiesFromText(
         // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
         // Nuqtu (Phase 3 PR-I): "Cleanses 1 debuff from itself (once per round) ... when an enemy
         // gets buffed" rides on-enemy-buffed (position-scoped; opposing-scoped trigger).
+        // AEGIS (SP-F F2): "cleanses all debuffs when an ally ... has their Shield destroyed"
+        // rides on-ally-shield-destroyed — position-scoped like the siblings above (this loop has
+        // no buff name to resolve a clause on).
         const reactiveTrigger =
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
             detectEnemyBuffedTrigger(text, cleansePos) ??
+            detectAllyShieldDestroyedTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
                 : undefined);
-        const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
+        // AEGIS's cleanse targets the ally whose shield was destroyed, NOT the bare-phrasing
+        // self default flipBareSupportTarget would otherwise resolve to (the clause "cleanses all
+        // debuffs" names no explicit receiver — the receiver is only named in the reactive
+        // TRIGGER clause, which flipBareSupportTarget/parseCleanse's target detection cannot see).
+        const cleanseTarget =
+            reactiveTrigger === 'on-ally-shield-destroyed'
+                ? 'ally'
+                : flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
         // Nuqtu's "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag.
         const cleanseOncePerRound = detectCleanseOncePerRound(text, cleansePos);
         out.push({
@@ -2662,6 +2674,15 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 ONCE_PER_ALLY_PER_ROUND_RE.test(rowText)
             ) {
                 ability.oncePerRoundPerAlly = true;
+            }
+            // AEGIS (SP-F F2): "grants Defense Up II ... when an ally ... has their Shield
+            // destroyed" names no explicit receiver in its own object clause (detectGrantScope's
+            // receiver-less-grant default resolves it to 'all-allies') — the real receiver is the
+            // ally named only in the (stripped-for-scope-detection) reactive trigger clause.
+            // Override to 'ally' so reactiveRecipients routes the grant to the ally whose shield
+            // was destroyed (eventCtx.damagedAllyId), not the whole team.
+            if (reactiveTrigger === 'on-ally-shield-destroyed') {
+                ability.target = 'ally';
             }
         } else if (
             // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives

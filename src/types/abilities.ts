@@ -174,6 +174,12 @@ export type AbilityTrigger =
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
     | 'on-shield-applied'
+    // SP-F F2: fires when a same-side ALLY (not the owner) has their shield pool FULLY DEPLETED
+    // by a direct hit (rides the new `shield-destroyed` event, ally-scoped on victimId — mirrors
+    // on-ally-debuffed's ally scoping). AEGIS's "grants Defense Up II and cleanses all debuffs
+    // when an ally within the Active pattern has their Shield destroyed" — the sole corpus user.
+    // Opposite direction of on-shield-applied (grant vs loss).
+    | 'on-ally-shield-destroyed'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
     // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
@@ -235,6 +241,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-deal-damage',
     // Resonating Fury: granter-scoped reaction fired once per shield-application cast.
     'on-shield-applied',
+    // SP-F F2: ally-scoped reaction to an ally's shield pool being fully depleted (AEGIS).
+    'on-ally-shield-destroyed',
 ]);
 
 export type ConditionSubject =

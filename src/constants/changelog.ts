@@ -59,6 +59,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Panon now deals its boosted damage (120%/170%) when Provoked or Taunted, matching its in-game "instead" effect.',
     "Meatshield now shields non-defender allies — direct damage to them is calculated against Meatshield's much higher defense.",
     "Combat sim: Lingshe's charged skill now reduces enemy Bomb timers (hacking-gated), detonating any that reach zero.",
+    "Combat sim: AEGIS now grants Defense Up II and cleanses all debuffs from an ally within its Active pattern when that ally's Shield is destroyed, matching its skill text, instead of always granting Defense Up II to the whole team and cleansing itself on every cast.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

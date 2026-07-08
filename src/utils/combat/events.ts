@@ -226,6 +226,14 @@ export type CombatEvent =
           effect: ControlEffect;
           round: number;
       } & ReactiveStamp)
+    /** A victim's shield pool was fully depleted by a DIRECT hit (SP-F F2, AEGIS). Emitted from
+     *  the shared `applyVictimDamage` immediately after the shield-drain line, ONLY when the pool
+     *  was > 0 immediately before this hit's absorb and reaches exactly 0 after it, AND the hit
+     *  is direct (`byDirectDamage`) — a DoT tick that zeroes a lingering shield does NOT emit this
+     *  (bombs/DoTs bypass the shield entirely or drain it without this being a "destruction" the
+     *  game surfaces reactively). A Barrier-blocked hit never reaches the shield at all (the
+     *  Barrier early-return precedes this emit point), so it can never false-positive here. */
+    | ({ type: 'shield-destroyed'; victimId: string; round: number } & ReactiveStamp)
     /** A target's HP fraction changed. Emitted on TWO distinct paths with intended
      *  granularity asymmetry:
      *   - Tank-side (Phase 4c PR 3, LIVE): once per HP-INTAKE EVENT inside

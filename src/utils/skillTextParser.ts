@@ -1253,6 +1253,10 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
 // inflicted got resisted). Distinct from the resister-side "when this Unit resists a debuff"
 // (parseOnResistHpDamage). Corpus-verified: Ravager is the only "its debuff is resisted" row.
 const OWN_DEBUFF_RESISTED_RE = /\bits\s+debuff\s+is\s+resisted\b/i;
+// SP-F F2: "when an ally [within the Active pattern] has their Shield destroyed" — AEGIS's sole
+// corpus reaction (docs/ship-skills.csv). The loose [^.]*? gaps cross the "within the Active
+// pattern" positional qualifier and any tag text between "ally" and "shield"/"destroyed".
+const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bdestroyed\b/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -1347,6 +1351,8 @@ export function detectReactiveTrigger(
     if (KILLED_BY_DIRECT_RE.test(clause)) return 'on-destroyed';
     // Ravager: "If its debuff is resisted, it gains <buff>" — inflictor-side reaction.
     if (OWN_DEBUFF_RESISTED_RE.test(clause)) return 'on-own-debuff-resisted';
+    // SP-F F2: "when an ally ... has their Shield destroyed" — AEGIS's Defense Up II grant.
+    if (ALLY_SHIELD_DESTROYED_RE.test(clause)) return 'on-ally-shield-destroyed';
     return undefined;
 }
 
@@ -1695,6 +1701,21 @@ export function detectEnemyBuffedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ENEMY_BUFFED_RE, anchorPos, 'on-enemy-buffed');
+}
+
+/**
+ * Returns 'on-ally-shield-destroyed' when `anchorPos` falls inside the sentence carrying the
+ * "when an ally ... has their Shield destroyed" phrase; otherwise undefined. Position-scoped on
+ * the RAW text (mirrors detectEnemyBuffedTrigger) — used by the CLEANSE builder (AEGIS's "cleanses
+ * all debuffs" half), which has no buff name to resolve a clause on (unlike the buff-grant path,
+ * which reuses ALLY_SHIELD_DESTROYED_RE directly inside detectReactiveTrigger for the "grants
+ * Defense Up II" half). Reference data: docs/ship-skills.csv (AEGIS only).
+ */
+export function detectAllyShieldDestroyedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_SHIELD_DESTROYED_RE, anchorPos, 'on-ally-shield-destroyed');
 }
 
 // Nuqtu's self-cleanse "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag

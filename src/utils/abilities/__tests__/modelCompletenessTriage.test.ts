@@ -663,27 +663,17 @@ describe('SP-F — deep one-offs', () => {
     const AEGIS_P2 =
         'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their Shield destroyed.';
 
-    it.fails(
-        'AEGIS: "when an ally ... has their Shield destroyed" does not ride a reactive shield-destroyed trigger',
-        () => {
-            const abilities = abilitiesFor({ secondPassiveSkillText: AEGIS_P2 }, 'passive');
-            // GAP: SP-F (on-ally-shield-destroyed, newly discovered — no allowlist entry
-            // existed before this task). Dry-run: 2 abilities build — an all-allies "Defense Up
-            // II" buff and an ally-target "cleanses all" — BOTH auto-filled as unconditioned
-            // `trigger: 'on-cast'`, as if this were a plain active/charged-style grant, not a
-            // reaction to a specific ally's shield being destroyed. No `on-ally-shield-destroyed`
-            // (or any shield-DESTRUCTION-scoped) literal exists in AbilityTrigger — the only
-            // shield-related trigger is `on-shield-applied` (the opposite direction, fired when
-            // a shield is GRANTED, not lost) — so this task cannot predict the new trigger's
-            // exact name without violating the "never assert an absent literal" rule. Proxy:
-            // checked against the ONE trigger literal that DOES exist and IS what's wrongly
-            // applied today — 'on-cast' — an existing, type-valid literal. False now (both
-            // abilities are on-cast); true once SP-F reroutes at least one of them onto
-            // whatever new reactive trigger it adds (any trigger other than 'on-cast' satisfies
-            // this, regardless of its name).
-            expect(abilities.some((a) => a.trigger !== 'on-cast')).toBe(true);
-        }
-    );
+    // CLOSED (SP-F F2): both abilities now ride the live `on-ally-shield-destroyed` reactive
+    // trigger, target:'ally' (routes to the ally whose shield was destroyed via
+    // eventCtx.damagedAllyId; footprintFilteredRecipients then scopes it to AEGIS's Active
+    // pattern). See onAllyShieldDestroyed.test.ts for the full engine-integration proof
+    // (reaction fires, footprint-gated, team-symmetric).
+    it('AEGIS: "when an ally ... has their Shield destroyed" rides the live on-ally-shield-destroyed trigger, target ally', () => {
+        const abilities = abilitiesFor({ secondPassiveSkillText: AEGIS_P2 }, 'passive');
+        expect(
+            abilities.some((a) => a.trigger === 'on-ally-shield-destroyed' && a.target === 'ally')
+        ).toBe(true);
+    });
 });
 
 describe('SP-G — engine known-limitations', () => {
