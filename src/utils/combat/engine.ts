@@ -4586,6 +4586,38 @@ export function runCombat(input: CombatEngineInput): {
             }
         };
 
+        // SP-F F3 fix (Critical + Important): routes a FORCED bomb detonation (a caster's
+        // countdown-reduce ability driving an existing PendingBomb to <=0, e.g. Lingshe) through
+        // the SAME per-victim `applyVictimDamage` sink a natural countdown-0 burst uses
+        // (processBombs' `creditDetonation` — see `applyPositionedTimedBurst` above). This is the
+        // ONLY correct way to preserve Barrier full-damage-immunity, the Cheat-Death intercept,
+        // recordDestroyed/`ship-destroyed` emission (no zombie units), and incoming-block/Lifeline
+        // — all of which a hand-rolled shieldPool/currentHp debit would bypass. Credits the
+        // round's detonation tally (roundPerTargetDamage + perActorDetonation) to the bomb's
+        // ORIGINAL applier (`sourceId`), exactly like `applyPerVictimDetonation`/`creditDetonation`
+        // above — never the forcing caster. `sink` is chosen by the CALLER (buildTurnArgs) via the
+        // same enemySink/playerSink direction `applyPerVictimDetonation` uses (player caster →
+        // enemySink, enemy caster → playerSink) since a forced detonation's victim is an arbitrary
+        // opposing actor, not necessarily the bursting actor's own HP.
+        const forceDetonateBombOnVictim = (
+            victim: CombatActor,
+            sink: DamageAccountingSink,
+            sourceId: string,
+            damage: number
+        ): void => {
+            applyVictimDamage(damage, victim, sink, {
+                killerId: sourceId,
+                byDirectDamage: true,
+                bombPortion: damage, // full shield drain, no pen — bomb-burst precedent
+                shieldPenetrationPct: 0,
+            });
+            roundPerTargetDamage.set(
+                victim.id,
+                (roundPerTargetDamage.get(victim.id) ?? 0) + damage
+            );
+            perActorDetonation.set(sourceId, (perActorDetonation.get(sourceId) ?? 0) + damage);
+        };
+
         // Shared positioned timed-burst loop. A POSITIONED actor carrying timed
         // pendingBombs/pendingAccumulators (seeded by the opposing side's earlier bomb/accumulator
         // applications) bursts them at the START of its own turn — against its OWN HP — via
@@ -4783,6 +4815,17 @@ export function runCombat(input: CombatEngineInput): {
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
+                // SP-F F3 fix: forced bomb-detonation sink (Lingshe's countdown-reduce-to-0),
+                // side-resolved exactly like applyPerVictimDetonation's sink argument (player
+                // caster → enemySink, enemy caster → playerSink) — a's opposing victims are
+                // ENEMY actors when a is a player, PLAYER actors when a is an enemy.
+                forceDetonateBomb: (victim: CombatActor, sourceId: string, damage: number) =>
+                    forceDetonateBombOnVictim(
+                        victim,
+                        a.side === 'player' ? enemySink : playerSink,
+                        sourceId,
+                        damage
+                    ),
                 // Positional detonation hint: when the engine will take the positional apply path
                 // (same predicate that computes aoeVictimIds — pattern + target + position all set),
                 // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead

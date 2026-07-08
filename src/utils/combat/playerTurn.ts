@@ -496,6 +496,19 @@ export interface PlayerTurnArgs {
         sourceCritPower: number;
         abilities: Ability[];
     }[];
+    /** SP-F F3 fix (Critical): routes a FORCED bomb detonation — `reduceEnemyBombs`/
+     *  `reduceBombsOnVictim` driving an existing PendingBomb's countdown to <=0 (Lingshe) — through
+     *  the engine's real per-victim `applyVictimDamage` sink, so it behaves EXACTLY like a natural
+     *  countdown-0 burst: Barrier full-damage-immunity, the Cheat-Death intercept, `destroyedRound`/
+     *  `ship-destroyed` emission (no zombie unit), incoming-block/Lifeline, and the round's
+     *  detonation tally (roundPerTargetDamage + perActorDetonation, credited to the bomb's ORIGINAL
+     *  `sourceId`) all apply. Supplied by the engine (`buildTurnArgs`), side-resolved (enemySink for
+     *  a player caster, playerSink for an enemy caster) — mirrors `applyPerVictimDetonation`'s sink
+     *  selection. Absent (standalone/unit-test callers with no engine scope) falls back to a bare
+     *  shield-then-HP debit with NO Barrier/Cheat-Death/destroyed handling — `reduceEnemyBombs` is
+     *  itself inert without a resolved `targetId`, which only a positional/engine-scoped caller ever
+     *  supplies in production, so the fallback is exercised only by tests that hand-build args. */
+    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -840,18 +853,20 @@ function stripShieldPct(victim: CombatActor, pct: number): void {
  * formula (engine.ts) — stacks * damagePerStack * affinityMult * (1 + detonationDamageModifier
  * / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`, NOT this ability's caster) via
  * a `bomb-detonated` bus emission (one event per detonating entry, mirroring the enemy-turn
- * `processBombs` shape) plus a direct shield-then-HP debit on `victim` (full drain, no
- * penetration — the bomb-burst precedent; this bespoke path has no access to the engine-scoped
- * `applyVictimDamage` sink, so Barrier/Cheat-Death/block interactions are out of scope for this
- * one-off, consistent with the epic's other deep-one-off approximations). Deliberately NOT
- * detonateContainers/detonate() — those credit the CASTER unconditionally and consume the WHOLE
- * container regardless of countdown.
+ * `processBombs` shape) and, when `forceDetonateBomb` is supplied, the SAME per-victim
+ * `applyVictimDamage` sink a natural detonation uses — so Barrier, Cheat-Death, `destroyedRound`/
+ * `ship-destroyed`, and incoming-block/Lifeline all apply exactly as they would to a natural
+ * countdown-0 burst (see `PlayerTurnArgs.forceDetonateBomb`'s doc comment). Absent (no engine
+ * scope — standalone/unit-test callers), falls back to a bare shield-then-HP debit with none of
+ * that. Deliberately NOT detonateContainers/detonate() — those credit the CASTER unconditionally
+ * and consume the WHOLE container regardless of countdown.
  */
 function reduceBombsOnVictim(
     victim: CombatActor,
     turns: number,
     round: number,
-    bus: CombatEventBus
+    bus: CombatEventBus,
+    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
 ): void {
     for (let i = victim.pendingBombs.length - 1; i >= 0; i--) {
         const bomb = victim.pendingBombs[i];
@@ -869,9 +884,13 @@ function reduceBombsOnVictim(
             stacks: bomb.stacks,
             damage: burst,
         });
-        const shieldDrain = Math.min(victim.shieldPool, burst);
-        victim.shieldPool -= shieldDrain;
-        victim.currentHp = Math.max(0, victim.currentHp - (burst - shieldDrain));
+        if (forceDetonateBomb) {
+            forceDetonateBomb(victim, bomb.sourceId, burst);
+        } else {
+            const shieldDrain = Math.min(victim.shieldPool, burst);
+            victim.shieldPool -= shieldDrain;
+            victim.currentHp = Math.max(0, victim.currentHp - (burst - shieldDrain));
+        }
         victim.pendingBombs.splice(i, 1);
     }
 }
@@ -894,6 +913,7 @@ function reduceEnemyBombs(args: {
     round: number;
     bus: CombatEventBus;
     landsTimedEnemyApplicationLive: (application?: 'inflict' | 'apply') => boolean;
+    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
 }): void {
     if (args.targetId === undefined) return;
     for (const ab of args.gatedSkill?.abilities ?? []) {
@@ -907,7 +927,13 @@ function reduceEnemyBombs(args: {
                 args.opposingVictimById?.get(vid) ??
                 (vid === args.anchor.id ? args.anchor : undefined);
             if (!victim) continue;
-            reduceBombsOnVictim(victim, ab.config.turns, args.round, args.bus);
+            reduceBombsOnVictim(
+                victim,
+                ab.config.turns,
+                args.round,
+                args.bus,
+                args.forceDetonateBomb
+            );
         }
     }
 }
@@ -2102,6 +2128,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         round: r,
         bus,
         landsTimedEnemyApplicationLive,
+        forceDetonateBomb: args.forceDetonateBomb,
     });
 
     // += (not =): with a FASTER enemy, the enemy's bomb/accumulator bursts

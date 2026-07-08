@@ -20,7 +20,9 @@ import { DoTType } from '../../types/calculator';
  *  - `dot-applied`: carries `sourceId` identifying the inflicting actor.
  *  - `bomb-detonated`: asymmetric paths — `processBombs` (enemy turn) emits one event
  *    per pending bomb that detonates; `detonate()` bomb branch (attacker turn) emits one
- *    aggregate event for all consumed bombs. `actorId` is 'attacker' in both paths.
+ *    aggregate event for all consumed bombs. `actorId` is the bomb's ORIGINAL applier
+ *    (`PendingBomb.sourceId`) in both paths — any actor, not always 'attacker' (e.g. a
+ *    forced early detonation via `bomb-countdown-reduce`, SP-F F3/Lingshe).
  *  - `control-applied`: emitted on the CAST path when the firing skill carries a `control`
  *    ability (e.g. Defiant's charged Stasis inflict). `casterId` is the applying actor;
  *    `effect` is the control effect. Present-only-when-fired. Emitting it does NOT make the
@@ -211,7 +213,9 @@ export type CombatEvent =
      *    consumed bomb entries. `damage` = (Σ stacks × damagePerStack) × affinityMult × pct,
      *    where pct is the detonation skill's power multiplier.
      *  In both cases `damage` is the realized payout under that path's scaling, not a
-     *  normalized value. `actorId` is 'attacker' in both paths. */
+     *  normalized value. `actorId` is the bomb's ORIGINAL applier (`PendingBomb.sourceId`)
+     *  in both paths — any actor, not always 'attacker' (SP-F F3/Lingshe forces early
+     *  detonation via `bomb-countdown-reduce`, crediting the original applier). */
     | { type: 'bomb-detonated'; actorId: string; round: number; stacks: number; damage: number }
     /** A `control` ability resolved on the cast path. `casterId` is the applying actor;
      *  `effect` is the control effect (e.g. 'stasis'). Present-only-when-fired; emitting it
