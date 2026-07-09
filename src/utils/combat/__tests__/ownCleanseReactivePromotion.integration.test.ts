@@ -2,9 +2,10 @@
  * Phase 3 PR-H — combat-integration tests for the NEW `on-own-cleanse` reactive trigger:
  *   - Morao (3rd passive): "This Unit repairs 5% of its Max HP every turn and, upon Cleansing a
  *     Debuff, repairs an additional 5% of its Max HP while gaining Defense Up II for 2 turns" —
- *     the "every turn" repair stays on-cast (a separate, out-of-scope recurring-trigger gap); ONLY
- *     the "upon Cleansing" repair + Defense Up II ride on-own-cleanse. Self-target — no actor
- *     capture needed.
+ *     the "every turn" repair now rides start-of-turn (SP-G G1a, 2026-07-09: detectEveryTurnTrigger
+ *     closed the "every turn" recurring-trigger gap this file's own comments used to call
+ *     out-of-scope); the "upon Cleansing" repair + Defense Up II ride on-own-cleanse. Self-target —
+ *     no actor capture needed.
  *   - Cultivator (1st passive): "When this Unit cleanses a Debuff, it also repairs that ally for
  *     4% of this Unit's Max HP" — 'ally'-target, routed to the ACTUALLY-cleansed ally via
  *     eventCtx.cleansedAllyIds (cleanse-performed.targets), fanning out over every real removal
@@ -91,9 +92,9 @@ function sumBucket(
 // =============================================================================
 
 const MORAO_P3 =
-    "This Unit <unit-damage>repairs 5%</unit-damage> of its Max HP every turn and, upon <unit-aid>Cleansing a</unit-aid> Debuff, repairs an additional <unit-damage>5%</unit-damage> of its Max HP while gaining <unit-skill>Defense Up II</unit-skill> for 2 turns.";
+    'This Unit <unit-damage>repairs 5%</unit-damage> of its Max HP every turn and, upon <unit-aid>Cleansing a</unit-aid> Debuff, repairs an additional <unit-damage>5%</unit-damage> of its Max HP while gaining <unit-skill>Defense Up II</unit-skill> for 2 turns.';
 const MORAO_HP = 20_000;
-const MORAO_BASE_PCT = 5; // "every turn" — stays on-cast (out of scope)
+const MORAO_BASE_PCT = 5; // "every turn" — start-of-turn (SP-G G1a)
 const MORAO_REACTIVE_PCT = 5; // "upon Cleansing a Debuff" — on-own-cleanse
 
 /** Extracts Morao's REAL production passive slot (all 3 abilities, unfiltered — the baseline
@@ -107,12 +108,12 @@ function moraoPassiveAbilities(): Ability[] {
 }
 
 describe('Morao passive — extracted ability shapes (mutation guard)', () => {
-    it('the "every turn" repair stays on-cast; ONLY the "upon Cleansing" repair + Defense Up II ride on-own-cleanse', () => {
+    it('the "every turn" repair rides start-of-turn (SP-G G1a); the "upon Cleansing" repair + Defense Up II ride on-own-cleanse', () => {
         const abilities = moraoPassiveAbilities();
         const heals = abilities.filter((a) => a.type === 'heal');
         const buffs = abilities.filter((a) => a.type === 'buff');
         expect(heals).toHaveLength(2);
-        expect(heals.filter((a) => a.trigger === 'on-cast')).toHaveLength(1);
+        expect(heals.filter((a) => a.trigger === 'start-of-turn')).toHaveLength(1);
         expect(heals.filter((a) => a.trigger === 'on-own-cleanse')).toHaveLength(1);
         expect(buffs).toHaveLength(1);
         expect(buffs[0].trigger).toBe('on-own-cleanse');
@@ -205,7 +206,7 @@ describe('Morao (player-side) — self-cleanse drives the reactive repair + Defe
             MORAO_BASE({ enemyAttackers: [debuffEnemy('enemy-deb')] })
         );
         const result = runCombat(MORAO_BASE({ enemyAttackers: [debuffEnemy('enemy-deb')] }));
-        // Baseline (5%, on-cast, always fires) + reactive (5%, on-own-cleanse) = 10% total.
+        // Baseline (5%, start-of-turn — SP-G G1a, always fires) + reactive (5%, on-own-cleanse) = 10% total.
         expect(sumBucket(result, 'attacker', 'directHeal')).toBeCloseTo(
             (MORAO_HP * (MORAO_BASE_PCT + MORAO_REACTIVE_PCT)) / 100,
             6
@@ -218,7 +219,7 @@ describe('Morao (player-side) — self-cleanse drives the reactive repair + Defe
     it('NEGATIVE control: no debuff to cleanse → only the baseline 5% fires, no Defense Up II', () => {
         const { buffsApplied } = runAndCollectBuffs(MORAO_BASE());
         const result = runCombat(MORAO_BASE());
-        // Only the baseline "every turn" repair (on-cast) fires — the reactive never triggers.
+        // Only the baseline "every turn" repair (start-of-turn) fires — the reactive never triggers.
         expect(sumBucket(result, 'attacker', 'directHeal')).toBeCloseTo(
             (MORAO_HP * MORAO_BASE_PCT) / 100,
             6
@@ -266,10 +267,14 @@ const damageThenDebuff = (): ShipSkills['slots'][number] => ({
     ],
 });
 
+// Deliberately independent of MORAO_HP (20_000, the 'attacker'-side fixture above) — enemyAt is a
+// shared generic enemy-attacker factory (also used by the Cultivator team-symmetry test below),
+// so its HP is its own fixture value. FOE_HP names it for the self-heal-basis math below.
+const FOE_HP = 40_000;
 const enemyAt = (id: string, position: Position, shipSkills: ShipSkills): EnemyAttacker =>
     ({
         id,
-        stats: { attack: 1_000, crit: 0, critDamage: 0, defence: 0, hp: 40_000, speed: 50 },
+        stats: { attack: 1_000, crit: 0, critDamage: 0, defence: 0, hp: FOE_HP, speed: 50 },
         chargeCount: 0,
         startCharged: false,
         position,
@@ -313,8 +318,13 @@ describe('Morao (enemy-side) — team symmetry: an enemy Morao self-cleanses and
         };
         const { buffsApplied } = runAndCollectBuffs(input);
         const result = runCombat(input);
+        // SP-G G1a: the "every turn" repair now rides start-of-turn, so — team-symmetrically with
+        // the 'attacker'-side test above — BOTH self-heals fire on the enemy actor too (previously
+        // only the on-own-cleanse repair fired here; the base repair was dormant on the enemy side
+        // since 'on-cast' never applied to a walked enemy attacker). The basis is 'foe's OWN HP
+        // (FOE_HP, enemyAt's fixture value), not the player-fixture's MORAO_HP.
         expect(sumBucket(result, 'foe', 'directHeal')).toBeCloseTo(
-            (MORAO_HP * (MORAO_BASE_PCT + MORAO_REACTIVE_PCT)) / 100,
+            (FOE_HP * (MORAO_BASE_PCT + MORAO_REACTIVE_PCT)) / 100,
             6
         );
         const defenseUp = buffsApplied.filter((b) => b.buffName === 'Defense Up II');
@@ -589,7 +599,13 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             runtimes: new Map([
                 [
                     'cultivator',
-                    { actor: { id: 'cultivator' }, healModifier: 0, attack: 0, defence: 0, hp: 20_000 } as unknown as PlayerActorRuntime,
+                    {
+                        actor: { id: 'cultivator' },
+                        healModifier: 0,
+                        attack: 0,
+                        defence: 0,
+                        hp: 20_000,
+                    } as unknown as PlayerActorRuntime,
                 ],
             ]),
             grantAllyCharges: () => {},
@@ -624,10 +640,14 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
         const { ctx, applied, credits } = buildHealCtx();
         executeIntent(makeHealIntent(['tank']), ctx);
         expect(applied).toEqual([800]);
-        expect(credits).toContainEqual({ actorId: 'cultivator', bucket: 'effectiveHeal', amount: 800 });
+        expect(credits).toContainEqual({
+            actorId: 'cultivator',
+            bucket: 'effectiveHeal',
+            amount: 800,
+        });
     });
 
-    it('MULTIPLE cleansedAllyIds fan out to EVERY actually-cleansed ally (robustness beyond Cultivator\'s real single-ally shape)', () => {
+    it("MULTIPLE cleansedAllyIds fan out to EVERY actually-cleansed ally (robustness beyond Cultivator's real single-ally shape)", () => {
         const { ctx, applied, credits } = buildHealCtx();
         executeIntent(makeHealIntent(['team1', 'tank']), ctx);
         // Both recipients are credited directHeal (one entry per recipient in the fan-out loop)...
@@ -641,7 +661,11 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
         const { ctx, applied, credits } = buildHealCtx();
         executeIntent(makeHealIntent(undefined), ctx);
         expect(applied).toEqual([800]);
-        expect(credits).toContainEqual({ actorId: 'cultivator', bucket: 'effectiveHeal', amount: 800 });
+        expect(credits).toContainEqual({
+            actorId: 'cultivator',
+            bucket: 'effectiveHeal',
+            amount: 800,
+        });
     });
 });
 

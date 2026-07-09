@@ -1404,6 +1404,72 @@ describe('per-target debuff stores (Task 1)', () => {
             expect(active[0].payload.buffName).toBe('WeakenAura');
         });
 
+        // SP-G G1b: a start-of-combat "N stacks" grant (Meatshield's Protection) is a
+        // stackable, non-accumulating buff — the parser leaves stackTrigger undefined so it
+        // rides the AURA branch (not accumulating) once seeded via buildShipAbilities' pre-combat
+        // relabel. Before this fix, the aura branch's `active` object never carried a `stacks`
+        // field at all (only the accumulating/persistent branches did), so a stackable one-shot
+        // grant's reported stack count silently vanished even though its STATIC payload.stacks
+        // was correct all along. Team-symmetric by construction: activeAbilityStatuses is the
+        // SAME function for both 'self' and 'enemy' — reading either aura list runs the
+        // identical stacks-inclusion branch below.
+        it("activeAbilityStatuses reports a stackable aura's payload.stacks on `active` — both sides (SP-G G1b)", () => {
+            const selfAura: RegisteredAbilityStatus = {
+                kind: 'aura',
+                side: 'self',
+                sourceSlot: 'passive',
+                conditions: [],
+                payload: {
+                    buffName: 'Protection',
+                    stacks: 3,
+                    parsedEffects: {},
+                    isStackable: true,
+                },
+            };
+            const enemyAura: RegisteredAbilityStatus = {
+                kind: 'aura',
+                side: 'enemy',
+                sourceSlot: 'passive',
+                conditions: [],
+                payload: {
+                    buffName: 'Protection',
+                    stacks: 3,
+                    parsedEffects: {},
+                    isStackable: true,
+                },
+            };
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([selfAura]);
+            eng.registerAbilityStatuses([enemyAura]);
+            eng.beginRound(1);
+
+            const self = eng.activeAbilityStatuses('self', () => baseCtx);
+            expect(self).toHaveLength(1);
+            expect(self[0].active.stacks).toBe(3);
+
+            const enemy = eng.activeAbilityStatuses('enemy', () => baseCtx);
+            expect(enemy).toHaveLength(1);
+            expect(enemy[0].active.stacks).toBe(3);
+        });
+
+        it('activeAbilityStatuses does NOT report stacks for a non-stackable aura (structural stacks:1 default stays hidden)', () => {
+            const aura: RegisteredAbilityStatus = {
+                kind: 'aura',
+                side: 'self',
+                sourceSlot: 'passive',
+                conditions: [],
+                // isStackable omitted (false-ish) — every buff/debuff payload carries a `stacks`
+                // field (non-stackable ones default to 1), but that's not a count worth reporting.
+                payload: { buffName: 'Focus', stacks: 1, parsedEffects: { crit: 15 } },
+            };
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([aura]);
+            eng.beginRound(1);
+            const active = eng.activeAbilityStatuses('self', () => baseCtx);
+            expect(active).toHaveLength(1);
+            expect(active[0].active.stacks).toBeUndefined();
+        });
+
         it('decrementEnemy decrements timed ability status on default target', () => {
             const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
             const status = timedEnemyStatus('Def Down', 2);

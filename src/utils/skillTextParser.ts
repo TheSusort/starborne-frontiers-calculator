@@ -1202,6 +1202,10 @@ function matchesActiveSelfCrit(text: string): boolean {
 }
 const START_OF_ROUND_RE =
     /at the start of (?:the|each|every) round|starts? (?:the|each|every) round/i;
+// "every turn" / "each turn" — a per-own-turn recurring self-grant. Distinct from
+// START_OF_TURN_CHARGE_RE ("at the start of the turn"): the trailing-phrase form Kinetik's
+// per-turn shield and Cinya's per-turn heal use (docs/ship-skills.csv). SP-G G1a.
+const EVERY_TURN_RE = /\b(?:each|every)\s+turn\b/i;
 // "starts (each|every|the) round with <buff>" — a start-of-round self-grant whose governing
 // phrase uses no application verb (Chakara's R2 passive; unique in the corpus). findVerb treats
 // it as a self-receive ('gains') so the buff segments extract.
@@ -2071,6 +2075,24 @@ export function detectStartOfRoundTrigger(
 }
 
 /**
+ * SP-G G1a: returns 'start-of-turn' when `anchorPos` (a shield/heal ability's raw-text anchor)
+ * falls in a sentence carrying "every turn"/"each turn". Position-scoped (mirrors
+ * phrasePosTrigger's sentence-scoping) so an unrelated heal/shield in another sentence is never
+ * co-triggered. Reference data: docs/ship-skills.csv (Kinetik shield, Cinya heal).
+ */
+export function detectEveryTurnTrigger(
+    text: string,
+    anchorPos: number
+): 'start-of-turn' | undefined {
+    // phrasePosTrigger's return type is the broader AbilityTrigger (it's shared by every
+    // detectX helper); passed the literal 'start-of-turn' trigger, it can only ever come back
+    // as that literal or undefined, so the narrowing cast here is safe.
+    return phrasePosTrigger(text, EVERY_TURN_RE, anchorPos, 'start-of-turn') as
+        | 'start-of-turn'
+        | undefined;
+}
+
+/**
  * Epic PR4: returns 'end-of-round' when `anchorPos` falls inside the sentence carrying the
  * "at the end of the round" phrase; otherwise undefined. Position-scoped on the RAW text
  * (shares END_OF_ROUND_RE with detectEndOfRoundPurgeTrigger — same phrase, DAMAGE-ability call
@@ -2819,20 +2841,11 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
                 oncePerRound,
                 autoFilled: true,
             });
-            // Shield basis derivation: the text says "30% of the damage dealt", referring to
-            // FrontLine's OWN 80% reactive damage. The reactive-shield executor's
-            // basis:'damage-dealt' reads eventCtx.triggerDamage, which on THIS trigger is the
-            // ENEMY's charged-cast damage (wrong). So the shield is modeled as basis:'attack'
-            // with pct = shieldPct * damagePct / 100 = 30*80/100 = 24 — an UN-mitigated
-            // approximation of "the damage dealt". Kept exact (no round) so a fractional
-            // source percentage isn't silently truncated.
-            //
-            // KNOWN DIVERGENCE (#211): since epic PR4b the reactive DAMAGE half is
-            // defense-mitigated and crit-eligible, so this flat-attack shield no longer shares
-            // the damage's basis — vs a high-defense enemy the shield over-grants relative to
-            // the true dealt amount (and under-grants on a crit). Tying the shield to the
-            // ACTUAL applyReactiveDamage result needs new eventCtx plumbing (thread the dealt
-            // amount into the reactive-shield executor for this trigger) — deferred.
+            // SP-G G3: the shield is "30% of the damage dealt" — FrontLine's OWN 80% reactive
+            // hit, which applyReactiveDamage computes defense-mitigated and crit-eligible. The
+            // reactive-damage intent drains before this shield intent (enqueue order) and stamps
+            // its dealt amount into reactiveDealtByOwner; basis:'damage-dealt' reads it via the
+            // exec ctx (see triggers.ts). pct is the raw clause percentage (30) — no attack fold.
             out.push({
                 id: '',
                 type: 'shield',
@@ -2841,8 +2854,8 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
                 conditions: [],
                 config: {
                     type: 'shield',
-                    basis: 'attack',
-                    pct: (shieldPct * damagePct) / 100,
+                    basis: 'damage-dealt',
+                    pct: shieldPct,
                 },
                 oncePerRound,
                 autoFilled: true,
@@ -4647,8 +4660,13 @@ export function parseSkillEffects(
 
         // Detect accumulating buffs: stacks gained per trigger with a recurring duration.
         // passive sources → per-round; active/charge → per-active/per-charge.
+        // SP-G G1b EXCEPTION: a start-of-combat "N stacks" grant (Meatshield) is a ONE-TIME
+        // grant, not a per-turn accumulator — leave stackTrigger undefined so buildShipAbilities'
+        // isAccumulatingBuff gate is false and the pre-combat relabel fires. The N-stack count and
+        // the persistent 'recurring' duration are preserved (seeded once at combat start).
         let stackTrigger: StackTrigger | undefined;
-        if (stacks !== undefined && duration === 'recurring') {
+        const startOfCombatOneShot = START_OF_COMBAT_GRANT_RE.test(prevText);
+        if (stacks !== undefined && duration === 'recurring' && !startOfCombatOneShot) {
             if (source === 'passive1' || source === 'passive2' || source === 'passive3') {
                 stackTrigger = 'per-round';
             } else if (source === 'active') {

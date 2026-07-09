@@ -336,6 +336,54 @@ describe('Overload lifecycle — engine fixtures', () => {
         expect(namesNoDebuff.some((round) => round.includes('Overload'))).toBe(true);
     });
 
+    it('3b. Butcher gains Marauder Rage II on debuff-inflict on the POSITIONAL path (simulateBattle, team-symmetric)', () => {
+        // Channel (B): the SP-G G4 gap. Channel-A test 3 proves this fires under runCombat; here we
+        // pin it under the positional two-team simulateBattle path, where SP0 found it silently
+        // never fired. Butcher inflicts Inferno II every round on an indestructible wall (no kill),
+        // so the ONLY source of Marauder Rage II is the on-debuff-inflicted reaction.
+        const butcher = ship('Butcher', {
+            activeSkillText:
+                'This Unit deals <unit-damage>160% damage</unit-damage> and inflicts <unit-skill>Inferno II</unit-skill> for 3 turns.',
+            firstPassiveSkillText: 'placeholder (R0 — superseded by the refit-active R2 passive)',
+            secondPassiveSkillText: BUTCHER_P2,
+            refits: [{}, {}] as Ship['refits'],
+        });
+        const r = simulateBattle({
+            playerTeam: [place(butcher, 'M4', 100, 1e12)],
+            enemyTeam: [place(dummy('wall', 'Defender'), 'M3', 1, 1e12)],
+            rounds: 4,
+        });
+        const mr = buffActorRounds(r, 'Marauder Rage II');
+        expect(mr.actors.has('attacker')).toBe(true);
+    });
+
+    it('3c. team symmetry — an ENEMY-side Butcher inflicting a debuff ALSO gains Marauder Rage II positionally', () => {
+        // Mirror of 3b with the Butcher on the ENEMY team. The G4 fix is parse-time (side-agnostic),
+        // so the reaction must fire identically on either side (feedback_engine_team_symmetry). A
+        // player-side indestructible wall is the debuff victim (no kill confound); the enemy Butcher
+        // inflicts Inferno II every round → its ONLY source of Marauder Rage II is on-debuff-inflicted.
+        const enemyButcher = ship('EnemyButcher', {
+            activeSkillText:
+                'This Unit deals <unit-damage>160% damage</unit-damage> and inflicts <unit-skill>Inferno II</unit-skill> for 3 turns.',
+            firstPassiveSkillText: 'placeholder (R0 — superseded by the refit-active R2 passive)',
+            secondPassiveSkillText: BUTCHER_P2,
+            refits: [{}, {}] as Ship['refits'],
+        });
+        const r = simulateBattle({
+            playerTeam: [place(dummy('wall', 'Defender'), 'M3', 1, 1e12)],
+            enemyTeam: [place(enemyButcher, 'M4', 100, 1e12)],
+            rounds: 4,
+        });
+        const mr = buffActorRounds(r, 'Marauder Rage II');
+        const enemyId = r.roster.find((x) => x.side === 'enemy')!.actorId;
+        // The grant landed — and ONLY on the enemy Butcher's own actor id (team-agnostic self-grant;
+        // it never leaks to the player side).
+        expect(mr.actors.has(enemyId)).toBe(true);
+        for (const a of mr.actors) {
+            expect(r.roster.find((x) => x.actorId === a)?.side).toBe('enemy');
+        }
+    });
+
     // ── 4. Ruiner on-enemy-repaired (gain Overload) ──────────────────────────
     it('4. Ruiner gains Overload when an enemy performs a repair (on-enemy-repaired)', () => {
         // Channel (A) healing mode: an enemy attacker that casts an all-allies repair each round.

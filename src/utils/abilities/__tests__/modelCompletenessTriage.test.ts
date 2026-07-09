@@ -756,67 +756,54 @@ describe('SP-G — engine known-limitations', () => {
     const CINYA_P1_SPG =
         'This Unit <unit-damage>repairs 3.5%</unit-damage> of its Max HP every turn.';
 
-    it('Meatshield: "gains 3 stacks of Protection" still rides on-cast — DELIBERATELY UNCHANGED (deferred)', () => {
+    it('Meatshield: "gains 3 stacks of Protection" is a one-time pre-combat grant (SP-G G1b)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: MEATSHIELD_P1_SPG }, 'passive');
         const protection = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
         );
-        // TRUE TODAY: pinned verbatim by
-        // src/utils/abilities/__tests__/roundBoundaryTriggerConsistency.test.ts, describe
-        // ('Meatshield: start-of-combat Protection stacks — DELIBERATELY UNCHANGED (deferred)') —
-        // that test's own name documents this as a CONSCIOUS deferral (the parser's stack-climb
-        // behaviour is keyed off the on-cast shape; relabeling only the trigger without also
-        // reworking the stack accumulation would misrepresent the mechanic). No recurring
-        // per-turn trigger exists today — this is the SP-G mechanic to add.
-        expect(protection?.trigger).toBe('on-cast');
+        // SP-G G1b: a start-of-combat "N stacks" grant no longer climbs per-round — it seeds all
+        // N stacks once at combat start. Pinned end-to-end by roundBoundaryTriggerConsistency.test.ts
+        // ('Meatshield: start-of-combat Protection stacks → one-time pre-combat 3-stack grant').
+        expect(protection?.trigger).toBe('pre-combat');
     });
 
-    it('Kinetik: "gains a Shield ... every turn" still rides on-cast — no recurring trigger exists yet', () => {
+    it('Kinetik: "gains a Shield ... every turn" rides start-of-turn (SP-G G1a)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: KINETIK_P1_SPG }, 'passive');
         const shield = abilities.find((a) => a.type === 'shield');
-        // TRUE TODAY: pinned verbatim by
-        // src/utils/abilities/__tests__/roundBoundaryTriggerConsistency.test.ts, describe
-        // ('Kinetik / Cinya: "every turn" (no "at the start of" phrase) — out of PR4 scope,
-        // unaffected'), it('Kinetik: the per-turn shield stays on-cast (no start-of-X phrase to
-        // detect)'). "Every turn" (unlike "at the start of the turn") has no detector at all —
-        // SP-G needs a genuine recurring trigger, not just a relabel.
-        expect(shield?.trigger).toBe('on-cast');
+        // SP-G G1a: detectEveryTurnTrigger routes the trailing "every turn" self-shield to the
+        // start-of-turn LIVE trigger. Pinned end-to-end by roundBoundaryTriggerConsistency.test.ts
+        // ('Kinetik / Cinya: "every turn" self shield/heal ride start-of-turn (SP-G G1a)').
+        expect(shield?.trigger).toBe('start-of-turn');
     });
 
-    it('Cinya: "repairs ... every turn" still rides on-cast — no recurring trigger exists yet', () => {
+    it('Cinya: "repairs ... every turn" rides start-of-turn (SP-G G1a)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: CINYA_P1_SPG }, 'passive');
         const heal = abilities.find((a) => a.type === 'heal');
-        // TRUE TODAY: pinned verbatim by the same roundBoundaryTriggerConsistency.test.ts
-        // describe block as Kinetik above, it('Cinya: the per-turn heal stays on-cast (no
-        // start-of-X phrase to detect)'). Same "every turn" gap, distinct ship/ability.
-        expect(heal?.trigger).toBe('on-cast');
+        expect(heal?.trigger).toBe('start-of-turn');
     });
 
-    // ── Butcher: positional-path Rage sourceId — NO CORPUS PROBE (see reconciliation doc) ──
+    // ── Butcher: positional-path Rage — SATISFIED by a positional integration pin (SP-G G4) ──
     // Butcher's "On inflicting a debuff, this Unit gains Marauder Rage II" (second_passive_skill_
-    // text) already has a build-output probe (buildShipAbilities.test.ts, "Butcher p2: remove
-    // Overload on kill + Marauder Rage II on debuff-inflicted") AND an engine-level integration
-    // pin (overloadLifecycle.test.ts, "3. Butcher gains Marauder Rage II when it inflicts a
-    // debuff (on-debuff-inflicted)") — but that integration pin runs ONLY through Channel (A),
-    // `runCombat` (DPS/healing mode), per the file's own docstring. It does NOT exercise the
-    // POSITIONAL two-team path (`simulateBattle`).
+    // text) has a build-output probe (buildShipAbilities.test.ts, "Butcher p2: remove Overload on
+    // kill + Marauder Rage II on debuff-inflicted") AND a Channel-A integration pin
+    // (overloadLifecycle.test.ts, "3. Butcher gains Marauder Rage II when it inflicts a debuff").
+    // SP0 empirically found the reaction did NOT fire on the POSITIONAL two-team `simulateBattle`
+    // path — a team-symmetry gap with no `buildShipAbilities`-observable proxy (the built ability
+    // is byte-identical regardless of which engine channel consumes it).
     //
-    // EMPIRICALLY VERIFIED during this task (throwaway probe, not committed): a Butcher placed in
-    // a real `simulateBattle` two-team battle, casting an active that inflicts Inferno II every
-    // round, DOES emit a `dot-applied` combat-log entry (the debuff infliction lands, sourceId
-    // correctly attributed to the caster) — but NO `buff` combat-log entry for Marauder Rage II
-    // ever appears anywhere across the whole battle. So the on-debuff-inflicted → Marauder Rage II
-    // reaction that works on Channel (A) does NOT fire on the positional path. This is a genuine,
-    // currently-unpinned gap.
+    // SP-G G4 ROOT-CAUSED and FIXED this: "On inflicting a debuff" was double-classified — promoted
+    // to the on-debuff-inflicted TRIGGER (detectReactiveTrigger / APPLYING_DEBUFF_RE) AND, from the
+    // same phrase, given a redundant `enemy-debuff` GATE condition (detectGrantConditions'
+    // appliesDebuffGate). That `derivable:true` condition gates the reactive drain against the
+    // enemy's LIVE debuff store — populated on the aggregate DPS path (shared enemy dummy) but NOT
+    // positionally (DoTs live in per-victim stores) — so it silently blocked Marauder Rage II in
+    // real team battles. The fix (buildShipAbilities.ts) drops the redundant `enemy-debuff`
+    // condition when the trigger is on-debuff-inflicted (the trigger IS the gate — the exact
+    // COLLISION-SCOPE pattern already used for on-enemy-buffed/enemy-buff).
     //
-    // No `buildShipAbilities`-observable proxy exists for this (the built ability object is
-    // byte-identical regardless of which engine channel consumes it — the bug is purely in the
-    // positional path's reactive-listener/event wiring, invisible to a build-output assertion).
-    // No existing integration test exercises this exact failure either (the closest one,
-    // overloadLifecycle.test.ts's Channel-B tests, only covers KILL reactives, not
-    // on-debuff-inflicted) — so, per the task protocol, this is recorded as MISSING in the
-    // reconciliation doc (`docs/model-completeness-triage-2026-07-05.md`) rather than fabricated
-    // a path here. SP-G will need to author a new positional-path integration test for this.
+    // The Butcher SP-G marker is therefore satisfied by the new POSITIONAL-PATH integration pins
+    // (overloadLifecycle.test.ts tests "3b" player-side + "3c" enemy-side team-symmetry) rather
+    // than a corpus `it.fails` flip — there is nothing build-observable to assert here.
 });
 
 describe('confirm-GREEN-only — locked FPs', () => {

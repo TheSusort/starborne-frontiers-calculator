@@ -237,6 +237,11 @@ function registerActorAbilityStatuses(
                 stacks: cfg.stacks,
                 parsedEffects: cfg.parsedEffects,
                 ...(cfg.type === 'debuff' ? { application: cfg.application } : {}),
+                // SP-G G1b: threads the config's isStackable flag through so the aura branch of
+                // activeAbilityStatuses can tell a genuinely-stackable one-shot grant (Meatshield's
+                // Protection) apart from the structural stacks:1 default every non-stackable buff
+                // carries — only the former should surface a reported stack count.
+                ...(cfg.isStackable ? { isStackable: true } : {}),
             };
             // `as const` keeps the literal types (side, sourceSlot) so the spread into
             // a union variant below doesn't widen them — runtime object is unchanged.
@@ -2461,6 +2466,13 @@ export function runCombat(input: CombatEngineInput): {
     // skips the roll entirely) — no gate is ever created for them, so they can never crit by
     // construction, independent of the RNG stream.
     const reactiveDamageCritGates = new Map<string, RateGate>();
+    // SP-G G3: the last reactive-damage `raw` each owner dealt, so a sibling reactive shield
+    // enqueued on the SAME trigger (FrontLine's "Shield equal to 30% of the damage dealt")
+    // can scale off the ACTUAL mitigated/crit amount rather than a flat attack approximation.
+    // Written by applyReactiveDamage (below), read by the reactive-shield executor via the
+    // exec ctx. Damage intent drains before the shield intent (enqueue order), so the value is
+    // fresh when the shield reads it.
+    const reactiveDealtByOwner = new Map<string, number>();
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
@@ -3112,6 +3124,11 @@ export function runCombat(input: CombatEngineInput): {
         // reactive heals fired by that emit correctly count toward THIS round (C2b-3).
         repairedThisRound.clear();
         hitThisRound.clear();
+        // SP-G G3 (CodeRabbit): reset the reactive dealt-amount slot each round so a
+        // basis:'damage-dealt' shield can never read a stale value from a previous round if its
+        // paired reactive-damage proc is gated out (differing procChance/oncePerRound/condition)
+        // and applyReactiveDamage never runs — the fallback read then correctly resolves to 0.
+        reactiveDealtByOwner.clear();
         // Reset per round so a start-of-round reactive drain (round 2+) stamps duringTurnOf
         // as turn-less (undefined) rather than the previous round's last acting actor.
         actingActorId = undefined;
@@ -4099,7 +4116,14 @@ export function runCombat(input: CombatEngineInput): {
             );
             // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
             // credits nothing), matching the pre-fix zero-damage guard.
-            if (raw <= 0) return;
+            if (raw <= 0) {
+                // SP-G G3: a non-positive reactive hit still resets the owner's dealt-amount slot,
+                // so a paired basis:'damage-dealt' shield (FrontLine) reads 0 for THIS proc rather
+                // than a stale prior-round value.
+                reactiveDealtByOwner.set(ownerId, 0);
+                return;
+            }
+            reactiveDealtByOwner.set(ownerId, raw);
             creditDamage(ownerId, 'direct', raw);
         };
 
@@ -5175,6 +5199,7 @@ export function runCombat(input: CombatEngineInput): {
                         // undefined → assume-met fallback (byte-identical).
                         nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
                         lastTurnCtxByActor,
+                        reactiveDealtByOwner,
                         enemyType,
                         enemyHp,
                         // Drain-time HP% includes this round's damage SO FAR (the round
@@ -5332,23 +5357,25 @@ export function runCombat(input: CombatEngineInput): {
 
         // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
         // the pre-refactor drainIntents (same runtimes/playerIds/lowest-speed/grantAllyCharges).
-        const drainIntents = (): void =>
-            drainQueue(intentQueue, {
-                runtimes: runtimesById,
-                recipientIds: playerIds,
-                isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
-                grantAllyCharges: bySide('player').grantAllyCharges,
-                removeEnemyCharges: bySide('player').removeEnemyCharges,
-                removeChargesFrom: bySide('player').removeChargesFrom,
-                selfHpPctFor: bySide('player').selfHpPctFor,
-                enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
-                enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
-                firstActivatorId,
-                lastStandingId: soleSurvivorOf(allPlayerActors),
-                oncePerRoundConsumed,
-                adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
-                footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
-            });
+        // Hoisted into a named factory (SP-G G2) so the new pre-cast start-of-turn grant drain
+        // can reuse the exact same ctx shape as the full drain.
+        const playerDrainCtx = (): ReactiveSideCtx => ({
+            runtimes: runtimesById,
+            recipientIds: playerIds,
+            isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
+            grantAllyCharges: bySide('player').grantAllyCharges,
+            removeEnemyCharges: bySide('player').removeEnemyCharges,
+            removeChargesFrom: bySide('player').removeChargesFrom,
+            selfHpPctFor: bySide('player').selfHpPctFor,
+            enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
+            enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
+            firstActivatorId,
+            lastStandingId: soleSurvivorOf(allPlayerActors),
+            oncePerRoundConsumed,
+            adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
+            footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
+        });
+        const drainIntents = (): void => drainQueue(intentQueue, playerDrainCtx());
 
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
         // recipientIds is the enemy-attacker ids (PR1 exercises self-target only; this
@@ -5357,27 +5384,58 @@ export function runCombat(input: CombatEngineInput): {
         // ally-charge grant now bumps the enemy attackers' charges, not the player team.
         // Skips entirely when the enemy queue is empty (DPS / no enemy reactives) so the
         // player path is untouched.
+        // Use the enemy executor's own runtime map (NOT runtimesById, which drives
+        // leech scan / seeding / credit and must stay player-only). This reuses the
+        // existing enemyPlayerRuntimeByActorId — same source, key, and values.
+        // Hoisted into a named factory (SP-G G2) alongside playerDrainCtx above.
+        const enemyDrainCtx = (): ReactiveSideCtx => ({
+            runtimes: enemyPlayerRuntimeByActorId,
+            recipientIds: enemyAttackerActorIds,
+            isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
+            grantAllyCharges: bySide('enemy').grantAllyCharges,
+            removeEnemyCharges: bySide('enemy').removeEnemyCharges,
+            removeChargesFrom: bySide('enemy').removeChargesFrom,
+            selfHpPctFor: bySide('enemy').selfHpPctFor,
+            enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
+            enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
+            firstActivatorId,
+            lastStandingId: soleSurvivorOf(enemyAttackerActors),
+            oncePerRoundConsumed,
+            adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
+            footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
+        });
         const drainEnemyIntents = (): void => {
             if (enemyIntentQueue.length === 0) return;
-            // Use the enemy executor's own runtime map (NOT runtimesById, which drives
-            // leech scan / seeding / credit and must stay player-only). This reuses the
-            // existing enemyPlayerRuntimeByActorId — same source, key, and values.
-            drainQueue(enemyIntentQueue, {
-                runtimes: enemyPlayerRuntimeByActorId,
-                recipientIds: enemyAttackerActorIds,
-                isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
-                grantAllyCharges: bySide('enemy').grantAllyCharges,
-                removeEnemyCharges: bySide('enemy').removeEnemyCharges,
-                removeChargesFrom: bySide('enemy').removeChargesFrom,
-                selfHpPctFor: bySide('enemy').selfHpPctFor,
-                enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
-                enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
-                firstActivatorId,
-                lastStandingId: soleSurvivorOf(enemyAttackerActors),
-                oncePerRoundConsumed,
-                adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
-                footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
-            });
+            drainQueue(enemyIntentQueue, enemyDrainCtx());
+        };
+
+        // SP-G G2: start-of-turn GRANTS (buffs/shields/heals) must apply BEFORE the acting owner
+        // casts, so a self-buff boosts the same turn it is granted (matching the game). Scoped to
+        // the acting owner only. CHARGE intents are EXCLUDED — they keep their post-cast drain
+        // (see drainIntents()/drainEnemyIntents() calls in the turn loop below), on which the
+        // Cobalt charge ledger depends. Team-symmetric: drains both side queues, so a ship on
+        // either side gets the same pre-cast ordering. Turn-block suppression is inherited from
+        // drainQueue's isTurnBlocked filter — a stunned owner's grant is dropped, matching every
+        // other reactive.
+        const drainStartOfTurnGrants = (ownerId: string): void => {
+            // The spliced batch (p/e) is drained in isolation; any follow-up intents a grant
+            // chain-enqueues land on the global queues and drain at the normal post-cast point.
+            const isGrant = (i: Intent): boolean =>
+                i.ownerId === ownerId &&
+                i.ability.trigger === 'start-of-turn' &&
+                i.ability.type !== 'charge';
+            const take = (queue: Intent[]): Intent[] => {
+                const ready: Intent[] = [];
+                for (let i = 0; i < queue.length; ) {
+                    if (isGrant(queue[i])) ready.push(queue.splice(i, 1)[0]);
+                    else i++;
+                }
+                return ready;
+            };
+            const p = take(intentQueue);
+            if (p.length) drainQueue(p, playerDrainCtx());
+            const e = take(enemyIntentQueue);
+            if (e.length) drainQueue(e, enemyDrainCtx());
         };
 
         // Path-B flush (Task 10): grants buffered from a PRIOR round's post-round enemy death
@@ -5549,6 +5607,10 @@ export function runCombat(input: CombatEngineInput): {
                 // uses a ≥2-turn block spanning a proc turn.
                 // The dummy-sink enemy is also bumped here; harmless (no every-n-turns ability on it).
                 actor.turnsTaken += 1;
+
+                // SP-G G2: apply this actor's start-of-turn GRANTS before it acts (see
+                // drainStartOfTurnGrants). Runs for every acting actor on both sides.
+                drainStartOfTurnGrants(actor.id);
 
                 // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start
                 // (mirroring the dummy enemy's DoT-tick timing — DoTs tick at the afflicted ship's

@@ -45,6 +45,12 @@ export interface AbilityStatusPayload {
     stacks: number;
     parsedEffects: ParsedBuffEffects;
     application?: 'inflict' | 'apply';
+    /** SP-G G1b: mirrors the ability config's `isStackable` flag. `stacks` is populated on
+     *  EVERY buff/debuff payload (even non-stackable ones default to 1) — this flag lets a
+     *  consumer (the aura branch of activeAbilityStatuses) distinguish "genuinely stackable,
+     *  report the count" from "stacks:1 is just the structural default, no count to report".
+     *  Absent/false preserves prior behaviour byte-for-byte. */
+    isStackable?: boolean;
 }
 
 interface AbilityStatusBase {
@@ -1389,7 +1395,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             if (!conditionsMet(a.conditions, resolveCtx(a.casterId ?? 'attacker'))) continue;
             out.push({
                 payload: a.payload,
-                active: { buffName: a.payload.buffName, turnsRemaining: 'recurring' },
+                active: {
+                    buffName: a.payload.buffName,
+                    turnsRemaining: 'recurring',
+                    // SP-G G1b: a one-time "N stacks" grant (Meatshield's Protection) rides the
+                    // aura branch once its per-round stackTrigger cadence is suppressed (a stackable,
+                    // non-accumulating buff — see skillTextParser's startOfCombatOneShot carve-out).
+                    // Without this, the aura's reported stack count silently dropped (undefined),
+                    // even though the STATIC payload.stacks carried the configured count all along.
+                    // Gated on isStackable (not just `stacks !== undefined`) because EVERY buff/debuff
+                    // payload carries a `stacks` field — non-stackable buffs default it to 1, which is
+                    // a structural placeholder, not a meaningful count to surface here.
+                    ...(a.payload.isStackable && a.payload.stacks !== undefined
+                        ? { stacks: a.payload.stacks }
+                        : {}),
+                },
                 casterId: a.casterId,
             });
         }
@@ -1426,6 +1446,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // enemyTargetId). The `ownerId` param is ignored for enemy-side; `enemyTargetId`
         // is ignored for self-side — matching the pre-Task-1 behavior where enemy maps were
         // singular and ownerId was never consulted for them.
+        // NOTE: like the aura branch, this finite-duration branch does not surface `active.stacks`.
+        // No corpus ship pairs a stackable status with a finite duration today; if one appears,
+        // apply the same isStackable-gated stacks spread used in the aura branch above.
         const map = side === 'self' ? selfMaps.get(ownerId) : enemyMaps.get(enemyTargetId);
         const out: ActiveAbilityStatus[] = [];
         if (map) {

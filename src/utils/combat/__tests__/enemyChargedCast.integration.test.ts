@@ -143,7 +143,7 @@ const reactionAbilitiesFromText = (passiveText: string, refitCount: number): Abi
 // Resolve the three real reaction ability sets ONCE (parse is pure).
 const CURATOR_R0 = reactionAbilitiesFromText(CURATOR_R0_TEXT, 0); // purge 1
 const CURATOR_R4 = reactionAbilitiesFromText(CURATOR_R4_TEXT, 4); // purge 2 + Block Buff(2)
-const FRONTLINE_R2 = reactionAbilitiesFromText(FRONTLINE_R2_TEXT, 2); // damage 80% + shield (attack×24%)
+const FRONTLINE_R2 = reactionAbilitiesFromText(FRONTLINE_R2_TEXT, 2); // damage 80% + shield (30% of dealt damage)
 
 // ─── Enemy fixtures ───────────────────────────────────────────────────────────────────
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -420,31 +420,40 @@ describe('FrontLine damage+shield-on-enemy-charged (engine integration)', () => 
         expect(focusCumulativeDamage(reaction)).toBeGreaterThan(focusCumulativeDamage(control));
     });
 
-    it('the shield magnitude tracks attack (basis attack × 24%): a 2× attack FrontLine yields ~2× shield', () => {
-        // Shield basis 'attack', pct 24 → raw = effectiveAttack × 0.24. Doubling the focus's attack
-        // doubles the credited shield (proportionality, mirroring the amplification/Spearhead tests).
-        const lowAtk = runCombat(
+    it('the shield magnitude tracks the ACTUAL dealt damage (shrinks under enemy defense; basis damage-dealt)', () => {
+        // The reactive shield is 30% of FrontLine's OWN 80% reactive hit, which is defense-mitigated.
+        // A high-defense charging enemy mitigates that hit → a SMALLER shield. The old flat
+        // attack×24% model ignored the victim's defense entirely, so it would grant an EQUAL shield
+        // in both runs — this assertion discriminates the fix from the old approximation.
+        const lowDef = runCombat(
             buildFocusInput({
                 reactionAbilities: FRONTLINE_R2,
                 enemies: [buffingChargedEnemy({ id: 'e1', startCharged: true, chargeCount: 1 })],
                 numRounds: 1,
-                focusAttack: 1000,
             })
         );
-        const highAtk = runCombat(
+        const highDef = runCombat(
             buildFocusInput({
                 reactionAbilities: FRONTLINE_R2,
-                enemies: [buffingChargedEnemy({ id: 'e1', startCharged: true, chargeCount: 1 })],
+                enemies: [
+                    {
+                        ...buffingChargedEnemy({ id: 'e1', startCharged: true, chargeCount: 1 }),
+                        stats: {
+                            attack: 1000,
+                            crit: 0,
+                            critDamage: 0,
+                            speed: 40,
+                            defence: 100000,
+                        },
+                    },
+                ],
                 numRounds: 1,
-                focusAttack: 2000,
             })
         );
-        const sLow = totalShield(lowAtk);
-        const sHigh = totalShield(highAtk);
-        expect(sLow).toBeGreaterThan(0);
-        // ~2× (allow a small tolerance for any non-attack folding); strictly larger and near double.
-        expect(sHigh).toBeGreaterThan(sLow * 1.8);
-        expect(sHigh).toBeLessThan(sLow * 2.2);
+        expect(totalShield(lowDef)).toBeGreaterThan(0);
+        expect(totalShield(highDef)).toBeGreaterThan(0);
+        // Dealt-amount basis: mitigation shrinks the shield. (Old attack-basis model → equal.)
+        expect(totalShield(highDef)).toBeLessThan(totalShield(lowDef));
     });
 });
 

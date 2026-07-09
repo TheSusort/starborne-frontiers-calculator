@@ -378,49 +378,32 @@ describe('Cobalt second passive — charge AND Out. Damage Up II coexist (no cla
     });
 });
 
-// ─── #210 review follow-up: the buff is CONSUMED live (engine level, not just the tag) ───────
+// ─── SP-G G2: the start-of-turn grant now precedes the owner's cast ──────────────────────────
 //
-// The parser-level assertion above proves the TAG; this pins what the ENGINE does with it.
-// Probed behavior (attack 4000, +30% Out. Damage Up II):
-//   old on-cast tag        → [5200, 4000, 4000, …]  boost dies after round 1 (seed-once, 1-turn)
-//   new start-of-turn tag  → [4000, 5200, 4000, 5200, …]  recurring, but ALTERNATING
-//   true in-game behavior  → boosted EVERY turn (grant precedes the act)
-//
-// KNOWN LIMITATION (documented, deliberately pinned): the start-of-turn grant drains AFTER the
-// owner's cast, so each grant boosts the FOLLOWING turn; and a re-grant landing while the buff
-// is still active is swallowed before the post-turn decrement removes it, producing the
-// alternating cadence instead of a steady one. Fixing this means reordering intent drains
-// relative to the cast — an engine-ordering change out of #210's scope. The re-tag is still a
-// strict improvement (recurring vs first-round-only). When the ordering fix lands, the
-// alternation assertions below MUST flip to every-turn — that is the point of pinning them.
-describe('Cobalt Out. Damage Up II — engine consumption (recurring; alternating cadence pinned)', () => {
+// FIXED (SP-G G2): a pre-cast drain of the acting owner's start-of-turn GRANT intents runs
+// between the turn-started emit and the cast, so the Out. Damage Up II buff boosts the SAME turn
+// it is granted — every turn, not every other turn. (The CHARGE half is excluded from this drain
+// and still banks post-cast, so the Part 1/Part 2 charge ledgers are unchanged.)
+describe('Cobalt Out. Damage Up II — engine consumption (recurring, every turn)', () => {
     const runFocusDamage = (withBuff: boolean): number[] => {
         const abilities = resolvePassiveAbilities(COBALT_P2).filter(
             (a) =>
-                a.type !== 'charge' && // charge half exercised by the ledger tests above
+                a.type !== 'charge' &&
                 (withBuff ||
                     !(a.config.type === 'buff' && a.config.buffName === 'Out. Damage Up II'))
         );
         const r = runCombat(
-            buildInput({
-                chargeCount: 0,
-                numRounds: 4,
-                passiveAbilities: abilities,
-            })
+            buildInput({ chargeCount: 0, numRounds: 4, passiveAbilities: abilities })
         );
         return r.rounds.map((round) => round.directDamage);
     };
 
-    it('the buff recurs beyond round 1 (fails under the pre-#210 on-cast/seed-once model)', () => {
+    it('the buff boosts EVERY turn (pre-cast grant ordering)', () => {
         const boosted = runFocusDamage(true);
         const control = runFocusDamage(false);
-        // Rounds 2 and 4 are boosted — under the old on-cast tag EVERY round after the first
-        // was unboosted, so these are the discriminating assertions.
+        expect(boosted[0]).toBeGreaterThan(control[0]);
         expect(boosted[1]).toBeGreaterThan(control[1]);
+        expect(boosted[2]).toBeGreaterThan(control[2]);
         expect(boosted[3]).toBeGreaterThan(control[3]);
-        // Pinned alternation (known limitation above): rounds 1 and 3 are NOT boosted today.
-        // A future drain-ordering fix flips these to boosted — update them consciously.
-        expect(boosted[0]).toBe(control[0]);
-        expect(boosted[2]).toBe(control[2]);
     });
 });
