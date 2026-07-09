@@ -31,6 +31,11 @@ export interface VictimDamageOutcome {
     shieldBefore: number;
     hpDamage: number;
     barriered: boolean;
+    /** SP-E Voron/Orel: the portion of this hit that was CONVERTED into a Damage-over-Time
+     *  effect instead of landing as damage this turn. The caller subtracts it from the
+     *  per-victim damage-taken credit so a transformed hit reads as 0 damage taken this round
+     *  (the converted amount arrives over time via DoT ticks). Absent/0 for every normal hit. */
+    transformedToDot?: number;
 }
 
 /** Per-cell damage scale keyed off the resolved CellRole. */
@@ -210,7 +215,9 @@ export function applyPositionalDamage(args: {
             const ampPct = outgoingAmplificationFor?.(victim, didCrit) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
             const outcome = applyToVictim(victim, dmg, isAnchor);
-            emitHit?.(victim, dmg, didCrit);
+            // A hit converted into a DoT (Voron/Orel) counts as 0 damage taken this round — the
+            // converted amount lands over time via DoT ticks — so exclude it from the credit.
+            emitHit?.(victim, dmg - (outcome.transformedToDot ?? 0), didCrit);
             onVictimResolved?.(victim, dmg, outcome, didCrit);
         }
     }

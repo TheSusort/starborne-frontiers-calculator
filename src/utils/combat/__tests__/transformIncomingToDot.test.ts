@@ -260,12 +260,13 @@ describe('Voron replaces a direct hit with a generic DoT (D/turns per tick, SP-A
         expect(totalHpLost).toBeCloseTo(totalTickDamage, 6);
     });
 
-    it('records ZERO net incoming HP in the sim intake bucket for the transform round (battle-sim HP fix)', () => {
-        // The positional battle sim derives each ship's HP% from `perActorIncoming`
-        // (incoming − shieldAbsorbed − barrierAbsorbed), NOT hp-changed. A transformed direct hit
-        // must net to zero there — the hit is DEFERRED into a DoT, not lost as HP this turn.
-        // Round 1: Voron (speed 1000) ticks BEFORE the attacker, so no DoT ticks yet — the only
-        // intake this round is the transformed direct hit, which must net to 0 (pre-fix: 5000).
+    it('the transform round shows ZERO HP loss in the battle-sim HP derivation (not the raw 5000)', () => {
+        // The positional battle sim derives each ship's per-round HP loss exactly as below:
+        // the per-victim `perActorIncoming` bucket (incoming − shield − barrier) when present,
+        // else the raw `perTargetDamage` fallback (see battleSimulator.assembleBattleResult). A
+        // transformed direct hit must net to 0 on BOTH channels — the hit is DEFERRED into a DoT,
+        // not lost as HP this turn. Round 1: Voron (speed 1000) ticks BEFORE the attacker, so no
+        // DoT ticks yet — the only intake this round is the transformed direct hit.
         const input = BASE_PLAYER_SIDE({
             numRounds: 2,
             teamActors: [playerVoron('voron', 'M4')],
@@ -273,9 +274,14 @@ describe('Voron replaces a direct hit with a generic DoT (D/turns per tick, SP-A
         });
         const result = runCombat({ ...input, bus: createEventBus() });
         const round1 = result.rounds.find((r) => r.round === 1)!;
-        const intake = round1.perActorIncoming?.['voron'];
-        const netHp = intake ? intake.incoming - intake.shieldAbsorbed - intake.barrierAbsorbed : 0;
-        expect(netHp).toBe(0);
+        // Replicate battleSimulator's `incomingHpThisRound` formula exactly.
+        const taken = round1.perTargetDamage?.['voron'] ?? 0;
+        const inc = round1.perActorIncoming?.['voron'];
+        const simHpLoss = inc
+            ? Math.max(0, inc.incoming - inc.shieldAbsorbed - inc.barrierAbsorbed)
+            : taken;
+        // Pre-fix: 5000 (raw hit leaked through the perTargetDamage fallback). Post-fix: 0.
+        expect(simHpLoss).toBe(0);
     });
 
     it('the created generic DoT ticks at exactly D/turns × 0.8 (SP-A’s 20%-less-from-DoT reduction applies)', () => {

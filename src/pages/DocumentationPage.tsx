@@ -3165,7 +3165,10 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         Pin a ship to open a per-round detail card with its full
-                                        breakdown for that round
+                                        breakdown for that round, including its active buffs and
+                                        debuffs — Damage over Time effects (Corrosion, Inferno,
+                                        Bomb, and converted-damage DoTs) are listed among the
+                                        debuffs
                                     </li>
                                     <li>
                                         The event log lists every turn-by-turn action, reaction, and

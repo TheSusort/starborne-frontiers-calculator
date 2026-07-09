@@ -344,6 +344,14 @@ describe('assembleBattleResult — buff tracking', () => {
                 dotType: 'generic',
                 stacks: 1,
             },
+            {
+                type: 'dot-applied',
+                sourceId: 'enemy-front',
+                targetId: 'player-team',
+                round: 1,
+                dotType: 'bomb',
+                stacks: 1,
+            },
         ];
         const result = assembleBattleResult({
             events,
@@ -353,6 +361,7 @@ describe('assembleBattleResult — buff tracking', () => {
         });
         expect(find(result, 1, 'enemy-front').activeDebuffs).toContain('Inferno');
         expect(find(result, 1, 'enemy-back').activeDebuffs).toContain('Damage over Time');
+        expect(find(result, 1, 'player-team').activeDebuffs).toContain('Bomb');
     });
 });
 
