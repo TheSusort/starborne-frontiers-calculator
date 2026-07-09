@@ -613,12 +613,15 @@ describe('Sentinel (player-side) — reactive heal + damage fire on ally crit, n
         const dmg = reactiveDamage.filter((e) => e.sourceId === 'sentinel');
         expect(dmg.length).toBeGreaterThan(0);
         expect(dmg.every((e) => e.amount > 0 && e.duringTurnOf === 'attacker')).toBe(true);
-        // Reactive HEAL surfaced for the log: caster=sentinel, a recipient present, same stamp.
+        // Reactive HEAL surfaced for the log: caster=sentinel, same stamp, and the repair lands
+        // on the CRIT-ing ally (attacker) — NOT the healTargetId fallback (ally-b). This proves
+        // the damagedAllyId routing via the perTarget recipient, catching the wrong-target trap.
         const heal = reactiveHeals.filter((e) => e.casterId === 'sentinel');
         expect(heal.length).toBeGreaterThan(0);
-        expect(heal.every((e) => e.perTarget.length > 0 && e.duringTurnOf === 'attacker')).toBe(
-            true
-        );
+        expect(heal.every((e) => e.duringTurnOf === 'attacker')).toBe(true);
+        const healRecipients = heal.flatMap((e) => e.perTarget.map((t) => t.targetId));
+        expect(healRecipients).toContain('attacker');
+        expect(healRecipients).not.toContain('ally-b');
     });
 
     it('does NOT heal or deal damage on its own turn when no ally crits (the on-turn leak)', () => {
@@ -699,10 +702,17 @@ describe('Sentinel (enemy-side) — team symmetry: an enemy Sentinel reacts to i
             enemyAttackers: [enemySentinel, enemyCritAlly],
         };
 
-        const { result, credits } = runSentinel(input);
+        const { result, credits, reactiveHeals } = runSentinel(input);
         // The enemy Sentinel's repair fires (directHeal credited) and its reactive damage credits —
         // both keyed to the ENEMY owner, never a player-side actor.
         expect(totalDirectHeal(result, 'enemy-sentinel')).toBeGreaterThan(0);
         expect(credits.some((c) => c.sourceId === 'enemy-sentinel' && c.amount > 0)).toBe(true);
+        // Team symmetry at the recipient level: the reactive repair lands on the crit-ing ENEMY
+        // ally (enemy-critter), never crossing onto a player-side actor.
+        const heal = reactiveHeals.filter((e) => e.casterId === 'enemy-sentinel');
+        expect(heal.length).toBeGreaterThan(0);
+        const healRecipients = heal.flatMap((e) => e.perTarget.map((t) => t.targetId));
+        expect(healRecipients).toContain('enemy-critter');
+        expect(healRecipients).not.toContain('attacker');
     });
 });
