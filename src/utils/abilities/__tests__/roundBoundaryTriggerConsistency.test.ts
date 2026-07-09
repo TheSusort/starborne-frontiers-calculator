@@ -320,19 +320,20 @@ describe('Tycho: start-of-combat Cheat Death + Everliving Regeneration I (docs/s
     });
 });
 
-describe('Meatshield: start-of-combat Protection stacks — DELIBERATELY UNCHANGED (deferred)', () => {
-    it('stays on-cast: the parser still climbs stacks per cast, so relabeling only the trigger would misrepresent the mechanic', () => {
+describe('Meatshield: start-of-combat Protection stacks → one-time pre-combat 3-stack grant (SP-G G1b)', () => {
+    it('rides pre-combat and grants 3 stacks in ONE application (no per-cast climb)', () => {
         const abilities = passiveAbilities({
             firstPassiveSkillText:
                 'At the start of combat, this Unit gains 3 stacks of <unit-skill>Protection</unit-skill>.',
         });
         const buff = findBuff(abilities, 'Protection')!;
         expect(buff).toBeDefined();
-        expect(buff.trigger).toBe('on-cast');
-        // Confirms the isAccumulatingBuff guard is actually keyed off this shape.
+        expect(buff.trigger).toBe('pre-combat');
         if (buff.config.type === 'buff') {
+            // One-shot 3-stack grant: still stackable, but NOT a per-round accumulator.
             expect(buff.config.isStackable).toBe(true);
-            expect(buff.config.stackTrigger).toBeDefined();
+            expect(buff.config.stacks).toBe(3);
+            expect(buff.config.stackTrigger).toBeUndefined();
         }
     });
 });

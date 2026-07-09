@@ -756,19 +756,15 @@ describe('SP-G — engine known-limitations', () => {
     const CINYA_P1_SPG =
         'This Unit <unit-damage>repairs 3.5%</unit-damage> of its Max HP every turn.';
 
-    it('Meatshield: "gains 3 stacks of Protection" still rides on-cast — DELIBERATELY UNCHANGED (deferred)', () => {
+    it('Meatshield: "gains 3 stacks of Protection" is a one-time pre-combat grant (SP-G G1b)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: MEATSHIELD_P1_SPG }, 'passive');
         const protection = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
         );
-        // TRUE TODAY: pinned verbatim by
-        // src/utils/abilities/__tests__/roundBoundaryTriggerConsistency.test.ts, describe
-        // ('Meatshield: start-of-combat Protection stacks — DELIBERATELY UNCHANGED (deferred)') —
-        // that test's own name documents this as a CONSCIOUS deferral (the parser's stack-climb
-        // behaviour is keyed off the on-cast shape; relabeling only the trigger without also
-        // reworking the stack accumulation would misrepresent the mechanic). No recurring
-        // per-turn trigger exists today — this is the SP-G mechanic to add.
-        expect(protection?.trigger).toBe('on-cast');
+        // SP-G G1b: a start-of-combat "N stacks" grant no longer climbs per-round — it seeds all
+        // N stacks once at combat start. Pinned end-to-end by roundBoundaryTriggerConsistency.test.ts
+        // ('Meatshield: start-of-combat Protection stacks → one-time pre-combat 3-stack grant').
+        expect(protection?.trigger).toBe('pre-combat');
     });
 
     it('Kinetik: "gains a Shield ... every turn" rides start-of-turn (SP-G G1a)', () => {

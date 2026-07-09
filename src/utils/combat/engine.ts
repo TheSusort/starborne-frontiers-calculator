@@ -237,6 +237,11 @@ function registerActorAbilityStatuses(
                 stacks: cfg.stacks,
                 parsedEffects: cfg.parsedEffects,
                 ...(cfg.type === 'debuff' ? { application: cfg.application } : {}),
+                // SP-G G1b: threads the config's isStackable flag through so the aura branch of
+                // activeAbilityStatuses can tell a genuinely-stackable one-shot grant (Meatshield's
+                // Protection) apart from the structural stacks:1 default every non-stackable buff
+                // carries — only the former should surface a reported stack count.
+                ...(cfg.isStackable ? { isStackable: true } : {}),
             };
             // `as const` keeps the literal types (side, sourceSlot) so the spread into
             // a union variant below doesn't widen them — runtime object is unchanged.
