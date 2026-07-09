@@ -1202,6 +1202,10 @@ function matchesActiveSelfCrit(text: string): boolean {
 }
 const START_OF_ROUND_RE =
     /at the start of (?:the|each|every) round|starts? (?:the|each|every) round/i;
+// "every turn" / "each turn" — a per-own-turn recurring self-grant. Distinct from
+// START_OF_TURN_CHARGE_RE ("at the start of the turn"): the trailing-phrase form Kinetik's
+// per-turn shield and Cinya's per-turn heal use (docs/ship-skills.csv). SP-G G1a.
+const EVERY_TURN_RE = /\b(?:each|every)\s+turn\b/i;
 // "starts (each|every|the) round with <buff>" — a start-of-round self-grant whose governing
 // phrase uses no application verb (Chakara's R2 passive; unique in the corpus). findVerb treats
 // it as a self-receive ('gains') so the buff segments extract.
@@ -2068,6 +2072,24 @@ export function detectStartOfRoundTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, START_OF_ROUND_RE, anchorPos, 'start-of-round');
+}
+
+/**
+ * SP-G G1a: returns 'start-of-turn' when `anchorPos` (a shield/heal ability's raw-text anchor)
+ * falls in a sentence carrying "every turn"/"each turn". Position-scoped (mirrors
+ * phrasePosTrigger's sentence-scoping) so an unrelated heal/shield in another sentence is never
+ * co-triggered. Reference data: docs/ship-skills.csv (Kinetik shield, Cinya heal).
+ */
+export function detectEveryTurnTrigger(
+    text: string,
+    anchorPos: number
+): 'start-of-turn' | undefined {
+    // phrasePosTrigger's return type is the broader AbilityTrigger (it's shared by every
+    // detectX helper); passed the literal 'start-of-turn' trigger, it can only ever come back
+    // as that literal or undefined, so the narrowing cast here is safe.
+    return phrasePosTrigger(text, EVERY_TURN_RE, anchorPos, 'start-of-turn') as
+        | 'start-of-turn'
+        | undefined;
 }
 
 /**

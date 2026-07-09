@@ -64,6 +64,7 @@ import {
     detectAllyDebuffedTrigger,
     detectEndOfRoundPurgeTrigger,
     detectStartOfRoundTrigger,
+    detectEveryTurnTrigger,
     detectEndOfRoundDamageTrigger,
     detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
@@ -1712,6 +1713,12 @@ function abilitiesFromText(
                 (h.kind === 'shield' && h.basis === 'hp'
                     ? detectPreCombatShieldTrigger(text, healPos)
                     : undefined) ??
+                // SP-G G1a: a self shield/heal whose anchor falls in an "every turn"/"each turn"
+                // sentence rides the start-of-turn LIVE trigger (Kinetik's per-turn Max-HP shield,
+                // Cinya's per-turn Max-HP repair). Position-scoped; mutually exclusive with the
+                // start-of-round / pre-combat phrases above (different phrasing). The healing
+                // calculator consumes start-of-turn self shields/heals; DPS is unaffected.
+                detectEveryTurnTrigger(text, healPos) ??
                 detectCritRepairTrigger(text, healPos) ??
                 // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
                 // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked

@@ -771,25 +771,19 @@ describe('SP-G — engine known-limitations', () => {
         expect(protection?.trigger).toBe('on-cast');
     });
 
-    it('Kinetik: "gains a Shield ... every turn" still rides on-cast — no recurring trigger exists yet', () => {
+    it('Kinetik: "gains a Shield ... every turn" rides start-of-turn (SP-G G1a)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: KINETIK_P1_SPG }, 'passive');
         const shield = abilities.find((a) => a.type === 'shield');
-        // TRUE TODAY: pinned verbatim by
-        // src/utils/abilities/__tests__/roundBoundaryTriggerConsistency.test.ts, describe
-        // ('Kinetik / Cinya: "every turn" (no "at the start of" phrase) — out of PR4 scope,
-        // unaffected'), it('Kinetik: the per-turn shield stays on-cast (no start-of-X phrase to
-        // detect)'). "Every turn" (unlike "at the start of the turn") has no detector at all —
-        // SP-G needs a genuine recurring trigger, not just a relabel.
-        expect(shield?.trigger).toBe('on-cast');
+        // SP-G G1a: detectEveryTurnTrigger routes the trailing "every turn" self-shield to the
+        // start-of-turn LIVE trigger. Pinned end-to-end by roundBoundaryTriggerConsistency.test.ts
+        // ('Kinetik / Cinya: "every turn" self shield/heal ride start-of-turn (SP-G G1a)').
+        expect(shield?.trigger).toBe('start-of-turn');
     });
 
-    it('Cinya: "repairs ... every turn" still rides on-cast — no recurring trigger exists yet', () => {
+    it('Cinya: "repairs ... every turn" rides start-of-turn (SP-G G1a)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: CINYA_P1_SPG }, 'passive');
         const heal = abilities.find((a) => a.type === 'heal');
-        // TRUE TODAY: pinned verbatim by the same roundBoundaryTriggerConsistency.test.ts
-        // describe block as Kinetik above, it('Cinya: the per-turn heal stays on-cast (no
-        // start-of-X phrase to detect)'). Same "every turn" gap, distinct ship/ability.
-        expect(heal?.trigger).toBe('on-cast');
+        expect(heal?.trigger).toBe('start-of-turn');
     });
 
     // ── Butcher: positional-path Rage sourceId — NO CORPUS PROBE (see reconciliation doc) ──

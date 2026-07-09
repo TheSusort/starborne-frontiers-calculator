@@ -337,24 +337,28 @@ describe('Meatshield: start-of-combat Protection stacks — DELIBERATELY UNCHANG
     });
 });
 
-// ─── Out-of-scope suspects verified: NOT "at the start of …" phrasing, correctly untouched ──
-
-describe('Kinetik / Cinya: "every turn" (no "at the start of" phrase) — out of PR4 scope, unaffected', () => {
-    it('Kinetik: the per-turn shield stays on-cast (no start-of-X phrase to detect)', () => {
+// ─── "every turn" → start-of-turn (SP-G G1a) ────────────────────────────────
+describe('Kinetik / Cinya: "every turn" self shield/heal ride start-of-turn (SP-G G1a)', () => {
+    it('Kinetik: the per-turn shield rides start-of-turn', () => {
         const abilities = passiveAbilities({
             firstPassiveSkillText:
                 'This Unit gains a <unit-damage>Shield equal to 4%</unit-damage> of its Max HP every turn.',
         });
         const shield = abilities.find((a) => a.type === 'shield')!;
-        expect(shield.trigger).toBe('on-cast');
+        expect(shield.trigger).toBe('start-of-turn');
+        if (shield.config.type === 'shield') {
+            expect(shield.config.pct).toBe(4);
+            expect(shield.config.basis).toBe('hp');
+        }
     });
 
-    it('Cinya: the per-turn heal stays on-cast (no start-of-X phrase to detect)', () => {
+    it('Cinya: the per-turn heal rides start-of-turn', () => {
         const abilities = passiveAbilities({
             firstPassiveSkillText:
                 'This Unit <unit-damage>repairs 3.5%</unit-damage> of its Max HP every turn.',
         });
         const heal = abilities.find((a) => a.type === 'heal')!;
-        expect(heal.trigger).toBe('on-cast');
+        expect(heal.trigger).toBe('start-of-turn');
+        if (heal.config.type === 'heal') expect(heal.config.pct).toBe(3.5);
     });
 });

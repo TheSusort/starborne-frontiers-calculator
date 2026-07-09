@@ -224,7 +224,7 @@ describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
     });
 
     const MADAX_P2 =
-        "This Unit <unit-damage>repairs itself for 13%</unit-damage> of its Max HP when an enemy dies.";
+        'This Unit <unit-damage>repairs itself for 13%</unit-damage> of its Max HP when an enemy dies.';
     it('Madax: self-heal-on-enemy-death rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: MADAX_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
@@ -237,7 +237,9 @@ describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
         'This Unit <unit-aid>adds 2 charges</unit-aid> to its Charged Skill upon killing an enemy.';
     it('Obsidian: charge-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: OBSIDIAN_P2 }, 'passive');
-        expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(true);
+        expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(
+            true
+        );
         // GAP: tag-only (detector-recognition) — emits NO ability; the charge builder doesn't
         // detect "upon killing an enemy". Self charge, no actor needed; on-enemy-destroyed exists.
     });
@@ -246,7 +248,9 @@ describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
         'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.';
     it('Valiant: charge-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VALIANT_P2 }, 'passive');
-        expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(true);
+        expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(
+            true
+        );
         // GAP: tag-only (detector-recognition) — same as Obsidian, emits nothing.
     });
 
@@ -272,7 +276,7 @@ describe('cluster 6 — on-bomb-detonated', () => {
     });
 
     const VALKYRIE_P2 =
-        "When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.";
+        'When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.';
     it('Valkyrie: repair on Echoing-Burst detonation rides on-bomb-detonated', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VALKYRIE_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
@@ -338,19 +342,20 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     });
 
     const MORAO_P3 =
-        "This Unit <unit-damage>repairs 5%</unit-damage> of its Max HP every turn and, upon <unit-aid>Cleansing a</unit-aid> Debuff, repairs an additional <unit-damage>5%</unit-damage> of its Max HP while gaining <unit-skill>Defense Up II</unit-skill> for 2 turns.";
+        'This Unit <unit-damage>repairs 5%</unit-damage> of its Max HP every turn and, upon <unit-aid>Cleansing a</unit-aid> Debuff, repairs an additional <unit-damage>5%</unit-damage> of its Max HP while gaining <unit-skill>Defense Up II</unit-skill> for 2 turns.';
     it('Morao: repair/buff-on-own-cleanse is reactive, not on-cast', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: MORAO_P3 }, 'passive');
         // Both the extra repair and Defense Up ride "upon cleansing"; today everything is on-cast.
         expect(ab.some((a) => a.trigger !== 'on-cast')).toBe(true);
         // Fixed (Phase 3 PR-H): both the extra repair AND Defense Up II ride the NEW
         // on-own-cleanse trigger (self-target, no actor capture needed). The "every turn" repair
-        // is a SEPARATE recurring-trigger gap (out of this family) and correctly stays on-cast —
-        // see the dedicated integration test for the precise per-ability assertion.
+        // was a SEPARATE recurring-trigger gap (out of this family); SP-G G1a closed it —
+        // it now rides start-of-turn — see the dedicated integration test for the precise
+        // per-ability assertion.
     });
 
     const CROCUS_P2 =
-        "When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit <unit-damage>repairs itself for 3%</unit-damage> of its Max HP.";
+        'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit <unit-damage>repairs itself for 3%</unit-damage> of its Max HP.';
     it('Crocus: self-repair on ally DoT-crit rides on-ally-crit-dot', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: CROCUS_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
@@ -361,7 +366,9 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
         "When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
     it('Vindicator: reactive damage on debuff-resisted rides on-debuff-resisted', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VINDICATOR_P3 }, 'passive');
-        expect(ab.some((a) => a.type === 'damage' && a.trigger === 'on-debuff-resisted')).toBe(true);
+        expect(ab.some((a) => a.type === 'damage' && a.trigger === 'on-debuff-resisted')).toBe(
+            true
+        );
         // GAP: DEFERRED (Phase 3 PR-C, 2026-07-04) — two independent infra gaps beyond Layer-1 tag
         // inheritance: (1) no maxHP-scaled damage model — the 'damage' AbilityConfig only carries an
         // attack%-based multiplier (applyReactiveDamage sources ownerStats.attack), so "30% of max HP"
