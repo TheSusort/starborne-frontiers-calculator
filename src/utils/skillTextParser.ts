@@ -2841,20 +2841,11 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
                 oncePerRound,
                 autoFilled: true,
             });
-            // Shield basis derivation: the text says "30% of the damage dealt", referring to
-            // FrontLine's OWN 80% reactive damage. The reactive-shield executor's
-            // basis:'damage-dealt' reads eventCtx.triggerDamage, which on THIS trigger is the
-            // ENEMY's charged-cast damage (wrong). So the shield is modeled as basis:'attack'
-            // with pct = shieldPct * damagePct / 100 = 30*80/100 = 24 — an UN-mitigated
-            // approximation of "the damage dealt". Kept exact (no round) so a fractional
-            // source percentage isn't silently truncated.
-            //
-            // KNOWN DIVERGENCE (#211): since epic PR4b the reactive DAMAGE half is
-            // defense-mitigated and crit-eligible, so this flat-attack shield no longer shares
-            // the damage's basis — vs a high-defense enemy the shield over-grants relative to
-            // the true dealt amount (and under-grants on a crit). Tying the shield to the
-            // ACTUAL applyReactiveDamage result needs new eventCtx plumbing (thread the dealt
-            // amount into the reactive-shield executor for this trigger) — deferred.
+            // SP-G G3: the shield is "30% of the damage dealt" — FrontLine's OWN 80% reactive
+            // hit, which applyReactiveDamage computes defense-mitigated and crit-eligible. The
+            // reactive-damage intent drains before this shield intent (enqueue order) and stamps
+            // its dealt amount into reactiveDealtByOwner; basis:'damage-dealt' reads it via the
+            // exec ctx (see triggers.ts). pct is the raw clause percentage (30) — no attack fold.
             out.push({
                 id: '',
                 type: 'shield',
@@ -2863,8 +2854,8 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
                 conditions: [],
                 config: {
                     type: 'shield',
-                    basis: 'attack',
-                    pct: (shieldPct * damagePct) / 100,
+                    basis: 'damage-dealt',
+                    pct: shieldPct,
                 },
                 oncePerRound,
                 autoFilled: true,

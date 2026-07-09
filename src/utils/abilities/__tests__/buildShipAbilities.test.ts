@@ -2566,7 +2566,7 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('FrontLine R4 passive: start-of-combat max-HP shield parses; no damage-dealt/taken shield', () => {
+        it('FrontLine R4 passive: start-of-combat max-HP shield + the on-enemy-charged-cast damage-dealt shield, no duplicate/taken shield', () => {
             const s = ship({
                 thirdPassiveSkillText:
                     'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
@@ -2577,13 +2577,17 @@ describe('buildShipAbilities', () => {
             expect(shields.some((sh) => (sh.config as { basis: string }).basis === 'hp')).toBe(
                 true
             );
-            // No damage-dealt / damage-taken shield is produced from this passive.
+            // SP-G G3: the on-enemy-charged-cast reaction shield is now basis 'damage-dealt' (it
+            // scales off FrontLine's OWN mitigated/crit reactive hit, via reactiveDealtByOwner —
+            // see triggers.ts/engine.ts) — exactly ONE such shield, on the correct trigger.
+            const damageDealtShields = shields.filter(
+                (sh) => (sh.config as { basis: string }).basis === 'damage-dealt'
+            );
+            expect(damageDealtShields).toHaveLength(1);
+            expect(damageDealtShields[0].trigger).toBe('on-enemy-charged-cast');
+            // No damage-taken shield is produced from this passive.
             expect(
-                shields.some((sh) =>
-                    ['damage-dealt', 'damage-taken'].includes(
-                        (sh.config as { basis: string }).basis
-                    )
-                )
+                shields.some((sh) => (sh.config as { basis: string }).basis === 'damage-taken')
             ).toBe(false);
         });
     });

@@ -2466,6 +2466,13 @@ export function runCombat(input: CombatEngineInput): {
     // skips the roll entirely) — no gate is ever created for them, so they can never crit by
     // construction, independent of the RNG stream.
     const reactiveDamageCritGates = new Map<string, RateGate>();
+    // SP-G G3: the last reactive-damage `raw` each owner dealt, so a sibling reactive shield
+    // enqueued on the SAME trigger (FrontLine's "Shield equal to 30% of the damage dealt")
+    // can scale off the ACTUAL mitigated/crit amount rather than a flat attack approximation.
+    // Written by applyReactiveDamage (below), read by the reactive-shield executor via the
+    // exec ctx. Damage intent drains before the shield intent (enqueue order), so the value is
+    // fresh when the shield reads it.
+    const reactiveDealtByOwner = new Map<string, number>();
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
@@ -4105,6 +4112,7 @@ export function runCombat(input: CombatEngineInput): {
             // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
             // credits nothing), matching the pre-fix zero-damage guard.
             if (raw <= 0) return;
+            reactiveDealtByOwner.set(ownerId, raw);
             creditDamage(ownerId, 'direct', raw);
         };
 
@@ -5180,6 +5188,7 @@ export function runCombat(input: CombatEngineInput): {
                         // undefined → assume-met fallback (byte-identical).
                         nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
                         lastTurnCtxByActor,
+                        reactiveDealtByOwner,
                         enemyType,
                         enemyHp,
                         // Drain-time HP% includes this round's damage SO FAR (the round

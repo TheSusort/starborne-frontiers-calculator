@@ -64,6 +64,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Kinetik and Cinya now correctly apply their per-turn shield / repair at the start of each of their turns (previously modelled as a one-off on cast).',
     'Meatshield now gains its 3 stacks of Protection once at the start of combat, instead of accumulating a stack on every skill use.',
     'Cobalt\'s start-of-turn "Out. Damage Up II" buff now boosts every one of its turns while at full HP, instead of every other turn.',
+    "FrontLine's reactive shield (on an enemy charged skill) now scales off the actual damage it deals — accounting for enemy defense, crits, and affinity — instead of a flat approximation.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

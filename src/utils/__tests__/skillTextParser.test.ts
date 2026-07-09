@@ -4594,9 +4594,10 @@ describe('parseEnemyChargedCastReaction (Curator enemy-charged-cast reaction)', 
         expect(parseEnemyChargedCastReaction(null)).toBeNull();
     });
 
-    // FrontLine R2 (Task 6): reactive damage + shield, once per round. The shield is modelled
-    // as basis:'attack', pct:24 (= round(30 * 80 / 100)) -- see the parser comment for the
-    // derivation (shield kept on the same un-mitigated basis as the 80% reactive damage).
+    // FrontLine R2 (Task 6; magnitude fixed SP-G G3): reactive damage + shield, once per round.
+    // The shield is modelled as basis:'damage-dealt', pct:30 -- the raw clause percentage,
+    // scaled at drain time off the ACTUAL mitigated/crit amount of the 80% reactive damage
+    // (see the parser comment + triggers.ts's reactiveDealtByOwner fallback).
     const FRONTLINE_R2 =
         'When an enemy uses their charged skill, it deals 80% and gains a Shield equal to 30% of the damage dealt, once per round.';
 
@@ -4616,12 +4617,12 @@ describe('parseEnemyChargedCastReaction (Curator enemy-charged-cast reaction)', 
         expect(damage.config).toMatchObject({ type: 'damage', multiplier: 80, hits: 1 });
     });
 
-    it('FrontLine shield ability: self target, basis attack, pct 24', () => {
+    it('FrontLine shield ability: self target, basis damage-dealt, pct 30', () => {
         const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2)!;
         const shield = abilities.find((a) => a.type === 'shield')!;
         expect(shield).toBeDefined();
         expect(shield.target).toBe('self');
-        expect(shield.config).toMatchObject({ type: 'shield', basis: 'attack', pct: 24 });
+        expect(shield.config).toMatchObject({ type: 'shield', basis: 'damage-dealt', pct: 30 });
     });
 
     // Cross-ship isolation (Task 5 follow-up): FrontLine text yields NO purge, NO debuff.
@@ -4656,7 +4657,7 @@ describe('parseEnemyChargedCastReaction (Curator enemy-charged-cast reaction)', 
     // — full <unit-damage> tags AND the "Shield equal to 25% of its Max HP at the start of combat"
     // preamble (which must NOT be mistaken for the reaction's shield). Mirrors the Curator real-data
     // test (Task 5): exercises tag stripping + preamble exclusion on the genuine game string.
-    it('FrontLine VERBATIM CSV second-passive text → exactly the damage(80)+shield(attack,24) pair', () => {
+    it('FrontLine VERBATIM CSV second-passive text → exactly the damage(80)+shield(damage-dealt,30) pair', () => {
         const FRONTLINE_R2_VERBATIM =
             'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
         const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2_VERBATIM);
@@ -4670,10 +4671,11 @@ describe('parseEnemyChargedCastReaction (Curator enemy-charged-cast reaction)', 
         expect(damage.config).toMatchObject({ type: 'damage', multiplier: 80, hits: 1 });
 
         const shield = abilities!.find((a) => a.type === 'shield')!;
-        // basis:'attack', pct:24 (= round(30 × 80 / 100)) — the reaction's 30%-of-damage shield,
-        // NOT the 25%-of-Max-HP start-of-combat preamble (which the parser correctly excludes here).
+        // basis:'damage-dealt', pct:30 — the reaction's 30%-of-damage shield, scaled at drain
+        // time off the actual mitigated/crit dealt amount, NOT the 25%-of-Max-HP start-of-combat
+        // preamble (which the parser correctly excludes here).
         expect(shield.target).toBe('self');
-        expect(shield.config).toMatchObject({ type: 'shield', basis: 'attack', pct: 24 });
+        expect(shield.config).toMatchObject({ type: 'shield', basis: 'damage-dealt', pct: 30 });
     });
 });
 

@@ -973,6 +973,10 @@ export interface IntentExecContext {
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
+    /** SP-G G3: last reactive-damage amount each owner dealt this drain cycle. A reactive shield
+     *  on the same trigger with basis 'damage-dealt' but no eventCtx.triggerDamage (on-enemy-
+     *  charged-cast stamps only counterTargetId) falls back to this owner-keyed amount. */
+    reactiveDealtByOwner?: Map<string, number>;
     enemyType?: EnemyBaseClass;
     enemyHp: number;
     /** Damage dealt to the enemy so far (drives the drain-time enemyHpPct). */
@@ -2286,7 +2290,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       // the damage TAKEN (the on-attacked hit's e.damage) for damage-taken. Falls
                       // back to 0 when no triggering damage is present (non-crit path or missing
                       // context) — a damage-scaled reactive with no damage context grants nothing.
-                      (intent.eventCtx?.triggerDamage ?? 0)
+                      (intent.eventCtx?.triggerDamage ??
+                      // SP-G G3: on-enemy-charged-cast doesn't stamp triggerDamage; a
+                      // damage-dealt shield falls back to the sibling reactive-damage proc's
+                      // actual dealt amount (stamped in applyReactiveDamage). damage-dealt
+                      // ONLY — damage-taken has no sibling-proc dealt amount to fall back to.
+                      (cfg.basis === 'damage-dealt'
+                          ? ctx.reactiveDealtByOwner?.get(intent.ownerId)
+                          : undefined) ??
+                      0)
                     : cfg.basis === 'overheal'
                       ? // Reactive overheal (Abundant Renewal on-own-repair-to-ally): scale off the
                         // clipped over-repair captured in eventCtx.overhealAmount by the listener.
