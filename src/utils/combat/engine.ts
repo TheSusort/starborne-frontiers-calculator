@@ -3124,6 +3124,11 @@ export function runCombat(input: CombatEngineInput): {
         // reactive heals fired by that emit correctly count toward THIS round (C2b-3).
         repairedThisRound.clear();
         hitThisRound.clear();
+        // SP-G G3 (CodeRabbit): reset the reactive dealt-amount slot each round so a
+        // basis:'damage-dealt' shield can never read a stale value from a previous round if its
+        // paired reactive-damage proc is gated out (differing procChance/oncePerRound/condition)
+        // and applyReactiveDamage never runs — the fallback read then correctly resolves to 0.
+        reactiveDealtByOwner.clear();
         // Reset per round so a start-of-round reactive drain (round 2+) stamps duringTurnOf
         // as turn-less (undefined) rather than the previous round's last acting actor.
         actingActorId = undefined;
