@@ -1446,6 +1446,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // enemyTargetId). The `ownerId` param is ignored for enemy-side; `enemyTargetId`
         // is ignored for self-side — matching the pre-Task-1 behavior where enemy maps were
         // singular and ownerId was never consulted for them.
+        // NOTE: like the aura branch, this finite-duration branch does not surface `active.stacks`.
+        // No corpus ship pairs a stackable status with a finite duration today; if one appears,
+        // apply the same isStackable-gated stacks spread used in the aura branch above.
         const map = side === 'self' ? selfMaps.get(ownerId) : enemyMaps.get(enemyTargetId);
         const out: ActiveAbilityStatus[] = [];
         if (map) {

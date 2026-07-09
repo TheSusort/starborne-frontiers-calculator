@@ -4111,7 +4111,13 @@ export function runCombat(input: CombatEngineInput): {
             );
             // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
             // credits nothing), matching the pre-fix zero-damage guard.
-            if (raw <= 0) return;
+            if (raw <= 0) {
+                // SP-G G3: a non-positive reactive hit still resets the owner's dealt-amount slot,
+                // so a paired basis:'damage-dealt' shield (FrontLine) reads 0 for THIS proc rather
+                // than a stale prior-round value.
+                reactiveDealtByOwner.set(ownerId, 0);
+                return;
+            }
             reactiveDealtByOwner.set(ownerId, raw);
             creditDamage(ownerId, 'direct', raw);
         };
@@ -5407,6 +5413,8 @@ export function runCombat(input: CombatEngineInput): {
         // drainQueue's isTurnBlocked filter — a stunned owner's grant is dropped, matching every
         // other reactive.
         const drainStartOfTurnGrants = (ownerId: string): void => {
+            // The spliced batch (p/e) is drained in isolation; any follow-up intents a grant
+            // chain-enqueues land on the global queues and drain at the normal post-cast point.
             const isGrant = (i: Intent): boolean =>
                 i.ownerId === ownerId &&
                 i.ability.trigger === 'start-of-turn' &&
