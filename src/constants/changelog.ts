@@ -63,6 +63,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Wusheng's charged skill now always strikes with affinity advantage; Isha and Nayra's Affinity Override buffs now force affinity advantage on offense and defense, including their two-ship synergy (each grants the other its extra Override only when both are on the team).",
     'Kinetik and Cinya now correctly apply their per-turn shield / repair at the start of each of their turns (previously modelled as a one-off on cast).',
     'Meatshield now gains its 3 stacks of Protection once at the start of combat, instead of accumulating a stack on every skill use.',
+    'Cobalt\'s start-of-turn "Out. Damage Up II" buff now boosts every one of its turns while at full HP, instead of every other turn.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
