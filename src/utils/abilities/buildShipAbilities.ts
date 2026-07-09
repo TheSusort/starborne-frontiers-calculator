@@ -2675,7 +2675,19 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                     // manual condition (harmless today since a manual condition with no
                     // manualCount defaults to "met", but leaving it is misleading and the
                     // brief calls it out explicitly).
-                    !(reactiveTrigger === 'on-enemy-buffed' && c.subject === 'enemy-buff')
+                    !(reactiveTrigger === 'on-enemy-buffed' && c.subject === 'enemy-buff') &&
+                    // SP-G G4 (same COLLISION-SCOPE pattern): "On inflicting a debuff, gains X"
+                    // is double-classified — detectReactiveTrigger promotes it to on-debuff-inflicted
+                    // (APPLYING_DEBUFF_RE) AND detectGrantConditions' appliesDebuffGate emits a
+                    // redundant enemy-debuff condition from the SAME phrase. The trigger already
+                    // proves a debuff was inflicted, so drop the enemy-debuff condition. Leaving it
+                    // is not harmless here: enemy-debuff is `derivable:true`, so at reactive drain it
+                    // gates against the enemy's LIVE debuff store. That store is populated on the
+                    // aggregate DPS path (the shared enemy dummy carries the inflicted DoT) but NOT
+                    // on the positional path (DoTs live in per-victim stores), so the stale condition
+                    // silently blocks Butcher's Marauder Rage II in real team battles — a team-symmetry
+                    // violation. (overloadLifecycle.test.ts test 3b pins the positional path.)
+                    !(reactiveTrigger === 'on-debuff-inflicted' && c.subject === 'enemy-debuff')
             );
             // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
             // oncePerRound flag) so a different ally inflicting a debuff still procs even if

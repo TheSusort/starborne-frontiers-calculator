@@ -65,6 +65,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Meatshield now gains its 3 stacks of Protection once at the start of combat, instead of accumulating a stack on every skill use.',
     'Cobalt\'s start-of-turn "Out. Damage Up II" buff now boosts every one of its turns while at full HP, instead of every other turn.',
     "FrontLine's reactive shield (on an enemy charged skill) now scales off the actual damage it deals — accounting for enemy defense, crits, and affinity — instead of a flat approximation.",
+    'Butcher now correctly gains Marauder Rage II when it inflicts a debuff in team battles (previously the buff only applied in the single-target DPS view).',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
