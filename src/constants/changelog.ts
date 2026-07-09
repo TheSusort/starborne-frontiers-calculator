@@ -68,6 +68,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Butcher now correctly gains Marauder Rage II when it inflicts a debuff in team battles (previously the buff only applied in the single-target DPS view).',
     "Combat sim: Sentinel no longer damages or heals on its own turn. Its reaction-only passives now correctly fire when an ally critically hits an enemy — dealing its bonus damage to that enemy and repairing the ally who landed the crit — instead of leaking onto Sentinel's own turn.",
     'Combat log: reactive damage and reactive repairs now show up in the log, nested under the turn that triggered them. Previously these procs (Sentinel, Grif, FrontLine, Judge, Vindicator, Paracelsus, and other "when …" damage/heal reactions) were applied but never displayed.',
+    'Combat sim: Hermes now gains 1 charge per ally attack that lands a critical hit, instead of one charge per critical hit — a multi-hit or multi-target attack that crits several times now grants a single charge, matching the skill text.',
+    'Combat sim: direct damage to a ship in Stasis now reduces its remaining Stasis by one turn instead of removing Stasis entirely — the target wakes up sooner with each hit rather than immediately.',
+    "Combat sim: Damage-over-Time effects (Corrosion, Inferno, Bomb, and transform DoTs) now show up in a ship's active debuff list in the battle playback, alongside its other debuffs.",
+    'Combat sim: fixed the HP shown for Voron (and Orel) after a hit is converted into a Damage-over-Time effect — the battle playback no longer double-counts the converted hit, so the HP bar reflects the real remaining HP.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

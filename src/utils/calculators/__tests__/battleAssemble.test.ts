@@ -302,6 +302,58 @@ describe('assembleBattleResult — buff tracking', () => {
         // debuff persists (no expiry event)
         expect(find(result, 2, 'enemy-front').activeDebuffs).toContain('Defense Shred');
     });
+
+    it('folds dot-applied into the victim activeDebuffs (DoTs shown as debuffs)', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'dot-applied',
+                sourceId: 'attacker',
+                targetId: 'enemy-front',
+                round: 1,
+                dotType: 'corrosion',
+                stacks: 3,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 2,
+        });
+        // The DoT surfaces in the victim's debuff list with a readable, stack-independent label…
+        expect(find(result, 1, 'enemy-front').activeDebuffs).toContain('Corrosion');
+        // …and persists to later rounds (infliction-only, mirroring debuff-applied).
+        expect(find(result, 2, 'enemy-front').activeDebuffs).toContain('Corrosion');
+    });
+
+    it('labels each DoT family in activeDebuffs, generic as "Damage over Time"', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'dot-applied',
+                sourceId: 'attacker',
+                targetId: 'enemy-front',
+                round: 1,
+                dotType: 'inferno',
+                stacks: 1,
+            },
+            {
+                type: 'dot-applied',
+                sourceId: 'attacker',
+                targetId: 'enemy-back',
+                round: 1,
+                dotType: 'generic',
+                stacks: 1,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(find(result, 1, 'enemy-front').activeDebuffs).toContain('Inferno');
+        expect(find(result, 1, 'enemy-back').activeDebuffs).toContain('Damage over Time');
+    });
 });
 
 describe('assembleBattleResult — hierarchical combatLog (buildCombatLog)', () => {

@@ -260,6 +260,24 @@ describe('Voron replaces a direct hit with a generic DoT (D/turns per tick, SP-A
         expect(totalHpLost).toBeCloseTo(totalTickDamage, 6);
     });
 
+    it('records ZERO net incoming HP in the sim intake bucket for the transform round (battle-sim HP fix)', () => {
+        // The positional battle sim derives each ship's HP% from `perActorIncoming`
+        // (incoming − shieldAbsorbed − barrierAbsorbed), NOT hp-changed. A transformed direct hit
+        // must net to zero there — the hit is DEFERRED into a DoT, not lost as HP this turn.
+        // Round 1: Voron (speed 1000) ticks BEFORE the attacker, so no DoT ticks yet — the only
+        // intake this round is the transformed direct hit, which must net to 0 (pre-fix: 5000).
+        const input = BASE_PLAYER_SIDE({
+            numRounds: 2,
+            teamActors: [playerVoron('voron', 'M4')],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1', 'front')],
+        });
+        const result = runCombat({ ...input, bus: createEventBus() });
+        const round1 = result.rounds.find((r) => r.round === 1)!;
+        const intake = round1.perActorIncoming?.['voron'];
+        const netHp = intake ? intake.incoming - intake.shieldAbsorbed - intake.barrierAbsorbed : 0;
+        expect(netHp).toBe(0);
+    });
+
     it('the created generic DoT ticks at exactly D/turns × 0.8 (SP-A’s 20%-less-from-DoT reduction applies)', () => {
         const input = BASE_PLAYER_SIDE({
             numRounds: 2,

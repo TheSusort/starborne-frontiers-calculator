@@ -3450,7 +3450,15 @@ export function runCombat(input: CombatEngineInput): {
                             sourceId: victim.id,
                             perTickAmount: damage / turns,
                         });
-                        damage = 0; // the direct hit is replaced — no shield/HP drain this turn
+                        // The direct hit is REPLACED by the DoT — no shield/HP drain this turn.
+                        // Reverse the `.incoming` recorded above so the battle sim's HP derivation
+                        // (incoming − shield − barrier) nets to zero real HP loss for this hit; the
+                        // converted damage instead lands over time via the generic-DoT ticks, each
+                        // of which records its own `.incoming` when it fires. Unlike the Barrier
+                        // path this hit is DEFERRED, not blocked, so it is NOT booked as
+                        // barrier/shield absorbed.
+                        sink.addIncoming(-damage, victim.id);
+                        damage = 0;
                     }
                 }
             }
@@ -6165,7 +6173,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (stasisBreakPending.has(actor.id)) {
                             stasisBreakPending.delete(actor.id);
                             for (const name of STASIS_BUFFS)
-                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
                         }
                         // Synthesize a minimal no-action result so the post-round
                         // `focusTurns.length` guard does not throw (the focus actor
@@ -6453,7 +6461,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (stasisBreakPending.has(actor.id)) {
                             stasisBreakPending.delete(actor.id);
                             for (const name of STASIS_BUFFS)
-                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
                         }
                     } // end stasis gate (walked-team branch)
                 } else if (actor.kind === 'enemy' && actor.id === enemy.id) {
@@ -7255,7 +7263,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (stasisBreakPending.has(actor.id)) {
                             stasisBreakPending.delete(actor.id);
                             for (const name of STASIS_BUFFS)
-                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
                         }
                     } // end stasis gate (real-enemy branch)
                 }
