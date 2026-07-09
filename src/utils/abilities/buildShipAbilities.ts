@@ -1073,10 +1073,17 @@ function abilitiesFromText(
         // (triggers.ts cfg.type==='damage' branch) and, for start-of-round specifically, the
         // partition machinery removing it from the old passive-payload-hit cast-time fold
         // (playerTurn.ts) both already exist; this ability just needs the correct label.
+        // #2 (Sentinel): a passive damage clause anchored in a "when an ally critically hits an
+        // enemy … deals X% damage to that enemy" sentence rides the on-ally-crit reactive trigger
+        // (the crit-victim enemy is routed via eventCtx.counterTargetId — triggers.ts on-ally-crit
+        // listener). Position-scoped like the round-boundary detectors above, so a co-located
+        // on-cast hit in another sentence is never co-triggered. Corpus: Sentinel alone carries an
+        // ally-crit DAMAGE clause (Hermes = charge, Howler = cleanse — both already wired).
         const damageTrigger: AbilityTrigger =
             detectStartOfRoundTrigger(text, damagePos) ??
             detectEndOfRoundDamageTrigger(text, damagePos) ??
             detectRoundStartContinuationTrigger(text, damagePos) ??
+            detectAllyCritTrigger(text, damagePos) ??
             'on-cast';
         // SP-F F1: emit the BASE branch FIRST (out[0]) so the ungated `.find`-first reads of
         // noCrit/hits below resolve sensibly, and so it stays out[0] for the conditional-scaling
@@ -1720,6 +1727,14 @@ function abilitiesFromText(
                 // calculator consumes start-of-turn self shields/heals; DPS is unaffected.
                 detectEveryTurnTrigger(text, healPos) ??
                 detectCritRepairTrigger(text, healPos) ??
+                // #2 (Sentinel): a repair anchored in a "when an ally critically hits an enemy …
+                // repairs the ally" sentence rides on-ally-crit — the crit-ing ally is routed via
+                // eventCtx.damagedAllyId (triggers.ts on-ally-crit listener; the same lane Howler's
+                // cleanse uses). Distinct from detectCritRepairTrigger above, which matches "when
+                // this Unit critically REPAIRS an ally" (Pallas). Position-scoped; corpus:
+                // Sentinel alone carries an ally-crit HEAL clause (Hermes/Howler self-heal in
+                // active/charge slots, no ally-crit phrase there).
+                detectAllyCritTrigger(text, healPos) ??
                 // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
                 // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
                 // for heals AND shields (the follow-on is a repair, but keep the path symmetric).

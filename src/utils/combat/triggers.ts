@@ -513,15 +513,21 @@ export function registerReactiveListeners(args: {
                         if (!isSameSideAlly(e.actorId, ownerId)) return;
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
                         // Stamp the crit-ing ally via damagedAllyId (Phase 3 PR-G, Howler) so an
-                        // 'ally'-target reactive (cleanse/buff) lands on THAT ally, mirroring the
-                        // on-ally-debuffed/on-ally-purged siblings. Zero-collateral for existing
-                        // on-ally-crit riders (Hermes's charge + Everliving Regeneration buff are
-                        // both 'self'-target, which never reads damagedAllyId — see
-                        // reactiveRecipients/the buff branch's recipient resolution).
+                        // 'ally'-target reactive (cleanse/buff/heal — Sentinel's repair) lands on
+                        // THAT ally, mirroring the on-ally-debuffed/on-ally-purged siblings. ALSO
+                        // stamp the crit-VICTIM enemy via counterTargetId (#2, Sentinel) so an
+                        // 'enemy'-target reactive damage hits "that enemy" (the one the ally crit)
+                        // rather than the ctx.enemy fallback. Zero-collateral for the pre-existing
+                        // riders (Hermes's charge + Everliving Regeneration buff are 'self'-target;
+                        // Howler's cleanse is 'ally'-target — none read counterTargetId).
                         for (let i = 0; i < n; i++)
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.actorId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    damagedAllyId: e.actorId,
+                                    counterTargetId: e.targetId,
+                                },
                             });
                     });
                     break;
@@ -1055,7 +1061,10 @@ export interface IntentExecContext {
         noCrit: boolean,
         hpBasisPct?: number,
         allowDeadOwner?: boolean
-    ) => void;
+        // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
+        // the combat log (reactive-damage-performed); void/0 when the proc was guarded (dead
+        // victim, non-positive) or the delegate is absent (unit fixtures).
+    ) => { dealt: number; didCrit: boolean } | void;
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
      *  apply path (no attacked event → no re-counter). */
@@ -1656,6 +1665,8 @@ type StampedEventType =
     | 'charge-changed'
     | 'heal-performed'
     | 'shield-applied'
+    | 'reactive-damage-performed'
+    | 'reactive-heal-performed'
     | 'buff-applied'
     | 'buff-expired'
     | 'debuff-applied'
@@ -1689,6 +1700,12 @@ const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<Stamp
     // it under the triggering turn instead. On-turn charge emissions use the captured outer bus
     // (unstamped) → unchanged.
     'charge-changed',
+    // #2 log visibility: drain-time reactive damage/heal procs emit these LOG-ONLY events so the
+    // combat log can surface them (they deliberately emit no ability-performed/heal-performed —
+    // chain guard). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf so
+    // they nest under the triggering turn. No combat listener subscribes → they never chain.
+    'reactive-damage-performed',
+    'reactive-heal-performed',
 ]);
 
 /** Wrap a bus so every reactive-capable event emitted through it is branded with
@@ -1722,6 +1739,28 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
             bus.emit(stamped);
         },
     };
+}
+
+/** Emit the LOG-ONLY `reactive-damage-performed` event for a proc that actually dealt damage.
+ *  `ctx.bus` is the reactive stamping wrapper (when present) → the event is branded `duringTurnOf`
+ *  so the combat log nests it under the triggering turn. NO combat listener subscribes to this
+ *  type, so it can never chain. Inert when the proc was guarded (void / dealt <= 0) or no bus is
+ *  wired (unit fixtures). */
+function emitReactiveDamageLog(
+    ctx: IntentExecContext,
+    ownerId: string,
+    victimId: string,
+    outcome: { dealt: number; didCrit: boolean } | void
+): void {
+    if (!ctx.bus || !outcome || outcome.dealt <= 0) return;
+    ctx.bus.emit({
+        type: 'reactive-damage-performed',
+        sourceId: ownerId,
+        targetId: victimId,
+        round: ctx.round,
+        amount: outcome.dealt,
+        didCrit: outcome.didCrit,
+    });
 }
 
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
@@ -2320,6 +2359,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const shieldRecipientIds: string[] = [];
         let shieldGrantedSum = 0;
         const shieldPerTarget: { targetId: string; amount: number }[] = [];
+        // #2 log visibility: accumulate the reactive HEAL's per-recipient raw repair so we can emit
+        // ONE log-only reactive-heal-performed after the loop (the executor emits no heal-performed).
+        const healPerTarget: { targetId: string; amount: number }[] = [];
+        let healSum = 0;
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
@@ -2351,6 +2394,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
             if (cfg.type === 'heal') {
                 ctx.healing.credit(intent.ownerId, 'directHeal', raw);
+                healPerTarget.push({ targetId: rid, amount: raw });
+                healSum += raw;
                 if (rid === ctx.healing.targetId) {
                     const { consumed, overheal } = ctx.healing.applyHealToTarget(raw);
                     ctx.healing.credit(intent.ownerId, 'effectiveHeal', consumed);
@@ -2388,6 +2433,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 round: ctx.round,
                 amount: shieldGrantedSum,
                 perTarget: shieldPerTarget,
+            });
+        }
+        // #2 log visibility: a reactive HEAL emits the LOG-ONLY reactive-heal-performed (NOT
+        // heal-performed — that would re-trigger on-repair listeners). No combat listener
+        // subscribes to this type, so it can't chain; buildCombatLog surfaces it, stamped
+        // duringTurnOf via ctx.bus so it nests under the triggering turn.
+        if (cfg.type === 'heal' && healPerTarget.length > 0 && ctx.bus) {
+            ctx.bus.emit({
+                type: 'reactive-heal-performed',
+                casterId: intent.ownerId,
+                round: ctx.round,
+                amount: healSum,
+                perTarget: healPerTarget,
             });
         }
         return;
@@ -2503,7 +2561,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}`;
             if (ctx.oncePerRoundConsumed?.has(onceKey)) return;
             ctx.oncePerRoundConsumed?.add(onceKey);
-            ctx.applyReactiveDamage?.(
+            const hpOutcome = ctx.applyReactiveDamage?.(
                 intent.ownerId,
                 sourceId,
                 intent.ability.id,
@@ -2517,6 +2575,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // dead-owner drain gate above already grants.
                 intent.eventCtx?.fromOwnDeath === true
             );
+            emitReactiveDamageLog(ctx, intent.ownerId, sourceId, hpOutcome);
             return;
         }
         if (!passesOncePerRoundGate(intent, ctx)) return;
@@ -2538,7 +2597,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // the cast path (e.g. 75 for "75% damage"); `hits` folds into the mitigation call the
         // same way applyCounterAttack folds a counter's hit count. Emits NO event → no chain.
         const targetId = intent.eventCtx?.counterTargetId ?? ctx.enemy.id;
-        ctx.applyReactiveDamage?.(
+        const outcome = ctx.applyReactiveDamage?.(
             intent.ownerId,
             targetId,
             intent.ability.id,
@@ -2546,6 +2605,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             cfg.hits ?? 1,
             cfg.noCrit ?? false
         );
+        emitReactiveDamageLog(ctx, intent.ownerId, targetId, outcome);
         return;
     }
 

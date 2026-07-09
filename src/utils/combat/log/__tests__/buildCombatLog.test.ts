@@ -1659,4 +1659,101 @@ describe('buildCombatLog', () => {
         expect(entry.actorId).toBe('B');
         expect(entry.targets).toEqual([]);
     });
+
+    // ─── Log-only reactive damage / heal (drain-time procs that emit no ability/heal event) ───
+    it('reactive-damage-performed nests under the trigger turn as an attack entry', () => {
+        // A crits B on A's turn; a reaction (stamped duringTurnOf:'A') deals damage to B. The
+        // reactive-damage-performed carries its own target — no follow-up `attacked` event.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                isPrimaryTarget: true,
+            }),
+            ev({
+                type: 'reactive-damage-performed',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                amount: 600,
+                didCrit: false,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turn = log[0].turns[0];
+        // Only ONE top-level entry: A's attack. The reactive damage nests under it.
+        expect(turn.entries).toHaveLength(1);
+        const attack = turn.entries[0];
+        expect(attack.reactions).toHaveLength(1);
+        const reaction = attack.reactions[0];
+        expect(reaction.kind).toBe('attack');
+        expect(reaction.actorId).toBe('A');
+        expect(reaction.targets).toEqual([
+            expect.objectContaining({ targetId: 'B', amount: 600, didHit: true }),
+        ]);
+    });
+
+    it('reactive-heal-performed nests under the trigger turn as a heal entry', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                isPrimaryTarget: true,
+            }),
+            ev({
+                type: 'reactive-heal-performed',
+                casterId: 'B',
+                round: 1,
+                amount: 1152,
+                perTarget: [{ targetId: 'A', amount: 1152 }],
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const attack = log[0].turns[0].entries[0];
+        expect(attack.reactions).toHaveLength(1);
+        const reaction = attack.reactions[0];
+        expect(reaction.kind).toBe('heal');
+        expect(reaction.actorId).toBe('B');
+        expect(reaction.targets).toEqual([
+            expect.objectContaining({ targetId: 'A', amount: 1152 }),
+        ]);
+    });
 });

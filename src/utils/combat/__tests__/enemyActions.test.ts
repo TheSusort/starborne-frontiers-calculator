@@ -202,8 +202,9 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
     it('routes to ctx.enemy.id when no eventCtx counterTargetId is present (Judge/Chakara/Incinerator/Rhodium shape)', () => {
         const calls: Call[] = [];
         const ctx = makeExecCtx({
-            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) =>
-                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit }),
+            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) => {
+                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit });
+            },
         });
 
         executeIntent(makeDamageIntent('grif', { multiplier: 75, noCrit: true }), ctx);
@@ -223,8 +224,9 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
     it('routes to eventCtx.counterTargetId when present (FrontLine on-enemy-charged-cast shape)', () => {
         const calls: Call[] = [];
         const ctx = makeExecCtx({
-            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) =>
-                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit }),
+            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) => {
+                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit });
+            },
         });
 
         executeIntent(
@@ -247,8 +249,9 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
     it('defaults noCrit to false and hits to 1 when the config omits them', () => {
         const calls: Call[] = [];
         const ctx = makeExecCtx({
-            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) =>
-                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit }),
+            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) => {
+                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit });
+            },
         });
 
         executeIntent(makeDamageIntent('grif', { multiplier: 60 }), ctx);

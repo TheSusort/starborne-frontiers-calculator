@@ -4044,7 +4044,7 @@ export function runCombat(input: CombatEngineInput): {
             noCrit: boolean,
             hpBasisPct?: number,
             allowDeadOwner?: boolean
-        ): void => {
+        ): { dealt: number; didCrit: boolean } | void => {
             const owner = allActorsById.get(ownerId);
             const victim = allActorsById.get(victimId);
             // allowDeadOwner (PR-B1, Paracelsus): an on-destroyed retaliation is BORN of the
@@ -4125,6 +4125,7 @@ export function runCombat(input: CombatEngineInput): {
             }
             reactiveDealtByOwner.set(ownerId, raw);
             creditDamage(ownerId, 'direct', raw);
+            return { dealt: raw, didCrit };
         };
 
         // §4.5 STASIS direct-damage break (B3 Task 2). Fires via the `onHitBreakStasis` hook
