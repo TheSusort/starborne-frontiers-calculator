@@ -164,6 +164,31 @@ export type CombatEvent =
            *  recipient. Always populated by the engine; absent only in hand-crafted test emits. */
           perTarget?: { targetId: string; amount: number }[];
       } & ReactiveStamp)
+    /** LOG-ONLY: a drain-time REACTIVE damage proc resolved (applyReactiveDamage → creditDamage).
+     *  A reactive damage credits its total but emits NO `ability-performed` (chain guard — an
+     *  ability-performed would re-trigger on-crit/on-attacked/on-ally-crit listeners and loop).
+     *  This event exists SOLELY so buildCombatLog can surface the proc: NO combat listener
+     *  subscribes to it, so it can never chain. `sourceId` = the reacting owner; `targetId` = the
+     *  victim; `amount` = the mitigated/credited damage; `didCrit` when the proc crit. */
+    | ({
+          type: 'reactive-damage-performed';
+          sourceId: string;
+          targetId: string;
+          round: number;
+          amount: number;
+          didCrit?: boolean;
+      } & ReactiveStamp)
+    /** LOG-ONLY: a drain-time REACTIVE heal resolved (executeIntent heal branch). A reactive heal
+     *  credits `directHeal` but emits NO `heal-performed` (chain guard — it must not re-trigger
+     *  on-repair listeners). This event exists SOLELY for buildCombatLog: NO combat listener
+     *  subscribes to it. `casterId` = the reacting owner; `perTarget` = per-recipient raw repair. */
+    | ({
+          type: 'reactive-heal-performed';
+          casterId: string;
+          round: number;
+          amount: number;
+          perTarget: { targetId: string; amount: number }[];
+      } & ReactiveStamp)
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the number of
      *  debuffs ACTUALLY removed. Team-symmetric (the enemy-cleanse-lift, #166-era): BOTH the
      *  player path and the enemy (event-only) path perform REAL removal via the side-agnostic

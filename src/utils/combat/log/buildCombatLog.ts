@@ -415,6 +415,33 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    // Log-only reactive procs (drain-time damage/heal that emit no ability-performed/heal-performed
+    // — chain guard). Self-contained: the event carries its own target(s), so no follow-up
+    // `attacked` event fills them in. Both nest under the trigger turn via `currentStamp`.
+    'reactive-damage-performed': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const target: CombatLogTarget = { targetId: e.targetId, amount: e.amount, didHit: true };
+        if (e.didCrit) target.didCrit = true;
+        const entry: CombatLogEntry = {
+            kind: 'attack',
+            actorId: e.sourceId,
+            targets: [target],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'reactive-heal-performed': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'heal',
+            actorId: e.casterId,
+            targets: e.perTarget.map((pt) => ({ targetId: pt.targetId, amount: pt.amount })),
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
     'debuff-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {

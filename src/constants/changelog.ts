@@ -66,6 +66,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Cobalt\'s start-of-turn "Out. Damage Up II" buff now boosts every one of its turns while at full HP, instead of every other turn.',
     "FrontLine's reactive shield (on an enemy charged skill) now scales off the actual damage it deals — accounting for enemy defense, crits, and affinity — instead of a flat approximation.",
     'Butcher now correctly gains Marauder Rage II when it inflicts a debuff in team battles (previously the buff only applied in the single-target DPS view).',
+    "Combat sim: Sentinel no longer damages or heals on its own turn. Its reaction-only passives now correctly fire when an ally critically hits an enemy — dealing its bonus damage to that enemy and repairing the ally who landed the crit — instead of leaking onto Sentinel's own turn.",
+    'Combat log: reactive damage and reactive repairs now show up in the log, nested under the turn that triggered them. Previously these procs (Sentinel, Grif, FrontLine, Judge, Vindicator, Paracelsus, and other "when …" damage/heal reactions) were applied but never displayed.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

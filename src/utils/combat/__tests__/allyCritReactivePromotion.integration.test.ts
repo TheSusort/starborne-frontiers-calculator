@@ -273,7 +273,9 @@ describe('Howler (player-side) — cleanse + Blast land on the crit-ing ally, no
     it('the crit-ing ally (attacker) is cleansed; the non-critting ally (ally-b, the fallback) keeps its debuff', () => {
         const { engine } = runAndCollect(BASE());
         expect(
-            engine.timedAbilityStatuses('enemy', undefined, 'attacker').map((s) => s.active.buffName)
+            engine
+                .timedAbilityStatuses('enemy', undefined, 'attacker')
+                .map((s) => s.active.buffName)
         ).toEqual([]);
         expect(
             engine.timedAbilityStatuses('enemy', undefined, 'ally-b').map((s) => s.active.buffName)
@@ -440,5 +442,277 @@ describe('Howler (enemy-side) — team symmetry: an enemy Howler reacts to its O
         const blast = buffsApplied.filter((b) => b.buffName === 'Blast');
         expect(blast).toHaveLength(1);
         expect(blast[0].actorId).toBe('enemy-critter');
+    });
+});
+
+// =============================================================================
+// Sentinel (#2 reaction-only-on-turn fix) — a reaction-only unit whose passive damage AND heal
+// fire ONLY "when an ally critically hits an enemy". Both must ride on-ally-crit: the damage
+// lands on the CRIT-VICTIM enemy ("that enemy"), the heal on the CRIT-ING ally ("the ally").
+// On Sentinel's OWN turn nothing should fire (the reported leak was an on-turn heal).
+//
+//   R0 (unrefit):   "…this Unit deals 40% damage to that enemy. This attack cannot crit."
+//   R2 (refit-active): "…repairs the ally for 5% of Max HP AND deals 60% damage to that enemy…"
+// (docs/ship-skills.csv, verbatim.)
+// =============================================================================
+
+const SENTINEL_R0 =
+    'When an ally critically hits an enemy, this Unit deals <unit-damage>40% damage</unit-damage> to that enemy.<br />This attack cannot critically hit.';
+const SENTINEL_R2 =
+    "When an ally critically hits an enemy, this Unit <unit-damage>repairs the ally for 5%</unit-damage> of this Unit's Max HP and deals <unit-damage>60% damage</unit-damage> to that enemy.<br />This attack cannot critically hit.";
+
+/** Sentinel's refit-resolved passive abilities through the REAL parser/builder. */
+function sentinelPassiveAbilities(refits: number): Ability[] {
+    return (
+        buildShipAbilities(
+            ship({
+                refits: Array.from({ length: refits }, () => ({})) as Ship['refits'],
+                firstPassiveSkillText: SENTINEL_R0,
+                secondPassiveSkillText: SENTINEL_R2,
+            })
+        ).slots.find((s) => s.slot === 'passive')?.abilities ?? []
+    );
+}
+
+describe('Sentinel ally-crit abilities — extracted shape (mutation guard)', () => {
+    it('R0 passive damage rides on-ally-crit, targeting the enemy, cannot crit', () => {
+        const dmg = sentinelPassiveAbilities(0).find((a) => a.type === 'damage');
+        if (!dmg) throw new Error('mutation guard: Sentinel R0 on-ally-crit damage not found');
+        expect(dmg.trigger).toBe('on-ally-crit');
+        expect(dmg.target).toBe('enemy');
+        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 40, noCrit: true });
+    });
+
+    it('R2 passive heal rides on-ally-crit, targeting the ally', () => {
+        const heal = sentinelPassiveAbilities(2).find((a) => a.type === 'heal');
+        if (!heal) throw new Error('mutation guard: Sentinel R2 on-ally-crit heal not found');
+        expect(heal.trigger).toBe('on-ally-crit');
+        expect(heal.target).toBe('ally');
+        expect(heal.config).toMatchObject({ type: 'heal', pct: 5 });
+    });
+
+    it('R2 passive damage rides on-ally-crit, targeting the enemy, cannot crit', () => {
+        const dmg = sentinelPassiveAbilities(2).find((a) => a.type === 'damage');
+        if (!dmg) throw new Error('mutation guard: Sentinel R2 on-ally-crit damage not found');
+        expect(dmg.trigger).toBe('on-ally-crit');
+        expect(dmg.target).toBe('enemy');
+        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 60, noCrit: true });
+    });
+});
+
+/** A Sentinel observer (team actor): R2 passive (heal + damage), real attack/HP so its reactive
+ *  damage credits and its 5%-Max-HP repair is non-zero. Acts LAST so ally crits precede it. */
+const sentinelObserver = (position: Position): TeamActorEngineInput =>
+    ({
+        id: 'sentinel',
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        walk: {
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [noopActive()] },
+                    { slot: 'passive', abilities: sentinelPassiveAbilities(2) },
+                ],
+            },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 100,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 20_000,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    }) as TeamActorEngineInput;
+
+function runSentinel(input: CombatEngineInput) {
+    const bus = createEventBus();
+    const credits: { sourceId: string; amount: number }[] = [];
+    const reactiveDamage: Extract<CombatEvent, { type: 'reactive-damage-performed' }>[] = [];
+    const reactiveHeals: Extract<CombatEvent, { type: 'reactive-heal-performed' }>[] = [];
+    bus.on('reactive-damage-performed', (e) => reactiveDamage.push(e));
+    bus.on('reactive-heal-performed', (e) => reactiveHeals.push(e));
+    const result = runCombat({
+        ...input,
+        bus,
+        __testTapCreditDamage: (sourceId, _channel, amount) => credits.push({ sourceId, amount }),
+    });
+    return { result, credits, reactiveDamage, reactiveHeals };
+}
+
+/** Total reactive repair the healing accounting credited to `ownerId` across all rounds. A
+ *  reactive heal credits `directHeal` to its OWNER (it emits no heal-performed — chain guard),
+ *  so this is the observable for "Sentinel's on-ally-crit repair fired". */
+const totalDirectHeal = (result: ReturnType<typeof runCombat>, ownerId: string): number =>
+    (result.healing?.rounds ?? []).reduce(
+        (sum, rd) => sum + (rd.perActor.get(ownerId)?.directHeal ?? 0),
+        0
+    );
+
+describe('Sentinel (player-side) — reactive heal + damage fire on ally crit, never on its own turn', () => {
+    // Focus 'attacker' (crit 100) crits every hit; 'ally-b' (crit 0) never crits. healTargetId is
+    // DELIBERATELY 'ally-b' (the fallback trap) — if the heal ever fell back to the on-cast heal
+    // target instead of the crit-ing ally, this catches it landing on the WRONG actor.
+    const BASE = (): CombatEngineInput => ({
+        attack: 1000,
+        crit: 100,
+        critDamage: 100,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 500,
+        healTargetId: 'ally-b', // deliberately the NON-critting ally (the fallback trap)
+        position: 'M1',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        teamActors: [sentinelObserver('M3'), critAlly('ally-b', 'M2', 0)],
+        enemyAttackers: [debuffAoE('enemy-x', 'M4')],
+    });
+
+    it('fires its repair reactively when an ally crits (directHeal credited to Sentinel)', () => {
+        const { result } = runSentinel(BASE());
+        expect(totalDirectHeal(result, 'sentinel')).toBeGreaterThan(0);
+    });
+
+    it('deals reactive damage (credited to Sentinel) when an ally crits', () => {
+        const { credits } = runSentinel(BASE());
+        expect(credits.some((c) => c.sourceId === 'sentinel' && c.amount > 0)).toBe(true);
+    });
+
+    it('emits log-only reactive damage + heal events, stamped to the crit-ing ally turn', () => {
+        const { reactiveDamage, reactiveHeals } = runSentinel(BASE());
+        // Reactive DAMAGE surfaced for the log: owner=sentinel, amount>0, nested under the
+        // crit-ing ally's turn (duringTurnOf === 'attacker'). NEVER re-emits ability-performed.
+        const dmg = reactiveDamage.filter((e) => e.sourceId === 'sentinel');
+        expect(dmg.length).toBeGreaterThan(0);
+        expect(dmg.every((e) => e.amount > 0 && e.duringTurnOf === 'attacker')).toBe(true);
+        // Reactive HEAL surfaced for the log: caster=sentinel, same stamp, and the repair lands
+        // on the CRIT-ing ally (attacker) — NOT the healTargetId fallback (ally-b). This proves
+        // the damagedAllyId routing via the perTarget recipient, catching the wrong-target trap.
+        const heal = reactiveHeals.filter((e) => e.casterId === 'sentinel');
+        expect(heal.length).toBeGreaterThan(0);
+        expect(heal.every((e) => e.duringTurnOf === 'attacker')).toBe(true);
+        const healRecipients = heal.flatMap((e) => e.perTarget.map((t) => t.targetId));
+        expect(healRecipients).toContain('attacker');
+        expect(healRecipients).not.toContain('ally-b');
+    });
+
+    it('does NOT heal or deal damage on its own turn when no ally crits (the on-turn leak)', () => {
+        const noCrit: CombatEngineInput = {
+            ...BASE(),
+            crit: 0,
+            teamActors: [sentinelObserver('M3'), critAlly('ally-b', 'M2', 0)],
+        };
+        const { result, credits } = runSentinel(noCrit);
+        expect(totalDirectHeal(result, 'sentinel')).toBe(0);
+        expect(credits.some((c) => c.sourceId === 'sentinel' && c.amount > 0)).toBe(false);
+    });
+});
+
+describe('Sentinel (enemy-side) — team symmetry: an enemy Sentinel reacts to its OWN crit-ing ally', () => {
+    it('heals the crit-ing ENEMY ally and credits reactive damage, never touching a player actor', () => {
+        const enemySentinel: EnemyAttacker = {
+            id: 'enemy-sentinel',
+            stats: { attack: 1000, crit: 0, critDamage: 100, defence: 0, hp: 20_000, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M3',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [noopActive()] },
+                    { slot: 'passive', abilities: sentinelPassiveAbilities(2) },
+                ],
+            },
+        } as EnemyAttacker;
+
+        const enemyCritAlly: EnemyAttacker = {
+            id: 'enemy-critter',
+            stats: {
+                attack: 1000,
+                crit: 100,
+                critDamage: 100,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 300,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M2',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
+        } as EnemyAttacker;
+
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [{ slot: 'active', abilities: [noopActive()] }] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1000,
+            healTargetId: 'attacker',
+            position: 'M1',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [],
+            enemyAttackers: [enemySentinel, enemyCritAlly],
+        };
+
+        const { result, credits, reactiveHeals } = runSentinel(input);
+        // The enemy Sentinel's repair fires (directHeal credited) and its reactive damage credits —
+        // both keyed to the ENEMY owner, never a player-side actor.
+        expect(totalDirectHeal(result, 'enemy-sentinel')).toBeGreaterThan(0);
+        expect(credits.some((c) => c.sourceId === 'enemy-sentinel' && c.amount > 0)).toBe(true);
+        // Team symmetry at the recipient level: the reactive repair lands on the crit-ing ENEMY
+        // ally (enemy-critter), never crossing onto a player-side actor.
+        const heal = reactiveHeals.filter((e) => e.casterId === 'enemy-sentinel');
+        expect(heal.length).toBeGreaterThan(0);
+        const healRecipients = heal.flatMap((e) => e.perTarget.map((t) => t.targetId));
+        expect(healRecipients).toContain('enemy-critter');
+        expect(healRecipients).not.toContain('attacker');
     });
 });

@@ -207,6 +207,9 @@ export const LOG_EVENT_TYPES = [
     'cleanse-performed',
     'purge-performed',
     'ship-destroyed',
+    // Log-only reactive procs (drain-time damage/heal that emit no ability-performed/heal-performed).
+    'reactive-damage-performed',
+    'reactive-heal-performed',
 ] as const satisfies readonly CombatEvent['type'][];
 
 // Compile-time proof that LOG_EVENT_TYPES ⊇ ASSEMBLED_EVENT_TYPES (bus subscribes to LOG;
