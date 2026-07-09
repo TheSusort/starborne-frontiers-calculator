@@ -51,8 +51,8 @@ const BERSERKER_P2 =
     'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
 
 function berserkerShip(): Ship {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...({} as any),
         refits: [{}, {}, {}, {}],
         secondPassiveSkillText: BERSERKER_P2,
