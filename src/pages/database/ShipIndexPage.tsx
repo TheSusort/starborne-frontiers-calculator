@@ -9,7 +9,14 @@ import { FilterPanel, FilterConfig } from '../../components/filters/FilterPanel'
 import { SortConfig } from '../../components/filters/SortPanel';
 import { usePersistedFilters } from '../../hooks/usePersistedFilters';
 import { useShipComparison } from '../../hooks/useShipComparison';
-import { SHIP_TYPES, FACTIONS, RARITY_ORDER, RARITIES, ALL_STAT_NAMES } from '../../constants';
+import {
+    SHIP_TYPES,
+    FACTIONS,
+    RARITY_ORDER,
+    RARITIES,
+    ALL_STAT_NAMES,
+    sortRarities,
+} from '../../constants';
 import { Ship, AffinityName } from '../../types/ship';
 import { useNotification } from '../../hooks/useNotification';
 import { Button } from '../../components/ui/Button';
@@ -162,6 +169,19 @@ export const ShipIndexPage: React.FC = () => {
         return Array.from(affinities).sort((a, b) => a.localeCompare(b));
     }, [templateShips]);
 
+    const uniqueShipTypes = useMemo(() => {
+        if (!templateShips) return [];
+        const shipTypes = new Set(templateShips.map((ship) => ship.type));
+        return Array.from(shipTypes).sort((a, b) =>
+            SHIP_TYPES[a].name.localeCompare(SHIP_TYPES[b].name)
+        );
+    }, [templateShips]);
+
+    const uniqueRarities = useMemo(() => {
+        const rarities = new Set(templateShips.map((ship) => ship.rarity));
+        return sortRarities(Array.from(rarities));
+    }, [templateShips]);
+
     const uniquePatternShapes = useMemo(() => {
         if (!templateShips) return [];
         const shapes = new Set<PatternShape>();
@@ -189,9 +209,9 @@ export const ShipIndexPage: React.FC = () => {
             label: 'Ship Type',
             values: state.filters.shipTypes ?? [],
             onChange: setSelectedShipTypes,
-            options: Object.entries(SHIP_TYPES).map(([key, type]) => ({
-                value: key,
-                label: type.name,
+            options: uniqueShipTypes.map((shipType) => ({
+                value: shipType,
+                label: SHIP_TYPES[shipType]?.name,
             })),
         },
         {
@@ -199,9 +219,9 @@ export const ShipIndexPage: React.FC = () => {
             label: 'Rarity',
             values: state.filters.rarities ?? [],
             onChange: setSelectedRarities,
-            options: Object.entries(RARITIES).map(([key, rarity]) => ({
-                value: key,
-                label: rarity.label,
+            options: uniqueRarities.map((rarity) => ({
+                value: rarity,
+                label: RARITIES[rarity].label,
             })),
         },
         {
@@ -216,7 +236,7 @@ export const ShipIndexPage: React.FC = () => {
         },
         {
             id: 'targetSelection',
-            label: 'Who it hits',
+            label: 'Target',
             values: state.filters.targetSelections ?? [],
             onChange: setSelectedTargetSelections,
             options: Object.values(TARGETING_RULES).map((rule) => ({

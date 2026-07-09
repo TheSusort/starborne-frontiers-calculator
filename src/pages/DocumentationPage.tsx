@@ -693,8 +693,8 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">
                                             Skill Targeting Filters:
                                         </span>{' '}
-                                        Filter by &quot;Who it hits&quot; (target selection: Front,
-                                        Back, Skip, All, Self, Allies, Other Allies) and{' '}
+                                        Filter by &quot;Target&quot; (target selection: Front, Back,
+                                        Skip, All, Self, Allies, Other Allies) and{' '}
                                         &quot;Pattern&quot; (AoE pattern shape)
                                     </li>
                                 </ul>
@@ -1857,7 +1857,7 @@ const DocumentationPage: React.FC = () => {
                                     <li>View base stats for all ships at level 60</li>
                                     <li>Filter by faction, ship type, rarity, and affinity</li>
                                     <li>
-                                        Filter by skill targeting — &quot;Who it hits&quot; (target
+                                        Filter by skill targeting — &quot;Target&quot; (target
                                         selection: Front, Back, Skip, All, Self, Allies, Other
                                         Allies) and &quot;Pattern&quot; (AoE pattern shape)
                                     </li>

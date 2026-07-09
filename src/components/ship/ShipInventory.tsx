@@ -406,7 +406,7 @@ export const ShipInventory: React.FC<Props> = ({
         },
         {
             id: 'targetSelection',
-            label: 'Who it hits',
+            label: 'Target',
             values: state.filters.targetSelections ?? [],
             onChange: setSelectedTargetSelections,
             options: Object.values(TARGETING_RULES).map((rule) => ({
