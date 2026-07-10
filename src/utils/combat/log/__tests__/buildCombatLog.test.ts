@@ -1823,3 +1823,85 @@ describe('buildCombatLog', () => {
         expect(turn.entries[0].targets[0].didHit).toBe(false); // miss target synthesized
     });
 });
+
+// ---------------------------------------------------------------------------
+// Task 6c: the LOG-ONLY stats-snapshot event decorates the turn it belongs to
+// (no entry is created — it is a property on CombatLogTurn, not a CombatLogEntry).
+// ---------------------------------------------------------------------------
+
+describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
+    it('attaches a stats-snapshot to the turn it belongs to', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'stats-snapshot',
+                actorId: 'A',
+                round: 1,
+                stats: {
+                    attack: 5000,
+                    defence: 3000,
+                    crit: 70,
+                    critDamage: 150,
+                    defensePenetration: 0,
+                    speed: 120,
+                    hacking: 200,
+                    security: 100,
+                    currentHp: 40000,
+                    maxHp: 50000,
+                    shieldPool: 0,
+                },
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const rounds = buildCombatLog(
+            events,
+            [{ actorId: 'A', side: 'player', name: 'A' }],
+            new Map()
+        );
+        expect(rounds[0].turns[0].statsSnapshot?.attack).toBe(5000);
+        expect(rounds[0].turns[0].statsSnapshot?.currentHp).toBe(40000);
+        // No entry is created for the snapshot — it decorates the turn only.
+        expect(rounds[0].turns[0].entries).toHaveLength(0);
+    });
+
+    it('does not attach the snapshot to a turn belonging to a different actor', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'B', round: 1 }),
+            ev({
+                type: 'stats-snapshot',
+                actorId: 'A', // stale/mismatched actorId — must not leak onto B's turn
+                round: 1,
+                stats: {
+                    attack: 1,
+                    defence: 1,
+                    crit: 1,
+                    critDamage: 1,
+                    defensePenetration: 1,
+                    speed: 1,
+                    hacking: 1,
+                    security: 1,
+                    currentHp: 1,
+                    maxHp: 1,
+                    shieldPool: 1,
+                },
+            }),
+            ev({ type: 'turn-ended', actorId: 'B', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const rounds = buildCombatLog(
+            events,
+            [
+                { actorId: 'A', side: 'player', name: 'A' },
+                { actorId: 'B', side: 'enemy', name: 'B' },
+            ],
+            new Map()
+        );
+        expect(rounds[0].turns[0].statsSnapshot).toBeUndefined();
+        expect(rounds[0].turns[1].statsSnapshot).toBeUndefined();
+    });
+});

@@ -11,6 +11,26 @@ export interface CombatLogTurn {
     chargeBefore: number; // charge level at turn start (filled by a later task; 0 for now)
     chargeMax: number; // 0 = no charge skill (filled by a later task)
     entries: CombatLogEntry[]; // chronological within the turn
+    /** Task 6: a snapshot of the acting actor's live modelled stats, taken immediately after
+     *  turn-started (see the `stats-snapshot` CombatEvent). Optional — absent on any turn built
+     *  from an event stream that predates/omits the emission (e.g. hand-crafted test fixtures). */
+    statsSnapshot?: StatsSnapshot;
+}
+
+/** Task 6: per-turn modelled stat snapshot for the acting actor (mirrors the `stats-snapshot`
+ *  CombatEvent's `stats` payload). */
+export interface StatsSnapshot {
+    attack: number;
+    defence: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    speed: number;
+    hacking: number;
+    security: number;
+    currentHp: number;
+    maxHp: number;
+    shieldPool: number;
 }
 
 export type CombatLogEntryKind =

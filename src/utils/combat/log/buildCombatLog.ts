@@ -298,6 +298,13 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.openTurn(e.actorId);
     },
 
+    // Task 6c: decorates the current turn with its live modelled stats — creates NO entry.
+    'stats-snapshot': (e, ctx) => {
+        if (ctx.currentTurn && ctx.currentTurn.actorId === e.actorId) {
+            ctx.currentTurn.statsSnapshot = e.stats;
+        }
+    },
+
     'turn-ended': (_e, ctx) => {
         ctx.closeOpenAttack(); // also clears pendingSkill
         ctx.currentTurn = undefined;
