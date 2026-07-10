@@ -1515,16 +1515,17 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         expect(enqueued).toHaveLength(1);
     });
 
-    it('on-ally-crit: an ally crit enqueues once per critting hit; own/enemy/no-crit do not', () => {
+    it('on-ally-crit (non-charge rider): an ally crit enqueues once per critting hit; own/enemy/no-crit do not', () => {
         const handBus = makeHandBus();
         const enqueued: Intent[] = [];
+        // A NON-charge rider (Sentinel-style reactive damage) — these fire once per critting hit.
         const ability: Ability = {
-            id: 'ally-crit-charge',
-            type: 'charge',
-            target: 'self',
+            id: 'ally-crit-damage',
+            type: 'damage',
+            target: 'enemy',
             trigger: 'on-ally-crit',
             conditions: [],
-            config: { type: 'charge', amount: 1 },
+            config: { type: 'damage', multiplier: 40, noCrit: true },
         };
         const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
         registerReactiveListeners({
@@ -1559,6 +1560,51 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         // Another player's cast with didCrit binary only (no critHits field) → 1 enqueue.
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: true });
         expect(enqueued).toHaveLength(3);
+    });
+
+    it('on-ally-crit (charge rider): charge gain is once PER ATTACK that crits, not per critting hit', () => {
+        const handBus = makeHandBus();
+        const enqueued: Intent[] = [];
+        // A CHARGE rider (Hermes: "gains 1 charge" per ally-crit event) — one enqueue per attack
+        // that crits, regardless of how many hits/victims crit.
+        const ability: Ability = {
+            id: 'ally-crit-charge',
+            type: 'charge',
+            target: 'self',
+            trigger: 'on-ally-crit',
+            conditions: [],
+            config: { type: 'charge', amount: 1 },
+        };
+        const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            isOpposing: (id) => id === 'enemy',
+        });
+        const base = {
+            round: 1,
+            didCrit: true,
+            targetId: 'enemy',
+            abilityType: 'damage' as const,
+        };
+
+        // An ally's cast with 2 critting hits → ONE enqueue (per attack, not per hit).
+        handBus.emit({ type: 'ability-performed', actorId: 'other', critHits: 2, ...base });
+        expect(enqueued).toHaveLength(1);
+
+        // Own / enemy casts → excluded → 0 additional.
+        handBus.emit({ type: 'ability-performed', actorId: 'attacker', critHits: 2, ...base });
+        handBus.emit({ type: 'ability-performed', actorId: 'enemy', critHits: 2, ...base });
+        expect(enqueued).toHaveLength(1);
+
+        // An ally's non-critting cast → 0 additional.
+        handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: false });
+        expect(enqueued).toHaveLength(1);
+
+        // Another ally attack that crits → +1 (one per ATTACK).
+        handBus.emit({ type: 'ability-performed', actorId: 'other', critHits: 3, ...base });
+        expect(enqueued).toHaveLength(2);
     });
 
     it('on-debuff-inflicted shield (APEX): own infliction enqueues; ally/enemy infliction does not', () => {
@@ -2045,7 +2091,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
         expect(focusHeal(result, 'cleanseCount')).toBe(0);
     });
 
-    it('on-ally-crit: a walked ally crit multi-hits (2) each round → focus banks 2 charges per ally cast', () => {
+    it('on-ally-crit: a walked ally crit multi-hits (2) each round → focus banks 1 charge per ally cast (per attack that crits, not per hit)', () => {
         idCounter = 0;
         const result = runCombat(
             BASE({
@@ -2078,9 +2124,10 @@ describe('healing — Task 9: reactive trigger integration', () => {
                 },
             })
         );
-        // The ally's active crit-hits twice → 2 critting hits → 2 reactive charge intents → the
-        // focus banks 2 charges. Surfaced via the round's charge accounting.
-        expect(result.rounds[0].charges).toBe(2);
+        // The ally's active crit-hits twice, but charge gain is once PER ATTACK that crits (Hermes:
+        // "gains 1 charge" per ally-crit event) — so the focus banks exactly 1 charge, not one per
+        // critting hit. Surfaced via the round's charge accounting.
+        expect(result.rounds[0].charges).toBe(1);
     });
 });
 

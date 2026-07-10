@@ -8,21 +8,23 @@
  * This task adds a covered-victim Stasis-break at all THREE positional cast-sites (focus,
  * walked-team, enemy). For every hit footprint victim that was stasised at hit time (and only when
  * the attacker does NOT have doesntBreakStasis), a DEFERRED break is recorded via stasisBreakPending
- * — the same deferral the anchor uses — so the victim's own skip branch removes the Stasis and it
- * acts on its NEXT scheduled turn. Covered victims have NO same-turn re-apply vector (the turn's
- * debuffs only ever target the anchor), so their break fires UNCONDITIONALLY (no re-apply guard).
+ * — the same deferral the anchor uses — so the victim's own skip branch reduces the Stasis and it
+ * eventually resumes acting. Covered victims have NO same-turn re-apply vector (the turn's debuffs
+ * only ever target the anchor), so their break fires UNCONDITIONALLY (no re-apply guard).
  *
  * Harness mirrors perVictimAttacked.integration.test.ts (positioned actors, Line-Range-1 AoE) +
  * stasis.test.ts (Stasis applied once by fast stasis-bots that are then killed; break observed via
  * the victim acting again — emitting ability-performed — on a round it would otherwise still skip).
  *
- * OBSERVATION MODEL. A stasised actor skips its turn (no ability-performed). We seed Stasis(20) on
+ * OBSERVATION MODEL. A stasised actor skips its turn (no ability-performed). We seed Stasis(4) on
  * two victims in round 1 via two fast stasis-bots, then kill those bots that same round (a culler)
- * so the Stasis is NEVER re-applied. Stasis(20) ≫ numRounds:4 → absent a break a victim NEVER acts.
- * A player/enemy AoE breaker (WITHOUT doesntBreakStasis) hits BOTH the anchor and the covered victim
- * every round. The anchor break already worked (it acts from round 2). The NEW behaviour: the COVERED
- * victim also breaks and acts (FAILS pre-change — it never acted). The break is DEFERRED (consumed at
- * the victim's own next skip), so a broken victim acts from round 2 onward.
+ * so the Stasis is NEVER re-applied. A direct hit REDUCES Stasis by one turn (not a full removal),
+ * so a victim HIT every round loses 2 turns/round (deferred break −1 + natural Post-Turn −1) and
+ * clears by the end of round 2 → acts from round 3; a victim NOT hit loses only −1/round and still
+ * has Stasis left at the end of the 4-round run → never acts. A player/enemy AoE breaker (WITHOUT
+ * doesntBreakStasis) hits BOTH the anchor and the covered victim every round. The anchor break
+ * already worked (it acts from round 3). The NEW behaviour: the COVERED victim also breaks and acts
+ * (FAILS pre-change — it never acted).
  *
  * GRID. Positions are the T/M/B × col-1..4 board. Targeting scans by ROW (the acting actor's row
  * first, then descend, wrapping bottom→top), then column within the first occupied row. We isolate
@@ -118,7 +120,12 @@ const firedRounds = (
     actorId: string
 ): number[] => performed.filter((e) => e.actorId === actorId).map((e) => e.round);
 
-const STASIS_LONG = 20; // ≫ numRounds → no natural expiry inside the run; only a break can free it
+// Stasis(4) + numRounds:4 is the reduce-by-one observation window. A footprint victim HIT every
+// round loses 2 turns/round (the deferred break's −1 plus the natural Post-Turn −1), so it clears
+// by the end of round 2 and acts from round 3. A victim NOT hit loses only the natural −1/round, so
+// Stasis(4) still has 1 turn left at the end of round 4 → it never acts inside the run. That gap is
+// what distinguishes a footprint-covered (hit) victim from an uncovered (unhit) one.
+const STASIS_LONG = 4;
 const ROUNDS = 4;
 
 // ---------------------------------------------------------------------------------------------

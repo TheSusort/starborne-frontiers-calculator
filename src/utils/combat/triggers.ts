@@ -511,7 +511,17 @@ export function registerReactiveListeners(args: {
                         // excluded — an opposing crit is NOT an ally crit, even though a
                         // walked enemy now emits ability-performed.
                         if (!isSameSideAlly(e.actorId, ownerId)) return;
-                        const n = e.critHits ?? (e.didCrit ? 1 : 0);
+                        // Charge gain is once PER ATTACK that crits (Hermes: "gains 1 charge"
+                        // per ally-crit event) — a multi-hit or AoE crit grants a single charge,
+                        // not one per critting (hit, victim) pair. Every other on-ally-crit rider
+                        // (Sentinel's reactive damage/heal, Howler's cleanse/Blast) stays
+                        // per-critting-hit via critHits.
+                        const n =
+                            intent.ability.config.type === 'charge'
+                                ? e.didCrit
+                                    ? 1
+                                    : 0
+                                : (e.critHits ?? (e.didCrit ? 1 : 0));
                         // Stamp the crit-ing ally via damagedAllyId (Phase 3 PR-G, Howler) so an
                         // 'ally'-target reactive (cleanse/buff/heal — Sentinel's repair) lands on
                         // THAT ally, mirroring the on-ally-debuffed/on-ally-purged siblings. ALSO

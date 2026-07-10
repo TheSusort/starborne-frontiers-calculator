@@ -183,6 +183,12 @@ export interface StatusEngine {
      *  co-applied debuffs on the same victim. Used by §4.5 direct-damage Stasis break.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     removeTimedEnemyStatus(targetId: string, buffName: string): void;
+    /** Reduce a SINGLE named timed enemy status on `targetId` by one turn, deleting it only if
+     *  that reaches 0. Targeted like removeTimedEnemyStatus, but a reduce (not a wipe): used by
+     *  §4.5 direct-damage Stasis break so a hit shaves one turn off Stasis instead of clearing it.
+     *  A 'permanent'/'recurring' entry is left untouched. Lazy-empty / unknown id / unknown name →
+     *  safe no-op. */
+    reduceTimedEnemyStatus(targetId: string, buffName: string): void;
     /** Remove a named buff family from ALL of `actorId`'s self stores (timed selfMaps,
      *  accumulating accumSelfMaps, persistent persistentSelfMaps). Lazy-empty / unknown id /
      *  unknown name → safe no-op. */
@@ -1041,6 +1047,19 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         map.delete(deriveFamilyKey(buffName).familyKey);
     };
 
+    /** §4.5 direct-damage Stasis break: shave ONE turn off the named timed enemy status instead
+     *  of wiping it (the game reduces Stasis' turn count on a direct hit, not removes it). Delete
+     *  only when the count reaches 0. 'permanent'/'recurring' entries are non-numeric → left as-is. */
+    const reduceTimedEnemyStatus = (targetId: string, buffName: string): void => {
+        const map = enemyMaps.get(targetId);
+        if (!map) return;
+        const key = deriveFamilyKey(buffName).familyKey;
+        const s = map.get(key);
+        if (!s || typeof s.turnsRemaining !== 'number') return;
+        s.turnsRemaining -= 1;
+        if (s.turnsRemaining <= 0) map.delete(key);
+    };
+
     /** Remove a named buff family from ALL of `actorId`'s self stores. The three self-side
      *  doors a buff can arrive through each use a different key:
      *   - timed `selfMaps` are keyed by `deriveFamilyKey(buffName).familyKey`,
@@ -1495,6 +1514,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         decrementEnemy,
         clearRemovable,
         removeTimedEnemyStatus,
+        reduceTimedEnemyStatus,
         removeSelfBuffByName,
         cleanse,
         reduceNewestDebuffDuration,

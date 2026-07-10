@@ -3403,6 +3403,9 @@ export function runCombat(input: CombatEngineInput): {
                 }
             }
             sink.addIncoming(damage, victim.id);
+            // SP-E: amount of THIS hit converted into a DoT (Voron/Orel). Reported in the returned
+            // outcome so the caller excludes it from the per-victim damage-taken credit.
+            let transformedToDot = 0;
             // SP-E: Voron/Orel — "when directly damaged, transforms the damage into a Damage over
             // Time effect lasting N turns". DIRECT INTAKE ONLY (byDirectDamage) — a DoT tick never
             // re-transforms (no recursive conversion). Never fires when Barrier is already
@@ -3450,7 +3453,16 @@ export function runCombat(input: CombatEngineInput): {
                             sourceId: victim.id,
                             perTickAmount: damage / turns,
                         });
-                        damage = 0; // the direct hit is replaced — no shield/HP drain this turn
+                        // The direct hit is REPLACED by the DoT — no shield/HP drain this turn.
+                        // Reverse the `.incoming` recorded above AND report the converted amount so
+                        // the caller drops it from the per-victim damage-taken credit; together
+                        // these make the battle sim's HP derivation net to zero real HP loss for
+                        // this hit (the converted damage instead lands over time via the generic-DoT
+                        // ticks, each recording its own `.incoming`). Unlike the Barrier path this
+                        // hit is DEFERRED, not blocked, so it is NOT booked as barrier/shield absorbed.
+                        sink.addIncoming(-damage, victim.id);
+                        transformedToDot = damage;
+                        damage = 0;
                     }
                 }
             }
@@ -3842,7 +3854,7 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
-            return { shieldBefore, hpDamage, barriered: false };
+            return { shieldBefore, hpDamage, barriered: false, transformedToDot };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
         // accumulates the victim's incoming / shield-absorbed / barrier-absorbed into its per-actor
@@ -6053,7 +6065,8 @@ export function runCombat(input: CombatEngineInput): {
                                 // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
                                 // (unconditional — covered victims have no same-turn re-apply vector).
                                 // Mirrors the anchor's stasisBreakPending mark; the victim's own skip
-                                // branch consumes it (removeTimedEnemyStatus) on its NEXT turn.
+                                // branch consumes it (reduceTimedEnemyStatus — shaves one turn off
+                                // Stasis, does NOT fully clear it) on its NEXT turn.
                                 for (const victimId of coveredStasisVictims) {
                                     stasisBreakPending.set(victimId, true);
                                 }
@@ -6165,7 +6178,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (stasisBreakPending.has(actor.id)) {
                             stasisBreakPending.delete(actor.id);
                             for (const name of STASIS_BUFFS)
-                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
                         }
                         // Synthesize a minimal no-action result so the post-round
                         // `focusTurns.length` guard does not throw (the focus actor
@@ -6453,7 +6466,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (stasisBreakPending.has(actor.id)) {
                             stasisBreakPending.delete(actor.id);
                             for (const name of STASIS_BUFFS)
-                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
                         }
                     } // end stasis gate (walked-team branch)
                 } else if (actor.kind === 'enemy' && actor.id === enemy.id) {
@@ -7255,7 +7268,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (stasisBreakPending.has(actor.id)) {
                             stasisBreakPending.delete(actor.id);
                             for (const name of STASIS_BUFFS)
-                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
                         }
                     } // end stasis gate (real-enemy branch)
                 }

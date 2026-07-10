@@ -1320,7 +1320,7 @@ describe('B3 Task 1 — reactive suppression: (d) non-stasised focus — on-atta
 
 describe('B3 Task 2 — direct-damage break', () => {
     // (i) A direct firing hit breaks Stasis
-    it('(i) direct hit breaks Stasis: victim acts on next scheduled turn instead of skipping the full duration', () => {
+    it('(i) direct hit reduces Stasis by one turn (not full removal): victim resumes one round later than a full break would give', () => {
         idc = 0;
         /**
          * Setup:
@@ -1333,18 +1333,15 @@ describe('B3 Task 2 — direct-damage break', () => {
          *   - breaker-enemy (speed=150): basicAttack targeting 'front' (the focus).
          *     Acts between killer and focus.
          *
-         * Without break: Stasis(3) skips rounds 1, 2, 3 → focus fires round 4.
-         * With break: in round 2 the breaker lands a direct hit → Stasis removed →
-         *   focus IS stasised in round 1 (applied round 1, decremented post-round1→2 remaining),
-         *   focus IS skipped in round 1. After breaker hits in round 2, Stasis is removed.
-         *   Focus acts in round 2 itself (after break) or round 3.
+         * A direct hit REDUCES the Stasis turn count by one instead of clearing it, so:
+         *   R1: Stasis(3) applied; breaker hits → break decrement 3→2, then Post-Turn 2→1.
+         *   R2: breaker hits → break decrement 1→0 (expired); focus still skipped this round.
+         *   R3: focus is free → fires.
+         * Compared to an untouched Stasis(3) (skips R1/R2/R3, fires R4), the every-round breaking
+         * hits shave it to a round-3 resume — one round later than the OLD full-removal rule (which
+         * cleared Stasis on the first hit and resumed in round 2).
          *
-         * We use numRounds:4. Assert focus fires in round 3 OR earlier (not only round 4+).
-         * Concretely: focus should fire in round 2 or 3 (break happened in round 2 before focus turn
-         * if breaker speed > focus speed, but break fires DURING apply, not before turn-gate check
-         * for the current round). Let's simplify: assert focus fired BEFORE round 4.
-         *
-         * Use __testTapIsStasised to also check Stasis is gone after round 2's apply.
+         * numRounds:4. Use __testTapIsStasised to confirm Stasis is gone by the end of the run.
          */
         let capturedIsStasised: ((actorId: string) => boolean) | undefined;
         const { events } = run({
@@ -1434,14 +1431,13 @@ describe('B3 Task 2 — direct-damage break', () => {
         expect(focusFiredRounds).not.toContain(1);
 
         // Turn order: stasis-bot(300) → killer(200) → breaker-enemy(150) → focus(100).
-        // Round 1: stasis-bot applies Stasis(3), killer kills stasis-bot, breaker hits stasised
-        // focus → break marked. Focus skip branch: consumes break → Stasis removed (but skip runs).
-        // Round 2: focus NOT stasised → fires in EXACTLY round 2 (not 3 or 4).
-        // Pinned to round 2 — "≤3" would pass under a one-round-late regression.
+        // Reduce-by-one (see the trace above): resumes round 3. Full removal would resume round 2;
+        // an untouched Stasis(3) would resume round 4. Pinned to round 3 — a loose "≤2" would pass
+        // under a full-removal regression, "≥4" under a no-break regression.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(2);
+        expect(firstFiredRound).toBe(3);
 
-        // Post-run: Stasis should be gone (broken in round 2).
+        // Post-run: Stasis should be gone (reduced to 0 by round 2, freed from round 3).
         expect(capturedIsStasised).toBeDefined();
         expect(capturedIsStasised!('attacker')).toBe(false);
     });
@@ -1681,7 +1677,8 @@ describe('B3 Task 2 — direct-damage break', () => {
          * numRounds=4.
          *
          * Without break: focus fires round 4 (after 3 skips).
-         * With break: focus fires in round 2 or 3.
+         * With reduce-by-one (breaker hits every round): R1 3→break2→post1; R2 1→break0 expired;
+         * focus fires round 3.
          */
         const { events } = run({
             attack: 0,
@@ -1763,12 +1760,11 @@ describe('B3 Task 2 — direct-damage break', () => {
 
         // Focus was stasised in round 1
         expect(focusFiredRounds).not.toContain(1);
-        // The breaker (a DIFFERENT attacker from the original applier) breaks Stasis in round 2.
+        // The breaker (a DIFFERENT attacker from the original applier) reduces Stasis each round.
         // Turn order: stasis-bot(300) → killer(200) → breaker-enemy(150) → focus(100).
-        // Round 1: break marked in focus's skip. Round 2: focus fires.
-        // Pinned to exactly round 2 — "≤3" would pass under a one-round-late regression.
+        // Reduce-by-one → focus fires round 3 (full removal would give round 2; no break, round 4).
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(2);
+        expect(firstFiredRound).toBe(3);
     });
 
     // (v) break regardless of minimal damage
@@ -1862,11 +1858,10 @@ describe('B3 Task 2 — direct-damage break', () => {
         // Stasis applied in round 1 (speed 300 > 200 > 100).
         expect(focusFiredRounds).not.toContain(1);
         // Turn order: stasis-bot(300) → killer(200) → tiny-attacker(150) → focus(100).
-        // Round 1: tiny-attacker hits stasised focus → break marked in focus's skip.
-        // Round 2: focus NOT stasised → fires in EXACTLY round 2.
-        // Pinned to round 2 — "≤3" would pass under a one-round-late regression.
+        // The minimal-damage hit still reduces Stasis each round (reduce-by-one): R1 3→break2→post1;
+        // R2 1→break0 expired; focus fires round 3. Any direct hit reduces Stasis regardless of damage.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(2);
+        expect(firstFiredRound).toBe(3);
 
         // Confirm attack was minimal but still connected (non-vacuous: the attacked event fired)
         const attacked = events.filter(
@@ -2080,17 +2075,15 @@ describe('B3 Task 2 — direct-damage break', () => {
         // Focus was stasised in round 1 (stasis-bot applied Stasis before focus acted).
         expect(focusFiredRounds).not.toContain(1);
 
-        // The breaking hit (round 1, breaker-enemy speed=150 > focus speed=100) marks a break
-        // on the focus's skip. Focus skip consumes the break → Stasis removed.
-        // Round 2: focus NOT stasised → fires in EXACTLY round 2.
-        // Pinned to round 2 — a loose "≤3" would pass under a one-round-late regression.
+        // The Barrier-absorbed hits (breaker-enemy speed=150 > focus speed=100) still reduce Stasis
+        // each round (reduce-by-one): R1 3→break2→post1; R2 1→break0 expired; focus fires round 3.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(2);
+        expect(firstFiredRound).toBe(3);
 
         // NON-VACUITY: without a breaking hit, Stasis(3) would keep focus locked in rounds 1–3
-        // and fire only in round 4. The focus fires in round 2 here — 2 rounds earlier than the
+        // and fire only in round 4. The focus fires in round 3 here — one round earlier than the
         // no-break baseline. This early fire is only possible if the Barrier-absorbed direct hit
-        // still broke Stasis despite delivering 0 HP loss (spec §3 case).
+        // still reduced Stasis despite delivering 0 HP loss (spec §3 case).
     });
 
     // (vii) REGRESSION: same attacker applies Stasis(5) then fires pure-damage hits → breaks
@@ -2102,8 +2095,8 @@ describe('B3 Task 2 — direct-damage break', () => {
          * Setup (healing mode):
          *   - focus ('attacker', speed=50, attack=0): stands as a victim; carries basicAttack.
          *   - std-enemy ('std-enemy', speed=300, hp=12000, chargeCount=1, startCharged=false):
-         *     active skill = stasisInflictAttack(5); charged skill = basicAttack (pure damage).
-         *     Round 1: NOT charged → fires active (stasisInflictAttack(5)) → Stasis(5) on focus.
+         *     active skill = stasisInflictAttack(3); charged skill = basicAttack (pure damage).
+         *     Round 1: NOT charged → fires active (stasisInflictAttack(3)) → Stasis(3) on focus.
          *     Round 2: charges >= chargeCount → fires charged (basicAttack) → pure damage, NO Stasis.
          *     casterId of the Stasis entry = 'std-enemy'.
          *     In the old code (casterId-identity bug): breakingAttackerId = 'std-enemy',
@@ -2123,12 +2116,14 @@ describe('B3 Task 2 — direct-damage break', () => {
          * Round 2:
          *   std-enemy fires charged (basicAttack) → pure hit on stasised focus → break marked.
          *   killer fires → std-enemy takes 10000 damage → killed (2000 − 10000 < 0).
-         *   focus: STASISED → skip → consumes break → Stasis removed.
+         *   focus: STASISED → skip → consumes break → Stasis reduced (2→1 here, then Post-Turn 1→0
+         *     → expired).
          * Round 3:
          *   std-enemy dead. killer fires. focus NOT stasised → acts.
          *
          * Assert: focus fires in round 3 (no earlier, because rounds 1-2 stasised/skip).
-         * No-break baseline: Stasis(5) would keep focus stasised through round 5 (5 skips before expiry).
+         * No-break baseline: without the round-2 break, Stasis(3) keeps focus stasised through
+         * round 3 (3 skips) and fires only in round 4 — so a round-3 fire proves the break fired.
          */
         const { events } = run({
             attack: 0,
@@ -2178,7 +2173,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     pattern: basePattern(),
                     shipSkills: {
                         slots: [
-                            // Active slot: stasisInflictAttack(5) — fires in round 1
+                            // Active slot: stasisInflictAttack(3) — fires in round 1
                             {
                                 slot: 'active',
                                 abilities: [
@@ -2194,7 +2189,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                                             type: 'debuff',
                                             buffName: 'Stasis',
                                             application: 'inflict',
-                                            duration: 5,
+                                            duration: 3,
                                             stacks: 1,
                                             isStackable: false,
                                             parsedEffects: {},
@@ -2368,12 +2363,13 @@ describe("B3 Task 3 — Akula don't-break", () => {
         }
     });
 
-    it('(control) same fixture WITHOUT doesntBreakStasis → Stasis IS broken, focus fires round 2', () => {
+    it('(control) same fixture WITHOUT doesntBreakStasis → Stasis IS reduced, focus fires round 3', () => {
         idc = 0;
         /**
          * Identical to the activation test above EXCEPT doesntBreakStasis is NOT set on
-         * akula-enemy. Without the flag the breaker behaves like any other attacker and
-         * breaks Stasis on the first direct hit (round 1 skip → focus fires round 2).
+         * akula-enemy. Without the flag the breaker behaves like any other attacker and reduces
+         * Stasis each round (reduce-by-one): R1 3→break2→post1; R2 1→break0 expired; focus fires
+         * round 3 (vs round 4 when the flag suppresses every break).
          */
         const { events } = run({
             attack: 0,
@@ -2455,9 +2451,9 @@ describe("B3 Task 3 — Akula don't-break", () => {
             .filter((e) => e.actorId === 'attacker')
             .map((e) => e.round);
 
-        // Without the flag: normal-enemy breaks Stasis → focus fires in round 2 (not 4).
+        // Without the flag: normal-enemy reduces Stasis each round → focus fires in round 3 (not 4).
         expect(focusFiredRounds).not.toContain(1); // still stasised round 1 (break pending)
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(2); // break frees focus → fires round 2
+        expect(firstFiredRound).toBe(3); // reduce-by-one frees focus → fires round 3
     });
 });

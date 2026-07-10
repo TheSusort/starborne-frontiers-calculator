@@ -37,7 +37,7 @@
 import type { CombatEvent } from '../combat/events';
 import type { Position } from '../../types/encounters';
 import type { Ship, AffinityName } from '../../types/ship';
-import type { CombatStatBlock } from '../../types/calculator';
+import type { CombatStatBlock, DoTType } from '../../types/calculator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../combat/engine';
 import { createEventBus } from '../combat/events';
 import { buildShipAbilities } from '../abilities/buildShipAbilities';
@@ -63,6 +63,17 @@ import { detectFullyCharged } from '../skillTextParser';
 import { getShipSkillRows } from '../ship/skillRows';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { computeAffinityModifiers } from './affinityUtils';
+
+/** A stack-independent debuff-badge label for a DoT family, so DoTs surface in a ship's
+ *  `activeDebuffs` list like any other debuff. Stack-independent on purpose: `activeDebuffs`
+ *  is a de-duplicating set, so a per-application "×N" suffix would proliferate a new chip on
+ *  every re-application. (The chronological combat log keeps the "dotType ×stacks" detail.) */
+const DOT_DEBUFF_LABELS: Record<DoTType, string> = {
+    corrosion: 'Corrosion',
+    inferno: 'Inferno',
+    bomb: 'Bomb',
+    generic: 'Damage over Time',
+};
 
 export interface ShipRoundState {
     actorId: string;
@@ -303,6 +314,10 @@ export function assembleBattleResult(args: {
                 activeBuffs.get(e.actorId)?.delete(e.buffName);
             } else if (e.type === 'debuff-applied') {
                 ensure(activeDebuffs, e.targetId).add(e.buffName);
+            } else if (e.type === 'dot-applied') {
+                // DoTs are debuffs too — surface them in the victim's debuff list (infliction-only,
+                // like debuff-applied). Labeled by family so re-applications collapse to one chip.
+                ensure(activeDebuffs, e.targetId).add(DOT_DEBUFF_LABELS[e.dotType]);
             }
         }
 
