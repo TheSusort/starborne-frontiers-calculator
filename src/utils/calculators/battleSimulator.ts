@@ -881,6 +881,7 @@ export function simulateBattle(
         // and therefore differs from the representative-security basis — the intended per-target
         // behaviour covered by the heterogeneous-security team-vs-team test in twoTeamBattle.test.ts.
         hacking: focus.stats.hacking,
+        security: focus.stats.security,
         enemySecurity: enemyRepSecurity,
         position: focus.position,
         target: focus.targeting?.target,

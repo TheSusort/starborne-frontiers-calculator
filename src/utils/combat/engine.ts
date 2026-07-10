@@ -996,6 +996,11 @@ export interface CombatEngineInput {
      *  attacker actor. The adapter passes `input.hacking ?? 200` (the OLD landing-formula default); no
      *  production reader until dynamic landing lands (A2 Task 4). */
     hacking?: number;
+    /** Focus attacker's base security. Optional — base for effectiveStatsOf.security on the
+     *  attacker actor. Threaded so the focus actor's own security (e.g. gear-folded via Code
+     *  Guard) reaches both the per-turn stats-snapshot and the live debuff-landing recompute
+     *  when the focus is the target of an enemy debuff, instead of silently defaulting. */
+    security?: number;
     /** DPS dummy enemy's base security (A2 Task 2). Optional — base for effectiveStatsOf.security on the
      *  dummy enemy actor. The adapter passes `input.enemySecurity ?? 100` (the OLD landing-formula default);
      *  no production reader until dynamic landing lands (A2 Task 4). */
@@ -1376,6 +1381,7 @@ export function runCombat(input: CombatEngineInput): {
         defence,
         hp,
         hacking,
+        security,
         enemySecurity,
         allyChargePerRound,
         enemyType,
@@ -1436,6 +1442,9 @@ export function runCombat(input: CombatEngineInput): {
             speed: speed ?? 100,
             // Base hacking (A2 Task 2) — base for effectiveStatsOf.hacking; unread until landing lands (A2 Task 4).
             hacking,
+            // Focus actor's own security — base for effectiveStatsOf.security (stats-snapshot
+            // display) and the live debuff-landing recompute when the focus is targeted.
+            security,
         },
         chargeCount,
         startCharged,
