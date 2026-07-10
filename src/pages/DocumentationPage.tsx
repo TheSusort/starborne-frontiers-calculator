@@ -3228,8 +3228,8 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         <strong>Per-turn stat snapshot:</strong> Each turn has a
                                         collapsible &quot;Stats&quot; row showing the acting
-                                        ship&apos;s current modelled HP, attack, defence, crit,
-                                        speed, hacking, and security including active stat
+                                        ship&apos;s current modelled HP, attack, defence, crit, crit
+                                        power, speed, hacking, and security including active stat
                                         buffs/debuffs (defense penetration shows the base value
                                         only) — so you can verify a buff actually landed.
                                     </li>

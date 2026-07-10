@@ -196,6 +196,7 @@ const TurnStatsSummary: React.FC<{ snapshot: StatsSnapshot }> = ({ snapshot }) =
             <button
                 type="button"
                 onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
                 className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
             >
                 Stats · HP {fmt(snapshot.currentHp)}/{fmt(snapshot.maxHp)}
