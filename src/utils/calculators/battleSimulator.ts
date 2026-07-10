@@ -221,6 +221,8 @@ export const LOG_EVENT_TYPES = [
     // Log-only reactive procs (drain-time damage/heal that emit no ability-performed/heal-performed).
     'reactive-damage-performed',
     'reactive-heal-performed',
+    // Task 6: log-only per-turn acting-actor stat snapshot (no listener subscribes).
+    'stats-snapshot',
 ] as const satisfies readonly CombatEvent['type'][];
 
 // Compile-time proof that LOG_EVENT_TYPES ⊇ ASSEMBLED_EVENT_TYPES (bus subscribes to LOG;
@@ -879,6 +881,7 @@ export function simulateBattle(
         // and therefore differs from the representative-security basis — the intended per-target
         // behaviour covered by the heterogeneous-security team-vs-team test in twoTeamBattle.test.ts.
         hacking: focus.stats.hacking,
+        security: focus.stats.security,
         enemySecurity: enemyRepSecurity,
         position: focus.position,
         target: focus.targeting?.target,

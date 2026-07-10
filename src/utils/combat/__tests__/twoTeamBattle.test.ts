@@ -1503,10 +1503,16 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         expect(aliveAt(1)).toBe(true);
         expect(aliveAt(2)).toBe(false);
 
-        // Round 1 (focus alive): the non-positional attacker fires a real attack entry.
-        const round1 = result.combatLog.find((r) => r.round === 1);
-        const round1Turn = round1?.turns.find((t) => t.actorId === DEADBOUND);
-        expect(round1Turn?.entries.some((e) => e.kind === 'attack')).toBe(true);
+        // Round 1 (focus alive): the non-positional attacker's ability DOES fire — its
+        // computed damage is credited via `ability-performed` regardless of the victim it
+        // resolves to (proven via `damageDealt`, independent of the combat log). Its legacy-
+        // victim fallback lands on the side's dummy sink rather than a real opposing actor,
+        // so no `attacked` event follows and the combat log's now-empty attack entry is
+        // correctly pruned as a phantom row (Task 4) — the SAME shape as round 4's genuine
+        // skip. `damageDealt` is the one signal that still tells the two cases apart.
+        const round1 = result.rounds.find((r) => r.round === 1);
+        const round1Ship = round1?.ships.find((s) => s.actorId === DEADBOUND);
+        expect(round1Ship?.damageDealt).toBeGreaterThan(0);
 
         // Round 4 (focus long dead, no positional re-target available): the attacker's turn
         // stays cadence-only — no skill-fired-derived entries at all. This is the PRESERVED
@@ -1516,6 +1522,11 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         const round4Turn = round4?.turns.find((t) => t.actorId === DEADBOUND);
         expect(round4Turn).toBeDefined();
         expect(round4Turn!.entries.length).toBe(0);
+
+        const round4Ship = result.rounds
+            .find((r) => r.round === 4)
+            ?.ships.find((s) => s.actorId === DEADBOUND);
+        expect(round4Ship?.damageDealt).toBe(0);
     });
 
     it('threshold flip: an ally-only ACTIVE runs but the enemy-facing CHARGED skill skips, per-round, at the charge threshold', () => {

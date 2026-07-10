@@ -1077,14 +1077,17 @@ export interface IntentExecContext {
     ) => { dealt: number; didCrit: boolean } | void;
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
-     *  apply path (no attacked event → no re-counter). */
+     *  apply path (no attacked event → no re-counter).
+     *  Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
+     *  the combat log (reactive-damage-performed); void/0 when the counter was guarded (dead
+     *  owner/attacker, self-hit, non-positive) or the delegate is absent (unit fixtures). */
     applyCounterAttack?: (
         ownerId: string,
         attackerId: string,
         abilityId: string,
         multiplier: number,
         hits: number
-    ) => void;
+    ) => { dealt: number; didCrit: boolean } | void;
     /** G PR1: per-actor-turn once-per-attack guard. Keyed `ownerId:abilityId`. Cleared at each
      *  actor turn-start (engine) so the per-hit `attacked` events of ONE attack collapse to a
      *  single counter; a later attack (different turn) counters again. Absent → no guard (the
@@ -2547,13 +2550,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (!passesProcChanceGate(intent, ctx)) return;
         if (!passesOncePerRoundGate(intent, ctx)) return;
         ctx.counterFiredThisTurn?.add(key);
-        ctx.applyCounterAttack?.(
+        const outcome = ctx.applyCounterAttack?.(
             intent.ownerId,
             attackerId,
             intent.ability.id,
             cfg.multiplier,
             cfg.hits ?? 1
         );
+        emitReactiveDamageLog(ctx, intent.ownerId, attackerId, outcome);
         return;
     }
 

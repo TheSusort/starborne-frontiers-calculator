@@ -37,14 +37,18 @@ describe('generic DoT', () => {
         ];
         let credited = 0;
         let tickedDamage: number | undefined;
+        let tickedStacks: number | undefined;
         tickDoTs({
             corrosionEntries: [],
             infernoEntries: [],
             genericDoTEntries: gen,
             enemyHp: 1_000_000,
             ctxFor: () => undefined,
-            emitTicked: (dotType, damage) => {
-                if (dotType === 'generic') tickedDamage = damage;
+            emitTicked: (dotType, damage, stacks) => {
+                if (dotType === 'generic') {
+                    tickedDamage = damage;
+                    tickedStacks = stacks;
+                }
             },
             credit: (_sourceId, dotType, damage) => {
                 if (dotType === 'generic') credited += damage;
@@ -53,6 +57,8 @@ describe('generic DoT', () => {
 
         expect(credited).toBe(300);
         expect(tickedDamage).toBe(300);
+        // The emitted stacks is the summed TICKING stacks for this DoT type (here: one entry, 1 stack).
+        expect(tickedStacks).toBe(1);
         expect(gen[0].remainingRounds).toBe(2);
 
         // Two more ticks exhaust remainingRounds → the entry expires (array empties).
@@ -122,5 +128,40 @@ describe('generic DoT', () => {
         };
         expect(stack.family).toBe('Acidic Decay');
         expect(stack.unremovable).toBe(true);
+    });
+
+    // Combat-log fidelity: `emitTicked`'s 3rd arg is the per-dotType SUMMED TICKING stacks
+    // (only entries that actually tick — i.e. have a resolvable applier ctx — are counted).
+    it('emitTicked receives the summed ticking stacks for corrosion, excluding entries with no ctx', () => {
+        const corrosion: ActiveDoTStack[] = [
+            { stacks: 2, tier: 10, remainingRounds: 2, sourceId: 'applier-a' },
+            { stacks: 1, tier: 10, remainingRounds: 2, sourceId: 'applier-b' },
+            // No ctx for this applier (faster-enemy round 1) — its 5 stacks must NOT be counted.
+            { stacks: 5, tier: 10, remainingRounds: 2, sourceId: 'no-ctx-applier' },
+        ];
+        const ctx = {
+            effectiveAttack: 100,
+            dotMult: 1,
+            affinityMult: 1,
+            effectiveDefence: 0,
+            effectiveMaxHp: 0,
+            outgoingHealPct: 0,
+            incomingHealPct: 0,
+        };
+        let tickedStacks: number | undefined;
+        tickDoTs({
+            corrosionEntries: corrosion,
+            infernoEntries: [],
+            genericDoTEntries: [],
+            enemyHp: 100_000,
+            ctxFor: (sourceId) => (sourceId === 'no-ctx-applier' ? undefined : ctx),
+            emitTicked: (dotType, _damage, stacks) => {
+                if (dotType === 'corrosion') tickedStacks = stacks;
+            },
+            credit: () => {},
+        });
+
+        // 2 (applier-a) + 1 (applier-b) = 3; the no-ctx entry's 5 stacks are excluded.
+        expect(tickedStacks).toBe(3);
     });
 });

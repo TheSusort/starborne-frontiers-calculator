@@ -3225,6 +3225,14 @@ const DocumentationPage: React.FC = () => {
                                         charged skill variant. Charge gains, resets, and
                                         manipulations each appear as explicit lines.
                                     </li>
+                                    <li>
+                                        <strong>Per-turn stat snapshot:</strong> Each turn has a
+                                        collapsible &quot;Stats&quot; row showing the acting
+                                        ship&apos;s current modelled HP, attack, defence, crit, crit
+                                        power, speed, hacking, and security including active stat
+                                        buffs/debuffs (defense penetration shows the base value
+                                        only) — so you can verify a buff actually landed.
+                                    </li>
                                 </ul>
                             </div>
 

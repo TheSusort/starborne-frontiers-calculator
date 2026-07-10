@@ -556,7 +556,10 @@ describe('buildCombatLog', () => {
 
     it('undefined didHit does not synthesize a miss target (strict === false guard)', () => {
         // ability-performed with no didHit field at all (undefined), no attacked events.
-        // The open attack entry should have zero targets — no miss is synthesized.
+        // No miss is synthesized (strict === false guard) — and since the entry then has
+        // zero targets and was not a miss, Task 4's phantom-row suppression removes it
+        // entirely (a bug that loosely treated undefined as a miss would instead leave a
+        // synthesized-miss entry behind, which would NOT be pruned).
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -572,8 +575,7 @@ describe('buildCombatLog', () => {
             ev({ type: 'round-ended', round: 1 }),
         ];
         const log = buildCombatLog(events, roster, initialCharge);
-        const entry = log[0].turns[0].entries[0];
-        expect(entry.targets).toHaveLength(0);
+        expect(log[0].turns[0].entries).toHaveLength(0);
     });
 
     // ─── Behavior 1: Charge header reconstruction ─────────────────────────────
@@ -1086,7 +1088,7 @@ describe('buildCombatLog', () => {
         expect(entry.note).toContain('corrosion');
     });
 
-    it('dot-ticked: targetId is both the actorId and target; amount is the damage; no skill consumed', () => {
+    it('dot-ticked: targetId is both the actorId and target; amount is the damage; note is "{dotType} ×{stacks}"; no skill consumed', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1102,8 +1104,9 @@ describe('buildCombatLog', () => {
                 type: 'dot-ticked',
                 targetId: 'B',
                 round: 1,
-                dotType: 'inferno',
-                damage: 250,
+                dotType: 'corrosion',
+                damage: 1234,
+                stacks: 3,
             }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
@@ -1117,7 +1120,8 @@ describe('buildCombatLog', () => {
         expect(dotEntry!.actorId).toBe('B'); // ticked target is the actor
         expect(dotEntry!.targets).toHaveLength(1);
         expect(dotEntry!.targets[0].targetId).toBe('B');
-        expect(dotEntry!.targets[0].amount).toBe(250);
+        expect(dotEntry!.targets[0].amount).toBe(1234);
+        expect(dotEntry!.note).toBe('corrosion ×3');
         // skill-fired must NOT have been consumed by dot-ticked
         expect(dotEntry!.skillName).toBeUndefined();
         expect(dotEntry!.slot).toBeUndefined();
@@ -1434,6 +1438,7 @@ describe('buildCombatLog', () => {
                 round: 1,
                 dotType: 'inferno',
                 damage: 250,
+                stacks: 2,
             }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -1560,9 +1565,10 @@ describe('buildCombatLog', () => {
         expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
         const log = buildCombatLog(events, roster, initialCharge);
         const turn = log[0].turns[0];
-        // The attack entry exists; the stamped buff-expired produced nothing.
-        expect(turn.entries).toHaveLength(1);
-        expect(turn.entries[0].reactions).toHaveLength(0);
+        // The ability-performed never received an attacked event, so it closes with zero
+        // targets and (didHit: true, not a miss) gets pruned by Task 4's phantom-row
+        // suppression. The stamped buff-expired produced nothing (no throw, no entries).
+        expect(turn.entries).toHaveLength(0);
         expect(log[0].endOfRound).toHaveLength(0);
     });
 
@@ -1755,5 +1761,150 @@ describe('buildCombatLog', () => {
         expect(reaction.targets).toEqual([
             expect.objectContaining({ targetId: 'A', amount: 1152 }),
         ]);
+    });
+
+    // ─── Task 4: suppress phantom empty attack row on buff-only turns ────────
+
+    it('does not emit an empty attack entry for a buff-only cast (no attacked event)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'A',
+                round: 1,
+                abilityType: 'buff',
+                didHit: true,
+            }),
+            ev({
+                type: 'buff-applied',
+                actorId: 'A',
+                round: 1,
+                buffName: 'Attack Up',
+                duration: 2,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const rounds = buildCombatLog(
+            events,
+            [{ actorId: 'A', side: 'player', name: 'A' }],
+            new Map()
+        );
+        const turn = rounds[0].turns[0];
+        // Only the buff entry remains — no empty attack row.
+        expect(turn.entries.map((e) => e.kind)).toEqual(['buff']);
+    });
+
+    it('still renders a genuine miss (targeted attack that missed)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                didHit: false,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const rounds = buildCombatLog(
+            events,
+            [
+                { actorId: 'A', side: 'player', name: 'A' },
+                { actorId: 'B', side: 'enemy', name: 'B' },
+            ],
+            new Map()
+        );
+        const turn = rounds[0].turns[0];
+        expect(turn.entries).toHaveLength(1);
+        expect(turn.entries[0].kind).toBe('attack');
+        expect(turn.entries[0].targets[0].didHit).toBe(false); // miss target synthesized
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Task 6c: the LOG-ONLY stats-snapshot event decorates the turn it belongs to
+// (no entry is created — it is a property on CombatLogTurn, not a CombatLogEntry).
+// ---------------------------------------------------------------------------
+
+describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
+    it('attaches a stats-snapshot to the turn it belongs to', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'stats-snapshot',
+                actorId: 'A',
+                round: 1,
+                stats: {
+                    attack: 5000,
+                    defence: 3000,
+                    crit: 70,
+                    critDamage: 150,
+                    defensePenetration: 0,
+                    speed: 120,
+                    hacking: 200,
+                    security: 100,
+                    currentHp: 40000,
+                    maxHp: 50000,
+                    shieldPool: 0,
+                },
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const rounds = buildCombatLog(
+            events,
+            [{ actorId: 'A', side: 'player', name: 'A' }],
+            new Map()
+        );
+        expect(rounds[0].turns[0].statsSnapshot?.attack).toBe(5000);
+        expect(rounds[0].turns[0].statsSnapshot?.currentHp).toBe(40000);
+        // No entry is created for the snapshot — it decorates the turn only.
+        expect(rounds[0].turns[0].entries).toHaveLength(0);
+    });
+
+    it('does not attach the snapshot to a turn belonging to a different actor', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'B', round: 1 }),
+            ev({
+                type: 'stats-snapshot',
+                actorId: 'A', // stale/mismatched actorId — must not leak onto B's turn
+                round: 1,
+                stats: {
+                    attack: 1,
+                    defence: 1,
+                    crit: 1,
+                    critDamage: 1,
+                    defensePenetration: 1,
+                    speed: 1,
+                    hacking: 1,
+                    security: 1,
+                    currentHp: 1,
+                    maxHp: 1,
+                    shieldPool: 1,
+                },
+            }),
+            ev({ type: 'turn-ended', actorId: 'B', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const rounds = buildCombatLog(
+            events,
+            [
+                { actorId: 'A', side: 'player', name: 'A' },
+                { actorId: 'B', side: 'enemy', name: 'B' },
+            ],
+            new Map()
+        );
+        expect(rounds[0].turns[0].statsSnapshot).toBeUndefined();
+        expect(rounds[0].turns[1].statsSnapshot).toBeUndefined();
     });
 });

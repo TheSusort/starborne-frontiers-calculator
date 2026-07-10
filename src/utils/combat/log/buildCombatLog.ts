@@ -234,6 +234,28 @@ function createBuildContext(
                     didHit: false,
                 };
                 ctx.openAttackEntry.targets.push(missTarget);
+                return;
+            }
+            // Suppress a phantom attack row: an ability-performed that produced no `attacked`
+            // event and was NOT a miss (buff/heal/utility-only cast). Remove it from the current
+            // turn's entries if present (the only container an on-turn attack entry lands in).
+            // Guarded on `reactions.length === 0`: a reactive trigger (e.g. Ravager's
+            // on-own-debuff-resisted Hacking Module Overdrive grant) can nest under this entry
+            // via routeReaction BEFORE the boundary that finalizes it — pruning the entry would
+            // silently discard that nested reaction along with it, so a non-empty `.reactions[]`
+            // keeps the (now target-less) parent row so its children stay visible in the log.
+            if (
+                ctx.openAttackEntry &&
+                ctx.openAttackEntry.kind === 'attack' &&
+                ctx.openAttackEntry.targets.length === 0 &&
+                ctx.openAttackAbilityDidHit !== false &&
+                ctx.openAttackEntry.reactions.length === 0
+            ) {
+                const entries = ctx.currentTurn?.entries;
+                if (entries) {
+                    const idx = entries.indexOf(ctx.openAttackEntry);
+                    if (idx !== -1) entries.splice(idx, 1);
+                }
             }
         },
 
@@ -274,6 +296,13 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     'turn-started': (e, ctx) => {
         if (!ctx.rosterIds.has(e.actorId)) return;
         ctx.openTurn(e.actorId);
+    },
+
+    // Task 6c: decorates the current turn with its live modelled stats — creates NO entry.
+    'stats-snapshot': (e, ctx) => {
+        if (ctx.currentTurn && ctx.currentTurn.actorId === e.actorId) {
+            ctx.currentTurn.statsSnapshot = e.stats;
+        }
     },
 
     'turn-ended': (_e, ctx) => {
@@ -470,12 +499,14 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
 
     'dot-ticked': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
-        // No consumePendingSkill: a tick is not a cast.
+        // No consumePendingSkill: a tick is not a cast. Note mirrors 'dot-applied''s format so
+        // the renderer can show type + stack count alongside the tick amount.
         const entry: CombatLogEntry = {
             kind: 'dot-ticked',
             actorId: e.targetId,
             targets: [{ targetId: e.targetId, amount: e.damage }],
             reactions: [],
+            note: `${e.dotType} ×${e.stacks}`,
         };
         ctx.attachEntry(entry);
     },
