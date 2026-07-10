@@ -127,9 +127,14 @@ const formatters: Record<
     'dot-ticked': (entry, ctx) => {
         const t = entry.targets[0];
         const who = ctx.nameOf(entry.actorId);
-        if (!t || t.amount === undefined) return who;
-        // DoT tick: "{victim}: {amount} (DoT)". The tick's damage lives on targets[0].amount.
-        return `${who}: ${fmt(t.amount)} (DoT)`;
+        // DoT tick: "{victim}: {dotType} ×{stacks} → {amount}" — note carries "{dotType}
+        // ×{stacks}" (mirrors dot-applied's format); amount lives on targets[0].amount.
+        // Fall back gracefully if either is missing (forward-compatible with older events).
+        if (entry.note && t?.amount !== undefined)
+            return `${who}: ${entry.note} → ${fmt(t.amount)}`;
+        if (entry.note) return `${who}: ${entry.note}`;
+        if (t?.amount !== undefined) return `${who}: ${fmt(t.amount)}`;
+        return who;
     },
     control: noteLine,
     cleanse: noteLine,

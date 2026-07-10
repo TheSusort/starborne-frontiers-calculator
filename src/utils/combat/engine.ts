@@ -838,7 +838,11 @@ export function tickDoTs(args: {
     genericDoTEntries: ActiveDoTStack[];
     enemyHp: number;
     ctxFor: (sourceId: string) => PlayerRoundCtx | undefined;
-    emitTicked: (dotType: TickableDoTType, damage: number) => void;
+    /** `stacks` = the per-dotType SUMMED TICKING stacks (only entries that actually tick this
+     *  call — i.e. have a resolvable applier ctx for corrosion/inferno — are counted; generic
+     *  has no ctx gate so all its entries count). Combat-log fidelity: lets the `dot-ticked`
+     *  event/log line show "{dotType} ×{stacks}" alongside the damage. */
+    emitTicked: (dotType: TickableDoTType, damage: number, stacks: number) => void;
     credit: (sourceId: string, dotType: TickableDoTType, damage: number) => void;
     /** D-PR3 (Vortex Veil): % reduction applied to this carrier's DoT ticks of the given type.
      *  Absent → 0 → byte-identical. */
@@ -855,24 +859,27 @@ export function tickDoTs(args: {
     const corrosionBaseHp = Math.min(args.enemyHp, 500_000);
     const corrosionCredits: Array<{ sourceId: string; d: number }> = [];
     let corrosionSum = 0;
+    let corrosionStacks = 0;
     for (const e of args.corrosionEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue; // applier has not acted yet this run (faster-enemy round 1)
         const d = e.stacks * (e.tier / 100) * corrosionBaseHp * dotMultFor(ctx) * ctx.affinityMult;
         corrosionCredits.push({ sourceId: e.sourceId, d });
         corrosionSum += d;
+        corrosionStacks += e.stacks;
     }
     if (corrosionSum > 0) {
         const reductionPct = args.incomingDotReductionPct?.('corrosion') ?? 0;
         const factor = 1 - reductionPct / 100;
         for (const { sourceId, d } of corrosionCredits)
             args.credit(sourceId, 'corrosion', d * factor);
-        args.emitTicked('corrosion', corrosionSum * factor);
+        args.emitTicked('corrosion', corrosionSum * factor, corrosionStacks);
     }
 
     // Step 5: Tick inferno (scales with the applier's effective attack, no outgoing buff)
     const infernoCredits: Array<{ sourceId: string; d: number }> = [];
     let infernoSum = 0;
+    let infernoStacks = 0;
     for (const e of args.infernoEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue;
@@ -880,29 +887,32 @@ export function tickDoTs(args: {
             e.stacks * (e.tier / 100) * ctx.effectiveAttack * dotMultFor(ctx) * ctx.affinityMult;
         infernoCredits.push({ sourceId: e.sourceId, d });
         infernoSum += d;
+        infernoStacks += e.stacks;
     }
     if (infernoSum > 0) {
         const reductionPct = args.incomingDotReductionPct?.('inferno') ?? 0;
         const factor = 1 - reductionPct / 100;
         for (const { sourceId, d } of infernoCredits) args.credit(sourceId, 'inferno', d * factor);
-        args.emitTicked('inferno', infernoSum * factor);
+        args.emitTicked('inferno', infernoSum * factor, infernoStacks);
     }
 
     // SP-E: Tick generic DoTs — an ABSOLUTE per-tick amount, independent of stats/HP (no ctxFor
     // gate: unlike corrosion/inferno, a generic tick doesn't need the applier's effective attack
     // or affinity, so it ticks even before the applier's first turn this run).
     let genericSum = 0;
+    let genericStacks = 0;
     const genericCredits: Array<{ sourceId: string; d: number }> = [];
     for (const e of args.genericDoTEntries) {
         const d = (e.perTickAmount ?? 0) * e.stacks;
         genericCredits.push({ sourceId: e.sourceId, d });
         genericSum += d;
+        genericStacks += e.stacks;
     }
     if (genericSum > 0) {
         const reductionPct = args.incomingDotReductionPct?.('generic') ?? 0;
         const factor = 1 - reductionPct / 100;
         for (const { sourceId, d } of genericCredits) args.credit(sourceId, 'generic', d * factor);
-        args.emitTicked('generic', genericSum * factor);
+        args.emitTicked('generic', genericSum * factor, genericStacks);
     }
 
     // Expire DoT stacks after ticking
@@ -5783,13 +5793,14 @@ export function runCombat(input: CombatEngineInput): {
                             // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
                             enemyHp: recipientMaxHp(healTarget.id),
                             ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
-                            emitTicked: (dotType, damage) =>
+                            emitTicked: (dotType, damage, stacks) =>
                                 bus.emit({
                                     type: 'dot-ticked',
                                     targetId: healTarget.id,
                                     round: r,
                                     dotType,
                                     damage,
+                                    stacks,
                                 }),
                             // Sum the ticked damage across all appliers; route it as INCOMING to the tank
                             // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
@@ -5861,13 +5872,14 @@ export function runCombat(input: CombatEngineInput): {
                                 // Corrosion scales with the AFFLICTED ship's own max HP.
                                 enemyHp: recipientMaxHp(actor.id),
                                 ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
-                                emitTicked: (dotType, damage) =>
+                                emitTicked: (dotType, damage, stacks) =>
                                     bus.emit({
                                         type: 'dot-ticked',
                                         targetId: actor.id,
                                         round: r,
                                         dotType,
                                         damage,
+                                        stacks,
                                     }),
                                 credit: (sourceId, dotType, damage) => {
                                     total += damage;
@@ -6593,13 +6605,14 @@ export function runCombat(input: CombatEngineInput): {
                         genericDoTEntries,
                         enemyHp,
                         ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
-                        emitTicked: (dotType, damage) =>
+                        emitTicked: (dotType, damage, stacks) =>
                             bus.emit({
                                 type: 'dot-ticked',
                                 targetId: enemy.id,
                                 round: r,
                                 dotType,
                                 damage,
+                                stacks,
                             }),
                         credit: (sourceId, dotType, damage) =>
                             creditDamage(sourceId, dotType, damage),

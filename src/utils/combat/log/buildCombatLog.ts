@@ -499,12 +499,14 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
 
     'dot-ticked': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
-        // No consumePendingSkill: a tick is not a cast.
+        // No consumePendingSkill: a tick is not a cast. Note mirrors 'dot-applied''s format so
+        // the renderer can show type + stack count alongside the tick amount.
         const entry: CombatLogEntry = {
             kind: 'dot-ticked',
             actorId: e.targetId,
             targets: [{ targetId: e.targetId, amount: e.damage }],
             reactions: [],
+            note: `${e.dotType} ×${e.stacks}`,
         };
         ctx.attachEntry(entry);
     },

@@ -71,7 +71,7 @@ const round: CombatLogRound = {
             actorId: 'selenite',
             targets: [{ targetId: 'selenite', amount: 300 }],
             reactions: [],
-            note: undefined,
+            note: 'inferno ×2',
         },
     ],
 };
@@ -112,10 +112,10 @@ describe('RoundEventLog', () => {
     it('renders the end-of-round group with its drained entries', () => {
         render(<RoundEventLog round={round} roster={roster} />);
         expect(screen.getByText(/— end of round —/)).toBeInTheDocument();
-        expect(screen.getByText(/Enemy Selenite: 300 \(DoT\)/)).toBeInTheDocument();
+        expect(screen.getByText(/Enemy Selenite: inferno ×2 → 300/)).toBeInTheDocument();
     });
 
-    it('renders DoT tick damage with its amount', () => {
+    it('renders DoT tick type, stack count, and amount', () => {
         const round = {
             round: 1,
             startOfRound: [],
@@ -130,6 +130,7 @@ describe('RoundEventLog', () => {
                             actorId: 'A',
                             targets: [{ targetId: 'A', amount: 1234 }],
                             reactions: [],
+                            note: 'corrosion ×3',
                         },
                     ],
                 },
@@ -140,7 +141,7 @@ describe('RoundEventLog', () => {
             { actorId: 'A', side: 'player', name: 'Anemone', position: 'T1' },
         ];
         render(<RoundEventLog round={round} roster={roster} />);
-        expect(screen.getByText(/1,234/)).toBeInTheDocument();
+        expect(screen.getByText(/Anemone: corrosion ×3 → 1,234/)).toBeInTheDocument();
     });
 
     it('renders the actor name for a target-less entry that still carries a nested reaction', () => {

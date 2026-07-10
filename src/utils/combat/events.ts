@@ -232,6 +232,9 @@ export type CombatEvent =
           // this event too. 'bomb' never appears here (bombs burst via 'bomb-detonated').
           dotType: DoTType;
           damage: number;
+          /** Combat-log fidelity: the per-dotType SUMMED TICKING stacks (see `tickDoTs`'s
+           *  `emitTicked` jsdoc) — lets the log line show "{dotType} ×{stacks}". */
+          stacks: number;
       }
     | { type: 'dot-detonated'; targetId: string; round: number; damage: number }
     /** Emitted on each bomb burst, but the two paths are asymmetric:

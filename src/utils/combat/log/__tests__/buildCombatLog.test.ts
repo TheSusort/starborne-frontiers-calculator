@@ -1088,7 +1088,7 @@ describe('buildCombatLog', () => {
         expect(entry.note).toContain('corrosion');
     });
 
-    it('dot-ticked: targetId is both the actorId and target; amount is the damage; no skill consumed', () => {
+    it('dot-ticked: targetId is both the actorId and target; amount is the damage; note is "{dotType} ×{stacks}"; no skill consumed', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1104,8 +1104,9 @@ describe('buildCombatLog', () => {
                 type: 'dot-ticked',
                 targetId: 'B',
                 round: 1,
-                dotType: 'inferno',
-                damage: 250,
+                dotType: 'corrosion',
+                damage: 1234,
+                stacks: 3,
             }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
@@ -1119,7 +1120,8 @@ describe('buildCombatLog', () => {
         expect(dotEntry!.actorId).toBe('B'); // ticked target is the actor
         expect(dotEntry!.targets).toHaveLength(1);
         expect(dotEntry!.targets[0].targetId).toBe('B');
-        expect(dotEntry!.targets[0].amount).toBe(250);
+        expect(dotEntry!.targets[0].amount).toBe(1234);
+        expect(dotEntry!.note).toBe('corrosion ×3');
         // skill-fired must NOT have been consumed by dot-ticked
         expect(dotEntry!.skillName).toBeUndefined();
         expect(dotEntry!.slot).toBeUndefined();
@@ -1436,6 +1438,7 @@ describe('buildCombatLog', () => {
                 round: 1,
                 dotType: 'inferno',
                 damage: 250,
+                stacks: 2,
             }),
             ev({ type: 'round-ended', round: 1 }),
         ];
