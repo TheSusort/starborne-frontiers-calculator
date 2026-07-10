@@ -68,9 +68,9 @@ const round: CombatLogRound = {
         {
             kind: 'dot-ticked',
             actorId: 'selenite',
-            targets: [],
+            targets: [{ targetId: 'selenite', amount: 300 }],
             reactions: [],
-            note: 'corrosion ×3',
+            note: undefined,
         },
     ],
 };
@@ -111,7 +111,35 @@ describe('RoundEventLog', () => {
     it('renders the end-of-round group with its drained entries', () => {
         render(<RoundEventLog round={round} roster={roster} />);
         expect(screen.getByText(/— end of round —/)).toBeInTheDocument();
-        expect(screen.getByText(/Enemy Selenite: corrosion ×3/)).toBeInTheDocument();
+        expect(screen.getByText(/Enemy Selenite: 300 \(DoT\)/)).toBeInTheDocument();
+    });
+
+    it('renders DoT tick damage with its amount', () => {
+        const round = {
+            round: 1,
+            startOfRound: [],
+            turns: [
+                {
+                    actorId: 'A',
+                    chargeBefore: 0,
+                    chargeMax: 0,
+                    entries: [
+                        {
+                            kind: 'dot-ticked' as const,
+                            actorId: 'A',
+                            targets: [{ targetId: 'A', amount: 1234 }],
+                            reactions: [],
+                        },
+                    ],
+                },
+            ],
+            endOfRound: [],
+        };
+        const roster: BattleResult['roster'] = [
+            { actorId: 'A', side: 'player', name: 'Anemone', position: 'T1' },
+        ];
+        render(<RoundEventLog round={round} roster={roster} />);
+        expect(screen.getByText(/1,234/)).toBeInTheDocument();
     });
 
     it('shows a fallback message when the round has no content', () => {

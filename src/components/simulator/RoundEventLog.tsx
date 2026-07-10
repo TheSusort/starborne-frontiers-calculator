@@ -122,7 +122,13 @@ const formatters: Record<
     buff: noteLine,
     debuff: noteLine,
     'dot-applied': noteLine,
-    'dot-ticked': noteLine,
+    'dot-ticked': (entry, ctx) => {
+        const t = entry.targets[0];
+        const who = ctx.nameOf(entry.actorId);
+        if (!t || t.amount === undefined) return who;
+        // DoT tick: "{victim}: {amount} (DoT)". The tick's damage lives on targets[0].amount.
+        return `${who}: ${fmt(t.amount)} (DoT)`;
+    },
     control: noteLine,
     cleanse: noteLine,
     purge: noteLine,
