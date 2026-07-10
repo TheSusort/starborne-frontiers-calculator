@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import RoundEventLog from '../RoundEventLog';
 import type { BattleResult } from '../../../utils/calculators/battleSimulator';
 import type { CombatLogRound } from '../../../utils/combat/log/types';
@@ -146,5 +147,45 @@ describe('RoundEventLog', () => {
         const empty: CombatLogRound = { round: 1, startOfRound: [], turns: [], endOfRound: [] };
         render(<RoundEventLog round={empty} roster={roster} />);
         expect(screen.getByText('No events this round.')).toBeInTheDocument();
+    });
+
+    it('shows a collapsed stats summary under a turn and expands to the full block', async () => {
+        const round: CombatLogRound = {
+            round: 1,
+            startOfRound: [],
+            endOfRound: [],
+            turns: [
+                {
+                    actorId: 'A',
+                    chargeBefore: 0,
+                    chargeMax: 0,
+                    entries: [],
+                    statsSnapshot: {
+                        attack: 5000,
+                        defence: 3000,
+                        crit: 70,
+                        critDamage: 150,
+                        defensePenetration: 0,
+                        speed: 120,
+                        hacking: 200,
+                        security: 100,
+                        currentHp: 40000,
+                        maxHp: 50000,
+                        shieldPool: 0,
+                    },
+                },
+            ],
+        };
+        render(
+            <RoundEventLog
+                round={round}
+                roster={[{ actorId: 'A', side: 'player', name: 'A', position: 'T1' }]}
+            />
+        );
+        // Collapsed summary shows HP.
+        expect(screen.getByText(/40,000\s*\/\s*50,000/)).toBeInTheDocument();
+        // Expanding reveals a detail stat (attack) not shown in the collapsed line.
+        await userEvent.click(screen.getByRole('button', { name: /stats/i }));
+        expect(screen.getByText(/5,000/)).toBeInTheDocument();
     });
 });

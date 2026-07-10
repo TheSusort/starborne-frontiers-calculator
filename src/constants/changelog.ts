@@ -74,6 +74,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: fixed the HP shown for Voron (and Orel) after a hit is converted into a Damage-over-Time effect — the battle playback no longer double-counts the converted hit, so the HP bar reflects the real remaining HP.',
     'Combat log now shows damage-over-time (corrosion/inferno) tick damage each round.',
     'Combat log now shows counter-attacks and damage reflection.',
+    "Combat log turns now include a collapsible snapshot of the acting ship's current modelled stats (HP, attack, defence, crit, speed, hacking, security).",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

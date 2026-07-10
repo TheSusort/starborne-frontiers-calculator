@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BattleResult } from '../../utils/calculators/battleSimulator';
 import { fmt } from '../../utils/simulator/boardOverlays';
+import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
 import type {
     CombatLogRound,
     CombatLogTurn,
     CombatLogEntry,
     CombatLogTarget,
     CombatLogEntryKind,
+    StatsSnapshot,
 } from '../../utils/combat/log/types';
 
 interface RoundEventLogProps {
@@ -174,6 +176,42 @@ const EntryView: React.FC<{ entry: CombatLogEntry; ctx: FormatterCtx }> = ({ ent
     </li>
 );
 
+/**
+ * Task 6d: a collapsible summary of the acting ship's live modelled stats for this turn.
+ * Collapsed by default — the header line (a sanctioned raw `<button>`, per the full-width
+ * accordion-header toggle exception) shows the compact HP line; expanding it reveals the
+ * remaining stats inside `CollapsibleAccordion` (a controlled, stateless container — this
+ * component owns the open/closed state itself).
+ */
+const TurnStatsSummary: React.FC<{ snapshot: StatsSnapshot }> = ({ snapshot }) => {
+    const [open, setOpen] = useState(false);
+    const shieldSuffix = snapshot.shieldPool > 0 ? ` (+${fmt(snapshot.shieldPool)} shield)` : '';
+    return (
+        <div className="ml-2 mt-1">
+            <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+            >
+                Stats · HP {fmt(snapshot.currentHp)}/{fmt(snapshot.maxHp)}
+                {shieldSuffix}
+            </button>
+            <CollapsibleAccordion isOpen={open}>
+                <ul className="grid grid-cols-2 gap-x-4 text-xs text-theme-text-secondary">
+                    <li>Attack: {fmt(snapshot.attack)}</li>
+                    <li>Defence: {fmt(snapshot.defence)}</li>
+                    <li>Crit: {Math.round(snapshot.crit)}%</li>
+                    <li>Crit Power: {Math.round(snapshot.critDamage)}%</li>
+                    <li>Def Pen: {fmt(snapshot.defensePenetration)}</li>
+                    <li>Speed: {Math.round(snapshot.speed)}</li>
+                    <li>Hacking: {fmt(snapshot.hacking)}</li>
+                    <li>Security: {fmt(snapshot.security)}</li>
+                </ul>
+            </CollapsibleAccordion>
+        </div>
+    );
+};
+
 /** A single turn: a charge-aware header followed by its chronological entries. */
 const TurnView: React.FC<{ turn: CombatLogTurn; ctx: FormatterCtx }> = ({ turn, ctx }) => {
     const header =
@@ -185,6 +223,7 @@ const TurnView: React.FC<{ turn: CombatLogTurn; ctx: FormatterCtx }> = ({ turn, 
             <div className="text-theme-text-secondary font-semibold border-t border-dark-border mt-1 pt-1">
                 {header}
             </div>
+            {turn.statsSnapshot && <TurnStatsSummary snapshot={turn.statsSnapshot} />}
             {turn.entries.length > 0 && (
                 <ul className="ml-2 space-y-1">
                     {turn.entries.map((entry, i) => (
