@@ -1,4 +1,10 @@
-import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abilities';
+import {
+    Ability,
+    AbilityTrigger,
+    LIVE_TRIGGERS,
+    ShipSkills,
+    SkillSlot,
+} from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import {
@@ -1093,6 +1099,17 @@ export interface IntentExecContext {
      *  single counter; a later attack (different turn) counters again. Absent → no guard (the
      *  counter branch is inert without the engine ctx). */
     counterFiredThisTurn?: Set<string>;
+    /** Task 5: per-actor-turn once-per-attack guard for SELF-scoped reactive buff/charge
+     *  riders (Hermes's Everliving Regeneration + charge on `on-ally-crit`). Keyed
+     *  `ownerId:abilityId`, cleared at each actor turn-start (engine) — mirroring
+     *  `counterFiredThisTurn`. The per-hit / per-victim reactive triggers (on-ally-crit,
+     *  on-attacked, on-ally-attacked) enqueue one intent per critting-hit / hit / victim; a
+     *  SELF-target buff/charge must land only ONCE for that whole attack. Ally/enemy-routed
+     *  reactions (Sentinel damage, Howler/Cultivator/Graphite ally heal) are per-victim by design,
+     *  and reactive HEALS/SHIELDS scale per hit (Isha/Adaptive Plating) — neither is keyed here
+     *  (see oncePerAttackGuardKey + the heal branch). Absent → no guard (unit ctxs without the
+     *  engine keep firing per intent, byte-identical). */
+    reactionFiredThisAttack?: Set<string>;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
@@ -1776,6 +1793,28 @@ function emitReactiveDamageLog(
     });
 }
 
+/** Task 5: reactive triggers that fan a single ATTACK into multiple `attacked`/`ability-performed`
+ *  events — one per hit, per AoE victim, or per critting hit. A SELF-scoped fixed-state rider
+ *  (buff/charge) on one of these must apply only ONCE for the whole attack; per-victim ally /
+ *  enemy routing legitimately fires per event, and reactive HEALS/SHIELDS scale per hit (see the
+ *  heal branch's scope note) so they are excluded too. */
+const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTrigger>([
+    'on-ally-crit',
+    'on-attacked',
+    'on-ally-attacked',
+]);
+
+/** Returns the once-per-attack guard key `ownerId:abilityId` when this intent is a SELF-target
+ *  rider on a per-hit reactive trigger (Hermes's Everliving Regeneration + charge), else undefined
+ *  — meaning "not guarded". Only `target: 'self'` qualifies: ally-routed grants (damagedAllyId —
+ *  Cultivator/Graphite/Howler/Sentinel repair) and enemy-routed damage (Sentinel) must stay
+ *  per-victim, so they never key here. Cross-referenced by the charge and buff branches only. */
+function oncePerAttackGuardKey(intent: Intent): string | undefined {
+    return intent.ability.target === 'self' && PER_HIT_REACTIVE_TRIGGERS.has(intent.ability.trigger)
+        ? `${intent.ownerId}:${intent.ability.id}`
+        : undefined;
+}
+
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // Brand every reactive-capable event this resolution emits with duringTurnOf/triggerActorId
     // (combat-log attribution). The wrapped bus is local to THIS call — on-turn emissions never
@@ -1832,6 +1871,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'charge') {
         if (!passesOncePerRoundGate(intent, ctx)) return;
+        // Task 5: a SELF-target charge on a per-hit reactive trigger (Hermes's on-ally-crit
+        // charge) collapses to +1 per attack. undefined key → not guarded (enemy/ally charges).
+        const chargeGuardKey = oncePerAttackGuardKey(intent);
+        if (chargeGuardKey && ctx.reactionFiredThisAttack?.has(chargeGuardKey)) return;
         if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
             // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
             // repairer); only act on the Nth event. Requires a repairer id and the counter map.
@@ -1863,6 +1906,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
         if (owner.actor.chargeCount === 0) return;
+        if (chargeGuardKey) ctx.reactionFiredThisAttack?.add(chargeGuardKey);
         const oldChargeManip = owner.actor.charges;
         owner.actor.charges = Math.min(owner.actor.charges + cfg.amount, owner.actor.chargeCount);
         if (owner.actor.charges !== oldChargeManip) {
@@ -1879,6 +1923,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     }
 
     if (cfg.type === 'buff') {
+        // Task 5: a SELF-target reactive buff on a per-hit trigger (Hermes's Everliving
+        // Regeneration on on-ally-crit) applies once per attack — a multi-hit / AoE crit enqueues
+        // this intent once per critting hit, but the self-buff must land only once. Checked FIRST
+        // (before the once-per-combat/per-ally consumes below) so a collapsed duplicate burns no
+        // other cap; the key is consumed only once the buff actually applies (after all gates).
+        // undefined key → not guarded (ally/all-allies grants stay per-victim/per-hit).
+        const buffGuardKey = oncePerAttackGuardKey(intent);
+        if (buffGuardKey && ctx.reactionFiredThisAttack?.has(buffGuardKey)) return;
         // "Once per battle" buff grant (Tycho/Shelter/Los Barrier): same combat-lifetime
         // Set as the heal executor's cap (heal branch below), keyed owner+ability. A key
         // present here means this owner+ability already granted this battle → silent skip.
@@ -1905,6 +1957,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // (procChance-less) buff grant stays byte-identical. Mirrors the heal/shield + damage
         // branches. Keys on `${ownerId}:${ability.id}` via ctx.procChanceGates.
         if (!passesProcChanceGate(intent, ctx)) return;
+        // Task 5: consume the once-per-attack slot now that the self-buff WILL apply.
+        if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
         // duration decides; a duration-less buff defaults to a 1-turn window.
         const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;
@@ -2293,6 +2347,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     if (cfg.type === 'heal' || cfg.type === 'shield') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         const healing = ctx.healing; // local binding preserves narrowing inside the closure below
+        // Task 5 SCOPE NOTE: reactive HEALS/SHIELDS are deliberately NOT collapsed to once per
+        // attack. Unlike a fixed buff (Everliving Regeneration — discrete state), a reactive
+        // repair/shield scales or crit-filters PER HIT (Isha's non-crit 3% / crit 6% on-attacked
+        // heal; Adaptive Plating's shield off each hit's damage taken), so every hit legitimately
+        // contributes its own share. Collapsing here would drop hits 2..N. The guard applies only
+        // to the buff and charge branches.
         // Once-per-combat cap (Task 8): a flagged repair (Yazid's on-cheat-death-activated 60%
         // repair) fires AT MOST ONCE per combat. The Set is engine-owned (combat lifetime), so
         // a key present here means this owner+ability already fired this battle → silent skip.
