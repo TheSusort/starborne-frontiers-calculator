@@ -143,6 +143,58 @@ describe('RoundEventLog', () => {
         expect(screen.getByText(/1,234/)).toBeInTheDocument();
     });
 
+    it('renders the actor name for a target-less entry that still carries a nested reaction', () => {
+        // Rare case: a resisted-debuff-only cast has no targets recorded on the entry itself,
+        // but its reaction (e.g. Ravager's counter) still nests underneath it. The bullet must
+        // show the acting ship, not render blank.
+        const round: CombatLogRound = {
+            round: 1,
+            startOfRound: [],
+            turns: [
+                {
+                    actorId: 'ravager',
+                    chargeBefore: 0,
+                    chargeMax: 0,
+                    entries: [
+                        {
+                            kind: 'attack',
+                            actorId: 'ravager',
+                            skillName: 'Ravage',
+                            targets: [],
+                            reactions: [
+                                {
+                                    kind: 'attack',
+                                    actorId: 'hexa',
+                                    targets: [
+                                        {
+                                            targetId: 'ravager',
+                                            amount: 500,
+                                            didHit: true,
+                                            resultingHpPct: 90,
+                                        },
+                                    ],
+                                    reactions: [],
+                                    note: undefined,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+            endOfRound: [],
+        };
+        const roster: BattleResult['roster'] = [
+            { actorId: 'ravager', side: 'enemy', name: 'Ravager', position: 'T1' },
+            { actorId: 'hexa', side: 'enemy', name: 'Hexa', position: 'T2' },
+        ];
+        render(<RoundEventLog round={round} roster={roster} />);
+        // The target-less entry still shows the actor + skill name (not blank).
+        expect(screen.getByText(/Enemy Ravager Ravage/)).toBeInTheDocument();
+        // The nested reaction still renders underneath it.
+        expect(screen.getByText(/↳ reacts:/)).toBeInTheDocument();
+        expect(screen.getByText(/Enemy Hexa → Enemy Ravager: 500 → 90%/)).toBeInTheDocument();
+    });
+
     it('shows a fallback message when the round has no content', () => {
         const empty: CombatLogRound = { round: 1, startOfRound: [], turns: [], endOfRound: [] };
         render(<RoundEventLog round={empty} roster={roster} />);

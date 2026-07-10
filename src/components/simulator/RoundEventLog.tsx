@@ -84,7 +84,7 @@ const renderTargets = (
             </span>
         );
     }
-    if (entry.targets.length === 0) return null;
+    if (entry.targets.length === 0) return <span>{header}</span>;
     return (
         <div>
             <div>{header}</div>
