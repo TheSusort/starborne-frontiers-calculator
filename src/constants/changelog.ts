@@ -75,6 +75,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log now shows damage-over-time (corrosion/inferno) tick damage each round.',
     'Combat log now shows counter-attacks and damage reflection.',
     "Combat log turns now include a collapsible snapshot of the acting ship's current modelled stats (HP, attack, defence, crit, speed, hacking, security).",
+    'Combat sim: reactive self-buff passives (e.g. Hermes Everliving Regeneration) no longer trigger multiple times against area-of-effect and multi-hit attacks — they now apply once per attack.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -2550,6 +2550,12 @@ export function runCombat(input: CombatEngineInput): {
     // turn) counters again. NOT per-round.
     const counterFiredThisTurn = new Set<string>();
 
+    // Task 5: sibling once-per-attack guard for SELF-scoped reactive buff/heal/charge riders
+    // (Hermes's Everliving Regeneration + charge on on-ally-crit). Same lifecycle as
+    // counterFiredThisTurn — cleared at every actor turn-start so a multi-hit / AoE attack applies
+    // a self-rider once, while a later attack (a different turn) applies it again.
+    const reactionFiredThisAttack = new Set<string>();
+
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
@@ -5344,6 +5350,7 @@ export function runCombat(input: CombatEngineInput): {
                         applyReactiveDamage,
                         applyCounterAttack,
                         counterFiredThisTurn,
+                        reactionFiredThisAttack,
                         // Healing mode only — the SAME shared ctx the player turns use, so a
                         // reactive heal/shield/cleanse credits the same per-round buckets and
                         // mutates the same live target. Undefined in DPS mode → the executor's
@@ -5679,6 +5686,9 @@ export function runCombat(input: CombatEngineInput): {
                 // later attack (a different turn) can counter again while all per-hit `attacked`
                 // events of ONE attack collapse to a single counter.
                 counterFiredThisTurn.clear();
+                // Task 5: reset the self-rider once-per-attack guard beside the counter guard so a
+                // later attack re-applies Hermes's Everliving Regeneration / charge.
+                reactionFiredThisAttack.clear();
 
                 // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff
                 // written during this actor's own turn is flagged appliedThisTurn so it survives
