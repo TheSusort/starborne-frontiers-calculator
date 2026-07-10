@@ -73,6 +73,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Damage-over-Time effects (Corrosion, Inferno, Bomb, and transform DoTs) now show up in a ship's active debuff list in the battle playback, alongside its other debuffs.",
     'Combat sim: fixed the HP shown for Voron (and Orel) after a hit is converted into a Damage-over-Time effect — the battle playback no longer double-counts the converted hit, so the HP bar reflects the real remaining HP.',
     'Combat log now shows damage-over-time (corrosion/inferno) tick damage each round.',
+    'Combat log now shows counter-attacks and damage reflection.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

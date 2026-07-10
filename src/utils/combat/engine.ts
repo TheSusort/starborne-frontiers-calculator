@@ -3298,6 +3298,37 @@ export function runCombat(input: CombatEngineInput): {
         // verbatim. Kept inside runCombat — it captures statusEngine/bus/r/recipientMaxHp/
         // cheatDeathConsumed/cheatDeathConsumedRound/recordDestroyed/BARRIER_BUFFS/
         // CHEAT_DEATH_BUFFS/selfBuffNamesForOwners exactly as before.
+        //
+        // Task 3 (combat-log) — deferred reflect log emit. Reflect thorns fire from INSIDE
+        // applyVictimDamage. On the POSITIONAL path they run DURING drivePositionalApply, BEFORE
+        // the attacker's aggregate `ability-performed` is emitted (emitDeferredAbilityPerformed,
+        // post-apply). Emitting the reflect's LOG-ONLY `reactive-damage-performed` inline there
+        // would nest it under whatever non-reactive entry already exists in the attacker's turn
+        // (e.g. a self charge-gain / self-buff the attacker's active cast emitted BEFORE the
+        // attack), not under the attack. So while `deferReflectLogs` is set (⟺ inside
+        // drivePositionalApply) we BUFFER the reflect rows and flush them right AFTER
+        // emitDeferredAbilityPerformed creates the attack entry, so routeReaction nests them under
+        // it. On every NON-deferred path (legacy non-positional apply, where runPlayerTurn already
+        // emitted `ability-performed` BEFORE the apply) the flag is false → inline emit, byte-
+        // identical, and the attack entry already exists to nest under. NO combat listener
+        // subscribes to `reactive-damage-performed` → it can never chain.
+        let deferReflectLogs = false;
+        const pendingReflectLogs: { sourceId: string; targetId: string; amount: number }[] = [];
+        const flushReflectLogs = (): void => {
+            for (const row of pendingReflectLogs) {
+                bus.emit({
+                    type: 'reactive-damage-performed',
+                    sourceId: row.sourceId,
+                    targetId: row.targetId,
+                    round: r,
+                    amount: row.amount,
+                    reactive: true,
+                    duringTurnOf: actingActorId,
+                    triggerActorId: actingActorId,
+                });
+            }
+            pendingReflectLogs.length = 0;
+        };
         const applyVictimDamage = (
             rawDamage: number,
             victim: CombatActor,
@@ -3850,6 +3881,32 @@ export function runCombat(input: CombatEngineInput): {
                                 attacker.id,
                                 (roundPerTargetDamage.get(attacker.id) ?? 0) + reflected
                             );
+                            // Log-only reflect surface (see the deferReflectLogs doc above
+                            // applyVictimDamage). On the deferred (positional) path we BUFFER the
+                            // row and flush it after emitDeferredAbilityPerformed creates the
+                            // attack entry, so it nests under the attack (not a preceding
+                            // charge/buff entry). Off the deferred path the attacker's
+                            // ability-performed already exists → emit inline. Stamp duringTurnOf
+                            // with the acting attacker either way; didCrit omitted (reflects don't
+                            // crit).
+                            if (deferReflectLogs) {
+                                pendingReflectLogs.push({
+                                    sourceId: victim.id,
+                                    targetId: attacker.id,
+                                    amount: reflected,
+                                });
+                            } else {
+                                bus.emit({
+                                    type: 'reactive-damage-performed',
+                                    sourceId: victim.id,
+                                    targetId: attacker.id,
+                                    round: r,
+                                    amount: reflected,
+                                    reactive: true,
+                                    duringTurnOf: actingActorId,
+                                    triggerActorId: actingActorId,
+                                });
+                            }
                         }
                     }
                 }
@@ -3962,7 +4019,7 @@ export function runCombat(input: CombatEngineInput): {
             abilityId: string,
             multiplier: number,
             hits: number
-        ): void => {
+        ): { dealt: number; didCrit: boolean } | void => {
             const owner = allActorsById.get(ownerId);
             const attacker = allActorsById.get(attackerId);
             // Guards: owner alive, attacker alive, not self (spec rule 6).
@@ -4030,6 +4087,7 @@ export function runCombat(input: CombatEngineInput): {
                 attacker.id,
                 (roundPerTargetDamage.get(attacker.id) ?? 0) + raw
             );
+            return { dealt: raw, didCrit };
         };
 
         // PR4b: the reactive `damage` executor branch (triggers.ts cfg.type==='damage') — Grif's
@@ -4358,125 +4416,138 @@ export function runCombat(input: CombatEngineInput): {
             // perVictimOutgoingDeltaPct. Unsupplied → delta stays 0 for every victim.
             preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
         }): { anyCrit: boolean; critPairs: number } => {
-            return applyPositionalDamage({
-                hitCrits: args.hitCrits ?? [],
-                scalars: args.scalars,
-                pattern: args.pattern,
-                actorPosition: args.actingPosition,
-                target: args.target,
-                opposingLiving: args.opposingLiving,
-                statusOf: statusLookupFor(args.opposingLiving),
-                acting: {
-                    ignoresForcedTargeting: args.ignoresForcedTargeting,
-                    provokedBy: provokerOf(statusEngine, args.actingId),
-                },
-                defenseProfileOf: (v) => {
-                    const m = victimIncomingModifiers(v.id);
-                    return {
-                        // SP-F F5: Meatshield defense-substitution (approximation) — see the
-                        // substitutedDefenceFor doc comment above for the full rule.
-                        defence: substitutedDefenceFor(v, v.stats.defence),
-                        // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
-                        // Direction-agnostic — v.id keys the victim's own enemy-debuff store
-                        // regardless of side.
-                        defenceModifierPct: m.enemyDefenseModifier,
-                        // B1/PR7b + D-PR12: per-victim incoming-damage modifier; combines
-                        // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
-                        // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
-                        incomingDamageModifierPct: m.incomingDamageModifier,
-                        affinity: v.affinity ?? 'antimatter',
-                        // Sub-project I, PR I2: this footprint victim's own enemy-status-gated
-                        // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
-                        outgoingDamageDeltaPct: perVictimOutgoingDeltaPct(
-                            args.perVictimOutgoing,
-                            args.preTurnVictimStatus,
-                            v
-                        ),
-                        // SP-F F4: this victim's 'Defensive Affinity Override' (Isha/Nayra) forces
-                        // the incoming attacker to affinity DISADVANTAGE against it. Detected per
-                        // victim (anchor AND covered) via the victim's own self-buff store — the
-                        // positional counterpart to playerTurn's `victimHasDefensiveOverride`.
-                        forceAffinityDisadvantage: selfBuffNamesForOwners(statusEngine, [
-                            v.id,
-                        ]).includes('Defensive Affinity Override'),
-                    };
-                },
-                applyToVictim: args.applyToVictim,
-                // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
-                // per-round map so the RoundData row can expose perTargetDamage. Identical
-                // across all three sites (focus / team / enemy), so it lives here.
-                // §4.5 NOTE: the Stasis break is NOT wired here. It fires via `onHitBreakStasis`
-                // inside runPlayerTurn (BEFORE the ability timed-debuff loop) so a Stasis
-                // re-application from the same attack's debuff ability is not inadvertently
-                // removed. The break fires for the resolved `targetId` (the selected victim);
-                // AoE footprint victims are a future Task-3 follow-up.
-                emitHit: (victim, damage) => {
-                    roundPerTargetDamage.set(
-                        victim.id,
-                        (roundPerTargetDamage.get(victim.id) ?? 0) + damage
-                    );
-                },
-                // E2: forward the per-direction leech hook (unsupplied by all current callers).
-                onVictimResolved: args.onVictimResolved,
-                // Per-victim crit: forward the firing turn's per-victim crit resolver.
-                rollVictimCrit: args.rollVictimCrit,
-                // D-PR3: victim-side incoming %-reduction, per footprint victim per sub-hit. Shared
-                // across all three sites (focus / walked-team / enemy) since drivePositionalApply
-                // makes ONE applyPositionalDamage call. incomingReductionForHit returns 0 for actors
-                // with no incoming-reduction ability → byte-identical when no such equipment exists.
-                incomingReductionFor: (victim, didCrit) => {
-                    const equip = incomingReductionForHit(incomingAbilitiesOf(victim.id), {
-                        didCrit,
-                        attackerStealthed: isStealthed(args.actingId),
-                        victimStealthed: isStealthed(victim.id),
-                        victimStasised: isStasised(victim.id),
-                        hitIndexThisRound: 0, // unused by reduction (only block reads it)
-                        attackerHasDot: attackerHasDot(args.actingId),
-                        victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
-                        victimHasShield: hasShield(victim.id),
-                        selfHpPct: selfHpPctOf(victim.id),
-                        attackerTauntedOrProvoked: attackerTauntedOrProvoked(args.actingId),
-                    });
-                    if (!didCrit) return equip;
-                    // F3 crit-conditional pre-fight damage modifiers, gated per sub-hit on
-                    // didCrit — the SAME crit-family mechanism as the equip reduction above
-                    // (a hit that crits sees the extra reduction on its whole damage).
-                    // SIGN CONVENTION: this channel is a REDUCTION (positive = less damage),
-                    // while the leader data is benefit/penalty-phrased pct points:
-                    //   victim incomingCritDamage  -10 → takes 10% smaller crits → +10 reduction;
-                    //   attacker outgoingCritDamage -10 (Negotiator III on enemies) → its crits
-                    //   deal 10% less → +10 reduction; positive values invert symmetrically.
-                    // Hence both terms are NEGATED. Absent → 0 → byte-identical.
-                    const victimCritTerm = -(victim.preFight?.incomingCritDamage ?? 0);
-                    const attackerCritTerm = -(
-                        allActorsById.get(args.actingId)?.preFight?.outgoingCritDamage ?? 0
-                    );
-                    return equip + victimCritTerm + attackerCritTerm;
-                },
-                // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
-                // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
-                // outgoing-amplification ability → byte-identical when no such equipment exists.
-                outgoingAmplificationFor: (victim, didCrit) => {
-                    // Fast path: skip the per-victim effectiveStatsOf folds when the attacker has no
-                    // outgoing-amplification ability (the overwhelmingly common case) — matches the
-                    // aggregate path's `ampAbilities.length > 0` guard. Byte-identical (returns 0).
-                    const outs = outgoingAbilitiesOf(args.actingId);
-                    if (outs.length === 0) return 0;
-                    const attacker = allActorsById.get(args.actingId);
-                    if (!attacker) return 0;
-                    return outgoingAmplificationForHit(
-                        outs,
-                        {
+            // Task 3: this is the ONE deferred (positional) apply path — reflects fired here must
+            // buffer their log row until emitDeferredAbilityPerformed creates the attack entry
+            // (see the deferReflectLogs doc above applyVictimDamage). try/finally so the flag
+            // always clears, even if applyPositionalDamage throws.
+            deferReflectLogs = true;
+            try {
+                return applyPositionalDamage({
+                    hitCrits: args.hitCrits ?? [],
+                    scalars: args.scalars,
+                    pattern: args.pattern,
+                    actorPosition: args.actingPosition,
+                    target: args.target,
+                    opposingLiving: args.opposingLiving,
+                    statusOf: statusLookupFor(args.opposingLiving),
+                    acting: {
+                        ignoresForcedTargeting: args.ignoresForcedTargeting,
+                        provokedBy: provokerOf(statusEngine, args.actingId),
+                    },
+                    defenseProfileOf: (v) => {
+                        const m = victimIncomingModifiers(v.id);
+                        return {
+                            // SP-F F5: Meatshield defense-substitution (approximation) — see the
+                            // substitutedDefenceFor doc comment above for the full rule.
+                            defence: substitutedDefenceFor(v, v.stats.defence),
+                            // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
+                            // Direction-agnostic — v.id keys the victim's own enemy-debuff store
+                            // regardless of side.
+                            defenceModifierPct: m.enemyDefenseModifier,
+                            // B1/PR7b + D-PR12: per-victim incoming-damage modifier; combines
+                            // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
+                            // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
+                            incomingDamageModifierPct: m.incomingDamageModifier,
+                            affinity: v.affinity ?? 'antimatter',
+                            // Sub-project I, PR I2: this footprint victim's own enemy-status-gated
+                            // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
+                            outgoingDamageDeltaPct: perVictimOutgoingDeltaPct(
+                                args.perVictimOutgoing,
+                                args.preTurnVictimStatus,
+                                v
+                            ),
+                            // SP-F F4: this victim's 'Defensive Affinity Override' (Isha/Nayra) forces
+                            // the incoming attacker to affinity DISADVANTAGE against it. Detected per
+                            // victim (anchor AND covered) via the victim's own self-buff store — the
+                            // positional counterpart to playerTurn's `victimHasDefensiveOverride`.
+                            forceAffinityDisadvantage: selfBuffNamesForOwners(statusEngine, [
+                                v.id,
+                            ]).includes('Defensive Affinity Override'),
+                        };
+                    },
+                    applyToVictim: args.applyToVictim,
+                    // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
+                    // per-round map so the RoundData row can expose perTargetDamage. Identical
+                    // across all three sites (focus / team / enemy), so it lives here.
+                    // §4.5 NOTE: the Stasis break is NOT wired here. It fires via `onHitBreakStasis`
+                    // inside runPlayerTurn (BEFORE the ability timed-debuff loop) so a Stasis
+                    // re-application from the same attack's debuff ability is not inadvertently
+                    // removed. The break fires for the resolved `targetId` (the selected victim);
+                    // AoE footprint victims are a future Task-3 follow-up.
+                    emitHit: (victim, damage) => {
+                        roundPerTargetDamage.set(
+                            victim.id,
+                            (roundPerTargetDamage.get(victim.id) ?? 0) + damage
+                        );
+                    },
+                    // E2: forward the per-direction leech hook (unsupplied by all current callers).
+                    onVictimResolved: args.onVictimResolved,
+                    // Per-victim crit: forward the firing turn's per-victim crit resolver.
+                    rollVictimCrit: args.rollVictimCrit,
+                    // D-PR3: victim-side incoming %-reduction, per footprint victim per sub-hit. Shared
+                    // across all three sites (focus / walked-team / enemy) since drivePositionalApply
+                    // makes ONE applyPositionalDamage call. incomingReductionForHit returns 0 for actors
+                    // with no incoming-reduction ability → byte-identical when no such equipment exists.
+                    incomingReductionFor: (victim, didCrit) => {
+                        const equip = incomingReductionForHit(incomingAbilitiesOf(victim.id), {
                             didCrit,
-                            targetHigherAttack:
-                                effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack >
-                                effectiveStatsOf(statusEngine, selfBuffLookup, attacker).attack,
-                        },
-                        (abilityId, chance) =>
-                            rollRateGate(procChanceGates, `${args.actingId}:${abilityId}`, chance)
-                    );
-                },
-            });
+                            attackerStealthed: isStealthed(args.actingId),
+                            victimStealthed: isStealthed(victim.id),
+                            victimStasised: isStasised(victim.id),
+                            hitIndexThisRound: 0, // unused by reduction (only block reads it)
+                            attackerHasDot: attackerHasDot(args.actingId),
+                            victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
+                            victimHasShield: hasShield(victim.id),
+                            selfHpPct: selfHpPctOf(victim.id),
+                            attackerTauntedOrProvoked: attackerTauntedOrProvoked(args.actingId),
+                        });
+                        if (!didCrit) return equip;
+                        // F3 crit-conditional pre-fight damage modifiers, gated per sub-hit on
+                        // didCrit — the SAME crit-family mechanism as the equip reduction above
+                        // (a hit that crits sees the extra reduction on its whole damage).
+                        // SIGN CONVENTION: this channel is a REDUCTION (positive = less damage),
+                        // while the leader data is benefit/penalty-phrased pct points:
+                        //   victim incomingCritDamage  -10 → takes 10% smaller crits → +10 reduction;
+                        //   attacker outgoingCritDamage -10 (Negotiator III on enemies) → its crits
+                        //   deal 10% less → +10 reduction; positive values invert symmetrically.
+                        // Hence both terms are NEGATED. Absent → 0 → byte-identical.
+                        const victimCritTerm = -(victim.preFight?.incomingCritDamage ?? 0);
+                        const attackerCritTerm = -(
+                            allActorsById.get(args.actingId)?.preFight?.outgoingCritDamage ?? 0
+                        );
+                        return equip + victimCritTerm + attackerCritTerm;
+                    },
+                    // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
+                    // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
+                    // outgoing-amplification ability → byte-identical when no such equipment exists.
+                    outgoingAmplificationFor: (victim, didCrit) => {
+                        // Fast path: skip the per-victim effectiveStatsOf folds when the attacker has no
+                        // outgoing-amplification ability (the overwhelmingly common case) — matches the
+                        // aggregate path's `ampAbilities.length > 0` guard. Byte-identical (returns 0).
+                        const outs = outgoingAbilitiesOf(args.actingId);
+                        if (outs.length === 0) return 0;
+                        const attacker = allActorsById.get(args.actingId);
+                        if (!attacker) return 0;
+                        return outgoingAmplificationForHit(
+                            outs,
+                            {
+                                didCrit,
+                                targetHigherAttack:
+                                    effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack >
+                                    effectiveStatsOf(statusEngine, selfBuffLookup, attacker).attack,
+                            },
+                            (abilityId, chance) =>
+                                rollRateGate(
+                                    procChanceGates,
+                                    `${args.actingId}:${abilityId}`,
+                                    chance
+                                )
+                        );
+                    },
+                });
+            } finally {
+                deferReflectLogs = false;
+            }
         };
 
         // ── Deferred ability-performed emit helper ────────────────────────────────────
@@ -4500,6 +4571,10 @@ export function runCombat(input: CombatEngineInput): {
                 ...(critHits > 0 ? { critHits } : {}),
                 didHit: true,
             });
+            // Task 3: the attack entry now exists — drain any reflect rows buffered during this
+            // cast's per-victim apply so buildCombatLog nests them UNDER this attack (not a
+            // preceding charge/buff entry in the attacker's turn). No-op when none buffered.
+            flushReflectLogs();
         };
 
         // ── Unified per-actor turn resolvers (bySide unification PR6a) ──────────────
