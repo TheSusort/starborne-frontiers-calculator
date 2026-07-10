@@ -2027,6 +2027,28 @@ export function runCombat(input: CombatEngineInput): {
     // resolves. Used by grantExtraAction; companion actorsBySide lands in PR3.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
 
+    // The dummy `enemy` is the player-offense sink for DPS-calc / non-positional mode. In a
+    // fully-positional team-vs-team sim it is vestigial: every player resolves a real positioned
+    // enemy target, so nothing ever routes into its containers and its DoT-tick turn is a pure
+    // no-op that only leaks a phantom "enemy" line into the log. Gate its TURN out in that case
+    // (it stays in allActors/allActorsById as the `legacyVictim` fallback object — only the turn
+    // order drops it). The gate mirrors selectTurnTarget's success predicate statically: real
+    // positioned enemies exist AND every player actor is positioned with an ENEMY-side parsed
+    // target (positions + parsed targets are fixed for the whole battle). If ANY player could
+    // fall back to the dummy sink, keep it in the turn order so its accumulated DoTs still tick.
+    // NOT gated on healingMode / enemyAttackers.length — the healing calculator sets healTargetId
+    // and can supply bare (non-positioned) enemies where the dummy is still the offense sink.
+    const dummyEnemyIsVestigial =
+        enemyAttackerActors.some((a) => a.position != null) &&
+        allPlayerActors.every((a) => {
+            const t = a.kind === 'attacker' ? input.target : teamTargetById.get(a.id);
+            return a.position != null && t?.side === 'enemy';
+        });
+    // The turn-order roster: the dummy `enemy` is dropped when vestigial (positional sim).
+    const turnOrderActors = dummyEnemyIsVestigial
+        ? allActors.filter((a) => a.id !== enemy.id)
+        : allActors;
+
     // Task 7 — NAMES-ONLY condition-context sources for `enemy-buff` / `self-debuff` gates.
     // These read buff/debuff NAMES from the status engine; they NEVER fold effects (effects
     // are folded exactly once via snapshot()/activeAbilityStatuses/timedAbilityStatuses), so
@@ -3192,8 +3214,9 @@ export function runCombat(input: CombatEngineInput): {
         // effective speed every step, so a Speed Up/Down applied mid-round reorders the remaining
         // unacted actors automatically (no re-sort hook). Dead actors keep their seeded pending=1
         // — the death-skip below consumes it via a plain `continue` (identical to the old loop
-        // visiting then continue-ing). The dummy `enemy` (no speed buffs) keeps its DoT-tick turn.
-        const roundActors = allActors;
+        // visiting then continue-ing). The dummy `enemy` (no speed buffs) keeps its DoT-tick turn
+        // in DPS/non-positional mode; a fully-positional sim drops it (dummyEnemyIsVestigial).
+        const roundActors = turnOrderActors;
         const pending = new Map<string, number>(roundActors.map((a) => [a.id, 1]));
         const pendingOf = (id: string) => pending.get(id) ?? 0;
 

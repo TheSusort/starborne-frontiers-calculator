@@ -385,7 +385,15 @@ export function registerReactiveListeners(args: {
                         // enforced at drain via gateConditions.
                         if (e.actorId !== ownerId) return;
                         if ((e.damage ?? 0) <= 0) return;
-                        enqueue(intent);
+                        // Capture the owner's own attack target so a reactive DoT rider (Burner's
+                        // on-deal-damage Inferno) lands on the enemy actually hit — the real
+                        // positional victim — instead of falling back to the DPS dummy `enemy`
+                        // sink. DPS mode: e.targetId is the dummy → byte-identical. Non-DoT riders
+                        // (Warpstrike duration-reduction) ignore victimId, so this is inert there.
+                        enqueue({
+                            ...intent,
+                            eventCtx: { ...intent.eventCtx, victimId: e.targetId },
+                        });
                     });
                     break;
                 case 'on-charged-cast':
@@ -455,7 +463,17 @@ export function registerReactiveListeners(args: {
                         // are excluded (mirrors on-ally-debuff-inflicted's ally scoping). One
                         // enqueue per qualifying infliction EVENT (per-infliction-event rule).
                         if (e.viaCrit && isSameSideAlly(e.sourceId, ownerId)) {
-                            enqueue(intent);
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    // Capture the ally's ACTUAL victim so the reactive `dot`
+                                    // executor lands "on that enemy" (the positional victim the
+                                    // ally hit), not the fixed DPS dummy `enemy` sink.
+                                    victimId: e.targetId,
+                                    dotType: e.dotType,
+                                },
+                            });
                         }
                     });
                     break;
@@ -2203,15 +2221,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
+        // Resolve the REAL victim (same seam the convert-dot branch uses): a reactive DoT must
+        // land on the enemy the triggering event carries (e.g. on-ally-crit-dot → "on that
+        // enemy", the ally's actual victim), NOT the fixed DPS dummy `enemy` sink. When no victim
+        // is threaded — DPS mode (victimId resolves to the dummy anyway), an owner's own-target
+        // reactive (Burner on-deal-damage: no victimId → the dummy IS the owner's target), or a
+        // unit-test ctx without `actorById` — fall through to the ctx-level containers / ctx.enemy.id
+        // exactly as before (byte-identical). Only a resolved victim swaps to its OWN containers.
+        const victim = intent.eventCtx?.victimId
+            ? ctx.actorById?.(intent.eventCtx.victimId)
+            : undefined;
+        const victimId = victim?.id ?? ctx.enemy.id;
         // Block Debuff (D-PR15 Task 7): an immune target auto-resists this reactive DoT — block
         // it AND emit a resist event (block path ONLY; a normal landing failure below stays
         // silent → byte-identical when not immune). Placed AFTER the inert-DoT guard above so a
         // zero-stack/tier DoT doesn't surface a spurious resist.
-        if (targetCarriesBlockDebuff(ctx.statusEngine, ctx.enemy.id)) {
+        if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
             emitBlockDebuffResist(
                 ctx.bus,
                 intent.ownerId,
-                ctx.enemy.id,
+                victimId,
                 ctx.round,
                 dotResistLabel(cfg.dotType, cfg.tier)
             );
@@ -2227,14 +2256,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // enemy's per-entry tick attributes to (and scales with) the applier; bombs snapshot
         // the owner's last-turn effective attack + affinity.
         if (cfg.dotType === 'corrosion') {
-            ctx.corrosionEntries.push({
+            (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
                 stacks: cfg.stacks,
                 tier: cfg.tier,
                 remainingRounds: cfg.duration,
                 sourceId: intent.ownerId,
             });
         } else if (cfg.dotType === 'inferno') {
-            ctx.infernoEntries.push({
+            (victim?.infernoEntries ?? ctx.infernoEntries).push({
                 stacks: cfg.stacks,
                 tier: cfg.tier,
                 remainingRounds: cfg.duration,
@@ -2246,7 +2275,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // now per owner). Affinity comes from the owner's last-turn ctx too.
             const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
             if (ownerCtx === undefined) return;
-            ctx.pendingBombs.push({
+            (victim?.pendingBombs ?? ctx.pendingBombs).push({
                 countdown: Math.max(1, cfg.duration),
                 damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
                 stacks: cfg.stacks,
@@ -2266,7 +2295,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         ctx.bus.emit({
             type: 'dot-applied',
             sourceId: intent.ownerId,
-            targetId: ctx.enemy.id,
+            targetId: victimId,
             round: ctx.round,
             dotType: cfg.dotType,
             stacks: cfg.stacks,
@@ -2278,10 +2307,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // convert it into <buffName> of the same level; upon converting, extend the new entry N
     // turns at crit-power chance." Team-symmetric: `owner` is Belladonna (either side); the
     // victim is resolved via eventCtx.victimId (the ally's ACTUAL target), never the fixed
-    // ctx.enemy — the `dot` branch above is safe leaving that fixed (no shipped reactive `dot`
-    // applier targets the opposing side today), but a Belladonna reacting on the OPPOSING side
-    // to her OWN ally's cast must land on that ally's real victim, which can be a real player
-    // actor (enemy-owner case) — never the DPS/team `enemy` dummy.
+    // ctx.enemy — the same seam the `dot` branch above now uses so a reactive DoT lands on the
+    // real positional victim (a Belladonna reacting on the OPPOSING side to her OWN ally's cast
+    // must land on that ally's real victim, which can be a real player actor in the enemy-owner
+    // case) — never the DPS/team `enemy` dummy.
     if (cfg.type === 'convert-dot') {
         // Gate 0: only the fromDotType this event carries (Corrosion) converts.
         if (intent.eventCtx?.dotType !== cfg.fromDotType) return;
