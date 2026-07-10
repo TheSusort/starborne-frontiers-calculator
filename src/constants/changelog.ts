@@ -77,6 +77,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log now shows counter-attacks and damage reflection.',
     "Combat log turns now include a collapsible snapshot of the acting ship's current modelled stats (HP, attack, defence, crit, speed, hacking, security).",
     'Combat sim: reactive self-buff passives (e.g. Hermes Everliving Regeneration) no longer trigger multiple times against area-of-effect and multi-hit attacks — they now apply once per attack.',
+    'Combat sim: ships now enter combat with their fully-geared Security (and Shield Penetration), instead of falling back to un-geared base values — a ship showing 359 Security on its details page now fights with 359, not its base value. This affects how reliably debuffs land.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
