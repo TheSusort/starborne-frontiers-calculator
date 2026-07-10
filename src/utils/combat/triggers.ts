@@ -385,7 +385,15 @@ export function registerReactiveListeners(args: {
                         // enforced at drain via gateConditions.
                         if (e.actorId !== ownerId) return;
                         if ((e.damage ?? 0) <= 0) return;
-                        enqueue(intent);
+                        // Capture the owner's own attack target so a reactive DoT rider (Burner's
+                        // on-deal-damage Inferno) lands on the enemy actually hit — the real
+                        // positional victim — instead of falling back to the DPS dummy `enemy`
+                        // sink. DPS mode: e.targetId is the dummy → byte-identical. Non-DoT riders
+                        // (Warpstrike duration-reduction) ignore victimId, so this is inert there.
+                        enqueue({
+                            ...intent,
+                            eventCtx: { ...intent.eventCtx, victimId: e.targetId },
+                        });
                     });
                     break;
                 case 'on-charged-cast':

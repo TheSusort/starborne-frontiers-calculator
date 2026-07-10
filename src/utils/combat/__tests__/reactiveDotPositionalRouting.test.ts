@@ -211,3 +211,57 @@ describe('reactive DoT positional routing — on-ally-crit-dot lands on the real
         expect(enemyFront.corrosionEntries.some((e) => e.sourceId === 'crit-ally')).toBe(true);
     });
 });
+
+// Focus with a Burner-style on-deal-damage inferno passive (the OTHER reactive-dot trigger). Its
+// own attack triggers it; the inferno must land on the enemy it hit, not the dummy sink. Without
+// this, the dummy-turn-order gate would strand the stack (applied to a turnless dummy).
+const burnerFocusSkills = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } })],
+        },
+        {
+            slot: 'passive',
+            abilities: [
+                ab({
+                    type: 'dot',
+                    target: 'enemy',
+                    trigger: 'on-deal-damage',
+                    config: {
+                        type: 'dot',
+                        dotType: 'inferno',
+                        tier: 15,
+                        stacks: 1,
+                        duration: 2,
+                    },
+                }),
+            ],
+        },
+    ],
+});
+
+describe('reactive DoT positional routing — on-deal-damage (Burner) inferno lands on the real enemy', () => {
+    it('the focus on-deal-damage inferno lands on the positioned enemy it hit, dummy stays empty', () => {
+        idc = 0;
+        let enemyFront: CombatActor | undefined;
+        let dummyEnemy: CombatActor | undefined;
+        runCombat(
+            BASE({
+                shipSkills: burnerFocusSkills(),
+                // Drop the crit-ally so the ONLY reactive dot is the focus's on-deal-damage inferno.
+                teamActors: [],
+                __testTapActors: (actors) => {
+                    enemyFront = actors.find((a) => a.id === 'enemy-front');
+                    dummyEnemy = actors.find((a) => a.id === 'enemy');
+                },
+            })
+        );
+        if (!enemyFront) throw new Error('__testTapActors never handed out enemy-front');
+
+        // The dummy sink must NOT receive the on-deal-damage inferno.
+        expect(dummyEnemy?.infernoEntries ?? []).toHaveLength(0);
+        // The inferno must land on the REAL enemy the focus attacked.
+        expect(enemyFront.infernoEntries.some((e) => e.sourceId === 'attacker')).toBe(true);
+    });
+});
