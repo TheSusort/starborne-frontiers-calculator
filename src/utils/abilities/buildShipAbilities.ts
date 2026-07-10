@@ -944,7 +944,14 @@ function flipBareSupportTarget(
     slot: SkillSlot,
     hasDamage: boolean,
     healSentence?: string,
-    role?: ShipTypeName
+    role?: ShipTypeName,
+    // The recipient scope for a BARE active/charged pure-support cast (no named recipient).
+    // Heals pass 'all-allies' — a support healer heals EVERYONE in its pattern footprint (AoE,
+    // "just like buffs"; the engine intersects all-allies with the support pattern). Cleanses
+    // (and the default) keep 'ally' — single-recipient, unchanged. An EXPLICIT recipient
+    // ("the ally with the most missing health" → Volk) sets explicitTarget and never reaches
+    // this branch, so it stays a single 'ally'.
+    bareActiveScope: 'ally' | 'all-allies' = 'ally'
 ): 'self' | 'ally' | 'all-allies' {
     if (
         !explicitTarget &&
@@ -961,7 +968,7 @@ function flipBareSupportTarget(
         ) {
             return 'self';
         }
-        return 'ally';
+        return bareActiveScope;
     }
 
     // PASSIVE recipient rules — see the jsdoc above. (A) ally-damage trigger → heal that ally;
@@ -1814,7 +1821,11 @@ function abilitiesFromText(
                       slot,
                       mult > 0,
                       healSentence,
-                      role
+                      role,
+                      // AoE: a bare support-cast heal repairs every ally in the pattern footprint
+                      // (like all-allies buffs), not a single ally. Volk-style explicit "most
+                      // missing health" sets explicitTarget and stays a single 'ally'.
+                      'all-allies'
                   )
                 : h.kind === 'shield'
                   ? flipBareSupportShieldTarget(

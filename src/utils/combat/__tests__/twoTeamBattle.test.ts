@@ -883,6 +883,95 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
         expect(focusStates.some((s) => s.damageTaken > 0)).toBe(true);
     });
 
+    it('support-pattern healer AoE-heals EVERY ally in its footprint, on the player side too', () => {
+        // Regression for the reported bug (bravo-vs-bravo: only the ENEMY Hermes healed) AND the
+        // correct model: a bare-repair support healer (Hermes: allies + Pattern-Circle-Support-
+        // Range-1) heals EVERYONE in its pattern footprint, like an all-allies buff — not a single
+        // ally, and not only the vestigial focus. Here the healer at M4 (Circle-Support-Range-1
+        // footprint = M4 + neighbours M3, T3, B3, B4…) covers two wounded neighbours; both are
+        // repaired. Pre-fix the player heal routed to the out-of-footprint focus → healed nobody.
+        const result = simulateBattle({
+            playerTeam: [
+                // Focus player[0] far back at B1 — NOT the intended recipient. Huge HP.
+                placement(makeShip('p1', 'Focus', BACK), 'B1', 5000, 1_000_000_000),
+                // Support healer at M4 (bare repair → AoE over its Circle-Support footprint).
+                placement(
+                    makeShip('p2', 'Healer', {
+                        activeTarget: 'allies',
+                        activePattern: 'Pattern-Circle-Support-Range-1',
+                        activeSkillText: 'This Unit repairs 30% of its Max HP.',
+                        type: 'Support',
+                    }),
+                    'M4',
+                    0,
+                    1_000_000
+                ),
+                // Two neighbours in the M4 circle footprint, both soaking enemy fire.
+                placement(makeShip('p3', 'AllyA', FRONT), 'M3', 0, 300_000),
+                placement(makeShip('p4', 'AllyB', FRONT), 'T3', 0, 300_000),
+            ],
+            enemyTeam: [
+                placement(makeShip('e1', 'EnemyA', FRONT), 'M4', 20000, 1_000_000_000),
+                placement(makeShip('e2', 'EnemyB', BACK), 'M1', 20000, 1_000_000_000),
+            ],
+            rounds: 5,
+        });
+
+        const HEALER = 'p:p2:1';
+        const healerStates = result.rounds.flatMap((r) =>
+            r.ships.filter((s) => s.actorId === HEALER)
+        );
+        // The player-side healer heals (pre-fix it routed to the out-of-footprint focus → 0).
+        expect(healerStates.some((s) => s.healingDone > 0)).toBe(true);
+
+        // AoE: MORE THAN ONE distinct ally receives healing across the fight (not single-target).
+        const healedAllies = new Set<string>();
+        for (const r of result.rounds) {
+            for (const s of r.ships) {
+                if (s.side === 'player' && s.healingReceived > 0) healedAllies.add(s.actorId);
+            }
+        }
+        expect(healedAllies.size).toBeGreaterThan(1);
+    });
+
+    it('support-pattern healer AoE-heals when it is the FOCUS actor (player[0]), not just team actors', () => {
+        // Browser-found follow-up: the AoE heal worked for team/enemy actors but the FOCUS actor
+        // (player[0], the reserved `attacker` id) still healed only itself. A support healer placed
+        // first on the team must AoE its footprint exactly like any other actor. Healer at M4;
+        // allies at M3 and T3 sit in its Circle-Support-Range-1 footprint.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(
+                    makeShip('p1', 'FocusHealer', {
+                        activeTarget: 'allies',
+                        activePattern: 'Pattern-Circle-Support-Range-1',
+                        activeSkillText: 'This Unit repairs 30% of its Max HP.',
+                        type: 'Support',
+                    }),
+                    'M4',
+                    0,
+                    1_000_000
+                ),
+                placement(makeShip('p2', 'AllyA', FRONT), 'M3', 0, 300_000),
+                placement(makeShip('p3', 'AllyB', FRONT), 'T3', 0, 300_000),
+            ],
+            enemyTeam: [
+                placement(makeShip('e1', 'EnemyA', FRONT), 'M4', 20000, 1_000_000_000),
+                placement(makeShip('e2', 'EnemyB', BACK), 'M1', 20000, 1_000_000_000),
+            ],
+            rounds: 5,
+        });
+
+        // AoE from the FOCUS healer: more than one distinct player ally receives healing.
+        const healedAllies = new Set<string>();
+        for (const r of result.rounds) {
+            for (const s of r.ships) {
+                if (s.side === 'player' && s.healingReceived > 0) healedAllies.add(s.actorId);
+            }
+        }
+        expect(healedAllies.size).toBeGreaterThan(1);
+    });
+
     it('AoE accounting: a 2-cell pattern hits the origin for FULL and the covered cell for HALF', () => {
         // One enemy at M1 fires Pattern-Line-Range-1 anchored on the front-most player (M4) →
         // covers M3 as the second cell. Origin (front player) takes full damage; the covered

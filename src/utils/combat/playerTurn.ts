@@ -154,6 +154,13 @@ export interface HealingRuntimeCtx {
     enemyIds: string[];
     /** Resolve a recipient id to its CombatActor (E5 enemy-heal apply). undefined if absent. */
     recipientActor: (id: string) => CombatActor | undefined;
+    /** Positional team-vs-team battle (the combat simulator), NOT the healing calculator.
+     *  When true, a PLAYER single-`ally` heal/shield resolves the lowest-HP living player ally
+     *  (mirroring the enemy side's `lowestHpEnemyAllyId`) instead of the fixed `targetId` — the
+     *  latter is a vestigial focus in the battle sim, so routing there (then intersecting the
+     *  caster's support footprint) drops the recipient entirely. Absent/false → the healing
+     *  calculator's fixed-target routing (heals measured onto the chosen tank). */
+    teamBattle?: boolean;
 }
 
 /** Everything one player actor's turn contributes to the round's RoundData row. */
@@ -2504,13 +2511,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
         // all-allies → every player in fixed source order. Shared by the heal + shield branches.
         const isEnemyCaster = actor.side === 'enemy';
-        // Lowest-HP-fraction living enemy ally for an enemy single-'ally' heal (E5).
-        // Deterministic: ties broken by enemyIds source order. Falls back to the caster
-        // when no other living ally exists. NEVER routes to the player heal target.
-        const lowestHpEnemyAllyId = (): string | undefined => {
+        // Lowest-HP-fraction living same-side ally for a single-'ally' heal. Deterministic:
+        // ties broken by source order. Falls back to the caster when no other living ally
+        // exists. Used by BOTH sides: the enemy caster (E5) and — in a positional team battle —
+        // the player caster (team symmetry; see HealingRuntimeCtx.teamBattle). NEVER routes to
+        // the (vestigial) player heal target.
+        const lowestHpAllyId = (ids: string[]): string => {
             let best: string | undefined;
             let bestFrac = Infinity;
-            for (const id of healing.enemyIds) {
+            for (const id of ids) {
                 if (id === actor.id) continue; // caster is the fallback only, never a primary candidate
                 const a = healing.recipientActor(id);
                 if (!a || a.currentHp <= 0) continue;
@@ -2528,10 +2537,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (target === 'self') base = [actor.id];
             else if (target === 'all-allies')
                 base = isEnemyCaster ? healing.enemyIds : healing.playerIds;
-            else if (isEnemyCaster) {
-                const rid = lowestHpEnemyAllyId();
-                base = rid ? [rid] : [];
-            } else base = [healing.targetId];
+            else if (isEnemyCaster) base = [lowestHpAllyId(healing.enemyIds)];
+            // Player single-'ally' in a positional team battle: mirror the enemy side and heal
+            // the lowest-HP living player ally (the fixed `targetId` is a vestigial focus there,
+            // and intersecting it with the caster's support footprint drops it — the bug). The
+            // healing calculator (teamBattle absent) keeps routing to its chosen heal target.
+            else if (healing.teamBattle) base = [lowestHpAllyId(healing.playerIds)];
+            else base = [healing.targetId];
             return supportRecipients(target, base);
         };
         // Basis value for a heal/shield ability against recipient `rid`.

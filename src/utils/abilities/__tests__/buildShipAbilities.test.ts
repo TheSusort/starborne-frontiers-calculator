@@ -1359,24 +1359,27 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    // One-target-per-skill game rule (user-verified 2026-06-07, Hermes/Isha live-verification
-    // bug): a bare repair/cleanse (no target phrase) on a PURE-SUPPORT active/charged skill
-    // (no damage component) targets the ally, not the caster. The parser defaults bare to
-    // 'self'; the flip lives in abilitiesFromText where the slot + damage component are known.
-    describe('bare repair/cleanse flip to ally on pure-support active/charged skills', () => {
-        it('Hermes active bare repair → heal target ally', () => {
+    // Bare repair/cleanse (no target phrase) on a PURE-SUPPORT active/charged skill (no damage
+    // component) targets allies, not the caster. HEALS route to 'all-allies' — a support healer
+    // repairs EVERYONE in its pattern footprint (AoE, "just like buffs"; the engine intersects
+    // all-allies with the support pattern). CLEANSES stay single 'ally'. An EXPLICIT recipient
+    // ("the ally with the most missing health" → Volk) sets explicitTarget and stays a single
+    // 'ally'. The parser defaults bare to 'self'; the flip lives in abilitiesFromText where the
+    // slot + damage component are known.
+    describe('bare repair → all-allies (AoE) / cleanse → ally on pure-support active/charged skills', () => {
+        it('Hermes active bare repair → AoE heal (all-allies)', () => {
             const s = ship({ activeSkillText: 'This Unit Repairs 27% of its Max HP.' });
             const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
             const heal = active?.abilities.find((a) => a.type === 'heal');
             expect(heal).toMatchObject({
                 type: 'heal',
-                target: 'ally',
+                target: 'all-allies',
                 trigger: 'on-cast',
                 config: { type: 'heal', pct: 27, basis: 'hp' },
             });
         });
 
-        it('Hermes charged bare repair → heal target ally; charge still parses', () => {
+        it('Hermes charged bare repair → AoE heal (all-allies); charge still parses', () => {
             const s = ship({
                 chargeSkillText:
                     'This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill. If the target has less than 40% HP, it grants Cheat Death.',
@@ -1386,7 +1389,7 @@ describe('buildShipAbilities', () => {
             const heal = charged?.abilities.find((a) => a.type === 'heal');
             expect(heal).toMatchObject({
                 type: 'heal',
-                target: 'ally',
+                target: 'all-allies',
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
             const charge = charged?.abilities.find((a) => a.type === 'charge');
@@ -1489,8 +1492,8 @@ describe('buildShipAbilities', () => {
         });
 
         // Regression lock: Oleander's active has no self-damage conditional in the repair sentence,
-        // so the flip to 'ally' still applies (user-confirmed correct 2026-06-07).
-        it('Oleander active: bare repair without self-damage condition → still flips to ally (regression)', () => {
+        // so the bare repair flips to the AoE all-allies scope (heals its pattern footprint).
+        it('Oleander active: bare repair without self-damage condition → AoE heal (all-allies)', () => {
             const s = ship({
                 activeSkillText:
                     'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 2 turns and <unit-damage>repairs 100%</unit-damage> of its Max HP, with an additional <unit-damage>8.5%</unit-damage> repair for each debuffed enemy.',
@@ -1499,7 +1502,7 @@ describe('buildShipAbilities', () => {
             const heal = active?.abilities.find((a) => a.type === 'heal');
             expect(heal).toMatchObject({
                 type: 'heal',
-                target: 'ally',
+                target: 'all-allies',
                 config: { type: 'heal', pct: 100, basis: 'hp' },
             });
         });
@@ -3025,11 +3028,12 @@ describe('buildShipAbilities', () => {
                 ],
             });
             expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
-            // The 37% repair + 1 charge are unchanged by the target-gate wiring.
+            // The 37% repair is an AoE all-allies heal (support footprint); the 1 charge is
+            // unchanged. (Cheat Death above still narrows to the single low-HP ally.)
             const heal = charged.abilities.find((a) => a.type === 'heal')!;
             expect(heal).toMatchObject({
                 type: 'heal',
-                target: 'ally',
+                target: 'all-allies',
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
             const charge = charged.abilities.find((a) => a.type === 'charge')!;
