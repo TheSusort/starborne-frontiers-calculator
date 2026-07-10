@@ -164,8 +164,15 @@ export interface Intent {
         repairedEnemyIds?: string[];
         /** The clipped overheal (heal-performed.overheal) carried from an own-repair-to-ally
          *  event, read by an `overheal`-basis reactive shield to scale off the over-repaired
-         *  amount rather than the owner's max HP (Abundant Renewal). */
+         *  amount rather than the owner's max HP (Abundant Renewal). Aggregate fallback used when
+         *  no per-ally breakdown is present (legacy single-target callers). */
         overhealAmount?: number;
+        /** Per-ally clipped over-repair (heal-performed.perTarget, non-self entries with
+         *  overheal > 0), keyed by ally id. When present, an `overheal`-basis reactive shield
+         *  (Abundant Renewal) grants EACH over-repaired ally a shield scaled off ITS OWN overheal
+         *  and lands on that ally — the AoE-repair routing that supersedes the single-target
+         *  overhealAmount + healing.targetId fallback. */
+        overhealByAlly?: Record<string, number>;
         /** The recipients of an `on-shield-applied` event (shield-applied.recipientIds — the
          *  actors whose pool grew). The reaction's buff/effect targets EXACTLY these, mirroring
          *  repairedAllyIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
@@ -499,12 +506,25 @@ export function registerReactiveListeners(args: {
                         if (e.casterId !== ownerId) return;
                         const repaired = e.targets.filter((t) => t !== ownerId);
                         if (repaired.length === 0) return;
+                        // Per-ally clipped over-repair from the cast's per-target breakdown (non-self
+                        // recipients that were actually over-repaired). Drives Abundant Renewal's
+                        // per-ally shield; absent (legacy single-target emit with no perTarget) →
+                        // the executor falls back to the aggregate overhealAmount + healing.targetId.
+                        const overhealByAlly: Record<string, number> = {};
+                        for (const pt of e.perTarget ?? []) {
+                            if (pt.targetId !== ownerId && (pt.overheal ?? 0) > 0) {
+                                overhealByAlly[pt.targetId] = pt.overheal as number;
+                            }
+                        }
                         enqueue({
                             ...intent,
                             eventCtx: {
                                 ...intent.eventCtx,
                                 repairedAllyIds: repaired,
                                 overhealAmount: e.overheal ?? 0,
+                                ...(Object.keys(overhealByAlly).length > 0
+                                    ? { overhealByAlly }
+                                    : {}),
                             },
                         });
                     });
@@ -2447,15 +2467,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         // reactive with no over-repair grants nothing.
                         (intent.eventCtx?.overhealAmount ?? 0)
                       : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+        // Per-ally overheal routing (Abundant Renewal): when the triggering AoE repair supplied a
+        // per-ally over-repair breakdown, an `overheal`-basis shield grants EACH over-repaired ally
+        // a shield scaled off ITS OWN overheal and lands on that ally. Absent (legacy single-target
+        // emit) → fall back to the aggregate overhealAmount routed to healing.targetId below.
+        const overhealByAlly =
+            cfg.basis === 'overheal' ? intent.eventCtx?.overhealByAlly : undefined;
         // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
-        // reaction repairs THAT ally) over the healing target. Identical today — the engine
-        // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
-        // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
-        // NOTE (Abundant Renewal / overheal shields): this heal/shield path does NOT consult
-        // eventCtx.repairedAllyIds — it resolves to healing.targetId, which IS the over-repaired
-        // ally because the engine repairs exactly one target today. If 4d multi-target repair
-        // lands, route overheal shields to the repaired ally explicitly here.
-        const recipients = reactiveRecipients(intent, ctx, healing.targetId);
+        // reaction repairs THAT ally) over the healing target. Identical today for single-target
+        // healing-mode runs, but the per-ally overheal map (when present) supersedes it so an AoE
+        // overheal shield fans out to every over-repaired ally.
+        const recipients =
+            overhealByAlly && Object.keys(overhealByAlly).length > 0
+                ? Object.keys(overhealByAlly)
+                : reactiveRecipients(intent, ctx, healing.targetId);
         // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied per
         // reactive shield (NOT per recipient) listing only recipients that actually gained pool.
         const shieldRecipientIds: string[] = [];
@@ -2481,7 +2506,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const recipientHp = ctx.runtimes.get(rid)?.actor.currentHp;
             if (recipientHp !== undefined && recipientHp <= 0) continue;
             const basisValue =
-                cfg.basis === 'target-hp' ? ctx.healing.recipientMaxHp(rid) : nonTargetHpBasis;
+                cfg.basis === 'target-hp'
+                    ? ctx.healing.recipientMaxHp(rid)
+                    : overhealByAlly
+                      ? // Per-ally over-repair (Abundant Renewal AoE routing): scale off THIS ally's
+                        // own clipped excess, not the aggregate.
+                        (overhealByAlly[rid] ?? 0)
+                      : nonTargetHpBasis;
             let raw =
                 cfg.type === 'heal'
                     ? basisValue *

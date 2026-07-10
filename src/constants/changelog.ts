@@ -77,6 +77,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log now shows counter-attacks and damage reflection.',
     "Combat log turns now include a collapsible snapshot of the acting ship's current modelled stats (HP, attack, defence, crit, speed, hacking, security).",
     'Combat sim: reactive self-buff passives (e.g. Hermes Everliving Regeneration) no longer trigger multiple times against area-of-effect and multi-hit attacks — they now apply once per attack.',
+    'Combat sim: ships now enter combat with their fully-geared Security (and Shield Penetration), instead of falling back to un-geared base values — a ship showing 359 Security on its details page now fights with 359, not its base value. This affects how reliably debuffs land.',
+    "Combat sim: AoE healing is now modelled. Support healers (e.g. Hermes) repair EVERY ally within their targeting pattern each cast — just like buffs — instead of a single ally. This also fixes player-team healers that previously healed no one (their heal was routed to a fixed ally outside the healing pattern), so player and enemy healers now behave identically. Healers whose skill explicitly targets one ally (e.g. Volk's 'ally with the most missing health') still heal a single lowest-HP ally.",
+    "Combat sim: AoE heals now restore each ally's real HP (previously only one ally per team was actually healed), and the Abundant Renewal implant now works — when a healer over-repairs an ally, that ally gains a Shield equal to a share of the over-repaired amount. Each over-repaired ally gets its own shield scaled to its own overheal, on both teams.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

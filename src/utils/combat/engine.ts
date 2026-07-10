@@ -1037,6 +1037,11 @@ export interface CombatEngineInput {
      *  engine runs in healing mode — heals/shields/cleanses are consumed and a `healing`
      *  result block is returned. Absent → DPS mode (the heal pipeline is fully inert). */
     healTargetId?: string;
+    /** Positional team-vs-team battle (the combat simulator sets this), NOT the healing
+     *  calculator. Threaded into the healing ctx so a PLAYER single-`ally` heal/shield resolves
+     *  the lowest-HP living player ally (team-symmetric with the enemy side) instead of the
+     *  vestigial `healTargetId` focus. See HealingRuntimeCtx.teamBattle. Default false. */
+    positionalTeamBattle?: boolean;
     /** Enemy attackers (healing mode): offense-only queue actors bombarding the heal
      *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier.
      *  `defence` and `hp` are optional now (default 0 for bare-stat legacy path); Task 9
@@ -2583,6 +2588,7 @@ export function runCombat(input: CombatEngineInput): {
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
         ? {
               targetId: healTarget.id,
+              teamBattle: input.positionalTeamBattle ?? false,
               credit: (actorId, bucket, amount) => {
                   healFor(actorId)[bucket] += amount;
               },

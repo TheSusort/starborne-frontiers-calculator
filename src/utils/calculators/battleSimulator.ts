@@ -900,6 +900,9 @@ export function simulateBattle(
         // VESTIGIAL: enemyAttackers only populate (and enemies only fire on players) when
         // healTargetId is set — the engine throws otherwise. Point it at the focus player id.
         healTargetId: focus.id,
+        // Positional team battle: a player single-`ally` heal/shield resolves the lowest-HP
+        // living player ally (team-symmetric with the enemy side), NOT the vestigial focus above.
+        positionalTeamBattle: true,
         teamActors,
         enemyAttackers,
         bus,
