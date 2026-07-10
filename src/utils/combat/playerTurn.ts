@@ -2745,15 +2745,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         const recipientActor = healing.recipientActor(rid);
-                        if (recipientActor) healing.applyHealToTarget(raw, recipientActor);
-                        // overheal intentionally NOT accumulated here — enemy-side reactive
-                        // overheal (overheal-basis shields) is a deferred gap; H3.3 surfaces
-                        // overheal only on the player heal path above.
+                        // Capture the clipped over-repair per recipient (team symmetry with the
+                        // player path): surfaces on heal-performed.perTarget so an enemy healer's
+                        // Abundant Renewal shields its over-repaired allies too.
+                        let perTargetOverheal: number | undefined;
+                        if (recipientActor) {
+                            const { overheal } = healing.applyHealToTarget(raw, recipientActor);
+                            if (overheal > 0) perTargetOverheal = overheal;
+                        }
                         healTargets.push(rid);
                         healRawSum += raw;
                         healPerTarget.push({
                             targetId: rid,
                             amount: raw,
+                            ...(perTargetOverheal !== undefined
+                                ? { overheal: perTargetOverheal }
+                                : {}),
                             ...(didCrit ? { didCrit: true } : {}),
                         });
                     }
@@ -2778,7 +2785,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                     healing.credit(actor.id, 'directHeal', raw);
                     let perTargetOverheal: number | undefined;
-                    if (rid === healing.targetId) {
+                    // Positional team battle: apply HP + capture the clipped over-repair on EACH
+                    // recipient's OWN actor (mirrors the enemy event-only path), so an AoE heal
+                    // restores every ally's real HP and each over-repaired ally's overheal is
+                    // surfaced per-target (drives Abundant Renewal's per-ally shield). The healing
+                    // calculator (teamBattle off) keeps single-target accounting on healing.targetId.
+                    const perRecipientActor = healing.teamBattle
+                        ? healing.recipientActor(rid)
+                        : undefined;
+                    if (perRecipientActor) {
+                        const { consumed, overheal } = healing.applyHealToTarget(
+                            raw,
+                            perRecipientActor
+                        );
+                        healing.credit(actor.id, 'effectiveHeal', consumed);
+                        healing.credit(actor.id, 'overheal', overheal);
+                        overhealSum += overheal;
+                        if (overheal > 0) perTargetOverheal = overheal;
+                    } else if (rid === healing.targetId) {
                         const { consumed, overheal } = healing.applyHealToTarget(raw);
                         healing.credit(actor.id, 'effectiveHeal', consumed);
                         healing.credit(actor.id, 'overheal', overheal);

@@ -75,6 +75,7 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
+import type { GearPiece } from '../../../types/gear';
 import type { CombatLogEntry } from '../log/types';
 import { flattenRound } from '../log/__testutils__/flattenCombatLog';
 
@@ -970,6 +971,53 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
             }
         }
         expect(healedAllies.size).toBeGreaterThan(1);
+    });
+
+    it('Abundant Renewal: an over-repaired ally gets a shield from the healer overhealing it', () => {
+        // Hermes-style AoE support healer with the Abundant Renewal implant (legendary: shield =
+        // 30% of the over-repaired amount on an ally). A full-HP ally in the footprint is
+        // over-repaired every cast, so the implant must grant IT a shield. Pre-fix: player heals
+        // only applied/over-healed the vestigial focus, and the overheal shield routed to the
+        // focus — the ally got nothing.
+        const healerShip: Ship = {
+            ...makeShip('p1', 'Healer', {
+                activeTarget: 'allies',
+                activePattern: 'Pattern-Circle-Support-Range-1',
+                activeSkillText: 'This Unit repairs 30% of its Max HP.',
+                type: 'Support',
+            }),
+            implants: { ultimate: 'ar-leg' },
+        };
+        const getGearPiece = (id: string): GearPiece | undefined =>
+            id === 'ar-leg'
+                ? ({
+                      id: 'ar-leg',
+                      slot: 'ultimate',
+                      setBonus: 'ABUNDANT_RENEWAL',
+                      rarity: 'legendary',
+                      stars: 6,
+                      level: 16,
+                      stats: [],
+                  } as unknown as GearPiece)
+                : undefined;
+
+        const result = simulateBattle(
+            {
+                playerTeam: [
+                    placement(healerShip, 'M4', 0, 1_000_000),
+                    // Full-HP ally in the M4 healer's footprint (M3) — never attacked, so every
+                    // AoE repair on it is pure overheal.
+                    placement(makeShip('p2', 'Ally', BACK), 'M3', 0, 300_000),
+                ],
+                enemyTeam: [placement(makeShip('e1', 'Enemy', FRONT), 'M4', 5000, 1_000_000_000)],
+                rounds: 3,
+            },
+            getGearPiece
+        );
+
+        const ALLY = 'p:p2:1';
+        const allyStates = result.rounds.flatMap((r) => r.ships.filter((s) => s.actorId === ALLY));
+        expect(allyStates.some((s) => s.shieldGranted > 0)).toBe(true);
     });
 
     it('AoE accounting: a 2-cell pattern hits the origin for FULL and the covered cell for HALF', () => {
