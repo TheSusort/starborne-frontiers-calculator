@@ -307,6 +307,32 @@ export type CombatEvent =
           newCharge: number;
           reason: 'gen' | 'cast-reset' | 'manip';
       } & ReactiveStamp)
+    /** LOG-ONLY: a per-turn snapshot of the ACTING actor's live modelled stats, emitted
+     *  immediately after `turn-started`. This is an on-turn snapshot, never a reaction — it
+     *  carries NO `ReactiveStamp` and NO combat listener subscribes to it (mirrors the
+     *  `reactive-damage-performed`/`reactive-heal-performed` log-only contract). Exists SOLELY
+     *  so `buildCombatLog` can attach a `statsSnapshot` to the turn view-model; folding it into
+     *  any subscribed/aggregated path would be a bug. `stats` reflects the same
+     *  `effectiveStatsOf(statusEngine, selfBuffLookup, actor)` fold every other live-stat read
+     *  in the engine uses, plus the actor's current HP/shield pool. */
+    | {
+          type: 'stats-snapshot';
+          actorId: string;
+          round: number;
+          stats: {
+              attack: number;
+              defence: number;
+              crit: number;
+              critDamage: number;
+              defensePenetration: number;
+              speed: number;
+              hacking: number;
+              security: number;
+              currentHp: number;
+              maxHp: number;
+              shieldPool: number;
+          };
+      }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome
      *  (present only when that hit critted). Emitted once PER HIT of the enemy's

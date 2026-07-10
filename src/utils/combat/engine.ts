@@ -5670,6 +5670,30 @@ export function runCombat(input: CombatEngineInput): {
                 statusEngine.beginTurn(actor.id);
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
+                // Task 6a: LOG-ONLY per-turn snapshot of the acting actor's live modelled stats
+                // (no listener subscribes — see the events.ts doc comment). Reads the SAME
+                // effectiveStatsOf fold every other live-stat call site in this file uses.
+                {
+                    const snapshotEff = effectiveStatsOf(statusEngine, selfBuffLookup, actor);
+                    bus.emit({
+                        type: 'stats-snapshot',
+                        actorId: actor.id,
+                        round: r,
+                        stats: {
+                            attack: snapshotEff.attack,
+                            defence: snapshotEff.defence,
+                            crit: snapshotEff.crit,
+                            critDamage: snapshotEff.critDamage,
+                            defensePenetration: snapshotEff.defensePenetration,
+                            speed: snapshotEff.speed,
+                            hacking: snapshotEff.hacking,
+                            security: snapshotEff.security,
+                            currentHp: actor.currentHp,
+                            maxHp: actor.stats.hp,
+                            shieldPool: actor.shieldPool,
+                        },
+                    });
+                }
                 // Phase 0 Task 5: bump the actor's own-turn counter so every-n-turns conditions
                 // can evaluate the live N. Incremented AFTER turn-started so end-of-turn
                 // (turn-ended) reactive drains — which run later — read the correct N. 1-based
