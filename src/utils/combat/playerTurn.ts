@@ -2793,17 +2793,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     const perRecipientActor = healing.teamBattle
                         ? healing.recipientActor(rid)
                         : undefined;
-                    if (perRecipientActor) {
+                    if (perRecipientActor || rid === healing.targetId) {
+                        // applyHealToTarget defaults victim to the heal target when
+                        // perRecipientActor is undefined (healing-calculator single-target path).
                         const { consumed, overheal } = healing.applyHealToTarget(
                             raw,
                             perRecipientActor
                         );
-                        healing.credit(actor.id, 'effectiveHeal', consumed);
-                        healing.credit(actor.id, 'overheal', overheal);
-                        overhealSum += overheal;
-                        if (overheal > 0) perTargetOverheal = overheal;
-                    } else if (rid === healing.targetId) {
-                        const { consumed, overheal } = healing.applyHealToTarget(raw);
                         healing.credit(actor.id, 'effectiveHeal', consumed);
                         healing.credit(actor.id, 'overheal', overheal);
                         overhealSum += overheal;
