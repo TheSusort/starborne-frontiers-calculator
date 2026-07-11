@@ -51,6 +51,8 @@ import {
     parseSelfBuffRemovals,
     parsePreCombatStatGrants,
     parseOnResistHpDamage,
+    detectProtectionTransformToDot,
+    detectTransformToDot,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -4880,5 +4882,21 @@ describe('parseOnResistHpDamage (Vindicator p2 reactive)', () => {
     it('returns null for empty input', () => {
         expect(parseOnResistHpDamage('')).toBeNull();
         expect(parseOnResistHpDamage(null)).toBeNull();
+    });
+});
+
+describe('detectProtectionTransformToDot', () => {
+    const meatshield =
+        'Any damage this Unit takes from <unit-skill>Protection</unit-skill> is transformed into a <unit-aid>Damage over Time effect</unit-aid> for 2 turns.';
+    it('parses turns from the Meatshield protection-transform clause', () => {
+        expect(detectProtectionTransformToDot(meatshield)).toEqual({ turns: 2 });
+    });
+    it('does NOT match Voron/Orel "transforms the damage into a DoT"', () => {
+        const voron =
+            'When directly damaged, this Unit transforms the damage into a Damage over Time effect lasting for 3 turns.';
+        expect(detectProtectionTransformToDot(voron)).toBeUndefined();
+    });
+    it('the existing detector does NOT match Meatshield (detectors stay disjoint)', () => {
+        expect(detectTransformToDot(meatshield)).toBeUndefined();
     });
 });

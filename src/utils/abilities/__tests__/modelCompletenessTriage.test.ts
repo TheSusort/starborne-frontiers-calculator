@@ -578,6 +578,17 @@ describe('SP-F — deep one-offs', () => {
         expect(substitution[0].target).toBe('all-allies');
     });
 
+    it('Meatshield refit-active passive emits a self-protection-redirect DoT transform', () => {
+        const abilities = abilitiesFor({ thirdPassiveSkillText: MEATSHIELD_P4 }, 'passive');
+        const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
+        expect(transform).toBeDefined();
+        expect(transform?.config).toMatchObject({
+            type: 'transform-incoming-to-dot',
+            turns: 2,
+            condition: 'self-protection-redirect',
+        });
+    });
+
     // forced-affinity — CARRIER: Wusheng (charge_skill_text) — the cleanest single-clause,
     // single-ship instance ("deals damage WITH affinity advantage", no team-composition
     // dependency). RELATED but NOT separately probed: Isha ("gains Offensive Affinity
