@@ -81,6 +81,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: AoE healing is now modelled. Support healers (e.g. Hermes) repair EVERY ally within their targeting pattern each cast — just like buffs — instead of a single ally. This also fixes player-team healers that previously healed no one (their heal was routed to a fixed ally outside the healing pattern), so player and enemy healers now behave identically. Healers whose skill explicitly targets one ally (e.g. Volk's 'ally with the most missing health') still heal a single lowest-HP ally.",
     "Combat sim: AoE heals now restore each ally's real HP (previously only one ally per team was actually healed), and the Abundant Renewal implant now works — when a healer over-repairs an ally, that ally gains a Shield equal to a share of the over-repaired amount. Each over-repaired ally gets its own shield scaled to its own overheal, on both teams.",
     "Combat sim now models Protection as a damage transfer: a ship holding Protection stacks (e.g. Meatshield) intercepts 10% per stack of the direct damage its allies take, absorbed on the protector's own defense — the attacker's affinity match-up against the original target is unchanged. Multiple protectors cascade in speed order.",
+    'Combat sim: Lionheart now gains 10 stacks of Protection each round and absorbs the first hit redirected from an ally, then loses all Protection until the next round.',
+    'Combat sim: Protection now redirects damage from any living ally, not only adjacent ones.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
