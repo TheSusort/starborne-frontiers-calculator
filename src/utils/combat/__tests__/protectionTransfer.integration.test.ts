@@ -648,3 +648,280 @@ describe('Protection transfer — enemy-side symmetry (protector + victim on the
         expect(protectorWith).toBeGreaterThan(0);
     });
 });
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// Task 4 (Component B runtime) — Meatshield's transform-incoming-to-dot passive turns a
+// Protection-REDIRECTED chunk into a 2-turn self-DoT instead of instant HP loss. Reuses this
+// file's PRODUCTION PATH aura-protector harness (protectionAuraPassive: Protection granted as an
+// aura ability, visible to the all-sources protectorsFor read) plus the SAME 3-stack / 30%
+// magnitude as the core aura test above, so `expectedChunk` below is the IDENTICAL arithmetic
+// (0.3 × ENEMY_ATTACK × mit(PROTECTOR_DEFENCE)/mit(0)) already proven correct for the instant
+// case — only now summed across the DoT's 2 ticks instead of read as one instant hit.
+//
+// Positional requirement (NOT present in the non-positional aura-protector tests above): a
+// non-heal-target team/enemy actor's OWN genericDoTEntries only tick at its own turn-start when
+// `isPositional(actor.position, opposingLiving)` is true (engine.ts's per-victim DoT-tick
+// prologue) — the always-ticking path is reserved for the heal target. So the protector (which is
+// NOT the heal target here — the direct-hit victim is) must carry a board position, mirroring
+// transformIncomingToDot.test.ts's positional harness. The direct-hit victim keeps a LOWER board
+// column than the protector so 'front' targeting is unambiguous.
+//
+// Single-hit isolation: the enemy roster's manualEnemy-style attacker fires every round it is
+// alive (no charge-gating in this harness), so left unchecked it would redirect a fresh chunk
+// every round and contaminate the "ticks sum to ONE chunk" assertion. Each test's direct-hit
+// victim therefore carries a throwaway `damage-reflection` "kill switch" (100% reflect) purely as
+// a test-harness device: the attacker's `stats.hp`/`hp` is seeded at 1, so ANY nonzero reflected
+// sliver (inevitable once the redirect leaves a real remainder on the victim) kills it via the
+// engine's ordinary recordDestroyed path immediately after its round-1 attack — isolating the
+// redirected chunk's DoT lifecycle to exactly that one hit for the remaining 2 rounds of pure
+// ticking. This is NOT a claim about Meatshield/production kits; it only exists to pin the
+// attacker to a single shot inside this test.
+describe('Protection transfer × transform-incoming-to-dot composition (Task 4, Component B runtime)', () => {
+    // Meatshield's R4-style reactive: fires only on a Protection-REDIRECTED hit (Task 2's
+    // 'self-protection-redirect' condition + `viaProtectionRedirect`, Task 3's ability shape).
+    const transformAbility: Ability = {
+        id: 'meatshield-transform',
+        type: 'transform-incoming-to-dot',
+        target: 'self',
+        trigger: 'on-attacked',
+        conditions: [],
+        config: {
+            type: 'transform-incoming-to-dot',
+            turns: 2,
+            condition: 'self-protection-redirect',
+        },
+    };
+    // Test-only kill switch — see file-section comment above.
+    const killSwitchReflect: Ability = {
+        id: 'kill-switch-reflect',
+        // Top-level type:'modifier' is a placeholder (mirrors buildEquipmentAbilities.ts's
+        // REFLECT gear-set entry) — the engine keys on config.type:'damage-reflection', not the
+        // top-level type.
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage-reflection', pct: 100 },
+    };
+    const basicAttack = (): Ability => ({
+        id: 'ks-basic-attack',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 100 },
+    });
+    const targetFront: ParsedTarget = { raw: 'front', side: 'enemy', selection: 'front' };
+    const basicPattern: ParsedPattern = { raw: 'base', shape: 'base', range: 0, modifiers: {} };
+
+    /** Runs `input` through a fresh bus, collecting every `dot-ticked` (dotType 'generic') event
+     *  landing on `targetId`. Returns the summed tick amount. */
+    const genericDotSum = (input: CombatEngineInput, targetId: string): number => {
+        const bus = createEventBus();
+        let sum = 0;
+        bus.on('dot-ticked', (e: Extract<CombatEvent, { type: 'dot-ticked' }>) => {
+            if (e.dotType === 'generic' && e.targetId === targetId) sum += e.damage;
+        });
+        runCombat({ ...input, bus });
+        return sum;
+    };
+
+    it('PLAYER side: a redirected chunk becomes a 2-turn self-DoT on the protector, not instant HP loss', () => {
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'ally-1',
+            teamActors: [
+                {
+                    id: 'ally-1', // direct-hit victim — front column (M4), the kill-switch reflector.
+                    speed: 10,
+                    chargeCount: 0,
+                    startCharged: false,
+                    selfBuffs: [],
+                    enemyDebuffs: [],
+                    position: 'M4',
+                    walk: {
+                        shipSkills: {
+                            slots: [{ slot: 'passive', abilities: [killSwitchReflect] }],
+                        },
+                        stats: {
+                            attack: 0,
+                            crit: 0,
+                            critDamage: 0,
+                            defensePenetration: 0,
+                            hacking: 0,
+                            defence: 0,
+                            hp: 1_000_000_000,
+                        },
+                        selfDotModifier: 0,
+                        defensePenetrationBuff: 0,
+                        affinityDamageModifier: 0,
+                        affinityCritCap: 100,
+                        affinityCritPenalty: 0,
+                        hasChargedSkill: false,
+                    },
+                },
+                {
+                    id: 'prot-1', // protector — back column (M1), high speed so its own DoT-tick
+                    // step (turn-start) runs BEFORE the redirect lands each round.
+                    speed: 1000,
+                    chargeCount: 0,
+                    startCharged: false,
+                    selfBuffs: [],
+                    enemyDebuffs: [],
+                    position: 'M1',
+                    walk: {
+                        shipSkills: {
+                            slots: [
+                                protectionAuraPassive(3),
+                                { slot: 'passive', abilities: [transformAbility] },
+                            ],
+                        },
+                        stats: {
+                            attack: 0,
+                            crit: 0,
+                            critDamage: 0,
+                            defensePenetration: 0,
+                            hacking: 0,
+                            defence: PROTECTOR_DEFENCE,
+                            hp: 1_000_000_000,
+                        },
+                        selfDotModifier: 0,
+                        defensePenetrationBuff: 0,
+                        affinityDamageModifier: 0,
+                        affinityCritCap: 100,
+                        affinityCritPenalty: 0,
+                        hasChargedSkill: false,
+                    },
+                },
+            ] as TeamActorEngineInput[],
+            enemyAttackers: [
+                {
+                    id: 'enemy-1',
+                    stats: {
+                        attack: ENEMY_ATTACK,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1,
+                        speed: 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'T1',
+                    target: targetFront,
+                    pattern: basicPattern,
+                    shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
+                },
+            ],
+        };
+
+        const result = runCombat(input);
+        const round1 = result.rounds.find((r) => r.round === 1)!;
+        // Turn of redirect: the protector's instant intake nets to ZERO (fully deferred to DoT).
+        expect(round1.perActorIncoming?.['prot-1']?.incoming ?? 0).toBe(0);
+
+        // The generic DoT ticks on the protector over the following 2 rounds, summing to the
+        // FULL redirected chunk (spread over 2 turns) — the SAME magnitude as the instant-case
+        // aura-protector test above.
+        const tickSum = genericDotSum(input, 'prot-1');
+        const expectedChunk = 0.3 * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+        expect(tickSum).toBeCloseTo(expectedChunk, 4);
+    });
+
+    it('ENEMY side (team symmetry): identical redirect-to-DoT behavior when the protector + victim are on the ENEMY side', () => {
+        const FOCUS_ATTACK = ENEMY_ATTACK; // same magnitude, direct numeric mirror.
+        const input: CombatEngineInput = {
+            attack: FOCUS_ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            // Kill-switch symmetry: the FOCUS is the attacker here, so IT is the one that dies to
+            // the reflected sliver after its round-1 attack — seeded at 1 HP for the same reason
+            // the enemy attacker is in the player-side test above.
+            hp: 1,
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: targetFront,
+            pattern: basicPattern,
+            enemyAttackers: [
+                {
+                    id: 'enemy-front', // direct-hit victim — front column (M4), kill-switch reflector.
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M4',
+                    shipSkills: { slots: [{ slot: 'passive', abilities: [killSwitchReflect] }] },
+                },
+                {
+                    id: 'enemy-protector', // protector — back column (M1), high speed.
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: PROTECTOR_DEFENCE,
+                        hp: 1_000_000_000,
+                        speed: 1000,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M1',
+                    shipSkills: {
+                        slots: [
+                            protectionAuraPassive(3),
+                            { slot: 'passive', abilities: [transformAbility] },
+                        ],
+                    },
+                },
+            ],
+        };
+
+        const result = runCombat(input);
+        const round1 = result.rounds.find((r) => r.round === 1)!;
+        expect(round1.perActorIncoming?.['enemy-protector']?.incoming ?? 0).toBe(0);
+
+        const tickSum = genericDotSum(input, 'enemy-protector');
+        const expectedChunk = 0.3 * FOCUS_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+        expect(tickSum).toBeCloseTo(expectedChunk, 4);
+    });
+});

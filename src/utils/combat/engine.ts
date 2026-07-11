@@ -3625,30 +3625,45 @@ export function runCombat(input: CombatEngineInput): {
                         const protectorSink = p.actor.side === 'player' ? playerSink : enemySink;
                         // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs and
                         // sets up the deferred DoT-transform, which acts per redirected chunk).
+                        let transformedTotal = 0;
                         for (let s = 0; s < chunk.stacks; s++) {
-                            applyVictimDamage(chunk.perStack, p.actor, protectorSink, {
-                                killerId: cause.killerId,
-                                byDirectDamage: true,
-                                isProtectionTransfer: true,
-                                shieldPenetrationPct: 0,
-                                bombPortion: 0,
+                            const outcome = applyVictimDamage(
+                                chunk.perStack,
+                                p.actor,
+                                protectorSink,
+                                {
+                                    killerId: cause.killerId,
+                                    byDirectDamage: true,
+                                    isProtectionTransfer: true,
+                                    shieldPenetrationPct: 0,
+                                    bombPortion: 0,
+                                }
+                            );
+                            transformedTotal += outcome.transformedToDot ?? 0;
+                        }
+                        // Meatshield's DoT-transform passive DEFERS the transformed portion to a
+                        // self-DoT ticked over the next N rounds (the generic-DoT path books its own
+                        // roundPerTargetDamage + .incoming per tick). Only the INSTANT remainder is
+                        // credited/logged this round. transformedTotal is a subset of chunk.total, so
+                        // `instant` is never negative; when nothing transforms it equals chunk.total
+                        // → byte-identical to the pre-change path for every non-Meatshield protector.
+                        const instant = chunk.total - transformedTotal;
+                        if (instant > 0) {
+                            roundPerTargetDamage.set(
+                                p.actor.id,
+                                (roundPerTargetDamage.get(p.actor.id) ?? 0) + instant
+                            );
+                            bus.emit({
+                                type: 'reactive-damage-performed',
+                                sourceId: victim.id,
+                                targetId: p.actor.id,
+                                round: r,
+                                amount: instant,
+                                reactive: true,
+                                duringTurnOf: actingActorId,
+                                triggerActorId: actingActorId,
                             });
                         }
-                        // Surface on the HP curve + reactive log (mirrors the reflect block).
-                        roundPerTargetDamage.set(
-                            p.actor.id,
-                            (roundPerTargetDamage.get(p.actor.id) ?? 0) + chunk.total
-                        );
-                        bus.emit({
-                            type: 'reactive-damage-performed',
-                            sourceId: victim.id,
-                            targetId: p.actor.id,
-                            round: r,
-                            amount: chunk.total,
-                            reactive: true,
-                            duringTurnOf: actingActorId,
-                            triggerActorId: actingActorId,
-                        });
                     });
                     // Lionheart R4: a consumable protector loses ALL Protection after it
                     // redirects a hit. The cascade was precomputed from pre-hit stacks, so THIS
@@ -3707,6 +3722,9 @@ export function runCombat(input: CombatEngineInput): {
                         victimHasShield: hasShield(victim.id),
                         selfHpPct: selfHpPctOf(victim.id),
                         attackerTauntedOrProvoked: attackerTauntedOrProvoked(attackerId),
+                        // Meatshield: this hit is a Protection-redirected chunk when the caller
+                        // stamped isProtectionTransfer (the per-protector applyVictimDamage below).
+                        viaProtectionRedirect: cause?.isProtectionTransfer ?? false,
                     };
                     const transform = transformAbilities.find(
                         (a) =>
