@@ -3574,8 +3574,12 @@ export function runCombat(input: CombatEngineInput): {
             // the PROTECTOR's own defense — realized by the mit-ratio inside protectionCascade.
             // Guards mirror the reflect block: direct damage only, and never a redirected/
             // reflected/counter application (loop-safe).
+            // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
+            // (matches the incoming-block step and the transform step) — an invulnerable target
+            // has no incoming hit for allies to soak.
             if (
                 cause?.byDirectDamage &&
+                !carriesBarrier &&
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
                 !cause.isCounter &&

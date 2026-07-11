@@ -359,6 +359,60 @@ describe('Protection damage transfer (integration)', () => {
         expect(protector).toBeCloseTo(expectedChunk, 4);
     });
 
+    it('Barrier on the target suppresses the redirect — protector takes nothing (Component A)', () => {
+        // Same aura-protector harness as the "PRODUCTION PATH" test above (a non-focus team-actor
+        // 'prot-1' grants ITSELF 3 Protection stacks via an aura passive; 'ally-1' is the
+        // direct-hit victim) — but the VICTIM additionally carries an always-active 'Barrier'
+        // self-buff. Barrier must be granted the SAME way Protection is here — as an aura ability
+        // (`type:'buff'`, no `duration`, `target:'self'`) — because a plain entry on a team actor's
+        // `selfBuffs` array only ever folds into the STATUS ENGINE's global 'attacker'-only
+        // snapshot (statusEngine.ts's `alwaysSelf`/`accumSelf`, gated to `ownerId === 'attacker'`
+        // in `snapshot()`); `selfBuffNamesForOwners` would never see it for 'ally-1''s own id.
+        // Routing it through `activeAbilityStatuses('self', ..., 'ally-1')` (the aura branch,
+        // per-owner) is what makes it visible to the victim's OWN `carriesBarrier` check.
+        // Barrier fully nullifies the hit BEFORE the transfer block runs, so nothing is left to
+        // redirect: the protector must take zero, and the victim's own barrierAbsorbed must equal
+        // the full (non-vacuous) hit while its `.incoming` stays what it always is under Barrier
+        // (the damage still "arrives" for accounting — see engine.ts's carriesBarrier comment —
+        // it just never touches HP).
+        const barrierAuraPassive = (): ShipSkills['slots'][number] => {
+            const ability: Ability = {
+                id: 'barrier-self-aura',
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'buff',
+                    buffName: 'Barrier',
+                    parsedEffects: {},
+                    stacks: 1,
+                    isStackable: false,
+                },
+            };
+            return { slot: 'passive', abilities: [ability] };
+        };
+        const input = BASE_INPUT({
+            selfBuffs: [], // the focus carries no Protection — the protector is a team actor.
+            defence: 0,
+            teamActors: [
+                teamActor('ally-1', 0, [barrierAuraPassive()]), // victim, Barrier-immune this hit
+                teamActor('prot-1', PROTECTOR_DEFENCE, [protectionAuraPassive(3)]), // aura protector
+            ],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+        const protector = totalIncoming(input, 'prot-1');
+        const result = runCombat(input);
+        const round1 = result.rounds[0];
+
+        // Protector takes nothing: no redirect happened (Barrier suppressed it upstream).
+        expect(protector).toBe(0);
+        // Non-vacuous: the hit genuinely reached the victim and was fully absorbed by Barrier —
+        // NOT a no-op where nothing fired at all.
+        expect(round1.perActorIncoming?.['ally-1']?.barrierAbsorbed).toBeCloseTo(ENEMY_ATTACK, 6);
+    });
+
     it('positional mode: Protection covers a NON-adjacent ally (all-allies, not hex-neighbours)', () => {
         // Wiring `position` on the victim AND another player actor makes `anyOtherPositioned`
         // true, so `adjacentAllyIdsFor` (adjacency.ts) would narrow to hex-neighbours instead of
