@@ -154,6 +154,15 @@ describe('incomingReductionForHit', () => {
         expect(incomingReductionForHit(a, ctx({ attackerTauntedOrProvoked: true }))).toBe(25);
         expect(incomingReductionForHit(a, ctx({ attackerTauntedOrProvoked: false }))).toBe(0);
     });
+    // Component B: Meatshield's transform gate — a bare incoming-reduction with this condition
+    // is synthetic (the real ability is 'transform-incoming-to-dot'), but conditionMet's arm is
+    // shared plumbing worth pinning directly.
+    it('Meatshield (self-protection-redirect): fires only when the hit is a Protection redirect', () => {
+        const a = [reduction('self-protection-redirect', 25, false)];
+        expect(incomingReductionForHit(a, ctx({ viaProtectionRedirect: true }))).toBe(25);
+        expect(incomingReductionForHit(a, ctx({ viaProtectionRedirect: false }))).toBe(0);
+        expect(incomingReductionForHit(a, ctx())).toBe(0); // omitted → false
+    });
 });
 
 describe('incomingBlockForIntake', () => {

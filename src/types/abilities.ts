@@ -418,7 +418,12 @@ export type IncomingCondition =
     // SP-E: Orel — the transform fires only when the ATTACKER of this hit currently carries
     // Taunt (self-buff) or Provoke (debuff placed on it by someone else). Distinct from
     // 'attacker-has-dot' (a DoT-status fact) — this checks control-status membership.
-    | 'attacker-taunted-or-provoke';
+    | 'attacker-taunted-or-provoke'
+    // Meatshield refit-active passive — the transform fires only when THIS hit is a chunk
+    // redirected onto the unit through Protection (cause.isProtectionTransfer). Distinct from
+    // every other arm (which are attacker/victim status facts) — this is a fact about how the
+    // hit arrived. Evaluated ONLY by the engine's transform-incoming-to-dot block.
+    | 'self-protection-redirect';
 
 /** Per-incoming-hit context assembled by the engine at each victim apply site. */
 export interface IncomingHitContext {
@@ -453,6 +458,11 @@ export interface IncomingHitContext {
      *  defaults 100 (full HP) where unused/inapplicable — inert unless an ability's config
      *  carries `hpScaling`. */
     selfHpPct: number;
+    /** Meatshield: true when THIS hit is a chunk redirected onto the victim via Protection
+     *  (engine sets it from `cause.isProtectionTransfer` at the transform block). OPTIONAL —
+     *  every other construction site omits it (→ undefined → treated as false in conditionMet),
+     *  keeping those sites byte-identical. */
+    viaProtectionRedirect?: boolean;
 }
 
 /**
