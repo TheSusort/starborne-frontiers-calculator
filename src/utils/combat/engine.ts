@@ -2894,6 +2894,24 @@ export function runCombat(input: CombatEngineInput): {
             }
         }
     }
+    // Ships whose Protection is consumable (Lionheart R4: "all Protection is removed" after a
+    // redirect). Scanned once from both runtime maps, slot-agnostic, mirroring hasAnyProtectionGrant.
+    const clearProtectionOnRedirectIds = new Set<string>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        for (const slot of rt.castSkills.slots) {
+            if (
+                slot.abilities.some(
+                    (a) =>
+                        a.config.type === 'buff' &&
+                        a.config.buffName === 'Protection' &&
+                        a.config.clearAllOnRedirect === true
+                )
+            ) {
+                clearProtectionOnRedirectIds.add(rt.actor.id);
+                break;
+            }
+        }
+    }
     // Board-level Protection gate: true iff ANY ability on the board grants Protection, OR any
     // actor carries a SCHEDULED Protection self-buff (SelectedGameBuff — the DPS/Healing
     // Calculator's manual "active buffs" input, e.g. protectionAccum in tests; independent of any
@@ -2914,6 +2932,9 @@ export function runCombat(input: CombatEngineInput): {
                 )
             )
         );
+    // NOTE: neither `hasAnyProtectionGrant` nor `clearProtectionOnRedirectIds` scans
+    // `reactiveAbilities` (partitioned out of `castSkills` above) — no ship grants Protection
+    // reactively today. If one is added, both gates need a matching branch over the reactive list.
     // Protection damage transfer (deferred mechanic, now consumed). A protector is any living
     // ally that holds >=1 Protection stack; it intercepts a fraction of its allies' direct
     // damage. Side-agnostic by construction (resolves allies via bySide), mirroring
@@ -3625,6 +3646,16 @@ export function runCombat(input: CombatEngineInput): {
                             triggerActorId: actingActorId,
                         });
                     });
+                    // Lionheart R4: a consumable protector loses ALL Protection after it
+                    // redirects a hit. The cascade was precomputed from pre-hit stacks, so THIS
+                    // hit already redirected fully; clearing now only affects later hits this
+                    // round. `removeSelfBuffByName` zeroes the accumulating stacks (Overload
+                    // precedent) → next round's beginRound re-accumulates to maxStacks (=10).
+                    for (const p of protectors) {
+                        if (clearProtectionOnRedirectIds.has(p.actor.id)) {
+                            statusEngine.removeSelfBuffByName(p.actor.id, 'Protection');
+                        }
+                    }
                     // The victim now only takes the non-transferred remainder.
                     damage = cascade.targetRemainder;
                 }
