@@ -29,6 +29,7 @@ import { createEventBus, CombatEvent } from '../events';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { protectionCascade } from '../protectionTransfer';
 import type { SelectedGameBuff } from '../../../types/calculator';
+import type { Ability, ShipSkills } from '../../../types/abilities';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -42,8 +43,13 @@ const manualEnemy = (id: string, attack: number, affinityDamageModifier = 0): En
     affinityDamageModifier,
 });
 
-/** A walked player team actor (a pure victim stat block, role ATTACKER so it is a valid victim). */
-const teamActor = (id: string, defence: number): TeamActorEngineInput => ({
+/** A walked player team actor (a pure victim stat block, role ATTACKER so it is a valid victim).
+ *  Optional `passive` slots carry an ability (e.g. an aura Protection grant) for the actor. */
+const teamActor = (
+    id: string,
+    defence: number,
+    passive?: ShipSkills['slots']
+): TeamActorEngineInput => ({
     id,
     speed: 100,
     chargeCount: 0,
@@ -52,7 +58,7 @@ const teamActor = (id: string, defence: number): TeamActorEngineInput => ({
     enemyDebuffs: [],
     role: 'ATTACKER',
     walk: {
-        shipSkills: { slots: [] },
+        shipSkills: { slots: passive ?? [] },
         stats: {
             attack: 0,
             crit: 0,
@@ -82,6 +88,29 @@ const protectionAccum = (stacks: number): SelectedGameBuff => ({
     maxStacks: stacks,
     stackTrigger: 'per-round',
 });
+
+/** A passive slot that grants SELF `Protection` the PRODUCTION way — an AURA (buff config with an
+ *  undefined duration + isStackable), the same classification a real Meatshield's start-of-combat
+ *  "gains N stacks of Protection" passive parses to (SP-G G1b). It flows through
+ *  `activeAbilityStatuses`, NOT `snapshot().activeSelfBuffs` — so it exercises the exact source the
+ *  old `snapshot()`-only read missed. */
+const protectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => {
+    const ability: Ability = {
+        id: 'meatshield-protection',
+        type: 'buff',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Protection',
+            parsedEffects: {},
+            stacks,
+            isStackable: true,
+        },
+    };
+    return { slot: 'passive', abilities: [ability] };
+};
 
 /** Total damage the actor actually TOOK across the run (post-transfer), read from the per-actor
  *  intake bucket (NOT the `attacked` event, which reports the pre-transfer hit value). */
@@ -215,5 +244,36 @@ describe('Protection damage transfer (integration)', () => {
         expect(cascade.chunks[1].total).toBeCloseTo(0.1 * 800 * 0.4, 6); // 32
         // The target loses only the FIRST hop (frac1), not the full transferred sum.
         expect(cascade.targetRemainder).toBeCloseTo((1 - 0.2) * 1000, 6); // 800
+    });
+
+    it('PRODUCTION PATH: aura-granted Protection on a NON-focus team-actor protector fires the redirect (reads exactly the granted stacks, no double-count)', () => {
+        // The whole point of the all-sources read: a real Meatshield grants Protection as an AURA
+        // (activeAbilityStatuses), which the old snapshot()-only read MISSED — and it sits on a
+        // TEAM actor, not the focus. Here 'prot-1' (a non-focus team actor) grants ITSELF 3 stacks
+        // of Protection via an aura passive; 'ally-1' (also a team actor) is the direct-hit victim.
+        const input = BASE_INPUT({
+            selfBuffs: [], // the FOCUS carries NO Protection — the protector is a team actor.
+            defence: 0, // focus is irrelevant here
+            teamActors: [
+                teamActor('ally-1', 0), // victim
+                teamActor('prot-1', PROTECTOR_DEFENCE, [protectionAuraPassive(3)]), // aura protector
+            ],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+        const victim = totalIncoming(input, 'ally-1');
+        const protector = totalIncoming(input, 'prot-1');
+
+        // The redirect FIRES from an aura-granted, non-focus protector — proving the all-sources
+        // read (not snapshot-only) is what makes real Protection live.
+        expect(protector).toBeGreaterThan(0);
+        // DOUBLE-COUNT GUARD: the victim keeps EXACTLY 70% → the resolver read EXACTLY 3 stacks
+        // (0.30 transferred). A double-count (3 in snapshot + 3 in aura = 6) would transfer 0.60
+        // and leave 40% — this asserts the single-source read (the aura instance appears in ONLY
+        // the activeAbilityStatuses source, never also snapshot).
+        expect(victim).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
+        // Protector chunk matches the same 3-stack magnitude as the focus-seeded case (a).
+        const expectedChunk = 0.3 * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+        expect(protector).toBeCloseTo(expectedChunk, 4);
     });
 });

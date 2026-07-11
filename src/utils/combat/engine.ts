@@ -94,13 +94,14 @@ import {
     provokerOf,
     registerReactiveListeners,
     selfBuffNamesForOwners,
+    selfBuffStacksForOwner,
     victimEnemyBuffs,
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
-import { protectionCascade, protectionStacks } from './protectionTransfer';
+import { protectionCascade } from './protectionTransfer';
 
 /** Backstop for pathological extra-action loops (a non-once-per-round grant whose
  *  conditions stay true re-fires on the extra turn it granted). Real texts are
@@ -2906,7 +2907,11 @@ export function runCombat(input: CombatEngineInput): {
             if (id === victim.id) continue;
             const actor = allActorsById.get(id);
             if (!actor || actor.currentHp <= 0) continue;
-            const stacks = protectionStacks(statusEngine.snapshot(id).activeSelfBuffs);
+            // Aggregate across ALL status sources (scheduled snapshot + timed + aura/accum ability
+            // statuses) — NOT snapshot().activeSelfBuffs alone, which misses aura-granted Protection
+            // (real Meatshield / SP-G G1b) and any non-'attacker' owner (the Cheat-Death-detection
+            // trap documented below at the Barrier/Cheat-Death read sites).
+            const stacks = selfBuffStacksForOwner(statusEngine, id, 'Protection');
             if (stacks > 0) out.push({ actor, stacks });
         }
         out.sort((a, b) => {
