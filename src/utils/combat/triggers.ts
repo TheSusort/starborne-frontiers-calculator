@@ -1469,6 +1469,44 @@ export function countOwnersWithSelfBuff(
     return count;
 }
 
+/** Total STACK count of a single named self-buff held by `ownerId`, aggregated across the SAME
+ *  three sources as {@link selfBuffNamesForOwners} (scheduled snapshot self-buffs + timed ability
+ *  statuses + aura/accum ability statuses). This is the stacks-aware sibling of the name-only
+ *  reads: consumers that need the count (Protection damage-transfer's per-stack fraction) cannot
+ *  use `snapshot().activeSelfBuffs` alone — that surfaces only SCHEDULED (non ability-sourced)
+ *  buffs on the 'attacker' owner, so an aura-granted Protection (Meatshield / SP-G G1b) or any
+ *  non-'attacker' owner's Protection would be invisible (the trap documented at the Cheat-Death
+ *  detection site in engine.ts). A single status instance lands in EXACTLY ONE of the three
+ *  sources (payload-carrying statuses are excluded from snapshot; timed and aura/accum live in
+ *  disjoint maps), so summing across all three does not double-count. A stackless entry counts as
+ *  1; a seeded-but-inert (stacks === 0) entry counts as 0. */
+export function selfBuffStacksForOwner(
+    statusEngine: StatusEngine,
+    ownerId: string,
+    buffName: string
+): number {
+    let total = 0;
+    for (const ab of statusEngine.snapshot(ownerId).activeSelfBuffs) {
+        if (ab.buffName === buffName && (ab.stacks === undefined || ab.stacks > 0))
+            total += ab.stacks ?? 1;
+    }
+    for (const s of statusEngine.timedAbilityStatuses('self', ownerId)) {
+        if (
+            s.active.buffName === buffName &&
+            (s.active.stacks === undefined || s.active.stacks > 0)
+        )
+            total += s.active.stacks ?? 1;
+    }
+    for (const s of statusEngine.activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId)) {
+        if (
+            s.active.buffName === buffName &&
+            (s.active.stacks === undefined || s.active.stacks > 0)
+        )
+            total += s.active.stacks ?? 1;
+    }
+    return total;
+}
+
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
  *  OWN debuffs). Scheduled non-payload debuffs come from snapshot(_, targetId).activeEnemyDebuffs;
  *  payload-carrying ability debuffs (timed + aura/accum) come from the ability-status reads

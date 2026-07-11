@@ -48,13 +48,16 @@ export type AbilityType =
     | 'convert-dot'
     // SP-F F5 (Meatshield, R4 refit-active passive — APPROXIMATION): "Any direct damage dealt
     // to a non-defender ally that is not transferred by Protection is dealt as if that ally
-    // had this Unit's defense." Protection-as-damage-transfer (a Defender intercepting ally
-    // damage) is a DEFERRED mechanic, so nothing is ever "transferred by Protection" in this
-    // model — the "not transferred" gate is vacuously satisfied, and ALL direct damage to a
-    // living non-defender ally is mitigated using the carrier's effective defence instead of
-    // the ally's own. Always-on passive, target:'all-allies'. See AbilityConfig's
-    // 'defense-substitution' variant (a no-op marker — consumed at the engine's defence-read
-    // sites, never through the ability-fold/executor pipeline).
+    // had this Unit's defense." Protection-as-damage-transfer (a living ally holding Protection
+    // stacks intercepting a fraction of an ally's direct hit, BEFORE the ally's own defence
+    // applies) IS implemented (engine.ts's `protectorsFor` + the transfer block in
+    // `applyVictimDamage`, via `protectionCascade`). This variant applies to the NON-TRANSFERRED
+    // REMAINDER only: the transferred portion is re-mitigated on the protector's own defence, and
+    // the ally's retained `(1 − redirectFraction)` share is what gets substituted with the
+    // carrier's effective defence instead of the ally's own. So the R4 wording is realized
+    // literally, not vacuously satisfied. Always-on passive, target:'all-allies'. See
+    // AbilityConfig's 'defense-substitution' variant (a no-op marker — consumed at the engine's
+    // defence-read sites, never through the ability-fold/executor pipeline).
     | 'defense-substitution'
     // SP-F F3 (Lingshe): "reduces all Bombs on the enemy targets by N turn(s), Bombs reduced
     // to 0 turns by this skill will detonate. This reduction effect requires hacking." Enemy-
@@ -826,8 +829,9 @@ export type AbilityConfig =
           extendChanceFromCritPower?: boolean;
       }
     // SP-F F5 (Meatshield defense-substitution, approximation — see AbilityType's
-    // 'defense-substitution' doc comment for the full rule + the deferred-Protection
-    // rationale). No fields: a bare presence marker, mirroring 'damage-reflection'/
+    // 'defense-substitution' doc comment for the full rule + how it composes with the now-
+    // implemented Protection transfer). No fields: a bare presence marker, mirroring
+    // 'damage-reflection'/
     // 'buff-duration-extension'. The engine collects every carrier of this config into a
     // dedicated per-owner set and substitutes the carrier's effective defence for a living
     // non-defender ally's own defence at every defence-read site.

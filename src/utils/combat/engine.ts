@@ -94,12 +94,14 @@ import {
     provokerOf,
     registerReactiveListeners,
     selfBuffNamesForOwners,
+    selfBuffStacksForOwner,
     victimEnemyBuffs,
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
+import { protectionCascade } from './protectionTransfer';
 
 /** Backstop for pathological extra-action loops (a non-once-per-round grant whose
  *  conditions stay true re-fires on the extra turn it granted). Real texts are
@@ -2892,18 +2894,46 @@ export function runCombat(input: CombatEngineInput): {
             }
         }
     }
+    // Protection damage transfer (deferred mechanic, now consumed). A protector is any living
+    // ally that holds >=1 Protection stack; it intercepts a fraction of its allies' direct
+    // damage. Side-agnostic by construction (resolves allies via bySide), mirroring
+    // defenseSubstitutionCarrierIds. Fastest-first ordering drives the multi-protector cascade.
+    const protectorsFor = (victim: CombatActor): { actor: CombatActor; stacks: number }[] => {
+        const allyIds = bySide(isEnemySide(victim.id) ? 'enemy' : 'player').adjacentAllyIdsFor(
+            victim.id
+        );
+        const out: { actor: CombatActor; stacks: number }[] = [];
+        for (const id of allyIds) {
+            if (id === victim.id) continue;
+            const actor = allActorsById.get(id);
+            if (!actor || actor.currentHp <= 0) continue;
+            // Aggregate across ALL status sources (scheduled snapshot + timed + aura/accum ability
+            // statuses) — NOT snapshot().activeSelfBuffs alone, which misses aura-granted Protection
+            // (real Meatshield / SP-G G1b) and any non-'attacker' owner (the Cheat-Death-detection
+            // trap documented below at the Barrier/Cheat-Death read sites).
+            const stacks = selfBuffStacksForOwner(statusEngine, id, 'Protection');
+            if (stacks > 0) out.push({ actor, stacks });
+        }
+        out.sort((a, b) => {
+            const sa = effectiveStatsOf(statusEngine, selfBuffLookup, a.actor).speed;
+            const sb = effectiveStatsOf(statusEngine, selfBuffLookup, b.actor).speed;
+            return sb - sa !== 0 ? sb - sa : a.actor.id.localeCompare(b.actor.id);
+        });
+        return out;
+    };
     // "Any direct damage dealt to a non-defender ally that is not transferred by Protection is
-    // dealt as if that ally had this Unit's defense." Protection-as-damage-transfer is DEFERRED
-    // (design doc §1) — nothing is ever "transferred by Protection" in this model, so the "not
-    // transferred" gate is vacuously satisfied: this substitutes for EVERY living non-defender
-    // ally of a living carrier, unconditionally. Called from EVERY defence-read site
-    // (defenseProfileOf, the reactive read, both victimDefenceFor bindings) so every attack type
-    // sees the same mitigation — wiring it into only one path would silently diverge across
-    // attack types. `fallback` is the site's OWN pre-substitution defence value (raw stats,
-    // buffed/effective, or a last-turn-ctx read — whichever that site already computed), so a
-    // victim with no applicable carrier is byte-identical to before this task. Multi-carrier tie-
-    // break (no known in-game dup case): the HIGHEST effective defence among living, same-side
-    // carriers wins.
+    // dealt as if that ally had this Unit's defense." Protection-as-damage-transfer is now
+    // IMPLEMENTED (see `protectorsFor` above + the transfer block in `applyVictimDamage`, which
+    // peels `redirectFraction × P` off a hit BEFORE this substitution is applied) — so this
+    // function only ever substitutes for the NON-TRANSFERRED remainder of a living non-defender
+    // ally's damage; the transferred portion is a separate hit re-mitigated on the protector's own
+    // defence via `protectionCascade`. Called from EVERY defence-read site (defenseProfileOf, the
+    // reactive read, both victimDefenceFor bindings) so every attack type sees the same
+    // mitigation — wiring it into only one path would silently diverge across attack types.
+    // `fallback` is the site's OWN pre-substitution defence value (raw stats, buffed/effective, or
+    // a last-turn-ctx read — whichever that site already computed), so a victim with no applicable
+    // carrier is byte-identical to before this task. Multi-carrier tie-break (no known in-game dup
+    // case): the HIGHEST effective defence among living, same-side carriers wins.
     const substitutedDefenceFor = (victim: CombatActor, fallback: number): number => {
         if (victim.currentHp <= 0) return fallback; // dead victims are never substituted
         // DEFENDER victims are never substituted (R4 text: "non-defender ally"). Substitution
@@ -3404,6 +3434,10 @@ export function runCombat(input: CombatEngineInput): {
                 /** G PR1: true when THIS application is a counterattack (Stalwart). The reflect
                  *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
                 isCounter?: boolean;
+                /** Protection transfer: true when THIS application is a redirected Protection
+                 *  chunk. The transfer block (Task 4) skips when set → a redirected chunk's own
+                 *  cascade was already precomputed, so it never re-triggers (loop-safe). */
+                isProtectionTransfer?: boolean;
                 /** Epic PR12 (A): true when this victim IS the attacker's resolved anchor/primary
                  *  target (Nosorog's `requirePrimaryTarget` reflect gate). Undefined/true for every
                  *  non-positional (inherently single-target) call site; explicitly false only for
@@ -3485,6 +3519,88 @@ export function runCombat(input: CombatEngineInput): {
                         }
                     );
                     damage = damage * (1 - blocked);
+                }
+            }
+            // Protection damage transfer. A living ally holding Protection stacks intercepts a
+            // fraction (10%/stack) of this victim's direct hit. The redirected chunk keeps the
+            // ORIGINAL target's affinity/outgoing (both baked into `damage`) and re-mitigates on
+            // the PROTECTOR's own defense — realized by the mit-ratio inside protectionCascade.
+            // Guards mirror the reflect block: direct damage only, and never a redirected/
+            // reflected/counter application (loop-safe).
+            if (
+                cause?.byDirectDamage &&
+                !cause.isProtectionTransfer &&
+                !cause.isReflected &&
+                !cause.isCounter &&
+                damage > 0
+            ) {
+                const protectors = protectorsFor(victim);
+                if (protectors.length > 0) {
+                    // `damage` was already mitigated by whatever defence the caller used at its
+                    // read site — for a defense-substitution victim (Meatshield R4), that's the
+                    // CARRIER's substituted defence, not the victim's own. Recomputing `targetMit`
+                    // must use that same substituted value or the recovered pre-defence `P` (and
+                    // therefore every protector chunk) is skewed. `substitutedDefenceFor` is a
+                    // no-op fallback to `victimDef` when no carrier applies, so this is
+                    // byte-identical to before for every non-substitution case.
+                    const victimDef = effectiveStatsOf(
+                        statusEngine,
+                        selfBuffLookup,
+                        victim
+                    ).defence;
+                    const targetDef = substitutedDefenceFor(victim, victimDef);
+                    const targetMit =
+                        targetDef > 0 ? 1 - calculateDamageReduction(targetDef) / 100 : 1;
+                    const cascade = protectionCascade(
+                        damage,
+                        targetMit,
+                        protectors.map((p) => ({
+                            stacks: p.stacks,
+                            mit:
+                                effectiveStatsOf(statusEngine, selfBuffLookup, p.actor).defence > 0
+                                    ? 1 -
+                                      calculateDamageReduction(
+                                          effectiveStatsOf(statusEngine, selfBuffLookup, p.actor)
+                                              .defence
+                                      ) /
+                                          100
+                                    : 1,
+                        }))
+                    );
+                    // Redirect each protector's chunk BEFORE the victim's own HP is touched.
+                    protectors.forEach((p, i) => {
+                        const chunk = cascade.chunks[i];
+                        if (!chunk || chunk.total <= 0) return;
+                        const protectorSink = p.actor.side === 'player' ? playerSink : enemySink;
+                        // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs and
+                        // sets up the deferred DoT-transform, which acts per redirected chunk).
+                        for (let s = 0; s < chunk.stacks; s++) {
+                            applyVictimDamage(chunk.perStack, p.actor, protectorSink, {
+                                killerId: cause.killerId,
+                                byDirectDamage: true,
+                                isProtectionTransfer: true,
+                                shieldPenetrationPct: 0,
+                                bombPortion: 0,
+                            });
+                        }
+                        // Surface on the HP curve + reactive log (mirrors the reflect block).
+                        roundPerTargetDamage.set(
+                            p.actor.id,
+                            (roundPerTargetDamage.get(p.actor.id) ?? 0) + chunk.total
+                        );
+                        bus.emit({
+                            type: 'reactive-damage-performed',
+                            sourceId: victim.id,
+                            targetId: p.actor.id,
+                            round: r,
+                            amount: chunk.total,
+                            reactive: true,
+                            duringTurnOf: actingActorId,
+                            triggerActorId: actingActorId,
+                        });
+                    });
+                    // The victim now only takes the non-transferred remainder.
+                    damage = cascade.targetRemainder;
                 }
             }
             sink.addIncoming(damage, victim.id);
