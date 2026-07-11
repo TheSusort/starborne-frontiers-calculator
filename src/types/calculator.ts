@@ -168,6 +168,9 @@ export interface SelectedGameBuff {
     application?: 'inflict' | 'apply';
     /** Parser ally-scope (team walk): granular target of the granting clause; absent on manual picks. */
     effectTarget?: 'self' | 'ally' | 'all-allies' | 'enemy';
+    // Lionheart: Protection removed entirely after it redirects a hit (consumable). Carried to
+    // the buff ability config so the engine clears stacks post-redirect.
+    clearAllOnRedirect?: boolean;
 }
 
 export interface DPSShipConfig {

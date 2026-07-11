@@ -557,6 +557,9 @@ export type AbilityConfig =
           isStackable: boolean;
           maxStacks?: number;
           stackTrigger?: StackTrigger;
+          /** Lionheart: a redirected hit clears the WHOLE Protection pool (distinct from a normal
+           *  per-hit consume). Absent → no clear-on-redirect behavior. */
+          clearAllOnRedirect?: boolean;
           duration?: number | 'recurring';
           /** "Once per battle" reactive buff grant (Tycho/Shelter/Los on-hp-threshold-crossed
            *  crossing grants): the executor fires AT MOST ONCE per combat, tracked by a
@@ -572,6 +575,7 @@ export type AbilityConfig =
               stacks: number;
               isStackable: boolean;
               maxStacks?: number;
+              clearAllOnRedirect?: boolean;
               duration: number;
           }>;
       }
@@ -583,6 +587,7 @@ export type AbilityConfig =
           isStackable: boolean;
           maxStacks?: number;
           stackTrigger?: StackTrigger;
+          clearAllOnRedirect?: boolean;
           application: 'inflict' | 'apply';
           duration?: number | 'recurring';
       }

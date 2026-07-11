@@ -1508,6 +1508,26 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    // Lionheart R4 refit-active passive (docs/ship-skills.csv, verbatim): the round-start
+    // Protection grant is a consumable FIXED pool (a redirected hit clears it entirely), so it
+    // must refresh to 10 each round rather than accumulate — maxStacks + clearAllOnRedirect are
+    // threaded through to the buff config for the engine (Task 4) to consume.
+    it('Lionheart: Protection buff ability carries maxStacks:10 + clearAllOnRedirect', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'At the start of combat, this Unit grants all adjacent allies 10% of its HP.<br /><br />At the start of the round, this Unit gains 10 stacks of <unit-skill>Protection</unit-skill>.<br />After taking damage redirected through <unit-skill>Protection</unit-skill>, all <unit-skill>Protection</unit-skill> is removed.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const prot = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
+        );
+        expect(prot).toBeDefined();
+        expect(prot!.config.type === 'buff' && prot!.config.stackTrigger).toBe('per-round');
+        expect(prot!.config.type === 'buff' && prot!.config.isStackable).toBe(true);
+        expect(prot!.config.type === 'buff' && prot!.config.maxStacks).toBe(10);
+        expect(prot!.config.type === 'buff' && prot!.config.clearAllOnRedirect).toBe(true);
+    });
+
     // Cleanse-triggered & ally-damage-triggered PASSIVE repairs resolve their real recipient
     // (user-verified 2026-06-07). A bare passive repair (no explicit recipient phrase) is normally
     // a self-heal, but two trigger shapes flip it to the ally: (A) an "when an ally … damaged"

@@ -2227,6 +2227,42 @@ describe('parseAllSkillEffects', () => {
         expect(result.find((e) => e.source === 'active')?.buffName).toBe('Defense Down II');
         expect(result.find((e) => e.source === 'charge')?.buffName).toBe('Attack Up III');
     });
+
+    // Lionheart R4 refit-active passive (docs/ship-skills.csv, verbatim). Its round-start
+    // Protection grant is a FIXED pool (a redirect clears it entirely) — refresh-to-10, not
+    // accumulate. maxStacks/clearAllOnRedirect tag this so the engine (Task 4) can cap +
+    // clear it, distinct from Meatshield's accumulating start-of-combat grant below.
+    it('Lionheart: round-start Protection grant carries maxStacks + clearAllOnRedirect', () => {
+        const lionheart = {
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'At the start of combat, this Unit grants all adjacent allies 10% of its HP.<br /><br />At the start of the round, this Unit gains 10 stacks of <unit-skill>Protection</unit-skill>.<br />After taking damage redirected through <unit-skill>Protection</unit-skill>, all <unit-skill>Protection</unit-skill> is removed.',
+        } as unknown as Ship;
+        const effects = parseAllSkillEffects(lionheart);
+        const prot = effects.find((e) => e.buffName === 'Protection');
+        expect(prot).toBeDefined();
+        expect(prot!.stacks).toBe(10);
+        expect(prot!.stackTrigger).toBe('per-round');
+        expect(prot!.maxStacks).toBe(10);
+        expect(prot!.clearAllOnRedirect).toBe(true);
+    });
+
+    // Negative case: Meatshield's R4 refit-active passive also grants/mentions Protection, but
+    // is an accumulating start-of-combat one-shot with an UNRELATED "transformed into a DoT"
+    // clause — not a redirect-clear. Must stay byte-identical (no maxStacks/clearAllOnRedirect).
+    it('does NOT tag Meatshield\'s Protection grant with maxStacks/clearAllOnRedirect (unrelated "transformed into a DoT" clause)', () => {
+        const meatshield = {
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                "At the start of combat, this Unit gains 3 stacks of <unit-skill>Protection</unit-skill>.<br /><br />Any damage this Unit takes from <unit-skill>Protection</unit-skill> is transformed into a <unit-aid>Damage over Time effect</unit-aid> for 2 turns.<br /><br />Any direct damage dealt to a non-defender ally that is not transferred by <unit-skill>Protection</unit-skill> is dealt as if that ally had this Unit's defense.",
+        } as unknown as Ship;
+        const effects = parseAllSkillEffects(meatshield);
+        const prot = effects.find((e) => e.buffName === 'Protection');
+        expect(prot).toBeDefined();
+        expect(prot!.stacks).toBe(3);
+        expect(prot!.maxStacks).toBeUndefined();
+        expect(prot!.clearAllOnRedirect).toBeUndefined();
+    });
 });
 
 describe('detectGrantConditions', () => {

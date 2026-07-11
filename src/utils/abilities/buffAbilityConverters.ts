@@ -28,6 +28,7 @@ export function abilityToSelectedBuff(ability: Ability, slot: SkillSlot): Select
         skillSource,
         skillDuration: c.duration,
         ...(c.type === 'debuff' ? { application: c.application } : {}),
+        ...(c.clearAllOnRedirect ? { clearAllOnRedirect: true } : {}),
     };
 }
 
@@ -53,6 +54,7 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
                   isStackable: buff.isStackable,
                   maxStacks: buff.maxStacks,
                   stackTrigger: buff.stackTrigger,
+                  ...(buff.clearAllOnRedirect ? { clearAllOnRedirect: true } : {}),
                   duration,
                   // Default to the resistible 'inflict' (the common case + matches makeDefaultAbility);
                   // only an explicitly-parsed 'apply' verb makes a debuff guaranteed.
@@ -66,6 +68,7 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
                   isStackable: buff.isStackable,
                   maxStacks: buff.maxStacks,
                   stackTrigger: buff.stackTrigger,
+                  ...(buff.clearAllOnRedirect ? { clearAllOnRedirect: true } : {}),
                   duration,
               },
     };
