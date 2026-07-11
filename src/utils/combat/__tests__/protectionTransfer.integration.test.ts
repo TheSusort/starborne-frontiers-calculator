@@ -309,6 +309,25 @@ describe('Protection damage transfer (integration)', () => {
         expect(slowProtector).toBeCloseTo(wouldBeDirectSkim * frac1, 4);
     });
 
+    it('no Protection anywhere on the board → no redirect (hasAnyProtectionGrant gate short-circuits protectorsFor)', () => {
+        // No ability anywhere on the board grants Protection (focus selfBuffs empty, no aura
+        // passives on the team actor) — hasAnyProtectionGrant is false, so protectorsFor
+        // short-circuits to [] and the ally eats the full, non-redirected hit.
+        const input = BASE_INPUT({
+            selfBuffs: [],
+            teamActors: [teamActor('ally-1', 0)],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+        const victim = totalIncoming(input, 'ally-1');
+        const focus = totalIncoming(input, 'attacker');
+
+        // Full hit lands on the ally — no redirect.
+        expect(victim).toBeCloseTo(ENEMY_ATTACK, 6);
+        // No chunk was ever redirected to the focus (which would be the protector if Protection existed).
+        expect(focus).toBe(0);
+    });
+
     it('PRODUCTION PATH: aura-granted Protection on a NON-focus team-actor protector fires the redirect (reads exactly the granted stacks, no double-count)', () => {
         // The whole point of the all-sources read: a real Meatshield grants Protection as an AURA
         // (activeAbilityStatuses), which the old snapshot()-only read MISSED — and it sits on a

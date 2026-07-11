@@ -2894,11 +2894,32 @@ export function runCombat(input: CombatEngineInput): {
             }
         }
     }
+    // Board-level Protection gate: true iff ANY ability on the board grants Protection, OR any
+    // actor carries a SCHEDULED Protection self-buff (SelectedGameBuff — the DPS/Healing
+    // Calculator's manual "active buffs" input, e.g. protectionAccum in tests; independent of any
+    // ability). `selfBuffLookup` (built above from `[...selfBuffs, ...teamActors.flatMap(t =>
+    // t.selfBuffs)]`) already indexes every scheduled self-buff by name, so re-using it here is
+    // the cheapest correct check for that source. A board-level boolean (not a per-actor carrier
+    // Set) is deliberate — Protection can be stolen/transferred onto a ship that carries no grant
+    // of its own (deferred mechanic), and the boolean only asserts "Protection is possible here,"
+    // which is the gate protectorsFor needs. Scans ALL slots (not just passive, unlike
+    // defenseSubstitutionCarrierIds) because Lionheart's round-start grant and a future
+    // charge-slot steal are not passive-slot auras.
+    const hasAnyProtectionGrant =
+        (selfBuffLookup.get('Protection')?.length ?? 0) > 0 ||
+        [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()].some((rt) =>
+            rt.castSkills.slots.some((slot) =>
+                slot.abilities.some(
+                    (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
+                )
+            )
+        );
     // Protection damage transfer (deferred mechanic, now consumed). A protector is any living
     // ally that holds >=1 Protection stack; it intercepts a fraction of its allies' direct
     // damage. Side-agnostic by construction (resolves allies via bySide), mirroring
     // defenseSubstitutionCarrierIds. Fastest-first ordering drives the multi-protector cascade.
     const protectorsFor = (victim: CombatActor): { actor: CombatActor; stacks: number }[] => {
+        if (!hasAnyProtectionGrant) return [];
         const allyIds = bySide(isEnemySide(victim.id) ? 'enemy' : 'player').adjacentAllyIdsFor(
             victim.id
         );
