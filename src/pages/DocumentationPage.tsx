@@ -3368,8 +3368,18 @@ const DocumentationPage: React.FC = () => {
                                     damage-over-time) grows the lower her HP falls.{' '}
                                     <strong>Vindicator</strong> retaliates when it resists an enemy
                                     debuff, dealing damage equal to 30% of its own max HP back to
-                                    the ship that attempted it. More implant and gear-set effects
-                                    will be added in future updates.
+                                    the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
+                                    <strong>Meatshield</strong>) now works as a damage transfer
+                                    instead of a plain unremovable buff: each stack a living ally
+                                    holds intercepts 10% of the direct damage another ally would
+                                    take, redirecting that share onto the protector instead — the
+                                    redirected share is absorbed against the protector&apos;s own
+                                    defense rather than the original target&apos;s, so the
+                                    attacker&apos;s affinity match-up against the original target is
+                                    unaffected. When more than one ally holds Protection, the faster
+                                    protector intercepts first and only its unabsorbed remainder
+                                    cascades to the next. More implant and gear-set effects will be
+                                    added in future updates.
                                 </p>
                             </div>
                         </div>
