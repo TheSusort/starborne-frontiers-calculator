@@ -82,7 +82,11 @@ function toSelectedBuffs(
             stacks: effect.stacks ?? 1,
             parsedEffects,
             isStackable: stackInfo.stackable,
-            maxStacks: stackInfo.maxStacks,
+            // Lionheart: a consumable Protection grant (maxStacks set by the parser) is a FIXED
+            // pool that refreshes each round rather than accumulating past it — prefer the
+            // parser's grant-count cap over the buff description's own stack ceiling. Meatshield
+            // sets no effect.maxStacks, so it keeps stackInfo.maxStacks (byte-identical).
+            maxStacks: effect.maxStacks ?? stackInfo.maxStacks,
             autoFilled: true,
             skillSource: effect.source,
             skillDuration: effect.duration,
@@ -92,6 +96,7 @@ function toSelectedBuffs(
             ...(effect.application !== undefined ? { application: effect.application } : {}),
             // Carry the granular ally-scope so the builder can stamp the right ability target.
             effectTarget: effect.target,
+            ...(effect.clearAllOnRedirect ? { clearAllOnRedirect: true } : {}),
         });
     }
 

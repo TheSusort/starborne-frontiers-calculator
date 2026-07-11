@@ -156,14 +156,25 @@ const incomingDamageR1 = (result: ReturnType<typeof simulateBattle>): number => 
 };
 
 describe('simulateBattle — Meatshield defense-substitution on the REAL production path (Critical fix)', () => {
-    it('a DEFENDER ally is NOT substituted: damage taken is IDENTICAL with or without the Meatshield teammate', () => {
+    it("a DEFENDER ally is NOT substituted, but still gets Meatshield's Protection-transfer reduction (transfer is role-agnostic; only substitution is defender-gated)", () => {
+        // Positions here (ally M4, Meatshield M1) are NOT hex-neighbours. Protection coverage is
+        // ALL living same-side allies, independent of board adjacency (confirmed model, PR #247 +
+        // the adjacency-narrowing fix) — so Meatshield's self-granted 3 Protection stacks still
+        // redirect 30% of the ally's incoming hit to itself, re-mitigated on Meatshield's OWN
+        // defence, REGARDLESS of the ally's role. Only the SEPARATE defense-substitution clause
+        // ("...dealt as if that ally had this Unit's defense") is gated to non-defenders — the
+        // R4 text itself scopes substitution to the UN-transferred remainder of a non-defender
+        // ally's damage, so a DEFENDER's remainder keeps ITS OWN (unsubstituted) defence.
         const alone = incomingDamageR1(simulateBattle(allyAloneInput('DEFENDER')));
         const withMeatshield = incomingDamageR1(
             simulateBattle(allyWithMeatshieldInput('DEFENDER'))
         );
 
         expect(alone).toBeGreaterThan(0);
-        expect(withMeatshield).toBeCloseTo(alone, 5);
+        // Exactly the 3-stack (30%) Protection-transfer reduction — no additional substitution
+        // discount (which would further shrink this below 0.7x, since Meatshield's defence 5000
+        // vastly exceeds the ally's own 200).
+        expect(withMeatshield).toBeCloseTo(alone * 0.7, 6);
     });
 
     it('an ATTACKER (non-defender) ally IS substituted: damage taken drops when the Meatshield teammate is present', () => {

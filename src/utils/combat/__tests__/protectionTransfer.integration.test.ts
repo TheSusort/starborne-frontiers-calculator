@@ -309,6 +309,25 @@ describe('Protection damage transfer (integration)', () => {
         expect(slowProtector).toBeCloseTo(wouldBeDirectSkim * frac1, 4);
     });
 
+    it('no Protection anywhere on the board → no redirect (hasAnyProtectionGrant gate short-circuits protectorsFor)', () => {
+        // No ability anywhere on the board grants Protection (focus selfBuffs empty, no aura
+        // passives on the team actor) — hasAnyProtectionGrant is false, so protectorsFor
+        // short-circuits to [] and the ally eats the full, non-redirected hit.
+        const input = BASE_INPUT({
+            selfBuffs: [],
+            teamActors: [teamActor('ally-1', 0)],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+        const victim = totalIncoming(input, 'ally-1');
+        const focus = totalIncoming(input, 'attacker');
+
+        // Full hit lands on the ally — no redirect.
+        expect(victim).toBeCloseTo(ENEMY_ATTACK, 6);
+        // No chunk was ever redirected to the focus (which would be the protector if Protection existed).
+        expect(focus).toBe(0);
+    });
+
     it('PRODUCTION PATH: aura-granted Protection on a NON-focus team-actor protector fires the redirect (reads exactly the granted stacks, no double-count)', () => {
         // The whole point of the all-sources read: a real Meatshield grants Protection as an AURA
         // (activeAbilityStatuses), which the old snapshot()-only read MISSED — and it sits on a
@@ -338,6 +357,36 @@ describe('Protection damage transfer (integration)', () => {
         // Protector chunk matches the same 3-stack magnitude as the focus-seeded case (a).
         const expectedChunk = 0.3 * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
         expect(protector).toBeCloseTo(expectedChunk, 4);
+    });
+
+    it('positional mode: Protection covers a NON-adjacent ally (all-allies, not hex-neighbours)', () => {
+        // Wiring `position` on the victim AND another player actor makes `anyOtherPositioned`
+        // true, so `adjacentAllyIdsFor` (adjacency.ts) would narrow to hex-neighbours instead of
+        // falling back to "all living same-side allies". T1's hex-neighbours are {T2, M1, M2}
+        // (see board.ts's AXIAL table / DIRECTIONS) — T4 is deliberately NOT one of them. Under
+        // the OLD adjacency-based resolution this protector would be excluded from
+        // `protectorsFor`; Protection's confirmed model (coverage = ALL living same-side allies,
+        // independent of board adjacency) must still redirect to it.
+        const input = BASE_INPUT({
+            selfBuffs: [], // the focus carries no Protection — the protector is a team actor.
+            defence: 0,
+            teamActors: [
+                { ...teamActor('ally-1', 0), position: 'T1' }, // victim
+                {
+                    ...teamActor('prot-1', PROTECTOR_DEFENCE, [protectionAuraPassive(3)]),
+                    position: 'T4', // NOT a hex-neighbour of T1 — proves all-allies coverage.
+                },
+            ],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+        const victim = totalIncoming(input, 'ally-1');
+        const protectorIncoming = totalIncoming(input, 'prot-1');
+
+        // The redirect fires even though the protector is NOT a hex-neighbour of the victim.
+        expect(protectorIncoming).toBeGreaterThan(0);
+        // Same 3-stack magnitude as the non-positional aura test above (identical coverage).
+        expect(victim).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
     });
 });
 

@@ -3376,10 +3376,16 @@ const DocumentationPage: React.FC = () => {
                                     redirected share is absorbed against the protector&apos;s own
                                     defense rather than the original target&apos;s, so the
                                     attacker&apos;s affinity match-up against the original target is
-                                    unaffected. When more than one ally holds Protection, the faster
-                                    protector intercepts first and only its unabsorbed remainder
-                                    cascades to the next. More implant and gear-set effects will be
-                                    added in future updates.
+                                    unaffected. Protection covers all living allies (not only
+                                    adjacent ones), allowing any protected ship to intercept damage
+                                    for any teammate. When more than one ally holds Protection, the
+                                    faster protector intercepts first and only its unabsorbed
+                                    remainder cascades to the next. <strong>Lionheart</strong> uses
+                                    a once-per-round variant: it gains 10 stacks of Protection at
+                                    the start of each round, and after it absorbs the first hit
+                                    redirected from an ally, it loses all Protection until the next
+                                    round. More implant and gear-set effects will be added in future
+                                    updates.
                                 </p>
                             </div>
                         </div>

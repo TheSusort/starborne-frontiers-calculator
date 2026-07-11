@@ -4180,6 +4180,10 @@ export interface SkillEffect {
     stackTrigger?: StackTrigger;
     // Enemy debuffs only: 'inflict' verbs are resistible, 'apply' verbs are guaranteed.
     application?: 'inflict' | 'apply';
+    // Lionheart: a consumable Protection ("all Protection is removed" after a redirect) has a
+    // FIXED pool — the round-start grant refreshes to `maxStacks`, it does not accumulate.
+    maxStacks?: number;
+    clearAllOnRedirect?: boolean;
 }
 
 // Application verbs grouped by the side they target, covering each verb's
@@ -4207,6 +4211,13 @@ const DURATION_RE = /for\s+(\d+)\s+turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
+// Lionheart refit passive: "After taking damage redirected through Protection, all Protection
+// is removed." Marks the ship's Protection grant as consumable (clear-all-on-redirect) and,
+// because such Protection is a fixed pool, caps its round-start accumulation at the grant count
+// (refresh-to-N, not accumulate). Reference data: docs/ship-skills.csv. Tested against
+// tag-stripped text (stripUnitTags) since "Protection" is <unit-skill>-wrapped in the raw string.
+const CLEAR_PROTECTION_ON_REDIRECT_RE =
+    /after taking damage redirected through protection,\s*all protection is removed/i;
 // Matches text that is ONLY connectors between tags (e.g. " and ", ", ", " or "), optionally
 // tolerating ONE bridging application verb between conjoined tags governed by different verbs —
 // "gains X and inflicts Y ... for N turns" (Bayah) has "inflicts" sitting between the two buff
@@ -4665,7 +4676,20 @@ export function parseSkillEffects(
         // isAccumulatingBuff gate is false and the pre-combat relabel fires. The N-stack count and
         // the persistent 'recurring' duration are preserved (seeded once at combat start).
         let stackTrigger: StackTrigger | undefined;
-        const startOfCombatOneShot = START_OF_COMBAT_GRANT_RE.test(prevText);
+        // Scope the one-shot check to the CURRENT sentence only (text since the last sentence
+        // boundary), not the whole prevText blob — a multi-sentence passive can carry an earlier,
+        // unrelated "at the start of combat" clause (Lionheart's HP-grant sentence precedes its
+        // round-start Protection grant with no intervening tag) that would otherwise false-positive
+        // the later per-round grant as a one-shot. Verified corpus-wide unique to Lionheart.
+        // NB: this raw `lastIndexOf('.')` sentence split does NOT mask buff-name abbreviation
+        // periods ("Inc."/"Out."), unlike the sentence-split scoping in skillTextParser's clause
+        // splitter and auditSkills. Safe today because such abbreviation periods live inside
+        // `<unit-skill>` tags, not in the inter-tag text `prevText` reads here — but a future
+        // untagged abbreviation clause could over-narrow this current-sentence slice.
+        const lastSentenceBoundary = prevText.lastIndexOf('.');
+        const currentClauseText =
+            lastSentenceBoundary === -1 ? prevText : prevText.slice(lastSentenceBoundary + 1);
+        const startOfCombatOneShot = START_OF_COMBAT_GRANT_RE.test(currentClauseText);
         if (stacks !== undefined && duration === 'recurring' && !startOfCombatOneShot) {
             if (source === 'passive1' || source === 'passive2' || source === 'passive3') {
                 stackTrigger = 'per-round';
@@ -4676,6 +4700,14 @@ export function parseSkillEffects(
             }
         }
 
+        // Lionheart: a Protection grant is consumable (a redirected hit clears the whole pool) —
+        // cap the round-start accumulation at the grant count (refresh-to-N) and tag it so the
+        // engine (Task 4) clears stacks post-redirect. Meatshield sets no such clause on its OWN
+        // accumulating/one-shot Protection grants, so it is unaffected (byte-identical).
+        const isConsumableProtection =
+            buffName === 'Protection' &&
+            CLEAR_PROTECTION_ON_REDIRECT_RE.test(stripUnitTags(skillText));
+
         effects.push({
             buffName,
             target,
@@ -4683,6 +4715,8 @@ export function parseSkillEffects(
             ...(stacks !== undefined ? { stacks } : {}),
             ...(stackTrigger !== undefined ? { stackTrigger } : {}),
             ...(application !== undefined ? { application } : {}),
+            ...(isConsumableProtection && stacks !== undefined ? { maxStacks: stacks } : {}),
+            ...(isConsumableProtection ? { clearAllOnRedirect: true } : {}),
             source,
         });
     }
