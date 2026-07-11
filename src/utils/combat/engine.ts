@@ -3404,6 +3404,10 @@ export function runCombat(input: CombatEngineInput): {
                 /** G PR1: true when THIS application is a counterattack (Stalwart). The reflect
                  *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
                 isCounter?: boolean;
+                /** Protection transfer: true when THIS application is a redirected Protection
+                 *  chunk. The transfer block (Task 4) skips when set → a redirected chunk's own
+                 *  cascade was already precomputed, so it never re-triggers (loop-safe). */
+                isProtectionTransfer?: boolean;
                 /** Epic PR12 (A): true when this victim IS the attacker's resolved anchor/primary
                  *  target (Nosorog's `requirePrimaryTarget` reflect gate). Undefined/true for every
                  *  non-positional (inherently single-target) call site; explicitly false only for
