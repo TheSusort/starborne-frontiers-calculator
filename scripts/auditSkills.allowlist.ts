@@ -114,16 +114,4 @@ export const ALLOWLIST: AllowEntry[] = [
         rules: ['accumulate-detonate'],
         reason: 'Passive mentions "When an Echoing Burst explodes" as a heal-on-burst reaction, not an infliction. The charged skill correctly parses the accumulate-detonate; the passive reference is filtered by the parser guard.',
     },
-
-    // ── SP-F F5: Meatshield — Protection→DoT sibling clause, DEFERRED ───────────
-    // Meatshield's R4 refit-active passive carries THREE sentences. SP-F F5 ships the
-    // defense-substitution clause ("dealt as if that ally had this Unit's defense" — the new
-    // `defense-substitution` ability, ally-scoped, target 'all-allies'). This entry covers the
-    // OTHER, still-unmodelled sentence: "Any damage this Unit takes from Protection is
-    // transformed into a Damage over Time effect for 2 turns."
-    {
-        ship: 'Meatshield',
-        rules: ['transform-incoming-to-dot'],
-        reason: "SP-F F5 SHIPPED the sibling defense-substitution clause (approximation — see AbilityType's 'defense-substitution' doc comment) but deliberately did NOT build this clause. It strictly requires the Protection-as-damage-transfer mechanic (a Defender intercepting ally damage) to exist first — no damage is ever \"transferred by Protection\" in this model, so there is nothing to convert into a DoT. Protection-transfer itself is deferred to a future SP pending a locked mitigation-ordering + speed-chained-redirect rule (design doc §1); it also affects Lionheart's Protection grant and Meatshield's own R3 \"steal Protection\". The generic self-DoT transform primitive (SP-E, `transform-incoming-to-dot` — Voron/Orel) is ready to receive this clause once Protection-transfer lands; both Meatshield skill-text columns (passive2/passive3) carry the clause, hence two raw findings suppressed by this one ship-scoped entry.",
-    },
 ];

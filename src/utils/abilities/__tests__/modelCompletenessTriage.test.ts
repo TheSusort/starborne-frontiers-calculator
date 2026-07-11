@@ -561,14 +561,13 @@ describe('SP-F — deep one-offs', () => {
     it('Meatshield: "dealt as if that ally had this Unit\'s defense" builds an ally-scoped defense-substitution ability (SP-F F5)', () => {
         const abilities = abilitiesFor({ thirdPassiveSkillText: MEATSHIELD_P4 }, 'passive');
         // SHIPPED: SP-F F5 (defense-substitution, approximation — Protection-transfer
-        // itself stays deferred; see the docs/superpowers spec §6 and the
-        // 'transform-incoming-to-dot' allowlist row below for the sibling DoT-transform
-        // clause, which remains deliberately unmodelled). buildShipAbilities now emits a
-        // dedicated `{ type: 'defense-substitution' }` config for this sentence, ally-
-        // scoped (`target: 'all-allies'`) — distinct from the self-target
+        // itself stays deferred; see the docs/superpowers spec §6). buildShipAbilities now
+        // emits a dedicated `{ type: 'defense-substitution' }` config for this sentence,
+        // ally-scoped (`target: 'all-allies'`) — distinct from the self-target
         // "gains 3 stacks of Protection" buff (auto-filled, recurring) that already built,
-        // and from the still-unbuilt "damage taken from Protection transforms into a DoT"
-        // sibling sentence (deliberately deferred — no assertion on it here).
+        // and from the "damage taken from Protection transforms into a DoT" sibling
+        // sentence, which IS now built (`transform-incoming-to-dot`, condition
+        // 'self-protection-redirect') and asserted in the coexistence test below.
         const substitution = abilities.filter(
             (a) =>
                 a.config.type === 'defense-substitution' &&
@@ -578,7 +577,7 @@ describe('SP-F — deep one-offs', () => {
         expect(substitution[0].target).toBe('all-allies');
     });
 
-    it('Meatshield refit-active passive emits a self-protection-redirect DoT transform', () => {
+    it('Meatshield refit-active passive emits a self-protection-redirect DoT transform alongside its sibling clauses', () => {
         const abilities = abilitiesFor({ thirdPassiveSkillText: MEATSHIELD_P4 }, 'passive');
         const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
         expect(transform).toBeDefined();
@@ -587,6 +586,23 @@ describe('SP-F — deep one-offs', () => {
             turns: 2,
             condition: 'self-protection-redirect',
         });
+
+        // Coexistence check: the additive push for this DoT-transform clause must not
+        // displace the passive's other two sentences — the "gains 3 stacks of Protection"
+        // grant and the "dealt as if that ally had this Unit's defense" substitution both
+        // still build from the SAME three-sentence fixture.
+        const protection = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
+        );
+        expect(protection).toBeDefined();
+
+        const substitution = abilities.filter(
+            (a) =>
+                a.config.type === 'defense-substitution' &&
+                (a.target === 'ally' || a.target === 'all-allies')
+        );
+        expect(substitution).toHaveLength(1);
+        expect(substitution[0].target).toBe('all-allies');
     });
 
     // forced-affinity — CARRIER: Wusheng (charge_skill_text) — the cleanest single-clause,
