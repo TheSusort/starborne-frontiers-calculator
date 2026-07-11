@@ -2920,9 +2920,14 @@ export function runCombat(input: CombatEngineInput): {
     // defenseSubstitutionCarrierIds. Fastest-first ordering drives the multi-protector cascade.
     const protectorsFor = (victim: CombatActor): { actor: CombatActor; stacks: number }[] => {
         if (!hasAnyProtectionGrant) return [];
-        const allyIds = bySide(isEnemySide(victim.id) ? 'enemy' : 'player').adjacentAllyIdsFor(
-            victim.id
-        );
+        // Protection coverage = ALL living same-side allies (no self-cover), independent of
+        // board adjacency. `adjacentAllyIdsFor` narrows to hex-neighbours in positional
+        // encounters, which would wrongly shrink coverage — genuinely adjacency-scoped
+        // mechanics (Lionheart's pre-combat HP gift, Centurion) keep using it; Protection
+        // does not. Behavior-identical to before in non-positional production.
+        const allyIds = [...allActorsById.values()]
+            .filter((a) => a.side === victim.side && a.currentHp > 0 && a.id !== victim.id)
+            .map((a) => a.id);
         const out: { actor: CombatActor; stacks: number }[] = [];
         for (const id of allyIds) {
             if (id === victim.id) continue;
