@@ -61,3 +61,9 @@ export function protectionCascade(
     }
     return { targetRemainder, chunks };
 }
+
+export function protectionStacks(activeSelfBuffs: { buffName: string; stacks?: number }[]): number {
+    return activeSelfBuffs
+        .filter((b) => b.buffName === 'Protection')
+        .reduce((sum, b) => sum + (b.stacks ?? 1), 0);
+}

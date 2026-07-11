@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { protectionCascade } from '../protectionTransfer';
+import { protectionCascade, protectionStacks } from '../protectionTransfer';
 
 describe('protectionCascade', () => {
     it('single protector: target keeps (1 - 0.1*stacks), protector chunk swaps defense via mit ratio', () => {
@@ -37,5 +37,14 @@ describe('protectionCascade', () => {
         const r = protectionCascade(1000, 0.25, []);
         expect(r.targetRemainder).toBe(1000);
         expect(r.chunks).toEqual([]);
+    });
+});
+
+describe('protectionStacks', () => {
+    it('sums Protection entries, defaults a stackless entry to 1, ignores others', () => {
+        expect(protectionStacks([{ buffName: 'Protection', stacks: 3 }])).toBe(3);
+        expect(protectionStacks([{ buffName: 'Protection' }])).toBe(1);
+        expect(protectionStacks([{ buffName: 'Buff Protection', stacks: 5 }])).toBe(0);
+        expect(protectionStacks([])).toBe(0);
     });
 });
