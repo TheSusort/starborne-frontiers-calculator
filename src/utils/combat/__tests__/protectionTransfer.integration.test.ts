@@ -277,3 +277,89 @@ describe('Protection damage transfer (integration)', () => {
         expect(protector).toBeCloseTo(expectedChunk, 4);
     });
 });
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// Task 6 — composition with `defense-substitution` (Meatshield R4, engine.ts:2907-2925).
+//
+// A carrier that BOTH substitutes its (high) defence for non-defender allies' incoming damage
+// AND holds Protection stacks. Design doc §6: because transfer peels off P BEFORE the defence
+// term, the non-transferred remainder correctly reads the SUBSTITUTED defence (this "just
+// works" via the shared defence-read sites). But the transfer block's OWN `targetMit` (used to
+// recover pre-defence P from the post-defence `damage`) must ALSO use the substituted defence —
+// not the victim's own — or the recovered P (and every protector chunk) is skewed. This is the
+// bug Task 6 fixes (engine.ts's Protection-transfer block, `targetMit` computation).
+// ───────────────────────────────────────────────────────────────────────────────────────
+describe('Protection transfer × defense-substitution composition (Task 6)', () => {
+    const CARRIER_DEFENCE = 8000; // high, mirrors the spec's Cultivator-order-of-magnitude example.
+    const STACKS = 3;
+    const FRAC = 0.1 * STACKS;
+
+    const defenseSubstitutionAbility: Ability = {
+        id: 'meatshield-defense-sub',
+        type: 'defense-substitution',
+        target: 'all-allies',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'defense-substitution' },
+    };
+    const defenseSubstitutionSlot: ShipSkills['slots'][number] = {
+        slot: 'passive',
+        abilities: [defenseSubstitutionAbility],
+    };
+
+    /** Carrier = Meatshield-style: BOTH the R4 defense-substitution passive (substitutes its own
+     *  HIGH defence for non-defender allies' incoming damage) AND N Protection stacks (redirects a
+     *  fraction of allies' direct damage to itself). Protects 'ally-1', a LOW (0) defence
+     *  non-defender ally (this file's `teamActor` hardcodes role 'ATTACKER'). */
+    const buildInput = (grantProtection: boolean): CombatEngineInput =>
+        BASE_INPUT({
+            selfBuffs: [], // focus is an inert bystander — carries neither ability.
+            defence: 0,
+            teamActors: [
+                teamActor('ally-1', 0),
+                teamActor(
+                    'carrier',
+                    CARRIER_DEFENCE,
+                    grantProtection
+                        ? [defenseSubstitutionSlot, protectionAuraPassive(STACKS)]
+                        : [defenseSubstitutionSlot]
+                ),
+            ],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+    it('non-transferred remainder reads the SUBSTITUTED (carrier) defence; transferred chunk recovers P from that same substituted mitigation', () => {
+        const input = buildInput(true);
+        const allyDamage = totalIncoming(input, 'ally-1');
+        const carrierDamage = totalIncoming(input, 'carrier');
+
+        const substitutedMit = mit(CARRIER_DEFENCE);
+        const expectedRemainder = (1 - FRAC) * ENEMY_ATTACK * substitutedMit;
+        const expectedChunk = FRAC * ENEMY_ATTACK * substitutedMit;
+
+        // (1) Composition holds: the ally's retained (1 - frac) share is computed AS IF it had
+        // the carrier's HIGH defence (substitution), not its own (0, unmitigated) defence —
+        // much smaller than the unsubstituted (1 - frac) x full hit would be.
+        expect(allyDamage).toBeCloseTo(expectedRemainder, 4);
+        expect(allyDamage).toBeLessThan((1 - FRAC) * ENEMY_ATTACK);
+
+        // (2) THE FIX: the protector (carrier) chunk correctly recovers the pre-defence P from
+        // the SUBSTITUTED mitigation (not the ally's own 0-defence no-op mitigation), then
+        // re-mitigates on the protector's own defence (here, the same carrier).
+        expect(carrierDamage).toBeCloseTo(expectedChunk, 4);
+
+        // (3) Proof the fix matters: under the OLD bug (`targetMit` read off the victim's OWN
+        // defence — 0, so targetMit = 1 short-circuits), the recovered P is just `damage`
+        // unchanged, giving the chunk an extra spurious `substitutedMit` factor — a materially
+        // SMALLER value than the correct chunk above. This is what the old code would have
+        // produced; assert the real (fixed) result diverges from it well beyond noise.
+        const oldBuggyChunk = FRAC * ENEMY_ATTACK * substitutedMit * substitutedMit;
+        expect(oldBuggyChunk).toBeLessThan(expectedChunk);
+        expect(carrierDamage).toBeGreaterThan(oldBuggyChunk * 1.5);
+    });
+
+    it('control: WITHOUT Protection stacks, the ally still gets the full substituted-defence hit (pure defense-substitution, no transfer)', () => {
+        const allyDamage = totalIncoming(buildInput(false), 'ally-1');
+        expect(allyDamage).toBeCloseTo(ENEMY_ATTACK * mit(CARRIER_DEFENCE), 4);
+    });
+});

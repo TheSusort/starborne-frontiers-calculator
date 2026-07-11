@@ -3535,13 +3535,21 @@ export function runCombat(input: CombatEngineInput): {
             ) {
                 const protectors = protectorsFor(victim);
                 if (protectors.length > 0) {
+                    // `damage` was already mitigated by whatever defence the caller used at its
+                    // read site — for a defense-substitution victim (Meatshield R4), that's the
+                    // CARRIER's substituted defence, not the victim's own. Recomputing `targetMit`
+                    // must use that same substituted value or the recovered pre-defence `P` (and
+                    // therefore every protector chunk) is skewed. `substitutedDefenceFor` is a
+                    // no-op fallback to `victimDef` when no carrier applies, so this is
+                    // byte-identical to before for every non-substitution case.
                     const victimDef = effectiveStatsOf(
                         statusEngine,
                         selfBuffLookup,
                         victim
                     ).defence;
+                    const targetDef = substitutedDefenceFor(victim, victimDef);
                     const targetMit =
-                        victimDef > 0 ? 1 - calculateDamageReduction(victimDef) / 100 : 1;
+                        targetDef > 0 ? 1 - calculateDamageReduction(targetDef) / 100 : 1;
                     const cascade = protectionCascade(
                         damage,
                         targetMit,
