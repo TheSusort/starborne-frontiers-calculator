@@ -4681,6 +4681,11 @@ export function parseSkillEffects(
         // unrelated "at the start of combat" clause (Lionheart's HP-grant sentence precedes its
         // round-start Protection grant with no intervening tag) that would otherwise false-positive
         // the later per-round grant as a one-shot. Verified corpus-wide unique to Lionheart.
+        // NB: this raw `lastIndexOf('.')` sentence split does NOT mask buff-name abbreviation
+        // periods ("Inc."/"Out."), unlike the sentence-split scoping in skillTextParser's clause
+        // splitter and auditSkills. Safe today because such abbreviation periods live inside
+        // `<unit-skill>` tags, not in the inter-tag text `prevText` reads here — but a future
+        // untagged abbreviation clause could over-narrow this current-sentence slice.
         const lastSentenceBoundary = prevText.lastIndexOf('.');
         const currentClauseText =
             lastSentenceBoundary === -1 ? prevText : prevText.slice(lastSentenceBoundary + 1);

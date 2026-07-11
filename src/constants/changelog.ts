@@ -83,6 +83,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim now models Protection as a damage transfer: a ship holding Protection stacks (e.g. Meatshield) intercepts 10% per stack of the direct damage its allies take, absorbed on the protector's own defense — the attacker's affinity match-up against the original target is unchanged. Multiple protectors cascade in speed order.",
     'Combat sim: Lionheart now gains 10 stacks of Protection each round and absorbs the first hit redirected from an ally, then loses all Protection until the next round.',
     'Combat sim: Protection now redirects damage from any living ally, not only adjacent ones.',
+    'Combat sim: a consumable Protection holder (e.g. Lionheart) no longer loses its Protection when another protector fully absorbs the redirected hit before it — Protection is only consumed when it actually intercepted damage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

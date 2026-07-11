@@ -3651,11 +3651,18 @@ export function runCombat(input: CombatEngineInput): {
                     // hit already redirected fully; clearing now only affects later hits this
                     // round. `removeSelfBuffByName` zeroes the accumulating stacks (Overload
                     // precedent) → next round's beginRound re-accumulates to maxStacks (=10).
-                    for (const p of protectors) {
+                    // Gate on the protector's OWN chunk having actually redirected something —
+                    // a faster protector upstream in the cascade can absorb the hit fully,
+                    // leaving THIS protector's chunk at 0 even though it holds Protection stacks;
+                    // the kit text ("after taking damage redirected through Protection") only
+                    // fires the clear when a redirected chunk was actually taken.
+                    protectors.forEach((p, i) => {
+                        const chunk = cascade.chunks[i];
+                        if (!chunk || chunk.total <= 0) return;
                         if (clearProtectionOnRedirectIds.has(p.actor.id)) {
                             statusEngine.removeSelfBuffByName(p.actor.id, 'Protection');
                         }
-                    }
+                    });
                     // The victim now only takes the non-transferred remainder.
                     damage = cascade.targetRemainder;
                 }

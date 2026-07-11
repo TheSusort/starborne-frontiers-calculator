@@ -33,12 +33,15 @@ const manualEnemy = (id: string, attack: number): EnemyAttacker => ({
 
 /** A walked player team actor (a pure victim/protector stat block, role ATTACKER so it is a
  *  valid victim). Optional `passive` slots carry an ability (e.g. Lionheart's Protection grant).
+ *  Optional `hp` (default a large sink) lets a protector be given a LOW hp so it can be killed
+ *  by its own redirected chunk mid-round (used by the chunk.total===0 guard test below).
  */
 const teamActor = (
     id: string,
     defence: number,
     passive?: ShipSkills['slots'],
-    speed = 100
+    speed = 100,
+    hp = 1_000_000_000
 ): TeamActorEngineInput => ({
     id,
     speed,
@@ -56,7 +59,7 @@ const teamActor = (
             defensePenetration: 0,
             hacking: 0,
             defence,
-            hp: 1_000_000_000,
+            hp,
         },
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
@@ -66,6 +69,28 @@ const teamActor = (
         hasChargedSkill: false,
     },
 });
+
+/** A passive slot that grants SELF `Protection` the AURA way (Meatshield-style: a static buff
+ *  config, no duration, isStackable) — used as the "Other" fully-stacked, SLOWER protector in
+ *  the chunk.total===0 guard test below. Distinct from `lionheartProtectionPassive`'s per-round
+ *  accumulating shape; either shape reads through the same all-sources stack resolver. */
+const otherProtectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => {
+    const ability: Ability = {
+        id: 'other-protection',
+        type: 'buff',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Protection',
+            parsedEffects: {},
+            stacks,
+            isStackable: true,
+        },
+    };
+    return { slot: 'passive', abilities: [ability] };
+};
 
 /** Lionheart R4's round-start Protection grant, as the parser really emits it: a per-round
  *  ACCUMULATING buff (rate = stacks = 10, capped at maxStacks = 10) whose config carries
@@ -142,5 +167,69 @@ describe('Lionheart Protection — clear-on-redirect (integration)', () => {
         // Round 2: beginRound's top-of-round tick re-accumulates 0 -> 10 (refresh-to-10) ->
         // the redirect resumes on round 2's first hit.
         expect(lionheartR2).toBeGreaterThan(0);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// Finding 1 (final-review) — the clear-on-redirect loop must be gated on the protector's OWN
+// cascade chunk having actually redirected something (`chunk.total > 0`), not fired
+// unconditionally for every `clearProtectionOnRedirectIds` member present in `protectors`.
+//
+// Reachable scenario: TWO protectors cover the same victim — Lionheart (FASTER, 10 stacks via
+// its per-round accumulating grant) and a second, SLOWER, fully-stacked (10 stacks, aura-granted)
+// protector "other". `protectionCascade`'s cascade math (protectionTransfer.ts) computes each
+// protector's `kept` share as `(1 - nextFrac) * flow * mit`, where `nextFrac` is the fraction the
+// NEXT (slower) protector in the chain drains before the current protector's share is realized.
+// Because "other" also has max stacks (frac = 1.0), Lionheart's OWN kept share collapses to
+// `(1 - 1.0) * flow * mit = 0` — "other" fully drains whatever cascades through Lionheart before
+// Lionheart's cut is realized, even though Lionheart is the FASTER (first) protector in the chain
+// and genuinely holds 10 Protection stacks. This is the `chunk.total === 0` case the guard exists
+// for. Verified directly with `protectionCascade` inputs mirroring this exact setup (both
+// protectors at max stacks, mit=1): chunks = [{total: 0}, {total: 1000}] — confirming Lionheart's
+// own chunk is genuinely 0 while "other" absorbs the full redirected amount.
+//
+// "other" is given deliberately low HP (500) so it DIES partway through absorbing its ~1000
+// chunk (10 sub-hits of ~100 each) — removing it from `protectorsFor` for the round's SECOND
+// hit. That isolates the observable difference: with the buggy unconditional clear, Lionheart's
+// Protection is wiped after hit 1 (despite its chunk being 0) -> by hit 2, BOTH protectors are
+// gone (other dead, Lionheart cleared) -> the ally eats the full second hit. With the guard, hit
+// 1 leaves Lionheart's Protection intact (its chunk was 0, so the clear never fires) -> by hit 2,
+// Lionheart is the sole living protector and still redirects it in full.
+describe('Lionheart Protection — clear-on-redirect guard: chunk.total === 0 must NOT clear (Finding 1)', () => {
+    const OTHER_DEFENCE = 0;
+    const OTHER_HP = 500; // < the ~1000 total chunk "other" absorbs on hit 1 -> dies mid-hit-1.
+
+    const guardInput: CombatEngineInput = {
+        ...BASE_INPUT,
+        numRounds: 1,
+        teamActors: [
+            teamActor('ally-1', 0), // the direct-hit victim (no Protection of its own).
+            teamActor('lionheart', LIONHEART_DEFENCE, [lionheartProtectionPassive()], 100), // FASTER protector.
+            teamActor('other', OTHER_DEFENCE, [otherProtectionAuraPassive(10)], 50, OTHER_HP), // SLOWER, max-stack, low-HP protector.
+        ],
+        enemyAttackers: [
+            manualEnemy('enemy-A', ENEMY_ATTACK),
+            manualEnemy('enemy-B', ENEMY_ATTACK),
+        ],
+    };
+
+    it("Lionheart's own chunk is drained to 0 by a slower, fully-stacked protector on hit 1 (that protector then dies); Lionheart's Protection must survive to redirect hit 2 in full", () => {
+        const res = runCombat(guardInput);
+
+        const allyR1 = res.rounds[0]?.perActorIncoming?.['ally-1']?.incoming ?? 0;
+        const lionheartR1 = res.rounds[0]?.perActorIncoming?.['lionheart']?.incoming ?? 0;
+        const otherR1 = res.rounds[0]?.perActorIncoming?.['other']?.incoming ?? 0;
+
+        // "other" (the last/slowest protector in the cascade) absorbed the (near-)full hit-1
+        // amount and died from it — confirms the chunk-math setup landed as designed.
+        expect(otherR1).toBeGreaterThan(0);
+
+        // THE GUARD ASSERTION: with the fix, Lionheart's Protection was NOT cleared after hit 1
+        // (its own chunk there was 0) — so it is still the sole living protector for hit 2 and
+        // redirects that hit in full. Under the unconditional-clear bug, Lionheart would have
+        // been cleared after hit 1 (despite absorbing nothing), "other" is already dead, so hit 2
+        // would land entirely on the ally instead (allyR1 ~= ENEMY_ATTACK, lionheartR1 ~= 0).
+        expect(allyR1).toBeCloseTo(0, 4);
+        expect(lionheartR1).toBeGreaterThan(0);
     });
 });
