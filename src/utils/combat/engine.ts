@@ -2922,17 +2922,18 @@ export function runCombat(input: CombatEngineInput): {
         return out;
     };
     // "Any direct damage dealt to a non-defender ally that is not transferred by Protection is
-    // dealt as if that ally had this Unit's defense." Protection-as-damage-transfer is DEFERRED
-    // (design doc §1) — nothing is ever "transferred by Protection" in this model, so the "not
-    // transferred" gate is vacuously satisfied: this substitutes for EVERY living non-defender
-    // ally of a living carrier, unconditionally. Called from EVERY defence-read site
-    // (defenseProfileOf, the reactive read, both victimDefenceFor bindings) so every attack type
-    // sees the same mitigation — wiring it into only one path would silently diverge across
-    // attack types. `fallback` is the site's OWN pre-substitution defence value (raw stats,
-    // buffed/effective, or a last-turn-ctx read — whichever that site already computed), so a
-    // victim with no applicable carrier is byte-identical to before this task. Multi-carrier tie-
-    // break (no known in-game dup case): the HIGHEST effective defence among living, same-side
-    // carriers wins.
+    // dealt as if that ally had this Unit's defense." Protection-as-damage-transfer is now
+    // IMPLEMENTED (see `protectorsFor` above + the transfer block in `applyVictimDamage`, which
+    // peels `redirectFraction × P` off a hit BEFORE this substitution is applied) — so this
+    // function only ever substitutes for the NON-TRANSFERRED remainder of a living non-defender
+    // ally's damage; the transferred portion is a separate hit re-mitigated on the protector's own
+    // defence via `protectionCascade`. Called from EVERY defence-read site (defenseProfileOf, the
+    // reactive read, both victimDefenceFor bindings) so every attack type sees the same
+    // mitigation — wiring it into only one path would silently diverge across attack types.
+    // `fallback` is the site's OWN pre-substitution defence value (raw stats, buffed/effective, or
+    // a last-turn-ctx read — whichever that site already computed), so a victim with no applicable
+    // carrier is byte-identical to before this task. Multi-carrier tie-break (no known in-game dup
+    // case): the HIGHEST effective defence among living, same-side carriers wins.
     const substitutedDefenceFor = (victim: CombatActor, fallback: number): number => {
         if (victim.currentHp <= 0) return fallback; // dead victims are never substituted
         // DEFENDER victims are never substituted (R4 text: "non-defender ally"). Substitution

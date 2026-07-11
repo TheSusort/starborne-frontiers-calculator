@@ -18,10 +18,12 @@
  * excludes — a Task 2/4 design concern outside this task's scope).
  *
  * The multi-protector CASCADE math + fastest-first ordering intent (the original test (c)) is
- * covered as a pure-function property in protectionTransfer.test.ts ("multi-protector cascade:
- * each protector skims the PREVIOUS protector chunk"). Two snapshot-visible protectors cannot be
- * staged end-to-end in this harness (only 'attacker' carries scheduled self-buffs), so (c) is
- * asserted at that `protectionCascade` seam here for completeness.
+ * ALSO covered as a pure-function property in protectionTransfer.test.ts ("multi-protector
+ * cascade: each protector skims the PREVIOUS protector chunk") and is additionally driven
+ * END-TO-END here (two AURA-granted, non-focus team-actor protectors of different speeds — the
+ * same PRODUCTION PATH pattern as the aura test below), since two snapshot-visible ('attacker'-
+ * owned) protectors cannot be staged in this harness (only 'attacker' carries scheduled
+ * self-buffs).
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
@@ -30,6 +32,7 @@ import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { protectionCascade } from '../protectionTransfer';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -44,14 +47,17 @@ const manualEnemy = (id: string, attack: number, affinityDamageModifier = 0): En
 });
 
 /** A walked player team actor (a pure victim stat block, role ATTACKER so it is a valid victim).
- *  Optional `passive` slots carry an ability (e.g. an aura Protection grant) for the actor. */
+ *  Optional `passive` slots carry an ability (e.g. an aura Protection grant) for the actor.
+ *  Optional `speed` (default 100) lets multi-protector tests stage a deterministic fastest-first
+ *  cascade order (`protectorsFor` sorts protectors by effective speed descending). */
 const teamActor = (
     id: string,
     defence: number,
-    passive?: ShipSkills['slots']
+    passive?: ShipSkills['slots'],
+    speed = 100
 ): TeamActorEngineInput => ({
     id,
-    speed: 100,
+    speed,
     chargeCount: 0,
     startCharged: false,
     selfBuffs: [],
@@ -227,12 +233,11 @@ describe('Protection damage transfer (integration)', () => {
         expect(protectorWith / expectedChunk).toBeGreaterThan(0.9);
     });
 
-    it("two protectors cascade by speed: slower protector skims the faster one's chunk", () => {
-        // Two snapshot-visible protectors cannot be staged in the runCombat harness (only the
-        // 'attacker' owner carries scheduled self-buffs — see the file header), so the cascade
-        // property is asserted at the protectionCascade seam the wiring calls. Fastest-first order
-        // is protectorsFor's responsibility; the cascade consumes the already-ordered list. Here P1
-        // (2 stacks) is the faster protector, P2 (1 stack) the slower.
+    it("two protectors cascade by speed: slower protector skims the faster one's chunk (pure protectionCascade seam)", () => {
+        // Fastest-first order is protectorsFor's responsibility; the cascade consumes the
+        // already-ordered list. Here P1 (2 stacks) is the faster protector, P2 (1 stack) the
+        // slower. The END-TO-END equivalent (real aura-granted protectors, driven through
+        // applyVictimDamage) is the next test below.
         // D=1000, targetMit=0.25 → P = 4000. frac1 = 0.2, frac2 = 0.1.
         const cascade = protectionCascade(1000, 0.25, [
             { mit: 0.5, stacks: 2 }, // P1 — faster
@@ -244,6 +249,64 @@ describe('Protection damage transfer (integration)', () => {
         expect(cascade.chunks[1].total).toBeCloseTo(0.1 * 800 * 0.4, 6); // 32
         // The target loses only the FIRST hop (frac1), not the full transferred sum.
         expect(cascade.targetRemainder).toBeCloseTo((1 - 0.2) * 1000, 6); // 800
+    });
+
+    it("PRODUCTION PATH multi-protector cascade: two AURA-granted protectors of DIFFERENT speeds — the slower one derives from the faster one's chunk, not the original hit", () => {
+        // Two non-focus team actors each grant THEMSELVES Protection via the production aura
+        // path (mirrors the single-protector "PRODUCTION PATH" test above). 'prot-fast' (speed
+        // 150, 2 stacks) is faster than 'prot-slow' (speed 50, 1 stack); protectorsFor sorts by
+        // effective speed descending, so 'prot-fast' is P1 and 'prot-slow' is P2 in the cascade.
+        const FAST_STACKS = 2; // frac1 = 0.2
+        const SLOW_STACKS = 1; // frac2 = 0.1
+        const FAST_DEFENCE = PROTECTOR_DEFENCE; // 300
+        const SLOW_DEFENCE = 600;
+        const input = BASE_INPUT({
+            selfBuffs: [], // focus carries no Protection — both protectors are team actors.
+            defence: 0,
+            teamActors: [
+                teamActor('ally-1', 0), // victim, 0 defence → targetMit = 1 → P = ENEMY_ATTACK.
+                teamActor(
+                    'prot-fast',
+                    FAST_DEFENCE,
+                    [protectionAuraPassive(FAST_STACKS)],
+                    150 // faster
+                ),
+                teamActor(
+                    'prot-slow',
+                    SLOW_DEFENCE,
+                    [protectionAuraPassive(SLOW_STACKS)],
+                    50 // slower
+                ),
+            ],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+        const victim = totalIncoming(input, 'ally-1');
+        const fastProtector = totalIncoming(input, 'prot-fast');
+        const slowProtector = totalIncoming(input, 'prot-slow');
+
+        const frac1 = 0.1 * FAST_STACKS;
+        const frac2 = 0.1 * SLOW_STACKS;
+        const P = ENEMY_ATTACK; // targetMit = mit(0) = 1
+
+        // Target loses only the FIRST hop (frac1 of its own hit).
+        expect(victim).toBeCloseTo((1 - frac1) * ENEMY_ATTACK, 4);
+
+        // Faster protector keeps (1 − frac2) of its P-space inflow (frac1 × P), re-mitigated on
+        // its OWN defence.
+        const expectedFast = (1 - frac2) * frac1 * P * mit(FAST_DEFENCE);
+        expect(fastProtector).toBeCloseTo(expectedFast, 4);
+
+        // THE CASCADE ASSERTION: the slower protector's damage derives from the FASTER
+        // protector's chunk (frac2 × (frac1 × P)), NOT from the original hit (frac2 × P).
+        const expectedSlow = frac2 * (frac1 * P) * mit(SLOW_DEFENCE);
+        expect(slowProtector).toBeCloseTo(expectedSlow, 4);
+
+        // Proof it is genuinely cascaded, not a direct skim of the original hit: a direct skim
+        // of frac2 off the untouched original hit would be materially LARGER (no frac1 discount).
+        const wouldBeDirectSkim = frac2 * P * mit(SLOW_DEFENCE);
+        expect(slowProtector).toBeLessThan(wouldBeDirectSkim * 0.5);
+        expect(slowProtector).toBeCloseTo(wouldBeDirectSkim * frac1, 4);
     });
 
     it('PRODUCTION PATH: aura-granted Protection on a NON-focus team-actor protector fires the redirect (reads exactly the granted stacks, no double-count)', () => {
@@ -361,5 +424,124 @@ describe('Protection transfer × defense-substitution composition (Task 6)', () 
     it('control: WITHOUT Protection stacks, the ally still gets the full substituted-defence hit (pure defense-substitution, no transfer)', () => {
         const allyDamage = totalIncoming(buildInput(false), 'ally-1');
         expect(allyDamage).toBeCloseTo(ENEMY_ATTACK * mit(CARRIER_DEFENCE), 4);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// Enemy-side symmetry (spec §8): the engine is team-agnostic by construction — `protectorsFor`
+// resolves `bySide(isEnemySide(victim.id) ? 'enemy' : 'player')`, and the transfer block runs
+// inside the shared `applyVictimDamage` core regardless of which sink (`playerSink`/`enemySink`)
+// invokes it. This proves the redirect fires identically when the ATTACKER is on the PLAYER side
+// and the protector+victim are on the ENEMY side (the mirror image of every test above).
+//
+// Staging note: a player→enemy hit only reaches `applyVictimDamage` (via `applyOutgoingToEnemy`)
+// on the POSITIONAL apply path (drivePositionalApply) — reachable in this harness by giving the
+// focus a board `position` + parsed `target`/`pattern` against a positioned `enemyAttackers[]`
+// roster (mirrors src/utils/combat/__tests__/positionalDamage.integration.test.ts). The victim
+// ('enemy-front') is positioned so the focus's `target:'front'` selection resolves it; the
+// protector ('enemy-protector') is deliberately left UNPOSITIONED so `adjacentAllyIdsFor` falls
+// back to "all living same-side allies" (adjacency.ts's non-positional branch — true whenever no
+// OTHER same-side actor besides the owner carries a position), avoiding the need to compute a real
+// hex-neighbour cell. Both enemy actors have `attack: 0` (pure damageable targets) so only the
+// focus's positional hit is in play. The post-transfer per-actor intake is read the SAME way as
+// every player-side test above (`totalIncoming` / `perActorIncoming`) — `applyOutgoingToEnemy`
+// records into that identical bucket, keyed by the enemy victim's id.
+describe('Protection transfer — enemy-side symmetry (protector + victim on the ENEMY side)', () => {
+    // A no-passive single-hit basic-attack active slot (mirrors positionalDamage.integration.test.ts's
+    // `basicAttack()`): multiplier 100 (1x), 1 hit, target:'enemy' — so the focus's firing-hit
+    // damage equals its raw attack stat against a 0-defence victim.
+    const positionalBasicAttack = (): ShipSkills['slots'][number] => ({
+        slot: 'active',
+        abilities: [
+            {
+                id: 'sym-basic-attack',
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'damage', multiplier: 100 },
+            } as Ability,
+        ],
+    });
+    const parsedTargetFront: ParsedTarget = { raw: 'front', side: 'enemy', selection: 'front' };
+    const basePattern: ParsedPattern = { raw: 'base', shape: 'base', range: 0, modifiers: {} };
+
+    it('an enemy-side protector redirects a PLAYER attack the same way a player-side protector redirects an enemy attack; the enemy target keeps 70%', () => {
+        const FOCUS_ATTACK = ENEMY_ATTACK; // same magnitude as the core player-side test, for a direct numeric mirror.
+
+        const build = (withProt: boolean): CombatEngineInput => ({
+            attack: FOCUS_ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [positionalBasicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            // Healing mode is required for `enemyAttackers` to be built into real CombatActors at
+            // all (engine.ts throws "enemyAttackers require healTargetId" otherwise) — same
+            // requirement every test above already carries via `healTargetId`.
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: parsedTargetFront,
+            pattern: basePattern,
+            enemyAttackers: [
+                {
+                    id: 'enemy-front', // the VICTIM — positioned so target:'front' resolves it.
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M4',
+                    shipSkills: { slots: [] },
+                },
+                {
+                    id: 'enemy-protector', // the PROTECTOR — deliberately unpositioned (see file note above).
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: PROTECTOR_DEFENCE,
+                        hp: 1_000_000_000,
+                        speed: 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: { slots: withProt ? [protectionAuraPassive(3)] : [] },
+                },
+            ],
+        });
+
+        const victimWithout = totalIncoming(build(false), 'enemy-front');
+        const victimWith = totalIncoming(build(true), 'enemy-front');
+        const protectorWith = totalIncoming(build(true), 'enemy-protector');
+
+        // Control: the unprotected enemy target takes the full firing-hit damage.
+        expect(victimWithout).toBeCloseTo(FOCUS_ATTACK, 6);
+        // Target keeps EXACTLY 70% — identical fraction to the player-side core test.
+        expect(victimWith).toBeCloseTo(0.7 * victimWithout, 6);
+        // Protector chunk = 0.30 × fullTargetDamage × mit(D_p)/mit(D_t); D_t = 0 → mit(D_t) = 1.
+        const expectedChunk = 0.3 * FOCUS_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+        expect(protectorWith).toBeCloseTo(expectedChunk, 4);
+        // The protector actually took damage (the redirect fired), not a zero no-op.
+        expect(protectorWith).toBeGreaterThan(0);
     });
 });
