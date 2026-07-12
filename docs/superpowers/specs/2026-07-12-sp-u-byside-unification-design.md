@@ -94,11 +94,16 @@ Fold `intentQueue`/`enemyIntentQueue`, `drainIntents`/`drainEnemyIntents`, and t
 `drainQueue(queue, sideCtx)` is already unified — this unifies the *queues* feeding it.)
 **Byte-identical.**
 
-### U4 — Decouple enemy-roster construction from `healTargetId` (R6)
-Build the positioned enemy roster whenever `enemyAttackers` exist, independent of a heal target.
-Kill the vestigial focus-id binding in `battleSimulator` and the
-`enemyAttackers require healTargetId` throw (`1979`). Healing mode still sets a *real* heal target;
-nothing else does. **Byte-identical** for existing modes.
+### U4 — FOLDED INTO U5 (reshaped 2026-07-12)
+Originally: decouple enemy-roster construction from `healTargetId` (R6) as a byte-identical
+standalone refactor. The U4 implementer's investigation disproved that: `battleSimulator`'s fake
+`healTargetId` is not purely vestigial — it also builds `healingCtx`, which enables heal-casting
+ships to actually heal in **real-vs-real sim mode** (`positionalTeamBattle` + `lowestHpAllyId`), so
+removing it silently regresses that feature (uncaught by current goldens). And the crash sites the
+decouple exposes (`takenLeechesByOwner.get(healTarget!.id)`, the `legacyVictim` fallback) live in
+the enemy incoming-accounting tail that U2 deferred to U5 and that U5 converts to per-victim. R6 is
+therefore inseparable from U5's accounting rework. **Decision: R6 is done in U5 as byte-identical
+phase 5a-0**, with a new heal-casting sim golden added in U5 to lock sim-mode healing.
 
 ### U5 — D4 keystone (the sole audited golden move)
 DPS mode drives a **real finite-HP skill-less enemy actor** instead of the dummy:

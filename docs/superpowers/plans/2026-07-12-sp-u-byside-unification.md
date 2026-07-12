@@ -4,7 +4,7 @@
 
 **Goal:** Retire the residual player/enemy mirror in `src/utils/combat/engine.ts` (R1–R6) and migrate the DPS calculator onto a real finite-HP skill-less enemy actor, deleting the dummy scalar sink.
 
-**Architecture:** Six sequential increments (each a mergeable PR). U1–U4 are **byte-identical pure refactors** — the existing golden corpus is the test oracle; a golden diff = a bug. U5 is the **sole audited golden move** (real enemy replaces the dummy sink; DPS goldens shift with an inspected diff). U6 is **additive UI** (no golden surface). Each increment ends green: `npm test`, `npm run audit:skills` (0 findings), `npm run lint`, `npx tsc --noEmit`.
+**Architecture:** Five sequential increments (each a mergeable PR) — U4 was folded into U5 mid-execution (see Task 4 stub). U1–U3 are **byte-identical pure refactors** — the existing golden corpus is the test oracle; a golden diff = a bug. U5 carries the R6 `healTargetId` decouple (byte-identical phase 5a-0) plus the **sole audited golden move** (real enemy replaces the dummy sink; DPS goldens shift with an inspected diff). U6 is **additive UI** (no golden surface). Each increment ends green: `npm test`, `npm run audit:skills` (0 findings), `npm run lint`, `npx tsc --noEmit`.
 
 **Tech Stack:** TypeScript, Vitest, React 18, Vite. Combat engine is a single large module (`engine.ts`, ~8078 lines) already ~80% unified behind `bySide(side)` / `TurnBindings` / `sink`.
 
@@ -26,11 +26,11 @@
 
 | File | Responsibility | Touched by |
 |------|----------------|-----------|
-| `src/utils/combat/engine.ts` | The combat loop; all residual dual-path (R1–R6) lives here | U1, U2, U3, U4, U5 |
-| `src/utils/calculators/battleSimulator.ts` | Real-vs-real sim adapter; sets the vestigial `healTargetId` | U4 |
+| `src/utils/combat/engine.ts` | The combat loop; all residual dual-path (R1–R6) lives here | U1, U2, U3, U5 (R6 folded into U5) |
+| `src/utils/calculators/battleSimulator.ts` | Real-vs-real sim adapter; sets the vestigial `healTargetId` | U5 (R6 decouple) |
 | `src/utils/calculators/dpsSimulator.ts` | DPS adapter over the engine; owns `DPSSimulationSummary` | U5 |
-| `src/utils/calculators/healingEngineAdapter.ts` | Healing adapter; sets a real `healTargetId` | U4 (verify only) |
-| `src/utils/calculators/__tests__/simGolden.test.ts` + `simGoldenFixtures.ts` | SP-0 sim goldens | U5 (add death-path fixture) |
+| `src/utils/calculators/healingEngineAdapter.ts` | Healing adapter; sets a real `healTargetId` | U5 (verify only) |
+| `src/utils/calculators/__tests__/simGolden.test.ts` + `simGoldenFixtures.ts` | SP-0 sim goldens | U5 (add death-path + heal-casting fixtures) |
 | `src/pages/calculators/DPSCalculatorPage.tsx` | DPS page state + ranking + charts | U5 (wiring), U6 (metric display) |
 | `src/components/calculator/EnemySettingsPanel.tsx` | DPS enemy-config UI | U6 |
 | `src/pages/DocumentationPage.tsx` | In-app docs | U6 |
@@ -150,52 +150,21 @@ git commit -m "refactor(combat): merge twin reactive intent queues into one bySi
 
 ---
 
-## Task 4 (U4): Decouple enemy-roster construction from `healTargetId` (R6)
+## Task 4 (U4): REMOVED — folded into Task 5 (U5)
 
-**Files:**
-- Modify: `src/utils/combat/engine.ts` (throw `1979`; `healTargetId` read `1964`, derived `1969`; the guards keyed on `healTarget && actor.id === healTarget.id`)
-- Modify: `src/utils/calculators/battleSimulator.ts` (the vestigial `healTargetId: focus.id` binding, ~`900`)
-- Verify only (no change expected): `src/utils/calculators/healingEngineAdapter.ts` (sets a REAL heal target)
-
-**Interfaces:**
-- Consumes: `input.enemyAttackers`, `input.healTargetId` (existing engine input fields).
-- Produces: enemy-roster construction gated on `enemyAttackers?.length` presence rather than `healTargetId` being set. `healTargetId` becomes purely the healing-mode heal-focus signal (no longer a gate for building/firing enemies).
-
-**Why byte-identical:** healing mode already sets a real `healTargetId` (unchanged). `battleSimulator` set a *vestigial* one only to unlock the enemy roster; removing it while making the roster build on `enemyAttackers` presence reproduces the same roster. The `throw` at `1979` only ever fired as a guard — with the gate moved, it is dead and removed.
-
-- [ ] **Step 1: Move the enemy-roster gate.** Find where the positioned enemy roster is built / enemies are allowed to fire (currently reachable only when `healTargetId` is set). Change the condition to key on `enemyAttackers` presence. Read `1964–1979` and the enemy-actor construction path to locate every place `healTargetId` acts as a build/fire gate.
-
-- [ ] **Step 2: Remove the throw.** Delete `throw new Error('runCombat: enemyAttackers require healTargetId')` at `1979` (now unreachable — enemies build without a heal target).
-
-- [ ] **Step 3: Drop the vestigial binding.** In `battleSimulator.ts`, remove the `healTargetId: focus.id` vestigial assignment (~`900`) and its VESTIGIAL comment. `battleSimulator` now passes no `healTargetId` (real-vs-real has no heal focus).
-
-- [ ] **Step 4: Verify healing still binds a real target.** `grep -n healTargetId src/utils/calculators/healingEngineAdapter.ts` — confirm it still sets the real heal-focus id. No change there.
-
-- [ ] **Step 5: Green gate (golden oracle).**
-
-```bash
-npm test 2>&1 | tail -20        # sim goldens (real-vs-real) + healing goldens byte-identical
-npm run audit:skills
-npm run lint && npx tsc --noEmit
-```
-Expected: full suite green, no snapshot changes. The sim goldens exercise `battleSimulator` with real enemies — they are the guard that the roster still builds identically without the vestigial binding.
-
-- [ ] **Step 6: Commit.**
-
-```bash
-git add src/utils/combat/engine.ts src/utils/calculators/battleSimulator.ts
-git commit -m "refactor(combat): build enemy roster from enemyAttackers presence, kill vestigial healTargetId (SP-U U4)"
-```
+> **Reshaped 2026-07-12.** U4 (decouple enemy-roster construction from `healTargetId`, R6) proved impossible as a byte-identical standalone refactor. The U4 implementer's investigation (report `.superpowers/sdd/task-4-report.md`) found that `battleSimulator`'s fake `healTargetId: focus.id` is NOT purely vestigial: besides unlocking the enemy roster it also builds `healingCtx`, which is what makes heal-casting ships actually heal in **real-vs-real sim mode** (`positionalTeamBattle` + `lowestHpAllyId`). Removing it silently regresses that feature (uncaught — no current sim golden has a healer). Worse, the two crash sites it exposed — `takenLeechesByOwner.get(healTarget!.id)` (leech keyed to the single heal target) and the `legacyVictim` fallback → `tgt.currentHp` — live in the **enemy incoming-accounting tail** that U2 already deferred to U5 and that U5 converts to per-victim. R6 is therefore inseparable from U5's accounting rework. **Decision: fold R6 into U5.** See Task 5's new phase 5a-0.
 
 ---
 
-## Task 5 (U5): D4 keystone — real finite-HP skill-less DPS enemy (the audited golden move)
+## Task 5 (U5): D4 keystone — decouple `healTargetId` (R6) + real finite-HP skill-less DPS enemy (the audited golden move)
 
 **Files:**
-- Modify: `src/utils/combat/engine.ts` (dummy sink construct `1477–1494`; scalar overwrite `7773–7844`; the `indestructible` death-gate `7822`)
-- Modify: `src/utils/calculators/dpsSimulator.ts` (`DPSSimulationSummary` `179–191`; result assembly `338–345`)
+- Modify: `src/utils/combat/engine.ts` (healing-mode signal: `healTargetId` read `~1963`, derived `healTarget` `~1968`, `healingMode` `~1972`, throw `~1977`; crash sites `takenLeechesByOwner.get(healTarget!.id)` `~7411` and `legacyVictim: healTarget!` `~4927`/`selectTurnTarget` fallback → `tgt.currentHp` `~6974`; `healingCtx` construction `~2593–2627`; dummy sink construct `~1477–1494`; scalar overwrite `~7773–7844`; the `indestructible` death-gate `~7822`) — **all line refs approximate; grep to locate (shifted by U1–U3).**
+- Modify: `src/utils/calculators/battleSimulator.ts` (vestigial `healTargetId: focus.id` binding ~`900` + its doc paragraphs)
+- Modify: `src/utils/calculators/dpsSimulator.ts` (`DPSSimulationSummary` `~179–191`; result assembly `~338–345`)
+- Modify existing tests that assert the throw: `healing.test.ts` (the `.toThrow(/enemyAttackers require healTargetId/)` case ~`1168`) + review comments in `perVictimTimedDetonation.integration.test.ts`, `positionalDamage.integration.test.ts`, `protectionTransfer.integration.test.ts` that document the throw-forces-healing-mode behavior.
 - Add test: `src/utils/calculators/__tests__/dpsSimulator.test.ts` (new `roundsToKill` / `survived` cases) — use the existing DPS test file if present, else create it
-- Modify: `src/utils/calculators/__tests__/simGoldenFixtures.ts` + `simGolden.test.ts` (add a death-path fixture)
+- Modify: `src/utils/calculators/__tests__/simGoldenFixtures.ts` + `simGolden.test.ts` (add a death-path fixture AND a heal-casting sim fixture — see 5c)
 - Modify: `src/constants/changelog.ts` (`UNRELEASED_CHANGES`)
 
 **Interfaces:**
@@ -221,13 +190,38 @@ git commit -m "refactor(combat): build enemy roster from enemyAttackers presence
   }
   ```
 
-**This is the sole audited golden move.** DPS goldens WILL shift (scalar → per-victim basis + early termination). Each regenerated snapshot is inspected and justified. Sim goldens should stay stable — investigate any move.
+**This is the sole audited golden move.** DPS goldens WILL shift (scalar → per-victim basis + early termination). Each regenerated snapshot is inspected and justified. Sim goldens should stay stable — investigate any move (the new heal-casting sim fixture from 5c is added here, not regenerated).
+
+### 5a-0 — Decouple `healTargetId` (R6), preserving sim-mode healing
+
+This phase MUST land before 5a's scalar-sink deletion: the real DPS enemy has no heal target, so the engine must first tolerate `healTarget === undefined` while `enemyAttackers` are present, without crashing and without regressing sim-mode healing.
+
+- [ ] **Step 0a: Introduce a healing-mode signal decoupled from `healTargetId`.** Today `healingMode = !!healTarget` and `healingCtx = healTarget ? {…} : undefined`. Replace the single `healTargetId`-truthiness proxy with an explicit signal: build `healingCtx` (and enable the heal/shield pipeline) when there is a heal FOCUS **or** a real positional team battle (the sim case). Concretely: gate `healingCtx` construction and `args.healing` on `healTarget || positionalTeamBattle` (the real-vs-real sim condition `battleSimulator` runs under), so removing the fake binding keeps `healingCtx` built for sim runs. The heal-application closures (`applyHealToTarget`/`grantShieldToTarget`/`lowestHpAllyId`) must resolve targets from the team roster, not from `healTarget` — verify they already do (they use `positionalTeamBattle` ally-resolution) or thread the roster in.
+
+- [ ] **Step 0b: Build the enemy roster from `enemyAttackers` presence.** Change the roster-build/fire gate to key on `enemyAttackers?.length` instead of `healTargetId`. Remove `throw new Error('runCombat: enemyAttackers require healTargetId')`.
+
+- [ ] **Step 0c: Guard the two crash sites.** `takenLeechesByOwner.get(healTarget!.id)` (~7411) → guard on `healingCtx`/`healTarget` (the enemy damage-taken-leech accounting is a healing-calculator concern; in DPS/sim mode it resolves per-victim via the U2 `onVictimResolved` path — do NOT key it to a single heal target). The `legacyVictim: healTarget!` fallback (~4927) feeding `tgt.currentHp` (~6974): when positional selection resolves no living target and there is no heal target, the enemy has no victim this turn → skip the apply (guard `tgt &&`) rather than crash. Confirm this skip is byte-identical for existing healing/sim goldens (where `healTarget` was always defined, so the guard never changed the path).
+
+- [ ] **Step 0d: Drop the vestigial binding.** In `battleSimulator.ts`, remove `healTargetId: focus.id` (~900) and its VESTIGIAL doc paragraphs. Sim now passes no `healTargetId`; `healingCtx` is instead built via the `positionalTeamBattle` signal from Step 0a.
+
+- [ ] **Step 0e: Update the throw-dependent tests.** Remove/rewrite `healing.test.ts`'s `.toThrow(/enemyAttackers require healTargetId/)` assertion (~1168). Review the 3 integration tests whose comments cite the throw as their reason for healing-mode; update comments where stale (no behavior change expected in them).
+
+- [ ] **Step 0f: Green gate for the decouple (still byte-identical).**
+
+```bash
+npm test 2>&1 | tail -30        # sim + healing goldens byte-identical; the throw test now removed/rewritten
+npm run audit:skills && npm run lint && npx tsc --noEmit
+```
+Expected: full suite green, NO golden diffs. The existing sim + healing goldens are the guard that the roster still builds and sim healing still runs. (The heal-casting sim fixture in 5c then LOCKS sim-mode healing against future regressions.) Commit this as its own commit within the U5 PR:
+`git commit -m "refactor(combat): decouple healTargetId — enemy roster from enemyAttackers, healingCtx from positionalTeamBattle (SP-U U5)"`
 
 ### 5a — Engine: real enemy replaces the dummy sink
 
 - [ ] **Step 1: Route DPS through a real enemy actor.** Build the DPS opponent as a real actor via the `enemyAttackers` path (real `hp`/`defence`/`security`/`speed`/`affinity`/`type`, **no skills** — no kit parsed). Remove `indestructible: true` from its construction (`1477–1494`). It now takes per-victim damage through `applyVictimDamage` like any real enemy and dies at 0 HP.
 
-- [ ] **Step 2: Delete the scalar sink.** Remove the `cumulativeDamage`/`cumulativeTeamDamage` accumulation and the `enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline)` overwrite (`7779`, `7802`, `7808–7809`). Enemy HP now declines naturally via `applyVictimDamage`. Keep the `hp-changed` emission but source it from the real `enemy.currentHp`. Remove the `!enemy.indestructible` special-case at `7822` (the enemy is now destructible; `recordDestroyed` fires normally).
+- [ ] **Step 2: Delete the scalar sink.** Remove the `cumulativeDamage`/`cumulativeTeamDamage` accumulation and the `enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline)` overwrite (`~7779`, `~7802`, `~7808–7809`). Enemy HP now declines naturally via `applyVictimDamage`. Keep the `hp-changed` emission but source it from the real `enemy.currentHp`. Remove the `!enemy.indestructible` special-case at `~7822` (the enemy is now destructible; `recordDestroyed` fires normally). **Also fix the now-false comment at `~7297–7298`** ("Inert regardless (no production caller threads enemy position+pattern)") flagged in U2 review — the enemy positional path IS exercised (sim goldens + now the real DPS enemy); correct or delete it.
+
+- [ ] **Step 2b: Verify the enemy accounting converges (do NOT force a full extraction).** With the scalar sink gone and the enemy real, the enemy's damage-taken accounting flows per-victim through `applyVictimDamage`/`intakeFor` like the player side (R5). Confirm the enemy incoming-accounting tail (the rows U2 left inline, `~7292`/`~7463`) now produces per-victim results and no longer depends on the deleted scalar. A full `applyTurnResult` merge of the enemy tail is OPTIONAL polish, not required by U5 — note it for the final review if the convergence makes it trivial, but do not expand U5's diff to force it.
 
 - [ ] **Step 3: Verify HP%-gates read real HP.** Confirm `enemyHpPct` (threaded via `roundContext.ts` → `evaluateConditions.ts`) now derives from the real `enemy.currentHp`, not the deleted scalar. hp-threshold / enemy-hp-pct skills must still resolve.
 
@@ -271,12 +265,14 @@ npx vitest run src/utils/calculators/__tests__/dpsSimulator.test.ts
 
 - [ ] **Step 9: Run → expect PASS.** Then full `npm test` green.
 
-### 5c — Death-path sim golden + changelog
+### 5c — Death-path + heal-casting sim goldens + changelog
 
 - [ ] **Step 10: Add the death-path sim golden.** In `simGoldenFixtures.ts`, add a decisive-outcome fixture (a battle that terminates on a real wipe, `winner !== 'draw'`, `≥1` death). Add its snapshot assertion in `simGolden.test.ts`. This closes the SP-0 follow-up (all four existing sim goldens end in `draw`).
 
+- [ ] **Step 10b: Add the heal-casting sim golden (locks sim-mode healing after the R6 decouple).** Add a fixture with a heal-casting ship on a real-vs-real team, so `positionalTeamBattle` + `lowestHpAllyId` heal-application is EXERCISED by a golden. This is the regression guard for 5a-0's healingCtx decoupling — without it, the sim-mode-healing feature has zero golden coverage. Snapshot it in `simGolden.test.ts` (writes once, then stable).
+
 ```bash
-npx vitest run src/utils/calculators/__tests__/simGolden.test.ts   # new fixture snapshot writes once, then stable
+npx vitest run src/utils/calculators/__tests__/simGolden.test.ts   # new fixtures snapshot writes once, then stable
 ```
 
 - [ ] **Step 11: Changelog.** Add a plain-English `UNRELEASED_CHANGES` entry: the DPS calculator now simulates a real, destructible target and reports rounds-to-kill.
@@ -364,7 +360,7 @@ git commit -m "feat(calculator): DPS enemy-config + rounds-to-kill ranking UI (S
 
 ## Self-review notes (author)
 
-- **Spec coverage:** R1→U1, R2→U3, R3→U1, R4/R5→U5, R6→U4, deferred-PR7 tails→U2; U-D1/U-D2 (finite enemy + rounds-to-kill)→U5/U6; U-D4 (high-HP default)→U6 Step 5; U-D5 (no ship picker)→U6 (manual stat-block only); SP-0 death-path golden→U5 Step 10. All spec sections mapped.
-- **Refactor-vs-TDD:** U1–U4 correctly use the golden corpus as oracle (a byte-identical refactor has no red state to write); U5/U6 use red-green TDD for the new `roundsToKill`/ranking behavior. This is deliberate, not a placeholder gap.
+- **Spec coverage:** R1→U1, R2→U3, R3→U1, R4/R5→U5, **R6→U5 phase 5a-0 (folded from U4 after the U4 escalation — decoupling isn't byte-identical: the fake binding also enables sim-mode healing, and the crash sites are in the enemy incoming-accounting tail U5 reworks)**, positional-apply block (reshaped from PR7 tails)→U2; U-D1/U-D2 (finite enemy + rounds-to-kill)→U5/U6; U-D4 (high-HP default)→U6 Step 5; U-D5 (no ship picker)→U6 (manual stat-block only); SP-0 death-path golden→U5 Step 10; sim-mode-healing regression guard→U5 Step 10b (heal-casting sim golden). All spec sections mapped.
+- **Refactor-vs-TDD:** U1–U3 + U5 phase 5a-0 are byte-identical refactors (golden corpus as oracle — no red state to write); U5 5a/5b + U6 use red-green TDD for the new `roundsToKill`/ranking behavior and the audited golden move. This is deliberate, not a placeholder gap.
 - **Type consistency:** `DPSSimulationSummary` fields (`roundsToKill?`, `survived`, `finalHpPct`) are defined once in U5 and consumed unchanged by `rankDpsConfigs` in U6.
 - **Deferred detail:** U2/U3 give exact locations + target signatures + the byte-identical invariant rather than literal merged bodies, because the final code depends on the live line-by-line diff the implementer must read first (Step 1 of each). This is the honest granularity for an in-place refactor of an 8000-line module under a golden guard.
