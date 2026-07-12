@@ -494,11 +494,19 @@ describe('Phase 3 reactive triggers', () => {
             ],
         });
         const numRounds = 4;
+        // crit: 100 (overriding baseInput's default 50) on BOTH runs — SP-0's keyed per-actor
+        // RNG streams mean two sequential `collectEvents` calls in one test draw from the SAME
+        // continuing `attacker:active-crit` sub-stream (no reseed between them), so an
+        // intermediate crit rate lets each run's OWN crit outcome (not the buff) dominate the
+        // per-round damage comparison below. Forcing every round to crit in both runs removes
+        // that confound (mirrors the same fix already used by scenario 6 above), isolating the
+        // comparison to the Attack Up buff's effect.
         const { events, result } = collectEvents(
             baseInput({
                 shipSkills: buffSkills(),
                 hasChargedSkill: false,
                 chargeCount: 0,
+                crit: 100,
                 numRounds,
             })
         );
@@ -516,6 +524,7 @@ describe('Phase 3 reactive triggers', () => {
                 },
                 hasChargedSkill: false,
                 chargeCount: 0,
+                crit: 100,
                 numRounds,
             })
         );
@@ -998,12 +1007,19 @@ describe('Phase 3 reactive triggers', () => {
     });
 
     it('persistent (test 4): Defense Shred climbs +1 per crit round, never expires, scales defense reduction', () => {
+        // crit: 100 (was 50) — SP-0's keyed per-actor RNG streams mean the final assertion
+        // (directDamage on the last round vs. the first-stacked round) is no longer safe to
+        // compare across an intermediate crit rate: two arbitrary rounds may differ in their
+        // OWN crit outcome, and that swing dwarfs the modest per-stack defense-reduction delta
+        // this test is actually trying to isolate. Forcing every round to crit removes that
+        // confound entirely (still exercises the on-crit trigger every round, so stacks still
+        // climb every round) without weakening the "scales defense reduction" invariant below.
         const { result } = collectEvents(
             baseInput({
                 shipSkills: persistentEnforcerSkills(),
                 hasChargedSkill: false,
                 chargeCount: 0,
-                crit: 50,
+                crit: 100,
                 numRounds: 10,
             })
         );

@@ -23,7 +23,7 @@
  * crit (both crit) → this test FAILS on the pre-wiring engine.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { setRateGateRng, setKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
@@ -89,7 +89,11 @@ describe('per-victim crit — end-to-end battle (per-victim crit, Task 3)', () =
 
     it('a covered victim the attacker is DISADVANTAGED against does NOT crit while the anchor does', () => {
         // Constant RNG 0.9: anchor (rate 1.0) crits; disadvantaged covered (rate 0.75) does not.
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
+        // shared constant draw actually reaches every gate this test depends on.
         setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
 
         const result = simulateBattle({
             playerTeam: [
@@ -335,7 +339,11 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
         //   coveredA antimatter → neutral      → rate 1.0  → CRITS  (rollVictimCrit path)
         //   coveredB thermal    → disadvantage → rate 0.75 → NO CRIT
         // => anyCrit true, critPairs 2.
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
+        // shared constant draw actually reaches every gate this test depends on.
         setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
         const events = runEvents(
             aoeBattle({ anchor: 'antimatter', coveredA: 'antimatter', coveredB: 'thermal' })
         );

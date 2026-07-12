@@ -232,9 +232,12 @@ function makeAdjacentCtx(opts?: {
 // ---------------------------------------------------------------------------
 
 describe('D-PR8 T3: reactive buff branch — passesProcChanceGate', () => {
-    it('(a) procChance 0.2 over 10 calls fires buff-applied exactly 2 times (not 10)', () => {
-        // Shared gate map — same owner+ability key re-uses ONE gate across all 10 calls,
-        // producing the deterministic 2/10 accumulator schedule (fires on calls 5, 10).
+    it('(a) procChance 0.2 over 10 calls fires buff-applied exactly 1 time (not 10)', () => {
+        // Shared gate map — same owner+ability key re-uses ONE gate across all 10 calls, so
+        // every call draws from the SAME continuing sub-stream (a real Bernoulli(0.2) draw per
+        // call, not a deterministic accumulator — `passesProcChanceGate` (triggers.ts) keys the
+        // gate itself by `${ownerId}:proc` under SP-0, so it draws from the keyed
+        // `owner1:proc` sub-stream under the fixed test seed, which fires once).
         const procChanceGates = new Map<string, ReturnType<typeof makeRateGate>>();
         const intent = makeBuffIntent({ procChance: 0.2 });
         const ctx = makeCtx({ procChanceGates });
@@ -243,8 +246,8 @@ describe('D-PR8 T3: reactive buff branch — passesProcChanceGate', () => {
             executeIntent(intent, ctx);
         }
 
-        // The deterministic accumulator fires exactly 2/10 times.
-        expect(ctx.buffAppliedEvents).toHaveLength(2);
+        // The keyed sub-stream fires exactly 1/10 times under the fixed test seed.
+        expect(ctx.buffAppliedEvents).toHaveLength(1);
     });
 
     it('(b) no procChance: buff-applied fires on all 4 calls (pass-through)', () => {

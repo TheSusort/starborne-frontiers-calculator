@@ -27,7 +27,7 @@
  * pattern used in chronoReaverCharge.integration.test.ts and other engine tests.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { setRateGateRng, setKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import type { AffinityName } from '../../../types/ship';
@@ -222,7 +222,13 @@ describe('per-victim crit consumers — Bloodthirst critHits fan-out (Task 6)', 
         ];
 
         // rng=0.9 → anchor crits (rate 1.0), covered does NOT crit (rate 0.75)
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
+        // shared constant draw actually reaches every gate this test depends on. (The second
+        // branch below doesn't need this: `resetRateGateRng()` nulls the keyed provider, so
+        // every gate falls back to the plain `rng()` override regardless of its stream key.)
         setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
         const perfMiss = collectAbilityPerformed(baseInput([bloodthirstAbility], mixedEnemies));
         expect(perfMiss.length).toBeGreaterThan(0);
         const critHitsMiss = perfMiss[0].critHits ?? 0;
@@ -263,7 +269,11 @@ describe('per-victim crit consumers — Reactive Ward / per-victim attacked.didC
      * didCrit=true) — this test would FAIL on the pre-wiring engine.
      */
     it('per-victim attacked event carries the victim own didCrit (not the anchor)', () => {
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
+        // shared constant draw actually reaches every gate this test depends on.
         setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
 
         const attacked = collectAttacked(
             baseInput(
@@ -328,7 +338,11 @@ describe('per-victim crit consumers — Reactive Ward / per-victim attacked.didC
      * Extends the two-victim case to a full line.
      */
     it('three-victim AoE: anchor crits, two thermal covered victims do NOT crit', () => {
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
+        // shared constant draw actually reaches every gate this test depends on.
         setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
 
         const attacked = collectAttacked(
             baseInput(
@@ -402,10 +416,15 @@ describe('per-victim crit consumers — Menace outgoing amplification (Task 6)',
             passiveEnemy('covered', 'M3', 'thermal'), // does NOT crit at rng=0.9
         ];
 
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
+        // shared constant draw actually reaches every gate this test depends on, in BOTH runs.
         setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
         const menaceAttacked = collectAttacked(baseInput([menaceAbility], enemies));
 
         setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
         const controlAttacked = collectAttacked(baseInput([], enemies));
 
         const menaceAnchor = menaceAttacked.find((e) => e.targetId === 'anchor');
