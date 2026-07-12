@@ -84,12 +84,7 @@ const placement = (ship: Ship, position: Position): BattlePlacement => ({
     },
 });
 
-const shipBase = (
-    id: string,
-    name: string,
-    type: ShipTypeName,
-    stats: FixtureStatsOpts
-): Ship => ({
+const shipBase = (id: string, name: string, type: ShipTypeName, stats: FixtureStatsOpts): Ship => ({
     id,
     name,
     rarity: 'legendary',
@@ -184,10 +179,7 @@ const finalizeAttacker = (ship: Ship): Ship => ({
 
 export function twoVsTwo(): BattleSimulationInput {
     return {
-        playerTeam: [
-            placement(twoVsTwoPlayerDot(), 'M4'),
-            placement(twoVsTwoPlayerHealer(), 'M1'),
-        ],
+        playerTeam: [placement(twoVsTwoPlayerDot(), 'M4'), placement(twoVsTwoPlayerHealer(), 'M1')],
         enemyTeam: [
             placement(twoVsTwoEnemyBomber(), 'T4'),
             placement(finalizeAttacker(twoVsTwoEnemyAttacker()), 'T1'),
@@ -423,14 +415,114 @@ const healingModeEnemyTwo = (): Ship => ({
 
 export function healingMode(): BattleSimulationInput {
     return {
-        playerTeam: [
-            placement(healingModeTank(), 'M4'),
-            placement(healingModeHealer(), 'M1'),
-        ],
-        enemyTeam: [
-            placement(healingModeEnemyOne(), 'T4'),
-            placement(healingModeEnemyTwo(), 'T1'),
-        ],
+        playerTeam: [placement(healingModeTank(), 'M4'), placement(healingModeHealer(), 'M1')],
+        enemyTeam: [placement(healingModeEnemyOne(), 'T4'), placement(healingModeEnemyTwo(), 'T1')],
+        rounds: 8,
+    };
+}
+
+// ===========================================================================
+// deathPath (SP-U U5) — a DECISIVE-OUTCOME battle: a fast, high-attack player attacker vs a
+// single fragile low-HP enemy that it wipes well inside the window. Closes the SP-0 follow-up
+// (all four original sim goldens end in `draw`): this one terminates on a real wipe with
+// `winner === 'player'`, `lastRound < 8`, and ≥1 death recorded.
+// ===========================================================================
+
+/** Fast glass-cannon attacker (speed 140 → acts first) that reliably kills the fragile enemy in
+ *  a couple of rounds. Plain 100% single-target front damage. */
+const deathPathExecutioner = (): Ship =>
+    finalizeAttacker(
+        shipBase('death-executioner', 'Executioner', 'ATTACKER', {
+            hp: 300_000,
+            attack: 12_000,
+            defence: 400,
+            hacking: 250,
+            security: 200,
+            speed: 140,
+            crit: 60,
+        })
+    );
+
+/** Fragile enemy: tiny HP pool, near-zero defence, slow (acts last), harmless attack — it is
+ *  wiped in ~2–3 rounds, giving a decisive player win without the attacker ever being at risk. */
+const deathPathHusk = (): Ship =>
+    finalizeAttacker(
+        shipBase('death-husk', 'Husk', 'DEFENDER', {
+            hp: 30_000,
+            attack: 300,
+            defence: 0,
+            hacking: 100,
+            security: 100,
+            speed: 50,
+        })
+    );
+
+export function deathPath(): BattleSimulationInput {
+    return {
+        playerTeam: [placement(deathPathExecutioner(), 'M4')],
+        enemyTeam: [placement(deathPathHusk(), 'T4')],
+        rounds: 8,
+    };
+}
+
+// ===========================================================================
+// healCasting (SP-U U5) — locks sim-mode healing after the R6 (healTargetId) decouple. A pure
+// ally-heal SUPPORTER on a real-vs-real team: the engine builds `healingCtx` off the
+// `positionalTeamBattle` signal (no vestigial healTargetId) and routes each cast to the
+// lowest-HP LIVING player ally via `lowestHpAllyId`. A fragile front ally soaks enemy fire while
+// the healer repairs it every turn; the battle survives the window (draw), so sustained,
+// per-turn heal routing is exercised across all 8 rounds.
+// ===========================================================================
+
+/** Fragile front ally: low HP + modest defence so it visibly loses (and regains) HP each round,
+ *  keeping it the lowest-HP ally so `lowestHpAllyId` routes the healer's cast here. */
+const healCastingFrontAlly = (): Ship =>
+    finalizeAttacker(
+        shipBase('healcast-front', 'Ember', 'ATTACKER', {
+            hp: 90_000,
+            attack: 1_500,
+            defence: 150,
+            hacking: 200,
+            security: 150,
+            speed: 120,
+        })
+    );
+
+/** Pure ally-heal supporter (same shape as the twoVsTwo healer): repairs 20% of its Max HP to an
+ *  ally each turn. High HP + no offence so it is never the lowest-HP ally — the heal always
+ *  routes to the fragile front ally. */
+const healCastingHealer = (): Ship => ({
+    ...shipBase('healcast-healer', 'Mender', 'SUPPORTER', {
+        hp: 260_000,
+        attack: 0,
+        defence: 300,
+        hacking: 200,
+        security: 150,
+        speed: 100,
+    }),
+    activeSkillText: 'This Unit repairs 20% of its Max HP.',
+    activeTarget: 'allies',
+    activePattern: 'Pattern-Base',
+});
+
+/** Enemy attacker: steady front damage onto the fragile ally — enough to dent it each round
+ *  (so the heal has work to do) but not enough to out-race the healer within the window. */
+const healCastingEnemy = (): Ship =>
+    finalizeAttacker(
+        shipBase('healcast-enemy', 'Reaver', 'ATTACKER', {
+            hp: 300_000,
+            attack: 2_000,
+            defence: 200,
+            hacking: 220,
+            security: 150,
+            speed: 90,
+        })
+    );
+
+export function healCasting(): BattleSimulationInput {
+    return {
+        playerTeam: [placement(healCastingFrontAlly(), 'M4'), placement(healCastingHealer(), 'M1')],
+        enemyTeam: [placement(healCastingEnemy(), 'T4')],
         rounds: 8,
     };
 }

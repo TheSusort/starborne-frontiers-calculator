@@ -179,6 +179,12 @@ export interface RoundData {
 export interface DPSSimulationSummary {
     totalDamage: number;
     avgDamagePerRound: number;
+    /** Round the enemy was destroyed; undefined if it survived the window. */
+    roundsToKill?: number;
+    /** True when the enemy survived all N rounds (never reached 0 HP). */
+    survived: boolean;
+    /** Enemy HP% remaining at the end of the window (0 when killed). */
+    finalHpPct: number;
     totalDirectDamage: number;
     totalCorrosionDamage: number;
     totalInfernoDamage: number;
@@ -298,7 +304,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     const engineTeamActors = deriveTeamEngineActors(teamActors, input.enemyAffinity);
     const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
 
-    const { rounds, rawTotals } = runCombat({
+    const { rounds, rawTotals, enemyOutcome } = runCombat({
         attack,
         crit,
         critDamage,
@@ -342,6 +348,15 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         summary: {
             totalDamage,
             avgDamagePerRound: Math.round(rawTotals.cumulative / numRounds),
+            // SP-U U5: rounds-to-kill adapter. The engine drives a real, destructible enemy; when
+            // it dies within the window the run terminates on that round and `enemyOutcome` reports
+            // it. Wiped → roundsToKill = death round, survived false, finalHpPct 0; else survived
+            // true, roundsToKill undefined, finalHpPct = end-of-window enemy HP%.
+            survived: enemyOutcome.survived,
+            ...(enemyOutcome.roundsToKill !== undefined
+                ? { roundsToKill: enemyOutcome.roundsToKill }
+                : {}),
+            finalHpPct: enemyOutcome.finalHpPct,
             totalDirectDamage: Math.round(rawTotals.direct),
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
             totalInfernoDamage: Math.round(rawTotals.inferno),

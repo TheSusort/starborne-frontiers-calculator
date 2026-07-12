@@ -1373,6 +1373,16 @@ export function runCombat(input: CombatEngineInput): {
          *  by DPSSimulationSummary; a future task can surface it as totalGenericDamage. */
         generic: number;
     };
+    /** SP-U U5: the real DPS enemy's end-of-run outcome. Meaningful only in pure DPS mode (no
+     *  real enemy attackers); the DPS adapter maps it onto DPSSimulationSummary. */
+    enemyOutcome: {
+        /** True when the enemy never reached 0 HP within the round window. */
+        survived: boolean;
+        /** Round the enemy was destroyed; undefined when it survived. */
+        roundsToKill?: number;
+        /** Enemy HP% remaining at the end of the run (0 when killed). */
+        finalHpPct: number;
+    };
     /** Healing-mode accounting (additive — present ONLY when healTargetId is set). */
     healing?: { rounds: HealingRoundEngine[]; destroyedRound?: number };
 } {
@@ -1475,9 +1485,13 @@ export function runCombat(input: CombatEngineInput): {
     });
     const enemy = createActor({
         id: 'enemy',
+        // SP-U U5: the DPS opponent is now a REAL, destructible actor — no `indestructible`. In
+        // pure DPS mode (no real enemyAttackers) it takes the round's dealt damage through the
+        // shared per-victim `applyVictimDamage` funnel, its HP declines naturally, and it dies at
+        // 0 HP (terminating the run). In sim/healing mode the fight runs on the positioned enemy
+        // roster and this actor is a vestigial huge-HP sink (never dies — see `dpsEnemyTarget`).
         side: 'enemy',
         kind: 'enemy',
-        indestructible: true,
         stats: {
             attack: 0,
             crit: 0,
@@ -1985,6 +1999,13 @@ export function runCombat(input: CombatEngineInput): {
     // mode supplies them under `positionalTeamBattle` with no explicit heal focus, and a future
     // real DPS enemy (SP-U 5a) supplies one with neither.
     const enemyAttackerInputs = input.enemyAttackers ?? [];
+    // SP-U U5: the dummy `enemy` is the REAL, destructible DPS target ONLY in pure DPS mode —
+    // i.e. when NO real enemy attackers carry the fight. In that case its HP declines through the
+    // per-victim `applyVictimDamage` funnel, it dies at 0 HP, and the run terminates (rounds-to-
+    // kill). When enemy attackers exist (sim/healing mode) the positioned roster is the real
+    // opponent and this `enemy` is a vestigial huge-HP sink that must NEVER die or terminate the
+    // run (kept on the legacy scalar decline, byte-identical).
+    const dpsEnemyTarget = enemyAttackerInputs.length === 0;
     // Validate enemy attacker ids before building any actors: an id that duplicates another
     // enemy attacker, or collides with a reserved/player id (the singular enemy entity, the
     // focus actor, or any team actor), would silently clobber a map entry (runtime lookup,
@@ -7336,8 +7357,11 @@ export function runCombat(input: CombatEngineInput): {
                                     // (enemy→player here). PLAYER-side wrapper: each player victim takes
                                     // real incoming damage; every victim's OWN currentHp/shield/death is
                                     // mutated. Since PR5b the sink keys intake by victim.id, so each covered
-                                    // victim's AoE share lands in ITS OWN per-actor bucket. Inert regardless
-                                    // (no production caller threads enemy position+pattern).
+                                    // victim's AoE share lands in ITS OWN per-actor bucket. This enemy
+                                    // positional path IS exercised in production: the sim goldens
+                                    // (2v2/3v3/healing) thread enemy positions+patterns so real enemy
+                                    // attackers hit player victims here (SP-U U5 corrected the earlier
+                                    // "inert — no production caller" note).
                                     // SP-U U2: shared drivePositionalTurnApply helper. The enemy injects the
                                     // enemy→player TAKEN leech (E2 Task 5 — each player victim procs its OWN
                                     // damage-taken heal/shield leech off the damage IT took) PLUS the focus
@@ -7698,46 +7722,52 @@ export function runCombat(input: CombatEngineInput): {
         cumulativeTeamDamage += teamRoundDamage;
         totalTeamRaw += teamRoundDamage;
 
-        // Track the enemy's remaining HP and emit hp-changed / ship-destroyed taps
-        // (emission-only; the sim keeps hitting the dead dummy regardless). Enemy HP decline
-        // uses focus + team cumulative — team damage reduces enemy HP for gates/HP%/destruction.
-        const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
-        enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline);
-        const newEnemyHpPctInt =
-            enemyHp > 0 ? Math.round(Math.max(0, 100 * (1 - enemyHpDecline / enemyHp))) : 100;
-        if (newEnemyHpPctInt !== lastEnemyHpPctInt) {
-            bus.emit({
-                type: 'hp-changed',
-                targetId: enemy.id,
-                round: r,
-                oldPct: lastEnemyHpPctInt,
-                newPct: newEnemyHpPctInt,
-            });
-            lastEnemyHpPctInt = newEnemyHpPctInt;
-        }
-        if (enemy.currentHp <= 0 && !enemy.indestructible) {
-            // An indestructible sink (the DPS dummy) NEVER dies. It keeps accumulating damage as
-            // currentHp decline so HP%-gates still resolve against it, but it is never
-            // recordDestroyed, emits no ship-destroyed, and fires no post-round
-            // on-enemy-destroyed drain. Its turn bookkeeping is unaffected: the turn-skip guard
-            // (~2791) is gated on isDummyEnemy, not destroyedRound, so DoT/decrement ticking
-            // continues exactly as before — this is the byte-identical invariant (suppressing
-            // recordDestroyed moves nothing because there is no observer of the dummy's death in
-            // the golden corpus).
-            //
-            // For a (hypothetical) destructible enemy this still applies:
-            // Shared helper: stamps enemy.destroyedRound + emits ship-destroyed exactly once
-            // (idempotent), replacing the old destroyedEmitted boolean.
-            recordDestroyed(enemy, r, bus);
-            // Path-B drain (Task 10): the enemy died POST-round — the turn loop is closed and no
-            // per-turn drain follows. Drain the on-enemy-destroyed intents now: CHARGE reactives
-            // (Liberator's "all allies add 1 charge") apply immediately (charges carry into the
-            // next round → correct); EXTRA-ACTION grants see inTurnLoop=false → buffer for next
-            // round (cross-round pending grant). recordDestroyed is idempotent so this drains at
-            // most once per combat. With NO on-enemy-destroyed listener registered the intent
-            // queue is empty → this is a NO-OP (goldens byte-identical).
-            drainIntentsFor('player');
-            drainIntentsFor('enemy');
+        // SP-U U5: land the enemy's remaining HP. Two modes:
+        if (dpsEnemyTarget) {
+            // REAL destructible DPS target (no enemy attackers). This round's dealt damage
+            // (focus + team) lands on the enemy through the SHARED per-victim funnel, so its HP
+            // declines and its intake is accounted per-victim like any real actor (R5): the
+            // amount surfaces in `perActorIncoming[enemy]` and `recordDestroyed` fires inside
+            // `applyVictimDamage` the instant HP first crosses 0 (emitting ship-destroyed +
+            // stamping destroyedRound). The pre-drain guard mirrors the old sink's finite floor
+            // (never re-hits a corpse). hp-changed is emitted from the REAL currentHp inside
+            // applyVictimDamage (float granularity, like every other real victim) — no separate
+            // coarse emit here.
+            const roundEnemyDamage = totalRoundDamage + teamRoundDamage;
+            if (roundEnemyDamage > 0 && enemy.currentHp > 0) {
+                applyVictimDamage(roundEnemyDamage, enemy, sink, {
+                    byDirectDamage: true,
+                    killerId: focusActorId,
+                });
+            }
+            if (enemy.currentHp <= 0) {
+                // Path-B drain (Task 10): the enemy died POST-round — the turn loop is closed and
+                // no per-turn drain follows. Drain the on-enemy-destroyed intents now: CHARGE
+                // reactives apply immediately; EXTRA-ACTION grants buffer for next round. With no
+                // on-enemy-destroyed listener the queue is empty → a NO-OP. The run terminates
+                // right after this round's row is pushed (see the break below `roundData.push`).
+                drainIntentsFor('player');
+                drainIntentsFor('enemy');
+            }
+        } else {
+            // Vestigial sink (sim/healing mode): the real fight runs on the positioned enemy
+            // roster; this dummy just absorbs the focus's aggregate damage so its HP%-gates still
+            // resolve. Kept on the legacy scalar decline + coarse integer hp-changed tap
+            // (byte-identical) — it NEVER dies or terminates the run (its HP is billions).
+            const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
+            enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline);
+            const newEnemyHpPctInt =
+                enemyHp > 0 ? Math.round(Math.max(0, 100 * (1 - enemyHpDecline / enemyHp))) : 100;
+            if (newEnemyHpPctInt !== lastEnemyHpPctInt) {
+                bus.emit({
+                    type: 'hp-changed',
+                    targetId: enemy.id,
+                    round: r,
+                    oldPct: lastEnemyHpPctInt,
+                    newPct: newEnemyHpPctInt,
+                });
+                lastEnemyHpPctInt = newEnemyHpPctInt;
+            }
         }
 
         // round-ended (C2b-2): end-of-round reactive purge (Rhodium). Emitted at the round TAIL,
@@ -7938,6 +7968,13 @@ export function runCombat(input: CombatEngineInput): {
                 backstopDestroyedRound = r;
             }
         }
+
+        // SP-U U5: terminate the run the round the REAL DPS enemy is destroyed — the row for the
+        // killing round is already pushed above, so `roundData` ends AT the kill (no zero-damage
+        // rounds past it). Gated on `dpsEnemyTarget` so the vestigial sim/healing sink (which
+        // never dies) never cuts a real battle short. The turn-loop finally already reset
+        // inTurnLoop, so this early exit is safe (see that finally's rationale).
+        if (dpsEnemyTarget && enemy.destroyedRound !== undefined) break;
     }
 
     // The heal target's death round comes from its per-actor `destroyedRound` field (stamped by
@@ -7946,6 +7983,17 @@ export function runCombat(input: CombatEngineInput): {
     // healTarget is undefined → undefined, never read (the healing shape is omitted below).
     const healTargetDestroyedRound = healTarget?.destroyedRound ?? backstopDestroyedRound;
 
+    // SP-U U5: DPS enemy outcome (the real, destructible target). `roundsToKill` = the round the
+    // enemy was destroyed (undefined if it survived the window); `survived` = never reached 0 HP;
+    // `finalHpPct` = its HP% remaining at the end of the run (0 when killed). In sim/healing mode
+    // (vestigial billion-HP sink) this always reports survived (never read — the DPS adapter is
+    // the only consumer).
+    const enemyFinalHpPct =
+        enemy.destroyedRound !== undefined
+            ? 0
+            : enemyHp > 0
+              ? Math.max(0, (100 * enemy.currentHp) / enemyHp)
+              : 100;
     return {
         rounds: roundData,
         rawTotals: {
@@ -7958,6 +8006,11 @@ export function runCombat(input: CombatEngineInput): {
             totalConditional: totalConditionalRaw,
             teamTotal: totalTeamRaw,
             generic: totalGenericRaw,
+        },
+        enemyOutcome: {
+            survived: enemy.destroyedRound === undefined,
+            roundsToKill: enemy.destroyedRound,
+            finalHpPct: enemyFinalHpPct,
         },
         // Additive — present ONLY in healing mode (DPS callers see the legacy shape).
         ...(healingMode

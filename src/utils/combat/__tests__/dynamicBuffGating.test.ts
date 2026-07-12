@@ -276,8 +276,10 @@ describe('dynamic per-round condition gating', () => {
                 },
             ],
         };
-        // Small enemy HP so it drops below 80% almost immediately after round 1.
-        const rows = buffNamesByRound(skills, { enemyHp: 30000 });
+        // SP-U U5: the enemy is a real, destructible target. Size the pool (80k) so it drops
+        // below 80% by round 2 (the gate lapses) yet survives rounds 1-3 — the buff's 3-round
+        // window is observed before the enemy is wiped (round 4) and the run terminates.
+        const rows = buffNamesByRound(skills, { enemyHp: 80000 });
         // Applied at R1 (HP entering = 100% > 80) and persists rounds 1-3 even though
         // the condition is false from R2 onward.
         expect(rows[0].names).toContain('Alpha Strike'); // applied R1

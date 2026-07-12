@@ -71,6 +71,11 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
     });
 
     it('fires EVERY round once the enemy is below 50% HP — a recurring reactive, not a one-shot', () => {
+        // SP-U U5: the DPS enemy is now real & destructible and the run terminates on its death,
+        // so this uses a larger pool (90k) that lingers below 50% for several rounds before dying
+        // — enough to observe the start-of-round reactive fire on MULTIPLE below-50% rounds (the
+        // point of the test) rather than a single kill round. Active-only 10k/round; once below
+        // 50% the reactive adds 60% of base attack (6,000) every round through the kill.
         const result = simulateDPS({
             attack: ATTACK,
             crit: 0,
@@ -78,22 +83,25 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
             defensePenetration: 0,
             chargeCount: 0,
             enemyDefense: 0,
-            enemyHp: 19_000,
-            rounds: 3,
+            enemyHp: 90_000,
+            rounds: 12,
             selfBuffs: [],
             enemyDebuffs: [],
             activeMultiplier: 100,
             shipSkills: judgeShipSkills(),
         });
-        // Round 1: enemy at 100% entering → gate fails → only the 10,000 active hit.
-        expect(result.rounds[0].directDamage).toBe(ATTACK);
-        // Round 2: enemy at (19000-10000)/19000 ≈ 47.4% entering (< 50%) → the reactive fires:
-        // 60% of BASE attack (10,000 × 0.6 = 6,000), credited alongside round 2's own active hit.
         const REACTIVE = ATTACK * 0.6;
-        expect(result.rounds[1].directDamage).toBe(ATTACK + REACTIVE);
-        // Round 3: still below 50% → fires again. Proves this is a per-round LIVE reactive
-        // (start-of-round), not a single on-cast fold that only ever applied once.
-        expect(result.rounds[2].directDamage).toBe(ATTACK + REACTIVE);
+        // The start-of-round reactive is gated on the ENTERING enemy HP% (rd.enemyHpPct): every
+        // round entered below 50% deals ATTACK + REACTIVE; every round at/above 50% deals only
+        // ATTACK. This holds through the kill round (the run terminates when the enemy dies).
+        for (const rd of result.rounds) {
+            expect(rd.directDamage).toBe(rd.enemyHpPct < 50 ? ATTACK + REACTIVE : ATTACK);
+        }
+        // Non-vacuous & recurring: the reactive fired on ≥2 rounds (not a one-shot on-cast fold).
+        const firedRounds = result.rounds.filter((rd) => rd.enemyHpPct < 50);
+        expect(firedRounds.length).toBeGreaterThanOrEqual(2);
+        // The enemy is a real target — it dies within the window.
+        expect(result.summary.survived).toBe(false);
     });
 
     it("the reactive credit IS now defense-mitigated (epic PR4b) — matches the active hit's mitigation ratio", () => {
