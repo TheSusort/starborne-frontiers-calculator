@@ -6,6 +6,7 @@ import {
     setRateGateRng,
     resetRateGateRng,
     mulberry32,
+    setupKeyedTestRng,
 } from '../rateAccumulator';
 
 // setupTests installs a seeded RNG before each test; these tests override it
@@ -121,5 +122,12 @@ describe('makeRateGate keyed vs unkeyed', () => {
         const gate = makeRateGate('p:1:crit');
         const shared = mulberry32(0x5eed1234);
         expect(gate(0.5)).toBe(shared() < 0.5);
+    });
+
+    it('the test bootstrap helper installs a keyed provider seeded from the base seed', () => {
+        setupKeyedTestRng(0x5eed1234);
+        const gate = makeRateGate('e:2:landing');
+        const expected = makeKeyedRng(0x5eed1234);
+        expect(gate(0.5)).toBe(expected('e:2:landing') < 0.5);
     });
 });

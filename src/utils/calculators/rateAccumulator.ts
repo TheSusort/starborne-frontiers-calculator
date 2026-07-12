@@ -59,6 +59,14 @@ export function makeKeyedRng(baseSeed: number): (key: string) => number {
     };
 }
 
+/** Test-only: install both the shared seeded rng (unkeyed gates) and a keyed provider
+ *  seeded from the same base seed (keyed gates), so every test runs with both streams
+ *  available. Called only from `src/setupTests.ts` — never in production. */
+export function setupKeyedTestRng(seed: number): void {
+    setRateGateRng(mulberry32(seed));
+    setKeyedRng(makeKeyedRng(seed));
+}
+
 /** Deterministic, seedable PRNG (mulberry32). Used by the test bootstrap to make the
  *  suite reproducible; not used in production. */
 export function mulberry32(seed: number): () => number {

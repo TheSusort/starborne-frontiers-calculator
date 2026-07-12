@@ -6,7 +6,7 @@ import '@testing-library/jest-dom';
 import { expect, afterEach, beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
-import { setRateGateRng, resetRateGateRng, mulberry32 } from './utils/calculators/rateAccumulator';
+import { setupKeyedTestRng, resetRateGateRng } from './utils/calculators/rateAccumulator';
 
 // Create proper types for the matchers
 type Matchers = typeof matchers & {
@@ -24,11 +24,12 @@ afterEach(() => {
 });
 
 // Make the combat RNG deterministic per test. Production uses real Math.random;
-// tests install a fixed-seed mulberry32 so crit/proc/landing outcomes — and the
-// golden snapshots that depend on them — are reproducible regardless of test order.
+// tests install both a fixed-seed mulberry32 (unkeyed gates) and a keyed provider
+// seeded from the same base seed (keyed gates), so crit/proc/landing outcomes — and
+// the golden snapshots that depend on them — are reproducible regardless of test order.
 const RATE_GATE_TEST_SEED = 0x5eed1234;
 beforeEach(() => {
-    setRateGateRng(mulberry32(RATE_GATE_TEST_SEED));
+    setupKeyedTestRng(RATE_GATE_TEST_SEED);
 });
 afterEach(() => {
     resetRateGateRng();
