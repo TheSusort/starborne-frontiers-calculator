@@ -112,7 +112,10 @@ export function rollRateGate(
     if (!gates) return true;
     let gate = gates.get(key);
     if (!gate) {
-        gate = makeRateGate();
+        // `key` is already the caller's per-(owner,ability) map key (e.g. `${rid}:${abilityId}`,
+        // `${ownerId}:${abilityId}`) — reuse it verbatim as the stream key (SP-0 Task 3) so each
+        // owner draws from its own sub-stream under the keyed test provider.
+        gate = makeRateGate(key);
         gates.set(key, gate);
     }
     return gate(chance);

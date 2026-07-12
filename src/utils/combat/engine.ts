@@ -577,13 +577,15 @@ export function buildEnemyPlayerActorRuntime(
     const resolvedCritPenalty = e.affinityCritPenalty ?? 0;
     const affinityDisadvantage = resolvedDamageMod < 0;
     // Own gate instances — separate draw streams so this enemy's crit/heal-crit/debuff/extend
-    // rolls are fully isolated from every other actor's deterministic schedule.
-    const enemyActiveCritGate = makeRateGate();
-    const enemyChargedCritGate = makeRateGate();
-    const enemyActiveHealCritGate = makeRateGate();
-    const enemyChargedHealCritGate = makeRateGate();
-    const enemyDebuffLandingGate = makeRateGate();
-    const enemyExtendChanceGate = makeRateGate();
+    // rolls are fully isolated from every other actor's deterministic schedule. Keyed by this
+    // enemy's own id + purpose (SP-0 Task 3) so, under the keyed test provider, its draws come
+    // from a sub-stream no other actor shares; production (no keyed provider) is unaffected.
+    const enemyActiveCritGate = makeRateGate(`${e.id}:active-crit`);
+    const enemyChargedCritGate = makeRateGate(`${e.id}:charged-crit`);
+    const enemyActiveHealCritGate = makeRateGate(`${e.id}:active-heal-crit`);
+    const enemyChargedHealCritGate = makeRateGate(`${e.id}:charged-heal-crit`);
+    const enemyDebuffLandingGate = makeRateGate(`${e.id}:landing`);
+    const enemyExtendChanceGate = makeRateGate(`${e.id}:extend`);
     // The landing closure reads the runtime's LIVE per-target landing chance (A2 Task 4 — set
     // each turn by runPlayerTurn) and falls back to the threaded scalar. It references `runtime`
     // (defined in the same const initializer); the arrow BODY runs only at turn time, well after
@@ -1616,14 +1618,14 @@ export function runCombat(input: CombatEngineInput): {
     // of how the charge cadence aligns with the crit schedule (no aliasing).
     // Declared BEFORE the status engine so the landing hook can close over the
     // debuff-landing gate (Task 7 — timed enemy applications draw it once).
-    const activeCritGate = makeRateGate();
-    const chargedCritGate = makeRateGate();
+    const activeCritGate = makeRateGate(`${focusActorId}:active-crit`);
+    const chargedCritGate = makeRateGate(`${focusActorId}:charged-crit`);
     // Heal crit gates: SEPARATE streams from the damage crit gates (drawing from those would
     // shift a heal-carrying ship's damage-crit schedule → golden churn). Per-actor isolation.
-    const activeHealCritGate = makeRateGate();
-    const chargedHealCritGate = makeRateGate();
-    const debuffLandingGate = makeRateGate();
-    const extendChanceGate = makeRateGate();
+    const activeHealCritGate = makeRateGate(`${focusActorId}:active-heal-crit`);
+    const chargedHealCritGate = makeRateGate(`${focusActorId}:charged-heal-crit`);
+    const debuffLandingGate = makeRateGate(`${focusActorId}:landing`);
+    const extendChanceGate = makeRateGate(`${focusActorId}:extend`);
 
     // Affinity-based ('apply') debuffs always hit EXCEPT at an affinity disadvantage,
     // where they are resisted (combat-system.md hit-check). affinityDamageModifier is
@@ -1808,13 +1810,15 @@ export function runCombat(input: CombatEngineInput): {
         );
         const teamAffinityDisadvantage = w.affinityDamageModifier < 0;
         // Own gate instances — separate draw streams so a team actor's crit/landing/extend
-        // rolls are isolated from the attacker's deterministic schedule.
-        const teamActiveCritGate = makeRateGate();
-        const teamChargedCritGate = makeRateGate();
-        const teamActiveHealCritGate = makeRateGate();
-        const teamChargedHealCritGate = makeRateGate();
-        const teamDebuffLandingGate = makeRateGate();
-        const teamExtendChanceGate = makeRateGate();
+        // rolls are isolated from the attacker's deterministic schedule. Keyed by this team
+        // actor's own id + purpose (SP-0 Task 3) — see the enemy/focus gates above for the
+        // same convention.
+        const teamActiveCritGate = makeRateGate(`${t.id}:active-crit`);
+        const teamChargedCritGate = makeRateGate(`${t.id}:charged-crit`);
+        const teamActiveHealCritGate = makeRateGate(`${t.id}:active-heal-crit`);
+        const teamChargedHealCritGate = makeRateGate(`${t.id}:charged-heal-crit`);
+        const teamDebuffLandingGate = makeRateGate(`${t.id}:landing`);
+        const teamExtendChanceGate = makeRateGate(`${t.id}:extend`);
         // Reads this team actor's runtime LIVE per-target landing chance (A2 Task 4 — set each
         // turn by runPlayerTurn). Invoked only at turn time (after `runtime` below is defined),
         // so the forward reference is safe. `?? 1` is a neutral guard for a pre-first-turn read.
@@ -3555,7 +3559,9 @@ export function runCombat(input: CombatEngineInput): {
                             }
                             let gate = procChanceGates.get(onceKey);
                             if (!gate) {
-                                gate = makeRateGate();
+                                // Keyed by the blocking victim's own id + purpose (SP-0 Task 3) —
+                                // `victim.id` is the stable owner of this incoming-block ability.
+                                gate = makeRateGate(`${victim.id}:proc`);
                                 procChanceGates.set(onceKey, gate);
                             }
                             const proc = gate(chance);
