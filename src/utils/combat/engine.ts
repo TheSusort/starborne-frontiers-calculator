@@ -2653,10 +2653,11 @@ export function runCombat(input: CombatEngineInput): {
         : undefined;
 
     // --- Phase 3 reactive triggers ---
-    // Intent queue (FIFO). Reactive listeners enqueue follow-up executions; the engine
-    // drains them at the drain points. Pure listeners (enqueue only) keep the Phase 1
-    // contract — the executor is the only state mutator.
-    const intentQueue: Intent[] = [];
+    // Intent queues (FIFO), one per side (SP-U U3: merged the former separate `intentQueue` /
+    // `enemyIntentQueue` locals into one bySide record). Reactive listeners enqueue follow-up
+    // executions; the engine drains them at the drain points. Pure listeners (enqueue only) keep
+    // the Phase 1 contract — the executor is the only state mutator.
+    const intentQueues: Record<Side, Intent[]> = { player: [], enemy: [] };
     // Per-owner reactive listeners (Task 6): the FOCUS/attacker owner FIRST (zero-churn —
     // its listeners enqueue in the historical order), then every walked team owner in input
     // order. Each owner's guards key on its OWN events; the executor routes the follow-up to
@@ -2698,44 +2699,47 @@ export function runCombat(input: CombatEngineInput): {
     if (input.name) nameByActorId.set(focusActorId, input.name);
     for (const t of teamActors) if (t.name) nameByActorId.set(t.id, t.name);
     for (const e of input.enemyAttackers ?? []) if (e.name) nameByActorId.set(e.id, e.name);
-    registerReactiveListeners({
-        bus,
-        perOwner: reactivePerOwner,
-        enqueue: (intent) => intentQueue.push(intent),
-        isOpposing: isEnemySide,
-        roleOf: (id) => roleByActorId.get(id),
-        adjacentAllyIdsFor: (ownerId: string) =>
-            bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
-        // D-PR16: owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
-        // id-keyed and side-agnostic, so the same closure serves the enemy registration below.
-        maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
-    });
-
-    // Enemy-side reactive registration (enemy-team PR1). A SEPARATE intent queue + a second
-    // registerReactiveListeners call so an enemy attacker's own reactive abilities (e.g.
-    // Chakara's start-of-round self Attack Up) fire — before this they were partitioned onto
-    // the enemy runtime but never listened for. registerReactiveListeners holds NO module-level
-    // state: it only attaches per-call `bus.on(...)` subscriptions closing over its args, so a
-    // second call adds an independent listener set without disturbing the player registration.
-    // Gated on length>0 so DPS / bare-stat-enemy runs register nothing (goldens byte-identical).
-    const enemyIntentQueue: Intent[] = [];
+    // Enemy-side reactive per-owner list (enemy-team PR1): every enemy ATTACKER's own reactive
+    // abilities (e.g. Chakara's start-of-round self Attack Up) — before this they were
+    // partitioned onto the enemy runtime but never listened for.
     const enemyReactivePerOwner = enemyPlayerRuntimes.map((rt) => ({
         ownerId: rt.actor.id,
         reactiveAbilities: rt.reactiveAbilities,
     }));
-    if (enemyReactivePerOwner.length > 0) {
+    // SP-U U3: one bySide loop replaces the former two separate registerReactiveListeners calls
+    // (player unconditional, enemy gated on `enemyReactivePerOwner.length > 0`).
+    // registerReactiveListeners holds NO module-level state: it only attaches per-call
+    // `bus.on(...)` subscriptions closing over its args, so registering per side independently
+    // is safe — a second call adds an independent listener set without disturbing the other
+    // side's registration. The length-gate is kept (applies uniformly to both sides here) purely
+    // as an early-exit: an empty `perOwner` array already makes registerReactiveListeners a no-op
+    // (its body is a single `for (const {..} of perOwner)` loop), so DPS / bare-stat-enemy runs
+    // still register nothing on the enemy side (goldens byte-identical); the player side's
+    // `perOwner` always has the attacker, so its gate never trips.
+    const perOwnerBySide: Record<
+        Side,
+        { ownerId: string; reactiveAbilities: typeof reactiveAbilities }[]
+    > = {
+        player: reactivePerOwner,
+        enemy: enemyReactivePerOwner,
+    };
+    for (const side of ['player', 'enemy'] as const) {
+        const perOwner = perOwnerBySide[side];
+        if (perOwner.length === 0) continue;
         registerReactiveListeners({
             bus,
-            perOwner: enemyReactivePerOwner,
-            enqueue: (intent) => enemyIntentQueue.push(intent),
-            // Enemy owners: the PLAYER team is opposing. Negating the player-centric
-            // isEnemySide flips on-enemy-* / on-ally-* to the enemy's own frame
-            // (bySide PR2 — fixes the enemy reactive-routing bug).
-            isOpposing: (id: string) => !isEnemySide(id),
+            perOwner,
+            enqueue: (intent) => intentQueues[side].push(intent),
+            // Player registration: opposing = enemy-side (isEnemySide). Enemy registration:
+            // opposing = player-side, its negation — bySide PR2's per-call isOpposing, so an
+            // enemy owner's opposing/ally reactions route against the correct side. Reproduced
+            // exactly per side from the pre-merge player/enemy calls.
+            isOpposing: side === 'enemy' ? (id: string) => !isEnemySide(id) : isEnemySide,
             roleOf: (id) => roleByActorId.get(id),
             adjacentAllyIdsFor: (ownerId: string) =>
                 bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
-            // D-PR16: same id-keyed effective-max-HP closure as the player registration.
+            // D-PR16: owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
+            // id-keyed and side-agnostic, so the same closure serves both side registrations.
             maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
         });
     }
@@ -5869,8 +5873,6 @@ export function runCombat(input: CombatEngineInput): {
             adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
         });
-        const drainIntents = (): void => drainQueue(intentQueue, playerDrainCtx());
-
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
         // recipientIds is the enemy-attacker ids (PR1 exercises self-target only; this
         // future-proofs PR2 enemy→enemy reactions). grantAllyCharges is bySide('enemy').grantAllyCharges
@@ -5898,19 +5900,26 @@ export function runCombat(input: CombatEngineInput): {
             adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
         });
-        const drainEnemyIntents = (): void => {
-            if (enemyIntentQueue.length === 0) return;
-            drainQueue(enemyIntentQueue, enemyDrainCtx());
+        // SP-U U3: side-parameterized drain replacing the former separate `drainIntents`/
+        // `drainEnemyIntents` closures. The queue-empty guard (previously only on the enemy
+        // side) is byte-identical for the player side too: drainQueue's `while (queue.length > 0)`
+        // already no-ops on an empty queue, and playerDrainCtx()/enemyDrainCtx() build pure
+        // closures (no side effects) — skipping their construction when the queue is empty
+        // changes nothing observable.
+        const drainIntentsFor = (side: Side): void => {
+            const queue = intentQueues[side];
+            if (queue.length === 0) return;
+            drainQueue(queue, side === 'player' ? playerDrainCtx() : enemyDrainCtx());
         };
 
         // SP-G G2: start-of-turn GRANTS (buffs/shields/heals) must apply BEFORE the acting owner
         // casts, so a self-buff boosts the same turn it is granted (matching the game). Scoped to
         // the acting owner only. CHARGE intents are EXCLUDED — they keep their post-cast drain
-        // (see drainIntents()/drainEnemyIntents() calls in the turn loop below), on which the
-        // Cobalt charge ledger depends. Team-symmetric: drains both side queues, so a ship on
-        // either side gets the same pre-cast ordering. Turn-block suppression is inherited from
-        // drainQueue's isTurnBlocked filter — a stunned owner's grant is dropped, matching every
-        // other reactive.
+        // (see the drainIntentsFor('player')/drainIntentsFor('enemy') calls in the turn loop
+        // below), on which the Cobalt charge ledger depends. Team-symmetric: drains both side
+        // queues, so a ship on either side gets the same pre-cast ordering. Turn-block
+        // suppression is inherited from drainQueue's isTurnBlocked filter — a stunned owner's
+        // grant is dropped, matching every other reactive.
         const drainStartOfTurnGrants = (ownerId: string): void => {
             // The spliced batch (p/e) is drained in isolation; any follow-up intents a grant
             // chain-enqueues land on the global queues and drain at the normal post-cast point.
@@ -5926,9 +5935,9 @@ export function runCombat(input: CombatEngineInput): {
                 }
                 return ready;
             };
-            const p = take(intentQueue);
+            const p = take(intentQueues.player);
             if (p.length) drainQueue(p, playerDrainCtx());
-            const e = take(enemyIntentQueue);
+            const e = take(intentQueues.enemy);
             if (e.length) drainQueue(e, enemyDrainCtx());
         };
 
@@ -5963,8 +5972,8 @@ export function runCombat(input: CombatEngineInput): {
         // site (nothing between beginRound and here emits an event).
         bus.emit({ type: 'round-started', round: r });
         // Drain point (a): start-of-round intents execute before the first turn.
-        drainIntents();
-        drainEnemyIntents();
+        drainIntentsFor('player');
+        drainIntentsFor('enemy');
 
         // §4.5 Stasis-break pending map (B3 Task 2). Reset fresh each round (new Map here).
         // Keys: victimIds whose Stasis should be removed when their skip branch runs.
@@ -7516,8 +7525,8 @@ export function runCombat(input: CombatEngineInput): {
                 // status they apply obeys the same-turn decrement rule (the carrier's Post Turn
                 // below decrements it). A triggered effect therefore never boosts the hit that
                 // triggered it (the hit's damage was already computed in the turn body).
-                drainIntents();
-                drainEnemyIntents();
+                drainIntentsFor('player');
+                drainIntentsFor('enemy');
 
                 // Post Turn (combat-system.md section 4): the status CARRIER decrements ALL its
                 // timed statuses by one turn — both its self-buff store and the debuff store of
@@ -7546,8 +7555,8 @@ export function runCombat(input: CombatEngineInput): {
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
                 // Drain intents enqueued by end-of-turn triggers before the next actor acts.
-                drainIntents();
-                drainEnemyIntents();
+                drainIntentsFor('player');
+                drainIntentsFor('enemy');
             }
         } finally {
             // The turn loop is closed: no live queue remains. The reset lives in `finally` so it
@@ -7688,8 +7697,8 @@ export function runCombat(input: CombatEngineInput): {
             // round (cross-round pending grant). recordDestroyed is idempotent so this drains at
             // most once per combat. With NO on-enemy-destroyed listener registered the intent
             // queue is empty → this is a NO-OP (goldens byte-identical).
-            drainIntents();
-            drainEnemyIntents();
+            drainIntentsFor('player');
+            drainIntentsFor('enemy');
         }
 
         // round-ended (C2b-2): end-of-round reactive purge (Rhodium). Emitted at the round TAIL,
@@ -7697,8 +7706,8 @@ export function runCombat(input: CombatEngineInput): {
         // assembly. Drain BOTH queues (player + enemy), mirroring the round-started emit+drain.
         // Drains the single-target reactive executor (most-buffs) — single-target by design, out of E3 scope.
         bus.emit({ type: 'round-ended', round: r });
-        drainIntents();
-        drainEnemyIntents();
+        drainIntentsFor('player');
+        drainIntentsFor('enemy');
 
         // Report stacks after expiry (state going into next round)
         roundData.push({
