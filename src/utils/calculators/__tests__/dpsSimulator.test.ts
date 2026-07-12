@@ -107,6 +107,28 @@ describe('simulateDPS', () => {
             expect(res.summary.finalHpPct).toBeGreaterThan(0);
             expect(res.rounds).toHaveLength(20);
         });
+
+        // SP-U U6: avgDamagePerRound must reflect the ELAPSED rounds on an early kill, not the
+        // configured window — otherwise a fast kill under-reports its per-round pace.
+        it('avgDamagePerRound divides by rounds elapsed, not the configured window, on an early kill', () => {
+            const res = simulateDPS({
+                ...baseInput,
+                attack: 15000,
+                enemyDefense: 0,
+                enemyHp: 50000,
+                rounds: 20,
+            });
+            expect(res.summary.survived).toBe(false);
+            const roundsToKill = res.summary.roundsToKill!;
+            expect(roundsToKill).toBeLessThan(20);
+            expect(res.summary.avgDamagePerRound).toBe(
+                Math.round(res.summary.totalDamage / roundsToKill)
+            );
+            // Regression guard: the pre-fix formula divided by the full configured window.
+            expect(res.summary.avgDamagePerRound).not.toBe(
+                Math.round(res.summary.totalDamage / 20)
+            );
+        });
     });
 
     describe('active + charged cycle', () => {

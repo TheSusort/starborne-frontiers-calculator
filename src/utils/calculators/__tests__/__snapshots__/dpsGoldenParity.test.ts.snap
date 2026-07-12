@@ -381,7 +381,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
     },
   ],
   "summary": {
-    "avgDamagePerRound": 39510,
+    "avgDamagePerRound": 67732,
     "finalHpPct": 0,
     "roundsToKill": 7,
     "survived": false,
@@ -4024,7 +4024,7 @@ exports[`dpsGoldenParity > dots all types 1`] = `
     },
   ],
   "summary": {
-    "avgDamagePerRound": 37313,
+    "avgDamagePerRound": 111938,
     "finalHpPct": 0,
     "roundsToKill": 4,
     "survived": false,
@@ -4299,7 +4299,7 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
     },
   ],
   "summary": {
-    "avgDamagePerRound": 40646,
+    "avgDamagePerRound": 121938,
     "finalHpPct": 0,
     "roundsToKill": 4,
     "survived": false,
@@ -5239,7 +5239,7 @@ exports[`dpsGoldenParity > judge passive gated damage 1`] = `
     },
   ],
   "summary": {
-    "avgDamagePerRound": 6731,
+    "avgDamagePerRound": 16155,
     "finalHpPct": 0,
     "roundsToKill": 5,
     "survived": false,
@@ -5537,7 +5537,7 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
     },
   ],
   "summary": {
-    "avgDamagePerRound": 46202,
+    "avgDamagePerRound": 138606,
     "finalHpPct": 0,
     "roundsToKill": 4,
     "survived": false,
@@ -5755,7 +5755,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
     },
   ],
   "summary": {
-    "avgDamagePerRound": 10781,
+    "avgDamagePerRound": 32344,
     "finalHpPct": 0,
     "roundsToKill": 4,
     "survived": false,

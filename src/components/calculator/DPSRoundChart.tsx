@@ -193,20 +193,28 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
     // the line that carries the kill mark when a team is configured.
     const teamShips = ships.filter(hasTeamDamage);
     const teamCumulative = new Map<string, number>();
+    // SP-U U6: when the enemy actually dies (real, destructible target) the run terminates
+    // early and `ship.result.rounds` is trimmed shorter than the configured window. Hold each
+    // line flat at its last known cumulative value past that point instead of falling back to
+    // 0 — the enemy is dead, damage dealt doesn't un-happen, and a mid-chart drop to 0 would
+    // misread as damage being undone.
+    const lastCumulative = new Map<string, number>();
 
     const chartData: ChartDataPoint[] = [];
     for (let r = 1; r <= rounds; r++) {
         const point: ChartDataPoint = { round: r };
         ships.forEach((ship) => {
             const roundData = ship.result.rounds[r - 1];
-            point[ship.id] = roundData ? roundData.cumulativeDamage : 0;
+            if (roundData) lastCumulative.set(ship.id, roundData.cumulativeDamage);
+            point[ship.id] = lastCumulative.get(ship.id) ?? 0;
         });
         teamShips.forEach((ship) => {
             const roundData = ship.result.rounds[r - 1];
             const running = (teamCumulative.get(ship.id) ?? 0) + (roundData?.teamDamage ?? 0);
             teamCumulative.set(ship.id, running);
-            // Combined total = attacker cumulative this round + team cumulative this round.
-            point[teamKey(ship.id)] = (roundData?.cumulativeDamage ?? 0) + running;
+            // Combined total = attacker cumulative this round + team cumulative this round
+            // (both held flat past the kill round via lastCumulative/teamCumulative above).
+            point[teamKey(ship.id)] = (lastCumulative.get(ship.id) ?? 0) + running;
         });
         chartData.push(point);
     }

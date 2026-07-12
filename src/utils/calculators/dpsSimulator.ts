@@ -347,7 +347,12 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         rounds,
         summary: {
             totalDamage,
-            avgDamagePerRound: Math.round(rawTotals.cumulative / numRounds),
+            // SP-U U6: divide by the ELAPSED rounds (rounds.length), not the configured window
+            // (numRounds). When the enemy dies early the run terminates on the kill round and
+            // `rounds` is trimmed to that length — dividing by numRounds under-reports the
+            // per-round pace of a fast kill. Survived runs are unaffected (rounds.length ===
+            // numRounds there).
+            avgDamagePerRound: Math.round(rawTotals.cumulative / rounds.length),
             // SP-U U5: rounds-to-kill adapter. The engine drives a real, destructible enemy; when
             // it dies within the window the run terminates on that round and `enemyOutcome` reports
             // it. Wiped → roundsToKill = death round, survived false, finalHpPct 0; else survived

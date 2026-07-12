@@ -72,6 +72,11 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
             ? ((simResult.summary.totalDamage - bestTotalDamage) / bestTotalDamage) * 100
             : null;
 
+    // SP-U U6: the enemy is now a real, destructible target. Lead with the outcome that
+    // actually matters — rounds-to-kill for a killed run, remaining HP% for a survivor —
+    // ahead of the raw damage totals (kept below as secondary detail).
+    const { survived, roundsToKill, finalHpPct } = simResult.summary;
+
     return (
         <div className="mt-4 pt-4 border-t border-dark-border">
             <div className="mb-3">
@@ -93,6 +98,18 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                     ))}
                 </div>
             </div>
+            <div className="flex justify-between items-baseline mb-3">
+                <span className="text-theme-text-secondary">Outcome:</span>
+                {!survived ? (
+                    <span className="text-green-400 font-bold text-lg">
+                        Killed in {roundsToKill} round{roundsToKill === 1 ? '' : 's'}
+                    </span>
+                ) : (
+                    <span className="text-yellow-400 font-bold text-lg">
+                        Survived ({finalHpPct.toFixed(1)}% HP left)
+                    </span>
+                )}
+            </div>
             <div className="flex justify-between mb-2">
                 <span className="text-theme-text-secondary">Crit Multiplier:</span>
                 <span>{critMultiplier.toFixed(2)}x</span>
@@ -104,7 +121,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                 </span>
             </div>
             <div className="flex justify-between mb-2">
-                <span className="text-theme-text-secondary">Total Damage ({rounds} rounds):</span>
+                <span className="text-theme-text-secondary">
+                    Total Damage ({!survived ? `${roundsToKill} rounds` : `${rounds} rounds`}):
+                </span>
                 <span className={isBest ? 'text-primary font-bold' : ''}>
                     {simResult.summary.totalDamage.toLocaleString()}
                 </span>
