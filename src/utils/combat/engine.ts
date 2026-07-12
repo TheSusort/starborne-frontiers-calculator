@@ -2561,30 +2561,37 @@ export function runCombat(input: CombatEngineInput): {
     //
     //  PATH A — during-turn deaths (on-destroyed self, on-ally-destroyed ally → Harvester).
     //    These fire from applyIncomingToTarget / the general death path, which run DURING an
-    //    actor's turn. They are followed by the per-turn drainIntents() (drain point (b)) while
-    //    the selection loop is still walking → the grant CAN bump the granter's pending count
-    //    via processExtraActionGrants(granter, …), and the selection loop then re-picks the
+    //    actor's turn. They are followed by the per-turn drainIntentsFor(side) (drain point (b))
+    //    while the selection loop is still walking → the grant CAN bump the granter's pending
+    //    count via processExtraActionGrants(granter, …), and the selection loop then re-picks the
     //    granter at its live speed-rank among the remaining actors (a same-round extra turn).
     //    `inTurnLoop` is true only while the loop body walks; the pre-loop / post-round drains
     //    see it false → Path B.
     //
     //  PATH B — post-round enemy death (cross-round buffered grant). Fires when an enemy death is
-    //    reconciled AFTER the turn loop closed and after the round's last per-turn drainIntents(),
-    //    with NO live queue. The post-round drain block then:
-    //      1. runs drainIntents() right after the ship-destroyed emit — on-enemy-destroyed CHARGE
-    //         reactives (Liberator's "all allies add 1 charge") apply immediately; charges carry
-    //         into the next round → correct.
+    //    reconciled AFTER the turn loop closed and after the round's last per-turn
+    //    drainIntentsFor(side), with NO live queue. The post-round drain block then:
+    //      1. runs drainIntentsFor('player')/drainIntentsFor('enemy') right after the
+    //         ship-destroyed emit — on-enemy-destroyed CHARGE reactives (Liberator's "all allies
+    //         add 1 charge") apply immediately; charges carry into the next round → correct.
     //      2. buffers extra-action grants (inTurnLoop false → grantExtraAction pushes onto
     //         `pendingExtraActions`); at the START of the NEXT round's pool construction each
     //         buffered granter's pending count is bumped one extra (respecting once-per-round via
     //         the SAME round extraActionFired set) → the on-kill extra action lands the round AFTER
     //         the kill is registered.
-    //    DORMANT TODAY (PR5d): the only actor that died post-round was the DPS dummy enemy, which
-    //    is now `indestructible` and never dies (the death block at ~3834 is gated on
-    //    `!enemy.indestructible`). Real enemy attackers die DURING a turn (positional
-    //    applyOutgoingToEnemy → recordDestroyed in the live queue) → Path A, not B. So no current
-    //    path produces a post-round death; the buffering machinery below is intact and correct,
-    //    and re-activates once a destructible enemy has a genuinely post-round-reconciled death.
+    //    LIVE TODAY (SP-U U5): the DPS opponent (`enemy`) is now a REAL destructible actor. In
+    //    pure DPS mode (`dpsEnemyTarget`, no positioned enemy attackers) its HP lands post-round —
+    //    AFTER the turn loop closes, once per round — through the shared `applyVictimDamage`
+    //    funnel; if that crosses 0 HP, `recordDestroyed` stamps `destroyedRound` and emits
+    //    ship-destroyed with `inTurnLoop` false, so this IS a genuine Path-B post-round death (see
+    //    the "Path-B drain (Task 10)" block right after that `applyVictimDamage` call, ~line
+    //    7742). The round loop then breaks (the row for the killing round is already pushed), so
+    //    the buffered grant lands only if the run continued — it currently does not, since the run
+    //    terminates the round the DPS enemy dies. In sim/healing mode the vestigial dummy sink
+    //    (`!dpsEnemyTarget`) never dies, so it never reaches this path. Real positioned enemy
+    //    attackers still die DURING a turn (positional applyOutgoingToEnemy → recordDestroyed in
+    //    the live queue) → Path A, not B. Enemy-incoming-accounting nuances around this tail are
+    //    deferred to SP-F/F7.
     //
     // pendingExtraActions is COMBAT-lifetime (outside the round loop) so a kill reconciled at the
     // end of round R survives into round R+1's pool build. Each entry is flushed (and removed)
@@ -4432,8 +4439,10 @@ export function runCombat(input: CombatEngineInput): {
             // A missing/already-destroyed victim has no defense to mitigate against — skip
             // rather than crediting an un-mitigated number. BEHAVIOR CHANGE vs the pre-#211
             // formula (which never referenced a victim and credited unconditionally): for the
-            // ctx.enemy fallback this is inert (the dummy is indestructible and never
-            // recordDestroyed'd), but a counterTargetId-routed victim (FrontLine's charging
+            // ctx.enemy fallback this is inert (the DPS/sim `enemy` is a real destructible actor
+            // since SP-U U5, but its HP/`recordDestroyed` only land in the post-round accounting
+            // step — never during this in-turn drain — so `victim.destroyedRound` is never set
+            // yet here), but a counterTargetId-routed victim (FrontLine's charging
             // enemy) CAN die to an earlier reactive in the same drain batch — the proc then
             // credits nothing, which is the correct reading (you can't hit a corpse).
             if (!victim || victim.destroyedRound !== undefined) return;
@@ -4513,10 +4522,10 @@ export function runCombat(input: CombatEngineInput): {
         //
         // DEFERRED-BREAK DESIGN: the hook does NOT immediately remove Stasis. Instead it marks
         // the victim id into a per-turn `stasisHitVictims` Set. Removal happens RIGHT AFTER the
-        // attacker's own `drainIntents`/`drainEnemyIntents` in the same turn-loop iteration.
-        // This satisfies two invariants:
+        // attacker's own `drainIntentsFor('player')`/`drainIntentsFor('enemy')` in the same
+        // turn-loop iteration. This satisfies two invariants:
         //  (i)  The on-attacked reactive's drainQueue check (Counter Shield suppression — test iii)
-        //       sees `isStasised(victim) = true` because drainIntents runs BEFORE the removal.
+        //       sees `isStasised(victim) = true` because drainIntentsFor runs BEFORE the removal.
         //  (ii) The victim is freed BEFORE its own next turn, so it acts in the next round.
         //
         // RE-APPLY CHECK: at resolution time, if the SAME turn's `inflictedEnemyDebuffs` contain
@@ -5672,8 +5681,8 @@ export function runCombat(input: CombatEngineInput): {
         // Side-parameterized drain (enemy-team PR1). The four side-specific fields are
         // `runtimes`, `recipientIds` (→ executeIntent ctx.playerIds), `isLowestSpeedAllyFor`,
         // and `grantAllyCharges`; everything else is shared and moved verbatim. The player
-        // drain (drainIntents) and the enemy drain (drainEnemyIntents) below each bind their
-        // own queue + sideCtx, so the player path is behaviourally unchanged.
+        // drain (`drainIntentsFor('player')`) and the enemy drain (`drainIntentsFor('enemy')`)
+        // below each bind their own queue + sideCtx, so the player path is behaviourally unchanged.
         const drainQueue = (queue: Intent[], sideCtx: ReactiveSideCtx): void => {
             let generation = 0;
             while (queue.length > 0) {
@@ -5690,7 +5699,7 @@ export function runCombat(input: CombatEngineInput): {
                     // FULLY locked out. Drop every queued intent whose OWNER is currently turn-blocked (Stasis OR
                     // Disable) — on-attacked, on-ally-attacked, on-crit, on-enemy-destroyed, AND start-of-round
                     // self-buffs (Chakara via round-started) all carry intent.ownerId, so this ONE filter covers
-                    // every reactive type for BOTH sides (drainIntents and drainEnemyIntents share this drainQueue).
+                    // every reactive type for BOTH sides (drainIntentsFor('player') and drainIntentsFor('enemy') share this drainQueue).
                     // Filtered at the DRAIN, before executeIntent. Listeners only ENQUEUE (pure), so dropping an
                     // intent leaves NO partial state. Incoming effects (damage/heals/ally buffs/DoT ticks) are
                     // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
@@ -6000,7 +6009,7 @@ export function runCombat(input: CombatEngineInput): {
         // round, before any turn-started of that round. Documented deviation from the
         // Phase 1 contract's turn-started mapping: in a multi-actor round turn-started fires
         // once per actor, so round-started is the reliable "start of round" signal. Emitted
-        // here (after the accumulator + drainIntents are in scope) so its start-of-round
+        // here (after the accumulator + drainIntentsFor are in scope) so its start-of-round
         // intents execute BEFORE any turn — no observable ordering change vs the old emit
         // site (nothing between beginRound and here emits an event).
         bus.emit({ type: 'round-started', round: r });
@@ -6018,7 +6027,7 @@ export function runCombat(input: CombatEngineInput): {
         // Consumed inside each actor's own skip branch (focus / team / real-enemy): if the
         // victim id is present, remove Stasis after the turn-skip logic. This ensures the
         // victim STILL skips its current-round turn (invariant preserved), and is freed for
-        // its next turn (Stasis gone). The same-round drain guard (drainIntents / drainEnemyIntents)
+        // its next turn (Stasis gone). The same-round drain guard (drainIntentsFor('player') / drainIntentsFor('enemy'))
         // runs BEFORE the break resolution → on-attacked reactive sees isStasised=true (test iii).
         // Re-apply check is performed at the ATTACKER's turn, not at consume time, so there is
         // NO casterId lookup: the per-turn inflictedEnemyDebuffs signal is sufficient and correct
@@ -6064,7 +6073,7 @@ export function runCombat(input: CombatEngineInput): {
                 // order, or a walked team ship that died) must NOT act when its turn comes up —
                 // no turn-started/turn-ended emit, no runPlayerTurn, no damage. A plain `continue`
                 // is correct: every per-iteration step below (turn-started emit, the kind-branch
-                // turn body, drainIntents/drainEnemyIntents, turn-ended) is THIS actor's own turn
+                // turn body, drainIntentsFor('player')/drainIntentsFor('enemy'), turn-ended) is THIS actor's own turn
                 // work, which a dead actor does none of. The pending decrement already happened in
                 // selectNext (Task 4) BEFORE the body runs, so the dead actor's pending is consumed
                 // and termination is preserved. Extra-action grants only fire from inside a live
@@ -6081,11 +6090,21 @@ export function runCombat(input: CombatEngineInput): {
                 //  - the dead HEAL TARGET → handleDeadTargetSkip above (healTargetBuffs=[] + the
                 //    synthesized dead-focus turn). It already `continue`d if dead, so reaching here
                 //    means it's alive; the exemption is belt-and-suspenders.
-                //  - the dummy `enemy` sink → the DPS/healing legacy enemy. The post-round block
-                //    stamps its destroyedRound once its HP decline crosses enemyHp (~line 3674),
-                //    yet "the sim keeps hitting the dead dummy regardless": its turn banks enemy
-                //    charges and runs the enemy-side DoT/decrement bookkeeping that MUST still tick.
-                //    Skipping it would drop a turn-started/ended pair and break every DPS golden.
+                //  - the `enemy` actor (DPS opponent / sim-mode dummy sink). This exemption is
+                //    effectively DORMANT today, coupled to the terminal `break` near the end of
+                //    the round loop (~line 7994, `if (dpsEnemyTarget && enemy.destroyedRound !==
+                //    undefined) break;`): in pure DPS mode `enemy` is a real destructible actor,
+                //    but its HP only lands (and `destroyedRound` only gets stamped) in the
+                //    POST-round accounting step, after this turn loop has already closed for that
+                //    round — so within any given round's turn-loop walk, `enemy.destroyedRound` is
+                //    never set yet, and the round loop breaks immediately once it is, so there is
+                //    no subsequent round left for this exemption to matter in. In sim/healing mode
+                //    the vestigial dummy sink never dies at all, so `destroyedRound` is never set
+                //    there either. The exemption exists so that IF the terminal break above were
+                //    ever removed (e.g. to keep simulating past the DPS enemy's death), a dead
+                //    `enemy` would still take its turn — banking enemy charges and running the
+                //    enemy-side DoT/decrement bookkeeping — rather than being skipped and dropping
+                //    a turn-started/ended pair.
                 const isDummyEnemy = actor.kind === 'enemy' && actor.id === enemy.id;
                 if (
                     actor.destroyedRound !== undefined &&
@@ -6436,7 +6455,7 @@ export function runCombat(input: CombatEngineInput): {
                             if (tgt === undefined) continue;
                             // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
                             // only when the victim was stasised at hit time. The actual statusEngine
-                            // removal happens AFTER drainIntents/drainEnemyIntents (below).
+                            // removal happens AFTER drainIntentsFor('player')/drainIntentsFor('enemy') (below).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis, the
                             // victim is never recorded → no break-mark, no stasisBreakPending entry.
                             const tgtWasStasised = !actor.doesntBreakStasis && isStasised(tgt.id);

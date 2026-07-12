@@ -4,6 +4,7 @@ import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
 import { orderByTurnPriority } from '../../utils/combat/state';
+import { bestVsSecondLabelColorClass } from '../../utils/calculators/rankDpsConfigs';
 
 /** Display-ready team actor: resolved name + turn-order speed. */
 export interface TurnOrderTeamActor {
@@ -192,7 +193,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                 <div className="text-sm mt-2 text-center">
                     <span className="text-primary">Best ship configuration</span>
                     {bestVsSecondLabel && (
-                        <span className="text-green-500 ml-2">{bestVsSecondLabel}</span>
+                        <span className={`${bestVsSecondLabelColorClass(bestVsSecondLabel)} ml-2`}>
+                            {bestVsSecondLabel}
+                        </span>
                     )}
                 </div>
             )}

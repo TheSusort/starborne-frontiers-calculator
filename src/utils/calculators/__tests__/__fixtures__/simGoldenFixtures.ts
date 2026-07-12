@@ -444,7 +444,8 @@ const deathPathExecutioner = (): Ship =>
     );
 
 /** Fragile enemy: tiny HP pool, near-zero defence, slow (acts last), harmless attack — it is
- *  wiped in ~2–3 rounds, giving a decisive player win without the attacker ever being at risk. */
+ *  wiped in round 1 (confirmed by the golden's `lastRound: 1`), giving a decisive player win
+ *  without the attacker ever being at risk. */
 const deathPathHusk = (): Ship =>
     finalizeAttacker(
         shipBase('death-husk', 'Husk', 'DEFENDER', {
@@ -471,7 +472,11 @@ export function deathPath(): BattleSimulationInput {
 // `positionalTeamBattle` signal (no vestigial healTargetId) and routes each cast to the
 // lowest-HP LIVING player ally via `lowestHpAllyId`. A fragile front ally soaks enemy fire while
 // the healer repairs it every turn; the battle survives the window (draw), so sustained,
-// per-turn heal routing is exercised across all 8 rounds.
+// per-turn heal routing is exercised across all 8 rounds. NOTE: the enemy's per-round damage is
+// small relative to the healer's 20%-max-HP cast, so the front ally sits at ~95-100% HP for most
+// of the golden — the heal is mostly OVERHEAL in this fixture. That's fine for its purpose: it
+// still exercises the positionalTeamBattle wiring + lowestHpAllyId routing + heal application
+// every round; it is not meant to be a low-HP/near-death healing stress case.
 // ===========================================================================
 
 /** Fragile front ally: low HP + modest defence so it visibly loses (and regains) HP each round,

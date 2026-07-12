@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { rankDpsConfigs, describeBestVsSecond } from '../rankDpsConfigs';
+import {
+    rankDpsConfigs,
+    describeBestVsSecond,
+    bestVsSecondLabelColorClass,
+} from '../rankDpsConfigs';
 import { DPSSimulationSummary } from '../dpsSimulator';
 
 /** Minimal summary fixture — only the fields rankDpsConfigs reads are meaningful. */
@@ -108,5 +112,38 @@ describe('describeBestVsSecond (best-vs-#2 badge under roundsToKill ranking)', (
         const best = s({ survived: false, roundsToKill: 4, totalDamage: 180 });
         const second = s({ survived: false, roundsToKill: 6, totalDamage: 500 });
         expect(describeBestVsSecond(best, second)).not.toContain('+-');
+    });
+});
+
+describe('bestVsSecondLabelColorClass (final-review fix: negative delta must not render green)', () => {
+    it('colors a negative damage-delta label red', () => {
+        const best = s({ survived: true, finalHpPct: 10, totalDamage: 300 });
+        const second = s({ survived: true, finalHpPct: 50, totalDamage: 500 });
+        const label = describeBestVsSecond(best, second);
+        expect(label).toBe('-40.00% damage vs #2');
+        expect(bestVsSecondLabelColorClass(label)).toBe('text-red-500');
+    });
+
+    it('colors a positive damage-delta label green', () => {
+        const best = s({ survived: true, finalHpPct: 10, totalDamage: 500 });
+        const second = s({ survived: true, finalHpPct: 50, totalDamage: 300 });
+        const label = describeBestVsSecond(best, second);
+        expect(label).toBe('+66.67% damage vs #2');
+        expect(bestVsSecondLabelColorClass(label)).toBe('text-green-500');
+    });
+
+    it('colors the rounds-faster label green', () => {
+        const best = s({ survived: false, roundsToKill: 2, totalDamage: 100 });
+        const second = s({ survived: false, roundsToKill: 4, totalDamage: 100 });
+        const label = describeBestVsSecond(best, second);
+        expect(bestVsSecondLabelColorClass(label)).toBe('text-green-500');
+    });
+
+    it('colors "Only config to destroy the target" green', () => {
+        const best = s({ survived: false, roundsToKill: 3, totalDamage: 100 });
+        const second = s({ survived: true, finalHpPct: 20, totalDamage: 400 });
+        const label = describeBestVsSecond(best, second);
+        expect(label).toBe('Only config to destroy the target');
+        expect(bestVsSecondLabelColorClass(label)).toBe('text-green-500');
     });
 });

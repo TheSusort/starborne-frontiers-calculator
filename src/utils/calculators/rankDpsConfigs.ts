@@ -82,3 +82,15 @@ export function describeBestVsSecond(
     // Both survived (best ranks first ⇒ if best survived, so did #2 and everything else).
     return damageDeltaLabel(best.totalDamage, second.totalDamage);
 }
+
+/**
+ * Tailwind color class for the best-vs-#2 badge produced by {@link describeBestVsSecond}
+ * (final-review fix, SP-U). `damageDeltaLabel` renders a bare leading `-` for a negative delta
+ * (never a `+-`), so a label starting with `-` is the sole "this isn't good news" case — the
+ * all-survived / rounds-tie edge where the higher-ranked config actually dealt LESS damage than
+ * #2. Every other shape (`Kills N round(s) faster…`, a `+`-prefixed damage delta, `Only config
+ * to destroy the target`) is good news for the #1 config and stays green.
+ */
+export function bestVsSecondLabelColorClass(label: string): string {
+    return label.startsWith('-') ? 'text-red-500' : 'text-green-500';
+}
