@@ -2433,6 +2433,27 @@ export function detectTransformToDot(
     return { turns, condition };
 }
 
+// Meatshield (refit-active passive) — "Any damage this Unit takes from Protection is transformed
+// into a Damage over Time effect for N turns". DISJOINT from TRANSFORM_TO_DOT_RE (which requires
+// the literal "transform the damage into a", so it never matches this clause, and this regex
+// requires "takes from Protection is transformed", which never matches Voron/Orel). Corpus-
+// verified: only Meatshield's refit-active passive matches (docs/ship-skills.csv).
+const PROTECTION_TRANSFORM_TO_DOT_RE =
+    /damage\s+this\s+unit\s+takes\s+from\s+protection\s+is\s+transformed\s+into\s+a\s+.*?damage\s+over\s+time\s+effect\b[^.]*?\bfor\s+(\d+)\s+turns?\b/i;
+
+/**
+ * Detects Meatshield's "damage taken from Protection is transformed into a DoT for N turns"
+ * reactive self-conversion. Emitted as a 'transform-incoming-to-dot' ability gated to
+ * `condition: 'self-protection-redirect'` so it fires ONLY on Protection-redirected chunks (never
+ * on a normal direct hit to Meatshield). Reference data: docs/ship-skills.csv (Meatshield).
+ */
+export function detectProtectionTransformToDot(text: string): { turns: number } | undefined {
+    const plain = stripUnitTags(text);
+    const m = PROTECTION_TRANSFORM_TO_DOT_RE.exec(plain);
+    if (!m) return undefined;
+    return { turns: parseInt(m[1], 10) };
+}
+
 // Phase 3 PR-F: two DISTINCT "enemy repair" reaction phrasings that both ride the LIVE
 // on-enemy-repaired trigger but route to DIFFERENT actors:
 //  - Ruiner's Bomb infliction ("on any enemy performing a repair") has NO leading "when" (so

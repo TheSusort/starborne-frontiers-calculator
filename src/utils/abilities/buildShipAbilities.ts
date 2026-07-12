@@ -103,6 +103,7 @@ import {
     statusEffectCondition,
     parsePreCombatStatGrants,
     detectTransformToDot,
+    detectProtectionTransformToDot,
     detectConvertDot,
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
@@ -2453,6 +2454,30 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: transformPos >= 0 ? transformPos : MAX_POS,
+        });
+    }
+
+    // Meatshield refit-active passive: Protection-redirected damage → 2-turn self-DoT. Distinct
+    // detector from the Voron/Orel transform above (disjoint regexes); gated to fire only on a
+    // Protection redirect via condition 'self-protection-redirect'.
+    const protTransform = detectProtectionTransformToDot(text);
+    if (protTransform) {
+        const protPos = text.search(/is\s+transformed\s+into/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'transform-incoming-to-dot',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'transform-incoming-to-dot',
+                    turns: protTransform.turns,
+                    condition: 'self-protection-redirect',
+                },
+                autoFilled: true,
+            },
+            pos: protPos >= 0 ? protPos : MAX_POS,
         });
     }
 

@@ -25,6 +25,8 @@ export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): 
             return ctx.victimHasShield;
         case 'attacker-taunted-or-provoke':
             return ctx.attackerTauntedOrProvoked;
+        case 'self-protection-redirect':
+            return ctx.viaProtectionRedirect ?? false;
         case 'always':
             return true;
     }

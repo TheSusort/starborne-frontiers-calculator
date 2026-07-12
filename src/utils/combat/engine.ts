@@ -3574,8 +3574,12 @@ export function runCombat(input: CombatEngineInput): {
             // the PROTECTOR's own defense — realized by the mit-ratio inside protectionCascade.
             // Guards mirror the reflect block: direct damage only, and never a redirected/
             // reflected/counter application (loop-safe).
+            // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
+            // (matches the incoming-block step and the transform step) — an invulnerable target
+            // has no incoming hit for allies to soak.
             if (
                 cause?.byDirectDamage &&
+                !carriesBarrier &&
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
                 !cause.isCounter &&
@@ -3621,30 +3625,53 @@ export function runCombat(input: CombatEngineInput): {
                         const protectorSink = p.actor.side === 'player' ? playerSink : enemySink;
                         // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs and
                         // sets up the deferred DoT-transform, which acts per redirected chunk).
+                        let instantTotal = 0;
                         for (let s = 0; s < chunk.stacks; s++) {
-                            applyVictimDamage(chunk.perStack, p.actor, protectorSink, {
-                                killerId: cause.killerId,
-                                byDirectDamage: true,
-                                isProtectionTransfer: true,
-                                shieldPenetrationPct: 0,
-                                bombPortion: 0,
+                            const outcome = applyVictimDamage(
+                                chunk.perStack,
+                                p.actor,
+                                protectorSink,
+                                {
+                                    killerId: cause.killerId,
+                                    byDirectDamage: true,
+                                    isProtectionTransfer: true,
+                                    shieldPenetrationPct: 0,
+                                    bombPortion: 0,
+                                }
+                            );
+                            instantTotal += outcome.immediateDamage ?? 0;
+                        }
+                        // We sum the post-block, non-transformed INSTANT amount per sub-hit
+                        // (`immediateDamage`, captured inside applyVictimDamage right after its
+                        // transform step resolves) rather than `chunk.total − transformedToDot` —
+                        // that subtraction wrongly counts a portion blocked by the protector's own
+                        // incoming-block ability as instant damage, when in fact it was neither
+                        // taken nor transformed. Meatshield's DoT-transform passive DEFERS the
+                        // transformed portion to a self-DoT ticked over the next N rounds (the
+                        // generic-DoT path books its own roundPerTargetDamage + .incoming per tick);
+                        // only the INSTANT remainder is credited/logged this round. For a protector
+                        // without a block/transform ability, `immediateDamage === chunk.perStack` for
+                        // every sub-hit, so `instantTotal === chunk.total` — byte-identical to the
+                        // pre-change path. In the fully-transformed case a sub-epsilon float sliver
+                        // can leave `instantTotal` at ±~1e-10; the 1e-9 threshold suppresses that
+                        // phantom near-zero emission (a real chunk is always >> 1e-9, so this never
+                        // affects a genuine instant remainder).
+                        if (instantTotal > 1e-9) {
+                            roundPerTargetDamage.set(
+                                p.actor.id,
+                                (roundPerTargetDamage.get(p.actor.id) ?? 0) + instantTotal
+                            );
+                            bus.emit({
+                                type: 'reactive-damage-performed',
+                                sourceId: victim.id,
+                                targetId: p.actor.id,
+                                round: r,
+                                amount: instantTotal,
+                                reactive: true,
+                                duringTurnOf: actingActorId,
+                                triggerActorId: actingActorId,
                             });
                         }
-                        // Surface on the HP curve + reactive log (mirrors the reflect block).
-                        roundPerTargetDamage.set(
-                            p.actor.id,
-                            (roundPerTargetDamage.get(p.actor.id) ?? 0) + chunk.total
-                        );
-                        bus.emit({
-                            type: 'reactive-damage-performed',
-                            sourceId: victim.id,
-                            targetId: p.actor.id,
-                            round: r,
-                            amount: chunk.total,
-                            reactive: true,
-                            duringTurnOf: actingActorId,
-                            triggerActorId: actingActorId,
-                        });
                     });
                     // Lionheart R4: a consumable protector loses ALL Protection after it
                     // redirects a hit. The cascade was precomputed from pre-hit stacks, so THIS
@@ -3703,6 +3730,9 @@ export function runCombat(input: CombatEngineInput): {
                         victimHasShield: hasShield(victim.id),
                         selfHpPct: selfHpPctOf(victim.id),
                         attackerTauntedOrProvoked: attackerTauntedOrProvoked(attackerId),
+                        // Meatshield: this hit is a Protection-redirected chunk when the caller
+                        // stamped isProtectionTransfer (the per-protector applyVictimDamage below).
+                        viaProtectionRedirect: cause?.isProtectionTransfer ?? false,
                     };
                     const transform = transformAbilities.find(
                         (a) =>
@@ -3731,6 +3761,15 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
+            // The post-block, non-transformed instant portion of this hit — captured HERE, right
+            // after the transform step resolves (transform zeroes `damage` on a match) and BEFORE
+            // any shield/HP drain below. For a normal hit (no block/transform/Barrier) this equals
+            // the input `damage` argument byte-for-byte; the incoming-block step above is the only
+            // thing that can have reduced it by this point. The Protection transfer block sums this
+            // per protector sub-hit instead of `chunk.total − transformedToDot`, so a blocked
+            // portion is correctly excluded from the instant-damage credit. The Barrier early-return
+            // below overrides this to 0 (Barrier nullifies — nothing lands, instant or otherwise).
+            const immediateDamage = damage;
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
@@ -3753,7 +3792,12 @@ export function runCombat(input: CombatEngineInput): {
                         newPct: (100 * victim.currentHp) / maxHp,
                     });
                 }
-                return { shieldBefore: victim.shieldPool, hpDamage: 0, barriered: true };
+                return {
+                    shieldBefore: victim.shieldPool,
+                    hpDamage: 0,
+                    barriered: true,
+                    immediateDamage: 0,
+                };
             }
             const shieldBefore = victim.shieldPool;
             // Lifeline (incoming-shield-grant): a PRE-hit threshold shield. When a PURE direct hit
@@ -4145,7 +4189,7 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
-            return { shieldBefore, hpDamage, barriered: false, transformedToDot };
+            return { shieldBefore, hpDamage, barriered: false, transformedToDot, immediateDamage };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
         // accumulates the victim's incoming / shield-absorbed / barrier-absorbed into its per-actor

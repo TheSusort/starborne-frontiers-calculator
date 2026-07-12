@@ -36,6 +36,12 @@ export interface VictimDamageOutcome {
      *  per-victim damage-taken credit so a transformed hit reads as 0 damage taken this round
      *  (the converted amount arrives over time via DoT ticks). Absent/0 for every normal hit. */
     transformedToDot?: number;
+    /** The post-block, non-transformed portion of this hit that landed as INSTANT damage this
+     *  turn (0 for a Barrier-nullified or fully DoT-transformed hit). The Protection transfer
+     *  block sums this across a protector's redirected sub-hits to credit only what actually hit
+     *  instantly — excluding a blocked portion, which `chunk.total − transformedToDot` would
+     *  wrongly count. Absent on outcomes from callers that don't set it. */
+    immediateDamage?: number;
 }
 
 /** Per-cell damage scale keyed off the resolved CellRole. */
