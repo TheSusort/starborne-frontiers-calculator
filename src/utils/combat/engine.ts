@@ -3644,11 +3644,14 @@ export function runCombat(input: CombatEngineInput): {
                         // Meatshield's DoT-transform passive DEFERS the transformed portion to a
                         // self-DoT ticked over the next N rounds (the generic-DoT path books its own
                         // roundPerTargetDamage + .incoming per tick). Only the INSTANT remainder is
-                        // credited/logged this round. transformedTotal is a subset of chunk.total, so
-                        // `instant` is never negative; when nothing transforms it equals chunk.total
-                        // → byte-identical to the pre-change path for every non-Meatshield protector.
+                        // credited/logged this round. transformedTotal is a subset of chunk.total; when
+                        // nothing transforms it is EXACTLY 0 → instant === chunk.total → byte-identical
+                        // to the pre-change path for every non-Meatshield protector. In the fully-
+                        // transformed case a sub-epsilon float sliver can leave `instant` at ±~1e-10;
+                        // the 1e-9 threshold suppresses that phantom near-zero emission (a real chunk
+                        // is always >> 1e-9, so this never affects a genuine instant remainder).
                         const instant = chunk.total - transformedTotal;
-                        if (instant > 0) {
+                        if (instant > 1e-9) {
                             roundPerTargetDamage.set(
                                 p.actor.id,
                                 (roundPerTargetDamage.get(p.actor.id) ?? 0) + instant
