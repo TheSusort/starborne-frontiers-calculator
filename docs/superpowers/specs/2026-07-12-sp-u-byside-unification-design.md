@@ -75,10 +75,18 @@ Byte-identical goldens through U1–U4, the audited D4 move in U5, additive UI i
 Their bodies are already byte-identical (`intakeFor(victimId).incoming += …`). Delete one, route
 both side-ternaries (`4206`/`4265`) through the single sink. **Goldens byte-identical.**
 
-### U2 — Unify the turn-body tails (the deferred "PR7")
-Extract the credit/intake/emit **tail** shared by the three `runPlayerTurn` sites
-(`6303`/`6636`/`7188`) into one side-parameterized function keyed off `TurnBindings`. Largest LOC
-reduction; still a pure refactor. **Byte-identical.**
+### U2 — Extract the triplicated positional-apply block (reshaped 2026-07-12, "Option B")
+Originally scoped as a full 3-way tail unification (`applyTurnResult`). The U2 implementer's diff
+table disproved that premise: the **enemy** tail uses a different accounting model (credits
+*incoming* damage + a damage-taken leech block + distinct `attacked` emit + display grouping +
+pre-call incoming-reduction) — the incoming-damage model that **U5** rewrites when the scalar sink
+dies. Forcing a merge now would create the `if (side==='enemy')` tangle the plan's escalate clause
+forbids. **Reshaped to Option B:** extract only the genuinely-unifiable chunk — the triplicated
+*positional-apply block* (focus `~6337–6474` / team `~6648–6773` / enemy `~7353–7478`) — into
+`drivePositionalTurnApply(actor, tb, sel, onVictimResolved)`, where the `onVictimResolved` callback
+isolates the only intra-block divergence (leech direction: player standing-leech vs enemy
+taken-leech). The incoming-vs-outgoing tail accounting stays inline, deferred to U5. Dedups all
+three sites at the lowest golden risk. **Byte-identical.**
 
 ### U3 — Merge the twin reactive machinery
 Fold `intentQueue`/`enemyIntentQueue`, `drainIntents`/`drainEnemyIntents`, and the two
@@ -107,6 +115,11 @@ DPS mode drives a **real finite-HP skill-less enemy actor** instead of the dummy
   already uses.
 - `dpsSimulator` handles early termination: reads the trimmed `BattleResult.outcome.lastRound`
   when the enemy is wiped → `roundsToKill`; else `survived: true` + `finalHpPct`.
+- **Absorbs the enemy turn-body tail unification deferred from U2.** Once the DPS enemy is a real
+  actor and the scalar sink is gone, the enemy tail's incoming-damage accounting model converges
+  toward the player tail (R5). Verify + fold the enemy positional/accounting tail onto the unified
+  path here; the `if (side==='enemy')` divergence U2 could not cleanly merge dissolves once the
+  scalar path is deleted.
 
 **Golden impact:** DPS goldens shift (scalar→per-victim basis + early termination) — each regen
 inspected and justified in the PR. Sim goldens should stay stable (already real-actor); any move is

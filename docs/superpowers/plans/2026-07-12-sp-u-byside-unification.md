@@ -75,39 +75,41 @@ git commit -m "refactor(combat): collapse player/enemy damage sinks into one (SP
 
 ---
 
-## Task 2 (U2): Unify the turn-body tails (the deferred "PR7")
+## Task 2 (U2): Extract the triplicated positional-apply block (Option B)
+
+> **Reshaped 2026-07-12** after the U2 implementer's diff table disproved the original premise. The three turn-body *tails* do NOT diverge only by `TurnBindings`: the **enemy** tail uses a different accounting model (credits *incoming* via `applyIncomingToTarget` + a damage-taken leech block + distinct `attacked` emit + `roundEnemyEffects` display grouping + pre-call incoming-reduction), which is the incoming-damage model that **U5** rewrites when the scalar sink dies. Forcing a full 3-way `applyTurnResult` now would create the `if (side==='enemy')` tangle the escalate clause forbids. **Option B (chosen):** extract only the genuinely-unifiable chunk — the triplicated *positional-apply block* (the single largest duplicated section, present near-verbatim at all three sites) — behind a side-parameterized helper with an `onVictimResolved` leech callback. The incoming-vs-outgoing accounting divergence stays inline, deferred to U5.
 
 **Files:**
-- Modify: `src/utils/combat/engine.ts` (the credit/intake/emit tails after the three `runPlayerTurn` sites: attacker `6303`, walked-team `6636`, enemy `7188`; the "PR7" deferral comment is at `4895`)
+- Modify: `src/utils/combat/engine.ts` (positional-apply block: focus `~6337–6474`, team `~6648–6773`, enemy `~7353–7478`; `runPlayerTurn` calls at focus `6280`, team `6613`, enemy `7165`)
 
 **Interfaces:**
-- Consumes: `buildTurnArgs(actor, tgt)` (`5159`), `TurnBindings` / `turnBindings(side)` (`4898–4959`), the unified `sink` from U1, `creditDamage`, `intakeFor`, the round-scalar accumulators.
-- Produces: a single side-parameterized tail function, e.g.
-  `applyTurnResult(actor: CombatActor, tb: TurnBindings, turnOut: PlayerTurnResult): void`
-  called identically from all three sites. Exact name/signature finalized by the implementer against the live code; it MUST take only the acting actor + its `TurnBindings` + the `runPlayerTurn` return, and read every per-side value from `tb`/`bySide`.
+- Consumes: `TurnBindings` / `turnBindings(side)` (`~4898–4959`) — specifically `tb.opposingRoster` and `tb.applyToVictim`; the unified `sink` from U1; `drivePositionalApply`, per-victim detonation, the per-victim emits; the pre-call head-locals `preTurnVictimStatus`, `target`, `pattern`, `tgt`, `turnArgs.aoeVictimIds`.
+- Produces: a single side-parameterized helper, e.g.
+  `drivePositionalTurnApply(actor: CombatActor, tb: TurnBindings, sel: PositionalTurnSel, onVictimResolved: (victim, dmg, outcome) => void): void`
+  where `sel` carries the pre-call head-locals the block reads (`{ tgt, pattern, target, preTurnVictimStatus, aoeVictimCount }`) and `onVictimResolved` injects the per-victim leech direction: focus/team pass `procStandingLeechesPerVictim(actor.id, dmg)` (player→enemy standing leech); enemy passes `procTakenLeechesPerVictim(victim, dmg, outcome)` + captures `positionalShieldWasHit`. Exact param-object shape and callback signature finalized by the implementer against the live code (the diff table in `.superpowers/sdd/task-2-report.md` is the map).
 
-**Why byte-identical:** the three tails already diverge only on values captured by `TurnBindings` (opposing roster, legacy victim, defence/maxHp resolvers, buff-name unions, `healEventOnly`, `applyToVictim`). Extracting the shared tail and driving it off `tb` reproduces each site exactly. This is a refactor with the golden corpus as oracle — do NOT write new "failing" tests.
+**Why byte-identical:** the positional-apply block is ALREADY tb-parameterized (`tb.opposingRoster` / `tb.applyToVictim`); the only per-site divergence inside it is the leech direction (Note A in the diff table), which the `onVictimResolved` callback isolates. Everything else in the block is verbatim modulo local variable names (`turn`/`teamTurn`, `d`/`td`, `critAgg`/`teamCritAgg`). Extracting it reproduces each site exactly. Golden corpus is the oracle — do NOT write new "failing" tests. Event EMISSION ORDER within the block is load-bearing — preserve it exactly.
 
-- [ ] **Step 1: Characterize the three tails.** Read the code AFTER each `runPlayerTurn` return: attacker (from `6303` to the end of its branch), team (from `6636`), enemy (from `7188`). Produce a written diff table: for each line of post-`runPlayerTurn` work, mark whether it is (a) identical across all three, (b) differs only by a `TurnBindings`/`bySide` value, or (c) genuinely kind-specific. Category (c) lines (if any) stay at the call site; (a)+(b) move into the shared function.
+- [ ] **Step 1: Confirm the block boundaries against the diff table.** Open `.superpowers/sdd/task-2-report.md` (rows 3–4 + Note A). Re-read the positional-apply block at all three sites (focus `~6337–6474`, team `~6648–6773`, enemy `~7353–7478`). Confirm the ONLY intra-block divergence is the `onVictimResolved` leech direction (Note A). If a second genuine divergence exists inside the block, record it and treat it the same way (a second injected callback) — do not branch on `side` inside the helper.
 
-- [ ] **Step 2: Extract the shared tail.** Create `applyTurnResult(actor, tb, turnOut)` co-located with `buildTurnArgs` (near `5159`). Move the (a)+(b) lines into it, replacing every captured per-side literal with the corresponding `tb.*` / `bySide(actor.side).*` accessor. Leave category-(c) lines (if any) inline at each site with a comment naming why they cannot generalize.
+- [ ] **Step 2: Extract `drivePositionalTurnApply`.** Create the helper co-located with `buildTurnArgs` (near `~5159`). Move the block body in, taking `sel` (the head-locals) as a param and calling `onVictimResolved` at the per-victim leech point. Replace captured per-side literals with `tb.*` accessors.
 
-- [ ] **Step 3: Call it from all three sites.** Replace the three inlined tails with `applyTurnResult(actor, tb, turnOut)`. Remove the now-stale "PR7" deferral comment at `4895`.
+- [ ] **Step 3: Call it from all three sites.** Replace the three inlined positional-apply blocks with a `drivePositionalTurnApply(actor, tb, sel, onVictimResolved)` call, passing each site's `sel` and its leech callback. Leave the surrounding tail rows (the incoming-vs-outgoing accounting, focus/team/enemy role-specific rows) inline. Add a one-line comment at the enemy site noting its incoming-accounting tail is deferred to U5.
 
 - [ ] **Step 4: Green gate (golden oracle).**
 
 ```bash
-npm test 2>&1 | tail -20        # ZERO golden diffs across DPS/healing + sim tiers
+npm test 2>&1 | tail -30        # ZERO golden diffs across DPS/healing + sim tiers
 npm run audit:skills
 npm run lint && npx tsc --noEmit
 ```
-Expected: full suite green, no snapshot changes. Any golden move = the extraction dropped or reordered a side-specific value → revert and re-diff Step 1.
+Expected: full suite green, no snapshot changes. Any golden move = the extraction dropped/reordered an emit or mis-wired a callback → revert and re-check Step 1.
 
 - [ ] **Step 5: Commit.**
 
 ```bash
 git add src/utils/combat/engine.ts
-git commit -m "refactor(combat): unify turn-body accounting tails into applyTurnResult (SP-U U2)"
+git commit -m "refactor(combat): extract triplicated positional-apply block into drivePositionalTurnApply (SP-U U2)"
 ```
 
 ---
