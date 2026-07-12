@@ -3625,7 +3625,7 @@ export function runCombat(input: CombatEngineInput): {
                         const protectorSink = p.actor.side === 'player' ? playerSink : enemySink;
                         // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs and
                         // sets up the deferred DoT-transform, which acts per redirected chunk).
-                        let transformedTotal = 0;
+                        let instantTotal = 0;
                         for (let s = 0; s < chunk.stacks; s++) {
                             const outcome = applyVictimDamage(
                                 chunk.perStack,
@@ -3639,29 +3639,34 @@ export function runCombat(input: CombatEngineInput): {
                                     bombPortion: 0,
                                 }
                             );
-                            transformedTotal += outcome.transformedToDot ?? 0;
+                            instantTotal += outcome.immediateDamage ?? 0;
                         }
-                        // Meatshield's DoT-transform passive DEFERS the transformed portion to a
-                        // self-DoT ticked over the next N rounds (the generic-DoT path books its own
-                        // roundPerTargetDamage + .incoming per tick). Only the INSTANT remainder is
-                        // credited/logged this round. transformedTotal is a subset of chunk.total; when
-                        // nothing transforms it is EXACTLY 0 → instant === chunk.total → byte-identical
-                        // to the pre-change path for every non-Meatshield protector. In the fully-
-                        // transformed case a sub-epsilon float sliver can leave `instant` at ±~1e-10;
-                        // the 1e-9 threshold suppresses that phantom near-zero emission (a real chunk
-                        // is always >> 1e-9, so this never affects a genuine instant remainder).
-                        const instant = chunk.total - transformedTotal;
-                        if (instant > 1e-9) {
+                        // We sum the post-block, non-transformed INSTANT amount per sub-hit
+                        // (`immediateDamage`, captured inside applyVictimDamage right after its
+                        // transform step resolves) rather than `chunk.total − transformedToDot` —
+                        // that subtraction wrongly counts a portion blocked by the protector's own
+                        // incoming-block ability as instant damage, when in fact it was neither
+                        // taken nor transformed. Meatshield's DoT-transform passive DEFERS the
+                        // transformed portion to a self-DoT ticked over the next N rounds (the
+                        // generic-DoT path books its own roundPerTargetDamage + .incoming per tick);
+                        // only the INSTANT remainder is credited/logged this round. For a protector
+                        // without a block/transform ability, `immediateDamage === chunk.perStack` for
+                        // every sub-hit, so `instantTotal === chunk.total` — byte-identical to the
+                        // pre-change path. In the fully-transformed case a sub-epsilon float sliver
+                        // can leave `instantTotal` at ±~1e-10; the 1e-9 threshold suppresses that
+                        // phantom near-zero emission (a real chunk is always >> 1e-9, so this never
+                        // affects a genuine instant remainder).
+                        if (instantTotal > 1e-9) {
                             roundPerTargetDamage.set(
                                 p.actor.id,
-                                (roundPerTargetDamage.get(p.actor.id) ?? 0) + instant
+                                (roundPerTargetDamage.get(p.actor.id) ?? 0) + instantTotal
                             );
                             bus.emit({
                                 type: 'reactive-damage-performed',
                                 sourceId: victim.id,
                                 targetId: p.actor.id,
                                 round: r,
-                                amount: instant,
+                                amount: instantTotal,
                                 reactive: true,
                                 duringTurnOf: actingActorId,
                                 triggerActorId: actingActorId,
@@ -3756,6 +3761,15 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
+            // The post-block, non-transformed instant portion of this hit — captured HERE, right
+            // after the transform step resolves (transform zeroes `damage` on a match) and BEFORE
+            // any shield/HP drain below. For a normal hit (no block/transform/Barrier) this equals
+            // the input `damage` argument byte-for-byte; the incoming-block step above is the only
+            // thing that can have reduced it by this point. The Protection transfer block sums this
+            // per protector sub-hit instead of `chunk.total − transformedToDot`, so a blocked
+            // portion is correctly excluded from the instant-damage credit. The Barrier early-return
+            // below overrides this to 0 (Barrier nullifies — nothing lands, instant or otherwise).
+            const immediateDamage = damage;
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
@@ -3778,7 +3792,12 @@ export function runCombat(input: CombatEngineInput): {
                         newPct: (100 * victim.currentHp) / maxHp,
                     });
                 }
-                return { shieldBefore: victim.shieldPool, hpDamage: 0, barriered: true };
+                return {
+                    shieldBefore: victim.shieldPool,
+                    hpDamage: 0,
+                    barriered: true,
+                    immediateDamage: 0,
+                };
             }
             const shieldBefore = victim.shieldPool;
             // Lifeline (incoming-shield-grant): a PRE-hit threshold shield. When a PURE direct hit
@@ -4170,7 +4189,7 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
-            return { shieldBefore, hpDamage, barriered: false, transformedToDot };
+            return { shieldBefore, hpDamage, barriered: false, transformedToDot, immediateDamage };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
         // accumulates the victim's incoming / shield-absorbed / barrier-absorbed into its per-actor

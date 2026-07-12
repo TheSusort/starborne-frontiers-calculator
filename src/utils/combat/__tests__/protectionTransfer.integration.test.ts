@@ -413,6 +413,76 @@ describe('Protection damage transfer (integration)', () => {
         expect(round1.perActorIncoming?.['ally-1']?.barrierAbsorbed).toBeCloseTo(ENEMY_ATTACK, 6);
     });
 
+    it('a PROTECTOR that also carries a full incoming-block ability credits ZERO instant damage for the blocked redirected chunk (CodeRabbit: immediateDamage, not chunk.total − transformedToDot)', () => {
+        // Same aura-protector harness as the "PRODUCTION PATH" test above ('prot-1' grants ITSELF
+        // 3 Protection stacks via an aura passive; 'ally-1' is the direct-hit victim) — but the
+        // PROTECTOR additionally carries an always-active, 100%-chance, 100%-block
+        // 'incoming-block' ability on ITSELF (granted the same aura way Protection/Barrier are
+        // granted elsewhere in this file, so it is visible to the protector's OWN block check at
+        // the applyVictimDamage funnel for its redirected sub-hit).
+        //
+        // The redirected chunk still leaves the target (cascade math is computed from the
+        // protector's Protection stacks, independent of its block ability) — 'ally-1' keeps 70%
+        // exactly like the PRODUCTION PATH test. But the protector's OWN incoming-block ability
+        // then fully blocks its post-redirect sub-hit: the protector takes ZERO real damage and
+        // transforms nothing into a DoT. The buggy accounting (`chunk.total − transformedToDot`)
+        // would still credit the FULL chunk as "instant" damage taken by the protector, because
+        // transformedToDot stays 0 for a pure block (no transform ability involved) — the fixed
+        // accounting (summed `immediateDamage`, captured post-block/post-transform inside
+        // applyVictimDamage) must read 0 instead.
+        const blockAuraPassive = (): ShipSkills['slots'][number] => {
+            const ability: Ability = {
+                id: 'full-block-self-aura',
+                type: 'incoming-block',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'incoming-block',
+                    condition: 'always',
+                    procChance: 1,
+                    blockPct: 1.0,
+                    oncePerRound: false,
+                },
+            };
+            return { slot: 'passive', abilities: [ability] };
+        };
+        const input = BASE_INPUT({
+            selfBuffs: [], // the focus carries no Protection — the protector is a team actor.
+            defence: 0,
+            teamActors: [
+                teamActor('ally-1', 0), // victim
+                teamActor('prot-1', PROTECTOR_DEFENCE, [
+                    protectionAuraPassive(3),
+                    blockAuraPassive(),
+                ]), // aura protector that ALSO fully blocks its own redirected sub-hit
+            ],
+            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+        const victim = totalIncoming(input, 'ally-1');
+        const protector = totalIncoming(input, 'prot-1');
+        const result = runCombat(input);
+        const round1 = result.rounds[0];
+        const reactiveHitsOnProtector = reactiveEventsTargeting(input, 'prot-1');
+
+        // The target still keeps 70% — the redirect itself is unaffected by the protector's OWN
+        // block ability (that ability only gates what the PROTECTOR takes from its own chunk).
+        expect(victim).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
+        // The protector's `.incoming` bucket shows ZERO — the redirected chunk was fully blocked
+        // before it ever landed as real intake.
+        expect(protector).toBe(0);
+        // THE CORE ASSERTION: the protector's credited round damage must NOT include the (fully
+        // blocked) chunk. `perTargetDamage` is set ONLY when non-empty (RoundData's "absent when
+        // empty" rule), so a wrongly-credited chunk would show up as a truthy, non-zero entry —
+        // the fixed accounting must leave this key ABSENT entirely.
+        expect(round1.perTargetDamage?.['prot-1']).toBeUndefined();
+        // No reactive-damage-performed event should have fired for the protector either — the
+        // `instantTotal > 1e-9` guard must suppress emission for a fully-blocked chunk exactly
+        // like it already does for a fully Barrier-suppressed or fully DoT-transformed one.
+        expect(reactiveHitsOnProtector).toBe(0);
+    });
+
     it('positional mode: Protection covers a NON-adjacent ally (all-allies, not hex-neighbours)', () => {
         // Wiring `position` on the victim AND another player actor makes `anyOtherPositioned`
         // true, so `adjacentAllyIdsFor` (adjacency.ts) would narrow to hex-neighbours instead of
