@@ -17,27 +17,55 @@
 // the roster (by name 'E2') once per result, then used to look up its row in each round.
 import { describe, it, expect } from 'vitest';
 import { simulateBattle } from '../../calculators/battleSimulator';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import {
+    setupKeyedTestRng,
+    setRateGateRng,
+    setKeyedRng,
+    mulberry32,
+} from '../../calculators/rateAccumulator';
 import { baseLocalityInput, withExtraE1Draw } from './__fixtures__/rngLocalityFixture';
 
 // Any fixed seed works — the point is that both calls below start from the SAME one.
 const LOCALITY_TEST_SEED = 0x5eed1234;
 
+// E2's per-round damageDealt. `ShipRoundState` (the per-round `ships[]` entries) carries only
+// `actorId`, NOT a `name` — `name` lives on the top-level `BattleResult.roster`, so E2's actorId
+// is resolved via the roster (by name 'E2') once, then used to look up its row in each round.
+const e2Damage = (r: ReturnType<typeof simulateBattle>): number[] => {
+    const e2ActorId = r.roster.find((entry) => entry.name === 'E2')?.actorId;
+    if (!e2ActorId) throw new Error("no roster entry named 'E2'");
+    return r.rounds.map((rd) => rd.ships.find((s) => s.actorId === e2ActorId)?.damageDealt ?? 0);
+};
+
 describe('RNG stream locality', () => {
-    it("perturbing E1's draw count leaves E2's per-round damage unchanged", () => {
+    // Both `simulateBattle` calls in each test are re-seeded to the SAME starting stream state
+    // before the call — per-key (and the shared) streams are lazily created and never reset
+    // between two calls sharing one provider, so without re-seeding a match would be coincidental
+    // (a fluke of where the crit threshold happens to fall), not proof of anything.
+
+    it("keyed streams: perturbing E1's draw count leaves E2's per-round damage unchanged", () => {
         setupKeyedTestRng(LOCALITY_TEST_SEED);
         const a = simulateBattle(baseLocalityInput());
 
         setupKeyedTestRng(LOCALITY_TEST_SEED);
         const b = simulateBattle(withExtraE1Draw());
 
-        const e2 = (r: ReturnType<typeof simulateBattle>) => {
-            const e2ActorId = r.roster.find((entry) => entry.name === 'E2')?.actorId;
-            if (!e2ActorId) throw new Error("no roster entry named 'E2'");
-            return r.rounds.map(
-                (rd) => rd.ships.find((s) => s.actorId === e2ActorId)?.damageDealt ?? 0
-            );
-        };
-        expect(e2(b)).toEqual(e2(a));
+        expect(e2Damage(b)).toEqual(e2Damage(a));
+    });
+
+    // Control (the "before" half of the before/after decoupling proof): with the keyed provider
+    // DISABLED (`setKeyedRng(null)`), every keyed gate falls back to the single shared `rng` — the
+    // pre-Task-3 behavior. The same E1 perturbation now DOES shift E2, because E1's extra draw
+    // advances the one shared stream that E2 also draws from. This is what the keying eliminates.
+    it('shared stream (control): the same perturbation DOES shift E2 when gates share one rng', () => {
+        setRateGateRng(mulberry32(LOCALITY_TEST_SEED));
+        setKeyedRng(null);
+        const a = simulateBattle(baseLocalityInput());
+
+        setRateGateRng(mulberry32(LOCALITY_TEST_SEED));
+        setKeyedRng(null);
+        const b = simulateBattle(withExtraE1Draw());
+
+        expect(e2Damage(b)).not.toEqual(e2Damage(a));
     });
 });

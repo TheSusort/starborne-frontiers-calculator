@@ -190,7 +190,7 @@ modeled with tests; both audit-clean (`audit:skills` 0 findings).
 
 - **SP-U:** DPS-calc opponent HP semantics (non-terminating vs finite) — proposal: non-terminating.
 - **SP-U:** exact increment slicing of the ~20 reconciliation points (U1…Un boundaries).
-- **SP-0:** sub-stream keying granularity (per-actor vs per-actor-per-gate-purpose) — decide after
-  characterizing the cascade on real fixtures.
+- **SP-0:** sub-stream keying granularity — RESOLVED (SP-0 owns this, settled): finest safe key
+  `${actorId}:${purpose}`. Not to be reopened by later sub-projects.
 - **SP-F/F6:** whether per-victim crit needs a model change to the deterministic anchor-crit
   convention beyond RNG decoupling.

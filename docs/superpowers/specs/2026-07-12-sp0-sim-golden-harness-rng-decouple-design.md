@@ -37,8 +37,11 @@ per `streamKey` (derived deterministically from the base seed + a hash of the ke
   crit/heal-crit/landing/extend/charge/proc/counter…). Module-level focus/enemy gates use fixed
   ids. Reactive gates created per-drain (`triggers.ts:1715/2393/2423`) get keyed by the owner id in
   scope at the drain site.
-- **Context-less sites** (if any gate lacks a stable key) fall back to a shared `"global"` stream —
-  the spike enumerates these; goal is zero, acceptable is a small documented set.
+- **Context-less sites** (if any gate lacks a stable key) are left UNKEYED — `makeRateGate()` with
+  no key draws from the shared `rng` (byte-identical, still correct), exactly as production does.
+  There is NO separate `"global"` keyed stream; unkeyed == the shared seeded stream. Goal is zero
+  context-less gates; acceptable is a small documented set. (Resolved in implementation: **zero** —
+  every gate had a stable id in scope, so all are keyed.)
 
 ### Characterization spike (first task)
 
@@ -98,7 +101,7 @@ the Part-A one-time reassignment.
 
 ### Files (Part B)
 
-New `src/utils/calculators/__tests__/simGolden.fixtures.ts` (the four rosters) +
+New `src/utils/calculators/__tests__/__fixtures__/simGoldenFixtures.ts` (the four rosters) +
 `simGolden.test.ts` (snapshot assertions). No production code changes.
 
 ---
@@ -118,7 +121,10 @@ New `src/utils/calculators/__tests__/simGolden.fixtures.ts` (the four rosters) +
 4. Four `BattleResult` sim goldens committed and green.
 5. Full suite green, lint + tsc clean, `audit:skills` 0 findings.
 
-## Open questions (for the plan)
+## Open questions (RESOLVED during implementation)
 
-- Keying granularity: per-actor vs per-actor-per-purpose — decided by the spike.
-- Any context-less gate sites needing a `"global"` fallback — enumerated by the spike (target zero).
+- Keying granularity: RESOLVED to the finest safe key, `${actorId}:${purpose}` — finer keying
+  strictly increases locality and never harms correctness, so no spike gamble was needed.
+- Context-less gate sites: RESOLVED to **zero** — every gate had a stable id in scope, so all are
+  keyed. Any that had lacked one would simply stay unkeyed (shared-`rng` fallback); there is no
+  separate `"global"` stream.

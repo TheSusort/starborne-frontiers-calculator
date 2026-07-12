@@ -226,7 +226,7 @@ git commit --no-verify -m "test(combat): install keyed RNG provider in test boot
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` (gate creation sites 581-586, 1619-1626, 1812-1817; `rollRateGate` call sites)
-- Modify: `src/utils/combat/rateAccumulator.ts` consumer `rollRateGate` (pass the map key into `makeRateGate`)
+- Modify: `src/utils/calculators/rateAccumulator.ts` consumer `rollRateGate` (pass the map key into `makeRateGate`) — same file as Task 1
 - Modify: `src/utils/combat/triggers.ts:1715, 2393, 2423` (reactive gates — key by owner id in scope)
 - Modify: `src/utils/combat/playerTurn.ts:280` (correct the stale `// determinism isolation` comment)
 - Test: `src/utils/combat/__tests__/rngLocality.test.ts` (create)

@@ -101,6 +101,7 @@ const placement = (ship: Ship, position: Position): BattlePlacement => ({
         critDamage: ship.baseStats.critDamage,
         defensePenetration: 0,
         hacking: ship.baseStats.hacking,
+        security: ship.baseStats.security,
         defence: ship.baseStats.defence,
         hp: ship.baseStats.hp,
         speed: ship.baseStats.speed,
