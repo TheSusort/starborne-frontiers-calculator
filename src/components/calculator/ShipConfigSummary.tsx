@@ -19,7 +19,8 @@ interface ShipConfigSummaryProps {
     rounds: number;
     attackerBuffTotals: AttackerBuffTotals;
     bestTotalDamage: number | undefined;
-    bestVsSecondPercentage: number | null;
+    /** Ranking-aware label describing best's advantage over #2 (SP-U U6). Null → no badge. */
+    bestVsSecondLabel: string | null;
     teamActors: TurnOrderTeamActor[];
     enemySpeed: number;
 }
@@ -32,7 +33,7 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     rounds,
     attackerBuffTotals,
     bestTotalDamage,
-    bestVsSecondPercentage,
+    bestVsSecondLabel,
     teamActors,
     enemySpeed,
 }) => {
@@ -190,10 +191,8 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
             {isBest && isComparing && (
                 <div className="text-sm mt-2 text-center">
                     <span className="text-primary">Best ship configuration</span>
-                    {bestVsSecondPercentage !== null && (
-                        <span className="text-green-500 ml-2">
-                            +{bestVsSecondPercentage.toFixed(2)}% vs #2
-                        </span>
+                    {bestVsSecondLabel && (
+                        <span className="text-green-500 ml-2">{bestVsSecondLabel}</span>
                     )}
                 </div>
             )}

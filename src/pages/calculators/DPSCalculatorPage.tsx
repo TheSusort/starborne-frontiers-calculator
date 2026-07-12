@@ -19,7 +19,7 @@ import {
 } from '../../utils/abilities/configToSimInputs';
 import { shipFinalStats, combatStatsFromShip } from '../../utils/ship/combatStats';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
-import { rankDpsConfigs } from '../../utils/calculators/rankDpsConfigs';
+import { rankDpsConfigs, describeBestVsSecond } from '../../utils/calculators/rankDpsConfigs';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -474,10 +474,15 @@ const DPSCalculatorPage: React.FC = () => {
     const secondBestConfig = configs.find((c) => c.id === rankedConfigIds[1]) ?? null;
 
     const bestTotalDamage = simResults.get(bestConfig?.id ?? '')?.summary.totalDamage;
-    const secondBestDmg = simResults.get(secondBestConfig?.id ?? '')?.summary.totalDamage;
-    const bestVsSecondPercentage =
-        bestTotalDamage && secondBestDmg
-            ? ((bestTotalDamage - secondBestDmg) / secondBestDmg) * 100
+    // SP-U U6 review fix: the "vs #2" badge must describe best's advantage along the RANKING
+    // dimension (rounds-to-kill), correctly signed — a hardcoded `+{damage%}` went nonsensical
+    // (`+-38.42%`) once the fastest killer could deal less total damage than #2. Computed here
+    // via the pure describeBestVsSecond helper (unit-tested) where both summaries are in scope.
+    const bestSummary = simResults.get(bestConfig?.id ?? '')?.summary;
+    const secondBestSummary = simResults.get(secondBestConfig?.id ?? '')?.summary;
+    const bestVsSecondLabel =
+        bestSummary && secondBestSummary
+            ? describeBestVsSecond(bestSummary, secondBestSummary)
             : null;
 
     return (
@@ -555,7 +560,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 isComparing={configs.length > 1}
                                 simResult={simResults.get(config.id)}
                                 bestTotalDamage={bestTotalDamage}
-                                bestVsSecondPercentage={bestVsSecondPercentage}
+                                bestVsSecondLabel={bestVsSecondLabel}
                                 rounds={rounds}
                                 attackerBuffTotals={mergedAttackerBuffTotals.get(config.id)!}
                                 onRemove={() => removeConfig(config.id)}

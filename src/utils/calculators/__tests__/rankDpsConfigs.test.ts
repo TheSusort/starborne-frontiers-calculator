@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rankDpsConfigs } from '../rankDpsConfigs';
+import { rankDpsConfigs, describeBestVsSecond } from '../rankDpsConfigs';
 import { DPSSimulationSummary } from '../dpsSimulator';
 
 /** Minimal summary fixture — only the fields rankDpsConfigs reads are meaningful. */
@@ -57,5 +57,56 @@ describe('rankDpsConfigs', () => {
         const copy = [...input];
         rankDpsConfigs(input);
         expect(input).toEqual(copy);
+    });
+});
+
+describe('describeBestVsSecond (best-vs-#2 badge under roundsToKill ranking)', () => {
+    // (a) two killers with different roundsToKill → rounds advantage, NOT a damage %.
+    it('two killers with different rounds → reports the rounds advantage', () => {
+        const best = s({ survived: false, roundsToKill: 4, totalDamage: 180 });
+        const second = s({ survived: false, roundsToKill: 6, totalDamage: 200 });
+        expect(describeBestVsSecond(best, second)).toBe('Kills 2 rounds faster than #2');
+    });
+
+    it('singular round wording when exactly 1 round faster', () => {
+        const best = s({ survived: false, roundsToKill: 4, totalDamage: 180 });
+        const second = s({ survived: false, roundsToKill: 5, totalDamage: 200 });
+        expect(describeBestVsSecond(best, second)).toBe('Kills 1 round faster than #2');
+    });
+
+    it('two killers tied on rounds → correctly-signed damage delta (tie-break winner has more)', () => {
+        const best = s({ survived: false, roundsToKill: 4, totalDamage: 300 });
+        const second = s({ survived: false, roundsToKill: 4, totalDamage: 100 });
+        expect(describeBestVsSecond(best, second)).toBe('+200.00% damage vs #2');
+    });
+
+    // (b) killer vs survivor → sole-killer label, never a rounds delta against a non-killer.
+    it('best killed, #2 survived → labels best the only killer', () => {
+        const best = s({ survived: false, roundsToKill: 4, totalDamage: 180 });
+        const second = s({ survived: true, finalHpPct: 30, totalDamage: 999 });
+        expect(describeBestVsSecond(best, second)).toBe('Only config to destroy the target');
+    });
+
+    // (c) all survived → correctly-signed damage delta; NEVER '+' before a negative.
+    it('all survived, best has more damage → positive damage delta', () => {
+        const best = s({ survived: true, finalHpPct: 12, totalDamage: 500 });
+        const second = s({ survived: true, finalHpPct: 40, totalDamage: 400 });
+        expect(describeBestVsSecond(best, second)).toBe('+25.00% damage vs #2');
+    });
+
+    it('all survived, best has LESS damage (ranked by lower HP%) → negative delta, no leading +', () => {
+        // best empties more HP (lower finalHpPct) but deals less total damage than #2.
+        const best = s({ survived: true, finalHpPct: 10, totalDamage: 300 });
+        const second = s({ survived: true, finalHpPct: 50, totalDamage: 500 });
+        const label = describeBestVsSecond(best, second);
+        expect(label).toBe('-40.00% damage vs #2');
+        expect(label).not.toContain('+-');
+    });
+
+    it('never renders the nonsensical "+-X%" the old badge produced', () => {
+        // The exact regression: fastest killer with LESS damage than #2.
+        const best = s({ survived: false, roundsToKill: 4, totalDamage: 180 });
+        const second = s({ survived: false, roundsToKill: 6, totalDamage: 500 });
+        expect(describeBestVsSecond(best, second)).not.toContain('+-');
     });
 });
