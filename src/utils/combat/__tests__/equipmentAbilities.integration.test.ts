@@ -22,7 +22,7 @@
  *   directHeal = 5000 × 0.20 = 1000. 2 fires → 2000 total.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { setRateGateRng, setKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { CombatActor } from '../state';
 import { createEventBus, CombatEvent } from '../events';
@@ -350,9 +350,15 @@ describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
             }))
             .filter((r) => r.heal > 0);
         expect(firedRounds).toHaveLength(expectedFires);
-        // Back-loaded accumulator: with rate 0.20, the gate crosses 1 at call 5 and call 10.
-        // Fires on rounds 5 and 10 (not 2 and 10 — that is the 0.5 schedule).
-        expect(firedRounds[0].round).toBe(5);
+        // NOTE: `installBackloadedAccumulator`'s `setRateGateRng` override is dead for this
+        // gate under SP-0 — the Bloodthirst proc gate now carries an `${ownerId}:proc` stream
+        // key (triggers.ts), and the keyed test provider (installed globally in
+        // setupTests.ts) takes precedence over a bare `setRateGateRng` override whenever a key
+        // is supplied. Left in place as historical intent documentation (originally scripted a
+        // back-loaded rate-0.2 accumulator firing on rounds 5 and 10); the actual fire rounds
+        // now come from the keyed `attacker:proc` sub-stream under the fixed test seed, which
+        // instead fires on rounds 6 and 10 (still exactly 2 of 10, same total directHeal).
+        expect(firedRounds[0].round).toBe(6);
         expect(firedRounds[1].round).toBe(10);
         // Each fire credits exactly perFireAmount.
         for (const r of firedRounds) {
@@ -712,8 +718,7 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
     const ATTACK = 4_000;
     const NUM_ROUNDS = 20;
     const INSIDIOUSNESS_MULT = 70; // 70% damage per proc
-    const INSIDIOUSNESS_PROC = 0.5; // deterministic: floor(20 × 0.5) = 10 procs
-    const EXPECTED_PROCS = Math.floor(NUM_ROUNDS * INSIDIOUSNESS_PROC); // 10
+    const INSIDIOUSNESS_PROC = 0.5;
     const PER_PROC = ATTACK * (INSIDIOUSNESS_MULT / 100); // 2800
 
     /** Single-hit 100% damage active (no debuff inflicted). */
@@ -771,7 +776,7 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
 
     it(
         'A. Debuff-applying active + Insidiousness: reactive damage procs add to rawTotals.direct ' +
-            '(floor(20 × 0.5)=10 procs × 2800 = 28000 on top of 80000 base damage)',
+            '(13 procs × 2800 = 36400 on top of 80000 base damage)',
         () => {
             // With Insidiousness and debuff active: each round the debuff lands → on-debuff-inflicted
             // → Insidiousness fires at 0.5 rate → reactive-damage credited to direct.
@@ -803,10 +808,16 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
                 withoutInsidiousness.rawTotals.direct
             );
 
-            // Quantitative: the reactive contribution must equal exactly EXPECTED_PROCS × PER_PROC.
+            // Quantitative: the reactive contribution must equal exactly ACTUAL_PROCS × PER_PROC.
+            // NOTE: `EXPECTED_PROCS` (floor(20×0.5)=10, a "back-loaded accumulator" formula) is
+            // stale under SP-0 — Insidiousness's on-debuff-inflicted proc gate now carries an
+            // `${ownerId}:proc` stream key (triggers.ts), drawing from a real keyed
+            // `attacker:proc` sub-stream under the fixed test seed, which fires 13 of 20 times
+            // (a real Bernoulli(0.5) outcome, not the deterministic floor formula).
+            const ACTUAL_PROCS = 13;
             const reactiveContribution =
                 withInsidiousness.rawTotals.direct - withoutInsidiousness.rawTotals.direct;
-            expect(reactiveContribution).toBeCloseTo(EXPECTED_PROCS * PER_PROC, 1);
+            expect(reactiveContribution).toBeCloseTo(ACTUAL_PROCS * PER_PROC, 1);
         }
     );
 
@@ -873,10 +884,13 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
     afterEach(() => resetRateGateRng());
     const ATTACKER_HP = 10_000;
     const NUM_ROUNDS = 10;
-    const SW_PROC = 0.5; // deterministic: floor(10 × 0.5) = 5 fires (calls 2,4,6,8,10)
-    const EXPECTED_FIRES = Math.floor(NUM_ROUNDS * SW_PROC); // 5
+    const SW_PROC = 0.5;
+    // `installBackloadedAccumulator` (below) documents the historical rate-0.5 back-loaded
+    // schedule (floor(10×0.5)=5 fires); under SP-0 the keyed `attacker:proc` sub-stream instead
+    // fires 9 of 10 rounds (a real Bernoulli(0.5) outcome — see the test body for the trace).
+    const EXPECTED_FIRES = 9;
     const PER_FIRE = ATTACKER_HP * (10 / 100); // 1000 (10% of max HP)
-    const EXPECTED_TOTAL = EXPECTED_FIRES * PER_FIRE; // 5000
+    const EXPECTED_TOTAL = EXPECTED_FIRES * PER_FIRE; // 9000
 
     /** Second Wind ability injected directly into passive slot (procChance 0.5 for determinism). */
     const secondWindAbility: Ability = {
@@ -976,12 +990,17 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
     });
 
     it(
-        'A. Crit attacker: Second Wind fires 5 times (rate 0.5 × 10 crits); ' +
-            'total directHeal = 5000, effectiveHeal = 0 (full HP → all overheal)',
+        'A. Crit attacker: Second Wind fires 9 times (rate 0.5 × 10 crits); ' +
+            'total directHeal = 9000, effectiveHeal = 0 (full HP → all overheal)',
         () => {
-            // Per round the engine draws 3 gates; the Second Wind proc gate is the 3rd
-            // (draws 3,6,9,…). Reproduce the legacy rate-0.5 back-loaded accumulator on it
-            // → fires on rounds 2,4,6,8,10.
+            // NOTE: `installBackloadedAccumulator`'s `setRateGateRng` override is dead for this
+            // gate under SP-0 — the Second Wind proc gate now carries an `${ownerId}:proc`
+            // stream key (triggers.ts), and the keyed test provider (installed globally in
+            // setupTests.ts) takes precedence over a bare `setRateGateRng` override whenever a
+            // key is supplied. Left in place as historical intent documentation (originally
+            // scripted a back-loaded rate-0.5 accumulator firing on rounds 2,4,6,8,10); the
+            // actual fire schedule now comes from the keyed `attacker:proc` sub-stream under
+            // the fixed test seed, which instead fires 9 of 10 rounds (all but round 4).
             installBackloadedAccumulator({ rate: SW_PROC, isGateOfInterest: (d) => d % 3 === 0 });
             const result = runCombat(
                 SW_BASE({
@@ -993,19 +1012,18 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
             expect(result.healing).toBeDefined();
             expect(result.healing!.rounds).toHaveLength(NUM_ROUNDS);
 
-            // directHeal = 5 fires × (ATTACKER_HP × 10%) = 5 × 1000 = 5000.
-            // basis 'hp' resolves to effectiveMaxHp (unchanged regardless of current HP).
-            expect(sumHeal(result, 'directHeal')).toBeCloseTo(EXPECTED_TOTAL, 6);
-
-            // Verify the gated schedule: fires on rounds 2, 4, 6, 8, 10 (back-loaded at rate 0.5).
+            // Verify the gated schedule: fires on rounds 1,2,3,5,6,7,8,9,10 (all but round 4).
             const firedRounds = result
                 .healing!.rounds.map((rd, i) => ({
                     round: i + 1,
                     heal: rd.perActor.get('attacker')?.directHeal ?? 0,
                 }))
                 .filter((r) => r.heal > 0);
+            // directHeal = 9 fires × (ATTACKER_HP × 10%) = 9 × 1000 = 9000.
+            // basis 'hp' resolves to effectiveMaxHp (unchanged regardless of current HP).
+            expect(sumHeal(result, 'directHeal')).toBeCloseTo(EXPECTED_TOTAL, 6);
             expect(firedRounds).toHaveLength(EXPECTED_FIRES);
-            expect(firedRounds[0].round).toBe(2);
+            expect(firedRounds[0].round).toBe(1);
             expect(firedRounds[EXPECTED_FIRES - 1].round).toBe(NUM_ROUNDS);
             for (const r of firedRounds) {
                 expect(r.heal).toBeCloseTo(PER_FIRE, 6);
@@ -1232,12 +1250,17 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
     // ── Vivacious (proc'd, target-below-25) ──────────────────────────────────────
     it('Vivacious: target <25% HP → repair roughly doubles at the gated frequency', () => {
         const NUM_ROUNDS = 10;
-        const VIV_PROC = 0.5; // floor(10 × 0.5) = 5 fires (back-loaded at rate 0.5)
+        const VIV_PROC = 0.5;
         const VIV_AMP = 100; // +100% → ×2 when it fires
-        // ORDER-SENSITIVE: the heal-amp proc gate draws at indices [4, 7, 9, 11, … 23]
-        // (verified empirically; startup transient then every-other). The test sums total
-        // heal so only the FIVE-fire count matters. Reproduce the legacy rate-0.5 back-loaded
-        // accumulator on the proc gate → exactly 5 of the 10 casts double.
+        // NOTE: `installBackloadedAccumulator`'s `setRateGateRng` override is dead for this gate
+        // under SP-0 — the heal-amp proc gate now carries an `${ownerId}:proc` stream key
+        // (triggers.ts), and the keyed test provider (installed globally in setupTests.ts)
+        // takes precedence over a bare `setRateGateRng` override whenever a key is supplied.
+        // Left in place as historical intent documentation (originally scripted a back-loaded
+        // rate-0.5 accumulator firing exactly 5 of 10 casts); the actual fire count now comes
+        // from the keyed `healer:proc` sub-stream under the fixed test seed, which instead
+        // fires 8 of 10 casts (a real Bernoulli(0.5) outcome). The test sums total heal so only
+        // the fire COUNT matters, not which specific casts fired.
         installBackloadedAccumulator({
             rate: VIV_PROC,
             isGateOfInterest: (d) => d === 4 || (d >= 7 && d % 2 === 1),
@@ -1261,12 +1284,12 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         );
         const baseHeal = sumHeal(without, 'directHeal');
         const ampHeal = sumHeal(withAmp, 'directHeal');
-        // Baseline: 10 casts × 1000 = 10000. With 5 proc'd ×2 fires: 5 normal + 5 doubled =
-        // 5×1000 + 5×2000 = 15000.
+        // Baseline: 10 casts × 1000 = 10000. With 8 proc'd ×2 fires: 2 normal + 8 doubled =
+        // 2×1000 + 8×2000 = 18000.
         expect(baseHeal).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
-        const EXPECTED_FIRES = Math.floor(NUM_ROUNDS * VIV_PROC); // 5
+        const ACTUAL_FIRES = 8;
         const expectedAmp =
-            NUM_ROUNDS * BASE_PER_CAST + EXPECTED_FIRES * BASE_PER_CAST * (VIV_AMP / 100);
+            NUM_ROUNDS * BASE_PER_CAST + ACTUAL_FIRES * BASE_PER_CAST * (VIV_AMP / 100);
         expect(ampHeal).toBeCloseTo(expectedAmp, 6);
         expect(ampHeal).toBeGreaterThan(baseHeal);
     });
@@ -1376,10 +1399,16 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
             'total received exceeds baseline by ampPct × (number of procs)',
         () => {
             const NUM_ROUNDS = 10;
-            const EXPECTED_PROCS = Math.floor(NUM_ROUNDS * EXU_PROC); // 5
+            // NOTE: `installBackloadedAccumulator`'s `setRateGateRng` override is dead for this
+            // gate under SP-0 — the Exuberance recipient gate now carries an `${ownerId}:proc`
+            // stream key (triggers.ts), and the keyed test provider (installed globally in
+            // setupTests.ts) takes precedence over a bare `setRateGateRng` override whenever a
+            // key is supplied. Left in place as historical intent documentation (originally
+            // scripted a back-loaded rate-0.5 accumulator boosting rounds 2,4,6,8,10 — 5 procs);
+            // the actual proc count now comes from the keyed `attacker:proc` sub-stream under
+            // the fixed test seed, which instead boosts 4 of the 10 casts.
+            const EXPECTED_PROCS = 4;
 
-            // The Exuberance gate is the 2nd draw each round (draws 2,4,…,20). Reproduce the
-            // legacy rate-0.5 back-loaded accumulator → boosts rounds 2,4,6,8,10 (5 procs).
             installBackloadedAccumulator({ rate: EXU_PROC, isGateOfInterest: (d) => d % 2 === 0 });
             const withExu = runCombat(
                 EXU_BASE({
@@ -1489,8 +1518,14 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
             const NUM_ROUNDS = 10;
             // Reactive heal fires every round (procChance 1.0) → a repair lands each round →
             // the recipient gate is rolled once per landed reactive repair.
-            // The Exuberance gate is the 3rd draw each round (draws 3,6,…,30). Reproduce the
-            // legacy rate-0.5 back-loaded accumulator → boosts 5 of the 10 landed repairs.
+            // NOTE: `installBackloadedAccumulator`'s `setRateGateRng` override is dead for this
+            // gate under SP-0 — the Exuberance recipient gate now carries an `${ownerId}:proc`
+            // stream key (triggers.ts), and the keyed test provider (installed globally in
+            // setupTests.ts) takes precedence over a bare `setRateGateRng` override whenever a
+            // key is supplied. Left in place as historical intent documentation (originally
+            // scripted a back-loaded rate-0.5 accumulator boosting 5 of the 10 landed repairs);
+            // the actual proc count now comes from the keyed `attacker:proc` sub-stream under
+            // the fixed test seed, which instead boosts 4 of the 10 landed repairs.
             installBackloadedAccumulator({ rate: EXU_PROC, isGateOfInterest: (d) => d % 3 === 0 });
             const withExu = runCombat(
                 EXU_BASE({
@@ -1524,8 +1559,9 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
             const exuHeal = sumHeal(withExu, 'directHeal');
             // Reactive heal fires every round → NUM_ROUNDS landed repairs of baseRaw each.
             expect(baseHeal).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
-            // Exuberance boosts floor(NUM_ROUNDS × 0.5) of those landed repairs.
-            const EXPECTED_PROCS = Math.floor(NUM_ROUNDS * EXU_PROC);
+            // Exuberance boosts 4 of the 10 landed repairs (see NOTE above — keyed sub-stream,
+            // not the floor(NUM_ROUNDS × 0.5) back-loaded formula).
+            const EXPECTED_PROCS = 4;
             const expectedExu =
                 NUM_ROUNDS * BASE_PER_CAST + EXPECTED_PROCS * BASE_PER_CAST * (EXU_AMP / 100);
             expect(exuHeal).toBeCloseTo(expectedExu, 6);
@@ -3028,6 +3064,14 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
     it('AoE repair reaching multiple OTHER allies grants the buff to all of them (one proc, fan-out)', () => {
         // The carrier (player[2]) repairs ALL allies → recipients = every player id. The two
         // OTHER allies (focus + ally1) are repaired non-self → a single proc fan-outs to both.
+        // Font of Power's on-own-repair-to-ally proc gate now carries a `${ownerId}:proc`
+        // stream key (triggers.ts) — under SP-0's keyed test provider, this specific carrier's
+        // `p:carrier:2:proc` sub-stream happens to fail all 16 rolls at the fixed test seed
+        // (a real, if unlucky, Bernoulli(0.16) outcome — not a mis-keyed gate). This test only
+        // asserts WHERE the grant lands (non-self recipients, not the caster), not an exact
+        // proc count, so force always-fire to make that assertion deterministic and robust.
+        setRateGateRng(() => 0);
+        setKeyedRng(() => 0);
         const result = simulateBattle(
             {
                 playerTeam: [
@@ -3147,6 +3191,16 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
             );
 
         it('PIN raises the recipient damage above the no-PIN baseline, and the increase tracks the CASTER attack (not the recipient)', () => {
+            // Font of Power's proc gate carries a `${ownerId}:proc` stream key (triggers.ts).
+            // This test calls `run()` three times with the SAME carrier id, so under SP-0's
+            // keyed test provider each call continues the prior call's `p:carrier:...:proc`
+            // sub-stream rather than starting fresh — an unlucky continuation can make one run
+            // proc more/less than another, breaking the cross-run delta comparison below (the
+            // magnitude/source assertions need PIN to proc consistently in EVERY PIN run, not
+            // "however many times this specific stream position happens to fire"). Force
+            // always-fire so the comparison isolates the caster-attack snapshot, not proc luck.
+            setRateGateRng(() => 0);
+            setKeyedRng(() => 0);
             const baseline = focusDamage(run(8000, false)); // no Font → no PIN
             const withLowCaster = focusDamage(run(4000, true)); // PIN snapshots caster=4000
             const withHighCaster = focusDamage(run(20000, true)); // PIN snapshots caster=20000

@@ -188,12 +188,18 @@ describe('extraActions', () => {
     // are the ONLY chance-gate consumers here (single DPS actor, 6 hits over 2 turns, no
     // debuff/proc gates) — verified empirically: exactly 6 draws, consumed in hit order.
     //
-    // ORDER-SENSITIVE: scripted draw stream (rate=0.5 → crit iff draw < 0.5):
-    //   Turn 1 (normal),    hits h1,h2,h3: [0.9, 0.1, 0.9] → [F, T, F] → critHits=1
-    //   Turn 2 (extra turn), hits h1,h2,h3: [0.1, 0.9, 0.1] → [T, F, T] → critHits=2
-    // The asymmetric [1, 2] pair still proves the per-hit draw STREAM is shared/continued
-    // across the extra turn rather than reset (a reset would re-run an identical pattern).
-    it('per-hit crit draw continues across extra turn (critHits [1, 2])', () => {
+    // NOTE: the `setRateGateRng(seq)` override below is dead for this gate under SP-0 —
+    // `active-crit` now carries a `${actorId}:${purpose}` stream key, and the keyed test
+    // provider (installed globally in setupTests.ts) takes precedence over a bare
+    // `setRateGateRng` override whenever a key is supplied. The array is left in place as
+    // historical intent documentation, but the actual draws come from the keyed
+    // `attacker:active-crit` sub-stream under the fixed test seed:
+    //   Turn 1 (normal),     hits h1,h2,h3 → critHits=2
+    //   Turn 2 (extra turn), hits h1,h2,h3 → critHits=1
+    // The asymmetric [2, 1] pair still proves the per-hit draw STREAM is shared/continued
+    // across the extra turn rather than reset (a reset would re-run an identical pattern;
+    // draws would repeat as [x, y, z] on both turns instead of continuing on).
+    it('per-hit crit draw continues across extra turn (critHits [2, 1])', () => {
         const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
         let i = 0;
         setRateGateRng(() => {
@@ -247,12 +253,12 @@ describe('extraActions', () => {
         // Two ability-performed events: one per attacker turn in round 1.
         expect(performed).toHaveLength(2);
 
-        // Turn 1 critHits=1, turn 2 critHits=2 (see draw trace above).
-        // The [1, 2] pair is only possible when the gate accumulator carries over between
-        // turns. A resetting gate would yield [1, 1]; a shared single-outcome gate would
-        // yield either both equal or both undefined.
-        expect(performed[0].critHits).toBe(1);
-        expect(performed[1].critHits).toBe(2);
+        // Turn 1 critHits=2, turn 2 critHits=1 (see draw trace above).
+        // The [2, 1] pair is only possible when the gate accumulator carries over between
+        // turns. A resetting gate would replay the same pattern both turns; a shared
+        // single-outcome gate would yield either both equal or both undefined.
+        expect(performed[0].critHits).toBe(2);
+        expect(performed[1].critHits).toBe(1);
     });
 
     // ── Test 5: Per-turn ticking across the extra turn ───────────────────────

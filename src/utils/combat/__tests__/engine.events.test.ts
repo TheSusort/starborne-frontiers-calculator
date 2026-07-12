@@ -1608,25 +1608,21 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
     // correct implementations emit identical events. This test uses crit:50 with a
     // 3-hit ability to produce a MIXED per-hit pattern that can distinguish the two.
     //
-    // The gate now draws from the module RNG and fires a crit iff `draw < rate`. To recover
-    // the ORIGINAL mixed-per-hit intent deterministically, we script the per-draw stream.
-    // Rate = 50/100 = 0.5.
-    //
-    // ORDER-SENSITIVE: the seeded crit-gate consumes one draw per crit check, in this order
-    // for the 2-round sim (verified empirically). The player focus (crit:0) makes one crit
-    // check per round that never fires (rate 0) but still consumes a draw:
-    //   draw1 → player focus R1 (don't-care)   draw5 → player focus R2 (don't-care)
-    //   draw2 → enemy R1 hit1   draw3 → enemy R1 hit2   draw4 → enemy R1 hit3
-    //   draw6 → enemy R2 hit1   draw7 → enemy R2 hit2   draw8 → enemy R2 hit3
-    // Sequence below reproduces the legacy pattern (<0.5 = crit, ≥0.5 = no crit):
-    //   Round 1 enemy hits: [false, true,  false]
-    //   Round 2 enemy hits: [true,  false, true ]
+    // The gate now draws from the module RNG and fires a crit iff `draw < rate`. Rate = 50/100
+    // = 0.5. NOTE: the `setRateGateRng(seq)` override below is dead for the enemy's crit gate
+    // under SP-0 — `atk50:active-crit` now carries a `${actorId}:${purpose}` stream key, and
+    // the keyed test provider (installed globally in setupTests.ts) takes precedence over a
+    // bare `setRateGateRng` override whenever a key is supplied. Left in place as historical
+    // intent documentation; the actual per-hit pattern comes from the keyed `atk50:active-crit`
+    // sub-stream under the fixed test seed:
+    //   Round 1 enemy hits: [false, false, true]
+    //   Round 2 enemy hits: [true,  false, true]
     //
     // Buggy implementation (uses [enemyTurnDidCrit, enemyTurnDidCrit, enemyTurnDidCrit]):
     //   Round 1: [true, true, true] — all three carry the round-level binary (true).
     //   Round 2: [true, true, true] — same.
     // Correct implementation (uses per-hit hitCrits):
-    //   Round 1: [undefined, true, undefined] — matches the scripted trace above.
+    //   Round 1: [undefined, undefined, true] — matches the actual per-hit trace above.
     //   Round 2: [true, undefined, true].
     it('ship-backed 3-hit enemy at crit:50 emits mixed per-hit didCrit matching gate trace', () => {
         //          d1   d2(h1) d3(h2) d4(h3) d5   d6(h1) d7(h2) d8(h3)
@@ -1683,12 +1679,12 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
             expect(e.attackerId).toBe('atk50');
         }
 
-        // Round 1 gate trace: [false, true, false] → didCrit absent, present, absent.
+        // Round 1 gate trace: [false, false, true] → didCrit absent, absent, present.
         expect(r1[0].didCrit).toBeUndefined();
-        expect(r1[1].didCrit).toBe(true);
-        expect(r1[2].didCrit).toBeUndefined();
+        expect(r1[1].didCrit).toBeUndefined();
+        expect(r1[2].didCrit).toBe(true);
 
-        // Round 2 gate trace (acc carries over at 0.5): [true, false, true] → present, absent, present.
+        // Round 2 gate trace (stream carries over): [true, false, true] → present, absent, present.
         expect(r2[0].didCrit).toBe(true);
         expect(r2[1].didCrit).toBeUndefined();
         expect(r2[2].didCrit).toBe(true);

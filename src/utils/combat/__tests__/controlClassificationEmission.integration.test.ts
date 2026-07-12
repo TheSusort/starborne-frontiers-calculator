@@ -85,10 +85,12 @@ const attackerWith = (...abilities: Ability[]): EnemyAttacker =>
         } as ShipSkills,
     }) as EnemyAttacker;
 
-/** Like attackerWith but with a custom `hacking` stat. hacking 150 vs the focus actor's default
- *  security 100 → live landing chance 0.5. The deterministic back-loaded rate gate fails its
- *  FIRST draw at 0.5 (acc 0.5 < 1) → an 'inflict' named status is RESISTED by landing roll on
- *  round 1 (NOT Block-Debuff). */
+/** Like attackerWith but with a custom `hacking` stat. `liveDebuffLandingChance`
+ *  (effectiveStats.ts) clamps `(hacking - security) / 100` to >= 0 — hacking <= the focus
+ *  actor's default security (100) deterministically floors the landing chance at 0, so an
+ *  'inflict' named status is GUARANTEED resisted by the landing roll on round 1 (NOT
+ *  Block-Debuff), independent of the RNG stream (SP-0: gates now draw from keyed per-actor
+ *  sub-streams, so a mid-range rate is no longer safe to pin a single-draw outcome on). */
 const attackerWithHacking = (hacking: number, ...abilities: Ability[]): EnemyAttacker =>
     ({
         id: 'e1',
@@ -231,15 +233,16 @@ describe('control-classification emission — resist ownership (Task 4)', () => 
     });
 
     // (d) Finding 1: a LANDING-ROLL resist (NOT Block Debuff) of the paired named status must
-    //     suppress control-applied. hacking 150 vs security 100 → 0.5 landing → round-1 'inflict'
-    //     fails the back-loaded gate, so the named Stasis is resisted and the control must NOT
-    //     emit (otherwise on-stasis-applied reactions fire for a Stasis that never landed).
+    //     suppress control-applied. hacking 100 vs security 100 → 0 landing chance (deterministic
+    //     floor, not a probabilistic draw) → round-1 'inflict' never lands, so the named Stasis
+    //     is resisted and the control must NOT emit (otherwise on-stasis-applied reactions fire
+    //     for a Stasis that never landed).
     it('a landing-roll-resisted Stasis (not Block Debuff) emits NO control-applied', () => {
         const { bus, events } = tap();
         run(
             { slots: [] }, // NO Block Debuff on the target — the resist comes from the landing roll.
             bus,
-            attackerWithHacking(150, namedControlDebuff('Stasis'), controlAb('stasis'))
+            attackerWithHacking(100, namedControlDebuff('Stasis'), controlAb('stasis'))
         );
 
         // The named status was resisted by the landing roll → recorded resisted.

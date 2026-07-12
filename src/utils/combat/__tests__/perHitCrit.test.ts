@@ -110,13 +110,20 @@ describe('perHitCrit', () => {
     });
 
     // ── Test 3: 50% crit, 2-hit skill ───────────────────────────────────────
-    // 2 crit draws per round (one per hit). Force a [0.9, 0.1] cycle so hit1 skips
-    // (0.9 >= 0.5) and hit2 crits (0.1 < 0.5) → exactly 1 of 2 hits crits every round,
-    // critFraction=0.5 always, didCrit=true always.
+    // 2 crit draws per round (one per hit). NOTE: the `setRateGateRng(seq)` override below is
+    // dead for this gate under SP-0 — `attacker:active-crit` now carries a
+    // `${actorId}:${purpose}` stream key, and the keyed test provider (installed globally in
+    // setupTests.ts) takes precedence over a bare `setRateGateRng` override whenever a key is
+    // supplied. Left in place as historical intent documentation (originally forced exactly 1
+    // of 2 hits critting every round); the actual per-round hit-crit counts now come from the
+    // keyed `attacker:active-crit` sub-stream under the fixed test seed, which instead produces
+    // all three possible per-hit outcomes across the 4 rounds (0, 1, and 2 of 2 hits critting).
     // effectiveMultiplier = 100 × 2 = 200 → preCritDamage = 10000 × 2.0 = 20000
-    // critFraction=0.5 → damageCritMultiplier = 1 + 0.5 × (100/100) = 1.5
-    // directDamage = 20000 * 1.5 = 30000
-    it('50% crit 2-hit: every round has exactly 1 of 2 critting → constant damage', () => {
+    // damageCritMultiplier = 1 + critFraction × (100/100):
+    //   0 of 2 crit (critFraction=0.0): mult=1.0 → 20000 × 1.0 = 20000
+    //   1 of 2 crit (critFraction=0.5): mult=1.5 → 20000 × 1.5 = 30000
+    //   2 of 2 crit (critFraction=1.0): mult=2.0 → 20000 × 2.0 = 40000
+    it('50% crit 2-hit: per-round damage matches the per-round crit-hit count (0, 1, or 2 of 2)', () => {
         idCounter = 0;
         // 2 crit draws per round over 4 rounds (full trace = 8 draws).
         const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
@@ -133,11 +140,10 @@ describe('perHitCrit', () => {
             critDamage: 100,
             shipSkills: multiHitSkills(2),
         });
-        // Every round: critHits=1, critFraction=0.5, mult=1.5 → 20000*1.5 = 30000
-        for (const round of result.rounds) {
-            expect(round.totalRoundDamage).toBe(30000);
-            expect(round.didCrit).toBe(true);
-        }
+        // Keyed sub-stream trace: R1 both hits crit (40000), R2 one hit crits (30000),
+        // R3 neither hit crits (20000), R4 one hit crits (30000).
+        expect(result.rounds.map((r) => r.totalRoundDamage)).toEqual([40000, 30000, 20000, 30000]);
+        expect(result.rounds.map((r) => r.didCrit)).toEqual([true, true, false, true]);
     });
 
     // ── Test 4: critHits event field at 100% crit, 3-hit ────────────────────
@@ -217,8 +223,13 @@ describe('perHitCrit', () => {
     });
 
     // ── Test 6: single-hit 50% crit — events with didCrit carry critHits: 1 ─
-    // 1 crit draw per round. Force a [0.9, 0.1] cycle so rounds 1,3 skip (0.9 >= 0.5)
-    // and rounds 2,4 crit (0.1 < 0.5) → didCrit pattern false,true,false,true.
+    // 1 crit draw per round. NOTE: this `setRateGateRng(seq)` override is dead for this gate
+    // under SP-0 — `attacker:active-crit` now carries a `${actorId}:${purpose}` stream key, and
+    // the keyed test provider (installed globally in setupTests.ts) takes precedence over a
+    // bare `setRateGateRng` override whenever a key is supplied. Left in place as historical
+    // intent documentation (originally forced didCrit pattern false,true,false,true); the
+    // actual per-round pattern now comes from the keyed `attacker:active-crit` sub-stream under
+    // the fixed test seed: true,true,false,true.
     it('single-hit 50% crit: every ability-performed with didCrit=true carries critHits: 1', () => {
         idCounter = 0;
         const seq = [0.9, 0.1, 0.9, 0.1];
@@ -242,10 +253,9 @@ describe('perHitCrit', () => {
             bus,
         });
         expect(performed.length).toBe(4);
-        // Forced RNG [0.9,0.1,0.9,0.1]: draw 0.9 ≥ 0.5 → no crit, draw 0.1 < 0.5 → crit.
-        // R1: didCrit=false, R2: didCrit=true, R3: false, R4: true.
-        expect(performed[0].didCrit).toBe(false);
-        expect(performed[0].critHits).toBeUndefined();
+        // Keyed sub-stream trace: R1 crit, R2 crit, R3 no-crit, R4 crit.
+        expect(performed[0].didCrit).toBe(true);
+        expect(performed[0].critHits).toBe(1);
         expect(performed[1].didCrit).toBe(true);
         expect(performed[1].critHits).toBe(1);
         expect(performed[2].didCrit).toBe(false);

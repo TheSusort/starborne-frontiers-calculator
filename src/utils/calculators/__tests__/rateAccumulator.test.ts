@@ -1,5 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { makeRateGate, setRateGateRng, resetRateGateRng, mulberry32 } from '../rateAccumulator';
+import {
+    makeRateGate,
+    makeKeyedRng,
+    setKeyedRng,
+    setRateGateRng,
+    resetRateGateRng,
+    mulberry32,
+    setupKeyedTestRng,
+} from '../rateAccumulator';
 
 // setupTests installs a seeded RNG before each test; these tests override it
 // explicitly and reset afterward so they never depend on the global default.
@@ -72,5 +80,54 @@ describe('makeRateGate (random draws)', () => {
         const r1 = mulberry32(12345);
         const r2 = mulberry32(12345);
         expect([r1(), r1(), r1()]).toEqual([r2(), r2(), r2()]);
+    });
+});
+
+describe('makeKeyedRng', () => {
+    it('same key yields a reproducible sequence; different keys are independent', () => {
+        const a1 = makeKeyedRng(123);
+        const a2 = makeKeyedRng(123);
+        // same base seed + same key → identical sequence
+        expect([a1('x'), a1('x'), a1('x')]).toEqual([a2('x'), a2('x'), a2('x')]);
+        // draining key 'x' must NOT shift key 'y' (independence / locality)
+        const g = makeKeyedRng(123);
+        const yFirst = makeKeyedRng(123)('y');
+        g('x');
+        g('x');
+        g('x');
+        expect(g('y')).toBe(yFirst);
+    });
+});
+
+describe('makeRateGate keyed vs unkeyed', () => {
+    it('unkeyed gate ignores the keyed provider and uses the shared rng', () => {
+        setRateGateRng(mulberry32(0x5eed1234));
+        setKeyedRng(makeKeyedRng(0x5eed1234));
+        const unkeyed = makeRateGate(); // no key
+        const shared = mulberry32(0x5eed1234);
+        // unkeyed draw equals the shared-stream draw (keyed provider not consulted)
+        expect(unkeyed(0.5)).toBe(shared() < 0.5);
+    });
+
+    it('a keyed gate draws from its own sub-stream', () => {
+        setRateGateRng(mulberry32(0x5eed1234));
+        setKeyedRng(makeKeyedRng(0x5eed1234));
+        const gate = makeRateGate('p:1:crit');
+        const stream = makeKeyedRng(0x5eed1234);
+        expect(gate(0.5)).toBe(stream('p:1:crit') < 0.5);
+    });
+
+    it('with no keyed provider installed, a keyed gate falls back to rng (production path)', () => {
+        setRateGateRng(mulberry32(0x5eed1234)); // keyed provider left null
+        const gate = makeRateGate('p:1:crit');
+        const shared = mulberry32(0x5eed1234);
+        expect(gate(0.5)).toBe(shared() < 0.5);
+    });
+
+    it('the test bootstrap helper installs a keyed provider seeded from the base seed', () => {
+        setupKeyedTestRng(0x5eed1234);
+        const gate = makeRateGate('e:2:landing');
+        const expected = makeKeyedRng(0x5eed1234);
+        expect(gate(0.5)).toBe(expected('e:2:landing') < 0.5);
     });
 });

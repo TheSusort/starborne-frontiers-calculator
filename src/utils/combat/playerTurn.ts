@@ -277,7 +277,10 @@ export interface PlayerActorRuntime {
      *  default neutral matchup; surfaced only on positionalScalars. */
     attackerAffinity?: AffinityName;
     allyChargePerRound?: number; // attacker-only manual input
-    // Per-actor deterministic gates (own instances — determinism isolation)
+    // Per-actor deterministic gates. Isolation across actors now comes from the `${actorId}:
+    // ${purpose}` stream key threaded into `makeRateGate` (SP-0 Task 3) under the keyed test
+    // provider — NOT from these being separate closure instances (every gate still shares the
+    // same fallback `rng()` when no key/provider is present, e.g. production).
     activeCritGate: RateGate;
     chargedCritGate: RateGate;
     debuffLandingGate: RateGate;

@@ -3,6 +3,14 @@ import { simulateDPS } from '../dpsSimulator';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { setupKeyedTestRng } from '../rateAccumulator';
+
+// Same test-only seed `src/setupTests.ts` installs per-test (SP-0's keyed provider). Re-applied
+// between the two `simulateDPS` calls below so both draw from an identical per-key stream state
+// — otherwise the second call silently continues wherever the first left off (same live-map
+// gotcha SP-0 Task 3 hit and fixed in `rngLocality.test.ts`), which is a test-methodology bug
+// unrelated to buff-steal's actual (RNG-free) no-op behavior.
+const RATE_GATE_TEST_SEED = 0x5eed1234;
 
 // PR10: buff steal has no direct DPS number — it's a buff-TRANSFER mechanic (moves a buff
 // from the target to the caster). In single-ship DPS mode there is no target holding buffs to
@@ -76,6 +84,9 @@ describe('PR10: buff-steal is DPS-inert (no target buffs to steal in single-ship
             expect(hasSteal).toBe(true);
 
             const withSteal = simulateDPS({ ...BASE_STATS, shipSkills: skills });
+            // Reseed so `withoutSteal` draws from the SAME per-key stream position `withSteal`
+            // started from, instead of continuing on from wherever the first call left off.
+            setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const withoutSteal = simulateDPS({
                 ...BASE_STATS,
                 shipSkills: withoutBuffSteal(skills),

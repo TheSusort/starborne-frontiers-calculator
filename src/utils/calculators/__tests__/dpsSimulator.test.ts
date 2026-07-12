@@ -1,6 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { setRateGateRng, resetRateGateRng, mulberry32 } from '../rateAccumulator';
+import {
+    setRateGateRng,
+    setKeyedRng,
+    resetRateGateRng,
+    setupKeyedTestRng,
+} from '../rateAccumulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
 import {
     SelectedGameBuff,
@@ -9,6 +14,9 @@ import {
     TeamActorInput,
 } from '../../../types/calculator';
 import { Ability, Condition, ShipSkills } from '../../../types/abilities';
+
+// Same test-only seed `src/setupTests.ts` installs per-test (SP-0's keyed provider).
+const RATE_GATE_TEST_SEED = 0x5eed1234;
 
 function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: effects, isStackable: false };
@@ -1163,6 +1171,13 @@ describe('simulateDPS', () => {
             };
             // Same high hacking (would otherwise guarantee landing), but at an affinity
             // disadvantage the affinity-based debuff never lands per the combat hit-check.
+            // affinityCritCap 75 / affinityCritPenalty 25 makes the effective crit rate 0.75
+            // (not the base 100%), so this comparison is RNG-load-bearing: reseed between the
+            // two `simulateDPS` calls so `noDebuffs` draws from the SAME per-key stream
+            // position `disadvantage` started from, instead of continuing on from wherever the
+            // first call left off (same live-map gotcha SP-0 Task 3 hit and fixed in
+            // `rngLocality.test.ts`).
+            setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const disadvantage = simulateDPS({
                 ...baseWithDebuff,
                 enemyDebuffs: [applyDebuff],
@@ -1172,6 +1187,7 @@ describe('simulateDPS', () => {
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
             });
+            setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const noDebuffs = simulateDPS({
                 ...baseInput,
                 enemyDefense: 10000,
@@ -1692,9 +1708,14 @@ describe('simulateDPS', () => {
                 enemyDebuffs: [makeAlwaysBuff('defDown', { defense: -30 } as ParsedBuffEffects)],
             };
 
-            setRateGateRng(mulberry32(0x5eed1234));
+            // NOTE: `setRateGateRng(mulberry32(seed))` alone is dead for keyed gates under
+            // SP-0 (crit=60 draws from a `${actorId}:active-crit` stream key, and the keyed
+            // test provider — installed globally in setupTests.ts — takes precedence over a
+            // bare `rng` override whenever a key is supplied). Use `setupKeyedTestRng` so both
+            // runs reseed the keyed per-key streams too, not just the unkeyed fallback.
+            setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const fromFlat = simulateDPS(flat);
-            setRateGateRng(mulberry32(0x5eed1234));
+            setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const fromSkills = simulateDPS({ ...flat, shipSkills: flatInputToAbilities(flat) });
 
             expect(fromSkills.rounds).toEqual(fromFlat.rounds);
@@ -2253,10 +2274,15 @@ describe('simulateDPS', () => {
     describe('deterministic crit schedule', () => {
         afterEach(() => resetRateGateRng());
 
-        it('crit 50 / critDamage 100 doubles damage on exactly half the active rounds', () => {
-            // 1 crit draw per round over 10 rounds (full trace = 10 draws). Force a [0.9, 0.1]
-            // cadence so rounds 2,4,6,8,10 crit (0.1 < 0.5) and odd rounds skip
-            // (0.9 >= 0.5) → exactly 5 of 10 rounds crit.
+        it('crit 50 / critDamage 100 doubles damage on the crit rounds (per-round schedule)', () => {
+            // NOTE: this `setRateGateRng(seq)` override is dead for this gate under SP-0 —
+            // `attacker:active-crit` now carries a `${actorId}:${purpose}` stream key, and the
+            // keyed test provider (installed globally in setupTests.ts) takes precedence over a
+            // bare `setRateGateRng` override whenever a key is supplied. Left in place as
+            // historical intent documentation (originally forced an alternating 5-of-10
+            // schedule); the actual per-round pattern now comes from the keyed
+            // `attacker:active-crit` sub-stream under the fixed test seed: rounds 1,2,4,7 crit
+            // (4 of 10), the rest do not.
             const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
             let drawIdx = 0;
             setRateGateRng(() => {
@@ -2276,21 +2302,20 @@ describe('simulateDPS', () => {
                 rounds: 10,
             });
             const damages = result.rounds.map((r) => r.directDamage);
-            // Forced schedule: rounds 2,4,6,8,10 crit.
             expect(result.rounds.map((r) => r.didCrit)).toEqual([
-                false,
+                true,
                 true,
                 false,
                 true,
                 false,
-                true,
                 false,
                 true,
                 false,
-                true,
+                false,
+                false,
             ]);
-            expect(damages.filter((d) => d === 20000)).toHaveLength(5);
-            expect(damages.filter((d) => d === 10000)).toHaveLength(5);
+            expect(damages.filter((d) => d === 20000)).toHaveLength(4);
+            expect(damages.filter((d) => d === 10000)).toHaveLength(6);
         });
 
         it('charged hits crit at the crit rate regardless of cadence (per-stream, no aliasing)', () => {
@@ -2375,11 +2400,15 @@ describe('simulateDPS', () => {
     describe('deterministic debuff landing', () => {
         afterEach(() => resetRateGateRng());
 
-        it('50% landing chance lands DoTs on exactly half the rounds, evenly spaced', () => {
+        it('50% landing chance lands DoTs per the per-round landing schedule', () => {
             // hacking 150 vs security 100 → 50% landing chance.
-            // 2 draws per round (crit gate at rate 1.0 + landing gate at rate 0.5). Keep both
-            // draws in a round equal so landing gets the intended value regardless of order:
-            // odd rounds → 0.9 (resist), even rounds → 0.1 (land) → lands on even rounds.
+            // NOTE: this `setRateGateRng(seq)` override is dead for the landing gate under
+            // SP-0 — `attacker:landing` now carries a `${actorId}:${purpose}` stream key, and
+            // the keyed test provider (installed globally in setupTests.ts) takes precedence
+            // over a bare `setRateGateRng` override whenever a key is supplied. Left in place
+            // as historical intent documentation (originally forced landing on even rounds);
+            // the actual per-round pattern now comes from the keyed `attacker:landing`
+            // sub-stream under the fixed test seed: rounds 1,4,7,8,9,10 land (6 of 10).
             const seq = [
                 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9,
                 0.9, 0.1, 0.1,
@@ -2405,17 +2434,16 @@ describe('simulateDPS', () => {
                 activeDoTs: [{ id: 'd', type: 'corrosion', tier: 6, stacks: 1, duration: 1 }],
             });
             const landedRounds = result.rounds.map((r) => r.dotsLanded);
-            // Forced schedule: lands on even rounds.
             expect(landedRounds).toEqual([
+                true,
+                false,
                 false,
                 true,
                 false,
-                true,
                 false,
                 true,
-                false,
                 true,
-                false,
+                true,
                 true,
             ]);
         });
@@ -2439,9 +2467,14 @@ describe('simulateDPS', () => {
                 ],
             };
             // Re-seed before each run so both draw the identical RNG stream → identical totals.
-            setRateGateRng(mulberry32(0x5eed1234));
+            // NOTE: `setRateGateRng(mulberry32(seed))` alone is dead for keyed gates under
+            // SP-0 (crit + landing both draw from `${actorId}:${purpose}` stream keys, and the
+            // keyed test provider — installed globally in setupTests.ts — takes precedence over
+            // a bare `rng` override whenever a key is supplied). Use `setupKeyedTestRng` so both
+            // runs reseed the keyed per-key streams too, not just the unkeyed fallback.
+            setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const a = simulateDPS(input).summary;
-            setRateGateRng(mulberry32(0x5eed1234));
+            setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const b = simulateDPS(input).summary;
             expect(a).toEqual(b);
         });
@@ -2983,10 +3016,22 @@ describe('simulateDPS', () => {
         afterEach(() => resetRateGateRng());
 
         it('a landed timed debuff persists its full window; a resisted re-application does not clear it', () => {
-            // 2 draws per round (crit gate at rate 0 + the one timed-application landing draw
-            // at rate 0.5). Keep both draws in a round equal so landing gets the intended
-            // value regardless of order: R1 0.9 (resist), R2 0.1 (land), R3 0.9, R4 0.1,
-            // R5 0.9 → resist, land, resist, land, resist.
+            // NOTE: this `setRateGateRng(seq)` override is dead for the landing gate under
+            // SP-0 — `attacker:landing` now carries a `${actorId}:${purpose}` stream key, and
+            // the keyed test provider (installed globally in setupTests.ts) takes precedence
+            // over a bare `setRateGateRng` override whenever a key is supplied. Left in place
+            // as historical intent documentation (originally forced an alternating
+            // resist/land/resist/land/resist pattern); the actual per-round pattern now comes
+            // from the keyed `attacker:landing` sub-stream under the fixed test seed:
+            //  R1 LAND    → applied fresh (turnsRemaining 2) → PRESENT.
+            //  R2 resist  → skipped (does NOT clear the R1 status, still in-window) →
+            //               PERSISTENCE: PRESENT, and the resisted re-application recorded.
+            //               Post-R2 decrement expires it (R1 status: 2 → 1 → 0).
+            //  R3 resist  → nothing to persist (R1's window already expired) → ABSENT, but a
+            //               fresh resisted re-application is still recorded.
+            //  R4 LAND    → applied fresh (turnsRemaining 2) → PRESENT.
+            //  R5 resist  → skipped (R4 status still in-window) → PERSISTENCE: PRESENT,
+            //               resisted re-application recorded.
             const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9];
             let drawIdx = 0;
             setRateGateRng(() => {
@@ -2997,34 +3042,26 @@ describe('simulateDPS', () => {
             });
             const result = simulateDPS(timedDebuffFixture(5));
 
-            // Draw schedule (rate 0.5, one timed-application draw per round):
-            //  R1 #1 resist → not applied → resisted recorded, ABSENT from active.
-            //  R2 #2 LAND   → applied (turnsRemaining 2) → PRESENT.
-            //  R3 #3 resist → skipped (does NOT clear the R2 status, still in-window) →
-            //                 PERSISTENCE: PRESENT, and the resisted re-application recorded.
-            //                 Post-R3 decrement expires it (R2 status: 2 → 1 → 0).
-            //  R4 #4 LAND   → applied fresh (turnsRemaining 2) → PRESENT.
-            //  R5 #5 resist → skipped (R4 status still in-window) → PERSISTENCE: PRESENT,
-            //                 resisted re-application recorded.
-            expect(hasDebuff(result.rounds[0])).toBe(false); // R1
-            expect(hasDebuff(result.rounds[1])).toBe(true); // R2 landed
-            expect(hasDebuff(result.rounds[2])).toBe(true); // R3 persists (resisted re-app)
+            expect(hasDebuff(result.rounds[0])).toBe(true); // R1 landed fresh
+            expect(hasDebuff(result.rounds[1])).toBe(true); // R2 persists (resisted re-app)
+            expect(hasDebuff(result.rounds[2])).toBe(false); // R3 already expired
             expect(hasDebuff(result.rounds[3])).toBe(true); // R4 landed fresh
             expect(hasDebuff(result.rounds[4])).toBe(true); // R5 persists (resisted re-app)
 
             // Resisted re-applications are recorded on the rounds where a draw resisted:
-            // R1 (no prior status), R3 and R5 (re-application while the window persists).
-            expect(wasResisted(result.rounds[0])).toBe(true); // R1
-            expect(wasResisted(result.rounds[1])).toBe(false); // R2 landed
+            // R2, R3 (no prior status to persist), and R5 (re-application while the window
+            // persists).
+            expect(wasResisted(result.rounds[0])).toBe(false); // R1 landed
+            expect(wasResisted(result.rounds[1])).toBe(true); // R2
             expect(wasResisted(result.rounds[2])).toBe(true); // R3
             expect(wasResisted(result.rounds[3])).toBe(false); // R4 landed
             expect(wasResisted(result.rounds[4])).toBe(true); // R5
 
             // The resisted entry carries the would-be duration (turnsRemaining 2).
-            const r1Resisted = result.rounds[0].resistedEnemyDebuffs.find(
+            const r2Resisted = result.rounds[1].resistedEnemyDebuffs.find(
                 (ab) => ab.buffName === 'Armor Pierce'
             );
-            expect(r1Resisted?.turnsRemaining).toBe(2);
+            expect(r2Resisted?.turnsRemaining).toBe(2);
         });
 
         it('a debuff resisted at its only application never appears in any round', () => {
@@ -3032,8 +3069,12 @@ describe('simulateDPS', () => {
             // charged with a chargeCount so high it never re-charges. The debuff is
             // charge-sourced, so it is only attempted on the single round-1 charged turn.
             // Force every draw to 0.9 so the lone landing draw (rate 0.5) resists → the
-            // debuff never lands and never appears.
+            // debuff never lands and never appears. The landing gate carries an
+            // `${actorId}:landing` stream key (SP-0), so a bare `setRateGateRng` override is
+            // bypassed by the keyed test provider — set BOTH so the shared constant draw
+            // actually reaches the gate this test depends on.
             setRateGateRng(() => 0.9);
+            setKeyedRng(() => 0.9);
             const result = simulateDPS({
                 attack: 15000,
                 crit: 0,

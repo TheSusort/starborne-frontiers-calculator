@@ -1712,7 +1712,11 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     const gateKey = `${intent.ownerId}:${intent.ability.id}`;
     let gate = ctx.procChanceGates?.get(gateKey);
     if (ctx.procChanceGates && !gate) {
-        gate = makeRateGate();
+        // Keyed by owner + purpose (SP-0 Task 3), NOT the finer-grained map key — every
+        // proc-chance ability on this owner shares the owner's "proc" sub-stream, which is
+        // enough for cross-actor locality (this task's invariant) without re-litigating
+        // per-ability draw order within one actor.
+        gate = makeRateGate(`${intent.ownerId}:proc`);
         ctx.procChanceGates.set(gateKey, gate);
     }
     return !gate || gate(pc);
@@ -2390,7 +2394,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const convertKey = `${intent.ownerId}:${intent.ability.id}`;
         let convertGate = ctx.procChanceGates?.get(convertKey);
         if (ctx.procChanceGates && !convertGate) {
-            convertGate = makeRateGate();
+            // Keyed by owner + purpose (SP-0 Task 3) — see passesProcChanceGate above.
+            convertGate = makeRateGate(`${intent.ownerId}:convert`);
             ctx.procChanceGates.set(convertKey, convertGate);
         }
         const converts = convertGate ? convertGate(convertRate) : convertRate >= 1;
@@ -2420,7 +2425,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const extendKey = `${convertKey}:extend`;
             let extendGate = ctx.procChanceGates?.get(extendKey);
             if (ctx.procChanceGates && !extendGate) {
-                extendGate = makeRateGate();
+                // Keyed by owner + purpose (SP-0 Task 3) — see passesProcChanceGate above.
+                extendGate = makeRateGate(`${intent.ownerId}:extend`);
                 ctx.procChanceGates.set(extendKey, extendGate);
             }
             const extends_ = extendGate ? extendGate(critPowerFactor) : critPowerFactor >= 1;
