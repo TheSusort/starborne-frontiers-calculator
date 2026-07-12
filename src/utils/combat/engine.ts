@@ -1331,10 +1331,9 @@ export interface HealingRoundEngine {
  * Side-specific accounting hooks for {@link applyVictimDamage}. Everything keyed off the
  * `victim` (Barrier/shield/HP/Cheat-Death/recordDestroyed/hp-changed) lives in the shared
  * core; the per-direction intake accounting is injected here so the core stays
- * caller-agnostic. Both directions now record into the per-actor `perActorIncoming` map keyed
- * by the victim's id — `playerSink` for enemy→player (tank intake) and `enemySink` for
- * player→enemy (E1 symmetric surface). The two bodies are identical today but kept separate so
- * E2 (per-victim leech) can diverge the enemy side without touching the player path.
+ * caller-agnostic. Both directions record into the same per-actor `perActorIncoming` map keyed
+ * by the victim's id — a single `sink` (SP-U U1) serves BOTH enemy→player (tank intake) and
+ * player→enemy (E1 symmetric surface) directions, since ids are globally unique across sides.
  */
 interface DamageAccountingSink {
     /** today: intakeFor(victimId).incoming += amount */
@@ -3359,7 +3358,7 @@ export function runCombat(input: CombatEngineInput): {
         let targetShieldStart = 0;
         // Per-round intake accounting (healing mode): per-actor incoming/shield/barrier buckets,
         // folded into this round's HealingRoundEngine entry at post-round assembly. Enemy attacker
-        // turns add to these via the shield-first drain below (the playerSink writes intakeFor()).
+        // turns add to these via the shield-first drain below (`sink` writes intakeFor()).
         // The heal target's row totals (incomingDamage/shieldAbsorbed/barrierAbsorbed) are read off
         // intakeFor(healTarget.id); barrierAbsorbed tracks the total fully blocked by an active
         // Barrier (full damage immunity), kept SEPARATE from shieldAbsorbed (Barrier does NOT drain
@@ -3628,23 +3627,19 @@ export function runCombat(input: CombatEngineInput): {
                     protectors.forEach((p, i) => {
                         const chunk = cascade.chunks[i];
                         if (!chunk || chunk.total <= 0) return;
-                        const protectorSink = p.actor.side === 'player' ? playerSink : enemySink;
                         // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs and
                         // sets up the deferred DoT-transform, which acts per redirected chunk).
+                        // SP-U U1: `sink` serves both sides (ids are globally unique), so no
+                        // per-side selection is needed here.
                         let instantTotal = 0;
                         for (let s = 0; s < chunk.stacks; s++) {
-                            const outcome = applyVictimDamage(
-                                chunk.perStack,
-                                p.actor,
-                                protectorSink,
-                                {
-                                    killerId: cause.killerId,
-                                    byDirectDamage: true,
-                                    isProtectionTransfer: true,
-                                    shieldPenetrationPct: 0,
-                                    bombPortion: 0,
-                                }
-                            );
+                            const outcome = applyVictimDamage(chunk.perStack, p.actor, sink, {
+                                killerId: cause.killerId,
+                                byDirectDamage: true,
+                                isProtectionTransfer: true,
+                                shieldPenetrationPct: 0,
+                                bombPortion: 0,
+                            });
                             instantTotal += outcome.immediateDamage ?? 0;
                         }
                         // We sum the post-block, non-transformed INSTANT amount per sub-hit
@@ -3958,11 +3953,10 @@ export function runCombat(input: CombatEngineInput): {
                         for (const allyId of allyIds) {
                             const ally = allActorsById.get(allyId);
                             if (!ally || ally.destroyedRound !== undefined) continue;
-                            const splashSink = ally.side === 'player' ? playerSink : enemySink;
                             for (const bomb of bombs) {
                                 const splash = splashDamageForBomb(bomb, bomb.splashModifier);
                                 if (splash <= 0) continue;
-                                applyVictimDamage(splash, ally, splashSink, {
+                                applyVictimDamage(splash, ally, sink, {
                                     killerId: bomb.sourceId,
                                     byDirectDamage: true,
                                     bombPortion: splash, // full bomb → full shield drain, no penetration
@@ -4142,10 +4136,10 @@ export function runCombat(input: CombatEngineInput): {
                             attackerIncomingReductionPct,
                         });
                         if (reflected > 0) {
-                            // Side-matched sink so the attacker's incoming accumulates into the
-                            // unified perActorIncoming/intakeFor map under its own id.
-                            const reflectSink = attacker.side === 'player' ? playerSink : enemySink;
-                            applyVictimDamage(reflected, attacker, reflectSink, {
+                            // `sink` accumulates the attacker's incoming into the unified
+                            // perActorIncoming/intakeFor map under its own id (ids are globally
+                            // unique across sides — no per-side selection needed, SP-U U1).
+                            applyVictimDamage(reflected, attacker, sink, {
                                 killerId: victim.id,
                                 byDirectDamage: true,
                                 isReflected: true,
@@ -4203,7 +4197,11 @@ export function runCombat(input: CombatEngineInput): {
         // it is read back off `healTarget.destroyedRound` (stamped by recordDestroyed) at the
         // result site. Signature, default `victim = healTarget!`, and return value are unchanged,
         // so every existing call site stays byte-identical.
-        const playerSink: DamageAccountingSink = {
+        // SP-U U1: this single sink serves BOTH directions (player-victim and enemy-victim) —
+        // ids are globally unique across sides, so one `intakeFor` map is safe for both. Formerly
+        // two separate per-side sink objects with byte-identical bodies; collapsed since they
+        // never diverged.
+        const sink: DamageAccountingSink = {
             addIncoming: (amount, victimId) => {
                 intakeFor(victimId).incoming += amount;
             },
@@ -4242,7 +4240,7 @@ export function runCombat(input: CombatEngineInput): {
             // requirePrimaryTarget).
             isPrimaryTarget?: boolean
         ): VictimDamageOutcome =>
-            applyVictimDamage(damage, victim, playerSink, {
+            applyVictimDamage(damage, victim, sink, {
                 ...cause,
                 // H1 T4: direct hits respect the ACTING attacker's shield penetration; DoT
                 // batches (byDirectDamage:false) force pen 0 and bypass the shield entirely.
@@ -4257,22 +4255,11 @@ export function runCombat(input: CombatEngineInput): {
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
         // victim runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path AND now records
         // its incoming / shield-absorbed / barrier-absorbed into the same per-actor `intakeFor`
-        // bucket the playerSink uses — keyed by the ENEMY victim's id (ids are globally unique
-        // across sides, so one map serves both directions). `applyOutgoingToEnemy` is only invoked
-        // on the positional apply path (drivePositionalApply), so non-positional fixtures never add
-        // an enemy key → byte-identical. The enemy victim is never the heal target, so no
-        // heal-target death-round bookkeeping applies. E2 (per-victim leech) reads this surface.
-        const enemySink: DamageAccountingSink = {
-            addIncoming: (amount, victimId) => {
-                intakeFor(victimId).incoming += amount;
-            },
-            addShieldAbsorbed: (amount, victimId) => {
-                intakeFor(victimId).shieldAbsorbed += amount;
-            },
-            addBarrierAbsorbed: (amount, victimId) => {
-                intakeFor(victimId).barrierAbsorbed += amount;
-            },
-        };
+        // bucket `sink` uses — keyed by the ENEMY victim's id (ids are globally unique across
+        // sides, so one map serves both directions). `applyOutgoingToEnemy` is only invoked on the
+        // positional apply path (drivePositionalApply), so non-positional fixtures never add an
+        // enemy key → byte-identical. The enemy victim is never the heal target, so no heal-target
+        // death-round bookkeeping applies. E2 (per-victim leech) reads this surface.
         const applyOutgoingToEnemy = (
             damage: number,
             enemyVictim: CombatActor,
@@ -4283,7 +4270,7 @@ export function runCombat(input: CombatEngineInput): {
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
             // H1 T4: positional player→enemy hits are all-direct (no detonation slice here), so
             // they respect the acting attacker's shield penetration with bombPortion 0 (default).
-            applyVictimDamage(damage, enemyVictim, enemySink, {
+            applyVictimDamage(damage, enemyVictim, sink, {
                 killerId: actingActorId,
                 byDirectDamage: true,
                 shieldPenetrationPct: attackerShieldPenOf(actingActorId),
@@ -4356,7 +4343,8 @@ export function runCombat(input: CombatEngineInput): {
             );
             if (raw <= 0) return;
 
-            const sink = attacker.side === 'player' ? playerSink : enemySink;
+            // `sink` (outer scope, SP-U U1) accumulates the attacker's incoming regardless of
+            // side — ids are globally unique across sides.
             applyVictimDamage(raw, attacker, sink, {
                 killerId: owner.id,
                 byDirectDamage: true,
@@ -5029,9 +5017,8 @@ export function runCombat(input: CombatEngineInput): {
         // — all of which a hand-rolled shieldPool/currentHp debit would bypass. Credits the
         // round's detonation tally (roundPerTargetDamage + perActorDetonation) to the bomb's
         // ORIGINAL applier (`sourceId`), exactly like `applyPerVictimDetonation`/`creditDetonation`
-        // above — never the forcing caster. `sink` is chosen by the CALLER (buildTurnArgs) via the
-        // same enemySink/playerSink direction `applyPerVictimDetonation` uses (player caster →
-        // enemySink, enemy caster → playerSink) since a forced detonation's victim is an arbitrary
+        // above — never the forcing caster. `sink` is passed in by the CALLER (buildTurnArgs) —
+        // the single shared sink (SP-U U1) since a forced detonation's victim is an arbitrary
         // opposing actor, not necessarily the bursting actor's own HP.
         const forceDetonateBombOnVictim = (
             victim: CombatActor,
@@ -5062,8 +5049,9 @@ export function runCombat(input: CombatEngineInput): {
         // cumulativeDamage → the focus-dummy HP overwrite → double-hit (HP already drained inside
         // applyVictimDamage). STRICT no-op (byte-identical) when the actor carries no timed
         // containers OR is not positioned vs opposingRoster — no fixture seeds actor-side timed
-        // containers. Used by the enemy site (PR2: sink=enemySink, roster=allPlayerActors) and the
-        // focus attacker + walked-team sites (PR-B: sink=playerSink, roster=enemyAttackerActors).
+        // containers. Used by the enemy site (PR2: sink=sink, roster=allPlayerActors) and the
+        // focus attacker + walked-team sites (PR-B: sink=sink, roster=enemyAttackerActors) — the
+        // single shared sink (SP-U U1) works for both since ids are globally unique across sides.
         const applyPositionedTimedBurst = (
             actor: CombatActor,
             sink: DamageAccountingSink,
@@ -5249,17 +5237,11 @@ export function runCombat(input: CombatEngineInput): {
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
-                // SP-F F3 fix: forced bomb-detonation sink (Lingshe's countdown-reduce-to-0),
-                // side-resolved exactly like applyPerVictimDetonation's sink argument (player
-                // caster → enemySink, enemy caster → playerSink) — a's opposing victims are
-                // ENEMY actors when a is a player, PLAYER actors when a is an enemy.
+                // SP-F F3 fix: forced bomb-detonation sink (Lingshe's countdown-reduce-to-0).
+                // SP-U U1: `sink` serves both directions (ids globally unique across sides), so
+                // no per-side selection is needed here anymore.
                 forceDetonateBomb: (victim: CombatActor, sourceId: string, damage: number) =>
-                    forceDetonateBombOnVictim(
-                        victim,
-                        a.side === 'player' ? enemySink : playerSink,
-                        sourceId,
-                        damage
-                    ),
+                    forceDetonateBombOnVictim(victim, sink, sourceId, damage),
                 // Positional detonation hint: when the engine will take the positional apply path
                 // (same predicate that computes aoeVictimIds — pattern + target + position all set),
                 // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead
@@ -6189,13 +6171,8 @@ export function runCombat(input: CombatEngineInput): {
                             if (total > 0) {
                                 // DoT batch: bypass shield (byDirectDamage:false), aggregate of
                                 // appliers with no single killer. Mirrors the heal-target route
-                                // (applyIncomingToTarget == applyVictimDamage + playerSink + pen 0).
-                                applyVictimDamage(
-                                    total,
-                                    actor,
-                                    sideIsPlayer ? playerSink : enemySink,
-                                    { byDirectDamage: false }
-                                );
+                                // (applyIncomingToTarget == applyVictimDamage + sink + pen 0).
+                                applyVictimDamage(total, actor, sink, { byDirectDamage: false });
                                 roundPerTargetDamage.set(
                                     actor.id,
                                     (roundPerTargetDamage.get(actor.id) ?? 0) + total
@@ -6236,11 +6213,11 @@ export function runCombat(input: CombatEngineInput): {
 
                         // PR-B: PER-POSITIONED-PLAYER TIMED BURST (enemy-seeded bombs/accumulators
                         // on the focus attacker burst against its OWN HP at its turn-start, via
-                        // playerSink). Mirror of the PR2 enemy site; strict no-op for every existing
+                        // sink). Mirror of the PR2 enemy site; strict no-op for every existing
                         // fixture (none seed player-actor timed containers). Canonical turn-start
                         // order is tickDoTs → processBombs → processAccumulators; PR-C will add
                         // tickDoTs AHEAD of this burst.
-                        applyPositionedTimedBurst(actor, playerSink, enemyAttackerActors);
+                        applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
 
                         // Dead-after-burst guard (PR2 lesson): a lethal self-burst stamps
                         // destroyedRound inside applyVictimDamage AFTER the top-of-turn dead-skip
@@ -6489,7 +6466,7 @@ export function runCombat(input: CombatEngineInput): {
                                     applyPerVictimDetonation(
                                         detonationRecipe,
                                         detonationTargets,
-                                        enemySink,
+                                        sink,
                                         actor.id,
                                         tb
                                     );
@@ -6598,7 +6575,7 @@ export function runCombat(input: CombatEngineInput): {
                         // PR-B: per-positioned-player timed burst (walked-team ally). Same as the
                         // focus site; no focusTurns synthesis (a walked-team actor is never the
                         // focus). tickDoTs added ahead by PR-C.
-                        applyPositionedTimedBurst(actor, playerSink, enemyAttackerActors);
+                        applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
                         const burstDestroyedActor =
                             actor.destroyedRound !== undefined &&
                             !(healTarget && actor.id === healTarget.id);
@@ -6780,15 +6757,15 @@ export function runCombat(input: CombatEngineInput): {
                                 // scale — full stored stacks). Bombs = full shield drain/no pen; inferno+
                                 // corrosion BYPASS the shield (DoT semantics). Credited to the walked-team
                                 // actor's per-round detonation tally + roundPerTargetDamage; NOT into
-                                // cumulativeDamage (HP lands per-victim via applyVictimDamage). `tb`
-                                // resolves player→enemy → enemySink is the correct sink. recipe present
+                                // cumulativeDamage (HP lands per-victim via applyVictimDamage). `sink`
+                                // serves both directions (SP-U U1). recipe present
                                 // only when a detonate-dot ability fired (else dets empty).
                                 const teamDetonationRecipe = teamTurn.positionalDetonation;
                                 if (teamDetonationRecipe && teamDetonationRecipe.dets.length > 0) {
                                     applyPerVictimDetonation(
                                         teamDetonationRecipe,
                                         detonationTargets,
-                                        enemySink,
+                                        sink,
                                         actor.id,
                                         tb
                                     );
@@ -6972,7 +6949,7 @@ export function runCombat(input: CombatEngineInput): {
                         // Stasis: this burst sits INSIDE the `!isTurnBlocked` gate, so a stasised/
                         // disabled positioned enemy does NOT burst this turn (its whole turn is
                         // skipped per the locked combat rule).
-                        applyPositionedTimedBurst(actor, enemySink, allPlayerActors);
+                        applyPositionedTimedBurst(actor, sink, allPlayerActors);
 
                         // Dead-after-burst guard (spike Fact 3): a lethal timed burst above
                         // fires recordDestroyed inside applyVictimDamage, but the loop's
@@ -7310,7 +7287,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // damage-taken leech now fires PER VICTIM on the positional path too (E2 T5,
                                 // procTakenLeechesPerVictim at the enemy site); the non-positional block below
                                 // stays gated to `!enemyPositional` and heal-target-only; (2) since PR5b
-                                // playerSink.addIncoming keys each victim's AoE share into ITS OWN per-actor
+                                // sink.addIncoming keys each victim's AoE share into ITS OWN per-actor
                                 // bucket (the heal-target row is no longer inflated) — surfacing those other
                                 // per-actor buckets as result rows is the still-deferred symmetric-accounting
                                 // surface.
@@ -7379,7 +7356,7 @@ export function runCombat(input: CombatEngineInput): {
                                     // real incoming damage. Every victim's OWN currentHp/shield is mutated
                                     // and recordDestroyed fires for it (its targetHpPct/death derive from the
                                     // victim itself — applyVictimDamage reads recipientMaxHp(victim.id)). Since
-                                    // PR5b the playerSink keys intake by victim.id, so each covered victim's
+                                    // PR5b the sink keys intake by victim.id, so each covered victim's
                                     // AoE share lands in ITS OWN per-actor bucket — the heal target's row reads
                                     // only intakeFor(healTarget.id) and is no longer inflated by other victims.
                                     // SURFACING those other per-actor buckets as result rows is the deferred
@@ -7390,7 +7367,7 @@ export function runCombat(input: CombatEngineInput): {
                                     // (enemyScalars, the DIRECT channel) lands per-victim here, and the
                                     // per-victim skill-triggered detonation slice is routed by the loop
                                     // below — each player footprint victim detonates its OWN containers
-                                    // against its OWN HP via playerSink (the mirror of the player→enemy
+                                    // against its OWN HP via sink (the mirror of the player→enemy
                                     // block). detonationDamage is 0 on the positional path because the
                                     // recipe (enemyPositionalDetonation) is consumed per-victim, not as
                                     // a single turn-scalar — so it is no longer dropped.
@@ -7481,7 +7458,7 @@ export function runCombat(input: CombatEngineInput): {
                                         stasisBreakPending.set(victimId, true);
                                     }
                                     // PR3: enemy→player per-victim skill-triggered detonation
-                                    // (mirror of the player→enemy block, routed through playerSink).
+                                    // (mirror of the player→enemy block, routed through `sink`).
                                     // Each PLAYER victim hit by this enemy cast that is STILL ALIVE
                                     // detonates its OWN containers (no role-scale). Bombs = full shield
                                     // drain/no pen; inferno+corrosion BYPASS shield. Credited to the
@@ -7494,7 +7471,7 @@ export function runCombat(input: CombatEngineInput): {
                                         applyPerVictimDetonation(
                                             enemyPositionalDetonation,
                                             detonationTargets,
-                                            playerSink,
+                                            sink,
                                             actor.id,
                                             tb
                                         );
@@ -7992,7 +7969,7 @@ export function runCombat(input: CombatEngineInput): {
         // enemy attacker turn); this post-round guard is a backstop for any other 0-HP path.
         if (healTarget) {
             // PR5b: the heal target's intake totals are sourced from its per-actor bucket
-            // (written by playerSink, PR5a). In the single-target path this is byte-identical to
+            // (written by sink, PR5a). In the single-target path this is byte-identical to
             // the legacy per-round scalars this replaced (the heal target is the only recorded
             // victim); in positional AoE it is the correct per-victim share rather than the old
             // tank-sums-everything scalar. The replaced scalars were removed in this same change.
