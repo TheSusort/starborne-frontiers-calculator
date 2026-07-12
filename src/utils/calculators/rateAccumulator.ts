@@ -25,6 +25,38 @@ export function setRateGateRng(fn: () => number): void {
 /** Test-only: restore the default Math.random RNG. */
 export function resetRateGateRng(): void {
     rng = Math.random;
+    keyedProvider = null;
+}
+
+/** Installed only by the test bootstrap. Null in production → keyed gates fall back to `rng`. */
+let keyedProvider: ((key: string) => number) | null = null;
+
+/** Test-only: install (or clear) the keyed sub-stream provider. */
+export function setKeyedRng(provider: ((key: string) => number) | null): void {
+    keyedProvider = provider;
+}
+
+/** FNV-1a string hash → 32-bit seed offset, so each key deterministically seeds its own stream. */
+function hashKey(key: string): number {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+        h ^= key.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return h >>> 0;
+}
+
+/** Build a keyed RNG: lazily mints one mulberry32 sub-stream per key, seeded from base ^ hash(key). */
+export function makeKeyedRng(baseSeed: number): (key: string) => number {
+    const streams = new Map<string, () => number>();
+    return (key: string): number => {
+        let s = streams.get(key);
+        if (!s) {
+            s = mulberry32((baseSeed ^ hashKey(key)) >>> 0);
+            streams.set(key, s);
+        }
+        return s();
+    };
 }
 
 /** Deterministic, seedable PRNG (mulberry32). Used by the test bootstrap to make the
@@ -47,9 +79,18 @@ export function mulberry32(seed: number): () => number {
  *
  * Each `makeRateGate()` returns its own closure for signature compatibility with the
  * engine's many gate instances; the closures are stateless and draw independently.
+ *
+ * `streamKey` is optional and test-only: when supplied AND a keyed provider is installed
+ * (via `setKeyedRng`), the draw comes from that key's own sub-stream instead of the
+ * shared `rng`. With no keyed provider installed (production), behavior is unchanged —
+ * the key is ignored and the gate falls back to `rng()` exactly as before.
  */
-export function makeRateGate(): (rate: number) => boolean {
-    return (rate: number): boolean => rng() < Math.min(1, Math.max(0, rate));
+export function makeRateGate(streamKey?: string): (rate: number) => boolean {
+    return (rate: number): boolean => {
+        const draw =
+            streamKey != null && keyedProvider != null ? keyedProvider(streamKey) : rng();
+        return draw < Math.min(1, Math.max(0, rate));
+    };
 }
 
 /** Get-or-create a per-key gate in `gates` and roll it at `chance`. Absent map → pass-through
