@@ -1155,17 +1155,25 @@ describe('healing mode — enemy attackers and target intake', () => {
         expect(rounds[1].perActor.get('attacker')?.directHeal ?? 0).toBe(0);
     });
 
-    // ── Test 6: enemyAttackers without healTargetId throws ────────────────────
-    it('throws when enemyAttackers provided without healTargetId', () => {
+    // ── Test 6: enemyAttackers WITHOUT healTargetId now runs (SP-U U5 R6 decouple) ─
+    // The engine used to throw `enemyAttackers require healTargetId`. The positioned enemy
+    // roster is now built purely from the enemyAttackers presence, so this configuration runs
+    // (DPS mode — no explicit heal focus, no positional team battle) without a heal pipeline
+    // and without crashing. The enemy attacker has no positional target and no heal-anchor
+    // legacy victim, so it takes the cadence-only no-victim skip each turn.
+    it('runs (no throw) when enemyAttackers are provided without healTargetId', () => {
         idCounter = 0;
-        expect(() =>
-            runCombat(
+        let result: ReturnType<typeof runCombat> | undefined;
+        expect(() => {
+            result = runCombat(
                 BASE({
                     enemyAttackers: [manualEnemy('atk1', 2000)],
                     shipSkills: { slots: [] },
                 })
-            )
-        ).toThrow(/enemyAttackers require healTargetId/);
+            );
+        }).not.toThrow();
+        // No heal focus / positional team battle → the heal pipeline stays inert.
+        expect(result?.healing).toBeUndefined();
     });
 
     // ── Enemy attacker id validation ──────────────────────────────────────────

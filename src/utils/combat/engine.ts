@@ -1965,18 +1965,26 @@ export function runCombat(input: CombatEngineInput): {
         [attacker.id, attacker],
         ...teamCombatActors.map((a) => [a.id, a] as const),
     ]);
-    const healTarget = healTargetId ? allPlayerActorsById.get(healTargetId) : undefined;
-    if (healTargetId && !healTarget) {
+    const explicitHealTarget = healTargetId ? allPlayerActorsById.get(healTargetId) : undefined;
+    if (healTargetId && !explicitHealTarget) {
         throw new Error(`runCombat: healTargetId '${healTargetId}' is not a player actor`);
     }
+    // SP-U U5 (R6 decouple): the heal/shield pipeline runs whenever there is an EXPLICIT heal
+    // focus (the healing calculator) OR a real positional team battle (the real-vs-real sim,
+    // `battleSimulator`). Sim mode has no explicit focus, so anchor `healTarget` to the focus
+    // actor there — this is byte-identical to the former vestigial `healTargetId: focus.id`
+    // binding `battleSimulator` used purely to keep healingCtx built and unlock the enemy roster.
+    // Every downstream focus-carve-out (`healTarget && actor.id === healTarget.id`) and the
+    // healingCtx anchor thus resolve exactly as before. Real-vs-real team heals still route to the
+    // lowest-HP living ally via `lowestHpAllyId` (the `teamBattle` path), NOT this anchor.
+    const healTarget = explicitHealTarget ?? (input.positionalTeamBattle ? attacker : undefined);
     const healingMode = !!healTarget;
 
-    // Enemy attackers (healing mode). Offense-only queue actors that bombard the heal target.
-    // They exist ONLY in healing mode — providing them without a heal target is a config bug.
+    // Enemy attackers. Offense actors that bombard the player side (healing/sim mode). The enemy
+    // roster is built purely from their presence (SP-U U5): no `healTargetId` is required — sim
+    // mode supplies them under `positionalTeamBattle` with no explicit heal focus, and a future
+    // real DPS enemy (SP-U 5a) supplies one with neither.
     const enemyAttackerInputs = input.enemyAttackers ?? [];
-    if (enemyAttackerInputs.length > 0 && !healTarget) {
-        throw new Error('runCombat: enemyAttackers require healTargetId');
-    }
     // Validate enemy attacker ids before building any actors: an id that duplicates another
     // enemy attacker, or collides with a reserved/player id (the singular enemy entity, the
     // focus actor, or any team actor), would silently clobber a map entry (runtime lookup,
@@ -4889,7 +4897,11 @@ export function runCombat(input: CombatEngineInput): {
         // been removed from this interface; the credit/intake & emit TAILS stay per-kind (→ PR7).
         interface TurnBindings {
             opposingRoster: CombatActor[];
-            legacyVictim: CombatActor;
+            // Player side: the always-present dummy `enemy` sink. Enemy side: the heal target,
+            // which can be undefined once enemy attackers no longer require one (SP-U U5 R6
+            // decouple). selectTurnTarget returns `tgt: undefined` only in that enemy-side no-victim
+            // case; the enemy turn then skips its attack (cadence-only), mirroring the dead-target path.
+            legacyVictim: CombatActor | undefined;
             victimDefenceFor: (tgt: CombatActor) => number;
             victimMaxHpFor: (tgt: CombatActor) => number;
             enemyTypeArg: EnemyBaseClass | undefined;
@@ -4924,7 +4936,7 @@ export function runCombat(input: CombatEngineInput): {
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
-            legacyVictim: healTarget!,
+            legacyVictim: healTarget,
             // SP-F F5: Meatshield defense-substitution (approximation) — see the
             // substitutedDefenceFor doc comment above for the full rule.
             victimDefenceFor: (tgt) =>
@@ -5123,7 +5135,7 @@ export function runCombat(input: CombatEngineInput): {
         // Unified positional target selection (bySide unification PR6a). Reproduces the
         // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against
         // its opposing roster, else fall back to the side's legacy victim (dummy / heal target).
-        const selectTurnTarget = (a: CombatActor): { tgt: CombatActor } => {
+        const selectTurnTarget = (a: CombatActor): { tgt: CombatActor | undefined } => {
             const tb = turnBindings(a.side);
             const target = parsedTargetFor(a);
             const selected =
@@ -6397,6 +6409,10 @@ export function runCombat(input: CombatEngineInput): {
                             // struck victim's currentHp (max − currentHp), so the dummy-sink and real-victim
                             // cases both read `tgt` uniformly — no separate decline ternary here.
                             const { tgt } = selectTurnTarget(actor);
+                            // The player side's legacy victim is the always-present dummy `enemy`
+                            // sink, so `tgt` is never undefined here — this is a type-narrowing
+                            // no-op (selectTurnTarget widened for the enemy side in SP-U U5 R6).
+                            if (tgt === undefined) continue;
                             // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
                             // only when the victim was stasised at hit time. The actual statusEngine
                             // removal happens AFTER drainIntents/drainEnemyIntents (below).
@@ -6643,6 +6659,10 @@ export function runCombat(input: CombatEngineInput): {
                             // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
                             // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
                             const { tgt } = selectTurnTarget(actor);
+                            // Player side's legacy victim is the always-present dummy `enemy` sink →
+                            // `tgt` is never undefined here (type-narrowing no-op; selectTurnTarget
+                            // widened for the enemy side in SP-U U5 R6).
+                            if (tgt === undefined) continue;
                             const teamPattern = parsedPatternFor(actor);
                             // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
@@ -6865,8 +6885,11 @@ export function runCombat(input: CombatEngineInput): {
                     // the TARGET bound as the `enemy` arg (Task 6b). Its damage drains shield-first
                     // into the live target via the intake below; self-buffs land in its OWN owner
                     // store; debuffs/DoTs land on the target's per-target store (targetId).
-                    // Healing mode is guaranteed here (enemyAttackers require healTargetId), so
-                    // healTarget is defined whenever this branch runs.
+                    // Healing mode is guaranteed here in the current corpus: an enemy attacker only
+                    // exists under an explicit heal focus OR a positional team battle (whose focus
+                    // anchor makes healTarget defined), so healTarget is defined whenever this branch
+                    // runs today. A future real DPS enemy (SP-U 5a) with neither will take the
+                    // no-victim cadence-only skip before reaching the heal-target-dependent paths.
                     //
                     // DEAD-TARGET GUARD (restores the retired runEnemyAttackerTurn semantic): vs a
                     // dead heal target the enemy must NOT apply debuffs/DoTs or emit application
@@ -6970,6 +6993,7 @@ export function runCombat(input: CombatEngineInput): {
                                 enemyWouldFireAction
                             );
                             const skipDeadTargetTurn =
+                                tgt !== undefined &&
                                 tgt.currentHp <= 0 &&
                                 skillNeedsOpposingVictim(enemyFiringSkillForDeadCheck);
                             // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
@@ -7047,19 +7071,24 @@ export function runCombat(input: CombatEngineInput): {
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
                             // the victim is never recorded → no break-mark, no stasisBreakPending.
                             const enemyTgtWasStasised =
-                                !actor.doesntBreakStasis && isStasised(tgt.id);
+                                !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             const enemyTurnStasisHitVictims = new Set<string>();
                             const enemyBreakHook = enemyTgtWasStasised
                                 ? (targetId: string) => {
                                       enemyTurnStasisHitVictims.add(targetId);
                                   }
                                 : undefined;
-                            if (skipDeadTargetTurn) {
+                            if (skipDeadTargetTurn || tgt === undefined) {
                                 // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                                 // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
                                 // application events — a dead target is untouched (old short-circuit).
                                 // The `&& actor.chargeCount > 0` term is redundant (hasChargedSkill already
                                 // implies chargeCount >= 1); the helper's internal guard handles it.
+                                // SP-U U5 (R6 decouple): `tgt === undefined` — no positional target AND no
+                                // legacy heal anchor — takes this same cadence-only skip (the enemy has no
+                                // victim this turn). Never reached in the existing corpus (the heal anchor is
+                                // always defined when an enemy attacker acts); the `else` below narrows `tgt`
+                                // to a defined CombatActor for the whole real-turn body.
                                 advanceChargeCadence(actor, enemyRuntime.hasChargedSkill, bus, r);
                                 // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
                                 // produced no ctx either; this actor has no live DoTs to attribute).
@@ -7244,7 +7273,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // undefined (enemy's "allies" are enemy-side, not the player team).
                                 processExtraActionGrants(actor, enemyTurn.extraActionGrants);
                             }
-                            if (damage > 0) {
+                            // `tgt !== undefined` narrows the victim for this block (SP-U U5 R6): a
+                            // positive `damage` is only produced by the non-skip `else` above, which
+                            // runs only when `tgt` is defined — byte-identical (the term is always true
+                            // when damage > 0 in the existing corpus).
+                            if (damage > 0 && tgt !== undefined) {
                                 // Phase-5 per-victim accounting notes (see detailed notes below): (1) the
                                 // damage-taken leech now fires PER VICTIM on the positional path too (E2 T5,
                                 // procTakenLeechesPerVictim at the enemy site); the non-positional block below
@@ -7406,8 +7439,14 @@ export function runCombat(input: CombatEngineInput): {
                                 // gated to `!enemyPositional` so the two paths never double-count. Inert on the
                                 // non-positional path unless a player runs a damage-taken reactive in healing
                                 // mode (no current fixture does → the heal target's slice is empty).
-                                const healTargetTakenLeeches =
-                                    takenLeechesByOwner.get(healTarget!.id) ?? [];
+                                // SP-U U5 (R6 decouple): guard the eager read — `healTarget` can be
+                                // undefined once enemy attackers no longer require a heal target
+                                // (future real DPS enemy). No heal target ⟹ no taken-leech slice ⟹
+                                // the block below is skipped. Byte-identical for the existing corpus
+                                // (healTarget always defined when an enemy attacker acts).
+                                const healTargetTakenLeeches = healTarget
+                                    ? (takenLeechesByOwner.get(healTarget.id) ?? [])
+                                    : [];
                                 if (
                                     !enemyPositional &&
                                     healTargetTakenLeeches.length > 0 &&

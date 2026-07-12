@@ -357,8 +357,9 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
         // So if someone deleted the `isPositional(...)` clause from the gate (or it regressed to
         // true), this enemy WOULD burst 4000 here and the assertions below would fail — NOT vacuous.
         //
-        // enemyAttackers require healTargetId, so we run in healing mode with the focus healing
-        // itself. The enemy attacker carries a 4 × 1000 timed bomb (countdown 2): under the legacy
+        // We run in healing mode (healTargetId = the focus healing itself) so the enemy attacks
+        // resolve against a real heal target. The enemy attacker carries a 4 × 1000 timed bomb
+        // (countdown 2): under the legacy
         // enemy-attacker branch this bomb is NEVER burst, and the per-positioned path is gated OFF.
         const { events, result } = collect(
             NONPOS_BASE({
