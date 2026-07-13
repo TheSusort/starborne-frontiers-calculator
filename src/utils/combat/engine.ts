@@ -985,8 +985,15 @@ export interface CombatEngineInput {
     shieldPenetration?: number;
     chargeCount: number;
     shipSkills: ShipSkills;
-    enemyDefense: number;
-    enemyHp: number;
+    /** Optional (F7) — omitted only by `battleSimulator.ts`'s positional call, where the
+     *  dummy `enemy` actor these feed is vestigial (never read as a victim's stats there).
+     *  `dpsSimulator.ts` (DPS mode) and `healingEngineAdapter.ts` still pass real values —
+     *  the latter's healer can cast a `damage` ability at `target:'enemy'`, landing on this
+     *  dummy and feeding `basis:'damage-dealt'` heal/shield riders, so its defence/HP are
+     *  load-bearing there (see docs/superpowers/notes/2026-07-13-f7-dummy-audit.md follow-up).
+     *  Absent → defaults to a huge-HP/zero-defence sink internally. */
+    enemyDefense?: number;
+    enemyHp?: number;
     numRounds: number;
     /** Scheduled (manual + team) buffs — statusEngine input. */
     selfBuffs: SelectedGameBuff[];
@@ -1394,8 +1401,10 @@ export function runCombat(input: CombatEngineInput): {
         chargeCount,
         // shipSkills is intentionally NOT destructured here — the cast/reactive split below
         // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
-        enemyDefense,
-        enemyHp,
+        // F7: optional on the input — default to the vestigial dummy sink's stats
+        // (0 defence / 1e9 HP) when the caller (positional/healing mode) omits them.
+        enemyDefense = 0,
+        enemyHp = 1_000_000_000,
         numRounds,
         selfBuffs,
         enemyDebuffs,

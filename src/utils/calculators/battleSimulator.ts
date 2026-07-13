@@ -855,10 +855,6 @@ export function simulateBattle(
         shieldPenetration: focus.stats.shieldPenetration,
         chargeCount: focus.chargeCount,
         shipSkills: focus.shipSkills,
-        // The dummy player-offense enemy target (vestigial alongside the positioned roster):
-        // a huge HP / 0 defence punching bag — the real per-victim damage flows positionally.
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
