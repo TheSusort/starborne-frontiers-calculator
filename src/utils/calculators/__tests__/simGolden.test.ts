@@ -9,6 +9,7 @@ import {
     healCasting,
     f1Reconciliation,
     healUnequalPerRecipient,
+    healModifierScaling,
 } from './__fixtures__/simGoldenFixtures';
 
 // High-level regression guard for the engine-unification epic. A diff = a real behavior change.
@@ -27,6 +28,8 @@ describe('sim goldens (BattleResult snapshots)', () => {
         ['f1Reconciliation', f1Reconciliation],
         // SP-F F2: dedicated per-recipient healing fixture — see the dedicated assertion below.
         ['healUnequalPerRecipient', healUnequalPerRecipient],
+        // SP-F F4: dedicated heal-modifier scaling fixture — see the dedicated assertion below.
+        ['healModifierScaling', healModifierScaling],
     ])('%s', (_n, build) => {
         // Snapshot the structured result (per-round per-ship totals + outcome), not the free-text log.
         const { rounds, outcome, roster } = simulateBattle(build());
@@ -126,5 +129,54 @@ describe('sim goldens (BattleResult snapshots)', () => {
         }
         // Non-vacuous: at least one round actually exercised the heal.
         expect(anyRoundChecked).toBe(true);
+    });
+
+    // SP-F F4: heal-modifier scaling (beyond the snapshot) — proves the per-ship `healModifier`
+    // stat is threaded from the sim adapter into the engine and folds into heal casts as
+    // `(1 + healModifier/100)`, on BOTH sides. Before F4 the adapter dropped the stat entirely
+    // (0 in `battleSimulator.ts`) and the engine's enemy runtime builder hard-coded
+    // `healModifier: 0`, so a simulated healer's output ignored its heal-modifier. Isolate each
+    // side by toggling ONLY that side's modifier (50 vs 0) while holding the other at 0, and
+    // sum that side's healingReceived across the run: the ratio must be exactly 1.5. The enemy
+    // leg specifically exercises the engine.ts enemy-builder fix (team symmetry).
+    it("healModifierScaling: a side's healingReceived scales by (1 + healModifier/100), both sides (F4)", () => {
+        const sumSideHealing = (
+            input: ReturnType<typeof healModifierScaling>,
+            side: 'player' | 'enemy'
+        ) => {
+            const { rounds } = simulateBattle(input);
+            let total = 0;
+            for (const r of rounds) {
+                for (const s of r.ships) {
+                    if (s.side === side) total += s.healingReceived;
+                }
+            }
+            return total;
+        };
+
+        // Player side: modifier ON (50) vs OFF (0), enemy held at 0 in both runs.
+        const pOn = sumSideHealing(
+            healModifierScaling({ playerHealModifier: 50, enemyHealModifier: 0 }),
+            'player'
+        );
+        const pOff = sumSideHealing(
+            healModifierScaling({ playerHealModifier: 0, enemyHealModifier: 0 }),
+            'player'
+        );
+        expect(pOff).toBeGreaterThan(0);
+        expect(pOn / pOff).toBeCloseTo(1.5, 5);
+
+        // Enemy side: proves the engine's enemy runtime builder now folds healModifier (was
+        // hard-coded 0 before F4). Player held at 0 in both runs.
+        const eOn = sumSideHealing(
+            healModifierScaling({ playerHealModifier: 0, enemyHealModifier: 50 }),
+            'enemy'
+        );
+        const eOff = sumSideHealing(
+            healModifierScaling({ playerHealModifier: 0, enemyHealModifier: 0 }),
+            'enemy'
+        );
+        expect(eOff).toBeGreaterThan(0);
+        expect(eOn / eOff).toBeCloseTo(1.5, 5);
     });
 });

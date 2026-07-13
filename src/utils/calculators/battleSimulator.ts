@@ -172,10 +172,12 @@ export interface BattleResult {
      */
     combatLog: CombatLogRound[];
     /**
-     * Pre-fight effects that landed on an actor but are NOT simulated (yet): squad-leader
-     * conditional/'other'/per-round lines, plus — until PR F3 consumes them — the modifier-
-     * channel lines. Present ONLY when a squad leader was selected AND at least one such
-     * text was recorded, so a no-leader run's result stays deep-equal to the pre-F shape.
+     * Pre-fight effects that landed on an actor but are NOT simulated: squad-leader
+     * conditional/'other'/per-round/'self' lines, plus any modifier-channel line whose channel
+     * has no mapped engine field (see `MODIFIER_FIELD_BY_CHANNEL` in squadLeaderPass.ts — mapped
+     * channels ARE consumed, so they no longer appear here). Present ONLY when a squad leader was
+     * selected AND at least one such text was recorded, so a no-leader run's result stays
+     * deep-equal to the pre-F shape.
      */
     preFight?: { unsimulated: { actorId: string; name: string; texts: string[] }[] };
 }
@@ -561,6 +563,10 @@ interface DerivedCombatStats {
     hp: number;
     /** Turn-order speed. Defaults to baseStats.speed ?? 100. */
     speed: number;
+    /** Heal-modifier % (SP-F F4). Folded into this actor's heal casts as `(1 + healModifier/100)`
+     *  by the engine (playerTurn `raw` fold + standing-leech/reactive-heal folds). Sourced from
+     *  statOverrides / baseStats (a gear-set or base stat); defaults 0. */
+    healModifier: number;
 }
 
 /** Resolve a placement's combat stats: ship.baseStats as the floor (with the page's
@@ -583,6 +589,7 @@ function resolveStats(p: BattlePlacement): DerivedCombatStats {
         defence: o.defence ?? b.defence ?? 0,
         hp: o.hp ?? b.hp ?? 0,
         speed: o.speed ?? b.speed ?? 100,
+        healModifier: o.healModifier ?? b.healModifier ?? 0,
     };
 }
 
@@ -632,6 +639,7 @@ function toEnemyStats(
     | 'hacking'
     | 'security'
     | 'shieldPenetration'
+    | 'healModifier'
 > {
     return {
         attack: stats.attack,
@@ -645,6 +653,9 @@ function toEnemyStats(
         hacking: stats.hacking,
         security: stats.security,
         shieldPenetration: stats.shieldPenetration,
+        // SP-F F4: the enemy folds ITS heal-modifier on its own heal casts (team symmetry with the
+        // focus/walk paths). Read by the engine's enemy runtime builder as `e.stats.healModifier`.
+        healModifier: stats.healModifier,
     };
 }
 
@@ -837,6 +848,9 @@ export function simulateBattle(
             walk: {
                 shipSkills: plan.shipSkills,
                 stats: toWalkStats(plan.stats),
+                // SP-F F4: fold the walked actor's heal-modifier on its heal casts (read flat as
+                // `w.healModifier`). Team symmetry with the focus/enemy paths.
+                healModifier: plan.stats.healModifier,
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
                 affinityDamageModifier: aff.damageModifier,
@@ -914,6 +928,9 @@ export function simulateBattle(
         defence: focus.stats.defence,
         hp: focus.stats.hp,
         speed: focus.stats.speed,
+        // SP-F F4: fold the focus actor's heal-modifier on its heal casts (read as
+        // `input.healModifier`). Team symmetry with the walk/enemy paths.
+        healModifier: focus.stats.healModifier,
         // Base hacking/security so the engine's live landing recompute has real inputs for
         // the focus actor and the vestigial dummy enemy. The dummy carries the representative
         // enemy security (first opponent). When the focus targets a POSITIONED enemy with

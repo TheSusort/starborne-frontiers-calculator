@@ -693,3 +693,88 @@ export function healUnequalPerRecipient(): BattleSimulationInput {
         rounds: 8,
     };
 }
+
+// ===========================================================================
+// healModifierScaling (SP-F F4) — proves the per-ship `healModifier` stat (a gear-set / base
+// stat, NOT a squad-leader channel) is threaded from the sim adapter into the engine and folds
+// into heal casts as `(1 + healModifier/100)` on BOTH sides (team symmetry): the player path
+// (adapter → `CombatEngineInput.healModifier` for the focus + `w.healModifier` for walked team
+// actors) and the enemy path (adapter → `EnemyActorInput.stats.healModifier` → the engine's
+// enemy runtime builder, which hard-coded `healModifier: 0` before F4). Before F4 the adapter
+// dropped the stat entirely, so every simulated healer under-counted by its heal-modifier.
+//
+// Both healers repair a bare "20% of its Max HP" (caster-basis) every turn with crit pinned to
+// 0, so a side's `healingReceived` scales linearly and deterministically with THAT side's
+// healModifier — the dedicated assertion in simGolden.test.ts runs the fixture with a side's
+// modifier on vs off and checks the exact 1.5 ratio. Allies deal 0 damage (attack 0, crit 0),
+// so nothing dies and the heal is the only signal; the fixture is fully deterministic.
+// ===========================================================================
+
+/** placement() variant that also injects a `healModifier` into statOverrides (the base
+ *  `placement` helper doesn't carry it). */
+const hmPlacement = (ship: Ship, position: Position, healModifier: number): BattlePlacement => ({
+    ship,
+    position,
+    statOverrides: {
+        attack: ship.baseStats.attack,
+        crit: ship.baseStats.crit,
+        critDamage: ship.baseStats.critDamage,
+        defensePenetration: 0,
+        hacking: ship.baseStats.hacking,
+        security: ship.baseStats.security,
+        defence: ship.baseStats.defence,
+        hp: ship.baseStats.hp,
+        speed: ship.baseStats.speed,
+        healModifier,
+    },
+});
+
+/** Pure ally-heal supporter (caster-basis "of its Max HP", crit 0 → deterministic heal). */
+const hmHealer = (id: string, name: string): Ship => ({
+    ...shipBase(id, name, 'SUPPORTER', {
+        hp: 200_000,
+        attack: 0,
+        defence: 300,
+        hacking: 200,
+        security: 150,
+        speed: 130,
+        crit: 0,
+    }),
+    activeSkillText: 'This Unit repairs 20% of its Max HP.',
+    activeTarget: 'allies',
+    activePattern: 'Pattern-Base',
+});
+
+/** Inert heal target: attack 0 / crit 0 so it neither deals damage nor draws RNG that matters;
+ *  it just exists as an ally for the healer to repair. */
+const hmAlly = (id: string, name: string): Ship => ({
+    ...shipBase(id, name, 'ATTACKER', {
+        hp: 180_000,
+        attack: 0,
+        defence: 200,
+        hacking: 200,
+        security: 150,
+        speed: 100,
+        crit: 0,
+    }),
+    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+});
+
+export function healModifierScaling(opts?: {
+    playerHealModifier?: number;
+    enemyHealModifier?: number;
+}): BattleSimulationInput {
+    return {
+        playerTeam: [
+            hmPlacement(hmHealer('f4-p-healer', 'Mercy'), 'M1', opts?.playerHealModifier ?? 50),
+            hmPlacement(hmAlly('f4-p-ally', 'Bastion'), 'M4', 0),
+        ],
+        enemyTeam: [
+            hmPlacement(hmHealer('f4-e-healer', 'Blight'), 'T1', opts?.enemyHealModifier ?? 30),
+            hmPlacement(hmAlly('f4-e-ally', 'Marauder'), 'T4', 0),
+        ],
+        rounds: 6,
+    };
+}

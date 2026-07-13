@@ -430,6 +430,10 @@ export interface EnemyActorInput {
         /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
          *  stats.shieldPenetration. No production reader until H1 Task 4 wires the apply path. */
         shieldPenetration?: number;
+        /** Heal-modifier % (SP-F F4). Folded into this enemy's own heal casts as
+         *  `(1 + healModifier/100)`, team-symmetric with the player focus/walk paths. Optional —
+         *  undefined treated as 0. */
+        healModifier?: number;
     };
     chargeCount: number;
     startCharged: boolean;
@@ -604,7 +608,9 @@ export function buildEnemyPlayerActorRuntime(
         defensePenetration: 0,
         defence: e.stats.defence ?? 0,
         hp: e.stats.hp ?? 0,
-        healModifier: 0,
+        // SP-F F4: fold the enemy's own heal-modifier (team symmetry with the player focus/walk
+        // paths); was hard-coded 0 before F4. Undefined → 0.
+        healModifier: e.stats.healModifier ?? 0,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: resolvedDamageMod,
