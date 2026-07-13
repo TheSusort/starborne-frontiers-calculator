@@ -1402,7 +1402,7 @@ export function runCombat(input: CombatEngineInput): {
         // shipSkills is intentionally NOT destructured here — the cast/reactive split below
         // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
         // F7: optional on the input — default to the vestigial dummy sink's stats
-        // (0 defence / 1e9 HP) when the caller (positional/healing mode) omits them.
+        // (0 defence / 1e9 HP) when the caller (battleSimulator.ts's positional mode) omits them.
         enemyDefense = 0,
         enemyHp = 1_000_000_000,
         numRounds,
