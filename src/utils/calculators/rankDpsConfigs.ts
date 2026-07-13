@@ -94,3 +94,24 @@ export function describeBestVsSecond(
 export function bestVsSecondLabelColorClass(label: string): string {
     return label.startsWith('-') ? 'text-red-500' : 'text-green-500';
 }
+
+/**
+ * Sign-prefixed percentage text for the non-best "Compared to best" badge (CodeRabbit fix,
+ * SP-U). `toFixed` already renders the minus sign for negatives; only non-negatives need an
+ * explicit '+' — mirrors {@link damageDeltaLabel}'s sign convention.
+ */
+export function formatComparedToBestPercentage(percentage: number): string {
+    const sign = percentage >= 0 ? '+' : '';
+    return `${sign}${percentage.toFixed(2)}%`;
+}
+
+/**
+ * Tailwind color class for the "Compared to best" badge (CodeRabbit fix, SP-U). Since
+ * bestConfig is now ranked by roundsToKill rather than max total damage, a non-best config's
+ * total damage can exceed the best config's (a positive delta) — that must render as favorable
+ * (green), not the old hardcoded red. Mirrors {@link bestVsSecondLabelColorClass}'s sign
+ * convention: non-negative is favorable.
+ */
+export function comparedToBestColorClass(percentage: number): string {
+    return percentage >= 0 ? 'text-green-500' : 'text-red-500';
+}

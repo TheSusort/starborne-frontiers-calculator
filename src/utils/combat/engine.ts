@@ -1485,11 +1485,11 @@ export function runCombat(input: CombatEngineInput): {
     });
     const enemy = createActor({
         id: 'enemy',
-        // SP-U U5: the DPS opponent is now a REAL, destructible actor — no `indestructible`. In
-        // pure DPS mode (no real enemyAttackers) it takes the round's dealt damage through the
-        // shared per-victim `applyVictimDamage` funnel, its HP declines naturally, and it dies at
-        // 0 HP (terminating the run). In sim/healing mode the fight runs on the positioned enemy
-        // roster and this actor is a vestigial huge-HP sink (never dies — see `dpsEnemyTarget`).
+        // SP-U U5: the DPS opponent is now a REAL, destructible actor. In pure DPS mode (no real
+        // enemyAttackers) it takes the round's dealt damage through the shared per-victim
+        // `applyVictimDamage` funnel, its HP declines naturally, and it dies at 0 HP (terminating
+        // the run). In sim/healing mode the fight runs on the positioned enemy roster and this
+        // actor is a vestigial huge-HP sink (never dies — see `dpsEnemyTarget`).
         side: 'enemy',
         kind: 'enemy',
         stats: {

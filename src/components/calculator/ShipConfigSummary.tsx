@@ -4,7 +4,11 @@ import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
 import { orderByTurnPriority } from '../../utils/combat/state';
-import { bestVsSecondLabelColorClass } from '../../utils/calculators/rankDpsConfigs';
+import {
+    bestVsSecondLabelColorClass,
+    comparedToBestColorClass,
+    formatComparedToBestPercentage,
+} from '../../utils/calculators/rankDpsConfigs';
 
 /** Display-ready team actor: resolved name + turn-order speed. */
 export interface TurnOrderTeamActor {
@@ -202,7 +206,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
             {comparedToBestPercentage !== null && (
                 <div className="flex justify-between mt-2">
                     <span className="text-theme-text-secondary">Compared to best:</span>
-                    <span className="text-red-500">{comparedToBestPercentage.toFixed(2)}%</span>
+                    <span className={comparedToBestColorClass(comparedToBestPercentage)}>
+                        {formatComparedToBestPercentage(comparedToBestPercentage)}
+                    </span>
                 </div>
             )}
         </div>

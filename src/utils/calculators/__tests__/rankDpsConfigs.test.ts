@@ -3,6 +3,8 @@ import {
     rankDpsConfigs,
     describeBestVsSecond,
     bestVsSecondLabelColorClass,
+    formatComparedToBestPercentage,
+    comparedToBestColorClass,
 } from '../rankDpsConfigs';
 import { DPSSimulationSummary } from '../dpsSimulator';
 
@@ -145,5 +147,26 @@ describe('bestVsSecondLabelColorClass (final-review fix: negative delta must not
         const label = describeBestVsSecond(best, second);
         expect(label).toBe('Only config to destroy the target');
         expect(bestVsSecondLabelColorClass(label)).toBe('text-green-500');
+    });
+});
+
+describe('formatComparedToBestPercentage / comparedToBestColorClass (CodeRabbit fix: a non-best config can deal MORE damage than the roundsToKill-ranked best, so this delta can be positive)', () => {
+    it('a positive delta is "+"-prefixed and colored green', () => {
+        const pct = 12.5;
+        expect(formatComparedToBestPercentage(pct)).toBe('+12.50%');
+        expect(comparedToBestColorClass(pct)).toBe('text-green-500');
+    });
+
+    it('a negative delta has a bare leading "-" (no double sign) and is colored red', () => {
+        const pct = -38.42;
+        const label = formatComparedToBestPercentage(pct);
+        expect(label).toBe('-38.42%');
+        expect(label).not.toContain('+-');
+        expect(comparedToBestColorClass(pct)).toBe('text-red-500');
+    });
+
+    it('zero is treated as favorable: "+"-prefixed and green', () => {
+        expect(formatComparedToBestPercentage(0)).toBe('+0.00%');
+        expect(comparedToBestColorClass(0)).toBe('text-green-500');
     });
 });
