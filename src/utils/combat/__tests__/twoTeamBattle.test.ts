@@ -1414,14 +1414,16 @@ describe('E1 — symmetric incoming surface: player→enemy hits record per-vict
 //   player[0] (focus 'attacker') — self-shield active skill, speed 200, large HP pool.
 //     Speed 200 > enemy speed 1 so the focus acts FIRST each round: it casts a shield,
 //     and then the enemy fires into the already-shielded target. The shield covers 25%
-//     of the focus's 40 000 HP = 10 000 HP of absorption. The enemy hits for 5 000
-//     (attack 5 000 vs defence 0) which is less than the shield pool → shieldsAbsorbed > 0.
+//     of the focus's 40 000 HP = 10 000 HP of absorption. The enemy hits for a deterministic
+//     5 000 (attack 5 000 vs defence 0, crit 0, neutral affinity) which is less than the
+//     shield pool → the hit is FULLY absorbed and shieldsAbsorbed is exactly 5 000.
 //   enemy[0] (e1) — basic-damage active, speed 1, immortal HP.
 //
 // Assertions on result.rounds[r].ships for the shielded ship:
 //   shieldGranted  > 0  (the grant fires and the extraction loop picked it up)
 //   currentShieldPool > 0  (the pool persists after absorbing partial damage)
-//   shieldsAbsorbed > 0  (the enemy hit while shielded → absorption > 0)
+//   shieldsAbsorbed == ENEMY_ATTACK  (SP-F F3: exact drain, not just > 0 — the channel is the
+//     verbatim shieldAbsorb.ts `absorbed`, wired since H1 #156) with incomingDamage == 0.
 // ===========================================================================
 
 describe('H1 Task 8 follow-up — simulateBattle end-to-end shield extraction loop', () => {
@@ -1486,12 +1488,27 @@ describe('H1 Task 8 follow-up — simulateBattle end-to-end shield extraction lo
         );
         expect(poolRounds.length).toBeGreaterThan(0);
 
-        // --- shieldsAbsorbed > 0: the enemy hit the focus while it was shielded ---
-        // Enemy attack (5 000) < shield pool (~10 000) so the hit is fully absorbed by the shield.
+        // --- shieldsAbsorbed matches the EXACT drain (SP-F F3 hardening) ---
+        // The channel has been wired end-to-end since Shield System H1 (#156): the value
+        // surfaced on ShipRoundState.shieldsAbsorbed is shieldAbsorb.ts's `absorbed` threaded
+        // verbatim through the sink — so F3 has no residual gap to close, only a stronger
+        // assertion to add. Both ships are neutral-affinity antimatter (affinityDamageModifier
+        // 0) and the enemy's crit is pinned to 0 (the `placement` helper), so the enemy's hit
+        // is a deterministic 5 000 (attack 5 000 vs the focus's 0 defence, no crit/affinity
+        // multiplier). The shield pool (>= 10 000 every round) fully covers it, so every round
+        // the enemy connects the drain is EXACTLY the enemy's attack, with 0 HP damage leaking
+        // through.
         const absorbedRounds = result.rounds.filter(
             (r) => (r.ships.find((s) => s.actorId === FOCUS_ACTOR_ID)?.shieldsAbsorbed ?? 0) > 0
         );
         expect(absorbedRounds.length).toBeGreaterThan(0);
+        for (const r of absorbedRounds) {
+            const focus = r.ships.find((s) => s.actorId === FOCUS_ACTOR_ID)!;
+            // Exact drain: the whole 5 000 hit was absorbed by the shield...
+            expect(focus.shieldsAbsorbed).toBe(ENEMY_ATTACK);
+            // ...and nothing leaked to HP (fully absorbed).
+            expect(focus.incomingDamage).toBe(0);
+        }
     });
 });
 
