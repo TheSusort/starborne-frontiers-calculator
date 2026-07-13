@@ -729,9 +729,15 @@ function planPlacement(
  * enemyAttackers presence, lets enemies fire on players, and runs the real-vs-real heal/shield
  * pipeline (heals route to the lowest-HP living ally) — no `healTargetId` is passed.
  *
- * Affinity: each actor's matchup is resolved against the FIRST opposing placement's affinity (the
- * single-opponent-affinity convention the DPS/healing adapters already use). The RAW affinity is
- * also threaded so the engine's positional path and the pre-resolved modifiers never disagree.
+ * Affinity: a single "representative opposing affinity" (the FIRST opposing placement's affinity,
+ * the single-opponent-affinity convention the DPS/healing adapters already use) is used ONLY to
+ * pre-resolve each actor's aggregate walk modifiers and the combat-log aggregate. It is NOT the
+ * authoritative accounting signal: SP-F F6 confirmed the engine's positional path recomputes
+ * affinity PER VICTIM from the RAW affinity (also threaded here — `walk.affinity`/`affinity`),
+ * so `damageDealt`/`damageTaken` reflect each victim's true matchup within a single AoE cast (an
+ * advantage victim can book +25% while a disadvantaged covered victim books −25% in the same
+ * cast; likewise per-victim crit via `rollVictimCrit`). Threading both keeps the representative
+ * aggregate and the per-victim path from disagreeing on a single-opponent battle.
  *
  * Actor ids are minted globally-unique across both squads (`p:<shipId>:<idx>` / `e:<shipId>:<idx>`),
  * avoiding the reserved `'attacker'`/`'enemy'` ids and any duplicate (runCombat throws on either).
@@ -804,7 +810,9 @@ export function simulateBattle(
         return m && hasAnyPreFightModifier(m) ? { preFight: m } : {};
     };
 
-    // Representative opposing affinity for each side's matchup resolution (first opponent).
+    // Representative opposing affinity (first opponent) — used ONLY to pre-resolve the aggregate
+    // walk modifiers below; the authoritative per-victim affinity is recomputed in the engine from
+    // the RAW `affinity` threaded alongside these (SP-F F6). See the function docstring above.
     const enemyRepAffinity = enemyPlans[0]?.affinity;
     const playerRepAffinity = playerPlans[0]?.affinity;
 

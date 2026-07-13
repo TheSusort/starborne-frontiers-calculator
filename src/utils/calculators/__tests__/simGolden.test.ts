@@ -10,6 +10,7 @@ import {
     f1Reconciliation,
     healUnequalPerRecipient,
     healModifierScaling,
+    perVictimAffinityAoe,
 } from './__fixtures__/simGoldenFixtures';
 
 // High-level regression guard for the engine-unification epic. A diff = a real behavior change.
@@ -30,6 +31,8 @@ describe('sim goldens (BattleResult snapshots)', () => {
         ['healUnequalPerRecipient', healUnequalPerRecipient],
         // SP-F F4: dedicated heal-modifier scaling fixture — see the dedicated assertion below.
         ['healModifierScaling', healModifierScaling],
+        // SP-F F6: dedicated per-victim affinity AoE fixture — see the dedicated assertion below.
+        ['perVictimAffinityAoe', perVictimAffinityAoe],
     ])('%s', (_n, build) => {
         // Snapshot the structured result (per-round per-ship totals + outcome), not the free-text log.
         const { rounds, outcome, roster } = simulateBattle(build());
@@ -178,5 +181,61 @@ describe('sim goldens (BattleResult snapshots)', () => {
         );
         expect(eOff).toBeGreaterThan(0);
         expect(eOn / eOff).toBeCloseTo(1.5, 5);
+    });
+
+    // SP-F F6: dedicated per-victim AFFINITY invariant (beyond the snapshot) — proves per-victim
+    // affinity is the AUTHORITATIVE signal on the BattleResult stat surface within a SINGLE AoE
+    // cast. `perVictimAffinityAoe` fires one thermal Pattern-All cast at three enemies that are
+    // IDENTICAL in every stat except affinity, with the attacker's crit pinned to 0, so each
+    // enemy's `damageTaken` in a firing round is deterministically the base hit × its own affinity
+    // modifier (victimDamage.ts: `affinityMult = 1 + affinityDamageModifier/100`, applied
+    // multiplicatively and orthogonally to the shared defence reduction):
+    //   - CHEMICAL victim  → attacker (thermal) ADVANTAGE    → ×1.25
+    //   - THERMAL  victim  → NEUTRAL (mirror)                → ×1.00
+    //   - ELECTRIC victim  → attacker (thermal) DISADVANTAGE → ×0.75
+    // so the advantage victim takes exactly 1.25× and the disadvantage victim 0.75× the neutral
+    // victim's damage — three genuinely distinct numbers from ONE cast. A representative/anchor
+    // affinity (a single scalar applied uniformly) would flatten all three to the same value.
+    // Actor ids follow simulateBattle's minting scheme (battleSimulator.ts ~L761-764): the lone
+    // player attacker is the reserved `'attacker'` id; enemies are `e:<shipId>:<idx>` (0-based).
+    // Per-victim CRIT divergence within one cast is proven deterministically (both sides) at the
+    // event surface by perVictimCritBattle.integration.test.ts; ShipRoundState carries no crit
+    // field, so this sim-tier assertion demonstrates the affinity half of the F6 acceptance.
+    it('perVictimAffinityAoe: covered victims differ by per-victim affinity within one cast (F6)', () => {
+        const { rounds } = simulateBattle(perVictimAffinityAoe());
+        expect(rounds.length).toBeGreaterThan(0);
+
+        let anyRoundChecked = false;
+        for (const round of rounds) {
+            const byId = new Map(round.ships.map((s) => [s.actorId, s]));
+            const chem = byId.get('e:f6-e-chem:0'); // advantage → ×1.25
+            const therm = byId.get('e:f6-e-therm:1'); // neutral → ×1.00
+            const elec = byId.get('e:f6-e-elec:2'); // disadvantage → ×0.75
+            if (!chem || !therm || !elec) continue;
+            // Only assert in a round the AoE actually landed on all three (all alive, all hit).
+            if (
+                chem.damageTaken === 0 ||
+                therm.damageTaken === 0 ||
+                elec.damageTaken === 0 ||
+                !chem.alive ||
+                !therm.alive ||
+                !elec.alive
+            ) {
+                continue;
+            }
+            anyRoundChecked = true;
+
+            // Exact per-victim affinity ratios off the neutral victim (crit pinned to 0 → no crit
+            // multiplier; tolerance absorbs integer damage rounding only).
+            expect(chem.damageTaken / therm.damageTaken).toBeCloseTo(1.25, 2);
+            expect(elec.damageTaken / therm.damageTaken).toBeCloseTo(0.75, 2);
+
+            // Three genuinely distinct shares from the SAME cast (not a uniform representative).
+            expect(chem.damageTaken).not.toBeCloseTo(therm.damageTaken, 0);
+            expect(therm.damageTaken).not.toBeCloseTo(elec.damageTaken, 0);
+            expect(chem.damageTaken).not.toBeCloseTo(elec.damageTaken, 0);
+        }
+        // Non-vacuous: at least one round actually exercised the three-victim AoE.
+        expect(anyRoundChecked).toBe(true);
     });
 });
