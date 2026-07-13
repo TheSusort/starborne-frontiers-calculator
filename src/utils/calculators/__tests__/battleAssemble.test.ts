@@ -3,8 +3,9 @@
  *
  * These tests feed HAND-BUILT synthetic CombatEvent[] + perRoundPerTarget (NO runCombat)
  * into `assembleBattleResult` and assert the symmetric result surface. The data-source
- * contract they encode is pinned in twoTeamBattle.test.ts (Task 1):
- *   - damage DEALT per attacker = ability-performed.damage summed by actorId
+ * contract they encode is pinned in twoTeamBattle.test.ts (Task 1; damage-dealt updated by
+ * SP-F F1):
+ *   - damage DEALT per attacker = perRoundPerDealt[round][attackerId] summed over victims
  *   - damage TAKEN per victim   = perRoundPerTarget[round][victimId]
  *   - heals = heal-performed { casterId, targets[], amount }
  *   - death = ship-destroyed { actorId }
@@ -61,9 +62,16 @@ describe('assembleBattleResult — symmetric damage dealt/taken', () => {
             },
         ];
         const perRoundPerTarget = { 1: { 'enemy-front': 5000, attacker: 3000 } };
+        // SP-F F1: damageDealt is now sourced from perRoundPerDealt (attacker -> victim ->
+        // dealt), not ability-performed — supply it alongside the events above so this
+        // synthetic fixture still exercises the real contract.
+        const perRoundPerDealt = {
+            1: { attacker: { 'enemy-front': 5000 }, 'enemy-front': { attacker: 3000 } },
+        };
         const result = assembleBattleResult({
             events,
             perRoundPerTarget,
+            perRoundPerDealt,
             roster: roster(),
             numRounds: 1,
         });
@@ -74,7 +82,7 @@ describe('assembleBattleResult — symmetric damage dealt/taken', () => {
         expect(find(result, 1, 'enemy-front').damageTaken).toBe(5000);
     });
 
-    it('sums multiple ability-performed for the same attacker in a round', () => {
+    it('sums multiple per-victim dealt entries for the same attacker in a round (SP-F F1)', () => {
         const events: CombatEvent[] = [
             {
                 type: 'ability-performed',
@@ -93,9 +101,15 @@ describe('assembleBattleResult — symmetric damage dealt/taken', () => {
                 damage: 1500,
             },
         ];
+        // SP-F F1: damageDealt sums perRoundPerDealt[round][attackerId] over its victims —
+        // exercise a multi-victim attacker (AoE-shaped) to pin the summation.
+        const perRoundPerDealt = {
+            1: { attacker: { 'enemy-front': 1000, 'enemy-back': 1500 } },
+        };
         const result = assembleBattleResult({
             events,
             perRoundPerTarget: {},
+            perRoundPerDealt,
             roster: roster(),
             numRounds: 1,
         });

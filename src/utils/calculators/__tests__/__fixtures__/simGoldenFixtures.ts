@@ -531,3 +531,57 @@ export function healCasting(): BattleSimulationInput {
         rounds: 8,
     };
 }
+
+// ===========================================================================
+// f1Reconciliation (SP-F F1) — dedicated AoE reconciliation demonstration. A single enemy
+// AoE attacker (Pattern-Line-Range-2: origin FULL + 2 covered cells at HALF each) faces three
+// player ships occupying the exact 3-cell M-lane footprint, while each player ship fires a
+// plain single-target hit back at the lone enemy. Every ship here has real parsed target+
+// pattern data (no case-c gap) and NO Protection ability is present anywhere (the audit's
+// documented double-count caveat), so `damageDealt`/`damageTaken` reconcile cleanly:
+// Σ over ALL ships' damageDealt this round == Σ over ALL ships' damageTaken this round (see
+// the round-level invariant asserted in simGolden.test.ts).
+// ===========================================================================
+
+/** Enemy AoE attacker: Pattern-Line-Range-2 hits the anchor (front-most player) FULL plus 2
+ *  covered cells at HALF each — the same footprint-widening precedent as `threeVsThree`'s
+ *  Comet, but a bounded 3-cell line instead of Pattern-All, so the fixture stays small. */
+const f1ReconciliationEnemyAoe = (): Ship => ({
+    ...finalizeAttacker(
+        shipBase('f1-e-aoe', 'Nova', 'ATTACKER', {
+            hp: 320_000,
+            attack: 1900,
+            defence: 200,
+            hacking: 220,
+            security: 150,
+            speed: 130,
+        })
+    ),
+    activePattern: 'Pattern-Line-Range-2',
+});
+
+/** Player ship (×3, one per M-lane footprint cell): a plain single-target attacker firing back
+ *  at the lone enemy — real targeting data on both sides of the exchange. */
+const f1ReconciliationPlayer = (id: string, name: string): Ship =>
+    finalizeAttacker(
+        shipBase(id, name, 'ATTACKER', {
+            hp: 260_000,
+            attack: 1300,
+            defence: 250,
+            hacking: 200,
+            security: 150,
+            speed: 100,
+        })
+    );
+
+export function f1Reconciliation(): BattleSimulationInput {
+    return {
+        playerTeam: [
+            placement(f1ReconciliationPlayer('f1-p1', 'Helios'), 'M4'),
+            placement(f1ReconciliationPlayer('f1-p2', 'Selene'), 'M3'),
+            placement(f1ReconciliationPlayer('f1-p3', 'Astra'), 'M2'),
+        ],
+        enemyTeam: [placement(f1ReconciliationEnemyAoe(), 'T1')],
+        rounds: 6,
+    };
+}

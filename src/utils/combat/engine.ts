@@ -985,8 +985,15 @@ export interface CombatEngineInput {
     shieldPenetration?: number;
     chargeCount: number;
     shipSkills: ShipSkills;
-    enemyDefense: number;
-    enemyHp: number;
+    /** Optional (F7) — omitted only by `battleSimulator.ts`'s positional call, where the
+     *  dummy `enemy` actor these feed is vestigial (never read as a victim's stats there).
+     *  `dpsSimulator.ts` (DPS mode) and `healingEngineAdapter.ts` still pass real values —
+     *  the latter's healer can cast a `damage` ability at `target:'enemy'`, landing on this
+     *  dummy and feeding `basis:'damage-dealt'` heal/shield riders, so its defence/HP are
+     *  load-bearing there (see docs/superpowers/notes/2026-07-13-f7-dummy-audit.md follow-up).
+     *  Absent → defaults to a huge-HP/zero-defence sink internally. */
+    enemyDefense?: number;
+    enemyHp?: number;
     numRounds: number;
     /** Scheduled (manual + team) buffs — statusEngine input. */
     selfBuffs: SelectedGameBuff[];
@@ -1394,8 +1401,10 @@ export function runCombat(input: CombatEngineInput): {
         chargeCount,
         // shipSkills is intentionally NOT destructured here — the cast/reactive split below
         // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
-        enemyDefense,
-        enemyHp,
+        // F7: optional on the input — default to the vestigial dummy sink's stats
+        // (0 defence / 1e9 HP) when the caller (battleSimulator.ts's positional mode) omits them.
+        enemyDefense = 0,
+        enemyHp = 1_000_000_000,
         numRounds,
         selfBuffs,
         enemyDebuffs,
@@ -3372,6 +3381,24 @@ export function runCombat(input: CombatEngineInput): {
         // callback (all three attack sites); stays EMPTY on non-positional rounds, so the
         // RoundData.perTargetDamage field is set only when non-empty → goldens byte-identical.
         const roundPerTargetDamage = new Map<string, number>();
+        // SP-F F1: per-attacker×victim dealt attribution channel — attacker id → victim id →
+        // damage dealt THIS round. Mirrors EVERY `roundPerTargetDamage.set` write above with an
+        // equal-amount entry keyed to that increment's CORRECT source-attacker (not always
+        // `actingActorId` — reflect's source is the reflector, counter's is the counter owner,
+        // etc; see the per-site comments at each write). Σ over victims for one attacker ==
+        // that attacker's `damageDealt`; Σ over attackers for one victim == `roundPerTargetDamage`
+        // for that victim — so `damageDealt`/`damageTaken` reconcile BY CONSTRUCTION once every
+        // site mirrors correctly. Stays EMPTY when roundPerTargetDamage is empty (non-positional
+        // rounds), so RoundData.perTargetDealt is set only when non-empty → goldens byte-identical.
+        const roundPerTargetDealt = new Map<string, Map<string, number>>();
+        const creditDealt = (attackerId: string, victimId: string, amount: number): void => {
+            let byVictim = roundPerTargetDealt.get(attackerId);
+            if (!byVictim) {
+                byVictim = new Map<string, number>();
+                roundPerTargetDealt.set(attackerId, byVictim);
+            }
+            byVictim.set(victimId, (byVictim.get(victimId) ?? 0) + amount);
+        };
         // D-PR3: per-victim direct-damage intake index (Ironclad nth-hit) + once-per-round block flags.
         const directIntakeIndex = new Map<string, number>();
         const blockOnceConsumed = new Set<string>(); // key `${victimId}:${abilityId}`
@@ -3702,6 +3729,16 @@ export function runCombat(input: CombatEngineInput): {
                                 p.actor.id,
                                 (roundPerTargetDamage.get(p.actor.id) ?? 0) + instantTotal
                             );
+                            // SP-F F1: this redirected chunk's real source-attacker is the
+                            // ORIGINAL hit's killer (cause.killerId), not the protector — the log
+                            // sourceId below (victim.id, the protecting wearer) is a DIFFERENT,
+                            // reactive-log-only concept (see the audit note §1 row 1). killerId is
+                            // absent when the redirected hit originated from a DoT-tick batch (no
+                            // single attacker) — nothing to attribute there, so skip silently
+                            // (the victim-keyed roundPerTargetDamage write above is unaffected).
+                            if (cause.killerId) {
+                                creditDealt(cause.killerId, p.actor.id, instantTotal);
+                            }
                             bus.emit({
                                 type: 'reactive-damage-performed',
                                 sourceId: victim.id,
@@ -4010,6 +4047,9 @@ export function runCombat(input: CombatEngineInput): {
                                     ally.id,
                                     (roundPerTargetDamage.get(ally.id) ?? 0) + splash
                                 );
+                                // SP-F F1: the bomb's original applier (sourceId), not the dying
+                                // bombed ship that splashed.
+                                creditDealt(bomb.sourceId, ally.id, splash);
                             }
                         }
                     }
@@ -4199,6 +4239,10 @@ export function runCombat(input: CombatEngineInput): {
                                 attacker.id,
                                 (roundPerTargetDamage.get(attacker.id) ?? 0) + reflected
                             );
+                            // SP-F F1: the reflecting WEARER (victim.id) is the source-attacker of
+                            // this bounce-back hit; `attacker` (the original attacker, now the
+                            // recipient) is the victim key — direction-inverted vs the outer names.
+                            creditDealt(victim.id, attacker.id, reflected);
                             // Log-only reflect surface (see the deferReflectLogs doc above
                             // applyVictimDamage). On the deferred (positional) path we BUFFER the
                             // row and flush it after emitDeferredAbilityPerformed creates the
@@ -4399,6 +4443,8 @@ export function runCombat(input: CombatEngineInput): {
                 attacker.id,
                 (roundPerTargetDamage.get(attacker.id) ?? 0) + raw
             );
+            // SP-F F1: the counter-OWNER is the source-attacker of this counter hit.
+            creditDealt(owner.id, attacker.id, raw);
             return { dealt: raw, didCrit };
         };
 
@@ -4793,6 +4839,10 @@ export function runCombat(input: CombatEngineInput): {
                             victim.id,
                             (roundPerTargetDamage.get(victim.id) ?? 0) + damage
                         );
+                        // SP-F F1: args.actingId (closed over from drivePositionalApply's
+                        // caller) is the firing attacker for every footprint victim (anchor AND
+                        // covered) this hit landed on.
+                        creditDealt(args.actingId, victim.id, damage);
                     },
                     // E2: forward the per-direction leech hook (unsupplied by all current callers).
                     onVictimResolved: args.onVictimResolved,
@@ -5032,6 +5082,8 @@ export function runCombat(input: CombatEngineInput): {
                         victim.id,
                         (roundPerTargetDamage.get(victim.id) ?? 0) + result.bomb
                     );
+                    // SP-F F1: the detonating caster (actorId) is the source-attacker.
+                    creditDealt(actorId, victim.id, result.bomb);
                 }
                 const bypass = result.inferno + result.corrosion;
                 if (bypass > 0) {
@@ -5046,6 +5098,10 @@ export function runCombat(input: CombatEngineInput): {
                         victim.id,
                         (roundPerTargetDamage.get(victim.id) ?? 0) + bypass
                     );
+                    // SP-F F1: the detonating caster (actorId) is the source-attacker — NOT
+                    // whoever originally applied the ticking DoT stacks (the existing,
+                    // accepted `perActorDetonation.set(actorId, …)` convention below).
+                    creditDealt(actorId, victim.id, bypass);
                 }
                 const dealt = result.bomb + bypass;
                 if (dealt > 0) {
@@ -5082,6 +5138,8 @@ export function runCombat(input: CombatEngineInput): {
                 victim.id,
                 (roundPerTargetDamage.get(victim.id) ?? 0) + damage
             );
+            // SP-F F1: the bomb's ORIGINAL applier (sourceId) — never the forcing caster.
+            creditDealt(sourceId, victim.id, damage);
             perActorDetonation.set(sourceId, (perActorDetonation.get(sourceId) ?? 0) + damage);
         };
 
@@ -5128,6 +5186,8 @@ export function runCombat(input: CombatEngineInput): {
                         actor.id,
                         (roundPerTargetDamage.get(actor.id) ?? 0) + damage
                     );
+                    // SP-F F1: the bomb's applier (sourceId) bursting on the bursting actor's own turn.
+                    creditDealt(sourceId, actor.id, damage);
                     perActorDetonation.set(
                         sourceId,
                         (perActorDetonation.get(sourceId) ?? 0) + damage
@@ -5154,6 +5214,8 @@ export function runCombat(input: CombatEngineInput): {
                         actor.id,
                         (roundPerTargetDamage.get(actor.id) ?? 0) + damage
                     );
+                    // SP-F F1: the accumulator's applier (sourceId).
+                    creditDealt(sourceId, actor.id, damage);
                     perActorDetonation.set(
                         sourceId,
                         (perActorDetonation.get(sourceId) ?? 0) + damage
@@ -6316,6 +6378,14 @@ export function runCombat(input: CombatEngineInput): {
                             actor.genericDoTEntries.length > 0;
                         if (hasDots && isPositional(actor.position, opposing)) {
                             let total = 0;
+                            // SP-F F1 RESHAPE: per-`sourceId` dealt detail for THIS tick batch —
+                            // multiple distinct DoT appliers can tick on the same victim in the
+                            // same round, so a single collapsed attacker id (like every other
+                            // site) would misattribute. Populated on BOTH sides (team-symmetric:
+                            // an enemy's DoT ticking on a player ally must attribute too), unlike
+                            // the `!sideIsPlayer`-gated `perActorDot` DPS map below, which stays
+                            // exactly as it was.
+                            const tickDealtBySource = new Map<string, number>();
                             tickDoTs({
                                 corrosionEntries: actor.corrosionEntries,
                                 infernoEntries: actor.infernoEntries,
@@ -6334,6 +6404,10 @@ export function runCombat(input: CombatEngineInput): {
                                     }),
                                 credit: (sourceId, dotType, damage) => {
                                     total += damage;
+                                    tickDealtBySource.set(
+                                        sourceId,
+                                        (tickDealtBySource.get(sourceId) ?? 0) + damage
+                                    );
                                     // Only PLAYER-applied DoTs ticking on an ENEMY victim are the
                                     // focus player's outgoing DPS → surface via perActorDot (keyed
                                     // by the DoT APPLIER; the C1 fold reads perActorDot[focus]).
@@ -6377,6 +6451,13 @@ export function runCombat(input: CombatEngineInput): {
                                     actor.id,
                                     (roundPerTargetDamage.get(actor.id) ?? 0) + total
                                 );
+                                // SP-F F1 RESHAPE: one roundPerTargetDealt entry PER distinct
+                                // applier — do not collapse to a single guessed attacker (see
+                                // tickDealtBySource above). Σ over sourceIds here == `total`, so
+                                // this write reconciles with the unchanged victim-keyed write above.
+                                for (const [sourceId, dealt] of tickDealtBySource) {
+                                    creditDealt(sourceId, actor.id, dealt);
+                                }
                             }
                             // Lethal turn-start tick → skip the rest of the turn. INTENTIONALLY
                             // follows the heal-target lethal convention (skip the shared post-turn
@@ -7827,6 +7908,19 @@ export function runCombat(input: CombatEngineInput): {
             // round (map non-empty). Non-positional rounds leave it absent → goldens byte-identical.
             ...(roundPerTargetDamage.size > 0
                 ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
+                : {}),
+            // perTargetDealt (SP-F F1): attacker id -> victim id -> dealt, mirroring EVERY
+            // roundPerTargetDamage increment above to its correct source-attacker. Set ONLY when
+            // non-empty — mirrors perTargetDamage's "absent when empty" rule, goldens byte-identical.
+            ...(roundPerTargetDealt.size > 0
+                ? {
+                      perTargetDealt: Object.fromEntries(
+                          [...roundPerTargetDealt].map(([attackerId, byVictim]) => [
+                              attackerId,
+                              Object.fromEntries(byVictim),
+                          ])
+                      ),
+                  }
                 : {}),
             // perActorSplash (bomb-splash-on-death): set ONLY when a dying bombed ally splashed
             // adjacent allies this round (map non-empty). Absent otherwise → byte-identical.

@@ -133,6 +133,22 @@ export interface RoundData {
      *  one-directional output. Populated ONLY by the positional apply path (gated on positions +
      *  pattern); absent in non-positional runs. */
     perTargetDamage?: Record<string, number>;
+    /** SP-F F1: attacker id -> victim id -> total damage DEALT to that victim THIS round by that
+     *  attacker, mirroring EVERY supported `roundPerTargetDamage`/`perTargetDamage` increment above
+     *  to its correct source-attacker (not always the acting/turn-owning actor — reflect's source
+     *  is the reflector, counter's is the counter owner, a DoT tick's is that tick's own applier,
+     *  etc). For attackers/victims covered by this channel, Σ over victims for one attacker ==
+     *  that attacker's `damageDealt` (battleSimulator.ts) and Σ over attackers for one victim ==
+     *  `perTargetDamage[victim]` — so `damageDealt`/`damageTaken` reconcile for supported targeted
+     *  positional writes. This is NOT an unconditional guarantee: it excludes reactive damage
+     *  (`applyReactiveDamage` never writes this channel), actors with no targeting data (case-c),
+     *  and focus-target DoT (healTarget defaults to focus, so it never books here); it also
+     *  inherits the Protection redirect double-count and the Protection DoT-tick-batch redirect
+     *  gap (no single source attacker to mirror to). Set ONLY when non-empty (mirrors
+     *  `perTargetDamage`'s "absent when empty" rule, goldens byte-identical). DoT-tick
+     *  contributions land in the TICK round (the ticking victim's own turn-start), not the cast
+     *  round — same pre-existing timing `perTargetDamage` already has for DoT ticks. */
+    perTargetDealt?: Record<string, Record<string, number>>;
     /** Per-actor shield accounting for THIS round (H1 Task 6), keyed by actor id. For each actor:
      *  `granted` = total shield actually added to its pool this round (post-cap delta);
      *  `absorbed` = shield drained by incoming damage this round; `pool` = its live remaining

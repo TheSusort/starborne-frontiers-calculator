@@ -74,6 +74,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
+import type { BattleResult } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import type { CombatLogEntry } from '../log/types';
@@ -1130,6 +1131,83 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
 });
 
 // ===========================================================================
+// SP-F PR1, Task 3 (F1): per-attacker×victim dealt attribution reconciles
+// `damageDealt` with `damageTaken`. See docs/superpowers/notes/2026-07-13-
+// f1-attribution-audit.md for the full design. Fixture is deliberately
+// Protection-free (the audit flags a pre-existing double-count under
+// Protection redirect that would confuse this invariant).
+// ===========================================================================
+describe('F1: per-attacker×victim dealt attribution reconciles damageDealt with damageTaken', () => {
+    const AOE_ENEMY_ID = 'e:e1:0';
+    const P1_ID = 'attacker'; // playerTeam[0] is always the reserved focus id
+    const P2_ID = 'p:p2:1';
+    const P3_ID = 'p:p3:2';
+
+    // A pure self/ally heal skill — NO damage ability at all, so these ships never
+    // contribute a dealt entry (keeps the fixture's only attacker unambiguous).
+    const healOnly = (position: Position) => ({
+        activeTarget: 'front',
+        activePattern: 'Pattern-Base',
+        activeSkillText: 'This Unit repairs 30% of its Max HP.',
+        position,
+    });
+
+    // One enemy AoE attacker (targeting `front`, Pattern-Line-Range-2 → hits 3 occupied
+    // M-lane cells: origin M4 FULL + 2 covered cells HALF each) vs 3 pure-healer players
+    // occupying the exact 3-cell footprint (M4/M3/M2). Players deal zero damage, so the
+    // AoE enemy is the ONLY ship in this fixture that ever dealt damage.
+    const runAoEFixture = (): BattleResult =>
+        simulateBattle({
+            playerTeam: [
+                placement(makeShip('p1', 'P1', healOnly('M4')), 'M4', 0, 1_000_000_000),
+                placement(makeShip('p2', 'P2', healOnly('M3')), 'M3', 0, 1_000_000_000),
+                placement(makeShip('p3', 'P3', healOnly('M2')), 'M2', 0, 1_000_000_000),
+            ],
+            enemyTeam: [
+                placement(
+                    makeShip('e1', 'AoE Enemy', {
+                        activeTarget: 'front',
+                        activePattern: 'Pattern-Line-Range-2',
+                    }),
+                    'M1',
+                    5000,
+                    1_000_000_000
+                ),
+            ],
+            rounds: 2,
+        });
+
+    // Ground truth computed WITHOUT touching `damageDealt`: in this fixture the AoE enemy
+    // is the sole attacker and its footprint hits EXACTLY {P1_ID, P2_ID, P3_ID} with no
+    // cross-fire, so summing those three victims' (unchanged) `damageTaken` for a round
+    // equals the total the enemy actually dealt that round.
+    const sumDealtTo = (result: BattleResult, round: number, attackerId: string): number => {
+        if (attackerId !== AOE_ENEMY_ID) return 0;
+        const r = result.rounds.find((rr) => rr.round === round);
+        if (!r) return 0;
+        return [P1_ID, P2_ID, P3_ID].reduce(
+            (sum, vid) => sum + (r.ships.find((s) => s.actorId === vid)?.damageTaken ?? 0),
+            0
+        );
+    };
+
+    it("F1: a targeted attacker's damageDealt equals the sum of per-victim damage it caused (AoE)", () => {
+        const result = runAoEFixture();
+        for (const round of result.rounds) {
+            for (const attacker of round.ships) {
+                if (attacker.damageDealt === 0) continue; // skips non-attacking + case-c-only actors
+                const causedByThisAttacker = sumDealtTo(result, round.round, attacker.actorId);
+                expect(attacker.damageDealt).toBe(causedByThisAttacker);
+            }
+        }
+        // Non-vacuous: the AoE enemy genuinely dealt damage in round 1 (else the loop above
+        // would trivially pass by never entering the assertion).
+        const r1Enemy = result.rounds[0].ships.find((s) => s.actorId === AOE_ENEMY_ID);
+        expect(r1Enemy?.damageDealt).toBeGreaterThan(0);
+    });
+});
+
+// ===========================================================================
 // Holistic review #2: PER-TARGET debuff landing in a team-vs-team battle.
 // The live recompute resolves landing against effectiveStatsOf(THE TURN'S ACTUAL
 // TARGET).security — NOT a representative (first-opposing) security as the old
@@ -1645,14 +1723,24 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
 
         // Round 1 (focus alive): the non-positional attacker's ability DOES fire — its
         // computed damage is credited via `ability-performed` regardless of the victim it
-        // resolves to (proven via `damageDealt`, independent of the combat log). Its legacy-
-        // victim fallback lands on the side's dummy sink rather than a real opposing actor,
-        // so no `attacked` event follows and the combat log's now-empty attack entry is
-        // correctly pruned as a phantom row (Task 4) — the SAME shape as round 4's genuine
-        // skip. `damageDealt` is the one signal that still tells the two cases apart.
+        // resolves to. Its legacy-victim fallback lands on the side's dummy sink rather than a
+        // real opposing actor, so no `attacked` event follows and the combat log's now-empty
+        // attack entry is correctly pruned as a phantom row (Task 4) — the SAME shape as round
+        // 4's genuine skip.
+        // SP-F F1 note: pre-F1, `damageDealt` (then `ability-performed.damage` summed by
+        // actorId) was the one signal that still told the two cases apart, because it didn't
+        // require a real per-victim landing. Post-F1, `damageDealt` is re-derived from
+        // `perTargetDealt` (an attacker×victim channel), so a hit that never lands on a real
+        // roster victim — exactly this legacy-dummy-fallback case — no longer surfaces via
+        // `damageDealt` either. This is the SAME class of adjacent, out-of-scope gap the F1
+        // audit calls "case-c" (real damage computed but unattributable to any victim); F1
+        // does not fix it, so BOTH rounds now read 0 here. `turnOrder` doesn't distinguish
+        // them either (the actor's turn opens in both rounds) — there is currently no
+        // BattleResult-level signal for "fired but hit nobody" vs "genuinely skipped"; the
+        // round-4 assertions below (the test's actual subject) still verify the skip itself.
         const round1 = result.rounds.find((r) => r.round === 1);
         const round1Ship = round1?.ships.find((s) => s.actorId === DEADBOUND);
-        expect(round1Ship?.damageDealt).toBeGreaterThan(0);
+        expect(round1Ship?.damageDealt).toBe(0);
 
         // Round 4 (focus long dead, no positional re-target available): the attacker's turn
         // stays cadence-only — no skill-fired-derived entries at all. This is the PRESERVED

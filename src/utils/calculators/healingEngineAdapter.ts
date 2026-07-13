@@ -174,6 +174,11 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     } = input;
 
     // Dummy-enemy defaults: a high-defence, huge-HP punching bag that never dies and acts last.
+    // NOTE (F7 audit follow-up, 2026-07-13): these are NOT vestigial for this caller — a
+    // healer's own active/charged `damage` ability targeting 'enemy' lands on this dummy and
+    // is computed against ENEMY_DEFENSE; that cast-damage number feeds `basis:'damage-dealt'`
+    // heal/shield riders, which ARE real `simulateHealing` outputs. Do not drop these without
+    // re-auditing that read-path (see docs/superpowers/notes/2026-07-13-f7-dummy-audit.md).
     const ENEMY_DEFENSE = 10000;
     const ENEMY_HP = 1_000_000;
     const ENEMY_SECURITY = 100;

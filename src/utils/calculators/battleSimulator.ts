@@ -7,8 +7,12 @@
  * It has NO engine dependency and NO side effects — it only imports the CombatEvent union
  * (combat/events) and the Position type (types/encounters).
  *
- * Data-source contract (pinned in combat/__tests__/twoTeamBattle.test.ts, Task 1):
- *   - damage DEALT per attacker = `ability-performed.damage` summed by `actorId`.
+ * Data-source contract (pinned in combat/__tests__/twoTeamBattle.test.ts, Task 1;
+ * damage-dealt updated by SP-F F1 — see the `ShipRoundState.damageDealt`/`damageTaken`
+ * docstrings below for the reconciliation invariant):
+ *   - damage DEALT per attacker = `perRoundPerDealt[round][attackerId]` summed over victims
+ *     (sourced from `RoundData.perTargetDealt`, a per-attacker×victim mirror of every
+ *     `perTargetDamage` increment keyed to its correct source-attacker).
  *   - damage TAKEN per victim   = `perRoundPerTarget[round][victimId]` (the reliable,
  *     symmetric source for BOTH sides; we do NOT use `hp-changed`).
  *   - heals = `heal-performed` { casterId, targets[], amount } (healing mode only).
@@ -79,17 +83,29 @@ export interface ShipRoundState {
     actorId: string;
     side: 'player' | 'enemy';
     /**
-     * Attacker's per-turn aggregate (`ability-performed.damage` by `actorId`, anchor full).
-     * Uses a DIFFERENT base from `damageTaken` (which is per-victim from `perTargetDamage`,
-     * AoE origin full / covered half), so they are NOT expected to reconcile: under AoE,
-     * `Σ damageDealt ≠ Σ damageTaken` — by design. (Per-hit/per-victim event fidelity is a
-     * deferred follow-up.)
+     * SP-F F1: attacker's per-ROUND aggregate, summed from `perRoundPerDealt[round][actorId]`
+     * (sourced from `RoundData.perTargetDealt` — a per-attacker×victim mirror of every
+     * `perTargetDamage` increment keyed to its correct source-attacker: reflect's source is the
+     * reflector, counter's is the counter owner, a DoT tick's is that tick's own applier, etc).
+     * RECONCILES with `damageTaken` by construction: `damageDealt` == `Σ` per-victim
+     * `damageTaken` attributed to this attacker this round — i.e. for every round, summing this
+     * field over all attackers who hit a given victim equals that victim's `damageTaken`.
+     * Per-ROUND, not per-turn: a DoT applier can show nonzero `damageDealt` in a round where it
+     * took no turn at all, because an earlier-applied DoT stack ticked on a victim THIS round
+     * (mirrors `damageTaken`'s existing DoT-tick-lands-in-the-tick-round behaviour). CAVEAT: an
+     * active Protection redirect inherits a pre-existing double-count (the protector's credited
+     * chunk is a diverted PORTION of the original hit, not independent new damage like Reflect/
+     * a counter) — under Protection this field is inflated relative to the single real hit the
+     * attacker landed; reconciliation with `damageTaken` holds for direct attacks, but NOT when
+     * the redirected damage is a DoT-tick-batch (which has no single source attacker → not
+     * mirrored into `perTargetDealt`), leaving that round's `Σ damageDealt` short by the
+     * redirected DoT amount.
      */
     damageDealt: number;
     /**
      * Per-victim damage from `perRoundPerTarget[round][victimId]` (AoE origin full / covered
-     * half). Uses a DIFFERENT base from `damageDealt` (the attacker's per-turn aggregate), so
-     * the two do NOT reconcile under AoE — see `damageDealt`.
+     * half; unchanged by SP-F F1). RECONCILES with `damageDealt` — see `damageDealt`'s docstring
+     * for the invariant and its Protection-redirect caveat.
      */
     damageTaken: number;
     healingDone: number;
@@ -249,6 +265,14 @@ export function assembleBattleResult(args: {
         number,
         Record<string, { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }>
     >;
+    /**
+     * SP-F F1: attacker id -> victim id -> dealt THIS round, keyed by round (parallel to
+     * `perRoundPerTarget`, built the same way from `RoundData.perTargetDealt`). Drives
+     * `damageDealt` below — replaces the old `ability-performed`-summed map so `damageDealt`
+     * reconciles with `damageTaken` (Σ over victims for one attacker's entry here == that
+     * attacker's `damageDealt`; Σ over attackers for one victim == `perRoundPerTarget[victim]`).
+     */
+    perRoundPerDealt?: Record<number, Record<string, Record<string, number>>>;
     roster: RosterEntry[];
     numRounds: number;
     /**
@@ -264,6 +288,7 @@ export function assembleBattleResult(args: {
         perRoundPerTarget,
         perRoundPerShield = {},
         perRoundPerIncoming = {},
+        perRoundPerDealt = {},
         roster,
         numRounds,
         initialCharge = new Map<string, { charge: number; max: number }>(),
@@ -323,12 +348,18 @@ export function assembleBattleResult(args: {
             }
         }
 
-        // Damage dealt per attacker this round (ability-performed.damage by actorId).
+        // SP-F F1: damage dealt per attacker this round, re-derived from `perRoundPerDealt`
+        // (attacker id -> victim id -> dealt, sourced from `RoundData.perTargetDealt`) instead
+        // of the old `ability-performed`-summed anchor-only aggregate. Summing each attacker's
+        // per-victim entries here is what makes `damageDealt` reconcile with `damageTaken` by
+        // construction (see the `ShipRoundState.damageDealt` docstring below).
+        const dealtThisRound = perRoundPerDealt[round] ?? {};
         const dealt = new Map<string, number>();
-        for (const e of roundEvents) {
-            if (e.type === 'ability-performed' && typeof e.damage === 'number') {
-                dealt.set(e.actorId, (dealt.get(e.actorId) ?? 0) + e.damage);
-            }
+        for (const [attackerId, byVictim] of Object.entries(dealtThisRound)) {
+            dealt.set(
+                attackerId,
+                Object.values(byVictim).reduce((s, v) => s + v, 0)
+            );
         }
 
         // Healing done (caster, full amount) + received (split evenly across targets —
@@ -855,10 +886,6 @@ export function simulateBattle(
         shieldPenetration: focus.stats.shieldPenetration,
         chargeCount: focus.chargeCount,
         shipSkills: focus.shipSkills,
-        // The dummy player-offense enemy target (vestigial alongside the positioned roster):
-        // a huge HP / 0 defence punching bag — the real per-victim damage flows positionally.
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -934,6 +961,13 @@ export function simulateBattle(
         perRoundPerIncoming[rd.round] = rd.perActorIncoming ?? {};
     }
 
+    // SP-F F1: per-round per-attacker×victim dealt, parallel to perRoundPerTarget — built from
+    // rd.perTargetDealt (set only when non-empty — absent rounds map to {}). Drives damageDealt.
+    const perRoundPerDealt: Record<number, Record<string, Record<string, number>>> = {};
+    for (const rd of engineRounds) {
+        perRoundPerDealt[rd.round] = rd.perTargetDealt ?? {};
+    }
+
     // Roster: every placed ship, with maxHp from its derived stats.
     const roster: RosterEntry[] = [
         ...playerPlans.map((plan) => ({
@@ -970,6 +1004,7 @@ export function simulateBattle(
         perRoundPerTarget,
         perRoundPerShield,
         perRoundPerIncoming,
+        perRoundPerDealt,
         roster,
         numRounds,
         initialCharge,
