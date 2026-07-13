@@ -680,3 +680,282 @@ describe("SP-M M1 Task 7: Incinerator's end-of-round damage hits ONLY the Infern
         expect(dealtDelta).toBeCloseTo(takenDeltaInferno, 5);
     });
 });
+
+/**
+ * SP-M M1 Task 8: team-symmetry sweep. All 8 reactive-damage mechanics above were exercised with
+ * the reactive ship on the PLAYER side and a victim on `enemyTeam` (`e:<id>:<idx>` actor ids). The
+ * engine is team-agnostic post-bySide unification — `playerDrainCtx`/`enemyDrainCtx` bind mirror
+ * rosters (engine.ts's `bySide('player')`/`bySide('enemy')`), and Task 6/7's new resolvers
+ * (`enemyWithHighestSpeed`, `livingOpposingActorIds`) are bound on BOTH sides. These mirror
+ * fixtures flip the placement — the SAME reactive ship now sits on `enemyTeam`, and the trigger/
+ * victim ship(s) sit on `playerTeam` — and assert a PLAYER victim's HP drops, proving the engine
+ * does not silently favor one side. Actor-id convention (battleSimulator.ts): enemy ships are
+ * always `e:<shipId>:<idx>`; player[0] is the reserved `attacker` id, player[N>0] is
+ * `p:<shipId>:<idx>`.
+ */
+
+describe('SP-M M1 Task 8: FrontLine reactive damage reduces the charging PLAYER HP when FrontLine is on the enemy side (positional)', () => {
+    const FL_ENEMY = 'e:fl:0';
+    const run = (playerShip: Ship) =>
+        simulateBattle({
+            playerTeam: [place(playerShip, 'M4', 1, 1e12)],
+            enemyTeam: [place(frontline('fl'), 'M4', 10_000, 1e12)],
+            rounds: 2,
+        });
+
+    it('the charging player loses HP to FrontLine reactive damage; delta reconciles dealt<->taken', () => {
+        const reaction = run(chargedEnemy('p1'));
+        const control = run(plainEnemy('p1'));
+        const dealtDelta = sumDealt(reaction, FL_ENEMY) - sumDealt(control, FL_ENEMY);
+        const takenDelta = sumTaken(reaction, ATTACKER) - sumTaken(control, ATTACKER);
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDelta, 5);
+        expect(minHpPct(reaction, ATTACKER)).toBeLessThan(minHpPct(control, ATTACKER));
+    });
+});
+
+describe('SP-M M1 Task 8: Vindicator on-resist reactive HP retaliation reduces the inflicting PLAYER HP when Vindicator is on the enemy side (positional)', () => {
+    const VIND_ENEMY = 'e:v:0';
+    const run = (playerHacking: number) =>
+        simulateBattle({
+            playerTeam: [
+                place(debuffInflictor('p1'), 'M4', 1, 1_000_000, { hacking: playerHacking }),
+            ],
+            enemyTeam: [place(vindicator('v'), 'M4', 1, 100_000, { security: 300 })],
+            rounds: 2,
+        });
+
+    it('a resisted debuff retaliates against the inflicting player; delta reconciles dealt<->taken vs a landed control', () => {
+        const resisted = run(0);
+        const landed = run(500);
+        const dealtDelta = sumDealt(resisted, VIND_ENEMY) - sumDealt(landed, VIND_ENEMY);
+        const takenDelta = sumTaken(resisted, ATTACKER) - sumTaken(landed, ATTACKER);
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDelta, 5);
+        expect(minHpPct(resisted, ATTACKER)).toBeLessThan(minHpPct(landed, ATTACKER));
+    });
+});
+
+describe('SP-M M1 Task 8: Paracelsus on-destroyed reactive HP retaliation reduces the killer PLAYER HP when Paracelsus is on the enemy side (positional)', () => {
+    const PARA_ENEMY = 'e:p:0';
+    const run = (paracelsusHp: number) =>
+        simulateBattle({
+            playerTeam: [place(killerEnemy('p1'), 'M4', 100_000, 1_000_000)],
+            enemyTeam: [place(paracelsus('p'), 'M4', 1, paracelsusHp)],
+            rounds: 2,
+        });
+
+    it('a killed Paracelsus retaliates for HP damage against its PLAYER killer; delta reconciles dealt<->taken vs a surviving control', () => {
+        const killable = run(10_000);
+        const surviving = run(1e12);
+        const dealtDelta = sumDealt(killable, PARA_ENEMY) - sumDealt(surviving, PARA_ENEMY);
+        const takenDelta = sumTaken(killable, ATTACKER) - sumTaken(surviving, ATTACKER);
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDelta, 5);
+        expect(minHpPct(killable, ATTACKER)).toBeLessThan(minHpPct(surviving, ATTACKER));
+    });
+});
+
+describe("SP-M M1 Task 8: Grif's on-enemy-cleansed reactive lands on the real cleansing PLAYER when Grif is on the enemy side (positional)", () => {
+    const GRIF_ENEMY = 'e:g:0';
+    const run = (playerShip: Ship) =>
+        simulateBattle({
+            playerTeam: [place(playerShip, 'M4', 1, 1_000_000)],
+            enemyTeam: [
+                place(grif('g'), 'M4', 1, 1_000_000),
+                place(debuffPlanter('inf'), 'M3', 5_000, 1_000_000),
+            ],
+            rounds: 2,
+        });
+
+    it("a cleansing player loses HP to Grif's reactive damage; delta reconciles dealt<->taken vs a no-cleanse control", () => {
+        const reaction = run(selfCleanser('p1'));
+        const control = run(plainEnemy('p1'));
+
+        const grifReactiveHits = flattenCombatLog(reaction).filter(
+            (e) =>
+                e.kind === 'attack' && e.actorId === GRIF_ENEMY && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(grifReactiveHits.length).toBeGreaterThan(0);
+
+        const dealtDelta = sumDealt(reaction, GRIF_ENEMY) - sumDealt(control, GRIF_ENEMY);
+        const takenDelta = sumTaken(reaction, ATTACKER) - sumTaken(control, ATTACKER);
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDelta, 5);
+        expect(minHpPct(reaction, ATTACKER)).toBeLessThan(minHpPct(control, ATTACKER));
+    });
+});
+
+describe("SP-M M1 Task 8: Rhodium's end-of-round damage lands on the most-buffed PLAYER, not the other, when Rhodium is on the enemy side (positional)", () => {
+    const RHOD_ENEMY = 'e:r:0';
+    const PLAYER2 = 'p:p2:1';
+    const run = (p1: Ship, p2: Ship) =>
+        simulateBattle({
+            playerTeam: [place(p1, 'M4', 1, 1e12), place(p2, 'M3', 1, 1e12)],
+            enemyTeam: [place(rhodium('r'), 'M4', 10_000, 1e12)],
+            rounds: 2,
+        });
+
+    it('the buffed player loses HP to the reactive damage; the buff-less player does not; delta reconciles dealt<->taken', () => {
+        const reaction = run(buffedEnemy('p1'), plainEnemy('p2'));
+        const control = run(plainEnemy('p1'), plainEnemy('p2'));
+
+        const rhodiumReactiveHits = flattenCombatLog(reaction).filter(
+            (e) =>
+                e.kind === 'attack' && e.actorId === RHOD_ENEMY && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(rhodiumReactiveHits.length).toBeGreaterThan(0);
+
+        const dealtDelta = sumDealt(reaction, RHOD_ENEMY) - sumDealt(control, RHOD_ENEMY);
+        const takenDeltaBuffed = sumTaken(reaction, ATTACKER) - sumTaken(control, ATTACKER);
+        const takenDeltaOther = sumTaken(reaction, PLAYER2) - sumTaken(control, PLAYER2);
+
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDeltaBuffed).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaBuffed, 5);
+        expect(minHpPct(reaction, ATTACKER)).toBeLessThan(minHpPct(control, ATTACKER));
+
+        expect(takenDeltaOther).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, PLAYER2)).toBeCloseTo(minHpPct(control, PLAYER2), 5);
+    });
+});
+
+describe("SP-M M1 Task 8: Chakara's start-of-round damage lands on the highest-Speed PLAYER, not the other, when Chakara is on the enemy side (positional)", () => {
+    const CHAK_ENEMY = 'e:c:0';
+    const P_SLOW = ATTACKER;
+    const P_FAST = 'p:p2:1';
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [
+                place(plainEnemy('p1'), 'M4', 1, 1e12, { speed: 100 }),
+                place(plainEnemy('p2'), 'M3', 1, 1e12, { speed: 300 }),
+            ],
+            enemyTeam: [place(chakara('c', withPassive), 'M4', 10_000, 1e12)],
+            rounds: 2,
+        });
+
+    it('the higher-Speed player loses HP to the reactive damage; the slower player does not; delta reconciles dealt<->taken', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        const chakaraReactiveHits = flattenCombatLog(reaction).filter(
+            (e) =>
+                e.kind === 'attack' && e.actorId === CHAK_ENEMY && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(chakaraReactiveHits.length).toBeGreaterThan(0);
+
+        const dealtDelta = sumDealt(reaction, CHAK_ENEMY) - sumDealt(control, CHAK_ENEMY);
+        const takenDeltaFaster = sumTaken(reaction, P_FAST) - sumTaken(control, P_FAST);
+        const takenDeltaSlower = sumTaken(reaction, P_SLOW) - sumTaken(control, P_SLOW);
+
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDeltaFaster).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaFaster, 5);
+        expect(minHpPct(reaction, P_FAST)).toBeLessThan(minHpPct(control, P_FAST));
+
+        expect(takenDeltaSlower).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, P_SLOW)).toBeCloseTo(minHpPct(control, P_SLOW), 5);
+    });
+});
+
+describe("SP-M M1 Task 8: Judge's start-of-round damage hits ALL <50%-HP PLAYERS, not the >50% one, when Judge is on the enemy side (positional)", () => {
+    const JUDGE_ENEMY = 'e:j:0';
+    const P_LOW1 = ATTACKER;
+    const P_LOW2 = 'p:lo2:1';
+    const P_HIGH = 'p:hi:2';
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [
+                // Two small-HP players (1500) → one round-1 chip of 1000 leaves them at 33%
+                // (<50%). lo1 additionally carries the 100%-damage active that kills the
+                // pre-damager (mirrors the player-side fixture's enemy roster, flipped).
+                place(preDamagerKiller('lo1'), 'M4', 100_000, 1500, { speed: 100 }),
+                place(plainEnemy('lo2'), 'M3', 1, 1500, { speed: 100 }),
+                // Huge-HP player → the same 1000 chip leaves it ~100% (>50%): Judge must SKIP it.
+                place(plainEnemy('hi'), 'B2', 1, 1e9, { speed: 100 }),
+            ],
+            enemyTeam: [
+                // Judge at the BACK, low attack, huge HP (mirrors the player-side fixture).
+                place(judge('j', withPassive), 'B4', 500, 1e12, { speed: 50 }),
+                // Pre-damager at the FRONT (players target it), fragile, fastest (chips first).
+                place(preDamagerAll('pre'), 'M4', 1000, 100, { speed: 1000 }),
+            ],
+            rounds: 2,
+        });
+
+    it('the two <50%-HP players lose HP to Judge; the >50% one does not; dealt reconciles with the two victims summed', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        const judgeReactiveHits = flattenCombatLog(reaction).filter(
+            (e) =>
+                e.kind === 'attack' && e.actorId === JUDGE_ENEMY && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(judgeReactiveHits.length).toBeGreaterThan(0);
+
+        const takenDeltaLow1 = sumTaken(reaction, P_LOW1) - sumTaken(control, P_LOW1);
+        const takenDeltaLow2 = sumTaken(reaction, P_LOW2) - sumTaken(control, P_LOW2);
+        const takenDeltaHigh = sumTaken(reaction, P_HIGH) - sumTaken(control, P_HIGH);
+        const dealtDelta = sumDealt(reaction, JUDGE_ENEMY) - sumDealt(control, JUDGE_ENEMY);
+
+        expect(takenDeltaLow1).toBeGreaterThan(0);
+        expect(takenDeltaLow2).toBeGreaterThan(0);
+        expect(minHpPct(reaction, P_LOW1)).toBeLessThan(minHpPct(control, P_LOW1));
+        expect(minHpPct(reaction, P_LOW2)).toBeLessThan(minHpPct(control, P_LOW2));
+
+        expect(takenDeltaHigh).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, P_HIGH)).toBeCloseTo(minHpPct(control, P_HIGH), 5);
+
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaLow1 + takenDeltaLow2, 5);
+    });
+});
+
+describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Inferno-afflicted PLAYER, when Incinerator is on the enemy side (positional)", () => {
+    const INC_ENEMY = 'e:i:0';
+    const P_INFERNO = ATTACKER;
+    const P_CLEAN = 'p:cln:1';
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [
+                // Front player: hit by Incinerator's single-target active → carries Inferno.
+                // Huge HP so it survives every end-of-round hit (no capping → clean reconciliation).
+                place(plainEnemy('inf'), 'M4', 1, 1e12, { security: 0 }),
+                // Back player: out of the single-target footprint → never afflicted with Inferno.
+                place(plainEnemy('cln'), 'B2', 1, 1e12, { security: 0 }),
+            ],
+            enemyTeam: [
+                // Incinerator's own active (185% + Inferno) fires in BOTH runs → cancels in the
+                // delta; hacking 500 guarantees the Inferno inflict lands on the front player.
+                place(incinerator('i', withPassive), 'M4', 1000, 1e12, { hacking: 500 }),
+            ],
+            rounds: 2,
+        });
+
+    it('the Inferno-afflicted player takes the end-of-round hit; the clean player does not; dealt reconciles', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        const incReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === INC_ENEMY && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(incReactiveHits.length).toBeGreaterThan(0);
+
+        const takenDeltaInferno = sumTaken(reaction, P_INFERNO) - sumTaken(control, P_INFERNO);
+        const takenDeltaClean = sumTaken(reaction, P_CLEAN) - sumTaken(control, P_CLEAN);
+        const dealtDelta = sumDealt(reaction, INC_ENEMY) - sumDealt(control, INC_ENEMY);
+
+        expect(takenDeltaInferno).toBeGreaterThan(0);
+        expect(minHpPct(reaction, P_INFERNO)).toBeLessThan(minHpPct(control, P_INFERNO));
+
+        expect(takenDeltaClean).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, P_CLEAN)).toBeCloseTo(minHpPct(control, P_CLEAN), 5);
+
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaInferno, 5);
+    });
+});
