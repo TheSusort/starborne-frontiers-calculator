@@ -64,57 +64,52 @@ git commit --no-verify -m "docs(sp-f): F7 dummy-reference audit"
 
 ---
 
-## Task 2: F7 — retire the dummy from the positional path
+## Task 2: F7 — drop the fake dummy inputs from both positional callers
+
+**Reshaped after the Task 1 audit** (`docs/superpowers/notes/2026-07-13-f7-dummy-audit.md`): the dummy `enemy` actor is load-bearing scaffolding and MUST still be constructed (referenced by `allActors`, `TurnBindings.legacyVictim`, the `isDummyEnemy` turn-skip, and `resolvePositionalTarget`'s null-target fallback). F7 is therefore NOT structural removal — it is: make `enemyHp`/`enemyDefense` optional with internal defaults, then stop the two positional callers from passing fake values. This is a **byte-identical refactor** for `battleSimulator.ts` (its passed values `1_000_000_000`/`0` become the exact internal defaults) so its oracle is the golden corpus — NO new behavioral test. `healingEngineAdapter.ts` passed *different* values (`1_000_000`/`10000`); the audit proved its dummy-derived outputs are unread, so dropping them must leave its goldens green — that is the audited gate.
 
 **Files:**
-- Modify: `src/utils/calculators/battleSimulator.ts:850–907` (the sim/healing `runCombat` call) and `:858–861`, `:876–884` (dummy comments)
-- Modify: `src/utils/combat/engine.ts` — the positional-mode construction/binding of the dummy `enemy` (exact sites per Task 1's note; `:4955` `legacyVictim`, and the `enemyHp` default consumption)
-- Test: `src/utils/combat/__tests__/twoTeamBattle.test.ts` (add the F7 invariant)
+- Modify: `src/utils/combat/engine.ts` — `CombatEngineInput.enemyDefense`/`enemyHp` field decls (`:988–989`, verify) → optional; add internal defaults where destructured (`:1397–1398`, verify): `enemyDefense ?? 0`, `enemyHp ?? 1_000_000_000`
+- Modify: `src/utils/calculators/battleSimulator.ts:858–861`, `:876–884` — delete the `enemyDefense: 0, enemyHp: 1_000_000_000` lines + trim the dummy comments
+- Modify: `src/utils/calculators/healingEngineAdapter.ts` (~`:177–178` consts, `:217–250` call) — delete `ENEMY_DEFENSE`/`ENEMY_HP` from its `runCombat` call (and the now-unused consts)
 
 **Interfaces:**
-- Consumes: Task 1's audit note (the vestigial vs load-bearing classification).
-- Produces: a positional `runCombat` path with no dummy `enemy` actor. DPS-calc path (`positionalTeamBattle` false) unchanged.
+- Consumes: Task 1's audit note (§5 minimal edit set).
+- Produces: `CombatEngineInput.enemyDefense?`/`enemyHp?` optional with defaults `0`/`1_000_000_000`. `dpsSimulator.ts` (which passes real values) is untouched and byte-identical.
 
-- [ ] **Step 1: Write the failing invariant test**
+- [ ] **Step 1: Re-verify the audit's line numbers against the live tree**
 
-Add to `twoTeamBattle.test.ts`. The dummy `'enemy'` id must never appear as a turn actor or a damage target in a positional team battle:
-
-```typescript
-it('F7: positional team battle has no dummy enemy actor in the event stream', () => {
-    const result = runTwoTeamBattleFixture(); // existing 2v2 helper in this file
-    const dummyReferenced = result.combatLog
-        .flatMap((r) => r.turns)
-        .some((t) => t.actorId === 'enemy' || t.entries.some((e) => e.targetId === 'enemy'));
-    expect(dummyReferenced).toBe(false);
-});
+Run (line numbers may have shifted):
+```bash
+grep -n "enemyDefense\|enemyHp" src/utils/combat/engine.ts | grep -iE "number|\?\?|const enemy|hp: enemyHp" | head
+grep -n "enemyHp: 1_000_000_000\|enemyDefense: 0" src/utils/calculators/battleSimulator.ts
+grep -n "ENEMY_HP\|ENEMY_DEFENSE\|enemyHp\|enemyDefense" src/utils/calculators/healingEngineAdapter.ts
 ```
+Expected: field decls, the two `battleSimulator` literals, and the `healingEngineAdapter` consts + call site.
 
-- [ ] **Step 2: Run it to confirm it fails**
+- [ ] **Step 2: Make the engine fields optional with internal defaults**
 
-Run: `npm test -- twoTeamBattle`
-Expected: FAIL — the dummy `'enemy'` id is still present as a target/actor.
+In `engine.ts`, change `enemyDefense: number;`/`enemyHp: number;` on `CombatEngineInput` to `enemyDefense?: number;`/`enemyHp?: number;`, and at the destructure/consumption site apply defaults so the dummy actor still gets `stats.defence = enemyDefense ?? 0` and `stats.hp = enemyHp ?? 1_000_000_000`. Every existing `runCombat` caller/test that still passes a value is unaffected (default only applies when the field is absent).
 
-- [ ] **Step 3: Remove the dummy from the positional `runCombat` inputs**
+- [ ] **Step 3: Verify types compile (the default path is net-new)**
 
-In `battleSimulator.ts` (the `simulateBattle` positional call, ~`:850`), guard the dummy inputs behind DPS-mode. Per Task 1, in positional mode (`teamActors`/`enemyAttackers` present) the engine builds the real roster; drop `enemyHp: 1_000_000_000` / `enemyDefense: 0` for that call and let the engine's positional branch not construct the dummy actor. Keep the DPS-calc call site (single-attacker) exactly as-is.
+Run: `npx tsc --noEmit`
+Expected: clean — `battleSimulator.ts`/`healingEngineAdapter.ts` may still pass the fields at this point (removed next step); no type error from making them optional.
 
-Show the edited positional call block (the `enemyHp`/`enemyDefense`/dummy-comment lines removed) in the commit; the exact engine-side change is the removal identified in Task 1 Step 3.
+- [ ] **Step 4: Drop the fake inputs from both positional callers**
 
-- [ ] **Step 4: Run the F7 invariant + full engine suite**
+In `battleSimulator.ts` delete `enemyDefense: 0,` and `enemyHp: 1_000_000_000,` from the positional `runCombat` call and trim the two dummy comments (`:858–859`, `:877–884`). In `healingEngineAdapter.ts` delete `enemyDefense`/`enemyHp` from its `runCombat` call and remove the now-unused `ENEMY_DEFENSE`/`ENEMY_HP` consts.
 
-Run: `npm test -- twoTeamBattle && npm test -- combat`
-Expected: the new F7 test PASSES; all other combat tests PASS (no dummy leak elsewhere).
-
-- [ ] **Step 5: Run the full suite; audit any golden movement**
+- [ ] **Step 5: Run the full suite — the audited byte-identical gate**
 
 Run: `npm test`
-Expected: green. If any DPS/healing or sim golden moved, STOP — the dummy was load-bearing somewhere Task 1 missed. Do not `-u`. Reconcile against the audit note first; a positional-only dummy removal should move NO DPS-mode golden.
+Expected: green with **zero golden movement**. `battleSimulator` is byte-identical by construction (defaults == dropped values). `healingEngineAdapter` goldens MUST also stay green (the audit proved its dummy-derived outputs are unread). If ANY golden moves, STOP and report — do not `-u`. A `healingEngineAdapter` golden move means a real read-path the audit missed; a `battleSimulator` move means the defaults don't match and is a bug.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/utils/calculators/battleSimulator.ts src/utils/combat/engine.ts src/utils/combat/__tests__/twoTeamBattle.test.ts
-git commit -m "feat(combat): SP-F F7 — retire vestigial dummy enemy from positional path"
+git add src/utils/combat/engine.ts src/utils/calculators/battleSimulator.ts src/utils/calculators/healingEngineAdapter.ts
+git commit -m "refactor(combat): SP-F F7 — make enemyHp/enemyDefense optional; drop fake dummy from positional callers"
 ```
 
 ---
@@ -132,14 +127,18 @@ git commit -m "feat(combat): SP-F F7 — retire vestigial dummy enemy from posit
 
 Today `damageDealt = Σ ability-performed.damage by actorId` (anchor-full base) and `damageTaken = perRoundPerTarget[round][victimId]` (per-victim, origin-full/covered-half) — different bases, so they cannot reconcile. `roundPerTargetDamage` is keyed by victim only, with no attacker attribution. F1 adds the missing attribution.
 
+**Case-c scope (from the Task 1 audit, user-ratified):** ships with NO targeting data at all (`target === undefined`) route real damage into the unread `cumulativeDamage` scalar — it never reaches `perTargetDamage`, so it is lost pre-existingly and cannot be attributed to a victim. F1's invariant is therefore **scoped to ships with targeting data** (the real corpus). Case-c is documented as a known pre-existing gap, NOT fixed here. Use fixtures built from ships that have parsed `target`+`pattern` (every ship in the standard corpus).
+
 - [ ] **Step 1: Write the failing reconciliation test**
 
+The fixture uses an AoE attacker WITH targeting data (parsed `target`+`pattern`) vs a multi-victim footprint. The invariant asserts reconciliation only for such attackers:
+
 ```typescript
-it('F1: attacker damageDealt equals sum of per-victim damageTaken it caused (AoE)', () => {
-    const result = runAoEFixture(); // AoE attacker vs 3-victim footprint; add helper if absent
+it('F1: a targeted attacker\'s damageDealt equals the sum of per-victim damage it caused (AoE)', () => {
+    const result = runAoEFixture(); // AoE attacker WITH target+pattern vs 3-victim footprint; add helper if absent
     for (const round of result.rounds) {
         for (const attacker of round.ships) {
-            if (attacker.damageDealt === 0) continue;
+            if (attacker.damageDealt === 0) continue; // skips non-attacking + case-c-only actors
             const causedByThisAttacker = sumDealtTo(result, round.round, attacker.actorId);
             expect(attacker.damageDealt).toBe(causedByThisAttacker);
         }
@@ -199,7 +198,7 @@ git commit -m "feat(combat): SP-F F1 — per-victim dealt attribution reconciles
 
 - [ ] **Step 1: Remove the closed approximation comments**
 
-Delete the "NOT expected to reconcile — by design" language (`battleSimulator.ts:83–94`) and the dummy-`'enemy'` "deferred follow-up" notes (`:20–24`, `:858–861`, `:876–884`) that Tasks 2/3 made false. Leave F2–F6 approximation comments intact (later PRs).
+Delete only the "NOT expected to reconcile — by design" language on the `ShipRoundState` docstrings (`battleSimulator.ts:81–94`) that Task 3 made false. **Do NOT touch** the `:20–24` header note about dummy-`'enemy'` targetId log lines — it stays TRUE (the dummy still exists as scaffolding and ally/self-targeting ships still produce those lines; Task 2 confirmed the dummy is not removed). Task 2 already trimmed the `:858–884` input comments. Leave F2–F6 approximation comments intact (later PRs).
 
 - [ ] **Step 2: Add the changelog entry**
 
