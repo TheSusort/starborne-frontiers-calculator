@@ -2132,8 +2132,25 @@ export function runCombat(input: CombatEngineInput): {
     // fall back to the dummy sink, keep it in the turn order so its accumulated DoTs still tick.
     // NOT gated on healingMode / enemyAttackers.length — the healing calculator sets healTargetId
     // and can supply bare (non-positioned) enemies where the dummy is still the offense sink.
+    //
+    // SP-M M1 (Task 9b fix): the first conjunct is extracted as `hasPositionedEnemyRoster` — "does
+    // a real, positioned opposing-enemy roster exist" — because the reactive target resolvers
+    // below need EXACTLY that signal, not the AND'd version with the player-target conjunct.
+    // dummyEnemyIsVestigial's full AND is the right combination for the turn-order gate (only drop
+    // the dummy from the turn order when NO player could ever fall back to it), but the second
+    // conjunct is irrelevant to whether the resolvers should target the real roster: a healer whose
+    // active targets allies does not make the enemy roster any less real. Gating the resolvers on
+    // dummyEnemyIsVestigial (its full AND) misrouted Judge/Incinerator/Chakara/Rhodium's reactive
+    // damage onto the vestigial dummy whenever the player team included an ally-targeting ship, even
+    // in a fully positional sim. Gating them on `input.positionalTeamBattle` instead (an earlier
+    // draft of this fix) over-corrected the other way: direct-engine tests (e.g.
+    // purgeConditionalSources.test.ts) supply a real, positioned enemyAttackers roster WITHOUT ever
+    // setting input.positionalTeamBattle, so that flag is too strict a requirement for "should the
+    // resolvers see the real roster". `hasPositionedEnemyRoster` is the narrowest correct signal for
+    // both cases.
+    const hasPositionedEnemyRoster = enemyAttackerActors.some((a) => a.position != null);
     const dummyEnemyIsVestigial =
-        enemyAttackerActors.some((a) => a.position != null) &&
+        hasPositionedEnemyRoster &&
         allPlayerActors.every((a) => {
             const t = a.kind === 'attacker' ? input.target : teamTargetById.get(a.id);
             return a.position != null && t?.side === 'enemy';
@@ -6136,29 +6153,45 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('player').removeEnemyCharges,
             removeChargesFrom: bySide('player').removeChargesFrom,
             selfHpPctFor: bySide('player').selfHpPctFor,
-            // SP-M M1 (Task 7b review): dummy-aware, matching livingOpposingActorIds below. In
-            // pure DPS mode (dummy vestigial=false) enemyAttackerActors is EMPTY, so the
-            // positional-only mostBuffsAmong(enemyAttackerActors) resolved to undefined and the
-            // reactive silently dropped instead of crediting the dummy `enemy` — restoring the
+            // SP-M M1 (Task 7b review, Task 9b fix): gated on `hasPositionedEnemyRoster` — "does a
+            // real, positioned opposing-enemy roster exist" — NOT `dummyEnemyIsVestigial` and NOT
+            // `input.positionalTeamBattle`. dummyEnemyIsVestigial ANDs in a second conjunct (every
+            // player actor's parsed target must be enemy-side) that is false whenever the player
+            // team includes an ally-targeting ship (e.g. a healer) even in a fully positional
+            // simulateBattle — that misrouted these resolvers onto the vestigial dummy instead of
+            // the real enemy roster. `input.positionalTeamBattle` over-corrects the other way: it
+            // is only ever set by simulateBattle, but direct-engine tests (e.g.
+            // purgeConditionalSources.test.ts) supply a real, positioned enemyAttackers roster
+            // without ever setting that flag — gating on it there wrongly fell back to the dummy.
+            // In pure DPS mode (no enemyAttackers supplied) enemyAttackerActors is EMPTY, so
+            // hasPositionedEnemyRoster is false and the positional-only
+            // mostBuffsAmong(enemyAttackerActors) would otherwise resolve to undefined and the
+            // reactive silently drop instead of crediting the dummy `enemy` — restoring the
             // pre-SP-M behavior of targeting the live dummy when it's the real DPS sink.
-            enemyWithMostBuffs: dummyEnemyIsVestigial
+            enemyWithMostBuffs: hasPositionedEnemyRoster
                 ? onceByOwner(() => mostBuffsAmong(enemyAttackerActors))
                 : () => (enemy.destroyedRound === undefined ? enemy.id : undefined),
             enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
             // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — Chakara has no purge/damage race
             // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
-            // SP-M M1 (Task 7b review): dummy-aware — same rationale as enemyWithMostBuffs above.
-            enemyWithHighestSpeed: dummyEnemyIsVestigial
+            // SP-M M1 (Task 7b review, Task 9b fix): gated on `hasPositionedEnemyRoster` — same
+            // rationale as enemyWithMostBuffs above.
+            enemyWithHighestSpeed: hasPositionedEnemyRoster
                 ? () => highestSpeedInRoster(enemyAttackerActors)
                 : () => (enemy.destroyedRound === undefined ? enemy.id : undefined),
-            // SP-M M1 (Task 7): living opposing roster for an 'all-enemies' reactive damage proc
-            // (Judge/Incinerator). In a positional sim (dummy vestigial) the real opposing roster
-            // is the living enemy attackers. In pure DPS mode the singular `enemy` dummy IS the
-            // real, destructible representative target (SP-U U5) — so the AoE resolves to it, its
-            // per-victim hp-threshold/enemy-debuff re-checked against its own live state, preserving
-            // Judge/Incinerator DPS-mode credit. NEVER the dummy when it is vestigial (positional).
+            // SP-M M1 (Task 7, Task 9b fix): living opposing roster for an 'all-enemies' reactive
+            // damage proc (Judge/Incinerator). When a real, positioned enemy roster exists
+            // (`hasPositionedEnemyRoster`) the real opposing roster is the living enemy attackers.
+            // In pure DPS mode the singular `enemy` dummy IS the real, destructible representative
+            // target (SP-U U5) — so the AoE resolves to it, its per-victim hp-threshold/enemy-debuff
+            // re-checked against its own live state, preserving Judge/Incinerator DPS-mode credit.
+            // NEVER the dummy when a real roster exists — gated on `hasPositionedEnemyRoster`, NOT
+            // `dummyEnemyIsVestigial` (falsely false whenever the player team includes an
+            // ally-targeting ship such as a healer, even in a fully positional battle) and NOT
+            // `input.positionalTeamBattle` (falsely false for direct-engine tests that supply a real
+            // enemyAttackers roster without that flag — see Task 9b).
             livingOpposingActorIds: () =>
-                dummyEnemyIsVestigial
+                hasPositionedEnemyRoster
                     ? enemyAttackerActors
                           .filter((a) => a.destroyedRound === undefined)
                           .map((a) => a.id)

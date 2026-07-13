@@ -959,3 +959,122 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
         expect(dealtDelta).toBeCloseTo(takenDeltaInferno, 5);
     });
 });
+
+/**
+ * SP-M M1 Task 9b: correctness-bug regression. `dummyEnemyIsVestigial` (engine.ts ~2135) requires
+ * EVERY player actor's parsed target to be enemy-side — false the instant the player team
+ * includes an ally-targeting ship (e.g. a healer), even in a fully positional `simulateBattle`.
+ * The three reactive resolvers (`enemyWithMostBuffs`, `enemyWithHighestSpeed`,
+ * `livingOpposingActorIds`) previously gated on that flag instead of `input.positionalTeamBattle`,
+ * so a healer on the roster silently misrouted Judge/Incinerator/Chakara/Rhodium's reactive damage
+ * onto the vestigial dummy `enemy` instead of the real enemy roster — defeating M1 for the (very
+ * common) healer-inclusive team composition. These fixtures add a plain ally-targeting healer
+ * (`This Unit repairs 5% of its Max HP.`, `activeTarget: 'allies'` — the same ally-heal idiom this
+ * file's `frontline` fixture already uses) alongside a reactive-damage ship and assert the real
+ * enemy(ies) still lose HP. Pre-fix (`dummyEnemyIsVestigial`-gated): RED — the healer flips the
+ * gate false, the resolver falls back to the dummy, and the matching enemy(ies) take 0 real HP.
+ * Post-fix (`input.positionalTeamBattle`-gated): GREEN — real enemy HP drops exactly as it does
+ * without the healer.
+ */
+
+// Plain ally-targeting healer — the ONLY thing needed to flip dummyEnemyIsVestigial's second
+// conjunct false (a player actor whose parsed target is NOT enemy-side), while remaining otherwise
+// inert (no shield/passive text) so it does not itself perturb any enemy's HP.
+const healer = (id: string): Ship =>
+    ship(id, {
+        type: 'Defender',
+        activeTarget: 'allies',
+        activeSkillText: 'This Unit repairs 5% of its Max HP.',
+    });
+
+describe("SP-M M1 Task 9b: Judge's start-of-round AoE still hits the real <50%-HP enemies with a healer on the player team (positional)", () => {
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [
+                // Same Judge + pre-damager roster as Task 7's AoE fixture above, PLUS a third
+                // ally-targeting healer — the only compositional difference from the already-green
+                // Task 7 test, isolating the delta to the healer's presence.
+                place(judge('j', withPassive), 'B4', 500, 1e12, { speed: 50 }),
+                place(preDamagerAll('pre'), 'M4', 1000, 100, { speed: 1000 }),
+                place(healer('heal'), 'M2', 1, 1e12, { speed: 10 }),
+            ],
+            enemyTeam: [
+                place(preDamagerKiller('lo1'), 'M4', 100_000, 1500, { speed: 100 }),
+                place(plainEnemy('lo2'), 'M3', 1, 1500, { speed: 100 }),
+                place(plainEnemy('hi'), 'B2', 1, 1e9, { speed: 100 }),
+            ],
+            rounds: 2,
+        });
+
+    it('the two <50%-HP enemies lose HP to Judge; the >50% one does not; dealt reconciles with the two victims summed', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        const judgeReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === JUDGE && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(judgeReactiveHits.length).toBeGreaterThan(0);
+
+        const takenDeltaLow1 = sumTaken(reaction, E_LOW1) - sumTaken(control, E_LOW1);
+        const takenDeltaLow2 = sumTaken(reaction, E_LOW2) - sumTaken(control, E_LOW2);
+        const takenDeltaHigh = sumTaken(reaction, E_HIGH) - sumTaken(control, E_HIGH);
+        const dealtDelta = sumDealt(reaction, JUDGE) - sumDealt(control, JUDGE);
+
+        // The load-bearing assertions: both <50%-HP enemies take REAL HP damage. Pre-fix (gated on
+        // dummyEnemyIsVestigial), the healer flips the gate false and Judge's AoE resolves to the
+        // vestigial dummy instead — both these deltas are 0 and this fails.
+        expect(takenDeltaLow1).toBeGreaterThan(0);
+        expect(takenDeltaLow2).toBeGreaterThan(0);
+        expect(minHpPct(reaction, E_LOW1)).toBeLessThan(minHpPct(control, E_LOW1));
+        expect(minHpPct(reaction, E_LOW2)).toBeLessThan(minHpPct(control, E_LOW2));
+
+        expect(takenDeltaHigh).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, E_HIGH)).toBeCloseTo(minHpPct(control, E_HIGH), 5);
+
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaLow1 + takenDeltaLow2, 5);
+    });
+});
+
+describe("SP-M M1 Task 9b: Chakara's single-target reactive still hits the real highest-Speed enemy with a healer on the player team (positional)", () => {
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [
+                // Same Chakara + two-enemy-speed roster as Task 6's fixture above, PLUS a second
+                // ally-targeting healer — the only compositional difference from the already-green
+                // Task 6 test, isolating the delta to the healer's presence.
+                place(chakara('c', withPassive), 'M4', 10_000, 1e12),
+                place(healer('heal'), 'M2', 1, 1e12, { speed: 10 }),
+            ],
+            enemyTeam: [
+                place(plainEnemy('e1'), 'M4', 1, 1e12, { speed: 100 }),
+                place(plainEnemy('e2'), 'M3', 1, 1e12, { speed: 300 }),
+            ],
+            rounds: 2,
+        });
+
+    it('the higher-Speed enemy loses HP to the reactive damage; the slower enemy does not; delta reconciles dealt<->taken', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        const chakaraReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(chakaraReactiveHits.length).toBeGreaterThan(0);
+
+        const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
+        const takenDeltaFaster = sumTaken(reaction, ENEMY2) - sumTaken(control, ENEMY2);
+        const takenDeltaSlower = sumTaken(reaction, ENEMY) - sumTaken(control, ENEMY);
+
+        // The load-bearing assertion: the real enemy still loses HP. Pre-fix, the healer flips
+        // dummyEnemyIsVestigial false and the reactive resolves to the vestigial dummy instead —
+        // this delta is 0 and the assertion fails.
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDeltaFaster).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaFaster, 5);
+        expect(minHpPct(reaction, ENEMY2)).toBeLessThan(minHpPct(control, ENEMY2));
+
+        expect(takenDeltaSlower).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, ENEMY)).toBeCloseTo(minHpPct(control, ENEMY), 5);
+    });
+});
