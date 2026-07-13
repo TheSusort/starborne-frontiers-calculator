@@ -82,10 +82,16 @@ not exhaustive.
 `battleSimulator.ts:335`. Acceptance: a multi-recipient heal fixture with **unequal** per-recipient
 amounts asserts each recipient's exact share.
 
-**F3 — `shieldsAbsorbed` channel.** Surface `shieldsAbsorbed` on the path where it currently reads 0
-(the grant path already reads `shield?.absorbed` at `:382`; confirm the incoming/heal path).
-Reconcile against `shieldAbsorb.ts`'s `absorbed`. Acceptance: a fixture where a shielded victim takes
-a hit reports non-zero `shieldsAbsorbed` matching the drain.
+**F3 — `shieldsAbsorbed` channel.** ~~Surface `shieldsAbsorbed` on the path where it currently reads 0~~
+**(AUDIT-CORRECTED 2026-07-13: no residual gap.)** The audit found `shieldsAbsorbed` already wired
+end-to-end since Shield System H1 (#156): `battleSimulator.ts:413` reads the real `shield?.absorbed`
+(the grant path), and the incoming/heal paths surface the same intake value — nothing reads 0. The
+surfaced value IS `shieldAbsorb.ts`'s `absorbed` threaded verbatim through `sink.addShieldAbsorbed`,
+so the reconciliation is an identity, not a computation to add. **Disposition:** downgraded to a
+test-hardening — tighten the existing `twoTeamBattle.test.ts` shield assertion from `> 0` to an
+exact-drain match (`shieldsAbsorbed === ENEMY_ATTACK`, `incomingDamage === 0`); no production change.
+Acceptance: the exact-drain assertion (a shielded victim's fully-absorbed hit reports
+`shieldsAbsorbed` equal to the drain).
 
 **F4 — `healModifier` consumption.** The in-cast path already applies `healModifier`
 (`playerTurn.ts:2742`). Close the path where it is forwarded-but-ignored — the
