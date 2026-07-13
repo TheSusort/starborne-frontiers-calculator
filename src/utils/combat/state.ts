@@ -149,10 +149,6 @@ export interface CombatActor {
     pendingAccumulators: PendingAccumulator[];
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
     destroyedRound?: number;
-    /** True for the DPS dummy sink: drains currentHp like any actor but the death /
-     *  combat-end path skips it (never recordDestroyed, never ends combat). Inert
-     *  plumbing here — first read by the death path in a later PR (bySide unification). */
-    indestructible?: boolean;
     /** Board position of this actor (positional plumbing — set at construction, not yet consumed). */
     position?: Position;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
@@ -166,7 +162,7 @@ export interface CombatActor {
      *  by apply). The positional damage calculator's `defenseProfileOf(victim)` will read this
      *  for per-victim affinity re-resolution (Task 8b/9). Absent → treated as neutral downstream. */
     affinity?: AffinityName;
-    // Unlike the optional plumbing flags above (indestructible/doesntBreakStasis/affinity/…),
+    // Unlike the optional plumbing flags above (doesntBreakStasis/affinity/…),
     // the next two always carry a defined value: createActor seeds them on every actor, so they
     // are required (non-optional) by design — no `X ?? default` reads needed at consume sites.
     /** Per-actor own-turn counter. Starts at 0; incremented at the actor's turn-start
@@ -192,7 +188,6 @@ export function createActor(
         ignoresForcedTargeting?: boolean;
         doesntBreakStasis?: boolean;
         affinity?: AffinityName;
-        indestructible?: boolean;
         chargeLossImmune?: boolean;
         preFight?: PreFightCombatModifiers;
     }
@@ -219,7 +214,6 @@ export function createActor(
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         doesntBreakStasis: partial.doesntBreakStasis,
         affinity: partial.affinity,
-        indestructible: partial.indestructible,
         turnsTaken: 0,
         chargeLossImmune: partial.chargeLossImmune ?? false,
         preFight: partial.preFight,

@@ -138,8 +138,9 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
     enemyAttackers: [enemyAttackerAt('enemy-aoe', 'M4', pattern)],
 });
 
-// A purely NON-positional battle: a focus attacker hitting a dummy enemy, no positions/teamActors/
-// enemyAttackers → no per-victim intake is ever recorded into the per-actor map.
+// A purely NON-positional battle: a focus attacker hitting the (real, destructible) DPS enemy,
+// no positions/teamActors/enemyAttackers. SP-U U5: the enemy now takes the round's dealt damage
+// through the shared per-victim funnel, so it records its OWN intake into the per-actor map.
 const NON_POSITIONAL: CombatEngineInput = {
     attack: 5_000,
     crit: 0,
@@ -179,9 +180,14 @@ describe('PR7 Task 6 — perActorIncoming surfaced on RoundData', () => {
         expect(round.perActorIncoming?.['pl-front']?.incoming).toBeGreaterThan(0);
     });
 
-    it('a NON-positional / no-intake round leaves perActorIncoming undefined (field absent)', () => {
+    it("a NON-positional DPS round records the real enemy target's own intake (SP-U U5)", () => {
         const result = runCombat(NON_POSITIONAL);
         const round = result.rounds[0];
-        expect(round.perActorIncoming).toBeUndefined();
+        // The DPS enemy is a real, destructible target: this round's 5000 direct damage lands
+        // through the shared sink → the enemy carries its own per-victim intake bucket.
+        expect(round.perActorIncoming).toBeDefined();
+        expect(round.perActorIncoming?.enemy?.incoming).toBe(5000);
+        expect(round.perActorIncoming?.enemy?.shieldAbsorbed).toBe(0);
+        expect(round.perActorIncoming?.enemy?.barrierAbsorbed).toBe(0);
     });
 });

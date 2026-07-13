@@ -663,9 +663,9 @@ describe('Protection transfer — enemy-side symmetry (protector + victim on the
             affinityCritPenalty: 0,
             defence: 0,
             hp: 1_000_000_000,
-            // Healing mode is required for `enemyAttackers` to be built into real CombatActors at
-            // all (engine.ts throws "enemyAttackers require healTargetId" otherwise) — same
-            // requirement every test above already carries via `healTargetId`.
+            // `enemyAttackers` are built into real CombatActors from their presence; this test sets
+            // healTargetId so the enemy attacks resolve against a real (healing-mode) heal target —
+            // the same setup every test above already carries via `healTargetId`.
             healTargetId: 'attacker',
             position: 'M4',
             target: parsedTargetFront,

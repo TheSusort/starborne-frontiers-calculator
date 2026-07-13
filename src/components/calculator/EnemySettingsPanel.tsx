@@ -59,11 +59,19 @@ export const EnemySettingsPanel: React.FC<EnemySettingsPanelProps> = ({
                 <ChevronDownIcon
                     className={`h-4 w-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
                 />
-                <span className="text-lg font-bold">Enemy Settings</span>
+                <span className="text-lg font-bold">Enemy Target</span>
             </span>
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
+                <p className="text-sm text-theme-text-secondary">
+                    The target is a real, destructible ship: it takes damage and dies once its HP
+                    reaches 0, ending the fight on that round — each config below then reports how
+                    many rounds it took. Set its stats manually — the default HP is high enough that
+                    most configs will not finish it off within the round window, so you can see
+                    steady-state DPS as well as time-to-kill. Lower it to see how fast a loadout can
+                    secure the kill.
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <Input
                         label="Enemy Defense"

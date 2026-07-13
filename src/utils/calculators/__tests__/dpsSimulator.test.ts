@@ -72,6 +72,65 @@ describe('simulateDPS', () => {
         });
     });
 
+    // SP-U U5: the DPS calc drives a REAL, destructible enemy. The summary reports rounds-to-kill
+    // when the enemy dies inside the window, or survived + HP% remaining when it outlasts it.
+    describe('rounds-to-kill (SP-U U5)', () => {
+        it('reports roundsToKill when the enemy dies within the window', () => {
+            // Strong attacker (~37.5k/round with the deterministic crit schedule) vs a small
+            // enemy pool → wiped early; the run terminates on the kill round.
+            const res = simulateDPS({
+                ...baseInput,
+                attack: 15000,
+                enemyDefense: 0,
+                enemyHp: 50000,
+                rounds: 20,
+            });
+            expect(res.summary.survived).toBe(false);
+            expect(res.summary.roundsToKill).toBeGreaterThan(0);
+            expect(res.summary.finalHpPct).toBe(0);
+            // The run stops AT the kill round — no rounds past it.
+            expect(res.rounds).toHaveLength(res.summary.roundsToKill!);
+        });
+
+        it('reports survived + finalHpPct when the enemy outlasts the window', () => {
+            // Weak attacker vs a huge pool → the enemy never dies across the window.
+            const res = simulateDPS({
+                ...baseInput,
+                attack: 1000,
+                crit: 0,
+                enemyDefense: 0,
+                enemyHp: 5_000_000,
+                rounds: 20,
+            });
+            expect(res.summary.survived).toBe(true);
+            expect(res.summary.roundsToKill).toBeUndefined();
+            expect(res.summary.finalHpPct).toBeGreaterThan(0);
+            expect(res.rounds).toHaveLength(20);
+        });
+
+        // SP-U U6: avgDamagePerRound must reflect the ELAPSED rounds on an early kill, not the
+        // configured window — otherwise a fast kill under-reports its per-round pace.
+        it('avgDamagePerRound divides by rounds elapsed, not the configured window, on an early kill', () => {
+            const res = simulateDPS({
+                ...baseInput,
+                attack: 15000,
+                enemyDefense: 0,
+                enemyHp: 50000,
+                rounds: 20,
+            });
+            expect(res.summary.survived).toBe(false);
+            const roundsToKill = res.summary.roundsToKill!;
+            expect(roundsToKill).toBeLessThan(20);
+            expect(res.summary.avgDamagePerRound).toBe(
+                Math.round(res.summary.totalDamage / roundsToKill)
+            );
+            // Regression guard: the pre-fix formula divided by the full configured window.
+            expect(res.summary.avgDamagePerRound).not.toBe(
+                Math.round(res.summary.totalDamage / 20)
+            );
+        });
+    });
+
     describe('active + charged cycle', () => {
         it('fires charged after chargeCount active rounds', () => {
             const result = simulateDPS({
@@ -690,6 +749,11 @@ describe('simulateDPS', () => {
         it('calculates mixed-tier corrosion damage correctly', () => {
             const result = simulateDPS({
                 ...baseInput,
+                // SP-U U5: crit 0 keeps direct damage low enough that the enemy survives all 4
+                // rounds (the real destructible target would otherwise be wiped mid-window,
+                // terminating the run). Corrosion (HP-%-scaled) is crit-independent, so the
+                // asserted tick values below are unchanged.
+                crit: 0,
                 activeMultiplier: 100,
                 chargedMultiplier: 200,
                 chargeCount: 2,
@@ -954,7 +1018,11 @@ describe('simulateDPS', () => {
             activeDoTs: [] as DoTApplicationConfig,
             chargedDoTs: [] as DoTApplicationConfig,
             enemyDefense: 0,
-            enemyHp: 10000,
+            // SP-U U5: the enemy is now a real, destructible target. These per-round-buff-timing
+            // tests observe buff behaviour across all 6+ rounds, so the pool must OUTLAST the
+            // window (a 10k pool died round 1 under 10k/round). Damage values here are compared
+            // relatively (not tied to enemyHp), so the larger pool changes nothing they assert.
+            enemyHp: 10_000_000,
             rounds: 6,
             enemyDebuffs: [] as SelectedGameBuff[],
             startCharged: false as const,
@@ -2516,8 +2584,11 @@ describe('simulateDPS', () => {
         it('an execute gate (enemy below 50% HP) switches on once enough damage accumulates', () => {
             // 10k dmg/round vs 40k enemy HP. enemyHpPct ENTERING each round (from damage
             // through previous rounds): r1=100, r2=75, r3=50, r4=25. 'below 50' (strict <)
-            // first passes entering round 4. So rounds 1-3 deal 10000, rounds 4+ deal 15000
+            // first passes entering round 4. So rounds 1-3 deal 10000, round 4 deals 15000
             // (base + 10% of 50000 HP secondary, both ×1 with critDamage 0).
+            // SP-U U5: the enemy is now a real, destructible target — round 4's 15000 hit takes
+            // the 10000-HP pool to 0, so the run TERMINATES at round 4 (roundsToKill 4). The
+            // execute gate is still observed firing on round 4 (the killing round).
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2562,10 +2633,13 @@ describe('simulateDPS', () => {
                 },
             });
             const damages = result.rounds.map((r) => r.directDamage);
-            expect(damages).toEqual([10000, 10000, 10000, 15000, 15000, 15000]);
-            // Entering-round enemy HP% (drives the gate, surfaced in the chart tooltip):
-            // 100, 75, 50, 25, then floored at 0 once cumulative (45k) exceeds the 40k pool.
-            expect(result.rounds.map((r) => r.enemyHpPct)).toEqual([100, 75, 50, 25, 0, 0]);
+            expect(damages).toEqual([10000, 10000, 10000, 15000]);
+            // Entering-round enemy HP% (drives the gate, surfaced in the chart tooltip): 100, 75,
+            // 50, 25 — the round-4 hit (15000) then wipes the 40k pool and the run terminates.
+            expect(result.rounds.map((r) => r.enemyHpPct)).toEqual([100, 75, 50, 25]);
+            expect(result.summary.survived).toBe(false);
+            expect(result.summary.roundsToKill).toBe(4);
+            expect(result.summary.finalHpPct).toBe(0);
         });
 
         it('a fresh same-cast dot satisfies a LATER damage gate but not an EARLIER one (text order)', () => {
@@ -2805,8 +2879,9 @@ describe('simulateDPS', () => {
             // 30k pool, base hit 10000:
             //  r1: hp 100%   → +30%   → 13000   (cum 13000)
             //  r2: hp 56.67% → +17%   → 11700   (cum 24700)
-            //  r3: hp 17.67% → +5.3%  → 10530   (cum 35230 ≥ pool)
-            //  r4+: hp 0%    → +0%    → 10000
+            //  r3: hp 17.67% → +5.3%  → 10530   (cum 35230 ≥ pool → enemy destroyed)
+            // SP-U U5: the enemy is a real, destructible target, so the round-3 hit wipes the 30k
+            // pool and the run TERMINATES at round 3 (roundsToKill 3) — no round 4+ against a corpse.
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2853,16 +2928,19 @@ describe('simulateDPS', () => {
                     ],
                 },
             });
-            expect(result.rounds.map((r) => r.directDamage)).toEqual([
-                13000, 11700, 10530, 10000, 10000,
-            ]);
+            expect(result.rounds.map((r) => r.directDamage)).toEqual([13000, 11700, 10530]);
+            expect(result.summary.survived).toBe(false);
+            expect(result.summary.roundsToKill).toBe(3);
         });
 
         it('passive-slot damage hits fire when their gate passes (Judge)', () => {
             // Judge passive: "At the start of the round, this Unit deals 60% damage to
             // all enemies with less than 50% HP." Active: plain 230%.
-            // 23k/round vs 100k pool → entering HP%: 100, 77, 54, 31(<50!), ...
+            // 23k/round vs 100k pool → entering HP%: 100, 77, 54, 31(<50!), 2, ...
             // Passive fires from round 4: 23000 + 6000 = 29000.
+            // SP-U U5: real destructible enemy — cum after r5 (98k + 29k) wipes the 100k pool, so
+            // the run TERMINATES at round 5 (roundsToKill 5); the passive is observed firing on
+            // rounds 4 and 5 (the killing round).
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2911,8 +2989,10 @@ describe('simulateDPS', () => {
                 },
             });
             const damages = result.rounds.map((r) => r.directDamage);
-            // entering HP%: 100, 77, 54, 31, 2, 0 → passive fires rounds 4-6
-            expect(damages).toEqual([23000, 23000, 23000, 29000, 29000, 29000]);
+            // entering HP%: 100, 77, 54, 31, 2 → passive fires rounds 4-5; round 5 wipes the pool.
+            expect(damages).toEqual([23000, 23000, 23000, 29000, 29000]);
+            expect(result.summary.survived).toBe(false);
+            expect(result.summary.roundsToKill).toBe(5);
         });
 
         it('a scaling-source condition does NOT gate the base damage (Meiying)', () => {

@@ -19,6 +19,7 @@ import {
 } from '../../utils/abilities/configToSimInputs';
 import { shipFinalStats, combatStatsFromShip } from '../../utils/ship/combatStats';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import { rankDpsConfigs, describeBestVsSecond } from '../../utils/calculators/rankDpsConfigs';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -453,27 +454,35 @@ const DPSCalculatorPage: React.FC = () => {
         setTeamShips((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
     };
 
-    const bestConfig = configs.reduce<DPSShipConfig | null>((best, current) => {
-        if (!best) return current;
-        const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
-        const currentDmg = simResults.get(current.id)?.summary.totalDamage ?? 0;
-        return currentDmg > bestDmg ? current : best;
-    }, null);
+    // SP-U U6: rank configs against the killable enemy target — killers first (fewest
+    // rounds-to-kill, ties broken by higher total damage), survivors last (lower remaining
+    // HP%). Replaces the old raw-totalDamage reduce, which under-ranked a fast kill against
+    // a slower config that merely dealt more cumulative (now-irrelevant, post-death) damage.
+    const rankedConfigIds = useMemo(() => {
+        const results = configs
+            .map((c) => {
+                const result = simResults.get(c.id);
+                return result ? { id: c.id, summary: result.summary } : null;
+            })
+            .filter(
+                (r): r is { id: string; summary: DPSSimulationResult['summary'] } => r !== null
+            );
+        return rankDpsConfigs(results);
+    }, [configs, simResults]);
 
-    const secondBestConfig = configs
-        .filter((c) => c.id !== bestConfig?.id)
-        .reduce<DPSShipConfig | null>((best, current) => {
-            if (!best) return current;
-            const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
-            const currentDmg = simResults.get(current.id)?.summary.totalDamage ?? 0;
-            return currentDmg > bestDmg ? current : best;
-        }, null);
+    const bestConfig = configs.find((c) => c.id === rankedConfigIds[0]) ?? null;
+    const secondBestConfig = configs.find((c) => c.id === rankedConfigIds[1]) ?? null;
 
     const bestTotalDamage = simResults.get(bestConfig?.id ?? '')?.summary.totalDamage;
-    const secondBestDmg = simResults.get(secondBestConfig?.id ?? '')?.summary.totalDamage;
-    const bestVsSecondPercentage =
-        bestTotalDamage && secondBestDmg
-            ? ((bestTotalDamage - secondBestDmg) / secondBestDmg) * 100
+    // SP-U U6 review fix: the "vs #2" badge must describe best's advantage along the RANKING
+    // dimension (rounds-to-kill), correctly signed — a hardcoded `+{damage%}` went nonsensical
+    // (`+-38.42%`) once the fastest killer could deal less total damage than #2. Computed here
+    // via the pure describeBestVsSecond helper (unit-tested) where both summaries are in scope.
+    const bestSummary = simResults.get(bestConfig?.id ?? '')?.summary;
+    const secondBestSummary = simResults.get(secondBestConfig?.id ?? '')?.summary;
+    const bestVsSecondLabel =
+        bestSummary && secondBestSummary
+            ? describeBestVsSecond(bestSummary, secondBestSummary)
             : null;
 
     return (
@@ -551,7 +560,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 isComparing={configs.length > 1}
                                 simResult={simResults.get(config.id)}
                                 bestTotalDamage={bestTotalDamage}
-                                bestVsSecondPercentage={bestVsSecondPercentage}
+                                bestVsSecondLabel={bestVsSecondLabel}
                                 rounds={rounds}
                                 attackerBuffTotals={mergedAttackerBuffTotals.get(config.id)!}
                                 onRemove={() => removeConfig(config.id)}
@@ -703,6 +712,15 @@ const DPSCalculatorPage: React.FC = () => {
                             cumulative damage accumulates against the configured enemy HP pool, so
                             execute-style &quot;below X% HP&quot; gates switch on at the correct
                             round mid-fight rather than always passing or always failing.
+                        </p>
+                        <p className="mt-2">
+                            <strong>The target is destructible.</strong> Once its HP reaches 0 the
+                            fight ends on that round — each config below reports rounds to kill
+                            instead of running out the full window. If a config doesn&apos;t secure
+                            the kill within the round window, it instead reports the enemy&apos;s
+                            remaining HP% at the end of the window. Configs are ranked by fastest
+                            kill first, then by lowest remaining enemy HP% among configs that
+                            don&apos;t kill.
                         </p>
                         <p className="mt-2">
                             <strong>Execution order.</strong> Abilities within a skill fire in the

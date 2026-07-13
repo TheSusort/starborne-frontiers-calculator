@@ -21,9 +21,9 @@
  * legacy DPS-sink direct/secondary/conditional credit for that case (so the firing-hit damage is
  * not double-counted into cumulativeDamage). Detonation credit is preserved (bombs are separate).
  *
- * REACHABILITY: the positioned enemy roster (`enemyAttackerActors`) is only populated in HEALING
- * mode (the engine throws `enemyAttackers require healTargetId` otherwise) — so every test here
- * runs `runCombat` with `healTargetId` set.
+ * REACHABILITY: the positioned enemy roster (`enemyAttackerActors`) is built from the
+ * enemyAttackers presence. These tests run `runCombat` with `healTargetId` set so the enemy
+ * attacks resolve against a real (healing-mode) heal target — the observable path pinned below.
  *
  * OBSERVABLE: the engine does not surface live enemy-actor HP, and the per-victim `hp-changed`
  * crossing is suppressed for enemy victims (their max HP is unknown to the tank-centric

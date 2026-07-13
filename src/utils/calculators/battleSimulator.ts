@@ -666,10 +666,10 @@ function planPlacement(
  *                  rates), position, target, pattern.
  *   - enemyTeam  → `enemyAttackers`, each with stats + shipSkills + position/target/pattern.
  *
- * `healTargetId` is set to the focus player actor's id as a VESTIGIAL workaround: the engine only
- * builds the positioned enemy roster (and lets enemies fire on players) when `healTargetId` is set
- * — it throws otherwise. The battle is driven by positions on both sides, not by the heal pipeline,
- * which stays inert beyond unlocking the enemy roster.
+ * The battle is driven by positions on both sides. `positionalTeamBattle: true` is the single
+ * signal the engine keys on (SP-U U5 R6 decouple): it builds the positioned enemy roster from the
+ * enemyAttackers presence, lets enemies fire on players, and runs the real-vs-real heal/shield
+ * pipeline (heals route to the lowest-HP living ally) — no `healTargetId` is passed.
  *
  * Affinity: each actor's matchup is resolved against the FIRST opposing placement's affinity (the
  * single-opponent-affinity convention the DPS/healing adapters already use). The RAW affinity is
@@ -696,9 +696,8 @@ export function simulateBattle(
     }
 
     // The engine's focus actor is ALWAYS the reserved id `'attacker'` (its damage/per-victim
-    // rows key off it), so player[0] must carry that id — minting `p:...` for it and pointing
-    // healTargetId there fails the engine's "is a player actor" check. The REST of the player
-    // team + every enemy get minted globally-unique ids that avoid `'attacker'`/`'enemy'`.
+    // rows key off it), so player[0] must carry that id. The REST of the player team + every
+    // enemy get minted globally-unique ids that avoid `'attacker'`/`'enemy'`.
     const FOCUS_ID = 'attacker';
     const playerPlans = input.playerTeam.map((p, i) =>
         planPlacement(p, i === 0 ? FOCUS_ID : `p:${p.ship.id}:${i}`, getGearPiece)
@@ -897,11 +896,10 @@ export function simulateBattle(
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,
         ...preFightModifiersFor(focus.id),
-        // VESTIGIAL: enemyAttackers only populate (and enemies only fire on players) when
-        // healTargetId is set — the engine throws otherwise. Point it at the focus player id.
-        healTargetId: focus.id,
-        // Positional team battle: a player single-`ally` heal/shield resolves the lowest-HP
-        // living player ally (team-symmetric with the enemy side), NOT the vestigial focus above.
+        // Positional team battle: the engine builds the positioned enemy roster from the
+        // enemyAttackers presence and runs the heal/shield pipeline off this flag (SP-U U5 R6
+        // decouple — no vestigial `healTargetId` needed). A player single-`ally` heal/shield
+        // resolves the lowest-HP living player ally (team-symmetric with the enemy side).
         positionalTeamBattle: true,
         teamActors,
         enemyAttackers,

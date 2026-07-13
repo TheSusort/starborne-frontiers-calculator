@@ -28,7 +28,7 @@ interface ShipConfigCardProps {
     isComparing: boolean;
     simResult: DPSSimulationResult | undefined;
     bestTotalDamage: number | undefined;
-    bestVsSecondPercentage: number | null;
+    bestVsSecondLabel: string | null;
     rounds: number;
     attackerBuffTotals: AttackerBuffTotals;
     onRemove: () => void;
@@ -69,7 +69,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     isComparing,
     simResult,
     bestTotalDamage,
-    bestVsSecondPercentage,
+    bestVsSecondLabel,
     rounds,
     attackerBuffTotals,
     onRemove,
@@ -291,7 +291,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         rounds={rounds}
                         attackerBuffTotals={attackerBuffTotals}
                         bestTotalDamage={bestTotalDamage}
-                        bestVsSecondPercentage={bestVsSecondPercentage}
+                        bestVsSecondLabel={bestVsSecondLabel}
                         teamActors={teamActors}
                         enemySpeed={enemySpeed}
                     />

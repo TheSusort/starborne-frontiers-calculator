@@ -2218,8 +2218,34 @@ const DocumentationPage: React.FC = () => {
                                         DPS Calculator
                                     </h4>
                                     <p className="text-theme-text mb-2">
-                                        Calculate damage per second for ships, factoring in attack,
-                                        crit rate, crit damage, and defense penetration.
+                                        A time-to-kill tool: simulate one or more ship
+                                        configurations against a configurable enemy target,
+                                        factoring in attack, crit rate, crit damage, and defense
+                                        penetration. The target is a real, destructible ship &mdash;
+                                        set its stats manually under Enemy Target (defense, HP,
+                                        security, speed, affinity, type, buffs/debuffs). Once its HP
+                                        reaches 0 the fight ends on that round.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Rounds to Kill & Ranking:
+                                        </span>{' '}
+                                        Each config reports either{' '}
+                                        <span className="font-semibold">
+                                            &quot;Killed in N rounds&quot;
+                                        </span>{' '}
+                                        when it destroys the target within the configured round
+                                        window, or{' '}
+                                        <span className="font-semibold">
+                                            &quot;Survived (X% HP left)&quot;
+                                        </span>{' '}
+                                        when the target outlasts it. Total damage and average
+                                        damage/round remain visible as secondary detail. When
+                                        comparing multiple configs, they are ranked by fastest kill
+                                        first (ties broken by higher total damage), then by lowest
+                                        remaining target HP% among configs that don&apos;t secure
+                                        the kill. The cumulative damage chart marks the round each
+                                        config&apos;s line empties the target&apos;s HP pool.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -2328,7 +2354,9 @@ const DocumentationPage: React.FC = () => {
                                         accumulates against the configured enemy HP pool, so
                                         execute-style &quot;below X% HP&quot; gates switch on
                                         mid-fight at the correct round rather than always passing or
-                                        always failing.
+                                        always failing. Since the target is destructible, reaching
+                                        0% HP ends the simulation on that round instead of
+                                        continuing on to the full configured window.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

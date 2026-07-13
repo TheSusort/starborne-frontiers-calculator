@@ -4,6 +4,11 @@ import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
 import { orderByTurnPriority } from '../../utils/combat/state';
+import {
+    bestVsSecondLabelColorClass,
+    comparedToBestColorClass,
+    formatComparedToBestPercentage,
+} from '../../utils/calculators/rankDpsConfigs';
 
 /** Display-ready team actor: resolved name + turn-order speed. */
 export interface TurnOrderTeamActor {
@@ -19,7 +24,8 @@ interface ShipConfigSummaryProps {
     rounds: number;
     attackerBuffTotals: AttackerBuffTotals;
     bestTotalDamage: number | undefined;
-    bestVsSecondPercentage: number | null;
+    /** Ranking-aware label describing best's advantage over #2 (SP-U U6). Null → no badge. */
+    bestVsSecondLabel: string | null;
     teamActors: TurnOrderTeamActor[];
     enemySpeed: number;
 }
@@ -32,7 +38,7 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     rounds,
     attackerBuffTotals,
     bestTotalDamage,
-    bestVsSecondPercentage,
+    bestVsSecondLabel,
     teamActors,
     enemySpeed,
 }) => {
@@ -72,6 +78,11 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
             ? ((simResult.summary.totalDamage - bestTotalDamage) / bestTotalDamage) * 100
             : null;
 
+    // SP-U U6: the enemy is now a real, destructible target. Lead with the outcome that
+    // actually matters — rounds-to-kill for a killed run, remaining HP% for a survivor —
+    // ahead of the raw damage totals (kept below as secondary detail).
+    const { survived, roundsToKill, finalHpPct } = simResult.summary;
+
     return (
         <div className="mt-4 pt-4 border-t border-dark-border">
             <div className="mb-3">
@@ -93,6 +104,18 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                     ))}
                 </div>
             </div>
+            <div className="flex justify-between items-baseline mb-3">
+                <span className="text-theme-text-secondary">Outcome:</span>
+                {!survived ? (
+                    <span className="text-green-400 font-bold text-lg">
+                        Killed in {roundsToKill} round{roundsToKill === 1 ? '' : 's'}
+                    </span>
+                ) : (
+                    <span className="text-yellow-400 font-bold text-lg">
+                        Survived ({finalHpPct.toFixed(1)}% HP left)
+                    </span>
+                )}
+            </div>
             <div className="flex justify-between mb-2">
                 <span className="text-theme-text-secondary">Crit Multiplier:</span>
                 <span>{critMultiplier.toFixed(2)}x</span>
@@ -104,7 +127,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                 </span>
             </div>
             <div className="flex justify-between mb-2">
-                <span className="text-theme-text-secondary">Total Damage ({rounds} rounds):</span>
+                <span className="text-theme-text-secondary">
+                    Total Damage ({!survived ? `${roundsToKill} rounds` : `${rounds} rounds`}):
+                </span>
                 <span className={isBest ? 'text-primary font-bold' : ''}>
                     {simResult.summary.totalDamage.toLocaleString()}
                 </span>
@@ -171,9 +196,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
             {isBest && isComparing && (
                 <div className="text-sm mt-2 text-center">
                     <span className="text-primary">Best ship configuration</span>
-                    {bestVsSecondPercentage !== null && (
-                        <span className="text-green-500 ml-2">
-                            +{bestVsSecondPercentage.toFixed(2)}% vs #2
+                    {bestVsSecondLabel && (
+                        <span className={`${bestVsSecondLabelColorClass(bestVsSecondLabel)} ml-2`}>
+                            {bestVsSecondLabel}
                         </span>
                     )}
                 </div>
@@ -181,7 +206,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
             {comparedToBestPercentage !== null && (
                 <div className="flex justify-between mt-2">
                     <span className="text-theme-text-secondary">Compared to best:</span>
-                    <span className="text-red-500">{comparedToBestPercentage.toFixed(2)}%</span>
+                    <span className={comparedToBestColorClass(comparedToBestPercentage)}>
+                        {formatComparedToBestPercentage(comparedToBestPercentage)}
+                    </span>
                 </div>
             )}
         </div>
