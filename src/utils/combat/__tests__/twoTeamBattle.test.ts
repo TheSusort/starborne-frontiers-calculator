@@ -72,6 +72,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import { parsePattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import type { BattleResult } from '../../calculators/battleSimulator';
@@ -1884,5 +1885,106 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         expect(dealsDamage(3)).toBe(false);
         // R4: the dead-path cadence reset the bank to 0 → back to the ally-only ACTIVE → runs.
         expect(grantsBuff(4)).toBe(true);
+    });
+});
+
+// ===========================================================================
+// SP-F PR2 (F5): charged-skill TARGETING fidelity. Two independent axes:
+//   (A) footprint — the positional damage apply must resolve its footprint from
+//       the CHARGED pattern on a charge-firing turn, not the ACTIVE one.
+//   (B) selection — there is no `chargedTarget` axis at all today; a charged
+//       skill that targets a DIFFERENT selection than its active must still
+//       resolve against the charged selection on a charge-firing turn.
+// Snakeroot-style divergence (real ship, for flavor only — this fixture is
+// synthetic): active "deals 170% damage and inflicts 2 stacks of Corrosion I"
+// on Pattern-Base (single-target); charged "deals 210% damage ... Corrosion
+// II" on Pattern-Line-Range-1 (wider, hits an extra covered cell).
+// chargeCount=1 → round 1 fires ACTIVE (banks 0→1), round 2 fires CHARGED
+// (1>=1, consumes/resets to 0) — see playerTurn.ts:~1044's action predicate.
+// ===========================================================================
+describe('SP-F F5: charged-skill footprint + target-selection fidelity', () => {
+    const chargedAttack = (): ShipSkills['slots'][number] => ({
+        slot: 'charged',
+        abilities: [
+            ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+        ],
+    });
+
+    const baseChargeInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 1,
+        shipSkills: { slots: [basicAttack(), chargedAttack()] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 2,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: true,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        // Healing mode — required for the positioned enemy roster to be built (mirrors `battle()`).
+        healTargetId: 'attacker',
+        position: 'M1',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        enemyAttackers: [
+            offensiveEnemyAt('enemy-front', 'M4', 'front', 0, 1_000_000_000),
+            offensiveEnemyAt('enemy-back', 'M3', 'back', 0, 1_000_000_000),
+        ],
+        ...overrides,
+    });
+
+    it('(A) a charge-firing turn resolves its DAMAGE FOOTPRINT from the charged pattern, not the active one', () => {
+        idc = 0;
+        const input = baseChargeInput({
+            // CHARGED footprint diverges from active (single-target → wider line); same target.
+            chargedPattern: parsePattern('Pattern-Line-Range-1'),
+        });
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE, Pattern-Base): origin only — the covered cell (enemy-back) untouched.
+        expect(round1['enemy-front']).toBe(5000);
+        expect(round1['enemy-back']).toBeUndefined();
+
+        // Round 2 (CHARGED, Pattern-Line-Range-1): origin FULL + covered HALF. Pre-fix, the
+        // engine keeps resolving the footprint from the ACTIVE pattern even on this charge
+        // turn, so enemy-back would stay untouched (same as round 1) — this is the RED case.
+        expect(round2['enemy-front']).toBe(5000);
+        expect(round2['enemy-back']).toBe(2500);
+    });
+
+    it('(B) a charge-firing turn resolves its TARGET SELECTION from the charged axis, not the active one', () => {
+        idc = 0;
+        const input = baseChargeInput({
+            // CHARGED selection diverges from active (front → back); same single-target footprint.
+            chargedTarget: parsedTarget('back'),
+            chargedPattern: basePattern(),
+        });
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE): targets FRONT.
+        expect(round1['enemy-front']).toBe(5000);
+        expect(round1['enemy-back']).toBeUndefined();
+
+        // Round 2 (CHARGED): targets BACK — the charged selection axis. Pre-fix, there is no
+        // `chargedTarget` axis at all, so the engine keeps resolving via the ACTIVE target
+        // (front) even on this charge turn — this is the RED case.
+        expect(round2['enemy-back']).toBe(5000);
+        expect(round2['enemy-front']).toBeUndefined();
     });
 });

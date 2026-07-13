@@ -688,8 +688,10 @@ function planPlacement(
     getGearPiece?: (id: string) => GearPiece | undefined
 ): PlacementPlan {
     const targeting = parseShipTargeting(p.ship);
-    // Use the ACTIVE targeting (target + pattern). Charged targeting is threaded separately
-    // for support footprint resolution when the charged skill fires.
+    // Use the ACTIVE targeting (target + pattern) as the default axes. Charged targeting is
+    // threaded separately (`chargedTargeting`) — SP-F F5: it now drives the damage footprint
+    // AND the target selection on a charge-firing turn (not just support-footprint resolution),
+    // via the engine's `chargedPattern`/`chargedTarget` inputs.
     return {
         id,
         name: p.ship.name,
@@ -836,8 +838,12 @@ export function simulateBattle(
             target: plan.targeting?.target,
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
-            // SP-F F5: thread the ship role (Ship.type) for role-filtered classification
-            // (Meatshield defense-substitution's "non-defender ally" gate).
+            // SP-F F5 (charged-skill targeting): thread the charged TARGET selection alongside
+            // the charged pattern above — drives both the damage footprint and the target
+            // selection on a charge-firing turn. Falls back to the active target when unset.
+            chargedTarget: plan.chargedTargeting?.target,
+            // SP-F F5 (Meatshield defense-substitution): thread the ship role (Ship.type) for
+            // role-filtered classification ("non-defender ally" gate).
             role: plan.role,
             // SP-F F4: thread the ship name for the live `ally-on-team` roster check
             // (Isha/Nayra reciprocal Affinity Override gate).
@@ -890,6 +896,9 @@ export function simulateBattle(
                 target: plan.targeting?.target,
                 pattern: plan.targeting?.pattern,
                 chargedPattern: plan.chargedTargeting?.pattern,
+                // SP-F F5 (charged-skill targeting): thread the charged TARGET selection
+                // alongside the charged pattern above (team-symmetric with the teamActors branch).
+                chargedTarget: plan.chargedTargeting?.target,
                 affinity: plan.affinity,
             };
         }
@@ -944,6 +953,9 @@ export function simulateBattle(
         target: focus.targeting?.target,
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,
+        // SP-F F5 (charged-skill targeting): thread the charged TARGET selection alongside the
+        // charged pattern above (team-symmetric with the teamActors/enemyAttackers branches).
+        chargedTarget: focus.chargedTargeting?.target,
         // SP-F F5: thread the focus actor's ship role (Ship.type) for role-filtered
         // classification (Meatshield defense-substitution's "non-defender ally" gate). Team
         // symmetry with the teamActors/enemyAttackers branches above.
