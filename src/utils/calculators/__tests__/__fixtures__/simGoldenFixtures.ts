@@ -585,3 +585,111 @@ export function f1Reconciliation(): BattleSimulationInput {
         rounds: 6,
     };
 }
+
+// ===========================================================================
+// healUnequalPerRecipient (SP-F F2) — proves `heal-performed.perTarget` carries a REAL
+// per-recipient breakdown, not an even split. The healer's active is phrased "repairs all
+// allies for N% of THEIR Max HP" — an EXPLICIT all-allies recipient phrase, which is what
+// keeps the parser's basis at `target-hp` (recipient-owned): a bare "repairs N% of its/their
+// Max HP" with NO named recipient defaults to `target: 'self'` at parse time, and
+// `resolveHealBasis`'s self-normalization (skillTextParser.ts ~L3577-3581) collapses even a
+// "their Max HP" reading back down to the CASTER-owned `hp` basis once `buildShipAbilities`
+// flips the bare-self target to `all-allies` for a pure-support active (verified directly
+// against `parseHealAbilities` — the bare phrasing parses to `{ basis: 'hp', target: 'self' }`
+// for BOTH "its" and "their"; only the explicit "all allies ... their Max HP" phrasing here
+// parses to `{ basis: 'target-hp', target: 'all-allies', explicitTarget: true }`).
+// `target-hp` basis resolves via `healing.recipientMaxHp(rid)` (playerTurn.ts ~L2569-2570) —
+// each recipient's OWN Max HP, not the caster's — so three player ships with distinct Max HP
+// produce three distinct heal shares from the SAME cast, which an even split (÷ recipient
+// count) would wrongly flatten to the same average value for all three.
+//
+// The healer's own crit is pinned to 0 (a stat override, not an ability flag) so the heal
+// NEVER crits — `healCritGate` gates on the CASTER's effective crit, and a crit multiplier
+// would apply identically to every recipient in the same cast anyway, but zeroing it removes
+// any RNG dependency from the expected-value assertion (dedicated test in simGolden.test.ts):
+// every recipient's `healingReceived` is deterministically exactly 20% of its own Max HP.
+//
+// Positions mirror `healCasting`: enemy T4's 'front' row-scan starts at its own (empty of
+// players) row T, then lands on row M — occupied by the healer (M1) and the front ally (M4) —
+// and picks the front-most column (M4) as the single primary target, so ONLY the front ally
+// ever takes damage; the healer (M1) and rear ally (B4) are never attacked, isolating the heal
+// distribution from any damage-taken noise on those two.
+// ===========================================================================
+
+/** Pure ally-heal supporter: EXPLICIT "all allies ... their Max HP" phrasing (see the fixture
+ *  doc above for why this — not the bare "its/their Max HP" shape every other healer fixture
+ *  uses — is required to get a `target-hp` (per-recipient) basis). Crit pinned to 0 so the
+ *  cast's single crit draw never perturbs the expected per-recipient shares. Max HP (220_000)
+ *  is distinct from both other player ships so its own heal share doesn't collide. */
+const healUnequalHealer = (): Ship => ({
+    ...shipBase('f2-healer', 'Reliant', 'SUPPORTER', {
+        hp: 220_000,
+        attack: 0,
+        defence: 300,
+        hacking: 220,
+        security: 150,
+        speed: 130,
+        crit: 0,
+    }),
+    activeSkillText: 'This Unit repairs all allies for 20% of their Max HP.',
+    activeTarget: 'allies',
+    activePattern: 'Pattern-Base',
+});
+
+/** Front ally: the enemy's sole primary target (row M, front column) — takes real damage each
+ *  round so the heal has visible work to do here, without ever out-racing the healer. Max HP
+ *  (260_000) is the largest of the three player ships, so its 20% share (52_000) is the
+ *  largest and clearly distinct from the healer's and the rear ally's. */
+const healUnequalFrontAlly = (): Ship =>
+    finalizeAttacker(
+        shipBase('f2-front', 'Ferrum', 'ATTACKER', {
+            hp: 260_000,
+            attack: 1500,
+            defence: 200,
+            hacking: 200,
+            security: 150,
+            speed: 120,
+        })
+    );
+
+/** Rear ally: placed in row B, never sharing a row with the lone T4 enemy, so it is never
+ *  attacked — its heal share is pure signal, undiluted by damage taken. Smallest Max HP
+ *  (100_000) of the three player ships, giving the smallest (20_000) of the three distinct
+ *  shares. */
+const healUnequalRearAlly = (): Ship =>
+    finalizeAttacker(
+        shipBase('f2-rear', 'Umbra', 'ATTACKER', {
+            hp: 100_000,
+            attack: 1200,
+            defence: 200,
+            hacking: 200,
+            security: 150,
+            speed: 100,
+        })
+    );
+
+/** Enemy attacker: steady front damage on the front ally only (mirrors `healCasting`'s
+ *  enemy — modest relative to the front ally's 260_000 HP so the battle survives the window). */
+const healUnequalEnemy = (): Ship =>
+    finalizeAttacker(
+        shipBase('f2-enemy', 'Vulcan', 'ATTACKER', {
+            hp: 300_000,
+            attack: 1800,
+            defence: 200,
+            hacking: 220,
+            security: 150,
+            speed: 90,
+        })
+    );
+
+export function healUnequalPerRecipient(): BattleSimulationInput {
+    return {
+        playerTeam: [
+            placement(healUnequalHealer(), 'M1'),
+            placement(healUnequalFrontAlly(), 'M4'),
+            placement(healUnequalRearAlly(), 'B4'),
+        ],
+        enemyTeam: [placement(healUnequalEnemy(), 'T4')],
+        rounds: 8,
+    };
+}

@@ -110,9 +110,12 @@ export interface ShipRoundState {
     damageTaken: number;
     healingDone: number;
     /**
-     * Heal `amount` split EVENLY across the heal's targets — the `heal-performed` event
-     * carries no per-recipient breakdown, so this is an approximation (not a true per-recipient
-     * amount).
+     * SP-F F2: per-recipient raw heal amount actually applied to this actor, sourced from
+     * `heal-performed.perTarget` (the engine's real per-recipient breakdown — see that event's
+     * doc in events.ts). An even split of `amount` across `targets` is only a FALLBACK for
+     * hand-crafted test emits that omit `perTarget`; the engine itself always populates it.
+     * CAVEAT (pre-existing, out of F2 scope): HoT-tick and reactive-heal channels are not
+     * `heal-performed` casts and are not included here.
      */
     healingReceived: number;
     /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */
@@ -319,7 +322,7 @@ export function assembleBattleResult(args: {
     const cumulativeTaken = new Map<string, number>();
     // Cumulative actual HP loss per actor (post-shield/barrier incoming, or raw fallback).
     const cumulativeHpLost = new Map<string, number>();
-    // Cumulative healing received per actor (approximation from heal-performed splits).
+    // Cumulative healing received per actor (SP-F F2: per-recipient, from heal-performed.perTarget).
     const cumulativeHealed = new Map<string, number>();
 
     // Roster id set: turn-started for a non-roster id (the dummy player-offense 'enemy')
@@ -362,16 +365,27 @@ export function assembleBattleResult(args: {
             );
         }
 
-        // Healing done (caster, full amount) + received (split evenly across targets —
-        // approximation: heal-performed carries no per-recipient breakdown).
+        // Healing done (caster, full amount) + received. SP-F F2: prefers the engine's real
+        // per-recipient breakdown (`heal-performed.perTarget`); an even split across `targets`
+        // is only the FALLBACK for hand-crafted test emits that omit `perTarget` (the engine
+        // itself always populates it — see the `heal-performed` event doc in events.ts).
         const healDone = new Map<string, number>();
         const healReceived = new Map<string, number>();
         for (const e of roundEvents) {
             if (e.type === 'heal-performed') {
                 healDone.set(e.casterId, (healDone.get(e.casterId) ?? 0) + e.amount);
-                const per = e.targets.length > 0 ? e.amount / e.targets.length : 0;
-                for (const tid of e.targets) {
-                    healReceived.set(tid, (healReceived.get(tid) ?? 0) + per);
+                if (e.perTarget && e.perTarget.length > 0) {
+                    for (const pt of e.perTarget) {
+                        healReceived.set(
+                            pt.targetId,
+                            (healReceived.get(pt.targetId) ?? 0) + pt.amount
+                        );
+                    }
+                } else {
+                    const per = e.targets.length > 0 ? e.amount / e.targets.length : 0;
+                    for (const tid of e.targets) {
+                        healReceived.set(tid, (healReceived.get(tid) ?? 0) + per);
+                    }
                 }
             }
         }
