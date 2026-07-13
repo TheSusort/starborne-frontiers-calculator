@@ -4592,6 +4592,37 @@ export function runCombat(input: CombatEngineInput): {
                 return;
             }
             reactiveDealtByOwner.set(ownerId, raw);
+            // SP-M M1: in a positioned two-team battle (simulateBattle sets input.positionalTeamBattle)
+            // a reactive proc REDUCES the resolved victim's real HP through the SAME shared funnel
+            // counters use (applyVictimDamage) — surfacing on the victim's HP curve
+            // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
+            // perTargetDealt → damageDealt). Mirrors applyCounterAttack EXACTLY (isCounter:true → a
+            // reactive hit is never itself reflected and never Protection-redirected; no shield
+            // penetration) and deliberately does NOT creditDamage: positionalTeamBattle is never
+            // dpsEnemyTarget, so the DPS-mode post-round aggregate (engine.ts:7931) never fires here
+            // — cumulativeDamage only reports + declines the vestigial dummy, never a real victim, so
+            // folding the reactive into it would double-count exactly like the per-victim DoT/
+            // detonation split documented at engine.ts:7898.
+            //
+            // victim.id !== enemy.id: defensive backstop keeping the HP path off the vestigial dummy
+            // (a proc whose target resolved to ctx.enemy — e.g. an AoE with an empty living roster —
+            // stays credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim.
+            if (input.positionalTeamBattle && victim.id !== enemy.id) {
+                applyVictimDamage(raw, victim, sink, {
+                    killerId: ownerId,
+                    byDirectDamage: true,
+                    isCounter: true,
+                    shieldPenetrationPct: 0,
+                    bombPortion: 0,
+                });
+                roundPerTargetDamage.set(
+                    victim.id,
+                    (roundPerTargetDamage.get(victim.id) ?? 0) + raw
+                );
+                creditDealt(ownerId, victim.id, raw);
+                return { dealt: raw, didCrit };
+            }
+            // DPS / healing mode (byte-identical): credit-only.
             creditDamage(ownerId, 'direct', raw);
             return { dealt: raw, didCrit };
         };
