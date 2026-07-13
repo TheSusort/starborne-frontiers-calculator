@@ -1987,4 +1987,176 @@ describe('SP-F F5: charged-skill footprint + target-selection fidelity', () => {
         expect(round2['enemy-back']).toBe(5000);
         expect(round2['enemy-front']).toBeUndefined();
     });
+
+    // -----------------------------------------------------------------------
+    // Team-symmetry coverage: the charge-aware footprint fix is mirrored at ALL
+    // THREE damage cast sites. Fixtures (A)/(B) above exercise the FOCUS cast
+    // site (engine.ts ~6588). (C) and (D) below cover the ENEMY-attacker cast
+    // site (~7183) and the walked-TEAM-actor cast site (~6854) respectively —
+    // both hit the SAME class of bug if their mirror is broken. Each is
+    // non-vacuous: the round-2 (charged) footprint reaches a SECOND victim that
+    // the ACTIVE single-target pattern never would, so a site that kept using
+    // the active pattern would leave the covered victim undamaged and fail.
+    // -----------------------------------------------------------------------
+
+    it('(C) an ENEMY charge-firing turn resolves its damage FOOTPRINT from the charged pattern (enemy cast site ~7183)', () => {
+        idc = 0;
+        // A positioned enemy attacker with a charge skill whose CHARGED footprint diverges from
+        // its ACTIVE one (single-target → wider line). chargeCount=1 → round 1 fires ACTIVE
+        // (banks 0→1), round 2 fires CHARGED (1>=1). buildEnemyPlayerActorRuntime derives
+        // hasChargedSkill=true (chargeCount>=1 AND the charged slot carries a >0-multiplier
+        // damage ability). Anchored on the front-most player (M4=focus); the charged line covers
+        // the walked team player at M3.
+        const chargedEnemy = {
+            id: 'enemy-charged',
+            stats: {
+                attack: 5000,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 1,
+            },
+            chargeCount: 1,
+            startCharged: false,
+            position: 'M1',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            chargedPattern: parsePattern('Pattern-Line-Range-1'),
+            shipSkills: { slots: [basicAttack(), chargedAttack()] },
+        } as EnemyAttacker;
+
+        // Two player-side actors in a line so the charged footprint can reach the second one:
+        // focus at M4 + one walked team actor at M3. Both deal 0 damage so the ONLY per-victim
+        // damage in this fixture flows enemy→player (clean assertions on the player victims).
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('player-team', 'M3', 'front', 0, 1_000_000_000)],
+            enemyAttackers: [chargedEnemy],
+        };
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE, Pattern-Base): the enemy hits only the front-most player (focus, M4).
+        expect(round1['attacker']).toBe(5000);
+        expect(round1['player-team']).toBeUndefined();
+
+        // Round 2 (CHARGED, Pattern-Line-Range-1): origin M4 FULL (5000) + covered M3 HALF (2500).
+        // A broken enemy-site mirror (still resolving the ACTIVE footprint on the charge turn)
+        // would leave player-team untouched here — this is the non-vacuous guard.
+        expect(round2['attacker']).toBe(5000);
+        expect(round2['player-team']).toBe(2500);
+    });
+
+    it('(D) a walked TEAM actor charge-firing turn resolves its damage FOOTPRINT from the charged pattern (team cast site ~6854)', () => {
+        idc = 0;
+        // A walked team actor (NOT the focus) with a charge skill whose CHARGED footprint diverges
+        // from its ACTIVE one. chargeCount=1 → round 1 ACTIVE (banks 0→1), round 2 CHARGED. It
+        // fires `front` at the enemy roster; the charged line anchored on the front-most enemy
+        // (M4) covers the enemy at M3.
+        const chargedTeam = {
+            id: 'team-charged',
+            speed: 150,
+            chargeCount: 1,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position: 'M3',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            chargedPattern: parsePattern('Pattern-Line-Range-1'),
+            walk: {
+                shipSkills: { slots: [basicAttack(), chargedAttack()] },
+                stats: {
+                    attack: 5000,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
+                },
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: true,
+            },
+        } as TeamActor;
+
+        // Focus deals 0 damage (it also fires `front` → adds 0 to the front enemy, inert). Two
+        // enemies in a line so the team actor's charged footprint reaches the second one; both
+        // enemies deal 0 so the only real per-victim damage flows team→enemy.
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [chargedTeam],
+            enemyAttackers: [
+                offensiveEnemyAt('enemy-front', 'M4', 'front', 0, 1_000_000_000),
+                offensiveEnemyAt('enemy-back', 'M3', 'back', 0, 1_000_000_000),
+            ],
+        };
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE, Pattern-Base): the team actor hits only the front-most enemy (M4).
+        expect(round1['enemy-front']).toBe(5000);
+        expect(round1['enemy-back']).toBeUndefined();
+
+        // Round 2 (CHARGED, Pattern-Line-Range-1): origin M4 FULL (5000) + covered M3 HALF (2500).
+        // A broken team-site mirror (still resolving the ACTIVE footprint on the charge turn)
+        // would leave enemy-back untouched here — this is the non-vacuous guard.
+        expect(round2['enemy-front']).toBe(5000);
+        expect(round2['enemy-back']).toBe(2500);
+    });
 });
