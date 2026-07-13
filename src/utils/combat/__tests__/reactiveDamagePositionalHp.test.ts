@@ -354,3 +354,73 @@ describe("SP-M M1 Task 5: Rhodium's end-of-round damage lands on the most-buffed
         expect(minHpPct(reaction, ENEMY2)).toBeCloseTo(minHpPct(control, ENEMY2), 5);
     });
 });
+
+/**
+ * SP-M M1 Task 5 review fix: TWO same-side Rhodiums drain their end-of-round purge+damage pair
+ * off the SAME batch/ctx (drainQueue's single ctx instance for the whole round-end drain). Each
+ * Rhodium's `enemyWithMostBuffs` resolution must be keyed by ITS OWN ownerId, re-resolving LIVE
+ * per owner — not memoized once for the whole batch regardless of which owner asks.
+ *
+ * Fixture: eA starts with 2 buffs (Attack Up III + Defense Up III), eB with 1 (Attack Up III) —
+ * eA is strictly more-buffed, so the FIRST Rhodium to resolve picks eA and its purge strips both
+ * of eA's buffs. By the time the SECOND Rhodium resolves, eB (still 1 buff) is now the
+ * most-buffed enemy on the roster (eA has 0).
+ *
+ * Pre-fix (batch-wide, ownerId-blind `once()`): whichever resolution happens FIRST is cached and
+ * reused for BOTH Rhodiums regardless of ownerId — eB never receives any reactive damage at all,
+ * and the cached enemy (eA) is hit TWICE (once per Rhodium). Post-fix (ownerId-keyed memo): each
+ * Rhodium re-resolves independently, seeing the current (post-first-purge) buff state — eA takes
+ * exactly one Rhodium's damage, eB takes the other's.
+ */
+const R1_ID = ATTACKER; // player[0] → reserved 'attacker' focus id (battleSimulator.ts FOCUS_ID)
+const R2_ID = 'p:r2:1'; // player[1] → globally-unique id (battleSimulator.ts naming convention)
+const ENEMY_A = 'e:eA:0';
+const ENEMY_B = 'e:eB:1';
+
+// Two DISTINCT buffs (real corpus "gains X for N turns" idiom, twice) — strictly more-buffed
+// than eB's single buff below, so mostBuffsAmong picks eA deterministically on the FIRST
+// (pre-any-purge) resolution.
+const twoBuffsEnemy = (id: string): Ship =>
+    ship(id, {
+        activeSkillText:
+            'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns. This Unit gains <unit-skill>Defense Up III</unit-skill> for 2 turns.',
+    });
+
+describe('SP-M M1 Task 5 review fix: two same-side Rhodiums re-resolve enemy-most-buffs per owner (positional)', () => {
+    const run = (eA: Ship, eB: Ship) =>
+        simulateBattle({
+            playerTeam: [
+                place(rhodium('r1'), 'M4', 10_000, 1e12),
+                place(rhodium('r2'), 'M3', 10_000, 1e12),
+            ],
+            enemyTeam: [place(eA, 'M4', 1, 1e12), place(eB, 'M3', 1, 1e12)],
+            rounds: 2,
+        });
+
+    it("after the first Rhodium's purge strips eA's buffs, the second Rhodium's pair re-resolves to eB instead of re-hitting eA", () => {
+        // reaction: eA starts most-buffed (2), eB less (1) — once eA is purged to 0, eB becomes
+        // most-buffed for whichever Rhodium resolves second.
+        const reaction = run(twoBuffsEnemy('eA'), buffedEnemy('eB'));
+        // control: both buff-less — mostBuffsAmong's "no buffs anywhere" case, the whole proc
+        // no-ops for BOTH Rhodiums (same idiom as the single-Rhodium Task 5 control above).
+        const control = run(plainEnemy('eA'), plainEnemy('eB'));
+
+        const takenDeltaA = sumTaken(reaction, ENEMY_A) - sumTaken(control, ENEMY_A);
+        const takenDeltaB = sumTaken(reaction, ENEMY_B) - sumTaken(control, ENEMY_B);
+
+        // The load-bearing assertion: BOTH enemies must take reactive damage. Pre-fix, one of
+        // these is exactly 0 (the never-selected enemy) while the other silently absorbs both
+        // Rhodiums' damage — this is what distinguishes the ownerId-keyed fix from the bug.
+        expect(takenDeltaA).toBeGreaterThan(0);
+        expect(takenDeltaB).toBeGreaterThan(0);
+
+        const dealtDeltaR1 = sumDealt(reaction, R1_ID) - sumDealt(control, R1_ID);
+        const dealtDeltaR2 = sumDealt(reaction, R2_ID) - sumDealt(control, R2_ID);
+        // Total dealt (both Rhodiums) reconciles with total taken (both enemies) — no damage is
+        // manufactured or dropped, only correctly re-routed per owner.
+        expect(dealtDeltaR1 + dealtDeltaR2).toBeCloseTo(takenDeltaA + takenDeltaB, 5);
+        // Each Rhodium's own reactive dealt is non-zero (both actually fired their proc).
+        expect(dealtDeltaR1).toBeGreaterThan(0);
+        expect(dealtDeltaR2).toBeGreaterThan(0);
+    });
+});

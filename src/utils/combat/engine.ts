@@ -6063,17 +6063,24 @@ export function runCombat(input: CombatEngineInput): {
         // the target, so a naive LIVE re-resolution by whichever ability drains SECOND (fixed by
         // sentence position — purge precedes "and deals X% damage" — so purge always drains
         // first) would resolve to nobody even though the FIRST-draining ability already found
-        // somebody. `once()` memoizes PER-CTX-INSTANCE: every intent drained by THIS call shares
-        // one resolution, but the NEXT separate drain call in the same round (a fresh
+        // somebody. `onceByOwner()` memoizes PER (CTX-INSTANCE, ownerId) PAIR: the purge and
+        // damage intents belonging to the SAME Rhodium (same ownerId) share one resolution, so
+        // they still agree on one pre-purge target — but a SECOND, DIFFERENT-ownerId Rhodium
+        // draining off the SAME batch (e.g. two same-side Rhodiums both firing at round-end) gets
+        // its OWN fresh resolution, re-evaluated live against the buff state AFTER the first
+        // Rhodium's purge already ran (review fix: the original single-cell `once()` ignored
+        // `ownerId` entirely and would reuse the FIRST owner's cached target for every owner in
+        // the batch, causing the second Rhodium to re-hit the already-stripped target instead of
+        // the now-most-buffed one). The NEXT separate drain call in the same round (a fresh
         // playerDrainCtx()/enemyDrainCtx() invocation — e.g. a later turn's pre-cast grant drain)
-        // gets its own fresh memo and re-resolves live, exactly as before. Scoped to
+        // still gets an entirely fresh map and re-resolves live, exactly as before. Scoped to
         // enemyWithMostBuffs only — every other resolver (enemyWithHighestAttack,
         // lastStandingId, etc.) is untouched.
-        const once = <T>(fn: () => T): (() => T) => {
-            let cached: { value: T } | undefined;
-            return () => {
-                if (!cached) cached = { value: fn() };
-                return cached.value;
+        const onceByOwner = <T>(fn: () => T): ((ownerId: string) => T) => {
+            const cache = new Map<string, T>();
+            return (ownerId: string) => {
+                if (!cache.has(ownerId)) cache.set(ownerId, fn());
+                return cache.get(ownerId) as T;
             };
         };
 
@@ -6089,7 +6096,7 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('player').removeEnemyCharges,
             removeChargesFrom: bySide('player').removeChargesFrom,
             selfHpPctFor: bySide('player').selfHpPctFor,
-            enemyWithMostBuffs: once(() => mostBuffsAmong(enemyAttackerActors)),
+            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(enemyAttackerActors)),
             enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(allPlayerActors),
@@ -6116,7 +6123,7 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('enemy').removeEnemyCharges,
             removeChargesFrom: bySide('enemy').removeChargesFrom,
             selfHpPctFor: bySide('enemy').selfHpPctFor,
-            enemyWithMostBuffs: once(() => mostBuffsAmong(allPlayerActors)),
+            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(allPlayerActors)),
             enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(enemyAttackerActors),
