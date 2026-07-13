@@ -430,6 +430,10 @@ export interface EnemyActorInput {
         /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
          *  stats.shieldPenetration. No production reader until H1 Task 4 wires the apply path. */
         shieldPenetration?: number;
+        /** Heal-modifier % (SP-F F4). Folded into this enemy's own heal casts as
+         *  `(1 + healModifier/100)`, team-symmetric with the player focus/walk paths. Optional —
+         *  undefined treated as 0. */
+        healModifier?: number;
     };
     chargeCount: number;
     startCharged: boolean;
@@ -456,6 +460,10 @@ export interface EnemyActorInput {
     pattern?: ParsedPattern;
     /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
     chargedPattern?: ParsedPattern;
+    /** SP-F F5: pre-parsed charged-skill TARGET selection when it differs from active; falls
+     *  back to `target`. Drives BOTH the damage footprint anchor AND target-selection on a
+     *  charge-firing turn (mirrors `chargedPattern`'s contract). */
+    chargedTarget?: ParsedTarget;
     /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
      *  computeAffinityModifiers to produce `affinityDamageModifier` above (positional plumbing —
      *  set but not yet consumed by apply). Threaded onto the runtime's attackerAffinity + the
@@ -604,7 +612,9 @@ export function buildEnemyPlayerActorRuntime(
         defensePenetration: 0,
         defence: e.stats.defence ?? 0,
         hp: e.stats.hp ?? 0,
-        healModifier: 0,
+        // SP-F F4: fold the enemy's own heal-modifier (team symmetry with the player focus/walk
+        // paths); was hard-coded 0 before F4. Undefined → 0.
+        healModifier: e.stats.healModifier ?? 0,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: resolvedDamageMod,
@@ -970,6 +980,10 @@ export type TeamActorEngineInput = TeamActorInput & {
     pattern?: ParsedPattern;
     /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
     chargedPattern?: ParsedPattern;
+    /** SP-F F5: pre-parsed charged-skill TARGET selection when it differs from active; falls
+     *  back to `target`. Drives BOTH the damage footprint anchor AND target-selection on a
+     *  charge-firing turn (mirrors `chargedPattern`'s contract). */
+    chargedTarget?: ParsedTarget;
     /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
      *  channels for this team actor. Absent → all folds inert (byte-identical). */
     preFight?: PreFightCombatModifiers;
@@ -1101,6 +1115,10 @@ export interface CombatEngineInput {
         pattern?: ParsedPattern;
         /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
         chargedPattern?: ParsedPattern;
+        /** SP-F F5: pre-parsed charged-skill TARGET selection when it differs from active; falls
+         *  back to `target`. Drives BOTH the damage footprint anchor AND target-selection on a
+         *  charge-firing turn (mirrors `chargedPattern`'s contract). */
+        chargedTarget?: ParsedTarget;
         /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
          *  computeAffinityModifiers for `affinityDamageModifier` above (positional plumbing —
          *  set but not yet consumed by apply). Absent → neutral default ('antimatter') downstream. */
@@ -1136,6 +1154,10 @@ export interface CombatEngineInput {
     pattern?: ParsedPattern;
     /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
     chargedPattern?: ParsedPattern;
+    /** SP-F F5: pre-parsed charged-skill TARGET selection when it differs from active; falls
+     *  back to `target`. Drives BOTH the damage footprint anchor AND target-selection on a
+     *  charge-firing turn (mirrors `chargedPattern`'s contract). */
+    chargedTarget?: ParsedTarget;
     /** RAW affinity of the focus attacker — the SAME affinity matchup the page resolved into the
      *  pre-resolved `affinityDamageModifier` above, so the two never disagree (positional plumbing
      *  — set but not yet consumed by apply). Threaded onto the attacker runtime's attackerAffinity
@@ -1605,6 +1627,14 @@ export function runCombat(input: CombatEngineInput): {
         const cp = t.chargedPattern ?? t.pattern;
         if (cp) teamChargedPatternById.set(t.id, cp);
     }
+    // SP-F F5: per-team-actor parsed CHARGED target selection, mirroring teamChargedPatternById.
+    // Falls back to the active `target` when unset (chargedTarget absent) → byte-identical for
+    // every existing input (no team actor threads a divergent charged selection today).
+    const teamChargedTargetById = new Map<string, ParsedTarget>();
+    for (const t of teamActors) {
+        const ct = t.chargedTarget ?? t.target;
+        if (ct) teamChargedTargetById.set(t.id, ct);
+    }
 
     // Per-enemy-attacker parsed positional target (Task C3, side-symmetric). The enemy's
     // `position` already rides on its CombatActor (buildEnemyPlayerActorRuntime → createActor),
@@ -1632,6 +1662,14 @@ export function runCombat(input: CombatEngineInput): {
     for (const e of input.enemyAttackers ?? []) {
         const cp = e.chargedPattern ?? e.pattern;
         if (cp) enemyChargedPatternById.set(e.id, cp);
+    }
+    // SP-F F5: per-enemy-attacker parsed CHARGED target selection, mirroring
+    // enemyChargedPatternById. Falls back to the active `target` when unset → byte-identical
+    // for every existing input (no enemy attacker threads a divergent charged selection today).
+    const enemyChargedTargetById = new Map<string, ParsedTarget>();
+    for (const e of input.enemyAttackers ?? []) {
+        const ct = e.chargedTarget ?? e.target;
+        if (ct) enemyChargedTargetById.set(e.id, ct);
     }
 
     // Deterministic event gates — replace Math.random / expected-value math so
@@ -4967,6 +5005,27 @@ export function runCombat(input: CombatEngineInput): {
             return teamChargedPatternById.get(a.id);
         };
 
+        // SP-F F5: the charged-skill TARGET-selection axis, mirroring parsedChargedPatternFor's
+        // contract exactly (falls back to the active target when unset). Together with
+        // parsedChargedPatternFor this drives BOTH the damage footprint AND target selection on
+        // a charge-firing turn (willFireChargedFor below) at all three damage cast sites.
+        const parsedChargedTargetFor = (a: CombatActor): ParsedTarget | undefined => {
+            if (a.side === 'enemy') return enemyChargedTargetById.get(a.id);
+            if (a.kind === 'attacker') return input.chargedTarget ?? input.target;
+            return teamChargedTargetById.get(a.id);
+        };
+
+        // SP-F F5: predict whether THIS actor's turn will fire its CHARGED skill, using the
+        // EXACT same predicate as runPlayerTurn's own action decision (playerTurn.ts:~1044 —
+        // `hasChargedSkill && actor.charges >= chargeCount`). Safe to read here, BEFORE
+        // runPlayerTurn is called: advanceChargeCadence (which consumes/resets the charge) runs
+        // INSIDE runPlayerTurn, AFTER the decision, so the actor.charges value visible at each
+        // engine cast site (before it calls runPlayerTurn) is the SAME value the decision reads.
+        // Drives the charge-aware pattern/target resolution below at all three damage cast sites
+        // + selectTurnTarget + the buildTurnArgs AoE-purge footprint.
+        const willFireChargedFor = (a: CombatActor): boolean =>
+            runtimeFor(a).hasChargedSkill && a.charges >= a.chargeCount;
+
         const sameSideLivingFor = (a: CombatActor): CombatActor[] =>
             actorsBySide(a.side).filter((x) => x.currentHp > 0);
 
@@ -5227,9 +5286,12 @@ export function runCombat(input: CombatEngineInput): {
         // Unified positional target selection (bySide unification PR6a). Reproduces the
         // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against
         // its opposing roster, else fall back to the side's legacy victim (dummy / heal target).
+        // SP-F F5: on a charge-firing turn, resolve against the CHARGED target axis instead of
+        // the active one (parsedChargedTargetFor falls back to the active target when unset →
+        // byte-identical for every non-divergent ship).
         const selectTurnTarget = (a: CombatActor): { tgt: CombatActor | undefined } => {
             const tb = turnBindings(a.side);
-            const target = parsedTargetFor(a);
+            const target = willFireChargedFor(a) ? parsedChargedTargetFor(a) : parsedTargetFor(a);
             const selected =
                 isPositional(a.position, tb.opposingRoster) && target
                     ? resolvePositionalTarget(
@@ -5264,7 +5326,13 @@ export function runCombat(input: CombatEngineInput): {
             // footprint). Non-positional → undefined → the playerTurn purge loop falls back to
             // the single anchor → byte-identical. The purge ability gates on
             // target === 'all-enemies', so single-'enemy' purges ignore this regardless.
-            const aoePattern = parsedPatternFor(a);
+            // SP-F F5: charge-aware, mirroring the 3 damage cast sites — an on-cast purge fired
+            // from a CHARGED cast (e.g. Lodolite) must expand its footprint from the charged
+            // pattern too, not the active one. `?? ` fallback → byte-identical for every
+            // non-divergent ship.
+            const aoePattern = willFireChargedFor(a)
+                ? parsedChargedPatternFor(a)
+                : parsedPatternFor(a);
             const aoeTarget = parsedTargetFor(a); // parse-completeness guard only (not a footprint arg)
             const aoeVictimIds =
                 aoePattern != null && aoeTarget != null && tgt.position != null
@@ -6510,8 +6578,20 @@ export function runCombat(input: CombatEngineInput): {
                             actor.destroyedRound !== undefined &&
                             !(healTarget && actor.id === healTarget.id);
                         if (!burstDestroyedActor) {
-                            const target = parsedTargetFor(actor);
-                            const pattern = parsedPatternFor(actor);
+                            // SP-F F5: on a charge-firing turn, resolve BOTH the footprint pattern
+                            // and the target selection from the CHARGED axes (each falls back to
+                            // the active axis when unset) — mirrors runPlayerTurn's own action
+                            // predicate exactly (playerTurn.ts:~1044), evaluated here BEFORE
+                            // runPlayerTurn consumes the charge (advanceChargeCadence runs inside
+                            // it, after the decision, so actor.charges is still the pre-decision
+                            // value at this point).
+                            const willFireCharged = willFireChargedFor(actor);
+                            const target = willFireCharged
+                                ? parsedChargedTargetFor(actor)
+                                : parsedTargetFor(actor);
+                            const pattern = willFireCharged
+                                ? parsedChargedPatternFor(actor)
+                                : parsedPatternFor(actor);
                             // Positional target selection (Task C1, GATED). When the focus attacker
                             // (`actor`) carries a board position AND the positioned enemy roster
                             // (`enemyAttackerActors`) has positioned actors, resolve the focus's parsed
@@ -6774,7 +6854,13 @@ export function runCombat(input: CombatEngineInput): {
                             // parsed target, or no living positioned enemy — we diverge NOTHING from the
                             // legacy dummy `enemy` binding. No existing test threads a team target →
                             // this branch never fires for them (goldens byte-identical).
-                            const teamTarget = parsedTargetFor(actor);
+                            // SP-F F5: charge-aware (mirrors the focus site) — resolve BOTH the
+                            // target and the footprint pattern from the CHARGED axes on a
+                            // charge-firing turn (each falls back to the active axis when unset).
+                            const teamWillFireCharged = willFireChargedFor(actor);
+                            const teamTarget = teamWillFireCharged
+                                ? parsedChargedTargetFor(actor)
+                                : parsedTargetFor(actor);
                             // Same `tgt` consolidation as the focus turn: both branches are full
                             // CombatActors, so every per-target binding derives from `tgt` uniformly.
                             // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
@@ -6784,7 +6870,9 @@ export function runCombat(input: CombatEngineInput): {
                             // `tgt` is never undefined here (type-narrowing no-op; selectTurnTarget
                             // widened for the enemy side in SP-U U5 R6).
                             if (tgt === undefined) continue;
-                            const teamPattern = parsedPatternFor(actor);
+                            const teamPattern = teamWillFireCharged
+                                ? parsedChargedPatternFor(actor)
+                                : parsedPatternFor(actor);
                             // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
                             // the victim is never recorded → no break-mark, no stasisBreakPending.
@@ -7075,6 +7163,15 @@ export function runCombat(input: CombatEngineInput): {
                             !(healTarget && actor.id === healTarget.id);
                         if (!burstDestroyedActor) {
                             const enemyRuntime = runtimeFor(actor);
+                            // SP-F F5: predict whether THIS enemy turn will fire its CHARGED skill
+                            // — the exact same predicate runPlayerTurn's own action decision reads
+                            // (playerTurn.ts:~1044). Safe here because advanceChargeCadence (which
+                            // consumes/resets the charge) runs INSIDE runPlayerTurn, AFTER the
+                            // decision. Drives the charge-aware target/pattern resolution below AND
+                            // (renamed from the former inline `enemyWouldFireAction` derivation)
+                            // the dead-target firing-skill check just below.
+                            const enemyWillFireCharged =
+                                enemyRuntime.hasChargedSkill && actor.charges >= actor.chargeCount;
                             // Positional target selection (Task C3, side-symmetric, GATED). Mirrors the
                             // focus-turn (C1) and team-turn (C2) branches, but the OPPOSING roster from the
                             // enemy's view is the PLAYER TEAM (`allPlayerActors` = focus + walked team), the
@@ -7086,7 +7183,11 @@ export function runCombat(input: CombatEngineInput): {
                             // bind, AND the applyIncomingToTarget intake) reads `tgt === healTarget!`, so
                             // every existing path stays byte-identical. No existing test threads an enemy
                             // target → this branch never fires for them.
-                            const enemyTarget = parsedTargetFor(actor);
+                            // SP-F F5: resolve from the CHARGED target axis on a charge-firing turn
+                            // (falls back to the active target when unset → byte-identical).
+                            const enemyTarget = enemyWillFireCharged
+                                ? parsedChargedTargetFor(actor)
+                                : parsedTargetFor(actor);
                             // The enemy's victim THIS turn: the positionally-selected player actor, else the
                             // legacy heal target. A full CombatActor in both cases, so every per-victim
                             // binding below derives from `tgt` uniformly (defence/maxHp/decline, the
@@ -7104,11 +7205,11 @@ export function runCombat(input: CombatEngineInput): {
                             // twoTeamBattle.test.ts "bug repro: enemy supporter turn skipped
                             // after the focus player dies"). Mirrors runPlayerTurn's OWN action
                             // selection (preTurn, playerTurn.ts) exactly so the predicate inspects
-                            // the SAME skill that would actually fire.
-                            const enemyWouldFireAction: 'active' | 'charged' =
-                                enemyRuntime.hasChargedSkill && actor.charges >= actor.chargeCount
-                                    ? 'charged'
-                                    : 'active';
+                            // the SAME skill that would actually fire. (SP-F F5: now sourced from
+                            // the single shared enemyWillFireCharged boolean above.)
+                            const enemyWouldFireAction: 'active' | 'charged' = enemyWillFireCharged
+                                ? 'charged'
+                                : 'active';
                             const enemyFiringSkillForDeadCheck = selectFiringSkill(
                                 enemyRuntime.castSkills,
                                 enemyWouldFireAction
@@ -7121,7 +7222,11 @@ export function runCombat(input: CombatEngineInput): {
                             // positional apply (footprint expansion). An enemy with a target but NO pattern
                             // stays on the legacy single-apply path (same `pattern != null` guard as the
                             // focus/team sites). Undefined for every current fixture → enemyPositional false.
-                            const enemyPattern = parsedPatternFor(actor);
+                            // SP-F F5: resolve from the CHARGED pattern axis on a charge-firing turn
+                            // (falls back to the active pattern when unset → byte-identical).
+                            const enemyPattern = enemyWillFireCharged
+                                ? parsedChargedPatternFor(actor)
+                                : parsedPatternFor(actor);
                             let damage = 0;
                             // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                             // scoped inside the else block below; this flag carries its roundCrit out.

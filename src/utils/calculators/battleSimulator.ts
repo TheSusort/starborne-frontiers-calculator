@@ -110,9 +110,12 @@ export interface ShipRoundState {
     damageTaken: number;
     healingDone: number;
     /**
-     * Heal `amount` split EVENLY across the heal's targets — the `heal-performed` event
-     * carries no per-recipient breakdown, so this is an approximation (not a true per-recipient
-     * amount).
+     * SP-F F2: per-recipient raw heal amount actually applied to this actor, sourced from
+     * `heal-performed.perTarget` (the engine's real per-recipient breakdown — see that event's
+     * doc in events.ts). An even split of `amount` across `targets` is only a FALLBACK for
+     * hand-crafted test emits that omit `perTarget`; the engine itself always populates it.
+     * CAVEAT (pre-existing, out of F2 scope): HoT-tick and reactive-heal channels are not
+     * `heal-performed` casts and are not included here.
      */
     healingReceived: number;
     /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */
@@ -169,10 +172,12 @@ export interface BattleResult {
      */
     combatLog: CombatLogRound[];
     /**
-     * Pre-fight effects that landed on an actor but are NOT simulated (yet): squad-leader
-     * conditional/'other'/per-round lines, plus — until PR F3 consumes them — the modifier-
-     * channel lines. Present ONLY when a squad leader was selected AND at least one such
-     * text was recorded, so a no-leader run's result stays deep-equal to the pre-F shape.
+     * Pre-fight effects that landed on an actor but are NOT simulated: squad-leader
+     * conditional/'other'/per-round/'self' lines, plus any modifier-channel line whose channel
+     * has no mapped engine field (see `MODIFIER_FIELD_BY_CHANNEL` in squadLeaderPass.ts — mapped
+     * channels ARE consumed, so they no longer appear here). Present ONLY when a squad leader was
+     * selected AND at least one such text was recorded, so a no-leader run's result stays
+     * deep-equal to the pre-F shape.
      */
     preFight?: { unsimulated: { actorId: string; name: string; texts: string[] }[] };
 }
@@ -319,7 +324,7 @@ export function assembleBattleResult(args: {
     const cumulativeTaken = new Map<string, number>();
     // Cumulative actual HP loss per actor (post-shield/barrier incoming, or raw fallback).
     const cumulativeHpLost = new Map<string, number>();
-    // Cumulative healing received per actor (approximation from heal-performed splits).
+    // Cumulative healing received per actor (SP-F F2: per-recipient, from heal-performed.perTarget).
     const cumulativeHealed = new Map<string, number>();
 
     // Roster id set: turn-started for a non-roster id (the dummy player-offense 'enemy')
@@ -362,16 +367,27 @@ export function assembleBattleResult(args: {
             );
         }
 
-        // Healing done (caster, full amount) + received (split evenly across targets —
-        // approximation: heal-performed carries no per-recipient breakdown).
+        // Healing done (caster, full amount) + received. SP-F F2: prefers the engine's real
+        // per-recipient breakdown (`heal-performed.perTarget`); an even split across `targets`
+        // is only the FALLBACK for hand-crafted test emits that omit `perTarget` (the engine
+        // itself always populates it — see the `heal-performed` event doc in events.ts).
         const healDone = new Map<string, number>();
         const healReceived = new Map<string, number>();
         for (const e of roundEvents) {
             if (e.type === 'heal-performed') {
                 healDone.set(e.casterId, (healDone.get(e.casterId) ?? 0) + e.amount);
-                const per = e.targets.length > 0 ? e.amount / e.targets.length : 0;
-                for (const tid of e.targets) {
-                    healReceived.set(tid, (healReceived.get(tid) ?? 0) + per);
+                if (e.perTarget && e.perTarget.length > 0) {
+                    for (const pt of e.perTarget) {
+                        healReceived.set(
+                            pt.targetId,
+                            (healReceived.get(pt.targetId) ?? 0) + pt.amount
+                        );
+                    }
+                } else {
+                    const per = e.targets.length > 0 ? e.amount / e.targets.length : 0;
+                    for (const tid of e.targets) {
+                        healReceived.set(tid, (healReceived.get(tid) ?? 0) + per);
+                    }
                 }
             }
         }
@@ -547,6 +563,10 @@ interface DerivedCombatStats {
     hp: number;
     /** Turn-order speed. Defaults to baseStats.speed ?? 100. */
     speed: number;
+    /** Heal-modifier % (SP-F F4). Folded into this actor's heal casts as `(1 + healModifier/100)`
+     *  by the engine (playerTurn `raw` fold + standing-leech/reactive-heal folds). Sourced from
+     *  statOverrides / baseStats (a gear-set or base stat); defaults 0. */
+    healModifier: number;
 }
 
 /** Resolve a placement's combat stats: ship.baseStats as the floor (with the page's
@@ -569,6 +589,7 @@ function resolveStats(p: BattlePlacement): DerivedCombatStats {
         defence: o.defence ?? b.defence ?? 0,
         hp: o.hp ?? b.hp ?? 0,
         speed: o.speed ?? b.speed ?? 100,
+        healModifier: o.healModifier ?? b.healModifier ?? 0,
     };
 }
 
@@ -618,6 +639,7 @@ function toEnemyStats(
     | 'hacking'
     | 'security'
     | 'shieldPenetration'
+    | 'healModifier'
 > {
     return {
         attack: stats.attack,
@@ -631,6 +653,9 @@ function toEnemyStats(
         hacking: stats.hacking,
         security: stats.security,
         shieldPenetration: stats.shieldPenetration,
+        // SP-F F4: the enemy folds ITS heal-modifier on its own heal casts (team symmetry with the
+        // focus/walk paths). Read by the engine's enemy runtime builder as `e.stats.healModifier`.
+        healModifier: stats.healModifier,
     };
 }
 
@@ -663,8 +688,10 @@ function planPlacement(
     getGearPiece?: (id: string) => GearPiece | undefined
 ): PlacementPlan {
     const targeting = parseShipTargeting(p.ship);
-    // Use the ACTIVE targeting (target + pattern). Charged targeting is threaded separately
-    // for support footprint resolution when the charged skill fires.
+    // Use the ACTIVE targeting (target + pattern) as the default axes. Charged targeting is
+    // threaded separately (`chargedTargeting`) — SP-F F5: it now drives the damage footprint
+    // AND the target selection on a charge-firing turn (not just support-footprint resolution),
+    // via the engine's `chargedPattern`/`chargedTarget` inputs.
     return {
         id,
         name: p.ship.name,
@@ -811,8 +838,12 @@ export function simulateBattle(
             target: plan.targeting?.target,
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
-            // SP-F F5: thread the ship role (Ship.type) for role-filtered classification
-            // (Meatshield defense-substitution's "non-defender ally" gate).
+            // SP-F F5 (charged-skill targeting): thread the charged TARGET selection alongside
+            // the charged pattern above — drives both the damage footprint and the target
+            // selection on a charge-firing turn. Falls back to the active target when unset.
+            chargedTarget: plan.chargedTargeting?.target,
+            // SP-F F5 (Meatshield defense-substitution): thread the ship role (Ship.type) for
+            // role-filtered classification ("non-defender ally" gate).
             role: plan.role,
             // SP-F F4: thread the ship name for the live `ally-on-team` roster check
             // (Isha/Nayra reciprocal Affinity Override gate).
@@ -823,6 +854,9 @@ export function simulateBattle(
             walk: {
                 shipSkills: plan.shipSkills,
                 stats: toWalkStats(plan.stats),
+                // SP-F F4: fold the walked actor's heal-modifier on its heal casts (read flat as
+                // `w.healModifier`). Team symmetry with the focus/enemy paths.
+                healModifier: plan.stats.healModifier,
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
                 affinityDamageModifier: aff.damageModifier,
@@ -862,6 +896,9 @@ export function simulateBattle(
                 target: plan.targeting?.target,
                 pattern: plan.targeting?.pattern,
                 chargedPattern: plan.chargedTargeting?.pattern,
+                // SP-F F5 (charged-skill targeting): thread the charged TARGET selection
+                // alongside the charged pattern above (team-symmetric with the teamActors branch).
+                chargedTarget: plan.chargedTargeting?.target,
                 affinity: plan.affinity,
             };
         }
@@ -900,6 +937,9 @@ export function simulateBattle(
         defence: focus.stats.defence,
         hp: focus.stats.hp,
         speed: focus.stats.speed,
+        // SP-F F4: fold the focus actor's heal-modifier on its heal casts (read as
+        // `input.healModifier`). Team symmetry with the walk/enemy paths.
+        healModifier: focus.stats.healModifier,
         // Base hacking/security so the engine's live landing recompute has real inputs for
         // the focus actor and the vestigial dummy enemy. The dummy carries the representative
         // enemy security (first opponent). When the focus targets a POSITIONED enemy with
@@ -913,6 +953,9 @@ export function simulateBattle(
         target: focus.targeting?.target,
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,
+        // SP-F F5 (charged-skill targeting): thread the charged TARGET selection alongside the
+        // charged pattern above (team-symmetric with the teamActors/enemyAttackers branches).
+        chargedTarget: focus.chargedTargeting?.target,
         // SP-F F5: thread the focus actor's ship role (Ship.type) for role-filtered
         // classification (Meatshield defense-substitution's "non-defender ally" gate). Team
         // symmetry with the teamActors/enemyAttackers branches above.

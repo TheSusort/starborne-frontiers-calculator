@@ -72,6 +72,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import { parsePattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import type { BattleResult } from '../../calculators/battleSimulator';
@@ -1414,14 +1415,16 @@ describe('E1 — symmetric incoming surface: player→enemy hits record per-vict
 //   player[0] (focus 'attacker') — self-shield active skill, speed 200, large HP pool.
 //     Speed 200 > enemy speed 1 so the focus acts FIRST each round: it casts a shield,
 //     and then the enemy fires into the already-shielded target. The shield covers 25%
-//     of the focus's 40 000 HP = 10 000 HP of absorption. The enemy hits for 5 000
-//     (attack 5 000 vs defence 0) which is less than the shield pool → shieldsAbsorbed > 0.
+//     of the focus's 40 000 HP = 10 000 HP of absorption. The enemy hits for a deterministic
+//     5 000 (attack 5 000 vs defence 0, crit 0, neutral affinity) which is less than the
+//     shield pool → the hit is FULLY absorbed and shieldsAbsorbed is exactly 5 000.
 //   enemy[0] (e1) — basic-damage active, speed 1, immortal HP.
 //
 // Assertions on result.rounds[r].ships for the shielded ship:
 //   shieldGranted  > 0  (the grant fires and the extraction loop picked it up)
 //   currentShieldPool > 0  (the pool persists after absorbing partial damage)
-//   shieldsAbsorbed > 0  (the enemy hit while shielded → absorption > 0)
+//   shieldsAbsorbed == ENEMY_ATTACK  (SP-F F3: exact drain, not just > 0 — the channel is the
+//     verbatim shieldAbsorb.ts `absorbed`, wired since H1 #156) with incomingDamage == 0.
 // ===========================================================================
 
 describe('H1 Task 8 follow-up — simulateBattle end-to-end shield extraction loop', () => {
@@ -1486,12 +1489,27 @@ describe('H1 Task 8 follow-up — simulateBattle end-to-end shield extraction lo
         );
         expect(poolRounds.length).toBeGreaterThan(0);
 
-        // --- shieldsAbsorbed > 0: the enemy hit the focus while it was shielded ---
-        // Enemy attack (5 000) < shield pool (~10 000) so the hit is fully absorbed by the shield.
+        // --- shieldsAbsorbed matches the EXACT drain (SP-F F3 hardening) ---
+        // The channel has been wired end-to-end since Shield System H1 (#156): the value
+        // surfaced on ShipRoundState.shieldsAbsorbed is shieldAbsorb.ts's `absorbed` threaded
+        // verbatim through the sink — so F3 has no residual gap to close, only a stronger
+        // assertion to add. Both ships are neutral-affinity antimatter (affinityDamageModifier
+        // 0) and the enemy's crit is pinned to 0 (the `placement` helper), so the enemy's hit
+        // is a deterministic 5 000 (attack 5 000 vs the focus's 0 defence, no crit/affinity
+        // multiplier). The shield pool (>= 10 000 every round) fully covers it, so every round
+        // the enemy connects the drain is EXACTLY the enemy's attack, with 0 HP damage leaking
+        // through.
         const absorbedRounds = result.rounds.filter(
             (r) => (r.ships.find((s) => s.actorId === FOCUS_ACTOR_ID)?.shieldsAbsorbed ?? 0) > 0
         );
         expect(absorbedRounds.length).toBeGreaterThan(0);
+        for (const r of absorbedRounds) {
+            const focus = r.ships.find((s) => s.actorId === FOCUS_ACTOR_ID)!;
+            // Exact drain: the whole 5 000 hit was absorbed by the shield...
+            expect(focus.shieldsAbsorbed).toBe(ENEMY_ATTACK);
+            // ...and nothing leaked to HP (fully absorbed).
+            expect(focus.incomingDamage).toBe(0);
+        }
     });
 });
 
@@ -1867,5 +1885,278 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         expect(dealsDamage(3)).toBe(false);
         // R4: the dead-path cadence reset the bank to 0 → back to the ally-only ACTIVE → runs.
         expect(grantsBuff(4)).toBe(true);
+    });
+});
+
+// ===========================================================================
+// SP-F PR2 (F5): charged-skill TARGETING fidelity. Two independent axes:
+//   (A) footprint — the positional damage apply must resolve its footprint from
+//       the CHARGED pattern on a charge-firing turn, not the ACTIVE one.
+//   (B) selection — there is no `chargedTarget` axis at all today; a charged
+//       skill that targets a DIFFERENT selection than its active must still
+//       resolve against the charged selection on a charge-firing turn.
+// Snakeroot-style divergence (real ship, for flavor only — this fixture is
+// synthetic): active "deals 170% damage and inflicts 2 stacks of Corrosion I"
+// on Pattern-Base (single-target); charged "deals 210% damage ... Corrosion
+// II" on Pattern-Line-Range-1 (wider, hits an extra covered cell).
+// chargeCount=1 → round 1 fires ACTIVE (banks 0→1), round 2 fires CHARGED
+// (1>=1, consumes/resets to 0) — see playerTurn.ts:~1044's action predicate.
+// ===========================================================================
+describe('SP-F F5: charged-skill footprint + target-selection fidelity', () => {
+    const chargedAttack = (): ShipSkills['slots'][number] => ({
+        slot: 'charged',
+        abilities: [
+            ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+        ],
+    });
+
+    const baseChargeInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 1,
+        shipSkills: { slots: [basicAttack(), chargedAttack()] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 2,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: true,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        // Healing mode — required for the positioned enemy roster to be built (mirrors `battle()`).
+        healTargetId: 'attacker',
+        position: 'M1',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        enemyAttackers: [
+            offensiveEnemyAt('enemy-front', 'M4', 'front', 0, 1_000_000_000),
+            offensiveEnemyAt('enemy-back', 'M3', 'back', 0, 1_000_000_000),
+        ],
+        ...overrides,
+    });
+
+    it('(A) a charge-firing turn resolves its DAMAGE FOOTPRINT from the charged pattern, not the active one', () => {
+        idc = 0;
+        const input = baseChargeInput({
+            // CHARGED footprint diverges from active (single-target → wider line); same target.
+            chargedPattern: parsePattern('Pattern-Line-Range-1'),
+        });
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE, Pattern-Base): origin only — the covered cell (enemy-back) untouched.
+        expect(round1['enemy-front']).toBe(5000);
+        expect(round1['enemy-back']).toBeUndefined();
+
+        // Round 2 (CHARGED, Pattern-Line-Range-1): origin FULL + covered HALF. Pre-fix, the
+        // engine keeps resolving the footprint from the ACTIVE pattern even on this charge
+        // turn, so enemy-back would stay untouched (same as round 1) — this is the RED case.
+        expect(round2['enemy-front']).toBe(5000);
+        expect(round2['enemy-back']).toBe(2500);
+    });
+
+    it('(B) a charge-firing turn resolves its TARGET SELECTION from the charged axis, not the active one', () => {
+        idc = 0;
+        const input = baseChargeInput({
+            // CHARGED selection diverges from active (front → back); same single-target footprint.
+            chargedTarget: parsedTarget('back'),
+            chargedPattern: basePattern(),
+        });
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE): targets FRONT.
+        expect(round1['enemy-front']).toBe(5000);
+        expect(round1['enemy-back']).toBeUndefined();
+
+        // Round 2 (CHARGED): targets BACK — the charged selection axis. Pre-fix, there is no
+        // `chargedTarget` axis at all, so the engine keeps resolving via the ACTIVE target
+        // (front) even on this charge turn — this is the RED case.
+        expect(round2['enemy-back']).toBe(5000);
+        expect(round2['enemy-front']).toBeUndefined();
+    });
+
+    // -----------------------------------------------------------------------
+    // Team-symmetry coverage: the charge-aware footprint fix is mirrored at ALL
+    // THREE damage cast sites. Fixtures (A)/(B) above exercise the FOCUS cast
+    // site (engine.ts ~6588). (C) and (D) below cover the ENEMY-attacker cast
+    // site (~7183) and the walked-TEAM-actor cast site (~6854) respectively —
+    // both hit the SAME class of bug if their mirror is broken. Each is
+    // non-vacuous: the round-2 (charged) footprint reaches a SECOND victim that
+    // the ACTIVE single-target pattern never would, so a site that kept using
+    // the active pattern would leave the covered victim undamaged and fail.
+    // -----------------------------------------------------------------------
+
+    it('(C) an ENEMY charge-firing turn resolves its damage FOOTPRINT from the charged pattern (enemy cast site ~7183)', () => {
+        idc = 0;
+        // A positioned enemy attacker with a charge skill whose CHARGED footprint diverges from
+        // its ACTIVE one (single-target → wider line). chargeCount=1 → round 1 fires ACTIVE
+        // (banks 0→1), round 2 fires CHARGED (1>=1). buildEnemyPlayerActorRuntime derives
+        // hasChargedSkill=true (chargeCount>=1 AND the charged slot carries a >0-multiplier
+        // damage ability). Anchored on the front-most player (M4=focus); the charged line covers
+        // the walked team player at M3.
+        const chargedEnemy = {
+            id: 'enemy-charged',
+            stats: {
+                attack: 5000,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 1,
+            },
+            chargeCount: 1,
+            startCharged: false,
+            position: 'M1',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            chargedPattern: parsePattern('Pattern-Line-Range-1'),
+            shipSkills: { slots: [basicAttack(), chargedAttack()] },
+        } as EnemyAttacker;
+
+        // Two player-side actors in a line so the charged footprint can reach the second one:
+        // focus at M4 + one walked team actor at M3. Both deal 0 damage so the ONLY per-victim
+        // damage in this fixture flows enemy→player (clean assertions on the player victims).
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('player-team', 'M3', 'front', 0, 1_000_000_000)],
+            enemyAttackers: [chargedEnemy],
+        };
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE, Pattern-Base): the enemy hits only the front-most player (focus, M4).
+        expect(round1['attacker']).toBe(5000);
+        expect(round1['player-team']).toBeUndefined();
+
+        // Round 2 (CHARGED, Pattern-Line-Range-1): origin M4 FULL (5000) + covered M3 HALF (2500).
+        // A broken enemy-site mirror (still resolving the ACTIVE footprint on the charge turn)
+        // would leave player-team untouched here — this is the non-vacuous guard.
+        expect(round2['attacker']).toBe(5000);
+        expect(round2['player-team']).toBe(2500);
+    });
+
+    it('(D) a walked TEAM actor charge-firing turn resolves its damage FOOTPRINT from the charged pattern (team cast site ~6854)', () => {
+        idc = 0;
+        // A walked team actor (NOT the focus) with a charge skill whose CHARGED footprint diverges
+        // from its ACTIVE one. chargeCount=1 → round 1 ACTIVE (banks 0→1), round 2 CHARGED. It
+        // fires `front` at the enemy roster; the charged line anchored on the front-most enemy
+        // (M4) covers the enemy at M3.
+        const chargedTeam = {
+            id: 'team-charged',
+            speed: 150,
+            chargeCount: 1,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position: 'M3',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            chargedPattern: parsePattern('Pattern-Line-Range-1'),
+            walk: {
+                shipSkills: { slots: [basicAttack(), chargedAttack()] },
+                stats: {
+                    attack: 5000,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
+                },
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: true,
+            },
+        } as TeamActor;
+
+        // Focus deals 0 damage (it also fires `front` → adds 0 to the front enemy, inert). Two
+        // enemies in a line so the team actor's charged footprint reaches the second one; both
+        // enemies deal 0 so the only real per-victim damage flows team→enemy.
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [chargedTeam],
+            enemyAttackers: [
+                offensiveEnemyAt('enemy-front', 'M4', 'front', 0, 1_000_000_000),
+                offensiveEnemyAt('enemy-back', 'M3', 'back', 0, 1_000_000_000),
+            ],
+        };
+
+        const { result } = run(input);
+        const round1 = result.rounds[0].perTargetDamage ?? {};
+        const round2 = result.rounds[1].perTargetDamage ?? {};
+
+        // Round 1 (ACTIVE, Pattern-Base): the team actor hits only the front-most enemy (M4).
+        expect(round1['enemy-front']).toBe(5000);
+        expect(round1['enemy-back']).toBeUndefined();
+
+        // Round 2 (CHARGED, Pattern-Line-Range-1): origin M4 FULL (5000) + covered M3 HALF (2500).
+        // A broken team-site mirror (still resolving the ACTIVE footprint on the charge turn)
+        // would leave enemy-back untouched here — this is the non-vacuous guard.
+        expect(round2['enemy-front']).toBe(5000);
+        expect(round2['enemy-back']).toBe(2500);
     });
 });
