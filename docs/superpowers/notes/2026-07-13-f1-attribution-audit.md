@@ -199,6 +199,30 @@ fixture doesn't mistake reconciliation-working for correctness-of-the-absolute-n
   the existing single-owner `basis:'damage-dealt'` shield mechanism at `engine.ts:5750`, `triggers.ts:
   2504`). It never touches the victim's real HP or `roundPerTargetDamage` in sim mode.
 
+  > **RETIRED by SP-M M1 (2026-07-13).** `applyReactiveDamage` (now `engine.ts:4529-4653`) has an
+  > explicit `if (input.positionalTeamBattle && victim.id !== enemy.id)` branch (`:4635-4649`) that
+  > now calls all three of `applyVictimDamage` (real HP mutation), `roundPerTargetDamage.set` (the
+  > `damageTaken` write), and the new `creditDealt(ownerId, victim.id, raw)` (the F1
+  > `perTargetDealt`/`damageDealt` attribution write) — for **all eight** mechanics this executor
+  > powers (FrontLine, Grif, Paracelsus on-destroyed, Vindicator on-resist, plus Rhodium, Chakara,
+  > Judge, Incinerator), each routed to its **true** target: `intent.eventCtx?.counterTargetId ??
+  > ctx.enemy.id` for FrontLine/Grif/Paracelsus/Vindicator; `ctx.enemyWithMostBuffs?.(ownerId)` for
+  > Rhodium; `ctx.enemyWithHighestSpeed?.(ownerId)` for Chakara; and the new
+  > `resolveAoEReactiveDamageVictims` seam (enumerating `ctx.livingOpposingActorIds`, filtered by
+  > per-victim `conditionsMet`) for Judge (<50% HP) and Incinerator (Inferno). The non-positional
+  > (pure DPS/healing) branch is unchanged — still the original `creditDamage(ownerId, 'direct',
+  > raw)` scalar-only path, explicitly commented "byte-identical" at the site, preserving §4.2's
+  > invariant. Two residual gaps remain, both orthogonal to this pin and NOT closed by SP-M: (a) the
+  > DPS/healing-mode credit-only path stays credit-only by design (§4.2 preserved, not a gap); (b) a
+  > **separate, pre-existing** round-tail snapshot-ordering bug (confirmed present before M1, at
+  > commit `78eab536`) means pure-DPS-mode `round-ended` triggers (Rhodium's end-of-round credit) are
+  > drained *after* `directDamage`/`cumulativeDamage`/`totalRoundDamage` are already snapshotted in
+  > `simulateDPS`, so Rhodium's (and by the same mechanism, Incinerator's) DPS-mode credit never
+  > surfaces in the DPS-calculator's public summary — see
+  > `src/utils/calculators/__tests__/rhodiumChakaraDpsModeCredit.integration.test.ts:25-37`. This is a
+  > DPS-mode-only gap (the positional-sim HP path added by M1 is unaffected) and is flagged as a
+  > follow-up, not caused by or fixed by SP-M M1.
+
 **Why this matters beyond "yet more known gaps":** these are sites where **nothing** is written to
 `roundPerTargetDamage` for a real damage event — so there is nothing for F1 to *mirror* there. The
 reconciliation invariant in §5 still holds (both `damageDealt` and `damageTaken` omit this damage
@@ -325,6 +349,18 @@ handoff so nobody mistakes them for new regressions or assumes F1 silently close
    writes `roundPerTargetDamage` at all (§5b) — if SP-M's M1 FrontLine reactive shield genuinely needs
    per-victim attribution of *this* channel, F1 as scoped does not provide it; SP-M's plan needs its
    own step, not an assumption that F1's mirror covers it.
+
+   > **RETIRED by SP-M M1 (2026-07-13).** SP-M M1 took its own engine-side step, exactly as
+   > anticipated here: `applyReactiveDamage` (`engine.ts:4529-4653`) now routes through
+   > `applyVictimDamage` + `roundPerTargetDamage.set` + the new `creditDealt` helper in positional
+   > mode, for all eight reactive-damage mechanics (FrontLine, Grif, Paracelsus, Vindicator, Rhodium,
+   > Chakara, Judge, Incinerator), each to its correct true target (see the retirement note under
+   > §5b above for the full per-mechanic routing). The non-positional DPS/healing path is untouched
+   > (still credit-only, byte-identical). Two residual, out-of-scope items carried forward: the
+   > DPS/healing credit-only path is by design, not a gap; and a separate pre-existing round-tail
+   > snapshot-ordering bug keeps Rhodium's/Incinerator's DPS-mode credit out of the DPS-calculator's
+   > public summary (see `rhodiumChakaraDpsModeCredit.integration.test.ts`) — unrelated to this pin
+   > and not caused by SP-M.
 4. Protection redirects of a **DoT-tick-batch** (site #11's pre-summed `total`, redirected to a
    protector) have no single source attacker at the write site — the batch collapses multiple
    `sourceId`s before the redirect, so there is nothing correct to mirror into `perTargetDealt` for
