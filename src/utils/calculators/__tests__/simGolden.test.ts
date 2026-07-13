@@ -11,6 +11,7 @@ import {
     healUnequalPerRecipient,
     healModifierScaling,
     perVictimAffinityAoe,
+    reactiveDamagePositional,
 } from './__fixtures__/simGoldenFixtures';
 
 // High-level regression guard for the engine-unification epic. A diff = a real behavior change.
@@ -33,6 +34,9 @@ describe('sim goldens (BattleResult snapshots)', () => {
         ['healModifierScaling', healModifierScaling],
         // SP-F F6: dedicated per-victim affinity AoE fixture — see the dedicated assertion below.
         ['perVictimAffinityAoe', perVictimAffinityAoe],
+        // SP-M M1 (Task 9): dedicated positional reactive-damage-HP fixture (Frontline's
+        // counterTargetId path + Judge/Incinerator's AoE path) — see the dedicated assertion below.
+        ['reactiveDamagePositional', reactiveDamagePositional],
     ])('%s', (_n, build) => {
         // Snapshot the structured result (per-round per-ship totals + outcome), not the free-text log.
         const { rounds, outcome, roster } = simulateBattle(build());

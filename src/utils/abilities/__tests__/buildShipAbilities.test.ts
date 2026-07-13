@@ -176,6 +176,10 @@ describe('buildShipAbilities', () => {
         expect(dmg.conditions).toEqual([
             { subject: 'hp-threshold', derivable: true, hpComparator: 'below', hpPercent: 50 },
         ]);
+        // SP-M M1 Task 7: the start-of-round hp-threshold damage re-targets to all-enemies (the
+        // reactive executor re-checks the per-victim hp-threshold against each victim's own HP%).
+        expect(dmg.trigger).toBe('start-of-round');
+        expect(dmg.target).toBe('all-enemies');
 
         // The "20% more direct damage for each destroyed enemy, up to 100%" is the outgoing-damage modifier.
         const modifier = passive.abilities.find(
@@ -260,6 +264,10 @@ describe('buildShipAbilities', () => {
         expect(dmg.conditions).toEqual([
             { subject: 'enemy-debuff', buffName: 'Inferno', derivable: true },
         ]);
+        // SP-M M1 Task 7: the end-of-round enemy-debuff damage re-targets to all-enemies (the
+        // reactive executor re-checks the "with Inferno" gate against each victim's own debuffs).
+        expect(dmg.trigger).toBe('end-of-round');
+        expect(dmg.target).toBe('all-enemies');
 
         const mod = passive.abilities.find(
             (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
@@ -268,6 +276,9 @@ describe('buildShipAbilities', () => {
         expect(mod.conditions).toEqual([
             { subject: 'enemy-debuff', buffName: 'Inferno', derivable: true },
         ]);
+        // The on-cast enemy-effect damage BONUS modifier is NOT re-targeted (it stays a same-target
+        // bonus, not an all-enemies filter — only the round-boundary base damage re-targets).
+        expect(mod.target).not.toBe('all-enemies');
     });
 
     it('Obsidian charged: "increases Damage by 100% to enemies with less than 30% HP" → enemy-HP-gated modifier', () => {
@@ -3641,6 +3652,22 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
                 expect(purge.config.count).toBe(2);
             }
         });
+
+        // SP-M M1 (Task 5): the co-located 80%-no-crit DAMAGE clause re-targets from the
+        // default 'enemy' to the SAME enemy-most-buffs selector the purge above resolves — it
+        // must land on the real most-buffed enemy in positional mode, not the vestigial dummy.
+        it('the co-located 80%-no-crit damage ability also carries target enemy-most-buffs', () => {
+            const passive = slot(buildShipAbilities(rhodiumP2()).slots, 'passive')!;
+            const damages = passive.abilities.filter((a) => a.type === 'damage');
+            expect(damages.length).toBeGreaterThanOrEqual(1);
+            const dmg = damages[0];
+            expect(dmg.trigger).toBe('end-of-round');
+            expect(dmg.target).toBe('enemy-most-buffs');
+            if (dmg.config.type === 'damage') {
+                expect(dmg.config.multiplier).toBe(80);
+                expect(dmg.config.noCrit).toBe(true);
+            }
+        });
     });
 
     describe('Iridium p1 regression: on-attacked + target:enemy UNCHANGED', () => {
@@ -3658,6 +3685,34 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
                 expect(purges[0].config.count).toBe(1);
             }
         });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// SP-M M1 Task 6: Chakara start-of-round enemy-highest-speed damage re-target build test.
+// RAW string from docs/ship-skills.csv (Chakara, third_passive_skill_text).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Chakara start-of-round highest-speed damage (SP-M M1 Task 6)', () => {
+    // Chakara p4 RAW: "This Unit starts each round with Attack Up II and Defense Up II for 1 turn
+    // if it has the lowest speed among all Allies. Then, deals 60% damage to the highest Speed
+    // Enemy." Default `ship()` helper seeds refits: [{}, {}, {}, {}] (4 refits) → thirdPassiveSkillText
+    // (R4, refit-active) is the active passive per getShipSkillRows.
+    const chakaraP4 = () =>
+        ship({
+            thirdPassiveSkillText:
+                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
+        });
+
+    it('the round-boundary damage ability carries trigger start-of-round, target enemy-highest-speed, multiplier 60', () => {
+        const passive = slot(buildShipAbilities(chakaraP4()).slots, 'passive')!;
+        const damages = passive.abilities.filter((a) => a.type === 'damage');
+        expect(damages.length).toBeGreaterThanOrEqual(1);
+        const dmg = damages[0];
+        expect(dmg.trigger).toBe('start-of-round');
+        expect(dmg.target).toBe('enemy-highest-speed');
+        if (dmg.config.type === 'damage') {
+            expect(dmg.config.multiplier).toBe(60);
+        }
     });
 });
 

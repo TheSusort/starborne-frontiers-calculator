@@ -1308,6 +1308,14 @@ interface ReactiveSideCtx {
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
     /** D-PR14 Doomsayer: per-side highest-attack opposing-actor resolver. See IntentExecContext. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
+    /** SP-M M1 Task 6 Chakara: per-side highest-speed opposing-actor resolver. See
+     *  IntentExecContext. Resolved LIVE (no onceByOwner memo) — unlike enemyWithMostBuffs,
+     *  Chakara's co-located clause is a SELF-buff that never changes an enemy's speed. */
+    enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
+    /** SP-M M1 Task 7 Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
+     *  DAMAGE proc (per-victim-conditional AoE). Player side → living enemy attackers; enemy side
+     *  → living player actors. See IntentExecContext. Resolved LIVE per drain (no memo). */
+    livingOpposingActorIds?: (ownerId: string) => string[];
     /** D-PR14: id of the round's first real activator (live value at drain-build time). */
     firstActivatorId?: string;
     /** D-PR16: id of the sole living actor on this side, recomputed each drain (Last Stand). */
@@ -2124,8 +2132,25 @@ export function runCombat(input: CombatEngineInput): {
     // fall back to the dummy sink, keep it in the turn order so its accumulated DoTs still tick.
     // NOT gated on healingMode / enemyAttackers.length — the healing calculator sets healTargetId
     // and can supply bare (non-positioned) enemies where the dummy is still the offense sink.
+    //
+    // SP-M M1 (Task 9b fix): the first conjunct is extracted as `hasPositionedEnemyRoster` — "does
+    // a real, positioned opposing-enemy roster exist" — because the reactive target resolvers
+    // below need EXACTLY that signal, not the AND'd version with the player-target conjunct.
+    // dummyEnemyIsVestigial's full AND is the right combination for the turn-order gate (only drop
+    // the dummy from the turn order when NO player could ever fall back to it), but the second
+    // conjunct is irrelevant to whether the resolvers should target the real roster: a healer whose
+    // active targets allies does not make the enemy roster any less real. Gating the resolvers on
+    // dummyEnemyIsVestigial (its full AND) misrouted Judge/Incinerator/Chakara/Rhodium's reactive
+    // damage onto the vestigial dummy whenever the player team included an ally-targeting ship, even
+    // in a fully positional sim. Gating them on `input.positionalTeamBattle` instead (an earlier
+    // draft of this fix) over-corrected the other way: direct-engine tests (e.g.
+    // purgeConditionalSources.test.ts) supply a real, positioned enemyAttackers roster WITHOUT ever
+    // setting input.positionalTeamBattle, so that flag is too strict a requirement for "should the
+    // resolvers see the real roster". `hasPositionedEnemyRoster` is the narrowest correct signal for
+    // both cases.
+    const hasPositionedEnemyRoster = enemyAttackerActors.some((a) => a.position != null);
     const dummyEnemyIsVestigial =
-        enemyAttackerActors.some((a) => a.position != null) &&
+        hasPositionedEnemyRoster &&
         allPlayerActors.every((a) => {
             const t = a.kind === 'attacker' ? input.target : teamTargetById.get(a.id);
             return a.position != null && t?.side === 'enemy';
@@ -4592,6 +4617,37 @@ export function runCombat(input: CombatEngineInput): {
                 return;
             }
             reactiveDealtByOwner.set(ownerId, raw);
+            // SP-M M1: in a positioned two-team battle (simulateBattle sets input.positionalTeamBattle)
+            // a reactive proc REDUCES the resolved victim's real HP through the SAME shared funnel
+            // counters use (applyVictimDamage) — surfacing on the victim's HP curve
+            // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
+            // perTargetDealt → damageDealt). Mirrors applyCounterAttack EXACTLY (isCounter:true → a
+            // reactive hit is never itself reflected and never Protection-redirected; no shield
+            // penetration) and deliberately does NOT creditDamage: positionalTeamBattle is never
+            // dpsEnemyTarget, so the DPS-mode post-round aggregate (engine.ts:7931) never fires here
+            // — cumulativeDamage only reports + declines the vestigial dummy, never a real victim, so
+            // folding the reactive into it would double-count exactly like the per-victim DoT/
+            // detonation split documented at engine.ts:7898.
+            //
+            // victim.id !== enemy.id: defensive backstop keeping the HP path off the vestigial dummy
+            // (a proc whose target resolved to ctx.enemy — e.g. an AoE with an empty living roster —
+            // stays credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim.
+            if (input.positionalTeamBattle && victim.id !== enemy.id) {
+                applyVictimDamage(raw, victim, sink, {
+                    killerId: ownerId,
+                    byDirectDamage: true,
+                    isCounter: true,
+                    shieldPenetrationPct: 0,
+                    bombPortion: 0,
+                });
+                roundPerTargetDamage.set(
+                    victim.id,
+                    (roundPerTargetDamage.get(victim.id) ?? 0) + raw
+                );
+                creditDealt(ownerId, victim.id, raw);
+                return { dealt: raw, didCrit };
+            }
+            // DPS / healing mode (byte-identical): credit-only.
             creditDamage(ownerId, 'direct', raw);
             return { dealt: raw, didCrit };
         };
@@ -5957,6 +6013,24 @@ export function runCombat(input: CombatEngineInput): {
                         // real activator id, and the shared once-per-round consume set. All
                         // inert today — only consumed by the next task's executor branch.
                         enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
+                        // SP-M M1 Task 6: Chakara's live highest-speed opposing-actor resolver.
+                        enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
+                        // SP-M M1 Task 7: living opposing roster for an 'all-enemies' reactive
+                        // damage proc (Judge/Incinerator per-victim-conditional AoE).
+                        livingOpposingActorIds: sideCtx.livingOpposingActorIds,
+                        // SP-M M1 Task 7: synthesized enemy debuff/DoT NAMES for a victim — the
+                        // EXACT synthesis buildTurnArgs uses (enemyDebuffNamesForTarget), so a
+                        // per-victim 'enemy-debuff' name-gate (Incinerator's "with Inferno") reads
+                        // the same names as an on-cast gate. Combat-wide (both sides) via
+                        // allActorsById, mirroring actorById/affinityOf. Empty for a missing id.
+                        enemyDebuffNamesFor: (id) => {
+                            const a = allActorsById.get(id);
+                            return a ? enemyDebuffNamesForTarget(a) : [];
+                        },
+                        // SP-M M1 Task 7: a victim's current effective max HP (the same
+                        // recipientMaxHp denominator every heal/HP-basis site uses) so the
+                        // per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
+                        recipientMaxHpFor: (id) => recipientMaxHp(id),
                         firstActivatorId: sideCtx.firstActivatorId,
                         lastStandingId: sideCtx.lastStandingId,
                         oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
@@ -6017,12 +6091,54 @@ export function runCombat(input: CombatEngineInput): {
                 (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
             );
 
+        // SP-M M1 (Task 6): living opposing actor with the greatest LIVE effective SPEED
+        // (Chakara's enemy-highest-speed round-boundary hit). Reuses the generic
+        // highestAttackAmong picker (a max-of-a-stat selector) with a speed accessor. Ties →
+        // roster order.
+        const highestSpeedInRoster = (roster: CombatActor[]): string | undefined =>
+            highestAttackAmong(
+                roster.map((a) => a.id),
+                (id) => {
+                    const a = roster.find((x) => x.id === id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).speed : 0;
+                },
+                (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
+            );
+
         // D-PR16: the id of the sole living actor in a roster, or undefined if !=1 alive.
         // Drives the `last-standing` condition (Last Stand). Recomputed each drain so it
         // reflects deaths recorded before the reactive drain.
         const soleSurvivorOf = (roster: CombatActor[]): string | undefined => {
             const living = roster.filter((a) => a.destroyedRound === undefined);
             return living.length === 1 ? living[0].id : undefined;
+        };
+
+        // SP-M M1 (Task 5): a round's co-located Rhodium purge+damage pair BOTH target
+        // 'enemy-most-buffs' and are drained TOGETHER off the SAME queue with ONE ctx instance
+        // (drainQueue drains every intent in the queue using the single ctx a drainIntentsFor
+        // call built). The purge's own buff removal can zero out the very count that identified
+        // the target, so a naive LIVE re-resolution by whichever ability drains SECOND (fixed by
+        // sentence position — purge precedes "and deals X% damage" — so purge always drains
+        // first) would resolve to nobody even though the FIRST-draining ability already found
+        // somebody. `onceByOwner()` memoizes PER (CTX-INSTANCE, ownerId) PAIR: the purge and
+        // damage intents belonging to the SAME Rhodium (same ownerId) share one resolution, so
+        // they still agree on one pre-purge target — but a SECOND, DIFFERENT-ownerId Rhodium
+        // draining off the SAME batch (e.g. two same-side Rhodiums both firing at round-end) gets
+        // its OWN fresh resolution, re-evaluated live against the buff state AFTER the first
+        // Rhodium's purge already ran (review fix: the original single-cell `once()` ignored
+        // `ownerId` entirely and would reuse the FIRST owner's cached target for every owner in
+        // the batch, causing the second Rhodium to re-hit the already-stripped target instead of
+        // the now-most-buffed one). The NEXT separate drain call in the same round (a fresh
+        // playerDrainCtx()/enemyDrainCtx() invocation — e.g. a later turn's pre-cast grant drain)
+        // still gets an entirely fresh map and re-resolves live, exactly as before. Scoped to
+        // enemyWithMostBuffs only — every other resolver (enemyWithHighestAttack,
+        // lastStandingId, etc.) is untouched.
+        const onceByOwner = <T>(fn: () => T): ((ownerId: string) => T) => {
+            const cache = new Map<string, T>();
+            return (ownerId: string) => {
+                if (!cache.has(ownerId)) cache.set(ownerId, fn());
+                return cache.get(ownerId) as T;
+            };
         };
 
         // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
@@ -6037,8 +6153,51 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('player').removeEnemyCharges,
             removeChargesFrom: bySide('player').removeChargesFrom,
             selfHpPctFor: bySide('player').selfHpPctFor,
-            enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
+            // SP-M M1 (Task 7b review, Task 9b fix): gated on `hasPositionedEnemyRoster` — "does a
+            // real, positioned opposing-enemy roster exist" — NOT `dummyEnemyIsVestigial` and NOT
+            // `input.positionalTeamBattle`. dummyEnemyIsVestigial ANDs in a second conjunct (every
+            // player actor's parsed target must be enemy-side) that is false whenever the player
+            // team includes an ally-targeting ship (e.g. a healer) even in a fully positional
+            // simulateBattle — that misrouted these resolvers onto the vestigial dummy instead of
+            // the real enemy roster. `input.positionalTeamBattle` over-corrects the other way: it
+            // is only ever set by simulateBattle, but direct-engine tests (e.g.
+            // purgeConditionalSources.test.ts) supply a real, positioned enemyAttackers roster
+            // without ever setting that flag — gating on it there wrongly fell back to the dummy.
+            // In pure DPS mode (no enemyAttackers supplied) enemyAttackerActors is EMPTY, so
+            // hasPositionedEnemyRoster is false and the positional-only
+            // mostBuffsAmong(enemyAttackerActors) would otherwise resolve to undefined and the
+            // reactive silently drop instead of crediting the dummy `enemy` — restoring the
+            // pre-SP-M behavior of targeting the live dummy when it's the real DPS sink.
+            enemyWithMostBuffs: hasPositionedEnemyRoster
+                ? onceByOwner(() => mostBuffsAmong(enemyAttackerActors))
+                : () => (enemy.destroyedRound === undefined ? enemy.id : undefined),
             enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
+            // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — Chakara has no purge/damage race
+            // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
+            // SP-M M1 (Task 7b review, Task 9b fix): gated on `hasPositionedEnemyRoster` — same
+            // rationale as enemyWithMostBuffs above.
+            enemyWithHighestSpeed: hasPositionedEnemyRoster
+                ? () => highestSpeedInRoster(enemyAttackerActors)
+                : () => (enemy.destroyedRound === undefined ? enemy.id : undefined),
+            // SP-M M1 (Task 7, Task 9b fix): living opposing roster for an 'all-enemies' reactive
+            // damage proc (Judge/Incinerator). When a real, positioned enemy roster exists
+            // (`hasPositionedEnemyRoster`) the real opposing roster is the living enemy attackers.
+            // In pure DPS mode the singular `enemy` dummy IS the real, destructible representative
+            // target (SP-U U5) — so the AoE resolves to it, its per-victim hp-threshold/enemy-debuff
+            // re-checked against its own live state, preserving Judge/Incinerator DPS-mode credit.
+            // NEVER the dummy when a real roster exists — gated on `hasPositionedEnemyRoster`, NOT
+            // `dummyEnemyIsVestigial` (falsely false whenever the player team includes an
+            // ally-targeting ship such as a healer, even in a fully positional battle) and NOT
+            // `input.positionalTeamBattle` (falsely false for direct-engine tests that supply a real
+            // enemyAttackers roster without that flag — see Task 9b).
+            livingOpposingActorIds: () =>
+                hasPositionedEnemyRoster
+                    ? enemyAttackerActors
+                          .filter((a) => a.destroyedRound === undefined)
+                          .map((a) => a.id)
+                    : enemy.destroyedRound === undefined
+                      ? [enemy.id]
+                      : [],
             firstActivatorId,
             lastStandingId: soleSurvivorOf(allPlayerActors),
             oncePerRoundConsumed,
@@ -6064,8 +6223,13 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('enemy').removeEnemyCharges,
             removeChargesFrom: bySide('enemy').removeChargesFrom,
             selfHpPctFor: bySide('enemy').selfHpPctFor,
-            enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
+            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(allPlayerActors)),
             enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
+            // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
+            enemyWithHighestSpeed: () => highestSpeedInRoster(allPlayerActors),
+            // SP-M M1 (Task 7): mirror — an enemy owner scans the living player roster.
+            livingOpposingActorIds: () =>
+                allPlayerActors.filter((a) => a.destroyedRound === undefined).map((a) => a.id),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(enemyAttackerActors),
             oncePerRoundConsumed,

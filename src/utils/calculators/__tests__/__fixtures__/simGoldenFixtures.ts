@@ -871,3 +871,198 @@ export function perVictimAffinityAoe(): BattleSimulationInput {
         rounds: 4,
     };
 }
+
+// ===========================================================================
+// reactiveDamagePositional (SP-M M1, Task 9) — dedicated high-level regression guard for the
+// engine-unification epic's reactive-damage-HP-fidelity milestone: eight reactive-damage
+// mechanics (Tasks 2-8) now reduce the resolved victim's REAL positional HP (surfacing on
+// damageTaken and reconciling into the owner's damageDealt) instead of a credit-only dummy sink.
+// This fixture layers THREE real named ships' verbatim reactive passives onto one battle so both
+// routing paths are exercised together at the BattleResult snapshot tier:
+//   - Frontline (counterTargetId path): its R2 refit passive reacts to ANY opposing actor's
+//     Charged-skill cast (`on-enemy-charged-cast` -> `eventCtx.counterTargetId` = the caster),
+//     landing 80% damage on that real charging enemy, once per round.
+//   - Judge (AoE path, start-of-round): "At the start of the round, ... this Unit deals 60%
+//     damage to all enemies with less than 50% HP" -> `target:'all-enemies'` re-checked per
+//     victim's live hp-threshold condition.
+//   - Incinerator (AoE path, end-of-round): "At the end of the round, this unit deals 100%
+//     damage to all enemies with Inferno" -> `target:'all-enemies'` re-checked per victim's live
+//     enemy-debuff (Inferno) condition; its own active is what inflicts Inferno in the first
+//     place, onto whichever enemy its single-target row-scan lands on.
+//
+// Skill text is verbatim from `src/utils/combat/__tests__/reactiveDamagePositionalHp.test.ts`
+// (Tasks 2 and 7's `FRONTLINE_R2_TEXT` / `JUDGE_PASSIVE` / `INCINERATOR_PASSIVE` constants,
+// themselves confirmed against docs/ship-skills.csv / ships.ts) — do NOT alter.
+//
+// Positions are three independent row-pairs (own-row-first targeting, `selectTargets.ts`) so
+// each mechanic's SETUP is deterministic while the reactive AoEs (which are roster-wide, not
+// row-scoped) still range freely across all three enemies:
+//   - Row T: Judge (T4) <-> Fragile (T1) — Judge's own active chips Fragile every round; Fragile's
+//     HP is tuned so it naturally crosses below 50% partway through the 8-round window (from
+//     ordinary sustained combat, not an artificial pre-chip), after which Judge's start-of-round
+//     passive also lands on it every remaining round.
+//   - Row M: Incinerator (M1) <-> InfernoVictim (M4) — Incinerator's own active always lands on
+//     InfernoVictim (the only occupant of row M on the enemy side), inflicting Inferno III every
+//     cast; Incinerator's end-of-round passive then hits it.
+//   - Row B: Frontline (B1) <-> Charger (B4) — Charger is never targeted by Judge/Incinerator's
+//     row-scanned actives (isolated on its own row), so it survives at full HP to reliably
+//     re-charge and re-cast every round, giving Frontline's counterTargetId reactive a live
+//     victim across the whole 8-round window.
+//
+// Frontline's ACTIVE here is a plain damage cast (not its in-game ally-heal), deliberately —
+// giving Frontline (or ANY player-side ship in this roster) an ally-targeted heal active flips
+// `engine.ts`'s `dummyEnemyIsVestigial` gate to false (its "every player actor has an enemy-side
+// parsed target" conjunct), which reroutes Judge's/Incinerator's `livingOpposingActorIds` to the
+// vestigial dummy `enemy` instead of the real enemy roster — silently zeroing their AoE reactive
+// in ANY roster that also carries a healer. Confirmed by direct engine inspection while building
+// this fixture (not merely inferred): the SAME Judge/Incinerator ships that fire correctly in
+// isolation stopped firing the instant a heal-casting ally (any heal ability, any attack value)
+// joined the team, and start-of-round/end-of-round log entries came back once the healer's active
+// was swapped for a damage cast. This is a genuine pre-existing gap in the Task 7b DPS-mode-safe
+// dummy-fallback (it conflates "no real positioned enemy roster" with "not every player targets
+// the enemy side", and a support ship's ally-heal falls into the second, much more common, case)
+// — out of scope to fix here; only Frontline's OWN passive (the mechanic under test) is affected
+// by this workaround, not its in-game kit identity. Reported as a concern in the task report.
+// ===========================================================================
+
+const RDP_FRONTLINE_R2_TEXT =
+    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+
+const RDP_JUDGE_PASSIVE =
+    'At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all ' +
+    'enemies with less than 50% HP.';
+
+const RDP_INCINERATOR_PASSIVE =
+    'At the end of the round, this unit deals <unit-damage>100% damage</unit-damage> to all ' +
+    'enemies with <unit-skill>Inferno</unit-skill>.';
+
+/** Player: Frontline — the counterTargetId reactive path. 2 refits so getShipSkillRows resolves
+ *  `secondPassiveSkillText` as the active R2 passive (matches the R2-refit idiom every other
+ *  hpBasisPct/refit-gated fixture in this file uses, e.g. `healUnequalHealer`/`vindicator`). Its
+ *  own active is a plain front-damage cast (not an ally-heal — see the fixture-level comment
+ *  above for why), with a real nonzero attack stat so its OWN reactive counter (multiplier ×
+ *  attack) actually deals visible damage, not just credits a 0. */
+const reactivePositionalFrontline = (): Ship => ({
+    ...shipBase('rdp-p-frontline', 'Frontline', 'DEFENDER', {
+        hp: 340_000,
+        attack: 8_000,
+        defence: 500,
+        hacking: 200,
+        security: 200,
+        speed: 100,
+    }),
+    activeSkillText: 'This Unit deals <unit-damage>60% damage</unit-damage>.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+    secondPassiveSkillText: RDP_FRONTLINE_R2_TEXT,
+    refits: [{}, {}] as unknown as Refit[],
+});
+
+/** Player: Judge — the start-of-round AoE reactive path (all living enemies under 50% HP).
+ *  Innate (R0) passive, zero refits. Its own 100% single-target active keeps sustained pressure
+ *  on Fragile (its own-row enemy) so Fragile actually crosses the 50%-HP threshold from ordinary
+ *  combat over the 8-round window, giving the reactive a real, naturally-arising victim. */
+const reactivePositionalJudge = (): Ship => ({
+    ...shipBase('rdp-p-judge', 'Judge', 'ATTACKER', {
+        hp: 300_000,
+        attack: 3_400,
+        defence: 250,
+        hacking: 220,
+        security: 150,
+        speed: 115,
+    }),
+    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+    firstPassiveSkillText: RDP_JUDGE_PASSIVE,
+});
+
+/** Player: Incinerator — the end-of-round AoE reactive path (all living enemies with Inferno).
+ *  Its own active is BOTH the Inferno-applier (onto InfernoVictim, its own-row enemy) and a
+ *  185% direct hit every cast; the passive then hits whatever it inflicted Inferno onto. */
+const reactivePositionalIncinerator = (): Ship => ({
+    ...shipBase('rdp-p-incinerator', 'Incinerator', 'ATTACKER', {
+        hp: 260_000,
+        attack: 1500,
+        defence: 200,
+        hacking: 260,
+        security: 150,
+        speed: 105,
+    }),
+    activeSkillText:
+        'This Unit deals <unit-damage>185% damage</unit-damage> and inflicts ' +
+        '<unit-skill>Inferno III</unit-skill> for 3 turns.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+    firstPassiveSkillText: RDP_INCINERATOR_PASSIVE,
+});
+
+/** Enemy: charges up and unleashes its Charged skill every round it is fully charged — the
+ *  trigger Frontline's counterTargetId reactive needs. "Starts combat fully charged" (same idiom
+ *  as `reactiveDamagePositionalHp.test.ts`'s Task 2 `chargedEnemy` fixture) fires the charge-cast
+ *  deterministically from round 1. Isolated alone on row B (enemy side) so neither Judge's nor
+ *  Incinerator's row-scanned actives ever touch it — it survives at full HP the whole battle,
+ *  giving Frontline's reactive a live victim across every round. */
+const reactivePositionalCharger = (): Ship => ({
+    ...shipBase('rdp-e-charger', 'Ignition', 'ATTACKER', {
+        hp: 240_000,
+        attack: 1400,
+        defence: 200,
+        hacking: 200,
+        security: 150,
+        speed: 110,
+    }),
+    activeSkillText:
+        'This Unit deals <unit-damage>90% damage</unit-damage>. This Unit starts combat fully charged.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+    chargeSkillText: 'This Unit deals <unit-damage>150% damage</unit-damage>.',
+    chargeSkillCharge: 1,
+});
+
+/** Enemy: the sole occupant of row M (enemy side) — Incinerator's own-row-first active always
+ *  lands here, inflicting Inferno III every cast (security 0 guarantees the hacking-vs-security
+ *  landing roll always lands). Generous HP so it survives the full 8-round window, giving
+ *  Incinerator's end-of-round passive a live victim across multiple rounds. */
+const reactivePositionalInfernoVictim = (): Ship =>
+    finalizeAttacker(
+        shipBase('rdp-e-inferno', 'Slagfield', 'DEFENDER', {
+            hp: 450_000,
+            attack: 900,
+            defence: 300,
+            hacking: 150,
+            security: 0,
+            speed: 90,
+        })
+    );
+
+/** Enemy: the sole occupant of row T (enemy side) — Judge's own-row-first active always lands
+ *  here every round, chipping it down from ordinary combat until it naturally crosses below 50%
+ *  HP partway through the window, after which Judge's start-of-round passive also lands on it. */
+const reactivePositionalFragile = (): Ship =>
+    finalizeAttacker(
+        shipBase('rdp-e-fragile', 'Husklight', 'DEFENDER', {
+            hp: 65_000,
+            attack: 700,
+            defence: 100,
+            hacking: 150,
+            security: 100,
+            speed: 95,
+        })
+    );
+
+export function reactiveDamagePositional(): BattleSimulationInput {
+    return {
+        playerTeam: [
+            placement(reactivePositionalJudge(), 'T4'),
+            placement(reactivePositionalIncinerator(), 'M1'),
+            placement(reactivePositionalFrontline(), 'B1'),
+        ],
+        enemyTeam: [
+            placement(reactivePositionalCharger(), 'B4'),
+            placement(reactivePositionalInfernoVictim(), 'M4'),
+            placement(reactivePositionalFragile(), 'T1'),
+        ],
+        rounds: 8,
+    };
+}

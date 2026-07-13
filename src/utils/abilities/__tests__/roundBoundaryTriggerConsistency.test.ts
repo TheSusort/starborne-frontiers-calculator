@@ -50,7 +50,9 @@ describe('Judge: start-of-round AoE execute damage (docs/ship-skills.csv passive
         const dmg = abilities.find((a) => a.type === 'damage')!;
         expect(dmg).toBeDefined();
         expect(dmg.trigger).toBe('start-of-round');
-        expect(dmg.target).toBe('enemy');
+        // SP-M M1 Task 7: the per-victim hp-threshold AoE re-targets to all-enemies (was 'enemy';
+        // the reactive executor now re-checks the <50%-HP gate against each living enemy).
+        expect(dmg.target).toBe('all-enemies');
         if (dmg.config.type === 'damage') expect(dmg.config.multiplier).toBe(60);
         // The hp-threshold condition (below 50%) survives the trigger fix untouched.
         expect(dmg.conditions).toContainEqual(

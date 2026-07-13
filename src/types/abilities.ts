@@ -80,8 +80,12 @@ export type AbilityTarget =
     | 'enemy'
     | 'all-enemies'
     | 'enemy-most-buffs'
-    | 'enemy-highest-attack'; // D-PR14 Doomsayer: living opposing actor with the greatest
-//                           live effective attack (global selector, resolved at drain).
+    | 'enemy-highest-attack' // D-PR14 Doomsayer: living opposing actor with the greatest
+    //                           live effective attack (global selector, resolved at drain).
+    | 'enemy-highest-speed'; // SP-M M1 Task 6 Chakara: living opposing actor with the greatest
+//                           live effective speed (global selector, resolved LIVE at drain — no
+//                           memo needed, Chakara's co-located clause is a self-buff that never
+//                           changes an enemy's speed).
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`

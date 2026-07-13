@@ -69,6 +69,7 @@ import {
     detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
+    parseHighestSpeedEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     ONCE_PER_ROUND_PER_ENEMY_RE,
@@ -1114,6 +1115,27 @@ function abilitiesFromText(
             },
             pos: damagePos >= 0 ? damagePos : MAX_POS,
         });
+        // SP-M M1 (Task 5): a round-boundary (end-of-round) damage clause co-located in the SAME
+        // sentence as an "enemy with the most buffs" phrase (Rhodium p2: "...purges 2 buffs from
+        // the enemy with the most buffs and deals 80% damage...") re-targets from the default
+        // 'enemy' to 'enemy-most-buffs' — reuses the SAME detector (detectMostBuffsTarget) the
+        // co-located purge below uses, sentence/position-scoped on damagePos so an unrelated
+        // on-cast damage clause elsewhere in the text (or a start-of-round damage clause, which
+        // never carries this phrase in the corpus) is unaffected. out[0] is safe to mutate here —
+        // this is the ability just pushed (SP-F F1's out[0] invariant, see comment above).
+        if (damageTrigger === 'end-of-round' && detectMostBuffsTarget(text, damagePos)) {
+            out[0].ability.target = 'enemy-most-buffs';
+        }
+        // SP-M M1 (Task 6): a round-boundary (start-of-round, INCLUDING the "Then," continuation
+        // sentence — Chakara p4: "starts each round with Attack Up II/Defense Up II … if it has
+        // the lowest speed among all Allies. Then, deals 60% damage to the highest Speed Enemy.")
+        // damage clause carrying "to the highest Speed Enemy" re-targets from the default 'enemy'
+        // to 'enemy-highest-speed'. Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget
+        // mirrors detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the
+        // text is unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
+        if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
+            out[0].ability.target = 'enemy-highest-speed';
+        }
         if (instead) {
             // Replacement branch (Provoked/Taunted): reuses the base's hits/noCrit — both
             // Panon branches share the same values (neither text carries a multi-hit or
@@ -1457,6 +1479,35 @@ function abilitiesFromText(
             ...out[0].ability.conditions,
             ...enemyEffectConditions(damageEffects),
         ];
+    }
+
+    // SP-M M1 (Task 7): a round-boundary (start-of-round OR end-of-round) reactive DAMAGE ability
+    // that now carries a PER-VICTIM enemy condition — Judge's start-of-round hp-threshold ("to all
+    // enemies with less than 50% HP") or Incinerator's end-of-round enemy-debuff ("to all enemies
+    // with Inferno") — hits ALL matching enemies, not one. Re-target from the default 'enemy' to
+    // 'all-enemies'; the reactive damage executor (triggers.ts) then enumerates the living opposing
+    // roster and re-checks the per-victim condition against each victim's own live HP%/debuff names.
+    // DISJOINT from the on-cast enemy-effect damage BONUS (Rikra/Wrecker) — those ride the on-cast
+    // trigger, not a round boundary — and from Rhodium/Chakara's selector re-targets above (which
+    // carry no hp-threshold/enemy-debuff condition). Gated on the round-boundary trigger so an
+    // on-cast damage-bonus gate with the same subject is never re-targeted. out[0] is safe to mutate
+    // here (SP-F F1's out[0] invariant).
+    // Task 7b review: hp-threshold must be narrowed to non-SELF (Judge's is hpSubject:'enemy' —
+    // confirmed via hpThresholdFromSentence, which only sets 'self' absent an enemy/target
+    // reference in the clause). A hypothetical round-boundary damage ability gated on the
+    // caster's OWN hp ("when this unit is below 50%, deal to all enemies") is a self-condition,
+    // not a per-victim one, and must NOT be re-targeted to 'all-enemies' + per-victim re-check.
+    if (
+        out[0]?.ability.type === 'damage' &&
+        (out[0].ability.trigger === 'start-of-round' ||
+            out[0].ability.trigger === 'end-of-round') &&
+        out[0].ability.conditions.some(
+            (c) =>
+                (c.subject === 'hp-threshold' && c.hpSubject !== 'self') ||
+                c.subject === 'enemy-debuff'
+        )
+    ) {
+        out[0].ability.target = 'all-enemies';
     }
 
     // Phase 4c PR 4 (Task 6): Grif's NAMELESS damage proc — "When an enemy cleanses a Debuff,
