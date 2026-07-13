@@ -62,6 +62,15 @@ export const sumTaken = (r: ReturnType<typeof simulateBattle>, id: string): numb
 export const minHpPct = (r: ReturnType<typeof simulateBattle>, id: string): number =>
     Math.min(...r.rounds.map((rd) => rd.ships.find((x) => x.actorId === id)?.hpPct ?? 100));
 
+// Confirms a reactive-damage proc actually fired (as opposed to no proc at all): a kind:'attack'
+// log entry keyed on the owner's actor id with a positive landed amount.
+const expectReactiveHitFired = (result: ReturnType<typeof simulateBattle>, actorId: string) => {
+    const hits = flattenCombatLog(result).filter(
+        (e) => e.kind === 'attack' && e.actorId === actorId && (e.targets[0]?.amount ?? 0) > 0
+    );
+    expect(hits.length).toBeGreaterThan(0);
+};
+
 const frontline = (id: string): Ship =>
     ship(id, {
         type: 'Defender',
@@ -262,10 +271,7 @@ describe("SP-M M1 Task 4: Grif's on-enemy-cleansed reactive lands on the real cl
         // fired at all": a kind:'attack' log entry keyed on Grif's OWN actor id (ATTACKER) with a
         // positive amount, distinct from Grif's own 0%-damage active. Present in BOTH the pre-fix
         // and post-fix state — the fix only changes WHERE the damage lands, not whether it fires.
-        const grifReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(grifReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, ATTACKER);
 
         const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
         const takenDelta = sumTaken(reaction, ENEMY) - sumTaken(control, ENEMY);
@@ -335,10 +341,7 @@ describe("SP-M M1 Task 5: Rhodium's end-of-round damage lands on the most-buffed
         // Confirms the reaction actually FIRED (not "no proc") — a kind:'attack' log entry keyed
         // on Rhodium's OWN actor id (ATTACKER) with a positive amount, distinct from Rhodium's own
         // 0%-damage active. Present only in the reaction run.
-        const rhodiumReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(rhodiumReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, ATTACKER);
 
         const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
         const takenDeltaBuffed = sumTaken(reaction, ENEMY) - sumTaken(control, ENEMY);
@@ -482,10 +485,7 @@ describe("SP-M M1 Task 6: Chakara's start-of-round damage lands on the highest-S
         // Confirms the reaction actually FIRED (not "no proc") — a kind:'attack' log entry keyed
         // on Chakara's OWN actor id (ATTACKER) with a positive amount, distinct from Chakara's own
         // 0%-damage active. Present only in the reaction run.
-        const chakaraReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(chakaraReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, ATTACKER);
 
         const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
         const takenDeltaFaster = sumTaken(reaction, ENEMY2) - sumTaken(control, ENEMY2);
@@ -582,10 +582,7 @@ describe("SP-M M1 Task 7: Judge's start-of-round damage hits ALL <50%-HP enemies
         // actor id with a positive amount, distinct from Judge's 0%-damage active. Present only in
         // the reaction run (pre-fix this fires against the vestigial dummy, landing 0 real HP —
         // which the per-enemy takenDelta assertions below are what actually catch).
-        const judgeReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === JUDGE && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(judgeReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, JUDGE);
 
         const takenDeltaLow1 = sumTaken(reaction, E_LOW1) - sumTaken(control, E_LOW1);
         const takenDeltaLow2 = sumTaken(reaction, E_LOW2) - sumTaken(control, E_LOW2);
@@ -658,10 +655,7 @@ describe("SP-M M1 Task 7: Incinerator's end-of-round damage hits ONLY the Infern
         const reaction = run(true);
         const control = run(false);
 
-        const incReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(incReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, ATTACKER);
 
         const takenDeltaInferno = sumTaken(reaction, E_INFERNO) - sumTaken(control, E_INFERNO);
         const takenDeltaClean = sumTaken(reaction, E_CLEAN) - sumTaken(control, E_CLEAN);
@@ -775,11 +769,7 @@ describe("SP-M M1 Task 8: Grif's on-enemy-cleansed reactive lands on the real cl
         const reaction = run(selfCleanser('p1'));
         const control = run(plainEnemy('p1'));
 
-        const grifReactiveHits = flattenCombatLog(reaction).filter(
-            (e) =>
-                e.kind === 'attack' && e.actorId === GRIF_ENEMY && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(grifReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, GRIF_ENEMY);
 
         const dealtDelta = sumDealt(reaction, GRIF_ENEMY) - sumDealt(control, GRIF_ENEMY);
         const takenDelta = sumTaken(reaction, ATTACKER) - sumTaken(control, ATTACKER);
@@ -804,11 +794,7 @@ describe("SP-M M1 Task 8: Rhodium's end-of-round damage lands on the most-buffed
         const reaction = run(buffedEnemy('p1'), plainEnemy('p2'));
         const control = run(plainEnemy('p1'), plainEnemy('p2'));
 
-        const rhodiumReactiveHits = flattenCombatLog(reaction).filter(
-            (e) =>
-                e.kind === 'attack' && e.actorId === RHOD_ENEMY && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(rhodiumReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, RHOD_ENEMY);
 
         const dealtDelta = sumDealt(reaction, RHOD_ENEMY) - sumDealt(control, RHOD_ENEMY);
         const takenDeltaBuffed = sumTaken(reaction, ATTACKER) - sumTaken(control, ATTACKER);
@@ -842,11 +828,7 @@ describe("SP-M M1 Task 8: Chakara's start-of-round damage lands on the highest-S
         const reaction = run(true);
         const control = run(false);
 
-        const chakaraReactiveHits = flattenCombatLog(reaction).filter(
-            (e) =>
-                e.kind === 'attack' && e.actorId === CHAK_ENEMY && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(chakaraReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, CHAK_ENEMY);
 
         const dealtDelta = sumDealt(reaction, CHAK_ENEMY) - sumDealt(control, CHAK_ENEMY);
         const takenDeltaFaster = sumTaken(reaction, P_FAST) - sumTaken(control, P_FAST);
@@ -891,11 +873,7 @@ describe("SP-M M1 Task 8: Judge's start-of-round damage hits ALL <50%-HP PLAYERS
         const reaction = run(true);
         const control = run(false);
 
-        const judgeReactiveHits = flattenCombatLog(reaction).filter(
-            (e) =>
-                e.kind === 'attack' && e.actorId === JUDGE_ENEMY && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(judgeReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, JUDGE_ENEMY);
 
         const takenDeltaLow1 = sumTaken(reaction, P_LOW1) - sumTaken(control, P_LOW1);
         const takenDeltaLow2 = sumTaken(reaction, P_LOW2) - sumTaken(control, P_LOW2);
@@ -940,10 +918,7 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
         const reaction = run(true);
         const control = run(false);
 
-        const incReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === INC_ENEMY && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(incReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, INC_ENEMY);
 
         const takenDeltaInferno = sumTaken(reaction, P_INFERNO) - sumTaken(control, P_INFERNO);
         const takenDeltaClean = sumTaken(reaction, P_CLEAN) - sumTaken(control, P_CLEAN);
@@ -1010,10 +985,7 @@ describe("SP-M M1 Task 9b: Judge's start-of-round AoE still hits the real <50%-H
         const reaction = run(true);
         const control = run(false);
 
-        const judgeReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === JUDGE && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(judgeReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, JUDGE);
 
         const takenDeltaLow1 = sumTaken(reaction, E_LOW1) - sumTaken(control, E_LOW1);
         const takenDeltaLow2 = sumTaken(reaction, E_LOW2) - sumTaken(control, E_LOW2);
@@ -1057,10 +1029,7 @@ describe("SP-M M1 Task 9b: Chakara's single-target reactive still hits the real 
         const reaction = run(true);
         const control = run(false);
 
-        const chakaraReactiveHits = flattenCombatLog(reaction).filter(
-            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
-        );
-        expect(chakaraReactiveHits.length).toBeGreaterThan(0);
+        expectReactiveHitFired(reaction, ATTACKER);
 
         const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
         const takenDeltaFaster = sumTaken(reaction, ENEMY2) - sumTaken(control, ENEMY2);

@@ -1961,7 +1961,8 @@ function buildPerVictimConditionCtx(
 function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext): string[] {
     const roster = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
     const perVictim = intent.ability.conditions.filter(
-        (c) => c.subject === 'hp-threshold' || c.subject === 'enemy-debuff'
+        (c) =>
+            (c.subject === 'hp-threshold' && c.hpSubject !== 'self') || c.subject === 'enemy-debuff'
     );
     return roster.filter((victimId) => {
         if (perVictim.length === 0) return true;
