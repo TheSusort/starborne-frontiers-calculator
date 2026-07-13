@@ -1114,6 +1114,17 @@ function abilitiesFromText(
             },
             pos: damagePos >= 0 ? damagePos : MAX_POS,
         });
+        // SP-M M1 (Task 5): a round-boundary (end-of-round) damage clause co-located in the SAME
+        // sentence as an "enemy with the most buffs" phrase (Rhodium p2: "...purges 2 buffs from
+        // the enemy with the most buffs and deals 80% damage...") re-targets from the default
+        // 'enemy' to 'enemy-most-buffs' — reuses the SAME detector (detectMostBuffsTarget) the
+        // co-located purge below uses, sentence/position-scoped on damagePos so an unrelated
+        // on-cast damage clause elsewhere in the text (or a start-of-round damage clause, which
+        // never carries this phrase in the corpus) is unaffected. out[0] is safe to mutate here —
+        // this is the ability just pushed (SP-F F1's out[0] invariant, see comment above).
+        if (damageTrigger === 'end-of-round' && detectMostBuffsTarget(text, damagePos)) {
+            out[0].ability.target = 'enemy-most-buffs';
+        }
         if (instead) {
             // Replacement branch (Provoked/Taunted): reuses the base's hits/noCrit — both
             // Panon branches share the same values (neither text carries a multi-hit or

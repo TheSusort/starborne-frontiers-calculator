@@ -6056,6 +6056,27 @@ export function runCombat(input: CombatEngineInput): {
             return living.length === 1 ? living[0].id : undefined;
         };
 
+        // SP-M M1 (Task 5): a round's co-located Rhodium purge+damage pair BOTH target
+        // 'enemy-most-buffs' and are drained TOGETHER off the SAME queue with ONE ctx instance
+        // (drainQueue drains every intent in the queue using the single ctx a drainIntentsFor
+        // call built). The purge's own buff removal can zero out the very count that identified
+        // the target, so a naive LIVE re-resolution by whichever ability drains SECOND (fixed by
+        // sentence position — purge precedes "and deals X% damage" — so purge always drains
+        // first) would resolve to nobody even though the FIRST-draining ability already found
+        // somebody. `once()` memoizes PER-CTX-INSTANCE: every intent drained by THIS call shares
+        // one resolution, but the NEXT separate drain call in the same round (a fresh
+        // playerDrainCtx()/enemyDrainCtx() invocation — e.g. a later turn's pre-cast grant drain)
+        // gets its own fresh memo and re-resolves live, exactly as before. Scoped to
+        // enemyWithMostBuffs only — every other resolver (enemyWithHighestAttack,
+        // lastStandingId, etc.) is untouched.
+        const once = <T>(fn: () => T): (() => T) => {
+            let cached: { value: T } | undefined;
+            return () => {
+                if (!cached) cached = { value: fn() };
+                return cached.value;
+            };
+        };
+
         // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
         // the pre-refactor drainIntents (same runtimes/playerIds/lowest-speed/grantAllyCharges).
         // Hoisted into a named factory (SP-G G2) so the new pre-cast start-of-turn grant drain
@@ -6068,7 +6089,7 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('player').removeEnemyCharges,
             removeChargesFrom: bySide('player').removeChargesFrom,
             selfHpPctFor: bySide('player').selfHpPctFor,
-            enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
+            enemyWithMostBuffs: once(() => mostBuffsAmong(enemyAttackerActors)),
             enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(allPlayerActors),
@@ -6095,7 +6116,7 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('enemy').removeEnemyCharges,
             removeChargesFrom: bySide('enemy').removeChargesFrom,
             selfHpPctFor: bySide('enemy').selfHpPctFor,
-            enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
+            enemyWithMostBuffs: once(() => mostBuffsAmong(allPlayerActors)),
             enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(enemyAttackerActors),

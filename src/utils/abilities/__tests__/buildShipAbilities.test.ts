@@ -3641,6 +3641,22 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
                 expect(purge.config.count).toBe(2);
             }
         });
+
+        // SP-M M1 (Task 5): the co-located 80%-no-crit DAMAGE clause re-targets from the
+        // default 'enemy' to the SAME enemy-most-buffs selector the purge above resolves — it
+        // must land on the real most-buffed enemy in positional mode, not the vestigial dummy.
+        it('the co-located 80%-no-crit damage ability also carries target enemy-most-buffs', () => {
+            const passive = slot(buildShipAbilities(rhodiumP2()).slots, 'passive')!;
+            const damages = passive.abilities.filter((a) => a.type === 'damage');
+            expect(damages.length).toBeGreaterThanOrEqual(1);
+            const dmg = damages[0];
+            expect(dmg.trigger).toBe('end-of-round');
+            expect(dmg.target).toBe('enemy-most-buffs');
+            if (dmg.config.type === 'damage') {
+                expect(dmg.config.multiplier).toBe(80);
+                expect(dmg.config.noCrit).toBe(true);
+            }
+        });
     });
 
     describe('Iridium p1 regression: on-attacked + target:enemy UNCHANGED', () => {

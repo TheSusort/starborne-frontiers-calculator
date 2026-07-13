@@ -275,3 +275,82 @@ describe("SP-M M1 Task 4: Grif's on-enemy-cleansed reactive lands on the real cl
         expect(minHpPct(reaction, ENEMY)).toBeLessThan(minHpPct(control, ENEMY));
     });
 });
+
+/**
+ * SP-M M1 Task 5: Rhodium's end-of-round co-located purge+damage sentence ("At the end of the
+ * round, this Unit purges 2 buffs from the enemy with the most buffs and deals 80% damage that
+ * cannot critically hit.") must route the DAMAGE clause to the SAME enemy-most-buffs selector the
+ * purge clause already resolves (ctx.enemyWithMostBuffs), not the co-located `target:'enemy'`
+ * default that falls back to the vestigial dummy `ctx.enemy` in positional mode. With two real
+ * enemies on the opposing roster and only ONE of them carrying a buff, the most-buffed enemy must
+ * take the real HP hit — and the OTHER enemy (still alive, never the selector's pick) must NOT.
+ */
+
+// Verbatim from docs/ship-skills.csv (Rhodium, second_passive_skill_text — the R2/refit-active
+// slot getShipSkillRows resolves for a 2-refit ship). Do NOT alter this text.
+const RHODIUM_P2 =
+    'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with ' +
+    'the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.';
+
+const rhodium = (id: string): Ship =>
+    ship(id, {
+        type: 'Attacker',
+        // 0%-damage active isolates the HP delta to the reactive proc — Rhodium's own attack
+        // never itself changes either enemy's HP, in EITHER run (mirrors the Paracelsus/Grif
+        // 0%-damage idiom above).
+        activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
+        secondPassiveSkillText: RHODIUM_P2,
+        // 2 refits → getShipSkillRows selects secondPassiveSkillText (skillRows.ts) as the R2
+        // active passive, carrying the co-located purge + 80%-no-crit damage clause.
+        refits: [{}, {}] as unknown as Ship['refits'],
+    });
+
+// A self-buff-granting active (real corpus idiom — Boost gear set fixtures use the same
+// "gains <unit-skill>Attack Up III</unit-skill> for N turns" phrasing) — the ONLY thing that
+// distinguishes this enemy from `plainEnemy` (which grants no buff at all), so
+// `mostBuffsAmong` picks it deterministically over its buff-less teammate.
+const buffedEnemy = (id: string): Ship =>
+    ship(id, {
+        activeSkillText: 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+    });
+
+const ENEMY2 = 'e:e2:1';
+
+describe("SP-M M1 Task 5: Rhodium's end-of-round damage lands on the most-buffed enemy, not the other (positional)", () => {
+    const run = (e1: Ship, e2: Ship) =>
+        simulateBattle({
+            playerTeam: [place(rhodium('r'), 'M4', 10_000, 1e12)],
+            enemyTeam: [place(e1, 'M4', 1, 1e12), place(e2, 'M3', 1, 1e12)],
+            rounds: 2,
+        });
+
+    it('the buffed enemy loses HP to the reactive damage; the buff-less enemy does not; delta reconciles dealt<->taken', () => {
+        // reaction: e1 self-buffs (most buffs) vs e2 plain (no buffs anywhere else either) —
+        // mostBuffsAmong picks e1 deterministically.
+        const reaction = run(buffedEnemy('e1'), plainEnemy('e2'));
+        // control: BOTH enemies buff-less — mostBuffsAmong's own "no buffs anywhere" case
+        // returns undefined, so the whole proc (purge + damage) no-ops for the whole round.
+        const control = run(plainEnemy('e1'), plainEnemy('e2'));
+
+        // Confirms the reaction actually FIRED (not "no proc") — a kind:'attack' log entry keyed
+        // on Rhodium's OWN actor id (ATTACKER) with a positive amount, distinct from Rhodium's own
+        // 0%-damage active. Present only in the reaction run.
+        const rhodiumReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(rhodiumReactiveHits.length).toBeGreaterThan(0);
+
+        const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
+        const takenDeltaBuffed = sumTaken(reaction, ENEMY) - sumTaken(control, ENEMY);
+        const takenDeltaOther = sumTaken(reaction, ENEMY2) - sumTaken(control, ENEMY2);
+
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDeltaBuffed).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaBuffed, 5);
+        expect(minHpPct(reaction, ENEMY)).toBeLessThan(minHpPct(control, ENEMY));
+
+        // The OTHER enemy (never the selector's pick) must be untouched by the reactive proc.
+        expect(takenDeltaOther).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, ENEMY2)).toBeCloseTo(minHpPct(control, ENEMY2), 5);
+    });
+});

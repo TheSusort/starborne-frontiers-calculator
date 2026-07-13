@@ -2774,24 +2774,37 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // FLAG, not by executor limitation — a non-flagged ability (Judge/Chakara/Incinerator/
         // FrontLine) can now crit.
         //
-        // Victim resolution mirrors the sibling debuff/purge branches at this trigger (line
-        // ~1758): prefer the eventCtx-routed counterparty (FrontLine's charging enemy, stamped
-        // by the on-enemy-charged-cast listener) and fall back to ctx.enemy — the same default
-        // single-target binding every other target:'enemy' reactive branch already uses when no
-        // specific triggering counterparty exists (Judge/Chakara/Incinerator/Rhodium's
-        // start-of-round/end-of-round triggers have none). `multiplier` is a raw percentage like
-        // the cast path (e.g. 75 for "75% damage"); `hits` folds into the mitigation call the
-        // same way applyCounterAttack folds a counter's hit count. Emits NO event → no chain.
-        const targetId = intent.eventCtx?.counterTargetId ?? ctx.enemy.id;
-        const outcome = ctx.applyReactiveDamage?.(
-            intent.ownerId,
-            targetId,
-            intent.ability.id,
-            cfg.multiplier,
-            cfg.hits ?? 1,
-            cfg.noCrit ?? false
-        );
-        emitReactiveDamageLog(ctx, intent.ownerId, targetId, outcome);
+        // SP-M M1 (Task 5): resolve the reactive damage victim SET. Single-selector targets
+        // (enemy-most-buffs, Rhodium) resolve one living opposing actor via the ctx resolvers —
+        // mirrors the debuff branch's enemy-highest-attack resolution (triggers.ts ~2207).
+        // Everything else keeps the pre-existing eventCtx-routed counterparty (FrontLine's
+        // charging enemy, Grif's cleansing enemy) else the ctx.enemy fallback (Judge/Chakara/
+        // Incinerator's start-of-round/end-of-round triggers, which have no specific triggering
+        // counterparty, and the DPS dummy). A selector that resolves nothing is a NO-OP — it
+        // never falls back to the dummy. `multiplier` is a raw percentage like the cast path
+        // (e.g. 75 for "75% damage"); `hits` folds into the mitigation call the same way
+        // applyCounterAttack folds a counter's hit count. Emits NO event → no chain.
+        const tgt = intent.ability.target;
+        let victimIds: (string | undefined)[];
+        if (tgt === 'enemy-most-buffs') {
+            const id = ctx.enemyWithMostBuffs?.(intent.ownerId);
+            if (id === undefined) return;
+            victimIds = [id];
+        } else {
+            victimIds = [intent.eventCtx?.counterTargetId ?? ctx.enemy.id];
+        }
+        for (const victimId of victimIds) {
+            if (victimId === undefined) continue;
+            const outcome = ctx.applyReactiveDamage?.(
+                intent.ownerId,
+                victimId,
+                intent.ability.id,
+                cfg.multiplier,
+                cfg.hits ?? 1,
+                cfg.noCrit ?? false
+            );
+            emitReactiveDamageLog(ctx, intent.ownerId, victimId, outcome);
+        }
         return;
     }
 
