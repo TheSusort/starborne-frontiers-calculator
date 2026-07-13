@@ -8038,7 +8038,10 @@ export function runCombat(input: CombatEngineInput): {
         const focus = dmg(focusActorId);
         // Row fields sourced from the focus entry. secondary/conditional go only to
         // rawTotals (RoundData has no sub-bucket columns) so they're read inline below.
-        const directDamage = focus.direct;
+        // directDamage/totalRoundDamage are `let`: the post-drain re-fold below (round-tail
+        // ordering fix) reassigns them to include end-of-round reactive-damage credits that
+        // land during the `round-ended` drain, after this snapshot.
+        let directDamage = focus.direct;
         const focusDot = perActorDot.get(focusActorId);
         const corrosionDamage = focus.corrosion + (focusDot?.corrosion ?? 0);
         const infernoDamage = focus.inferno + (focusDot?.inferno ?? 0);
@@ -8063,7 +8066,7 @@ export function runCombat(input: CombatEngineInput): {
         // perActorDot-folded corrosionDamage/infernoDamage/genericDamage locals) — per-victim DoT
         // ticks land via applyVictimDamage, so folding perActorDot here would double-drain the
         // dummy HP overwrite (same guard as the focusPositionalDetonation/detonation comment below).
-        const totalRoundDamage =
+        let totalRoundDamage =
             focus.direct + focus.corrosion + focus.inferno + focus.detonation + focus.generic;
         cumulativeDamage += totalRoundDamage;
         // Row/summary rawTotals stay FOCUS-only — only the focus actor reaches summary DPS
@@ -8146,6 +8149,58 @@ export function runCombat(input: CombatEngineInput): {
         bus.emit({ type: 'round-ended', round: r });
         drainIntentsFor('player');
         drainIntentsFor('enemy');
+
+        // Post-drain re-fold (round-tail ordering fix): end-of-round reactive-damage procs
+        // (Rhodium's most-buffed-enemy purge, Incinerator's enemy-debuff AoE) credit into
+        // `roundDamage` via `creditDamage` DURING the `round-ended` drain above — AFTER this
+        // round's scalar snapshot (directDamage/totalRoundDamage/cumulativeDamage/raw totals) was
+        // taken and folded into the persistent accumulators. In DPS mode those credits would
+        // otherwise be discarded when `roundDamage` is recreated next round, so they never reached
+        // the public DPS summary. (The positional sim is unaffected: there reactives route through
+        // applyVictimDamage + the per-victim maps, which are serialized into RoundData below AFTER
+        // this drain, and never touch `roundDamage` — so the delta computed here is 0 in that mode.)
+        // Re-read roundDamage, fold ONLY the post-drain delta into the row + accumulators (the
+        // pre-drain amount was already folded at the snapshot, so adding the delta avoids
+        // double-count), and — for a real destructible DPS target — decline its HP by the same
+        // delta so `totalRoundDamage + teamRoundDamage == enemy-HP delta` (8085) and roundsToKill
+        // stay honest. The delta is 0 for every round without an end-of-round reactive-damage proc
+        // → byte-identical to the pre-fix numbers, so existing goldens don't move. Only the
+        // 'direct' channel can shift at round tail (applyReactiveDamage credits 'direct' only), but
+        // the totals are recomputed across all channels for robustness.
+        const focusTotalFinal =
+            focus.direct + focus.corrosion + focus.inferno + focus.detonation + focus.generic;
+        let teamTotalFinal = 0;
+        for (const [id, d] of roundDamage) {
+            if (id === focusActorId) continue;
+            teamTotalFinal += d.direct + d.corrosion + d.inferno + d.detonation + d.generic;
+        }
+        const focusReactiveDelta = focusTotalFinal - totalRoundDamage;
+        const teamReactiveDelta = teamTotalFinal - teamRoundDamage;
+        if (focusReactiveDelta !== 0 || teamReactiveDelta !== 0) {
+            // Fold the focus delta into the row's directDamage + the persistent direct/cumulative
+            // accumulators (compute the direct-channel raw delta BEFORE reassigning directDamage).
+            totalDirectRaw += focus.direct - directDamage;
+            directDamage = focus.direct;
+            totalRoundDamage = focusTotalFinal;
+            cumulativeDamage += focusReactiveDelta;
+            // Team delta mirrors the focus fold on the team channels.
+            teamRoundDamage = teamTotalFinal;
+            cumulativeTeamDamage += teamReactiveDelta;
+            totalTeamRaw += teamReactiveDelta;
+            // Real destructible DPS target: land the reactive delta on its HP too. The pre-drain
+            // decline at the dpsEnemyTarget branch above used the pre-reactive total, so this is the
+            // remaining amount (no double-apply). A post-drain death is stamped by recordDestroyed
+            // inside applyVictimDamage; the row is pushed just below and the run terminates at the
+            // dpsEnemyTarget break. The vestigial dummy (sim/healing) never reaches here with a
+            // nonzero delta (those modes route reactives through the positional path).
+            const reactiveEnemyDelta = focusReactiveDelta + teamReactiveDelta;
+            if (dpsEnemyTarget && reactiveEnemyDelta > 0 && enemy.currentHp > 0) {
+                applyVictimDamage(reactiveEnemyDelta, enemy, sink, {
+                    byDirectDamage: true,
+                    killerId: focusActorId,
+                });
+            }
+        }
 
         // Report stacks after expiry (state going into next round)
         roundData.push({

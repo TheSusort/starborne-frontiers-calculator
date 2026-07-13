@@ -126,6 +126,32 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
         expect(credited).toBeCloseTo(ATTACK * 0.8, 6);
     });
 
+    it("Rhodium's end-of-round proc surfaces in the PUBLIC simulateDPS summary (round-tail ordering fix)", () => {
+        // The end-of-round reactive credit lands during the `round-ended` drain, which fires
+        // AFTER the round's directDamage/cumulativeDamage/totalRoundDamage scalar snapshot. The
+        // post-drain re-fold folds that late credit into the reported round + summary numbers,
+        // so the proc is now visible on the public surface (not only via __testTapCreditDamage).
+        const reaction = simulateDPS({
+            attack: ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            rounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: rhodiumShipSkills(),
+        });
+        // Active skill is 0%-damage; the only credited direct damage is the end-of-round 80%
+        // proc (noCrit, 0 defense) → ATTACK × 0.8, on the round row, the direct total, and the
+        // cumulative summary.
+        expect(reaction.rounds[0].directDamage).toBeCloseTo(ATTACK * 0.8, 6);
+        expect(reaction.summary.totalDirectDamage).toBeCloseTo(ATTACK * 0.8, 6);
+        expect(reaction.summary.totalDamage).toBeCloseTo(ATTACK * 0.8, 6);
+    });
+
     it("Chakara's start-of-round highest-Speed-enemy proc credits cumulativeDamage/directDamage in DPS mode (no positioned enemy attackers)", () => {
         const reaction = simulateDPS({
             attack: ATTACK,
