@@ -64,14 +64,16 @@ git commit --no-verify -m "docs(sp-f): F7 dummy-reference audit"
 
 ---
 
-## Task 2: F7 — drop the fake dummy inputs from both positional callers
+## Task 2: F7 — drop the fake dummy inputs from the positional caller (`battleSimulator.ts` only)
 
-**Reshaped after the Task 1 audit** (`docs/superpowers/notes/2026-07-13-f7-dummy-audit.md`): the dummy `enemy` actor is load-bearing scaffolding and MUST still be constructed (referenced by `allActors`, `TurnBindings.legacyVictim`, the `isDummyEnemy` turn-skip, and `resolvePositionalTarget`'s null-target fallback). F7 is therefore NOT structural removal — it is: make `enemyHp`/`enemyDefense` optional with internal defaults, then stop the two positional callers from passing fake values. This is a **byte-identical refactor** for `battleSimulator.ts` (its passed values `1_000_000_000`/`0` become the exact internal defaults) so its oracle is the golden corpus — NO new behavioral test. `healingEngineAdapter.ts` passed *different* values (`1_000_000`/`10000`); the audit proved its dummy-derived outputs are unread, so dropping them must leave its goldens green — that is the audited gate.
+**Reshaped after the Task 1 audit** (`docs/superpowers/notes/2026-07-13-f7-dummy-audit.md`): the dummy `enemy` actor is load-bearing scaffolding and MUST still be constructed (referenced by `allActors`, `TurnBindings.legacyVictim`, the `isDummyEnemy` turn-skip, and `resolvePositionalTarget`'s null-target fallback). F7 is therefore NOT structural removal — it is: make `enemyHp`/`enemyDefense` optional with internal defaults, then stop `battleSimulator.ts`'s positional call from passing fake values. This is a **byte-identical refactor** for `battleSimulator.ts` (its passed values `1_000_000_000`/`0` become the exact internal defaults) so its oracle is the golden corpus — NO new behavioral test.
+
+**CORRECTED SCOPE (post-implementation):** the audit's original plan also targeted `healingEngineAdapter.ts` (it passed *different* placeholder values, `1_000_000`/`10000`, and the audit believed its dummy-derived outputs were unread). That was disproven during implementation: a healer casting a `damage`-typed ability at `target:'enemy'` lands on the dummy and feeds a `basis:'damage-dealt'` heal/shield rider off `enemyHp`/`enemyDefense`, so `healingEngineAdapter.ts`'s dummy is load-bearing. The attempted change there was reverted (see `engine.ts`'s F7 comment fix, commit `14b195d4`) and `healingEngineAdapter.ts` is intentionally left unchanged. F7 as shipped touches `battleSimulator.ts` (plus the `CombatEngineInput` optional-fields change) only.
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` — `CombatEngineInput.enemyDefense`/`enemyHp` field decls (`:988–989`, verify) → optional; add internal defaults where destructured (`:1397–1398`, verify): `enemyDefense ?? 0`, `enemyHp ?? 1_000_000_000`
 - Modify: `src/utils/calculators/battleSimulator.ts:858–861`, `:876–884` — delete the `enemyDefense: 0, enemyHp: 1_000_000_000` lines + trim the dummy comments
-- Modify: `src/utils/calculators/healingEngineAdapter.ts` (~`:177–178` consts, `:217–250` call) — delete `ENEMY_DEFENSE`/`ENEMY_HP` from its `runCombat` call (and the now-unused consts)
+- **Out of scope, intentionally unchanged:** `src/utils/calculators/healingEngineAdapter.ts` (~`:177–178` consts, `:217–250` call) — its `ENEMY_DEFENSE`/`ENEMY_HP` dummy is load-bearing (see correction above); do not delete it.
 
 **Interfaces:**
 - Consumes: Task 1's audit note (§5 minimal edit set).
@@ -112,6 +114,11 @@ git add src/utils/combat/engine.ts src/utils/calculators/battleSimulator.ts src/
 git commit -m "refactor(combat): SP-F F7 — make enemyHp/enemyDefense optional; drop fake dummy from positional callers"
 ```
 
+**SHIPPED OUTCOME (steps 1–6 above are the original plan; see the "CORRECTED SCOPE" note at the
+top of this task):** Step 4/5/6's `healingEngineAdapter.ts` edit was attempted, found load-bearing
+by the golden corpus, and reverted — the shipped commit only touches `engine.ts` (optional fields)
+and `battleSimulator.ts` (dummy inputs dropped); `healingEngineAdapter.ts` is unchanged.
+
 ---
 
 ## Task 3: F1 — per-victim dealt attribution + reconciliation
@@ -149,6 +156,14 @@ it('F1: a targeted attacker\'s damageDealt equals the sum of per-victim damage i
     }
 });
 ```
+
+**Note (shipped implementation):** this snippet is illustrative of the invariant, not what landed.
+The SHIPPED test lives in `simGolden.test.ts` and instead asserts the **round-level**
+`Σ damageDealt == Σ damageTaken` invariant, guarded by an explicit non-vacuity check
+(`anyNonZeroRound`) so the assertion can't pass vacuously on an all-zero round, plus a snapshot
+fixture pinning per-attacker values. It does NOT rely on this snippet's vacuous
+`if (attacker.damageDealt === 0) continue` gate (which would silently skip every non-attacking
+actor and any case-c-only actor without asserting anything about them).
 
 - [ ] **Step 2: Run it to confirm it fails**
 

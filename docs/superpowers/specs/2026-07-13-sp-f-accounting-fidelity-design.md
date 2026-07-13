@@ -51,16 +51,29 @@ not exhaustive.
   damage-taken-leech / distinct `attacked`-emit / `roundEnemyEffects` / pre-call incoming-reduction
   rows that SP-U's `drivePositionalTurnApply` left inline (see the SP-U U2 boundary lesson) — onto
   the single per-victim path. Team-symmetric: a ship's incoming accounting is identical on either side.
-- Acceptance: no dummy target in any `runCombat` call; enemy and player incoming accounting share one
-  path; sim goldens move only where the dummy's absence is expected (audited).
+- Acceptance (**corrected — shipped scope narrower than originally drafted**): only
+  `battleSimulator.ts`'s positional `runCombat` call omits `enemyHp`/`enemyDefense`; the dummy
+  `enemy` actor itself is never removed (it stays structural — `TurnBindings.legacyVictim`, the
+  `isDummyEnemy` turn-skip, `resolvePositionalTarget`'s null-target fallback). The audit
+  (`docs/superpowers/notes/2026-07-13-f7-dummy-audit.md`) found `healingEngineAdapter.ts`'s dummy
+  inputs to be load-bearing (a `damage`-typed heal cast at `target:'enemy'` feeds a
+  `basis:'damage-dealt'` rider off the dummy's stats), so it is explicitly **out of scope** and left
+  unchanged. Enemy and player incoming accounting share one path; sim goldens move only where
+  `battleSimulator.ts`'s dummy-input removal is expected (audited).
 
 **F1 — AoE reconciliation**
 - Today `damageDealt` is the anchor-full `ability-performed` aggregate and `damageTaken` is per-victim
   (AoE origin-full / covered-half); the `ShipRoundState` docstrings (`:83–94`) declare them "NOT
   expected to reconcile — by design." Make the attacker aggregate equal `Σ` per-victim `damageTaken`.
 - Rewrite those two docstrings to state the new invariant.
-- Acceptance: for every AoE cast in the sim goldens, `attacker.damageDealt == Σ victims.damageTaken`;
-  a dedicated AoE sim fixture asserts it.
+- Acceptance (**qualified — not exhaustive over every cast**): for every **supported targeted
+  positional** cast in the sim goldens (an attacker with parsed `target`+`pattern`),
+  `attacker.damageDealt == Σ victims.damageTaken`; a dedicated AoE sim fixture asserts it. This
+  explicitly excludes, and does not claim to close: Protection redirects (inherits a pre-existing
+  double-count), Protection DoT-tick-batch redirects (no single source attacker to mirror),
+  focus-target DoT (sim mode's `healTarget` defaults to the focus, so it never books into
+  `perTargetDamage`), actors with no targeting data at all (case-c — pre-existing, documented gap),
+  and reactive damage (`applyReactiveDamage` never writes this channel).
 
 ### PR2 — Dropped channels (consumer-side unless the audit finds an engine gap)
 
@@ -113,12 +126,18 @@ assertion added; full suite green; `audit:skills` 0 findings; lint + tsc clean; 
 audited-and-explained.
 
 **SP-F done:**
-1. The dummy sink is gone from all `runCombat` paths; enemy incoming-accounting runs the per-victim path.
+1. `battleSimulator.ts`'s positional `runCombat` call no longer passes fake dummy `enemyHp`/
+   `enemyDefense` values (the dummy actor itself stays structural scaffolding, and
+   `healingEngineAdapter.ts`'s load-bearing dummy is intentionally untouched — see F7's corrected
+   acceptance above); enemy incoming-accounting runs the per-victim path.
 2. Every approximation comment enumerated in `battleSimulator.ts` is closed.
 3. Each closure is backed by an audited sim-golden that moved deliberately.
 4. `audit:skills` 0; lint + tsc clean; two golden tiers green.
 
-This unblocks **SP-M** (M1 FrontLine reactive shield needs F1's per-victim dealt-amount plumbing).
+F1 **provides groundwork** for SP-M's M1 FrontLine reactive shield (per-victim dealt-amount
+plumbing exists for the supported channel), but does not fully unblock it: reactive damage
+(`applyReactiveDamage`) is a separate channel that never writes `perTargetDealt`/`perTargetDamage`,
+so M1 will need its own, separate engine work for that path.
 
 ## 7. Cross-cutting invariants (from the epic)
 

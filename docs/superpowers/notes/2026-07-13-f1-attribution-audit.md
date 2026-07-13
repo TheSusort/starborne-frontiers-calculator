@@ -325,3 +325,11 @@ handoff so nobody mistakes them for new regressions or assumes F1 silently close
    writes `roundPerTargetDamage` at all (§5b) — if SP-M's M1 FrontLine reactive shield genuinely needs
    per-victim attribution of *this* channel, F1 as scoped does not provide it; SP-M's plan needs its
    own step, not an assumption that F1's mirror covers it.
+4. Protection redirects of a **DoT-tick-batch** (site #11's pre-summed `total`, redirected to a
+   protector) have no single source attacker at the write site — the batch collapses multiple
+   `sourceId`s before the redirect, so there is nothing correct to mirror into `perTargetDealt` for
+   that increment. This is a **narrower gap than #1 above**: #1 covers direct-hit Protection
+   redirects (which DO reconcile, just double-counted); this one does NOT reconcile at all for that
+   round's redirected amount — `damageDealt` comes up short by the redirected DoT total. Confirmed
+   post-implementation in `battleSimulator.ts`'s `ShipRoundState.damageDealt` docstring (commit
+   `52cd77ec`). Not fixed by F1 as scoped; carry forward as a documented exclusion, not a regression.

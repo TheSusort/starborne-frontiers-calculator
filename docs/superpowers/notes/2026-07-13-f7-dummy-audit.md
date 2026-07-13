@@ -19,12 +19,28 @@ Before classifying references, note there are **three** real callers, not two �
 | `src/utils/calculators/battleSimulator.ts` (:850-907) | `true` | set (`enemyAttackers`) | placeholder `enemyDefense: 0` / `enemyHp: 1_000_000_000` (:860-861) | `false` | No — destructures only `{ rounds: engineRounds }`, and only ever reads `rd.perTargetDamage` / `rd.perActorShield` / `rd.perActorIncoming` off each round (:912-935) |
 
 So "sim/healing (positional) mode" in the brief covers **two** callers (`battleSimulator.ts` and
-`healingEngineAdapter.ts`), both of which pass placeholder `enemyHp`/`enemyDefense` and never read
-the dummy-derived outputs. `dpsSimulator.ts` is the one and only load-bearing consumer.
+`healingEngineAdapter.ts`), both of which pass placeholder `enemyHp`/`enemyDefense` and — per this
+audit's read at the time — never read the dummy-derived outputs. `dpsSimulator.ts` is the one and
+only load-bearing consumer for the DPS-mode outputs (`rawTotals`/`enemyOutcome`).
 `positionalTeamBattle: true` is unique to `battleSimulator.ts`; `healingEngineAdapter.ts` reaches
 `dpsEnemyTarget === false` purely via `enemyAttackers.length > 0`. Task 2's target is explicitly
 `battleSimulator.ts`'s call (per the brief), but the same vestigial-dummy argument applies
 verbatim to `healingEngineAdapter.ts` — worth flagging for a follow-up, not required for PR1.
+
+**CORRECTION (post-implementation):** the claim above that `healingEngineAdapter.ts`'s dummy inputs
+are unread was **disproven** during Task 2's implementation. A healer casting a `damage`-typed
+ability at `target:'enemy'` (a real pattern in the corpus) lands that cast on the dummy `enemy`
+actor and feeds a `basis:'damage-dealt'` heal/shield rider off the dummy's `enemyHp`/`enemyDefense`
+values — i.e. `healingEngineAdapter.ts`'s dummy is **load-bearing**, not vestigial. Only
+`battleSimulator.ts`'s call was proven safe to drop the dummy inputs from (confirmed by the golden
+corpus after the attempted change was reverted for `healingEngineAdapter.ts`; see
+`docs/superpowers/plans/2026-07-13-sp-f-pr1-accounting-surface.md` Task 2 and
+`engine.ts`'s F7 comment fix, commit `14b195d4`). The classification tables and conclusions below
+that assumed both callers were dummy-input-free (§2's "Positional vestigial" list, §4's answer, §5's
+recommendation) are **superseded for `healingEngineAdapter.ts` specifically** — treat every mention
+of `healingEngineAdapter.ts` below as describing what was audited/attempted, not what shipped. This
+note is left in place rather than rewritten, per the project's "don't silently rewrite history"
+convention.
 
 ---
 
@@ -32,7 +48,7 @@ verbatim to `healingEngineAdapter.ts` — worth flagging for a follow-up, not re
 
 ### `engine.ts` — `legacyVictim|1_000_000_000|enemyHp|cumulativeDamage|focus-dummy|dummy sink|dummy enemy`
 
-```
+```text
 337:            enemyHpPct: 100,
 843:    enemyHp: number;
 863:    const corrosionBaseHp = Math.min(args.enemyHp, 500_000);
@@ -114,7 +130,7 @@ classification as their nearest code line below).
 
 ### `battleSimulator.ts` — `1_000_000_000|enemyHp|enemyDefense|dummy`
 
-```
+```text
 21: * `ability-performed` — actorId=attacker, targetId, amount; dummy-'enemy' target lines are
 22: * kept), heals, buffs, debuffs, dots, deaths. (The dummy-'enemy' targetId on ally/self-
 23: * targeting ships means some damage lines read as "X → enemy"; that's accepted — the
