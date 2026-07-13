@@ -61,17 +61,20 @@ design decision (§5).
 
 ## 4. Desired behaviour (invariants)
 
-1. **Positional mode** (`!dpsEnemyTarget`; a real positioned opposing roster exists): a reactive proc
-   reduces the resolved victim's HP **exactly once** via `applyVictimDamage`, surfaces on the victim's HP
-   curve (`roundPerTargetDamage`) and `damageTaken`, and is attributed to the owner via `creditDealt`
-   (`perTargetDealt` → `damageDealt`). The `damageDealt`↔`damageTaken` reconciliation the F1 sim goldens
-   assert stays intact by construction. The victim may now **die** from reactive damage — death/retarget
-   flows via the shared `applyVictimDamage` funnel (same as counters).
-2. **DPS mode** (`dpsEnemyTarget`, no positioned enemy attackers): **no HP double-count** with the
-   post-round aggregate apply (`engine.ts:7931-7943`, which lands `totalRoundDamage + teamRoundDamage`),
-   and reactive damage **remains part of the DPS-calc's reported damage** (`cumulativeDamage`) exactly as
-   today — `enemyChargedCast.integration.test.ts:417-420` (`focusCumulativeDamage(reaction) > control`)
-   must still hold.
+1. **Positional mode** (`input.positionalTeamBattle` — set ONLY by `simulateBattle`; see §4a on the gate
+   correction): a reactive proc reduces its **true** positional victim(s)' HP **exactly once** via
+   `applyVictimDamage`, surfaces on the victim's HP curve (`roundPerTargetDamage`) and `damageTaken`, and is
+   attributed to the owner via `creditDealt` (`perTargetDealt` → `damageDealt`). The
+   `damageDealt`↔`damageTaken` reconciliation the F1 sim goldens assert stays intact by construction. A
+   victim may now **die** from reactive damage — death/retarget flows via the shared `applyVictimDamage`
+   funnel (same as counters). "True victim" is trigger-specific (see §4b + §6): the `counterTargetId`-routed
+   procs already resolve a real roster actor; the round-boundary procs need real target resolution.
+2. **DPS & healing-guard modes** (`!positionalTeamBattle` — pure DPS `runCombat`, AND the healing-mode
+   reactive-guard suites that carry enemy attackers): credit-only, **byte-identical to today**. No HP
+   double-count with the pure-DPS post-round aggregate (`engine.ts:7931-7943`), and reactive damage
+   **remains part of the DPS-calc's reported damage** (`cumulativeDamage`) exactly as today —
+   `enemyChargedCast.integration.test.ts:417-420` (`focusCumulativeDamage(reaction) > control`) and the
+   `reactiveDamageMitigation` credit tap must still hold.
 3. **Team-symmetric:** identical behaviour for a reactive-damage ship on either side (engine is
    team-agnostic post-bySide). Each affected mechanic gets a both-sides fixture.
 4. **Flags preserved:** `noCrit` (Grif/Rhodium "cannot critically hit") and the `hpBasisPct` retaliation
@@ -80,39 +83,62 @@ design decision (§5).
 5. **Shield unchanged:** `reactiveDealtByOwner` is retained; the FrontLine shield magnitude and its tests
    are untouched.
 
-## 5. The one genuine design decision (resolve in the plan)
+### 4a. Gate correction (plan Finding A)
+
+The gate is **`input.positionalTeamBattle`**, NOT `!dpsEnemyTarget`. The `enemyChargedCast` and
+`reactiveDamageMitigation` regression guards run in **healing mode with enemy attackers present**, so
+`dpsEnemyTarget === false` there — gating the HP path on `!dpsEnemyTarget` would flip those guards into the
+new branch and drop their `creditDamage`, breaking the very suites §4.2 protects. `positionalTeamBattle` is
+set only by `simulateBattle` and implies `!dpsEnemyTarget`, so the pure-DPS post-round aggregate never fires
+under the new branch → no double-count.
+
+### 4b. Victim-resolution scope (plan Finding B — resolvers now IN scope)
+
+The executor receives `victimId = counterTargetId ?? ctx.enemy.id`; in a positioned battle `ctx.enemy` is
+the **vestigial dummy sink**, not a roster ship. Only the three procs that stamp `counterTargetId` resolve a
+real roster victim today: FrontLine (charging enemy), Paracelsus (killer), Vindicator (inflictor). The four
+round-boundary procs (Judge/Chakara/Incinerator/Rhodium) and Grif enqueue **without** `counterTargetId`, so
+they fall back to the dummy. Applying HP + `creditDealt` against the dummy would inflate `damageDealt` with
+no matching `damageTaken` → break F1 reconciliation. Per user decision (2026-07-13) M1 **builds the real
+positional target resolution** for all of them rather than deferring:
+
+- **Grif** — one-line stamp `counterTargetId: e.casterId` (the cleansing enemy); byte-identical in
+  DPS/healing (the only opposing actor there is the dummy).
+- **Judge** — AoE, all enemies < 50% HP (per-victim HP condition).
+- **Incinerator** — AoE, all enemies with Inferno (per-victim status condition).
+- **Chakara** — single, highest-Speed enemy.
+- **Rhodium** — single, enemy with the most buffs (`noCrit`).
+
+The plan reuses existing **cast-path** target resolvers for these patterns wherever they exist (do not
+invent new machinery if the cast path already resolves "all enemies with Inferno" / highest-speed /
+most-buffs), and captures any dropped targeting into the reactive-damage ability config via a parser task.
+
+## 5. The double-count trap (mechanism, not a live fork)
 
 Reactive damage currently feeds `cumulativeDamage` (via `creditDamage`) so it counts in the DPS metric AND
-the DPS-mode post-round aggregate. Counters feed HP directly (`applyVictimDamage`) and skip
-`cumulativeDamage`. The plan must land the HP reduction in positional mode **without** (a) double-counting
-against the DPS-mode aggregate, or (b) dropping reactive damage from the DPS-calc's reported
-`cumulativeDamage`. Candidate mechanisms, to settle via TDD:
+the pure-DPS post-round aggregate. Counters feed HP directly (`applyVictimDamage`) and skip `cumulativeDamage`.
+Naively adding an unconditional `applyVictimDamage` to the shared executor while keeping `creditDamage` would
+apply the same `raw` twice in DPS mode (once mid-round, once via the aggregate). The resolved approach:
 
-- **(A, preferred) Mode-gated dual path.** Keep the current credit-only path in **DPS mode** unchanged
-  (reactive stays in `cumulativeDamage` → aggregate applies HP once). In **positional mode**, apply via
-  `applyVictimDamage` + `roundPerTargetDamage` + `creditDealt` (the counter model). Because the post-round
-  aggregate only fires when `dpsEnemyTarget`, there is no aggregate in positional mode to double-apply —
-  mirrors exactly how per-victim DoT/detonation already split the two modes (`engine.ts:7898-7916`
-  "per-victim … land via applyVictimDamage, so folding … would double-drain"). Resolve whether the
-  positional path also `creditDamage`s for the focus DPS row or leaves it to `perTargetDealt`.
-- **(B, fallback) Unified counter-model path** (drop `creditDamage`, always `applyVictimDamage`).
-  Rejected unless (A) proves infeasible: it removes reactive damage from `cumulativeDamage`, regressing the
-  DPS-calc reported number and breaking the `enemyChargedCast` cumulative assertion — a fidelity loss for
-  the DPS view.
-
-The victim id is already resolved by the caller (`triggers.ts` `counterTargetId ?? ctx.enemy.id`) — the
-executor only needs to apply against that concrete victim.
+- **Positional (`positionalTeamBattle`):** apply via `applyVictimDamage` + `roundPerTargetDamage` +
+  `creditDealt`, and **omit `creditDamage`** (mirrors `applyCounterAttack`). The aggregate never fires here,
+  and `cumulativeDamage` in positional mode only reports/declines the dummy, so folding the reactive in would
+  double-count — same reasoning as the per-victim DoT/detonation split (`engine.ts:7898-7916`).
+- **DPS/healing (`!positionalTeamBattle`):** unchanged — credit-only (`creditDamage`); pure-DPS aggregate
+  applies HP once, and reactive stays in the DPS-calc reported `cumulativeDamage`.
 
 ## 6. Affected ships (all via the shared executor)
 
-| Ship | Trigger | Path | Notes |
-|------|---------|------|-------|
-| FrontLine | on-enemy-charged-cast | multiplier | 80% + shield (shield unchanged); once-per-round |
-| Grif | on-enemy-cleansed | multiplier | `noCrit` |
-| Judge / Chakara / Incinerator | round-boundary | multiplier | crit-eligible |
-| Rhodium | round-boundary | multiplier | `noCrit` |
-| Paracelsus | on-destroyed (self) | `hpBasisPct` | dead-owner retaliation (`allowDeadOwner`/`fromOwnDeath`) |
-| Vindicator | on-resist | `hpBasisPct` | 30% max HP |
+| Ship | Trigger | Path | Positional victim | Notes |
+|------|---------|------|-------------------|-------|
+| FrontLine | on-enemy-charged-cast | multiplier | `counterTargetId` (charging enemy) — real today | 80% + shield (shield unchanged); once-per-round |
+| Paracelsus | on-destroyed (self) | `hpBasisPct` | `counterTargetId` (killer) — real today | dead-owner retaliation (`allowDeadOwner`/`fromOwnDeath`) |
+| Vindicator | on-resist | `hpBasisPct` | `counterTargetId` (inflictor) — real today | 30% max HP |
+| Grif | on-enemy-cleansed | multiplier | one-line stamp `counterTargetId: e.casterId` | `noCrit` |
+| Judge | start-of-round | multiplier | **resolver:** AoE, enemies < 50% HP | per-victim HP condition |
+| Incinerator | end-of-round | multiplier | **resolver:** AoE, enemies with Inferno | per-victim status condition |
+| Chakara | start-of-round | multiplier | **resolver:** highest-Speed enemy | single-selected |
+| Rhodium | end-of-round | multiplier | **resolver:** enemy with most buffs | single-selected; `noCrit` |
 
 ## 7. Testing & discipline
 
