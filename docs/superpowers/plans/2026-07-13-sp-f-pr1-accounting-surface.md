@@ -123,9 +123,13 @@ git commit -m "refactor(combat): SP-F F7 — make enemyHp/enemyDefense optional;
 
 **Interfaces:**
 - Consumes: Task 2's dummy-free positional surface.
-- Produces: `RoundData.perTargetDealt: Map<string, Record<string, number>>` (attackerId → victimId → dealt), and `damageDealt` derived from it. SP-M's M1 FrontLine reads `perTargetDealt`.
+- Produces: a per-attacker×victim dealt channel on `RoundData` (`perTargetDealt`, attackerId → victimId → dealt), and `damageDealt` re-derived from it. **NOTE (Task 3 audit finding #3):** this channel covers the standard damage path only — `applyReactiveDamage` (FrontLine/Grif/Rhodium/Chakara/Incinerator reactive triggers) never writes `roundPerTargetDamage`, so it is NOT in this channel. SP-M's M1 FrontLine will need a separate decision; do NOT claim F1 fully feeds M1.
 
-Today `damageDealt = Σ ability-performed.damage by actorId` (anchor-full base) and `damageTaken = perRoundPerTarget[round][victimId]` (per-victim, origin-full/covered-half) — different bases, so they cannot reconcile. `roundPerTargetDamage` is keyed by victim only, with no attacker attribution. F1 adds the missing attribution.
+**Reconciliation definition (from the Task 3 audit, `docs/superpowers/notes/2026-07-13-f1-attribution-audit.md`):** for every round `r` and attacker `a`, `damageDealt[r] = Σ_v perTargetDealt[r][a][v]`; this reconciles with `damageTaken` because for every victim `v`, `Σ_a perTargetDealt[r][a][v] == perTargetDamage[r][v]`. It holds BY CONSTRUCTION only if every `roundPerTargetDamage.set` increment is mirrored by an equal-amount `perTargetDealt` write keyed to the correct source-attacker — with multi-source aggregates split by source, not collapsed.
+
+Today `damageDealt = Σ ability-performed.damage by actorId`. Reactive damage (reflects, DoT ticks) emits NO `ability-performed` (chain guard), so today's `damageDealt` omits them while `damageTaken` includes them — that is why they don't reconcile. `damageDealt` WILL change (become fuller) — a deliberate audited golden move. `perTargetDamage`/`damageTaken` are UNCHANGED, so DPS/healing goldens keyed on them stay put; only `damageDealt` moves.
+
+**Audit-flagged adjacent findings (inherit faithfully, do NOT try to fix in F1):** (a) Protection redirect already double-counts in today's `perTargetDamage` — reconciliation still holds, but `damageDealt` looks inflated under Protection, so keep the reconciliation FIXTURE Protection-free; (b) in positional sim mode `healTarget` defaults to the focus attacker, so DoTs landing ON the focus never book into `perTargetDamage` — irrelevant to the per-attacker `damageDealt` invariant, but don't be surprised by it.
 
 **Case-c scope (from the Task 1 audit, user-ratified):** ships with NO targeting data at all (`target === undefined`) route real damage into the unread `cumulativeDamage` scalar — it never reaches `perTargetDamage`, so it is lost pre-existingly and cannot be attributed to a victim. F1's invariant is therefore **scoped to ships with targeting data** (the real corpus). Case-c is documented as a known pre-existing gap, NOT fixed here. Use fixtures built from ships that have parsed `target`+`pattern` (every ship in the standard corpus).
 
@@ -153,7 +157,11 @@ Expected: FAIL — `damageDealt` (anchor-full) ≠ `Σ` per-victim taken under A
 
 - [ ] **Step 3: Add the per-attacker×victim dealt channel in the engine**
 
-Alongside every `roundPerTargetDamage.set(victimId, …)` site, also record `roundPerTargetDealt.set(attackerId, victimId, amount)` using the acting attacker's id (`actingActorId` / the site's `attacker.id`). Surface `perTargetDealt` on `RoundData` only when non-empty (mirror the `perTargetDamage` "set only when non-empty → goldens byte-identical" convention at `:3373`).
+The Task 3 audit enumerated **11** `roundPerTargetDamage.set` sites. **Ten** have a clean single source-attacker id already in scope (protection-redirect, bomb-splash, reflect, counter, the main positional emitHit path, and four detonation flavors) — at each, add a mirrored `roundPerTargetDealt` write of the SAME amount keyed to that source-attacker (verify each site's attacker id against the audit note; do NOT assume `actingActorId` everywhere — e.g. reflect's source is the reflector, counter's is the counter owner).
+
+**The one site that needs a reshape, not a one-liner:** the generic per-victim DoT-tick site (`engine.ts:~6316-6398`, the `credit` closure `~:6344-6359`). It currently SUMS per-entry damage from potentially multiple distinct DoT appliers into one `total` before writing `roundPerTargetDamage`. A single-attacker mirror there would misattribute when two enemies' DoT stacks tick on the same victim in the same round. Instead: accumulate the dealt channel per `sourceId` (the `credit(sourceId, dotType, damage)` callback already carries it) so each applier gets its own `perTargetDealt` entry, and DROP the existing `!sideIsPlayer` gate for this new map (team-symmetric — enemy appliers must attribute too). The victim-keyed `roundPerTargetDamage` write stays exactly as-is (still the summed total → `perTargetDamage` unchanged).
+
+Surface `perTargetDealt` on `RoundData` only when non-empty (mirror the `perTargetDamage` "set only when non-empty → goldens byte-identical" convention). Propose the exact type per the audit note (attackerId → victimId → number).
 
 - [ ] **Step 4: Consume it in `assembleBattleResult`; reconcile `damageDealt`**
 
