@@ -96,8 +96,10 @@ export interface ShipRoundState {
      * active Protection redirect inherits a pre-existing double-count (the protector's credited
      * chunk is a diverted PORTION of the original hit, not independent new damage like Reflect/
      * a counter) — under Protection this field is inflated relative to the single real hit the
-     * attacker landed; reconciliation with `damageTaken` still holds (both sides mirror the same
-     * already-doubled numbers), just the absolute number looks larger than expected.
+     * attacker landed; reconciliation with `damageTaken` holds for direct attacks, but NOT when
+     * the redirected damage is a DoT-tick-batch (which has no single source attacker → not
+     * mirrored into `perTargetDealt`), leaving that round's `Σ damageDealt` short by the
+     * redirected DoT amount.
      */
     damageDealt: number;
     /**
