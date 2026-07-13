@@ -843,7 +843,15 @@ export function registerReactiveListeners(args: {
                         // Opposing-scoped: any opposing-side actor's cleanse. For the player
                         // call: enemy side. For the enemy call: player side.
                         // One enqueue per cast.
-                        if (isOpposing(e.casterId)) enqueue(intent);
+                        // SP-M M1: stamp the cleansing enemy as the reaction victim so Grif's 75%
+                        // damage lands on the REAL cleanser in positional mode. In DPS/healing mode
+                        // the only opposing actor IS the dummy `enemy`, so counterTargetId ===
+                        // ctx.enemy.id and this is byte-identical there.
+                        if (isOpposing(e.casterId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.casterId },
+                            });
                     });
                     break;
                 case 'on-enemy-buffed':

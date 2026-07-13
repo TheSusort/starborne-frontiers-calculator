@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
+import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 
 const FRONTLINE_R2_TEXT =
     'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
@@ -197,5 +198,80 @@ describe('SP-M M1: Paracelsus on-destroyed reactive HP retaliation reduces the k
         expect(takenDelta).toBeGreaterThan(0);
         expect(dealtDelta).toBeCloseTo(takenDelta, 5);
         expect(minHpPct(killable, ENEMY)).toBeLessThan(minHpPct(surviving, ENEMY));
+    });
+});
+
+/**
+ * SP-M M1 Task 4: Grif's on-enemy-cleansed reactive (triggers.ts's `cfg.type === 'damage'`
+ * branch, `targetId = intent.eventCtx?.counterTargetId ?? ctx.enemy.id`) must land on the REAL
+ * cleansing enemy in positional mode, not the vestigial dummy `enemy` — the on-enemy-cleansed
+ * listener (triggers.ts ~846) did not stamp `counterTargetId`, so `targetId` fell back to
+ * `ctx.enemy.id`, which the `victim.id !== enemy.id` backstop excludes → 0 real HP, credit-only.
+ *
+ * Grif (player-side, the focus) needs an opposing cast that actually cleanses a debuff. A second
+ * player-side ship inflicts a removable debuff onto the lone enemy (same idiom as this file's
+ * Vindicator `debuffInflictor`, just aimed the other way); the enemy's own active then cleanses
+ * that debuff FROM ITSELF (parseCleanse: "from itself" -> target:'self', explicitTarget:true —
+ * skips buildShipAbilities' bare-support-cast ally flip), firing a real `cleanse-performed` with
+ * casterId = the enemy's own actor id.
+ */
+
+// Verbatim from docs/ship-skills.csv (Grif, first_passive_skill_text — the R0/innate slot,
+// applies with zero refits). Do NOT alter this text.
+const GRIF_P1 =
+    'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.';
+
+const grif = (id: string): Ship =>
+    ship(id, {
+        type: 'Attacker',
+        // 0%-damage active isolates the HP delta to the reactive proc — Grif's own attack never
+        // itself changes the enemy's HP, in EITHER run (mirrors the Paracelsus 0%-damage idiom).
+        activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
+        firstPassiveSkillText: GRIF_P1,
+    });
+
+// A second player-side ship whose active inflicts a removable debuff onto the lone enemy — the
+// enemy needs something to cleanse. Same text as this file's Vindicator `debuffInflictor`
+// fixture, just carried by a player ship targeting the enemy instead of an enemy targeting a
+// player (the verb-based 'enemy' target resolution is side-agnostic).
+const debuffPlanter = (id: string): Ship =>
+    ship(id, {
+        activeSkillText: 'This Unit inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns.',
+    });
+
+// The enemy: cleanses a debuff FROM ITSELF (real corpus idiom, e.g. Nuqtu's "from itself").
+const selfCleanser = (id: string): Ship =>
+    ship(id, { activeSkillText: 'This Unit cleanses 1 debuff from itself.' });
+
+describe("SP-M M1 Task 4: Grif's on-enemy-cleansed reactive lands on the real cleansing enemy (positional)", () => {
+    const run = (enemy: Ship) =>
+        simulateBattle({
+            playerTeam: [
+                place(grif('g'), 'M4', 1, 1_000_000),
+                place(debuffPlanter('inf'), 'M3', 5_000, 1_000_000),
+            ],
+            enemyTeam: [place(enemy, 'M4', 1, 1_000_000)],
+            rounds: 2,
+        });
+
+    it("a cleansing enemy loses HP to Grif's reactive damage; delta reconciles dealt<->taken vs a no-cleanse control", () => {
+        const reaction = run(selfCleanser('e1'));
+        const control = run(plainEnemy('e1'));
+
+        // Distinguishes "reactive fired but landed on the dummy (0 real HP)" from "no reaction
+        // fired at all": a kind:'attack' log entry keyed on Grif's OWN actor id (ATTACKER) with a
+        // positive amount, distinct from Grif's own 0%-damage active. Present in BOTH the pre-fix
+        // and post-fix state — the fix only changes WHERE the damage lands, not whether it fires.
+        const grifReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(grifReactiveHits.length).toBeGreaterThan(0);
+
+        const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
+        const takenDelta = sumTaken(reaction, ENEMY) - sumTaken(control, ENEMY);
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDelta, 5);
+        expect(minHpPct(reaction, ENEMY)).toBeLessThan(minHpPct(control, ENEMY));
     });
 });
