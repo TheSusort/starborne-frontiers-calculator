@@ -778,3 +778,96 @@ export function healModifierScaling(opts?: {
         rounds: 6,
     };
 }
+
+// ===========================================================================
+// perVictimAffinityAoe (SP-F F6) — proves per-victim AFFINITY is the authoritative signal on the
+// BattleResult stat surface within a SINGLE AoE cast. A thermal AoE attacker fires Pattern-All at
+// three enemies that are IDENTICAL in every stat (defence/HP/etc.) except affinity, so the ONLY
+// thing that can make their `damageTaken` differ is the per-victim affinity matchup. Affinity
+// triangle (affinityUtils.ts): thermal > chemical > electric > thermal; antimatter always neutral.
+// Attacker = thermal, so per victim:
+//   - CHEMICAL victim  → thermal beats chemical → attacker ADVANTAGE    → damageModifier +25 → ×1.25
+//   - THERMAL  victim  → mirror match           → NEUTRAL               → damageModifier   0 → ×1.00
+//   - ELECTRIC victim  → electric beats thermal → attacker DISADVANTAGE → damageModifier -25 → ×0.75
+//
+// Pattern-All is the load-bearing choice: `resolveCells` special-cases shape==='all' so EVERY
+// occupied enemy cell is a FULL-scale victim (no anchor-full/covered-half split — verified in
+// perVictimCritBattle.integration.test.ts's Task-5 all-pattern block), which keeps affinity the
+// sole per-victim variable. The attacker's crit is pinned to 0 (a stat override, not an ability
+// flag) so no crit multiplier perturbs the ratio — `damageTaken` is deterministically the base
+// hit × the per-victim affinity modifier, giving exact 1.25 : 1.00 : 0.75 shares (asserted in
+// simGolden.test.ts). The three enemies deal 0 damage back (attack 0) and have large HP, so none
+// dies and the ratio holds pristine every round the AoE fires.
+//
+// Per-victim CRIT divergence within one cast is proven deterministically (both sides) at the
+// event surface by perVictimCritBattle.integration.test.ts; ShipRoundState carries no crit field,
+// so this sim fixture demonstrates the affinity half of the F6 acceptance at the BattleResult tier.
+// ===========================================================================
+
+/** placement() variant that also injects a `crit` override — the base `placement` copies the
+ *  ship's baseStats crit (50), but this fixture needs the attacker's crit pinned to 0 for a
+ *  deterministic, crit-free affinity ratio. */
+const critPlacement = (ship: Ship, position: Position, crit: number): BattlePlacement => ({
+    ship,
+    position,
+    statOverrides: {
+        attack: ship.baseStats.attack,
+        crit,
+        critDamage: ship.baseStats.critDamage,
+        defensePenetration: 0,
+        hacking: ship.baseStats.hacking,
+        security: ship.baseStats.security,
+        defence: ship.baseStats.defence,
+        hp: ship.baseStats.hp,
+        speed: ship.baseStats.speed,
+    },
+});
+
+/** Thermal AoE attacker: Pattern-All, plain 100% single-hit damage, crit pinned to 0 (via
+ *  critPlacement) so every victim's damageTaken is base × its affinity modifier with no crit. */
+const affinityAoeAttacker = (): Ship => ({
+    ...shipBase('f6-p-aoe', 'Pyre', 'ATTACKER', {
+        hp: 300_000,
+        attack: 2000,
+        defence: 300,
+        hacking: 250,
+        security: 150,
+        speed: 130,
+    }),
+    affinity: 'thermal',
+    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage> to all enemies.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-All',
+});
+
+/** Enemy victim factory — every victim is IDENTICAL except its affinity and id/position, so
+ *  affinity is the sole driver of per-victim damageTaken. Attack 0 (never fires back → no deaths,
+ *  no counter noise) but still takes the player AoE full-scale. Large HP so it survives the window. */
+const affinityVictim = (id: string, name: string, affinity: Ship['affinity']): Ship => ({
+    ...finalizeAttacker(
+        shipBase(id, name, 'ATTACKER', {
+            hp: 5_000_000,
+            attack: 0,
+            defence: 200,
+            hacking: 200,
+            security: 150,
+            speed: 90,
+        })
+    ),
+    affinity,
+});
+
+export function perVictimAffinityAoe(): BattleSimulationInput {
+    return {
+        // Attacker at M4; crit pinned to 0 for the deterministic affinity ratio.
+        playerTeam: [critPlacement(affinityAoeAttacker(), 'M4', 0)],
+        enemyTeam: [
+            // Three identical-stat victims (defence/HP equal) in distinct rows so Pattern-All
+            // covers all three full-scale; only their affinity differs.
+            placement(affinityVictim('f6-e-chem', 'Solvent', 'chemical'), 'T4'), // advantage → ×1.25
+            placement(affinityVictim('f6-e-therm', 'Cinder', 'thermal'), 'M1'), //  neutral   → ×1.00
+            placement(affinityVictim('f6-e-elec', 'Arc', 'electric'), 'B4'), //     disadvantage → ×0.75
+        ],
+        rounds: 4,
+    };
+}
