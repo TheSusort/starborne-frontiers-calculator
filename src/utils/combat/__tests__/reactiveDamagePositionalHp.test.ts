@@ -424,3 +424,80 @@ describe('SP-M M1 Task 5 review fix: two same-side Rhodiums re-resolve enemy-mos
         expect(dealtDeltaR2).toBeGreaterThan(0);
     });
 });
+
+/**
+ * SP-M M1 Task 6: Chakara's start-of-round continuation sentence ("This Unit starts each round
+ * with Attack Up II and Defense Up II for 1 turn if it has the lowest speed among all Allies.
+ * Then, deals 60% damage to the highest Speed Enemy.") must route the damage clause to the LIVE
+ * highest-Speed opposing actor (ctx.enemyWithHighestSpeed), not the co-located `target:'enemy'`
+ * default that falls back to the vestigial dummy `ctx.enemy` in positional mode. With two real
+ * enemies of different Speed, only the FASTER one must take the real HP hit — the slower enemy
+ * (never the selector's pick) must not.
+ */
+
+// Verbatim from docs/ship-skills.csv (Chakara, third_passive_skill_text — the R4/refit-active
+// slot getShipSkillRows resolves for a 4-refit ship). Do NOT alter this text.
+const CHAKARA_P4 =
+    'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and ' +
+    '<unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all ' +
+    'Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+
+// `withPassive` isolates the HP delta to the reactive proc firing at all — the reaction run
+// carries Chakara's real R4 passive text (4 refits, per getShipSkillRows), the control run omits
+// it entirely (no refits, no passive text) so the whole proc no-ops for both enemies, mirroring
+// the Rhodium Task 5 "no proc anywhere" control idiom above.
+const chakara = (id: string, withPassive: boolean): Ship =>
+    ship(id, {
+        type: 'Attacker',
+        // 0%-damage active isolates the HP delta to the reactive proc — Chakara's own attack
+        // never itself changes either enemy's HP, in EITHER run (mirrors the Paracelsus/Grif/
+        // Rhodium 0%-damage idiom above).
+        activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
+        ...(withPassive
+            ? {
+                  thirdPassiveSkillText: CHAKARA_P4,
+                  refits: [{}, {}, {}, {}] as unknown as Ship['refits'],
+              }
+            : {}),
+    });
+
+describe("SP-M M1 Task 6: Chakara's start-of-round damage lands on the highest-Speed enemy, not the other (positional)", () => {
+    // e1 (ENEMY) is fixed at Speed 100, e2 (ENEMY2) at Speed 300 — e2 is the faster enemy in
+    // BOTH the reaction and control run, so the only thing that differs between the two runs is
+    // whether Chakara's passive (and therefore the proc) exists at all.
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [place(chakara('c', withPassive), 'M4', 10_000, 1e12)],
+            enemyTeam: [
+                place(plainEnemy('e1'), 'M4', 1, 1e12, { speed: 100 }),
+                place(plainEnemy('e2'), 'M3', 1, 1e12, { speed: 300 }),
+            ],
+            rounds: 2,
+        });
+
+    it('the higher-Speed enemy loses HP to the reactive damage; the slower enemy does not; delta reconciles dealt<->taken', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        // Confirms the reaction actually FIRED (not "no proc") — a kind:'attack' log entry keyed
+        // on Chakara's OWN actor id (ATTACKER) with a positive amount, distinct from Chakara's own
+        // 0%-damage active. Present only in the reaction run.
+        const chakaraReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(chakaraReactiveHits.length).toBeGreaterThan(0);
+
+        const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
+        const takenDeltaFaster = sumTaken(reaction, ENEMY2) - sumTaken(control, ENEMY2);
+        const takenDeltaSlower = sumTaken(reaction, ENEMY) - sumTaken(control, ENEMY);
+
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(takenDeltaFaster).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaFaster, 5);
+        expect(minHpPct(reaction, ENEMY2)).toBeLessThan(minHpPct(control, ENEMY2));
+
+        // The slower enemy (never the selector's pick) must be untouched by the reactive proc.
+        expect(takenDeltaSlower).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, ENEMY)).toBeCloseTo(minHpPct(control, ENEMY), 5);
+    });
+});

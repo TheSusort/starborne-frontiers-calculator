@@ -1308,6 +1308,10 @@ interface ReactiveSideCtx {
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
     /** D-PR14 Doomsayer: per-side highest-attack opposing-actor resolver. See IntentExecContext. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
+    /** SP-M M1 Task 6 Chakara: per-side highest-speed opposing-actor resolver. See
+     *  IntentExecContext. Resolved LIVE (no onceByOwner memo) — unlike enemyWithMostBuffs,
+     *  Chakara's co-located clause is a SELF-buff that never changes an enemy's speed. */
+    enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
     /** D-PR14: id of the round's first real activator (live value at drain-build time). */
     firstActivatorId?: string;
     /** D-PR16: id of the sole living actor on this side, recomputed each drain (Last Stand). */
@@ -5988,6 +5992,8 @@ export function runCombat(input: CombatEngineInput): {
                         // real activator id, and the shared once-per-round consume set. All
                         // inert today — only consumed by the next task's executor branch.
                         enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
+                        // SP-M M1 Task 6: Chakara's live highest-speed opposing-actor resolver.
+                        enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
                         firstActivatorId: sideCtx.firstActivatorId,
                         lastStandingId: sideCtx.lastStandingId,
                         oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
@@ -6048,6 +6054,20 @@ export function runCombat(input: CombatEngineInput): {
                 (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
             );
 
+        // SP-M M1 (Task 6): living opposing actor with the greatest LIVE effective SPEED
+        // (Chakara's enemy-highest-speed round-boundary hit). Reuses the generic
+        // highestAttackAmong picker (a max-of-a-stat selector) with a speed accessor. Ties →
+        // roster order.
+        const highestSpeedInRoster = (roster: CombatActor[]): string | undefined =>
+            highestAttackAmong(
+                roster.map((a) => a.id),
+                (id) => {
+                    const a = roster.find((x) => x.id === id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).speed : 0;
+                },
+                (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
+            );
+
         // D-PR16: the id of the sole living actor in a roster, or undefined if !=1 alive.
         // Drives the `last-standing` condition (Last Stand). Recomputed each drain so it
         // reflects deaths recorded before the reactive drain.
@@ -6098,6 +6118,9 @@ export function runCombat(input: CombatEngineInput): {
             selfHpPctFor: bySide('player').selfHpPctFor,
             enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(enemyAttackerActors)),
             enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
+            // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — Chakara has no purge/damage race
+            // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
+            enemyWithHighestSpeed: () => highestSpeedInRoster(enemyAttackerActors),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(allPlayerActors),
             oncePerRoundConsumed,
@@ -6125,6 +6148,8 @@ export function runCombat(input: CombatEngineInput): {
             selfHpPctFor: bySide('enemy').selfHpPctFor,
             enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(allPlayerActors)),
             enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
+            // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
+            enemyWithHighestSpeed: () => highestSpeedInRoster(allPlayerActors),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(enemyAttackerActors),
             oncePerRoundConsumed,

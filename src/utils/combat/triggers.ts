@@ -1186,6 +1186,10 @@ export interface IntentExecContext {
     lastStandingId?: string;
     /** D-PR14 Doomsayer: living opposing actor with the greatest live effective attack. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
+    /** SP-M M1 Task 6 Chakara: living opposing actor with the greatest live effective speed.
+     *  Resolved LIVE per owner (unlike enemyWithMostBuffs, no purge co-occurs with it, so no
+     *  onceByOwner memo is needed). Optional — absent in unit-test ctxs that don't drive it. */
+    enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
     /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
     oncePerRoundConsumed?: Set<string>;
 }
@@ -2788,6 +2792,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         let victimIds: (string | undefined)[];
         if (tgt === 'enemy-most-buffs') {
             const id = ctx.enemyWithMostBuffs?.(intent.ownerId);
+            if (id === undefined) return;
+            victimIds = [id];
+        } else if (tgt === 'enemy-highest-speed') {
+            const id = ctx.enemyWithHighestSpeed?.(intent.ownerId);
             if (id === undefined) return;
             victimIds = [id];
         } else {

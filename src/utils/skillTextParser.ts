@@ -2224,6 +2224,26 @@ export function detectMostBuffsTarget(text: string | null | undefined, anchorPos
     return sentence !== undefined && MOST_BUFFS_RE.test(sentence);
 }
 
+// "to the highest Speed Enemy" — Chakara's enemy-highest-speed target axis (SP-M M1 Task 6).
+// Crosses <unit-damage> tags. Verified against RAW CSV: '…deals 60% damage to the highest Speed
+// Enemy.'
+const HIGHEST_SPEED_ENEMY_RE = /\bhighest\s+speed\s+enemy\b/i;
+
+/**
+ * Returns true when `anchorPos` falls inside the sentence carrying the "highest Speed Enemy"
+ * phrase (Chakara p4's round-start-continuation damage clause); otherwise false.
+ * Position-scoped on the RAW text (mirrors detectMostBuffsTarget's sentence-scoping).
+ * Reference data: docs/ship-skills.csv (Chakara).
+ */
+export function parseHighestSpeedEnemyTarget(
+    text: string | null | undefined,
+    anchorPos: number
+): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && HIGHEST_SPEED_ENEMY_RE.test(sentence);
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.

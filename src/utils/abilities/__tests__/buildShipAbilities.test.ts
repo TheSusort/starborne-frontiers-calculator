@@ -3678,6 +3678,34 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
 });
 
 // ---------------------------------------------------------------------------
+// SP-M M1 Task 6: Chakara start-of-round enemy-highest-speed damage re-target build test.
+// RAW string from docs/ship-skills.csv (Chakara, third_passive_skill_text).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Chakara start-of-round highest-speed damage (SP-M M1 Task 6)', () => {
+    // Chakara p4 RAW: "This Unit starts each round with Attack Up II and Defense Up II for 1 turn
+    // if it has the lowest speed among all Allies. Then, deals 60% damage to the highest Speed
+    // Enemy." Default `ship()` helper seeds refits: [{}, {}, {}, {}] (4 refits) → thirdPassiveSkillText
+    // (R4, refit-active) is the active passive per getShipSkillRows.
+    const chakaraP4 = () =>
+        ship({
+            thirdPassiveSkillText:
+                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
+        });
+
+    it('the round-boundary damage ability carries trigger start-of-round, target enemy-highest-speed, multiplier 60', () => {
+        const passive = slot(buildShipAbilities(chakaraP4()).slots, 'passive')!;
+        const damages = passive.abilities.filter((a) => a.type === 'damage');
+        expect(damages.length).toBeGreaterThanOrEqual(1);
+        const dmg = damages[0];
+        expect(dmg.trigger).toBe('start-of-round');
+        expect(dmg.target).toBe('enemy-highest-speed');
+        if (dmg.config.type === 'damage') {
+            expect(dmg.config.multiplier).toBe(60);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
 // I6: Lodolite charged purge (passive-voice "is Purged of all buffs") + legendary-refit
 // shield strip. RAW strings verbatim from docs/ship-skills.csv (Lodolite row).
 // ---------------------------------------------------------------------------

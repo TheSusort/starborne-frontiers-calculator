@@ -69,6 +69,7 @@ import {
     detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
+    parseHighestSpeedEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     ONCE_PER_ROUND_PER_ENEMY_RE,
@@ -1124,6 +1125,16 @@ function abilitiesFromText(
         // this is the ability just pushed (SP-F F1's out[0] invariant, see comment above).
         if (damageTrigger === 'end-of-round' && detectMostBuffsTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-most-buffs';
+        }
+        // SP-M M1 (Task 6): a round-boundary (start-of-round, INCLUDING the "Then," continuation
+        // sentence — Chakara p4: "starts each round with Attack Up II/Defense Up II … if it has
+        // the lowest speed among all Allies. Then, deals 60% damage to the highest Speed Enemy.")
+        // damage clause carrying "to the highest Speed Enemy" re-targets from the default 'enemy'
+        // to 'enemy-highest-speed'. Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget
+        // mirrors detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the
+        // text is unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
+        if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
+            out[0].ability.target = 'enemy-highest-speed';
         }
         if (instead) {
             // Replacement branch (Provoked/Taunted): reuses the base's hits/noCrit — both
