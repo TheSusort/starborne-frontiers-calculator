@@ -1190,6 +1190,21 @@ export interface IntentExecContext {
      *  Resolved LIVE per owner (unlike enemyWithMostBuffs, no purge co-occurs with it, so no
      *  onceByOwner memo is needed). Optional — absent in unit-test ctxs that don't drive it. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
+    /** SP-M M1 Task 7 Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
+     *  DAMAGE proc. The executor enumerates these and re-checks the ability's per-victim enemy
+     *  conditions (hp-threshold / enemy-debuff) against EACH victim's own live state. Optional —
+     *  ABSENT in unit-test ctxs, where resolveAoEReactiveDamageVictims returns [] (no-op, never
+     *  the vestigial dummy). Player owner → living enemy attackers; enemy owner → living players. */
+    livingOpposingActorIds?: (ownerId: string) => string[];
+    /** SP-M M1 Task 7: synthesized enemy debuff/DoT NAMES for a victim (the same
+     *  enemyDebuffNamesForTarget synthesis buildTurnArgs uses — control/marker debuff names +
+     *  base DoT-type names). Feeds the per-victim `enemy-debuff` name-gate (Incinerator's "with
+     *  Inferno"). Optional — absent in unit-test ctxs (→ [] per victim). */
+    enemyDebuffNamesFor?: (victimId: string) => string[];
+    /** SP-M M1 Task 7: a victim's current effective max HP (engine's recipientMaxHp) — the
+     *  denominator for the per-victim hp-threshold gate (Judge's "<50% HP"). Optional — absent
+     *  in unit-test ctxs. */
+    recipientMaxHpFor?: (victimId: string) => number;
     /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
     oncePerRoundConsumed?: Set<string>;
 }
@@ -1907,6 +1922,55 @@ function oncePerAttackGuardKey(intent: Intent): string | undefined {
         : undefined;
 }
 
+/** SP-M M1 Task 7: a per-VICTIM ConditionContext for an 'all-enemies' reactive damage proc. Clones
+ *  the owner's drain-time context (so every non-per-victim field — self-buffs, enemy type, etc. —
+ *  stays owner-scoped) and overrides ONLY the two per-victim reads the AoE conditions consult:
+ *  `enemyHpPct` = the victim's own live HP% (Judge's "<50% HP"), and `enemyDebuffNames` = the
+ *  victim's own synthesized debuff/DoT names (Incinerator's "with Inferno"). The name synthesis is
+ *  the ENGINE's own `enemyDebuffNamesFor` (== buildTurnArgs's enemyDebuffNamesForTarget) so a
+ *  per-victim name-gate reads exactly the names an on-cast gate would. */
+function buildPerVictimConditionCtx(
+    ctx: IntentExecContext,
+    ownerId: string,
+    victim: CombatActor
+): ReturnType<typeof buildDrainContext> {
+    const base = buildDrainContext(ctx, ownerId);
+    // Per-victim HP% from the victim's own live currentHp/maxHp — but ONLY when the engine tracks
+    // a real max HP for this victim (positional real enemies, registered in baseHpById). The DPS
+    // dummy is NOT registered there (recipientMaxHp → 0); for it, `base.enemyHpPct` is already the
+    // correct HP% (buildDrainContext derives it from ctx.cumulativeDamage/ctx.enemyHp), so fall
+    // back to it rather than dividing by 0 (which would read a spurious 0% and always fire).
+    const maxHp = ctx.recipientMaxHpFor?.(victim.id) ?? 0;
+    const enemyHpPct =
+        maxHp > 0 ? Math.max(0, Math.min(100, (100 * victim.currentHp) / maxHp)) : base.enemyHpPct;
+    return {
+        ...base,
+        enemyHpPct,
+        // Populate the OPT-IN name array so a `buffName`-carrying enemy-debuff condition matches by
+        // name (see ConditionContext.enemyDebuffNames sentinel doc). Absent resolver → [] (a real
+        // "no debuffs" signal — the name-gate correctly evaluates to 0).
+        enemyDebuffNames: ctx.enemyDebuffNamesFor?.(victim.id) ?? [],
+    };
+}
+
+/** SP-M M1 Task 7: the living opposing victims for an 'all-enemies' reactive DAMAGE proc, filtered
+ *  by the ability's PER-VICTIM enemy conditions (Judge: hp-threshold <50%; Incinerator: enemy-debuff
+ *  Inferno). Each surviving victim's own live HP% + synthesized debuff names are re-checked via
+ *  conditionsMet against a per-victim ConditionContext. Falls back to [] (no-op) when the roster
+ *  resolver is absent (unit-test ctx) — NEVER the vestigial dummy. */
+function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext): string[] {
+    const roster = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
+    const perVictim = intent.ability.conditions.filter(
+        (c) => c.subject === 'hp-threshold' || c.subject === 'enemy-debuff'
+    );
+    return roster.filter((victimId) => {
+        if (perVictim.length === 0) return true;
+        const victim = ctx.actorById?.(victimId);
+        if (!victim) return false;
+        return conditionsMet(perVictim, buildPerVictimConditionCtx(ctx, intent.ownerId, victim));
+    });
+}
+
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // Brand every reactive-capable event this resolution emits with duringTurnOf/triggerActorId
     // (combat-log attribution). The wrapped bus is local to THIS call — on-turn emissions never
@@ -1952,7 +2016,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ? intent.ability.conditions.filter(
                   (c) => !(c.subject === 'hp-threshold' && c.hpSubject === 'self')
               )
-            : intent.ability.conditions;
+            : // SP-M M1 Task 7: an all-enemies reactive DAMAGE proc (Judge start-of-round
+              // hp-threshold, Incinerator end-of-round enemy-debuff) re-evaluates its enemy
+              // hp-threshold / enemy-effect conditions PER VICTIM in the damage branch below —
+              // scrub them from the single global drain gate (which reads ONE
+              // enemyHpPct/enemyDebuffNames, the vestigial dummy in positional mode) so it
+              // neither blocks nor false-passes the whole AoE. Gated strictly on
+              // type==='damage' && target==='all-enemies' so no other ability is touched.
+              intent.ability.type === 'damage' && intent.ability.target === 'all-enemies'
+              ? intent.ability.conditions.filter(
+                    (c) => c.subject !== 'hp-threshold' && c.subject !== 'enemy-debuff'
+                )
+              : intent.ability.conditions;
 
     // Drain-time condition gate against CURRENT engine state — one gate for every branch,
     // built against the OWNER's snapshot (Task 6). liveGateConditions neutralizes
@@ -2798,6 +2873,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const id = ctx.enemyWithHighestSpeed?.(intent.ownerId);
             if (id === undefined) return;
             victimIds = [id];
+        } else if (tgt === 'all-enemies') {
+            // SP-M M1 Task 7 (Judge/Incinerator): a per-victim-CONDITIONAL AoE — enumerate the
+            // living opposing roster and keep only the victims whose OWN live state satisfies the
+            // ability's per-victim enemy conditions (hp-threshold <50% / enemy-debuff Inferno). The
+            // once-per-round gate above already fired ONCE for the whole proc (all victims share it).
+            victimIds = resolveAoEReactiveDamageVictims(intent, ctx);
         } else {
             victimIds = [intent.eventCtx?.counterTargetId ?? ctx.enemy.id];
         }

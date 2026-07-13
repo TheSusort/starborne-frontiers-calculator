@@ -1481,6 +1481,28 @@ function abilitiesFromText(
         ];
     }
 
+    // SP-M M1 (Task 7): a round-boundary (start-of-round OR end-of-round) reactive DAMAGE ability
+    // that now carries a PER-VICTIM enemy condition — Judge's start-of-round hp-threshold ("to all
+    // enemies with less than 50% HP") or Incinerator's end-of-round enemy-debuff ("to all enemies
+    // with Inferno") — hits ALL matching enemies, not one. Re-target from the default 'enemy' to
+    // 'all-enemies'; the reactive damage executor (triggers.ts) then enumerates the living opposing
+    // roster and re-checks the per-victim condition against each victim's own live HP%/debuff names.
+    // DISJOINT from the on-cast enemy-effect damage BONUS (Rikra/Wrecker) — those ride the on-cast
+    // trigger, not a round boundary — and from Rhodium/Chakara's selector re-targets above (which
+    // carry no hp-threshold/enemy-debuff condition). Gated on the round-boundary trigger so an
+    // on-cast damage-bonus gate with the same subject is never re-targeted. out[0] is safe to mutate
+    // here (SP-F F1's out[0] invariant).
+    if (
+        out[0]?.ability.type === 'damage' &&
+        (out[0].ability.trigger === 'start-of-round' ||
+            out[0].ability.trigger === 'end-of-round') &&
+        out[0].ability.conditions.some(
+            (c) => c.subject === 'hp-threshold' || c.subject === 'enemy-debuff'
+        )
+    ) {
+        out[0].ability.target = 'all-enemies';
+    }
+
     // Phase 4c PR 4 (Task 6): Grif's NAMELESS damage proc — "When an enemy cleanses a Debuff,
     // this Unit deals 75% Damage that cannot critically hit" — rides the LIVE on-enemy-cleansed
     // trigger. Sentence-scoped at the damage anchor (`damagePos`), so Grif's standing "increases

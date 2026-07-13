@@ -176,6 +176,10 @@ describe('buildShipAbilities', () => {
         expect(dmg.conditions).toEqual([
             { subject: 'hp-threshold', derivable: true, hpComparator: 'below', hpPercent: 50 },
         ]);
+        // SP-M M1 Task 7: the start-of-round hp-threshold damage re-targets to all-enemies (the
+        // reactive executor re-checks the per-victim hp-threshold against each victim's own HP%).
+        expect(dmg.trigger).toBe('start-of-round');
+        expect(dmg.target).toBe('all-enemies');
 
         // The "20% more direct damage for each destroyed enemy, up to 100%" is the outgoing-damage modifier.
         const modifier = passive.abilities.find(
@@ -260,6 +264,10 @@ describe('buildShipAbilities', () => {
         expect(dmg.conditions).toEqual([
             { subject: 'enemy-debuff', buffName: 'Inferno', derivable: true },
         ]);
+        // SP-M M1 Task 7: the end-of-round enemy-debuff damage re-targets to all-enemies (the
+        // reactive executor re-checks the "with Inferno" gate against each victim's own debuffs).
+        expect(dmg.trigger).toBe('end-of-round');
+        expect(dmg.target).toBe('all-enemies');
 
         const mod = passive.abilities.find(
             (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
@@ -268,6 +276,9 @@ describe('buildShipAbilities', () => {
         expect(mod.conditions).toEqual([
             { subject: 'enemy-debuff', buffName: 'Inferno', derivable: true },
         ]);
+        // The on-cast enemy-effect damage BONUS modifier is NOT re-targeted (it stays a same-target
+        // bonus, not an all-enemies filter — only the round-boundary base damage re-targets).
+        expect(mod.target).not.toBe('all-enemies');
     });
 
     it('Obsidian charged: "increases Damage by 100% to enemies with less than 30% HP" → enemy-HP-gated modifier', () => {

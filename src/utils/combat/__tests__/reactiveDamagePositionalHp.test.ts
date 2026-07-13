@@ -501,3 +501,182 @@ describe("SP-M M1 Task 6: Chakara's start-of-round damage lands on the highest-S
         expect(minHpPct(reaction, ENEMY)).toBeCloseTo(minHpPct(control, ENEMY), 5);
     });
 });
+
+/**
+ * SP-M M1 Task 7: Judge's start-of-round passive ("At the start of the round, this Unit deals 60%
+ * damage to all enemies with less than 50% HP.") is a per-victim-CONDITIONAL AoE — it must hit
+ * EVERY living enemy below 50% HP (not one, not the vestigial dummy) with real HP loss, and skip
+ * the enemies above 50%. Pre-fix (target:'enemy', single-victim → dummy fallback) no real enemy
+ * loses HP to Judge. Post-fix (target:'all-enemies', per-victim hp-threshold re-check) exactly the
+ * two <50%-HP enemies lose HP and the >50% one does not, and Judge's dealt reconciles with the sum
+ * of the two victims' Judge-attributed damageTaken.
+ *
+ * Fixture note — a Pattern-All "pre-damager" ally (player[1]) chips ALL enemies ONCE in round 1
+ * (to 33% for the two small-HP enemies, ~100% for the huge-HP one), then is KILLED that same round
+ * by the front enemy's 100%-damage active (it is placed at the front M4; Judge sits at the back B4,
+ * out of the enemies' reach). Because the pre-damager fires first (speed 1000) and dies before
+ * round 2, there is NO second chip — so the two small enemies stay alive at 33% into round 2, where
+ * Judge's start-of-round hit lands on them without any overkill/capping confusing the reconciliation.
+ */
+const JUDGE_PASSIVE =
+    'At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all ' +
+    'enemies with less than 50% HP.';
+
+// `withPassive` isolates the HP delta to the reactive proc firing at all (mirrors the Chakara
+// idiom above): the reaction run carries Judge's start-of-round passive (firstPassiveSkillText —
+// the R0/innate slot, applies with zero refits, same slot Grif/Paracelsus use), the control run
+// omits it entirely so the proc no-ops for every enemy.
+const judge = (id: string, withPassive: boolean): Ship =>
+    ship(id, {
+        type: 'Attacker',
+        // 0%-damage active isolates the HP delta to the reactive proc — Judge's own attack never
+        // itself changes any enemy's HP, in EITHER run (mirrors the Paracelsus/Grif/Rhodium idiom).
+        activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
+        ...(withPassive ? { firstPassiveSkillText: JUDGE_PASSIVE } : {}),
+    });
+// Pattern-All ally that chips ALL enemies once (real AoE idiom — simGoldenFixtures' Comet uses the
+// same activePattern:'Pattern-All' + "to all enemies" text). Fragile HP (100) + front placement so
+// the front enemy's 100%-damage active kills it in round 1 after it has already chipped.
+const preDamagerAll = (id: string): Ship =>
+    ship(id, {
+        activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage> to all enemies.',
+        activePattern: 'Pattern-All',
+        activeTarget: 'front',
+    });
+// Front enemy that KILLS the pre-damager in round 1 (100%-damage active vs the pre-damager's 100
+// HP). Also one of the two <50%-HP Judge victims (its own attack does not affect its own HP).
+const preDamagerKiller = (id: string): Ship =>
+    ship(id, { activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.' });
+
+const JUDGE = ATTACKER; // Judge is player[0] → the reserved 'attacker' focus id
+const E_LOW1 = 'e:lo1:0';
+const E_LOW2 = 'e:lo2:1';
+const E_HIGH = 'e:hi:2';
+
+describe("SP-M M1 Task 7: Judge's start-of-round damage hits ALL <50%-HP enemies, not the >50% one (positional)", () => {
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [
+                // Judge at the BACK, low attack (its reactive 60% must not KILL a 33%-HP victim,
+                // so the victim survives in both runs → clean reconciliation), huge HP (survives).
+                place(judge('j', withPassive), 'B4', 500, 1e12, { speed: 50 }),
+                // Pre-damager at the FRONT (enemies target it), fragile, fastest (chips first).
+                place(preDamagerAll('pre'), 'M4', 1000, 100, { speed: 1000 }),
+            ],
+            enemyTeam: [
+                // Two small-HP enemies (1500) → one round-1 chip of 1000 leaves them at 33% (<50%).
+                // lo1 additionally carries the 100%-damage active that kills the pre-damager.
+                place(preDamagerKiller('lo1'), 'M4', 100_000, 1500, { speed: 100 }),
+                place(plainEnemy('lo2'), 'M3', 1, 1500, { speed: 100 }),
+                // Huge-HP enemy → the same 1000 chip leaves it ~100% (>50%): Judge must SKIP it.
+                place(plainEnemy('hi'), 'B2', 1, 1e9, { speed: 100 }),
+            ],
+            rounds: 2,
+        });
+
+    it('the two <50%-HP enemies lose HP to Judge; the >50% one does not; dealt reconciles with the two victims summed', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        // Confirms the reaction actually FIRED — a kind:'attack' log entry keyed on Judge's OWN
+        // actor id with a positive amount, distinct from Judge's 0%-damage active. Present only in
+        // the reaction run (pre-fix this fires against the vestigial dummy, landing 0 real HP —
+        // which the per-enemy takenDelta assertions below are what actually catch).
+        const judgeReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === JUDGE && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(judgeReactiveHits.length).toBeGreaterThan(0);
+
+        const takenDeltaLow1 = sumTaken(reaction, E_LOW1) - sumTaken(control, E_LOW1);
+        const takenDeltaLow2 = sumTaken(reaction, E_LOW2) - sumTaken(control, E_LOW2);
+        const takenDeltaHigh = sumTaken(reaction, E_HIGH) - sumTaken(control, E_HIGH);
+        const dealtDelta = sumDealt(reaction, JUDGE) - sumDealt(control, JUDGE);
+
+        // Both <50%-HP enemies take Judge's reactive damage.
+        expect(takenDeltaLow1).toBeGreaterThan(0);
+        expect(takenDeltaLow2).toBeGreaterThan(0);
+        expect(minHpPct(reaction, E_LOW1)).toBeLessThan(minHpPct(control, E_LOW1));
+        expect(minHpPct(reaction, E_LOW2)).toBeLessThan(minHpPct(control, E_LOW2));
+
+        // The >50%-HP enemy is NEVER a victim — untouched by the reactive proc.
+        expect(takenDeltaHigh).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, E_HIGH)).toBeCloseTo(minHpPct(control, E_HIGH), 5);
+
+        // Reconciliation: Judge's total reactive damageDealt == Σ of the two victims' Judge-
+        // attributed damageTaken (no damage manufactured or dropped across the AoE).
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaLow1 + takenDeltaLow2, 5);
+    });
+});
+
+/**
+ * SP-M M1 Task 7: Incinerator's end-of-round passive ("At the end of the round, this unit deals
+ * 100% damage to all enemies with Inferno.") is a per-victim-CONDITIONAL AoE gated on the enemy-
+ * debuff name 'Inferno'. Incinerator's active inflicts Inferno III on the FRONT enemy only (single-
+ * target Pattern-Base); the back enemy never receives it. Only the Inferno-afflicted enemy may take
+ * the end-of-round hit. Pre-fix (target:'enemy' → dummy) no real enemy loses HP to the passive;
+ * post-fix (target:'all-enemies', per-victim enemy-debuff re-check) exactly the afflicted enemy does.
+ */
+// Real corpus active (single-target 185% + inflicts Inferno III) — verbatim-shaped from
+// docs/ship-skills.csv (Incinerator active_skill_text). The Inferno infliction lands (Incinerator
+// hacking 500 vs the victim's security 0), so the front enemy carries Inferno from round 1 on.
+const INCINERATOR_PASSIVE =
+    'At the end of the round, this unit deals <unit-damage>100% damage</unit-damage> to all ' +
+    'enemies with <unit-skill>Inferno</unit-skill>.';
+const incinerator = (id: string, withPassive: boolean): Ship =>
+    ship(id, {
+        type: 'Attacker',
+        activeSkillText:
+            'This Unit deals <unit-damage>185% damage</unit-damage> and inflicts ' +
+            '<unit-skill>Inferno III</unit-skill> for 3 turns.',
+        ...(withPassive ? { firstPassiveSkillText: INCINERATOR_PASSIVE } : {}),
+    });
+
+const E_INFERNO = 'e:inf:0';
+const E_CLEAN = 'e:cln:1';
+
+describe("SP-M M1 Task 7: Incinerator's end-of-round damage hits ONLY the Inferno-afflicted enemy (positional)", () => {
+    const run = (withPassive: boolean) =>
+        simulateBattle({
+            playerTeam: [
+                // Incinerator's own active (185% + Inferno) fires in BOTH runs → cancels in the
+                // delta; hacking 500 guarantees the Inferno inflict lands on the front enemy.
+                place(incinerator('i', withPassive), 'M4', 1000, 1e12, { hacking: 500 }),
+            ],
+            enemyTeam: [
+                // Front enemy: hit by Incinerator's single-target active → carries Inferno. Huge HP
+                // so it survives every end-of-round hit (no capping → clean reconciliation).
+                place(plainEnemy('inf'), 'M4', 1, 1e12, { security: 0 }),
+                // Back enemy: out of the single-target footprint → never afflicted with Inferno →
+                // never a victim of the end-of-round passive.
+                place(plainEnemy('cln'), 'B2', 1, 1e12, { security: 0 }),
+            ],
+            rounds: 2,
+        });
+
+    it('the Inferno-afflicted enemy takes the end-of-round hit; the clean enemy does not; dealt reconciles', () => {
+        const reaction = run(true);
+        const control = run(false);
+
+        const incReactiveHits = flattenCombatLog(reaction).filter(
+            (e) => e.kind === 'attack' && e.actorId === ATTACKER && (e.targets[0]?.amount ?? 0) > 0
+        );
+        expect(incReactiveHits.length).toBeGreaterThan(0);
+
+        const takenDeltaInferno = sumTaken(reaction, E_INFERNO) - sumTaken(control, E_INFERNO);
+        const takenDeltaClean = sumTaken(reaction, E_CLEAN) - sumTaken(control, E_CLEAN);
+        const dealtDelta = sumDealt(reaction, ATTACKER) - sumDealt(control, ATTACKER);
+
+        // Only the Inferno-afflicted enemy takes the end-of-round hit.
+        expect(takenDeltaInferno).toBeGreaterThan(0);
+        expect(minHpPct(reaction, E_INFERNO)).toBeLessThan(minHpPct(control, E_INFERNO));
+
+        // The clean (no-Inferno) enemy is never a victim.
+        expect(takenDeltaClean).toBeCloseTo(0, 5);
+        expect(minHpPct(reaction, E_CLEAN)).toBeCloseTo(minHpPct(control, E_CLEAN), 5);
+
+        // Reconciliation: the passive's dealt lands entirely on the one afflicted victim.
+        expect(dealtDelta).toBeGreaterThan(0);
+        expect(dealtDelta).toBeCloseTo(takenDeltaInferno, 5);
+    });
+});

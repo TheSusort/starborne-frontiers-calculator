@@ -1312,6 +1312,10 @@ interface ReactiveSideCtx {
      *  IntentExecContext. Resolved LIVE (no onceByOwner memo) — unlike enemyWithMostBuffs,
      *  Chakara's co-located clause is a SELF-buff that never changes an enemy's speed. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
+    /** SP-M M1 Task 7 Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
+     *  DAMAGE proc (per-victim-conditional AoE). Player side → living enemy attackers; enemy side
+     *  → living player actors. See IntentExecContext. Resolved LIVE per drain (no memo). */
+    livingOpposingActorIds?: (ownerId: string) => string[];
     /** D-PR14: id of the round's first real activator (live value at drain-build time). */
     firstActivatorId?: string;
     /** D-PR16: id of the sole living actor on this side, recomputed each drain (Last Stand). */
@@ -5994,6 +5998,22 @@ export function runCombat(input: CombatEngineInput): {
                         enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
                         // SP-M M1 Task 6: Chakara's live highest-speed opposing-actor resolver.
                         enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
+                        // SP-M M1 Task 7: living opposing roster for an 'all-enemies' reactive
+                        // damage proc (Judge/Incinerator per-victim-conditional AoE).
+                        livingOpposingActorIds: sideCtx.livingOpposingActorIds,
+                        // SP-M M1 Task 7: synthesized enemy debuff/DoT NAMES for a victim — the
+                        // EXACT synthesis buildTurnArgs uses (enemyDebuffNamesForTarget), so a
+                        // per-victim 'enemy-debuff' name-gate (Incinerator's "with Inferno") reads
+                        // the same names as an on-cast gate. Combat-wide (both sides) via
+                        // allActorsById, mirroring actorById/affinityOf. Empty for a missing id.
+                        enemyDebuffNamesFor: (id) => {
+                            const a = allActorsById.get(id);
+                            return a ? enemyDebuffNamesForTarget(a) : [];
+                        },
+                        // SP-M M1 Task 7: a victim's current effective max HP (the same
+                        // recipientMaxHp denominator every heal/HP-basis site uses) so the
+                        // per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
+                        recipientMaxHpFor: (id) => recipientMaxHp(id),
                         firstActivatorId: sideCtx.firstActivatorId,
                         lastStandingId: sideCtx.lastStandingId,
                         oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
@@ -6121,6 +6141,20 @@ export function runCombat(input: CombatEngineInput): {
             // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — Chakara has no purge/damage race
             // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
             enemyWithHighestSpeed: () => highestSpeedInRoster(enemyAttackerActors),
+            // SP-M M1 (Task 7): living opposing roster for an 'all-enemies' reactive damage proc
+            // (Judge/Incinerator). In a positional sim (dummy vestigial) the real opposing roster
+            // is the living enemy attackers. In pure DPS mode the singular `enemy` dummy IS the
+            // real, destructible representative target (SP-U U5) — so the AoE resolves to it, its
+            // per-victim hp-threshold/enemy-debuff re-checked against its own live state, preserving
+            // Judge/Incinerator DPS-mode credit. NEVER the dummy when it is vestigial (positional).
+            livingOpposingActorIds: () =>
+                dummyEnemyIsVestigial
+                    ? enemyAttackerActors
+                          .filter((a) => a.destroyedRound === undefined)
+                          .map((a) => a.id)
+                    : enemy.destroyedRound === undefined
+                      ? [enemy.id]
+                      : [],
             firstActivatorId,
             lastStandingId: soleSurvivorOf(allPlayerActors),
             oncePerRoundConsumed,
@@ -6150,6 +6184,9 @@ export function runCombat(input: CombatEngineInput): {
             enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
             // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
             enemyWithHighestSpeed: () => highestSpeedInRoster(allPlayerActors),
+            // SP-M M1 (Task 7): mirror — an enemy owner scans the living player roster.
+            livingOpposingActorIds: () =>
+                allPlayerActors.filter((a) => a.destroyedRound === undefined).map((a) => a.id),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(enemyAttackerActors),
             oncePerRoundConsumed,

@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Judge's start-of-round execute (60% damage to all enemies below 50% HP) and Incinerator's end-of-round burn (100% damage to all enemies with Inferno) now hit every matching enemy on the board and reduce their real HP, instead of landing on a single target. Each enemy is checked individually, so only the ones that actually qualify are hit.",
     'Battle simulator now reports damage dealt and damage taken consistently under area-of-effect attacks.',
     'Battle simulator now reports the actual amount each ship receives from a multi-target heal, instead of splitting the total evenly across recipients.',
     "Battle simulator now applies each ship's Heal Modifier stat to the heals it casts (previously ignored in the simulation), on both teams.",
