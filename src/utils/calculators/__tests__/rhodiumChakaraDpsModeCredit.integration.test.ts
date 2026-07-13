@@ -1,0 +1,172 @@
+/**
+ * SP-M M1 Task 7b review: Tasks 5/6 re-targeted Rhodium's end-of-round reactive damage and
+ * Chakara's start-of-round reactive damage to the `enemy-most-buffs` / `enemy-highest-speed`
+ * selectors (triggers.ts, ctx.enemyWithMostBuffs / ctx.enemyWithHighestSpeed). Those selectors
+ * are bound (engine.ts playerDrainCtx) over `enemyAttackerActors` — the POSITIONED opposing
+ * roster. In pure DPS mode (no positioned enemy attackers) that roster is EMPTY, so
+ * `mostBuffsAmong([])` / `highestSpeedInRoster([])` resolve to `undefined`, and triggers.ts's
+ * damage arm (`if (id === undefined) return;`) silently drops the proc — `applyReactiveDamage`/
+ * `creditDamage` is never called at all — a regression vs pre-SP-M behavior (these procs used to
+ * target the DPS dummy `enemy` via the plain `target:'enemy'` fallback and always credited).
+ *
+ * Fix (engine.ts playerDrainCtx): `enemyWithMostBuffs`/`enemyWithHighestSpeed` now fall back to
+ * the live dummy `enemy.id` when `dummyEnemyIsVestigial` is false (DPS mode) — mirroring Task 7's
+ * existing `livingOpposingActorIds` dummy-aware binding for Judge/Incinerator's all-enemies proc.
+ *
+ * Both ships use their real corpus passive text (docs/ship-skills.csv), matching the positional
+ * fixtures in reactiveDamagePositionalHp.test.ts verbatim.
+ *
+ * Chakara (start-of-round trigger) is verified end-to-end through the PUBLIC `simulateDPS`
+ * surface (`cumulativeDamage`/`directDamage`) — the same surface `judgeStartOfRoundDamage.
+ * integration.test.ts` uses for Judge's start-of-round proc. `round-started` is emitted+drained
+ * BEFORE the round's damage tally is snapshotted (engine.ts), so the credited amount correctly
+ * appears in that round's reported numbers.
+ *
+ * Rhodium (end-of-round trigger) is verified via the lower-level `__testTapCreditDamage` probe
+ * (the same instrumentation `reactiveDamageMitigation.integration.test.ts` uses), NOT through
+ * `simulateDPS`'s `cumulativeDamage`. This is deliberate: `round-ended` is emitted+drained AFTER
+ * the round's `directDamage`/`cumulativeDamage`/`totalRoundDamage` locals are already snapshotted
+ * (engine.ts ~8005-8035, well before the `round-ended` emit at ~8113) — a SEPARATE, PRE-EXISTING
+ * ordering gap (confirmed present at commit 78eab536, BEFORE Task 5 ever touched Rhodium — i.e.
+ * NOT introduced by, and out of scope for, this selector fix) that silently discards ANY
+ * 'end-of-round'-triggered reactive-damage credit from DPS-mode `RoundData`/`summary` regardless
+ * of target/selector. The `__testTapCreditDamage` probe proves the SPECIFIC regression this task
+ * fixes — the selector no longer resolves to `undefined` and drops the proc; `creditDamage` now
+ * fires with the correct (mitigated) amount, exactly like every other reactive-damage credit path
+ * — while honestly not claiming the separate round-tail ordering bug is fixed (it isn't, and
+ * fixing it is out of this task's locus; flagged in the task report as a follow-up).
+ */
+import { describe, it, expect } from 'vitest';
+import { simulateDPS } from '../dpsSimulator';
+import { runCombat, CombatEngineInput } from '../../combat/engine';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import type { Ship } from '../../../types/ship';
+
+// Verbatim from docs/ship-skills.csv (Rhodium, second_passive_skill_text — the R2/refit-active
+// slot getShipSkillRows resolves for a 2-refit ship). Matches reactiveDamagePositionalHp.test.ts.
+const RHODIUM_P2 =
+    'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with ' +
+    'the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.';
+
+function rhodiumShipSkills() {
+    const rhodium = {
+        refits: [{}, {}],
+        activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
+        secondPassiveSkillText: RHODIUM_P2,
+    } as unknown as Ship;
+    return buildShipAbilities(rhodium);
+}
+
+// Verbatim from docs/ship-skills.csv (Chakara, third_passive_skill_text — the R4/refit-active
+// slot getShipSkillRows resolves for a 4-refit ship). Matches reactiveDamagePositionalHp.test.ts.
+const CHAKARA_P4 =
+    'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and ' +
+    '<unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all ' +
+    'Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+
+function chakaraShipSkills(withPassive: boolean) {
+    const chakara = {
+        refits: withPassive ? [{}, {}, {}, {}] : [],
+        activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
+        ...(withPassive ? { thirdPassiveSkillText: CHAKARA_P4 } : {}),
+    } as unknown as Ship;
+    return buildShipAbilities(chakara);
+}
+
+/** Sums every `direct`-channel creditDamage call attributed to `sourceId` across the whole run
+ *  (mirrors reactiveDamageMitigation.integration.test.ts's `creditedDirectDamageFor`). */
+const creditedDirectDamageFor = (sourceId: string, input: CombatEngineInput): number => {
+    let total = 0;
+    runCombat({
+        ...input,
+        __testTapCreditDamage: (id, channel, amount) => {
+            if (id === sourceId && channel === 'direct') total += amount;
+        },
+    });
+    return total;
+};
+
+const ATTACK = 10_000;
+
+/** DPS-mode input (no `enemyAttackers`) carrying the given ship's parsed abilities. The active
+ *  skill is 0%-damage by construction (both ships' texts above) — any credited direct damage is
+ *  unambiguously the reactive proc. */
+const buildDpsInput = (shipSkills: ReturnType<typeof rhodiumShipSkills>): CombatEngineInput => ({
+    attack: ATTACK,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills,
+    enemyDefense: 0,
+    enemyHp: 1_000_000_000,
+    numRounds: 1,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: 1_000_000_000,
+    speed: 200,
+    healTargetId: 'attacker',
+});
+
+describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DPS-mode damage metric', () => {
+    it("Rhodium's end-of-round most-buffed-enemy proc no longer silently drops in DPS mode — creditDamage fires with the mitigated 80% amount (regression probe via __testTapCreditDamage)", () => {
+        const credited = creditedDirectDamageFor('attacker', buildDpsInput(rhodiumShipSkills()));
+        // Pre-fix: enemyWithMostBuffs(ownerId) resolved to `undefined` off the empty
+        // enemyAttackerActors roster → triggers.ts's damage arm returned early → creditDamage was
+        // NEVER called → credited === 0. Post-fix: the selector falls back to the live dummy
+        // `enemy.id`, so the proc fires and credits ATTACK × 0.8 (noCrit, 0 defense).
+        expect(credited).toBeCloseTo(ATTACK * 0.8, 6);
+    });
+
+    it("Chakara's start-of-round highest-Speed-enemy proc credits cumulativeDamage/directDamage in DPS mode (no positioned enemy attackers)", () => {
+        const reaction = simulateDPS({
+            attack: ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            rounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: chakaraShipSkills(true),
+        });
+        // Control: the passive (and therefore the whole proc) is entirely absent — same idiom as
+        // reactiveDamagePositionalHp.test.ts's Chakara control run. Isolates the reactive's own
+        // HP delta from the (0%-damage) active hit, without hardcoding the "lowest speed among
+        // Allies" self-buff's attack-up magnitude into the expectation.
+        const control = simulateDPS({
+            attack: ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            rounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: chakaraShipSkills(false),
+        });
+
+        expect(control.summary.totalDamage).toBe(0);
+        // Pre-fix: enemyWithHighestSpeed(ownerId) resolved to `undefined` off the empty
+        // enemyAttackerActors roster → the proc silently dropped → reaction === control (both 0).
+        // Post-fix: the selector falls back to the live dummy `enemy.id`, so round 1 alone credits
+        // at least ATTACK × 0.6 (the self-buff granted by the co-located "starts each round with
+        // Attack Up II..." clause can only ever ADD to this floor, never subtract).
+        expect(reaction.rounds[0].directDamage).toBeGreaterThanOrEqual(ATTACK * 0.6);
+        expect(reaction.summary.totalDamage).toBeGreaterThan(control.summary.totalDamage);
+        // Recurring across both rounds (not a one-shot) — the proc fires every round entered.
+        expect(reaction.rounds[1].directDamage).toBeGreaterThanOrEqual(ATTACK * 0.6);
+    });
+});

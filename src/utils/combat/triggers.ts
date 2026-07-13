@@ -2023,9 +2023,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
               // enemyHpPct/enemyDebuffNames, the vestigial dummy in positional mode) so it
               // neither blocks nor false-passes the whole AoE. Gated strictly on
               // type==='damage' && target==='all-enemies' so no other ability is touched.
+              // Task 7b review: only an enemy/target-oriented hp-threshold is scrubbed here —
+              // a hypothetical SELF hp-threshold co-located on an all-enemies damage ability
+              // (buildShipAbilities.ts's re-target never attaches target:'all-enemies' for a
+              // self-only hp-threshold — see that file's matching narrowing) must keep gating
+              // normally at the global drain gate, not be scrubbed for a per-victim re-check
+              // that triggers.ts's damage branch never performs for it.
               intent.ability.type === 'damage' && intent.ability.target === 'all-enemies'
               ? intent.ability.conditions.filter(
-                    (c) => c.subject !== 'hp-threshold' && c.subject !== 'enemy-debuff'
+                    (c) =>
+                        !(c.subject === 'hp-threshold' && c.hpSubject !== 'self') &&
+                        c.subject !== 'enemy-debuff'
                 )
               : intent.ability.conditions;
 

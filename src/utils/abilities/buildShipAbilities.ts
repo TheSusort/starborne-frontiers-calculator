@@ -1492,12 +1492,19 @@ function abilitiesFromText(
     // carry no hp-threshold/enemy-debuff condition). Gated on the round-boundary trigger so an
     // on-cast damage-bonus gate with the same subject is never re-targeted. out[0] is safe to mutate
     // here (SP-F F1's out[0] invariant).
+    // Task 7b review: hp-threshold must be narrowed to non-SELF (Judge's is hpSubject:'enemy' —
+    // confirmed via hpThresholdFromSentence, which only sets 'self' absent an enemy/target
+    // reference in the clause). A hypothetical round-boundary damage ability gated on the
+    // caster's OWN hp ("when this unit is below 50%, deal to all enemies") is a self-condition,
+    // not a per-victim one, and must NOT be re-targeted to 'all-enemies' + per-victim re-check.
     if (
         out[0]?.ability.type === 'damage' &&
         (out[0].ability.trigger === 'start-of-round' ||
             out[0].ability.trigger === 'end-of-round') &&
         out[0].ability.conditions.some(
-            (c) => c.subject === 'hp-threshold' || c.subject === 'enemy-debuff'
+            (c) =>
+                (c.subject === 'hp-threshold' && c.hpSubject !== 'self') ||
+                c.subject === 'enemy-debuff'
         )
     ) {
         out[0].ability.target = 'all-enemies';

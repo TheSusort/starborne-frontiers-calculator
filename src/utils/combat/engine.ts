@@ -6136,11 +6136,21 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: bySide('player').removeEnemyCharges,
             removeChargesFrom: bySide('player').removeChargesFrom,
             selfHpPctFor: bySide('player').selfHpPctFor,
-            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(enemyAttackerActors)),
+            // SP-M M1 (Task 7b review): dummy-aware, matching livingOpposingActorIds below. In
+            // pure DPS mode (dummy vestigial=false) enemyAttackerActors is EMPTY, so the
+            // positional-only mostBuffsAmong(enemyAttackerActors) resolved to undefined and the
+            // reactive silently dropped instead of crediting the dummy `enemy` — restoring the
+            // pre-SP-M behavior of targeting the live dummy when it's the real DPS sink.
+            enemyWithMostBuffs: dummyEnemyIsVestigial
+                ? onceByOwner(() => mostBuffsAmong(enemyAttackerActors))
+                : () => (enemy.destroyedRound === undefined ? enemy.id : undefined),
             enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
             // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — Chakara has no purge/damage race
             // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
-            enemyWithHighestSpeed: () => highestSpeedInRoster(enemyAttackerActors),
+            // SP-M M1 (Task 7b review): dummy-aware — same rationale as enemyWithMostBuffs above.
+            enemyWithHighestSpeed: dummyEnemyIsVestigial
+                ? () => highestSpeedInRoster(enemyAttackerActors)
+                : () => (enemy.destroyedRound === undefined ? enemy.id : undefined),
             // SP-M M1 (Task 7): living opposing roster for an 'all-enemies' reactive damage proc
             // (Judge/Incinerator). In a positional sim (dummy vestigial) the real opposing roster
             // is the living enemy attackers. In pure DPS mode the singular `enemy` dummy IS the
