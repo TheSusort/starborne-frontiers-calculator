@@ -442,6 +442,17 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    'cheat-death-activated': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'cheat-death',
+            actorId: e.actorId,
+            targets: [{ targetId: e.actorId }],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
     'buff-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {

@@ -33,6 +33,7 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
         case 'dot-ticked':
             return 'text-red-400';
         case 'heal':
+        case 'cheat-death':
             return 'text-green-400';
         case 'buff':
         case 'shield':
@@ -151,6 +152,7 @@ const formatters: Record<
         return tgt && tgt !== src ? `${src} → ${tgt}: ${label}` : `${src}: ${label}`;
     },
     'shield-destroyed': (entry, ctx) => `${ctx.nameOf(entry.actorId)}'s shield destroyed`,
+    'cheat-death': (entry, ctx) => `${ctx.nameOf(entry.actorId)} cheats death!`,
     death: noteLine,
     detonation: (entry, ctx) => {
         const amount = entry.targets[0]?.amount;

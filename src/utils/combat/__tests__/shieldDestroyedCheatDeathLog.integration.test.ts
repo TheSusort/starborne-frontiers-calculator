@@ -107,3 +107,53 @@ describe('shield-destroyed surfaces in the combat log (real sim path)', () => {
         expect(nestedShieldDestroyed.length).toBe(shieldBreaks.length);
     });
 });
+
+describe('cheat-death-activated surfaces in the combat log (real sim path)', () => {
+    it('a lethal hit on a Cheat-Death carrier appears as a cheat-death entry', () => {
+        // Enemy seeds a start-of-combat self Cheat Death; a fast, hard-hitting player lands a
+        // lethal hit that the intercept survives at 1 HP instead of a kill.
+        const survivor = makeShip('survivor', 'Survivor', {
+            secondPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill>.',
+            refits: [{}, {}] as Ship['refits'],
+        });
+        const killer = makeShip('killer', 'Killer');
+        const result = simulateBattle(
+            {
+                playerTeam: [
+                    placement(killer, 'M2', { attack: 9000, crit: 0, hp: 20_000, speed: 300 }),
+                ],
+                enemyTeam: [
+                    placement(survivor, 'M4', {
+                        attack: 1,
+                        crit: 0,
+                        defence: 0,
+                        hp: 2_000,
+                        speed: 1,
+                    }),
+                ],
+                rounds: 1,
+            },
+            noGear
+        );
+        const saves = flattenCombatLog(result).filter((e) => e.kind === 'cheat-death');
+        expect(saves.length).toBeGreaterThan(0);
+
+        // Ordering proof (mirrors the shield-destroyed case above): cheat-death-activated fires
+        // INSIDE applyVictimDamage, before the attack's deferred ability-performed on the
+        // positional path — a naive (unbuffered) forward would surface it as a TOP-LEVEL sibling
+        // entry in the killer's turn instead of nested under the triggering attack. Only the
+        // buffered defer-flush routes it into the attack's `.reactions[]`.
+        const topLevelCheatDeath = result.combatLog
+            .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
+            .filter((entry) => entry.kind === 'cheat-death');
+        expect(topLevelCheatDeath).toHaveLength(0);
+
+        const nestedCheatDeath = result.combatLog
+            .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
+            .flatMap((entry) => entry.reactions)
+            .filter((reaction) => reaction.kind === 'cheat-death');
+        expect(nestedCheatDeath.length).toBeGreaterThan(0);
+        expect(nestedCheatDeath.length).toBe(saves.length);
+    });
+});

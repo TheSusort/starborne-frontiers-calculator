@@ -4077,7 +4077,16 @@ export function runCombat(input: CombatEngineInput): {
                     victim.genericDoTEntries = victim.genericDoTEntries.filter(
                         (e) => e.unremovable
                     );
-                    bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
+                    const cheatDeathEv: CombatEvent = {
+                        type: 'cheat-death-activated',
+                        actorId: targetId,
+                        round: r,
+                        reactive: true,
+                        duringTurnOf: actingActorId,
+                        triggerActorId: actingActorId,
+                    };
+                    if (deferReflectLogs) pendingConsequenceLogs.push(cheatDeathEv);
+                    else bus.emit(cheatDeathEv);
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
                     // ship-destroyed once (shared helper; idempotent via the per-actor
