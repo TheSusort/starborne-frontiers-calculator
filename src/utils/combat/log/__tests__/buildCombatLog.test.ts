@@ -1920,4 +1920,37 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         expect(expired!.actorId).toBe('A');
         expect(expired!.note).toBe('Shield Wall expired');
     });
+
+    it('renders a debuff-resisted event with source and target', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'debuff-resisted',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                buffName: 'Stun',
+            }),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const resisted = rounds[0].turns[0].entries.find((e) => e.kind === 'debuff-resisted');
+        expect(resisted).toBeDefined();
+        expect(resisted!.actorId).toBe('A');
+        expect(resisted!.targets[0].targetId).toBe('B');
+        expect(resisted!.note).toBe('Stun');
+    });
+
+    it('renders a debuff-resisted event with no source (falls back to target)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'debuff-resisted', targetId: 'B', round: 1, buffName: 'Stun' }),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const resisted = rounds[0].turns[0].entries.find((e) => e.kind === 'debuff-resisted');
+        expect(resisted).toBeDefined();
+        expect(resisted!.actorId).toBe('B');
+        expect(resisted!.targets[0].targetId).toBe('B');
+    });
 });

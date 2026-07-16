@@ -496,6 +496,18 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    'debuff-resisted': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'debuff-resisted',
+            actorId: e.sourceId ?? e.targetId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: e.buffName,
+        };
+        ctx.attachEntry(entry);
+    },
+
     'dot-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {

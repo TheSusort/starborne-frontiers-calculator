@@ -48,6 +48,7 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
         case 'purge':
         case 'charge-changed':
         case 'buff-expired':
+        case 'debuff-resisted':
         default:
             return 'text-theme-text-secondary';
     }
@@ -142,6 +143,12 @@ const formatters: Record<
     purge: noteLine,
     'charge-changed': noteLine,
     'buff-expired': noteLine,
+    'debuff-resisted': (entry, ctx) => {
+        const src = ctx.nameOf(entry.actorId);
+        const tgt = entry.targets[0] ? ctx.nameOf(entry.targets[0].targetId) : undefined;
+        const label = entry.note ? `${entry.note} resisted` : 'resisted';
+        return tgt && tgt !== src ? `${src} → ${tgt}: ${label}` : `${src}: ${label}`;
+    },
     death: noteLine,
     detonation: (entry, ctx) => {
         const amount = entry.targets[0]?.amount;

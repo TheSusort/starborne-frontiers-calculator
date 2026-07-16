@@ -231,6 +231,7 @@ export const LOG_EVENT_TYPES = [
     'buff-applied',
     'buff-expired',
     'debuff-applied',
+    'debuff-resisted',
     'dot-applied',
     'dot-ticked',
     'dot-detonated',
