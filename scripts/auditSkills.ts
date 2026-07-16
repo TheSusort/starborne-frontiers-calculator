@@ -10,7 +10,7 @@
  * Usage: npm run audit:skills
  * Writes a grouped report to docs/skill-audit.md and prints a summary.
  */
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
 import {
@@ -21,34 +21,15 @@ import {
 import { Ship } from '../src/types/ship';
 import { Ability } from '../src/types/abilities';
 import { ALLOWLIST } from './auditSkills.allowlist';
+import {
+    parseCsvLine,
+    readCsvRecords,
+    csvAvailable as libCsvAvailable,
+    CSV_PATH,
+} from './lib/shipSkillCsv';
 
 // Paths are relative to the repo root (npm run sets cwd there).
-const CSV_PATH = 'docs/ship-skills.csv';
 const OUT_PATH = 'docs/skill-audit.md';
-
-// ─── CSV ───────────────────────────────────────────────────────────────────
-function parseCsvLine(line: string): string[] {
-    const fields: string[] = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        if (inQuotes) {
-            if (c === '"') {
-                if (line[i + 1] === '"') {
-                    cur += '"';
-                    i++;
-                } else inQuotes = false;
-            } else cur += c;
-        } else if (c === '"') inQuotes = true;
-        else if (c === ',') {
-            fields.push(cur);
-            cur = '';
-        } else cur += c;
-    }
-    fields.push(cur);
-    return fields;
-}
 
 interface ShipRow {
     name: string;
@@ -57,39 +38,16 @@ interface ShipRow {
 
 // RESOLVED (2026-07-02, was a KNOWN GAP): six CSV records (Centurion, Chimei, Curator,
 // Enforcer, Graphite, Lingshe) carry literal newlines inside quoted passive texts — a naive
-// line-per-record reader silently dropped them (141 of 147 records audited). Fixed below by
+// line-per-record reader silently dropped them (141 of 147 records audited). Fixed by
 // accumulating physical lines into a record buffer until quotes are balanced (see
-// `readCsvRecords`) before splitting into fields. Recovering these six surfaced two
-// pre-existing findings, fixed ahead of the reader change: the `detonation` rule's keyword
-// false-positived on Chimei's "Out. Detonation Damage Up III" buff NAME (fixed via a negative
-// lookahead — see the rule above); Lingshe's "gains Stealth on detonating a Bomb" passive
-// clause is already gated by the parser's on-bomb-detonated trigger (verified via
+// `readCsvRecords` in `./lib/shipSkillCsv`) before splitting into fields. Recovering these six
+// surfaced two pre-existing findings, fixed ahead of the reader change: the `detonation` rule's
+// keyword false-positived on Chimei's "Out. Detonation Damage Up III" buff NAME (fixed via a
+// negative lookahead — see the rule above); Lingshe's "gains Stealth on detonating a Bomb"
+// passive clause is already gated by the parser's on-bomb-detonated trigger (verified via
 // `detectReactiveTrigger`'s `BOMB_DETONATE_RE`), so it never reaches `ungatedEffects` — no
 // code change needed there. The pre-combat-stat rule below was verified out-of-band against
 // all 147 records: it hits exactly Lionheart/Centurion/Enforcer/Defiant/Stalwart, all handled.
-function readCsvRecords(raw: string): string[] {
-    const physicalLines = raw.split('\n');
-    const records: string[] = [];
-    let buffer: string[] = [];
-    let quoteCount = 0;
-    for (const line of physicalLines) {
-        buffer.push(line);
-        quoteCount += (line.match(/"/g) ?? []).length;
-        // Even quote count = no unterminated quoted field spanning this line boundary — the
-        // buffered lines form one complete record. Re-join with '\n' so multi-line skill text
-        // is preserved (parseCsvLine treats embedded newlines as ordinary characters).
-        if (quoteCount % 2 === 0) {
-            const record = buffer.join('\n');
-            buffer = [];
-            quoteCount = 0;
-            if (record.trim().length > 0) records.push(record);
-        }
-    }
-    // Any leftover buffered lines (unbalanced quotes through EOF) are dropped — malformed CSV,
-    // not a multi-line record.
-    return records;
-}
-
 function readShips(): ShipRow[] {
     const records = readCsvRecords(readFileSync(CSV_PATH, 'utf8'));
     const rows: ShipRow[] = [];
@@ -532,7 +490,7 @@ export function unusedAllowlistPairs(): { ship: string; rule: string; reason: st
 
 /** True when the (gitignored) reference CSV is present — false in CI/clean checkouts. */
 export function csvAvailable(): boolean {
-    return existsSync(CSV_PATH);
+    return libCsvAvailable(CSV_PATH);
 }
 
 /** Pure pass: every coverage finding across all ships (no I/O side effects beyond reading the CSV). */
