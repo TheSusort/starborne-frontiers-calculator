@@ -217,7 +217,8 @@ git commit -m "refactor: extract shared ship-skill CSV reader for the kit-audit 
   - `const SHIP_DATA_BY_NAME: Map<string, import('../../src/constants/ships').` ... (a `Map<string, ShipData>` keyed on display name).
 
 Notes on construction:
-- Skill text comes from the CSV record (authoritative). Stats/affinity/rarity/faction/role come from `SHIPS[key]` (matched by `ShipData.name === record.name`).
+- Skill text comes from the CSV record (authoritative). Stats/affinity/rarity/faction/role come from `SHIPS[key]`, matched **case-insensitively** (the CSV `name` column is inconsistently cased — `AEGIS`, `APEX` are all-caps while `Akula`, `Amartya` are mixed-case — but `ShipData.name` is always canonical mixed-case). Both the SHIPS lookup and the CSV-record lookup key on `name.toUpperCase()`.
+- The returned `Ship.name` is the **canonical** `SHIPS` name (`data.name`, e.g. `Aegis`), NOT the raw CSV casing — so bundles/ledger use one consistent spelling regardless of whether the caller passed `AEGIS` or `Aegis`.
 - `refits` is synthesized as an array of `refitLevel` empty objects (`[{}, {}, {}, {}]` for R4) so `getShipSkillRows` selects the intended passive tier. `refitLevel` defaults to 4.
 - `baseStats` maps `ShipData` fields → `BaseStats` (`hp, attack, defence, hacking, security, crit=critRate, critDamage, speed`).
 
@@ -272,28 +273,30 @@ export interface BuildTraceShipOpts {
     refitLevel?: RefitLevel;
 }
 
+// Keyed on the UPPERCASED name because the CSV name column is inconsistently cased
+// (AEGIS/APEX all-caps vs Akula/Amartya mixed) while ShipData.name is canonical mixed-case.
 export const SHIP_DATA_BY_NAME: Map<string, ShipData> = new Map(
-    Object.values(SHIPS).map((d) => [d.name, d])
+    Object.values(SHIPS).map((d) => [d.name.toUpperCase(), d])
 );
 
 let recordCache: Map<string, ShipSkillRecord> | null = null;
 function recordFor(name: string): ShipSkillRecord | undefined {
     if (!recordCache) {
-        recordCache = new Map(loadShipSkillRecords().map((r) => [r.name, r]));
+        recordCache = new Map(loadShipSkillRecords().map((r) => [r.name.toUpperCase(), r]));
     }
-    return recordCache.get(name);
+    return recordCache.get(name.toUpperCase());
 }
 
 export function buildTraceShip(name: string, opts: BuildTraceShipOpts = {}): Ship | null {
-    const data = SHIP_DATA_BY_NAME.get(name);
+    const data = SHIP_DATA_BY_NAME.get(name.toUpperCase());
     if (!data) return null;
     const rec = recordFor(name);
     const refitLevel = opts.refitLevel ?? 4;
     const refits: Refit[] = Array.from({ length: refitLevel }, () => ({}) as Refit);
 
     return {
-        id: `trace:${name}`,
-        name,
+        id: `trace:${data.name}`,
+        name: data.name, // canonical SHIPS casing, not the raw CSV casing
         rarity: data.rarity ?? 'legendary',
         faction: data.faction ?? 'MPL',
         type: data.role ?? 'ATTACKER',
@@ -683,11 +686,13 @@ export function buildKitBundle(
             target: (ability as { target?: string }).target,
             trigger: ability.trigger,
             summary: JSON.stringify(ability.config),
-            observed: logHasEventForShip(combatLog, eventTypes, name),
+            // Search by the ship's CANONICAL name (buildTraceShip normalizes CSV casing) —
+            // the combat log contains ship.name, which may differ from the caller's raw `name`.
+            observed: logHasEventForShip(combatLog, eventTypes, ship.name),
         };
     });
 
-    return { name, refitLevel: overrides.refitLevel ?? 4, skillRows, abilities, combatLog, outcome };
+    return { name: ship.name, refitLevel: overrides.refitLevel ?? 4, skillRows, abilities, combatLog, outcome };
 }
 
 export function renderKitBundleMarkdown(bundle: KitBundleResult): string {
