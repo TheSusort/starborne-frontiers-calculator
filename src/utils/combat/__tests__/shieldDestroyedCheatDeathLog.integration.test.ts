@@ -95,8 +95,15 @@ describe('shield-destroyed surfaces in the combat log (real sim path)', () => {
         // (no non-reactive trigger entry exists yet for the twin to nest under) instead of
         // nested under the attack that caused it. Only the buffered defer-flush routes it into
         // the triggering attack's `.reactions[]`.
+        // Search ALL non-nested containers (startOfRound + turn entries + endOfRound) so this
+        // assertion actually catches the unbuffered failure mode — a leaked twin would land in
+        // `endOfRound`, so omitting it would make this check blind to the exact bug it guards.
         const topLevelShieldDestroyed = result.combatLog
-            .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
+            .flatMap((round) => [
+                ...round.startOfRound,
+                ...round.turns.flatMap((turn) => turn.entries),
+                ...round.endOfRound,
+            ])
             .filter((entry) => entry.kind === 'shield-destroyed');
         expect(topLevelShieldDestroyed).toHaveLength(0);
 
@@ -146,8 +153,15 @@ describe('cheat-death-activated surfaces in the combat log (real sim path)', () 
         // non-reactive trigger entry exists yet for the twin to nest under) instead of nested
         // under the triggering attack. Only the buffered defer-flush routes it into the attack's
         // `.reactions[]`.
+        // Search ALL non-nested containers (startOfRound + turn entries + endOfRound) so this
+        // assertion actually catches the unbuffered failure mode — a leaked twin would land in
+        // `endOfRound`, so omitting it would make this check blind to the exact bug it guards.
         const topLevelCheatDeath = result.combatLog
-            .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
+            .flatMap((round) => [
+                ...round.startOfRound,
+                ...round.turns.flatMap((turn) => turn.entries),
+                ...round.endOfRound,
+            ])
             .filter((entry) => entry.kind === 'cheat-death');
         expect(topLevelCheatDeath).toHaveLength(0);
 
