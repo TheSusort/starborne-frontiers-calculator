@@ -71,7 +71,7 @@ import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
 import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
-import { CombatEventBus, createEventBus } from './events';
+import { CombatEvent, CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
@@ -3578,6 +3578,12 @@ export function runCombat(input: CombatEngineInput): {
         // subscribes to `reactive-damage-performed` → it can never chain.
         let deferReflectLogs = false;
         const pendingReflectLogs: { sourceId: string; targetId: string; amount: number }[] = [];
+        // Task 3: shared consequence-log buffer (reused by Task 4's cheat-death-activated).
+        // Same defer-flush rationale as pendingReflectLogs above — events emitted from INSIDE
+        // applyVictimDamage during drivePositionalApply must wait until the attack entry exists
+        // (post emitDeferredAbilityPerformed) so buildCombatLog's routeReaction nests them under
+        // it instead of a preceding sibling entry in the attacker's turn.
+        const pendingConsequenceLogs: CombatEvent[] = [];
         const flushReflectLogs = (): void => {
             for (const row of pendingReflectLogs) {
                 bus.emit({
@@ -3592,6 +3598,8 @@ export function runCombat(input: CombatEngineInput): {
                 });
             }
             pendingReflectLogs.length = 0;
+            for (const ev of pendingConsequenceLogs) bus.emit(ev);
+            pendingConsequenceLogs.length = 0;
         };
         const applyVictimDamage = (
             rawDamage: number,
@@ -4008,7 +4016,16 @@ export function runCombat(input: CombatEngineInput): {
             // "destruction" the game reacts to; a Barrier-blocked hit already returned above and
             // never reaches this line, so it can never false-positive here either.
             if (cause?.byDirectDamage && shieldBeforeThisAbsorb > 0 && victim.shieldPool === 0) {
-                bus.emit({ type: 'shield-destroyed', victimId: victim.id, round: r });
+                const ev: CombatEvent = {
+                    type: 'shield-destroyed',
+                    victimId: victim.id,
+                    round: r,
+                    reactive: true,
+                    duringTurnOf: actingActorId,
+                    triggerActorId: actingActorId,
+                };
+                if (deferReflectLogs) pendingConsequenceLogs.push(ev);
+                else bus.emit(ev);
             }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS

@@ -36,6 +36,7 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
             return 'text-green-400';
         case 'buff':
         case 'shield':
+        case 'shield-destroyed':
             return 'text-cyan-400';
         case 'debuff':
         case 'control':
@@ -149,6 +150,7 @@ const formatters: Record<
         const label = entry.note ? `${entry.note} resisted` : 'resisted';
         return tgt && tgt !== src ? `${src} → ${tgt}: ${label}` : `${src}: ${label}`;
     },
+    'shield-destroyed': (entry, ctx) => `${ctx.nameOf(entry.actorId)}'s shield destroyed`,
     death: noteLine,
     detonation: (entry, ctx) => {
         const amount = entry.targets[0]?.amount;

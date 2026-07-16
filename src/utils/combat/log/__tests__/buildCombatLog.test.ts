@@ -1953,4 +1953,45 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         expect(resisted!.actorId).toBe('B');
         expect(resisted!.targets[0].targetId).toBe('B');
     });
+
+    it('nests a stamped shield-destroyed under the triggering attack', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 5000,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 5000,
+                didCrit: false,
+                isPrimaryTarget: true,
+            }),
+            // Emitted after the attack entry exists (defer-flush), stamped to A's turn.
+            ev({
+                type: 'shield-destroyed',
+                victimId: 'B',
+                round: 1,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const attack = rounds[0].turns[0].entries.find((e) => e.kind === 'attack');
+        expect(attack).toBeDefined();
+        const nested = attack!.reactions.find((r) => r.kind === 'shield-destroyed');
+        expect(nested).toBeDefined();
+        expect(nested!.actorId).toBe('B');
+    });
 });

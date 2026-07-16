@@ -49,7 +49,8 @@ export type CombatLogEntryKind =
     | 'detonation'
     | 'bomb'
     | 'buff-expired'
-    | 'debuff-resisted';
+    | 'debuff-resisted'
+    | 'shield-destroyed';
 
 export interface CombatLogEntry {
     kind: CombatLogEntryKind;

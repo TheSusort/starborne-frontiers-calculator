@@ -431,6 +431,17 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    'shield-destroyed': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'shield-destroyed',
+            actorId: e.victimId,
+            targets: [{ targetId: e.victimId }],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
     'buff-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
