@@ -431,6 +431,28 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    'shield-destroyed-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'shield-destroyed',
+            actorId: e.victimId,
+            targets: [{ targetId: e.victimId }],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'cheat-death-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'cheat-death',
+            actorId: e.actorId,
+            targets: [{ targetId: e.actorId }],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
     'buff-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
@@ -440,6 +462,18 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             reactions: [],
             note: e.buffName,
             ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'buff-expired': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'buff-expired',
+            actorId: e.actorId,
+            targets: [],
+            reactions: [],
+            note: `${e.buffName} expired`,
         };
         ctx.attachEntry(entry);
     },
@@ -480,6 +514,18 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             reactions: [],
             note: e.buffName,
             ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'debuff-resisted': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'debuff-resisted',
+            actorId: e.sourceId ?? e.targetId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: e.buffName,
         };
         ctx.attachEntry(entry);
     },

@@ -71,7 +71,7 @@ import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
 import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
-import { CombatEventBus, createEventBus } from './events';
+import { CombatEvent, CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
@@ -3578,6 +3578,15 @@ export function runCombat(input: CombatEngineInput): {
         // subscribes to `reactive-damage-performed` → it can never chain.
         let deferReflectLogs = false;
         const pendingReflectLogs: { sourceId: string; targetId: string; amount: number }[] = [];
+        // Shared LOG-ONLY consequence-event buffer. Carries the log-only twins
+        // `shield-destroyed-log` / `cheat-death-log` (NOT the real shield-destroyed /
+        // cheat-death-activated events, which emit inline for their combat listeners). NO combat
+        // listener subscribes to the twins, so buffering them cannot alter reaction timing.
+        // Same defer-flush rationale as pendingReflectLogs above — twins emitted from INSIDE
+        // applyVictimDamage during drivePositionalApply must wait until the attack entry exists
+        // (post emitDeferredAbilityPerformed) so buildCombatLog's routeReaction nests them under
+        // it instead of a preceding sibling entry in the attacker's turn.
+        const pendingConsequenceLogs: CombatEvent[] = [];
         const flushReflectLogs = (): void => {
             for (const row of pendingReflectLogs) {
                 bus.emit({
@@ -3592,6 +3601,8 @@ export function runCombat(input: CombatEngineInput): {
                 });
             }
             pendingReflectLogs.length = 0;
+            for (const ev of pendingConsequenceLogs) bus.emit(ev);
+            pendingConsequenceLogs.length = 0;
         };
         const applyVictimDamage = (
             rawDamage: number,
@@ -4008,7 +4019,20 @@ export function runCombat(input: CombatEngineInput): {
             // "destruction" the game reacts to; a Barrier-blocked hit already returned above and
             // never reaches this line, so it can never false-positive here either.
             if (cause?.byDirectDamage && shieldBeforeThisAbsorb > 0 && victim.shieldPool === 0) {
+                // Real event — INLINE for its combat listener (AEGIS on-ally-shield-destroyed).
+                // Emitting inline keeps listener enqueue timing byte-identical to pre-log
+                // behavior; the LOG-ONLY twin below carries the deferred nesting.
                 bus.emit({ type: 'shield-destroyed', victimId: victim.id, round: r });
+                const logEv: CombatEvent = {
+                    type: 'shield-destroyed-log',
+                    victimId: victim.id,
+                    round: r,
+                    reactive: true,
+                    duringTurnOf: actingActorId,
+                    triggerActorId: actingActorId,
+                };
+                if (deferReflectLogs) pendingConsequenceLogs.push(logEv);
+                else bus.emit(logEv);
             }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
@@ -4060,7 +4084,19 @@ export function runCombat(input: CombatEngineInput): {
                     victim.genericDoTEntries = victim.genericDoTEntries.filter(
                         (e) => e.unremovable
                     );
+                    // Real event — INLINE for its combat listener (Yazid on-cheat-death-activated),
+                    // keeping listener timing byte-identical; the LOG-ONLY twin carries the nesting.
                     bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
+                    const cheatDeathLogEv: CombatEvent = {
+                        type: 'cheat-death-log',
+                        actorId: targetId,
+                        round: r,
+                        reactive: true,
+                        duringTurnOf: actingActorId,
+                        triggerActorId: actingActorId,
+                    };
+                    if (deferReflectLogs) pendingConsequenceLogs.push(cheatDeathLogEv);
+                    else bus.emit(cheatDeathLogEv);
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
                     // ship-destroyed once (shared helper; idempotent via the per-actor

@@ -104,8 +104,8 @@ describe('buildCombatLog', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            // buff-expired has no handler — should not throw and produce no entry
-            ev({ type: 'buff-expired', actorId: 'A', round: 1, buffName: 'Inspire' }),
+            // unknown-event-type has no handler — should not throw and produce no entry
+            ev({ type: 'unknown-event-type', actorId: 'A', round: 1 } as unknown as CombatEvent),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -1537,7 +1537,7 @@ describe('buildCombatLog', () => {
     });
 
     it('unknown stamped event type is a no-op (no entry, no throw)', () => {
-        // buff-expired has no handler. Stamped — the stamp logic must not throw.
+        // unknown-event-type has no handler. Stamped — the stamp logic must not throw.
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1551,14 +1551,13 @@ describe('buildCombatLog', () => {
                 didHit: true,
             }),
             ev({
-                type: 'buff-expired',
+                type: 'unknown-event-type',
                 actorId: 'A',
                 round: 1,
-                buffName: 'Inspire',
                 reactive: true,
                 duringTurnOf: 'A',
                 triggerActorId: 'A',
-            }),
+            } as unknown as CombatEvent),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -1567,7 +1566,7 @@ describe('buildCombatLog', () => {
         const turn = log[0].turns[0];
         // The ability-performed never received an attacked event, so it closes with zero
         // targets and (didHit: true, not a miss) gets pruned by Task 4's phantom-row
-        // suppression. The stamped buff-expired produced nothing (no throw, no entries).
+        // suppression. The stamped unknown-event-type produced nothing (no throw, no entries).
         expect(turn.entries).toHaveLength(0);
         expect(log[0].endOfRound).toHaveLength(0);
     });
@@ -1906,5 +1905,162 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         );
         expect(rounds[0].turns[0].statsSnapshot).toBeUndefined();
         expect(rounds[0].turns[1].statsSnapshot).toBeUndefined();
+    });
+
+    it('renders a buff-expired event as a status line in the owner turn', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'buff-expired', actorId: 'A', round: 1, buffName: 'Shield Wall' }),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const entries = rounds[0].turns[0].entries;
+        const expired = entries.find((e) => e.kind === 'buff-expired');
+        expect(expired).toBeDefined();
+        expect(expired!.actorId).toBe('A');
+        expect(expired!.note).toBe('Shield Wall expired');
+    });
+
+    it('renders a debuff-resisted event with source and target', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'debuff-resisted',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                buffName: 'Stun',
+            }),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const resisted = rounds[0].turns[0].entries.find((e) => e.kind === 'debuff-resisted');
+        expect(resisted).toBeDefined();
+        expect(resisted!.actorId).toBe('A');
+        expect(resisted!.targets[0].targetId).toBe('B');
+        expect(resisted!.note).toBe('Stun');
+    });
+
+    it('renders a debuff-resisted event with no source (falls back to target)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'debuff-resisted', targetId: 'B', round: 1, buffName: 'Stun' }),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const resisted = rounds[0].turns[0].entries.find((e) => e.kind === 'debuff-resisted');
+        expect(resisted).toBeDefined();
+        expect(resisted!.actorId).toBe('B');
+        expect(resisted!.targets[0].targetId).toBe('B');
+    });
+
+    it('nests a stamped shield-destroyed under the triggering attack', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 5000,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 5000,
+                didCrit: false,
+                isPrimaryTarget: true,
+            }),
+            // Emitted after the attack entry exists (defer-flush), stamped to A's turn.
+            // The engine emits the LOG-ONLY twin (`shield-destroyed-log`) through the
+            // defer-flush buffer; the REAL `shield-destroyed` emits inline for its
+            // combat listener (AEGIS) and carries no log entry (see decoupling test below).
+            ev({
+                type: 'shield-destroyed-log',
+                victimId: 'B',
+                round: 1,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            } as CombatEvent),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const attack = rounds[0].turns[0].entries.find((e) => e.kind === 'attack');
+        expect(attack).toBeDefined();
+        const nested = attack!.reactions.find((r) => r.kind === 'shield-destroyed');
+        expect(nested).toBeDefined();
+        expect(nested!.actorId).toBe('B');
+    });
+
+    it('the real shield-destroyed event produces NO log entry (only the -log twin does)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'shield-destroyed', victimId: 'B', round: 1 } as CombatEvent),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const all = rounds[0].turns.flatMap((t) => t.entries).concat(rounds[0].endOfRound);
+        expect(all.some((e) => e.kind === 'shield-destroyed')).toBe(false);
+    });
+
+    it('nests a stamped cheat-death-activated under the triggering attack', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 9999,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 9999,
+                didCrit: false,
+                isPrimaryTarget: true,
+            }),
+            // Emitted after the attack entry exists (defer-flush), stamped to A's turn.
+            // The engine emits the LOG-ONLY twin (`cheat-death-log`) through the defer-flush
+            // buffer; the REAL `cheat-death-activated` emits inline for its combat listener
+            // (Yazid) and carries no log entry (see decoupling test below).
+            ev({
+                type: 'cheat-death-log',
+                actorId: 'B',
+                round: 1,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            } as CombatEvent),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const attack = rounds[0].turns[0].entries.find((e) => e.kind === 'attack');
+        expect(attack).toBeDefined();
+        const nested = attack!.reactions.find((r) => r.kind === 'cheat-death');
+        expect(nested).toBeDefined();
+        expect(nested!.actorId).toBe('B');
+    });
+
+    it('the real cheat-death-activated event produces NO log entry (only the -log twin does)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'cheat-death-activated', actorId: 'B', round: 1 } as CombatEvent),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const all = rounds[0].turns.flatMap((t) => t.entries).concat(rounds[0].endOfRound);
+        expect(all.some((e) => e.kind === 'cheat-death')).toBe(false);
     });
 });

@@ -268,6 +268,13 @@ export type CombatEvent =
      *  with any other direct hit. A Barrier-blocked hit never reaches the shield at all (the
      *  Barrier early-return precedes this emit point), so it can never false-positive here. */
     | ({ type: 'shield-destroyed'; victimId: string; round: number } & ReactiveStamp)
+    /** LOG-ONLY twin of `shield-destroyed`. The REAL `shield-destroyed` event carries the
+     *  combat listeners (AEGIS on-ally-shield-destroyed) and is emitted INLINE; this twin
+     *  exists SOLELY so buildCombatLog can surface (and nest) the shield break. NO combat
+     *  listener subscribes to it, so it can never chain — same contract as
+     *  `reactive-damage-performed`. Buffered on the positional path (defer-flush) to nest
+     *  under the triggering attack. */
+    | ({ type: 'shield-destroyed-log'; victimId: string; round: number } & ReactiveStamp)
     /** A target's HP fraction changed. Emitted on TWO distinct paths with intended
      *  granularity asymmetry:
      *   - Tank-side (Phase 4c PR 3, LIVE): once per HP-INTAKE EVENT inside
@@ -296,6 +303,11 @@ export type CombatEvent =
     /** Emitted when a Cheat Death passive intercepts what would have been a lethal
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
     | ({ type: 'cheat-death-activated'; actorId: string; round: number } & ReactiveStamp)
+    /** LOG-ONLY twin of `cheat-death-activated`. The REAL event carries the combat listeners
+     *  (Yazid on-cheat-death-activated) and is emitted INLINE; this twin exists SOLELY for
+     *  buildCombatLog. NO combat listener subscribes to it (cannot chain). Buffered on the
+     *  positional path (defer-flush) to nest under the triggering attack. */
+    | ({ type: 'cheat-death-log'; actorId: string; round: number } & ReactiveStamp)
     /** Emitted at every actor.charges mutation so the log can show charge state and
      *  manipulation. `oldCharge`/`newCharge` bracket the mutation; `reason` distinguishes
      *  the three mutation paths:
