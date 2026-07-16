@@ -105,7 +105,7 @@ describe('buildCombatLog', () => {
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
             // unknown-event-type has no handler — should not throw and produce no entry
-            ev({ type: 'unknown-event-type' as any, actorId: 'A', round: 1 }),
+            ev({ type: 'unknown-event-type', actorId: 'A', round: 1 } as unknown as CombatEvent),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -1551,13 +1551,13 @@ describe('buildCombatLog', () => {
                 didHit: true,
             }),
             ev({
-                type: 'unknown-event-type' as any,
+                type: 'unknown-event-type',
                 actorId: 'A',
                 round: 1,
                 reactive: true,
                 duringTurnOf: 'A',
                 triggerActorId: 'A',
-            }),
+            } as unknown as CombatEvent),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
