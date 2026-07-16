@@ -548,15 +548,16 @@ git commit -m "feat: standardized battle scenario builder for the kit-audit harn
 
 **Interfaces:**
 - Consumes: `buildTraceShip` (Task 2); `buildStandardScenario`, `ScenarioOverrides` (Task 3); `getShipSkillRows` (`src/utils/ship/skillRows.ts`); `buildShipAbilities` (`src/utils/abilities/buildShipAbilities.ts`); `simulateBattle` (`src/utils/calculators/battleSimulator.ts`); `Ability` (`src/types/abilities.ts`).
+- Also consumes: `CombatLogRound`, `CombatLogEntry`, `CombatLogEntryKind` (`src/utils/combat/log/types.ts`).
 - Produces:
   - `interface ClauseTrace { slot: string; type: string; target?: string; trigger?: string; summary: string; observed: boolean; }`
-  - `interface KitBundle { name: string; refitLevel: number; skillRows: { label: string; text: string }[]; abilities: ClauseTrace[]; combatLog: unknown[]; outcome: unknown; }`
+  - `interface KitBundle { name: string; refitLevel: number; skillRows: { label: string; text: string }[]; abilities: ClauseTrace[]; combatLog: CombatLogRound[]; outcome: unknown; }`
   - `type KitBundleResult = KitBundle | { name: string; error: string };`
   - `buildKitBundle(name: string, overrides?: ScenarioOverrides & { refitLevel?: 0 | 2 | 4 }): KitBundleResult`
   - `renderKitBundleMarkdown(bundle: KitBundleResult): string`
-  - `const ABILITY_TYPE_TO_LOG_EVENTS: Record<string, string[]>`
+  - `const ABILITY_TYPE_TO_LOG_KINDS: Record<string, CombatLogEntryKind[]>`
 
-Observed-labeler heuristic: an ability is `observed` when the combat log contains ≥1 event whose `type` is in `ABILITY_TYPE_TO_LOG_EVENTS[ability.type]` AND references the reviewed ship as actor/source. This is a routing aid for escalation — the reviewer makes the actual correctness judgment; it does not decide findings.
+**CRITICAL — combat-log structure (confirmed against `src/utils/combat/log/types.ts`):** the log is `CombatLogRound[]`, each round has `startOfRound: CombatLogEntry[]`, `turns: CombatLogTurn[]` (each turn `{ actorId, entries: CombatLogEntry[] }`), and `endOfRound: CombatLogEntry[]`. Every `CombatLogEntry` carries `{ kind: CombatLogEntryKind, actorId, targets, reactions: CombatLogEntry[] }` — entries key on **`actorId`, never a ship name**. The reviewed ship is ALWAYS `player[0]` → the reserved focus id `'attacker'` (minted by `simulateBattle`). So the observed-labeler walks the log, collects the `kind`s of every entry whose `actorId === 'attacker'` (recursing into nested `reactions` — reactive/counter/start-and-end-of-round procs land there), and marks an ability `observed` when that kind-set intersects `ABILITY_TYPE_TO_LOG_KINDS[ability.type]`. Do NOT substring-search a ship name — the name never appears in the log. This is a routing aid for escalation; the reviewer makes the actual correctness judgment.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -607,21 +608,26 @@ import { getShipSkillRows } from '../../src/utils/ship/skillRows';
 import { buildShipAbilities } from '../../src/utils/abilities/buildShipAbilities';
 import { simulateBattle } from '../../src/utils/calculators/battleSimulator';
 import type { Ability } from '../../src/types/abilities';
+import type { CombatLogRound, CombatLogEntry, CombatLogEntryKind } from '../../src/utils/combat/log/types';
 
-export const ABILITY_TYPE_TO_LOG_EVENTS: Record<string, string[]> = {
-    damage: ['attacked', 'ability-performed'],
-    counter: ['reactive-damage-performed', 'attacked'],
-    'additional-damage': ['attacked', 'ability-performed'],
-    heal: ['heal-performed', 'reactive-heal-performed'],
-    shield: ['shield-applied'],
-    buff: ['buff-applied'],
-    debuff: ['debuff-applied', 'debuff-resisted'],
+// The reviewed ship is always player[0], whose engine actor id is the reserved 'attacker'.
+const FOCUS_ACTOR_ID = 'attacker';
+
+// Maps a parsed ability's `type` to the combat-log entry `kind`s it would produce when it fires.
+export const ABILITY_TYPE_TO_LOG_KINDS: Record<string, CombatLogEntryKind[]> = {
+    damage: ['attack'],
+    counter: ['attack'],
+    'additional-damage': ['attack'],
+    heal: ['heal'],
+    shield: ['shield'],
+    buff: ['buff'],
+    debuff: ['debuff', 'debuff-resisted'],
     dot: ['dot-applied', 'dot-ticked'],
-    control: ['control-applied'],
-    cleanse: ['cleanse-performed'],
-    purge: ['purge-performed'],
+    control: ['control'],
+    cleanse: ['cleanse'],
+    purge: ['purge'],
     charge: ['charge-changed'],
-    modifier: ['buff-applied', 'stats-snapshot'],
+    modifier: ['buff'],
 };
 
 export interface ClauseTrace {
@@ -637,19 +643,30 @@ export interface KitBundle {
     refitLevel: number;
     skillRows: { label: string; text: string }[];
     abilities: ClauseTrace[];
-    combatLog: unknown[];
+    combatLog: CombatLogRound[];
     outcome: unknown;
 }
 export type KitBundleResult = KitBundle | { name: string; error: string };
 
 const TARGETING_FALLBACK = { activeTarget: 'front', activePattern: 'Pattern-Base' };
 
-// Does the log mention the reviewed ship by name in an entry of one of the expected types?
-function logHasEventForShip(log: unknown[], eventTypes: string[], shipName: string): boolean {
-    const needle = JSON.stringify(log);
-    // Coarse: the hierarchical log embeds actor names + event kind strings. A precise per-event
-    // walk is unnecessary — this only routes UNTRIGGERED clauses to escalation.
-    return eventTypes.some((t) => needle.includes(t)) && needle.includes(shipName);
+// Collect the entry kinds of every log entry whose actor is `actorId`, recursing into nested
+// reactions (counters / start-and-end-of-round procs land there). Entries key on actorId, never
+// a ship name — so the reviewed ship is found by its reserved focus id, not by its display name.
+function collectActorEntryKinds(log: CombatLogRound[], actorId: string): Set<CombatLogEntryKind> {
+    const kinds = new Set<CombatLogEntryKind>();
+    const visit = (entries: CombatLogEntry[]): void => {
+        for (const e of entries) {
+            if (e.actorId === actorId) kinds.add(e.kind);
+            if (e.reactions?.length) visit(e.reactions);
+        }
+    };
+    for (const round of log) {
+        visit(round.startOfRound ?? []);
+        for (const turn of round.turns ?? []) visit(turn.entries ?? []);
+        visit(round.endOfRound ?? []);
+    }
+    return kinds;
 }
 
 export function buildKitBundle(
@@ -668,7 +685,7 @@ export function buildKitBundle(
         s.abilities.map((ability) => ({ slot: s.slot, ability }))
     );
 
-    let combatLog: unknown[] = [];
+    let combatLog: CombatLogRound[] = [];
     let outcome: unknown = null;
     try {
         const result = simulateBattle(buildStandardScenario(ship, overrides));
@@ -678,17 +695,17 @@ export function buildKitBundle(
         return { name, error: `simulateBattle threw: ${(e as Error).message}` };
     }
 
+    // Kinds the reviewed ship (focus actor) actually produced in this scenario.
+    const focusKinds = collectActorEntryKinds(combatLog, FOCUS_ACTOR_ID);
     const abilities: ClauseTrace[] = allAbilities.map(({ slot, ability }) => {
-        const eventTypes = ABILITY_TYPE_TO_LOG_EVENTS[ability.type] ?? [];
+        const expectedKinds = ABILITY_TYPE_TO_LOG_KINDS[ability.type] ?? [];
         return {
             slot,
             type: ability.type,
             target: (ability as { target?: string }).target,
             trigger: ability.trigger,
             summary: JSON.stringify(ability.config),
-            // Search by the ship's CANONICAL name (buildTraceShip normalizes CSV casing) —
-            // the combat log contains ship.name, which may differ from the caller's raw `name`.
-            observed: logHasEventForShip(combatLog, eventTypes, ship.name),
+            observed: expectedKinds.some((k) => focusKinds.has(k)),
         };
     });
 
