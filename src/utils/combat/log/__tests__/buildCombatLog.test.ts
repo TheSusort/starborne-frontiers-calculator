@@ -1978,14 +1978,17 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
                 isPrimaryTarget: true,
             }),
             // Emitted after the attack entry exists (defer-flush), stamped to A's turn.
+            // The engine emits the LOG-ONLY twin (`shield-destroyed-log`) through the
+            // defer-flush buffer; the REAL `shield-destroyed` emits inline for its
+            // combat listener (AEGIS) and carries no log entry (see decoupling test below).
             ev({
-                type: 'shield-destroyed',
+                type: 'shield-destroyed-log',
                 victimId: 'B',
                 round: 1,
                 reactive: true,
                 duringTurnOf: 'A',
                 triggerActorId: 'A',
-            }),
+            } as CombatEvent),
         ];
         const rounds = buildCombatLog(events, roster, initialCharge);
         const attack = rounds[0].turns[0].entries.find((e) => e.kind === 'attack');
@@ -1993,6 +1996,17 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         const nested = attack!.reactions.find((r) => r.kind === 'shield-destroyed');
         expect(nested).toBeDefined();
         expect(nested!.actorId).toBe('B');
+    });
+
+    it('the real shield-destroyed event produces NO log entry (only the -log twin does)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'shield-destroyed', victimId: 'B', round: 1 } as CombatEvent),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const all = rounds[0].turns.flatMap((t) => t.entries).concat(rounds[0].endOfRound);
+        expect(all.some((e) => e.kind === 'shield-destroyed')).toBe(false);
     });
 
     it('nests a stamped cheat-death-activated under the triggering attack', () => {
@@ -2019,14 +2033,17 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
                 isPrimaryTarget: true,
             }),
             // Emitted after the attack entry exists (defer-flush), stamped to A's turn.
+            // The engine emits the LOG-ONLY twin (`cheat-death-log`) through the defer-flush
+            // buffer; the REAL `cheat-death-activated` emits inline for its combat listener
+            // (Yazid) and carries no log entry (see decoupling test below).
             ev({
-                type: 'cheat-death-activated',
+                type: 'cheat-death-log',
                 actorId: 'B',
                 round: 1,
                 reactive: true,
                 duringTurnOf: 'A',
                 triggerActorId: 'A',
-            }),
+            } as CombatEvent),
         ];
         const rounds = buildCombatLog(events, roster, initialCharge);
         const attack = rounds[0].turns[0].entries.find((e) => e.kind === 'attack');
@@ -2034,5 +2051,16 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         const nested = attack!.reactions.find((r) => r.kind === 'cheat-death');
         expect(nested).toBeDefined();
         expect(nested!.actorId).toBe('B');
+    });
+
+    it('the real cheat-death-activated event produces NO log entry (only the -log twin does)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'cheat-death-activated', actorId: 'B', round: 1 } as CombatEvent),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const all = rounds[0].turns.flatMap((t) => t.entries).concat(rounds[0].endOfRound);
+        expect(all.some((e) => e.kind === 'cheat-death')).toBe(false);
     });
 });

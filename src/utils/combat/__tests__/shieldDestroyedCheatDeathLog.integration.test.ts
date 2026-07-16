@@ -89,11 +89,12 @@ describe('shield-destroyed surfaces in the combat log (real sim path)', () => {
         const shieldBreaks = flattenCombatLog(result).filter((e) => e.kind === 'shield-destroyed');
         expect(shieldBreaks.length).toBeGreaterThan(0);
 
-        // Ordering proof (the actual defer-flush contract): the shield-destroyed entry fires
+        // Ordering proof (the actual defer-flush contract): the shield-destroyed-log twin fires
         // INSIDE applyVictimDamage — BEFORE the attack's deferred ability-performed on the
-        // positional path — so a naive (unbuffered) forward would surface it as a TOP-LEVEL
-        // sibling entry in the breaker's turn instead of nested under the attack that caused it.
-        // Only the buffered defer-flush routes it into the triggering attack's `.reactions[]`.
+        // positional path — so a naive (unbuffered) forward would land it in `endOfRound`
+        // (no non-reactive trigger entry exists yet for the twin to nest under) instead of
+        // nested under the attack that caused it. Only the buffered defer-flush routes it into
+        // the triggering attack's `.reactions[]`.
         const topLevelShieldDestroyed = result.combatLog
             .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
             .filter((entry) => entry.kind === 'shield-destroyed');
@@ -139,11 +140,12 @@ describe('cheat-death-activated surfaces in the combat log (real sim path)', () 
         const saves = flattenCombatLog(result).filter((e) => e.kind === 'cheat-death');
         expect(saves.length).toBeGreaterThan(0);
 
-        // Ordering proof (mirrors the shield-destroyed case above): cheat-death-activated fires
-        // INSIDE applyVictimDamage, before the attack's deferred ability-performed on the
-        // positional path — a naive (unbuffered) forward would surface it as a TOP-LEVEL sibling
-        // entry in the killer's turn instead of nested under the triggering attack. Only the
-        // buffered defer-flush routes it into the attack's `.reactions[]`.
+        // Ordering proof (mirrors the shield-destroyed case above): the cheat-death-log twin
+        // fires INSIDE applyVictimDamage, before the attack's deferred ability-performed on the
+        // positional path — a naive (unbuffered) forward would land it in `endOfRound` (no
+        // non-reactive trigger entry exists yet for the twin to nest under) instead of nested
+        // under the triggering attack. Only the buffered defer-flush routes it into the attack's
+        // `.reactions[]`.
         const topLevelCheatDeath = result.combatLog
             .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
             .filter((entry) => entry.kind === 'cheat-death');

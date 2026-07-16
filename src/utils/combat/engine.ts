@@ -4016,16 +4016,20 @@ export function runCombat(input: CombatEngineInput): {
             // "destruction" the game reacts to; a Barrier-blocked hit already returned above and
             // never reaches this line, so it can never false-positive here either.
             if (cause?.byDirectDamage && shieldBeforeThisAbsorb > 0 && victim.shieldPool === 0) {
-                const ev: CombatEvent = {
-                    type: 'shield-destroyed',
+                // Real event — INLINE for its combat listener (AEGIS on-ally-shield-destroyed).
+                // Emitting inline keeps listener enqueue timing byte-identical to pre-log
+                // behavior; the LOG-ONLY twin below carries the deferred nesting.
+                bus.emit({ type: 'shield-destroyed', victimId: victim.id, round: r });
+                const logEv: CombatEvent = {
+                    type: 'shield-destroyed-log',
                     victimId: victim.id,
                     round: r,
                     reactive: true,
                     duringTurnOf: actingActorId,
                     triggerActorId: actingActorId,
                 };
-                if (deferReflectLogs) pendingConsequenceLogs.push(ev);
-                else bus.emit(ev);
+                if (deferReflectLogs) pendingConsequenceLogs.push(logEv);
+                else bus.emit(logEv);
             }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
@@ -4077,16 +4081,19 @@ export function runCombat(input: CombatEngineInput): {
                     victim.genericDoTEntries = victim.genericDoTEntries.filter(
                         (e) => e.unremovable
                     );
-                    const cheatDeathEv: CombatEvent = {
-                        type: 'cheat-death-activated',
+                    // Real event — INLINE for its combat listener (Yazid on-cheat-death-activated),
+                    // keeping listener timing byte-identical; the LOG-ONLY twin carries the nesting.
+                    bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
+                    const cheatDeathLogEv: CombatEvent = {
+                        type: 'cheat-death-log',
                         actorId: targetId,
                         round: r,
                         reactive: true,
                         duringTurnOf: actingActorId,
                         triggerActorId: actingActorId,
                     };
-                    if (deferReflectLogs) pendingConsequenceLogs.push(cheatDeathEv);
-                    else bus.emit(cheatDeathEv);
+                    if (deferReflectLogs) pendingConsequenceLogs.push(cheatDeathLogEv);
+                    else bus.emit(cheatDeathLogEv);
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
                     // ship-destroyed once (shared helper; idempotent via the per-actor

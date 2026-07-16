@@ -431,7 +431,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
-    'shield-destroyed': (e, ctx) => {
+    'shield-destroyed-log': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'shield-destroyed',
@@ -442,7 +442,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
-    'cheat-death-activated': (e, ctx) => {
+    'cheat-death-log': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'cheat-death',
