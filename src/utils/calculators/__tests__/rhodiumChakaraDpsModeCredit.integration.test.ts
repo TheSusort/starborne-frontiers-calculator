@@ -195,6 +195,11 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
         expect(reaction.summary.roundsToKill).toBe(1);
         // Run terminated on the kill round — no zero-damage rounds past it.
         expect(reaction.rounds).toHaveLength(1);
+        // enemyHpPct is the ENTERING-round value (dpsSimulator.ts docs; used for hp-threshold
+        // gating), NOT a post-round value — so the kill round reports 100 (full HP entering),
+        // exactly like the tested [100,75,50,25] case where the enemy dies on round 4 showing 25.
+        // (Deliberately not 0: a round-tail kill is consistent with every other kill round.)
+        expect(reaction.rounds[0].enemyHpPct).toBe(100);
     });
 
     it("Chakara's start-of-round highest-Speed-enemy proc credits cumulativeDamage/directDamage in DPS mode (no positioned enemy attackers)", () => {
