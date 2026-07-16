@@ -1,6 +1,6 @@
 import type { Ship, Refit, ShipData } from '../../src/types/ship';
 import { SHIPS } from '../../src/constants/ships';
-import { loadShipSkillRecords, ShipSkillRecord } from './shipSkillCsv';
+import { loadShipSkillRecords, csvAvailable, ShipSkillRecord } from './shipSkillCsv';
 
 export type RefitLevel = 0 | 2 | 4;
 export interface BuildTraceShipOpts {
@@ -16,6 +16,9 @@ export const SHIP_DATA_BY_NAME: Map<string, ShipData> = new Map(
 let recordCache: Map<string, ShipSkillRecord> | null = null;
 function recordFor(name: string): ShipSkillRecord | undefined {
     if (!recordCache) {
+        // Clean checkout: the CSV is gitignored/absent. Return no record rather than letting
+        // readFileSync throw — SHIPS-only lookups (and the neither-source null path) stay safe.
+        if (!csvAvailable()) return undefined;
         recordCache = new Map(loadShipSkillRecords().map((r) => [r.name.toUpperCase(), r]));
     }
     return recordCache.get(name.toUpperCase());

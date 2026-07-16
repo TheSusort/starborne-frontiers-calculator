@@ -19,7 +19,14 @@ export interface LedgerInput {
 const RANK: Record<Finding['severity'], number> = { high: 0, med: 1, low: 2 };
 
 export function renderLedgerMarkdown(input: LedgerInput): string {
-    const sorted = [...input.findings].sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+    // Severity first; then ship, then slot as deterministic tiebreakers so same-severity
+    // ordering is stable regardless of input order (the ledger is a reproducible artifact).
+    const sorted = [...input.findings].sort(
+        (a, b) =>
+            RANK[a.severity] - RANK[b.severity] ||
+            a.ship.localeCompare(b.ship) ||
+            a.slot.localeCompare(b.slot)
+    );
     const bySev = (s: Finding['severity']) => input.findings.filter((f) => f.severity === s).length;
     const rows = sorted
         .map((f) => `| ${f.ship} | ${f.slot} | ${f.layer} | ${f.verdict} | ${f.severity} | ${f.expected} | ${f.observed} | ${f.fixPointer} |`)

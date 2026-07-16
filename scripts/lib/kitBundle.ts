@@ -70,7 +70,7 @@ export function buildKitBundle(
     overrides: ScenarioOverrides & { refitLevel?: 0 | 2 | 4 } = {}
 ): KitBundleResult {
     const ship = buildTraceShip(name, { refitLevel: overrides.refitLevel });
-    if (!ship) return { name, error: 'no SHIPS base stats for this name' };
+    if (!ship) return { name, error: 'no SHIPS base stats and no CSV skill record for this name' };
     // Supply targeting fallbacks so the reviewed ship's active resolves a victim in the sim.
     if (!ship.activeTarget) ship.activeTarget = TARGETING_FALLBACK.activeTarget;
     if (!ship.activePattern) ship.activePattern = TARGETING_FALLBACK.activePattern;
