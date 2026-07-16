@@ -244,8 +244,18 @@ describe('buildTraceShip', () => {
         expect(ship!.refits).toHaveLength(4);
     });
 
-    it('returns null for a name with no SHIPS base stats', () => {
+    it('returns null when there is neither SHIPS data nor a CSV record', () => {
         expect(buildTraceShip('NotARealShip_zzz')).toBeNull();
+    });
+
+    it.skipIf(!csvAvailable())('traces a CSV-only ship (no SHIPS entry) on the default baseline', () => {
+        // Centurion has skill text in the CSV but no SHIPS entry — must still trace.
+        const ship = buildTraceShip('Centurion');
+        expect(ship).not.toBeNull();
+        expect(ship!.name).toBe('Centurion');
+        expect(ship!.baseStats.hp).toBe(200_000); // default baseline
+        expect(ship!.affinity).toBe('antimatter'); // neutral fallback
+        expect((ship!.activeSkillText ?? '').length).toBeGreaterThan(0); // CSV skill text present
     });
 
     it.skipIf(!csvAvailable())('honours a lower refit level', () => {
@@ -289,42 +299,47 @@ function recordFor(name: string): ShipSkillRecord | undefined {
 
 export function buildTraceShip(name: string, opts: BuildTraceShipOpts = {}): Ship | null {
     const data = SHIP_DATA_BY_NAME.get(name.toUpperCase());
-    if (!data) return null;
     const rec = recordFor(name);
+    // Need at least ONE source. Eight CSV ships (Amartya, Centurion, Enforcer, Graphite, Hemlock,
+    // Lingshe, Meatshield, Wildfire) have skill text but NO SHIPS entry — trace them on a default
+    // stat baseline (affinity 'antimatter' = always-neutral, so no affinity distortion) so the
+    // parser+execution audit still covers all 147. Return null only when NEITHER source exists.
+    if (!data && !rec) return null;
+    const canonicalName = data?.name ?? rec!.name;
     const refitLevel = opts.refitLevel ?? 4;
     const refits: Refit[] = Array.from({ length: refitLevel }, () => ({}) as Refit);
 
     return {
-        id: `trace:${data.name}`,
-        name: data.name, // canonical SHIPS casing, not the raw CSV casing
-        rarity: data.rarity ?? 'legendary',
-        faction: data.faction ?? 'MPL',
-        type: data.role ?? 'ATTACKER',
-        affinity: data.affinity ?? 'antimatter',
+        id: `trace:${canonicalName}`,
+        name: canonicalName, // canonical SHIPS casing when available, else the CSV name
+        rarity: data?.rarity ?? 'legendary',
+        faction: data?.faction ?? 'MPL',
+        type: data?.role ?? 'ATTACKER',
+        affinity: data?.affinity ?? 'antimatter',
         baseStats: {
-            hp: data.hp ?? 200_000,
-            attack: data.attack ?? 2000,
-            defence: data.defense ?? 300,
-            hacking: data.hacking ?? 200,
-            security: data.security ?? 150,
-            crit: data.critRate ?? 50,
-            critDamage: data.critDamage ?? 150,
-            speed: data.speed ?? 100,
+            hp: data?.hp ?? 200_000,
+            attack: data?.attack ?? 2000,
+            defence: data?.defense ?? 300,
+            hacking: data?.hacking ?? 200,
+            security: data?.security ?? 150,
+            crit: data?.critRate ?? 50,
+            critDamage: data?.critDamage ?? 150,
+            speed: data?.speed ?? 100,
         },
         equipment: {},
         implants: {},
         refits,
         // CSV skill text is authoritative; fall back to SHIPS text only if the CSV lacks a record.
-        activeSkillText: rec?.active || data.activeSkillText,
-        chargeSkillText: rec?.charge || data.chargeSkillText,
-        chargeSkillCharge: rec?.chargeCharge ?? data.chargeSkillCharge ?? 0,
-        firstPassiveSkillText: rec?.passives[0] || data.firstPassiveSkillText,
-        secondPassiveSkillText: rec?.passives[1] || data.secondPassiveSkillText,
-        thirdPassiveSkillText: rec?.passives[2] || data.thirdPassiveSkillText,
-        activeTarget: data.activeTarget,
-        activePattern: data.activePattern,
-        chargedTarget: data.chargedTarget,
-        chargedPattern: data.chargedPattern,
+        activeSkillText: rec?.active || data?.activeSkillText,
+        chargeSkillText: rec?.charge || data?.chargeSkillText,
+        chargeSkillCharge: rec?.chargeCharge ?? data?.chargeSkillCharge ?? 0,
+        firstPassiveSkillText: rec?.passives[0] || data?.firstPassiveSkillText,
+        secondPassiveSkillText: rec?.passives[1] || data?.secondPassiveSkillText,
+        thirdPassiveSkillText: rec?.passives[2] || data?.thirdPassiveSkillText,
+        activeTarget: data?.activeTarget,
+        activePattern: data?.activePattern,
+        chargedTarget: data?.chargedTarget,
+        chargedPattern: data?.chargedPattern,
     };
 }
 ```
