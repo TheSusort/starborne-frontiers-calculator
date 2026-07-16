@@ -3578,8 +3578,11 @@ export function runCombat(input: CombatEngineInput): {
         // subscribes to `reactive-damage-performed` → it can never chain.
         let deferReflectLogs = false;
         const pendingReflectLogs: { sourceId: string; targetId: string; amount: number }[] = [];
-        // Task 3: shared consequence-log buffer (reused by Task 4's cheat-death-activated).
-        // Same defer-flush rationale as pendingReflectLogs above — events emitted from INSIDE
+        // Shared LOG-ONLY consequence-event buffer. Carries the log-only twins
+        // `shield-destroyed-log` / `cheat-death-log` (NOT the real shield-destroyed /
+        // cheat-death-activated events, which emit inline for their combat listeners). NO combat
+        // listener subscribes to the twins, so buffering them cannot alter reaction timing.
+        // Same defer-flush rationale as pendingReflectLogs above — twins emitted from INSIDE
         // applyVictimDamage during drivePositionalApply must wait until the attack entry exists
         // (post emitDeferredAbilityPerformed) so buildCombatLog's routeReaction nests them under
         // it instead of a preceding sibling entry in the attacker's turn.
