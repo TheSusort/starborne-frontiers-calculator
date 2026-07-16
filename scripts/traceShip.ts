@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import { mkdirSync, writeFileSync } from 'fs';
 import { loadShipSkillRecords, csvAvailable } from './lib/shipSkillCsv';
-import { buildKitBundle, renderKitBundleMarkdown } from './lib/kitBundle';
+import { buildKitBundle, renderKitReviewMarkdown } from './lib/kitBundle';
 import { parseTraceArgs } from './lib/traceArgs';
 
 const OUT_DIR = 'docs/kit-bundles';
@@ -24,7 +24,7 @@ function main() {
         if ('error' in bundle) errors++;
         const safe = name.replace(/[^\w-]/g, '_') + (parsed.outSuffix ? `.${parsed.outSuffix}` : '');
         writeFileSync(`${OUT_DIR}/${safe}.json`, JSON.stringify(bundle, null, 2));
-        writeFileSync(`${OUT_DIR}/${safe}.md`, renderKitBundleMarkdown(bundle));
+        writeFileSync(`${OUT_DIR}/${safe}.md`, renderKitReviewMarkdown(bundle));
     }
     console.log(`Wrote ${names.length} kit bundles to ${OUT_DIR}/ (${errors} harness errors).`);
 }

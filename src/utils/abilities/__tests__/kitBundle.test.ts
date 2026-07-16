@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
-import { buildKitBundle, renderKitBundleMarkdown } from '../../../../scripts/lib/kitBundle';
+import {
+    buildKitBundle,
+    renderKitBundleMarkdown,
+    renderKitReviewMarkdown,
+} from '../../../../scripts/lib/kitBundle';
 
 describe('buildKitBundle', () => {
     it('returns an error record for an unknown ship', () => {
@@ -24,5 +28,21 @@ describe('buildKitBundle', () => {
         expect(md).toContain('## Skill text');
         expect(md).toContain('## Parsed abilities');
         expect(md).toContain('## Execution trace');
+    });
+});
+
+describe('renderKitReviewMarkdown', () => {
+    it.skipIf(!csvAvailable())('renders the compact review sections for a real ship', () => {
+        const md = renderKitReviewMarkdown(buildKitBundle('Aegis'));
+        expect(md).toContain('## Skill text');
+        expect(md).toContain('## Parsed abilities');
+        expect(md).toContain('## Execution summary');
+        expect(md).toContain('## Focus-actor transcript');
+        expect(md).toContain('Focus-actor kinds observed:');
+    });
+
+    it('renders a harness error', () => {
+        const md = renderKitReviewMarkdown(buildKitBundle('NotARealShip_zzz'));
+        expect(md).toContain('**HARNESS-ERROR:**');
     });
 });
