@@ -18,9 +18,22 @@ describe('buildTraceShip', () => {
         expect(ship!.refits).toHaveLength(4);
     });
 
-    it('returns null for a name with no SHIPS base stats', () => {
+    it('returns null when there is neither SHIPS data nor a CSV record', () => {
         expect(buildTraceShip('NotARealShip_zzz')).toBeNull();
     });
+
+    it.skipIf(!csvAvailable())(
+        'traces a CSV-only ship (no SHIPS entry) on the default baseline',
+        () => {
+            // Centurion has skill text in the CSV but no SHIPS entry — must still trace.
+            const ship = buildTraceShip('Centurion');
+            expect(ship).not.toBeNull();
+            expect(ship!.name).toBe('Centurion');
+            expect(ship!.baseStats.hp).toBe(200_000); // default baseline
+            expect(ship!.affinity).toBe('antimatter'); // neutral fallback
+            expect((ship!.activeSkillText ?? '').length).toBeGreaterThan(0); // CSV skill text present
+        }
+    );
 
     it.skipIf(!csvAvailable())('honours a lower refit level', () => {
         const r0 = buildTraceShip('Aegis', { refitLevel: 0 });
