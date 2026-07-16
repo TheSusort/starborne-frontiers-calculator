@@ -948,4 +948,10 @@ export interface ShipSkills {
      *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
      *  charge removal is a no-op against actors with this flag set. */
     chargeLossImmune?: boolean;
+    /** True when the ship's skill text declares its attacks ignore Taunt and Provoke
+     *  (Judge, Stalwart, Yuyan, Huanying, Valkyrie, Vanguard). Threaded onto
+     *  CombatActor.ignoresForcedTargeting by the engine adapter and consumed by
+     *  positionalBinding.ts to skip Taunt/Provoke forced-targeting redirects (Concentrate
+     *  Fire is unaffected). */
+    ignoresForcedTargeting?: boolean;
 }

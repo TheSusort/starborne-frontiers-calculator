@@ -83,6 +83,7 @@ import {
     parseForceAffinityAdvantage,
     parseDoesntBreakStasis,
     parseChargeLossImmune,
+    detectIgnoresForcedTargeting,
     parseChargeRemoval,
     parseSelfBuffRemovals,
     parseEnemyChargedCastReaction,
@@ -3115,9 +3116,16 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
 
+    // Ship-kit correctness backlog: check ALL skill rows for the "ignores Taunt and Provoke"
+    // clause (forced-targeting immunity), same refit-resolved row set as the flags above.
+    const ignoresForcedTargeting = detectIgnoresForcedTargeting(
+        ...getShipSkillRows(ship).map((row) => row.text)
+    );
+
     return {
         slots,
         ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
+        ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
     };
 }

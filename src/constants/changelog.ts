@@ -96,6 +96,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: when a Barrier fully absorbs an incoming hit, that hit is no longer redirected to the target's protectors — Protection only redirects damage the target would actually take.",
     "DPS calculator: the target is now a real, destructible enemy that actually loses HP as you damage it, instead of an indestructible dummy. The simulation stops the moment the enemy is destroyed and reports how many rounds it took to kill (or, if it survives the window, the enemy's HP remaining).",
     'DPS calculator: comparing multiple ship configs now ranks them by fastest kill first (fewest rounds to destroy the target, ties broken by higher total damage), then by lowest remaining target HP% among configs that don\'t secure the kill. Each config\'s summary leads with "Killed in N rounds" or "Survived (X% HP left)", with total damage and average damage/round kept as secondary detail, and the cumulative damage chart marks the round the target\'s HP reaches 0. Also fixed a bug where average damage/round was computed against the full round window instead of the rounds actually elapsed on an early kill, under-reporting fast-kill configs.',
+    'Combat sim: ships whose skills say their attacks ignore Taunt and Provoke — Judge, Stalwart, Yuyan, Huanying, Valkyrie, Vanguard — now correctly bypass enemy forced-targeting instead of being redirected like every other attacker.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
