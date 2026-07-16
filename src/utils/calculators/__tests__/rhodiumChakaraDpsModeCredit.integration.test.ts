@@ -126,6 +126,82 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
         expect(credited).toBeCloseTo(ATTACK * 0.8, 6);
     });
 
+    it("Rhodium's end-of-round proc surfaces in the PUBLIC simulateDPS summary (round-tail ordering fix)", () => {
+        // The end-of-round reactive credit lands during the `round-ended` drain, which fires
+        // AFTER the round's directDamage/cumulativeDamage/totalRoundDamage scalar snapshot. The
+        // post-drain re-fold folds that late credit into the reported round + summary numbers,
+        // so the proc is now visible on the public surface (not only via __testTapCreditDamage).
+        const reaction = simulateDPS({
+            attack: ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            rounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: rhodiumShipSkills(),
+        });
+        // Active skill is 0%-damage; the only credited direct damage is the end-of-round 80%
+        // proc (noCrit, 0 defense) → ATTACK × 0.8, on the round row, the direct total, and the
+        // cumulative summary.
+        expect(reaction.rounds[0].directDamage).toBeCloseTo(ATTACK * 0.8, 6);
+        expect(reaction.summary.totalDirectDamage).toBeCloseTo(ATTACK * 0.8, 6);
+        expect(reaction.summary.totalDamage).toBeCloseTo(ATTACK * 0.8, 6);
+    });
+
+    it("Rhodium's end-of-round proc accumulates across rounds in the public summary", () => {
+        const reaction = simulateDPS({
+            attack: ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            rounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: rhodiumShipSkills(),
+        });
+        // Each round's 80% proc (ATTACK × 0.8 = 8000) is folded into that round + the cumulative
+        // summary — the re-fold runs every round, not just once.
+        expect(reaction.rounds).toHaveLength(3);
+        expect(reaction.rounds[2].directDamage).toBeCloseTo(ATTACK * 0.8, 6);
+        expect(reaction.summary.totalDamage).toBeCloseTo(3 * ATTACK * 0.8, 6);
+    });
+
+    it("Rhodium's end-of-round proc can land the kill at round tail — roundsToKill honours the reactive HP decline and the run terminates", () => {
+        // enemyHp (5000) < the round-tail proc (ATTACK × 0.8 = 8000), and the active skill deals
+        // 0% — so the enemy survives the (zero) pre-drain decline and is killed by the end-of-round
+        // proc's supplemental applyVictimDamage in the re-fold. Pre-fix the proc never touched HP,
+        // so the enemy survived all 3 rounds; post-fix it dies on round 1 and the run terminates.
+        const reaction = simulateDPS({
+            attack: ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 5_000,
+            rounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: rhodiumShipSkills(),
+        });
+        expect(reaction.summary.survived).toBe(false);
+        expect(reaction.summary.roundsToKill).toBe(1);
+        // Run terminated on the kill round — no zero-damage rounds past it.
+        expect(reaction.rounds).toHaveLength(1);
+        // enemyHpPct is the ENTERING-round value (dpsSimulator.ts docs; used for hp-threshold
+        // gating), NOT a post-round value — so the kill round reports 100 (full HP entering),
+        // exactly like the tested [100,75,50,25] case where the enemy dies on round 4 showing 25.
+        // (Deliberately not 0: a round-tail kill is consistent with every other kill round.)
+        expect(reaction.rounds[0].enemyHpPct).toBe(100);
+    });
+
     it("Chakara's start-of-round highest-Speed-enemy proc credits cumulativeDamage/directDamage in DPS mode (no positioned enemy attackers)", () => {
         const reaction = simulateDPS({
             attack: ATTACK,
