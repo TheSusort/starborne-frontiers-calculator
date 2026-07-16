@@ -47,6 +47,7 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
         case 'cleanse':
         case 'purge':
         case 'charge-changed':
+        case 'buff-expired':
         default:
             return 'text-theme-text-secondary';
     }
@@ -140,6 +141,7 @@ const formatters: Record<
     cleanse: noteLine,
     purge: noteLine,
     'charge-changed': noteLine,
+    'buff-expired': noteLine,
     death: noteLine,
     detonation: (entry, ctx) => {
         const amount = entry.targets[0]?.amount;

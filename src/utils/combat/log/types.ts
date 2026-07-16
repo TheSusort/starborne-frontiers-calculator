@@ -47,7 +47,8 @@ export type CombatLogEntryKind =
     | 'charge-changed'
     | 'death'
     | 'detonation'
-    | 'bomb';
+    | 'bomb'
+    | 'buff-expired';
 
 export interface CombatLogEntry {
     kind: CombatLogEntryKind;

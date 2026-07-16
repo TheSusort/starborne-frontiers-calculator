@@ -104,8 +104,8 @@ describe('buildCombatLog', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            // buff-expired has no handler — should not throw and produce no entry
-            ev({ type: 'buff-expired', actorId: 'A', round: 1, buffName: 'Inspire' }),
+            // unknown-event-type has no handler — should not throw and produce no entry
+            ev({ type: 'unknown-event-type' as any, actorId: 'A', round: 1 }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -1537,7 +1537,7 @@ describe('buildCombatLog', () => {
     });
 
     it('unknown stamped event type is a no-op (no entry, no throw)', () => {
-        // buff-expired has no handler. Stamped — the stamp logic must not throw.
+        // unknown-event-type has no handler. Stamped — the stamp logic must not throw.
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1551,10 +1551,9 @@ describe('buildCombatLog', () => {
                 didHit: true,
             }),
             ev({
-                type: 'buff-expired',
+                type: 'unknown-event-type' as any,
                 actorId: 'A',
                 round: 1,
-                buffName: 'Inspire',
                 reactive: true,
                 duringTurnOf: 'A',
                 triggerActorId: 'A',
@@ -1567,7 +1566,7 @@ describe('buildCombatLog', () => {
         const turn = log[0].turns[0];
         // The ability-performed never received an attacked event, so it closes with zero
         // targets and (didHit: true, not a miss) gets pruned by Task 4's phantom-row
-        // suppression. The stamped buff-expired produced nothing (no throw, no entries).
+        // suppression. The stamped unknown-event-type produced nothing (no throw, no entries).
         expect(turn.entries).toHaveLength(0);
         expect(log[0].endOfRound).toHaveLength(0);
     });
@@ -1906,5 +1905,19 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         );
         expect(rounds[0].turns[0].statsSnapshot).toBeUndefined();
         expect(rounds[0].turns[1].statsSnapshot).toBeUndefined();
+    });
+
+    it('renders a buff-expired event as a status line in the owner turn', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'buff-expired', actorId: 'A', round: 1, buffName: 'Shield Wall' }),
+        ];
+        const rounds = buildCombatLog(events, roster, initialCharge);
+        const entries = rounds[0].turns[0].entries;
+        const expired = entries.find((e) => e.kind === 'buff-expired');
+        expect(expired).toBeDefined();
+        expect(expired!.actorId).toBe('A');
+        expect(expired!.note).toBe('Shield Wall expired');
     });
 });
