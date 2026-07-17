@@ -193,7 +193,8 @@ export type AbilityTrigger =
     // separate from `on-enemy-buffed` (which fires for ANY buff, unfiltered) — Amartya's "When an
     // enemy defender gains Taunt, this Unit inflicts 2 stacks of Exposed on that defender" needs
     // the Taunt-specific gate, not a broad any-buff reaction. Routes onto the actual Taunt
-    // recipient via eventCtx.victimId (positional/team-battle fidelity — see triggers.ts).
+    // recipient via eventCtx.counterTargetId — this is a debuff ability, whose executor reads
+    // counterTargetId (NOT victimId, which only dot/convert-dot consume; see triggers.ts).
     | 'on-enemy-taunt-gained'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
