@@ -7,6 +7,11 @@ import {
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { matchesRoleCategory } from '../../constants/shipTypes';
+import {
+    TOXIC_OVERFLOW,
+    SPREAD_CORROSION_TIER,
+    SPREAD_CORROSION_DURATION,
+} from '../../constants/toxicOverflow';
 import { Ability, AbilityTarget, IncomingHitContext, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
@@ -8185,6 +8190,45 @@ export function runCombat(input: CombatEngineInput): {
                 });
                 lastEnemyHpPctInt = newEnemyHpPctInt;
             }
+        }
+
+        // Toxic Overflow end-of-round Corrosion spread (ship-kit W3, Task 9, ledger #49). Game rule
+        // (constants/buffs.ts): "At the end of the round if a unit has Toxic Overflow and at least 1
+        // stack of Corrosion, inflict Corrosion I for 3 turns to all adjacent allies and remove
+        // Toxic Overflow." Runs BEFORE the round-ended emit/drain below so each `corrosion-spread`
+        // event's enqueued reactions (Hemlock's self-heal, on-corrosion-spread) are flushed by the
+        // same drainIntentsFor calls. Team-symmetric: iterates every living real actor (the DPS
+        // dummy `enemy` is skipped — it holds no per-victim debuffs). The holder's Toxic Overflow
+        // lives in the per-victim TIMED enemy-debuff store (ownerDebuffNames reads it); Corrosion
+        // lives on the actor's corrosionEntries. adjacentAllyIdsFor resolves the holder's SAME-SIDE
+        // adjacent allies (board-neighbours positionally, all same-side allies otherwise).
+        for (const holder of allActors) {
+            if (holder.id === enemy.id) continue; // vestigial DPS dummy — never a real holder
+            if (holder.destroyedRound !== undefined) continue;
+            if (!ownerDebuffNames(holder.id).includes(TOXIC_OVERFLOW)) continue;
+            if (totalStacks(holder.corrosionEntries) < 1) continue;
+            const affectedIds = bySide(
+                isEnemySide(holder.id) ? 'enemy' : 'player'
+            ).adjacentAllyIdsFor(holder.id);
+            // Inflict Corrosion I (SPREAD_CORROSION_TIER, SPREAD_CORROSION_DURATION turns) on each
+            // adjacent ally. Attributed to the holder (a live, resolvable applier so the tick is
+            // counted — see tickDoTs's corrosion applier-ctx rule). New independent stack (DoTs of
+            // the same family stack), mirroring applyNewDoTs's corrosion entry shape.
+            for (const allyId of affectedIds) {
+                const ally = allActorsById.get(allyId);
+                if (!ally) continue;
+                ally.corrosionEntries.push({
+                    stacks: 1,
+                    tier: SPREAD_CORROSION_TIER,
+                    remainingRounds: SPREAD_CORROSION_DURATION,
+                    sourceId: holder.id,
+                });
+            }
+            // Remove Toxic Overflow from the holder (targeted single-family removal — preserves any
+            // co-applied debuffs on the same victim). It landed as a timed enemy debuff (Hemlock's
+            // charged), so it lives in the per-victim enemy store keyed by the holder's id.
+            statusEngine.removeTimedEnemyStatus(holder.id, TOXIC_OVERFLOW);
+            bus.emit({ type: 'corrosion-spread', sourceId: holder.id, affectedIds, round: r });
         }
 
         // round-ended (C2b-2): end-of-round reactive purge (Rhodium). Emitted at the round TAIL,

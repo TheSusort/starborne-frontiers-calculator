@@ -274,6 +274,21 @@ export type CombatEvent =
           round: number;
           pct: number;
       } & ReactiveStamp)
+    /** Ship-kit Wave 3 (Task 9, Hemlock/ledger #49): Corrosion SPREAD at the end of a round. The
+     *  engine's end-of-round Toxic Overflow mechanic (engine.ts) emits this for each unit that held
+     *  Toxic Overflow AND ≥1 stack of Corrosion: it inflicted Corrosion I (3 turns) on that unit's
+     *  adjacent allies and removed its Toxic Overflow. `sourceId` = the unit that held Toxic
+     *  Overflow (the spread origin); `affectedIds` = the adjacent allies that RECEIVED Corrosion I
+     *  (possibly empty if the holder had no living adjacent allies). Team-symmetric — emitted for
+     *  holders on either side. Hemlock's `on-corrosion-spread` self-heal (triggers.ts) rides it,
+     *  scaling by `affectedIds.length` ("per enemy affected"), scoped to spreads whose `sourceId`
+     *  opposes the reactor. */
+    | ({
+          type: 'corrosion-spread';
+          sourceId: string;
+          affectedIds: string[];
+          round: number;
+      } & ReactiveStamp)
     /** A victim's shield pool was fully depleted by a DIRECT hit (SP-F F2, AEGIS). Emitted from
      *  the shared `applyVictimDamage` immediately after the shield-drain line, ONLY when the pool
      *  was > 0 immediately before this hit's absorb and reaches exactly 0 after it, AND the hit

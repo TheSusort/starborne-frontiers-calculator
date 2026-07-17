@@ -104,9 +104,9 @@ const noopActive = (id: string): Ability =>
         config: { type: 'damage', multiplier: 0 },
     }) as unknown as Ability;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const enemyAt = (
     id: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     position: any,
     slots: ShipSkills['slots'],
     speed: number

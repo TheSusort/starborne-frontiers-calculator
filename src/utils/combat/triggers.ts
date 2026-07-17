@@ -200,6 +200,12 @@ export interface Intent {
          *  the own-side `cleansedAllyIds` above. Ignored by non-dot cleanse reactors (Grif's damage
          *  proc routes via counterTargetId). */
         cleansedEnemyIds?: string[];
+        /** Ship-kit W3 (Hemlock, Task 9): the adjacent-ally ids a Corrosion SPREAD landed Corrosion
+         *  I on (corrosion-spread.affectedIds), stamped by the on-corrosion-spread listener. Read
+         *  ONLY for its `.length` by the reactive heal executor's `spread-affected-count` scaling
+         *  ("repairs 5% per enemy affected"); Hemlock's heal is self-target so the ids themselves
+         *  are never routed. Mirrors repairedEnemyIds' count-only use. */
+        spreadAffectedIds?: string[];
         /** SP-E, Task E4: the ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
          *  the convert-dot executor to resolve the correct CombatActor (via ctx.actorById) whose
@@ -952,6 +958,27 @@ export function registerReactiveListeners(args: {
                         // charged skill only — the active skill's cleanse+damage never reaches
                         // stripShieldPct/emits shield-stripped, see events.ts's jsdoc).
                         if (e.casterId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-corrosion-spread':
+                    bus.on('corrosion-spread', (e) => {
+                        // Ship-kit W3 (Task 9, Hemlock): Corrosion spread at end of round (the Toxic
+                        // Overflow mechanic, ledger #49). Opposing-scoped on the SOURCE: the spread
+                        // originates from a unit OPPOSING this owner, so the affected units are the
+                        // owner's enemies — "repairs 5% per ENEMY affected" (this is also what makes
+                        // it team-symmetric: an enemy-side Hemlock heals off a player-side spread).
+                        // Hemlock's heal is target:'self' (reactiveRecipients routes it to [ownerId]
+                        // regardless), so the affected ids are stamped ONLY for the executor's
+                        // spread-affected-count scaling to read `.length` — never for recipient
+                        // routing. One enqueue per spread event.
+                        if (isOpposing(e.sourceId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    spreadAffectedIds: e.affectedIds,
+                                },
+                            });
                     });
                     break;
                 case 'on-enemy-purged':
@@ -2694,10 +2721,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // stamped by the on-enemy-repaired listener from the REAL repaired-actor ids, so in a
         // positional team battle this counts the actual multi-enemy repair, not the DPS dummy).
         // Undefined countSource → 1× (byte-identical for every existing reactive heal/shield).
+        // ship-kit W3 (Hemlock, Task 9): the sibling count-source — "repairs 5% PER enemy affected".
+        // count = the number of adjacent allies the Corrosion spread landed Corrosion I on
+        // (eventCtx.spreadAffectedIds, stamped by the on-corrosion-spread listener from the real
+        // affected-actor ids), so a positional multi-ally spread heals proportionally.
         const eventCountMultiplier =
             intent.ability.scaling?.countSource === 'repaired-enemy-count'
                 ? (intent.eventCtx?.repairedEnemyIds?.length ?? 0)
-                : undefined;
+                : intent.ability.scaling?.countSource === 'spread-affected-count'
+                  ? (intent.eventCtx?.spreadAffectedIds?.length ?? 0)
+                  : undefined;
         // The per-unit rate for a count-scaled heal is scaling.perUnit (== the parsed base pct);
         // for a plain heal it is cfg.pct. A zero count (defensive — the trigger only fires on a
         // repair event, so count >= 1 in practice) grants nothing.

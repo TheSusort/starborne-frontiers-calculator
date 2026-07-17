@@ -2615,6 +2615,28 @@ export function detectEnemyDotDamageTrigger(
     return ENEMY_TAKES_DOT_DAMAGE_RE.test(stripped) ? 'on-enemy-dot-damage' : undefined;
 }
 
+// ship-kit W3 (Hemlock, Task 9): "When Corrosion spreads this Unit repairs 5% …". Corpus-verified
+// unique phrasing (docs/ship-skills.csv). "Spread" is the end-of-round Toxic Overflow mechanic
+// (ledger #49): a unit with Toxic Overflow + Corrosion inflicts Corrosion I on its adjacent allies
+// at end of round — the engine emits `corrosion-spread`, which this trigger rides.
+const CORROSION_SPREADS_RE = /\bwhen\s+corrosion\s+spreads\b/i;
+
+/**
+ * Sentence-scoped (mirrors detectEnemyDotDamageTrigger's rawSentenceAround + stripUnitTags shape)
+ * detector for Hemlock's "when Corrosion spreads" self-repair reaction. Returns undefined outside
+ * that sentence so a heal anchor in a different clause (Hemlock's co-located "gains 1 charge …
+ * after it inflicts a debuff") is never co-triggered. Reference data: docs/ship-skills.csv (Hemlock).
+ */
+export function detectCorrosionSpreadTrigger(
+    text: string,
+    pos: number
+): 'on-corrosion-spread' | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const stripped = stripUnitTags(sentence);
+    return CORROSION_SPREADS_RE.test(stripped) ? 'on-corrosion-spread' : undefined;
+}
+
 // ship-kit W3 (Laika, Task 7): "… upon removing Shield from an enemy." Corpus-verified unique
 // phrasing (grep docs/ship-skills.csv: Laika's two passive-tier variants — 20%/refit-inactive and
 // 30%/refit-active — are the ONLY rows carrying "removing Shield from an enemy"). Laika's own
@@ -3665,6 +3687,11 @@ function parseHealCountScaling(
 // parseHealCountScaling's "for each <live count>" form above. `pct` is KEPT (the per-unit rate);
 // the reactive heal executor multiplies it by the event count.
 const REPAIRED_ENEMY_COUNT_RE = /\bfor every enemy repaired\b/i;
+// ship-kit W3 (Hemlock, Task 9): reactive event-count repair scaling — "repairs 5% … PER enemy
+// affected". The count is the number of adjacent allies a Corrosion spread landed Corrosion I on
+// (eventCtx.spreadAffectedIds.length), stamped by the on-corrosion-spread listener. Same primitive
+// as Sansi's above; `pct` is KEPT (the per-unit rate) and the executor multiplies it by the count.
+const SPREAD_AFFECTED_COUNT_RE = /\bper enemy affected\b/i;
 // ship-kit W3 (Sansi): numeric per-round cap — "limited to 3 times per Round". Generalizes the
 // boolean once-per-round caps. Threaded to Ability.maxPerRound and enforced executor-side.
 const MAX_PER_ROUND_RE = /\blimited to\s+(\d+)\s+times?\s+per\s+round\b/i;
@@ -3678,6 +3705,9 @@ function parseHealEventCountScaling(
 ): { perUnit: number; countSource: ReactiveScalingCountSource } | null {
     if (REPAIRED_ENEMY_COUNT_RE.test(sentence))
         return { perUnit: basePct, countSource: 'repaired-enemy-count' };
+    // ship-kit W3 (Hemlock): "per enemy affected" — the Corrosion-spread affected-count source.
+    if (SPREAD_AFFECTED_COUNT_RE.test(sentence))
+        return { perUnit: basePct, countSource: 'spread-affected-count' };
     return null;
 }
 

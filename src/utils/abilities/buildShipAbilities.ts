@@ -73,6 +73,7 @@ import {
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     detectEnemyDotDamageTrigger,
+    detectCorrosionSpreadTrigger,
     detectShieldStrippedTrigger,
     ONCE_PER_ROUND_PER_ENEMY_RE,
     PURGE_MORE_RE,
@@ -121,6 +122,7 @@ import {
     DOT_TIER_MAP,
 } from '../calculators/skillBuffAutoFill';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
+import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -1887,6 +1889,14 @@ function abilitiesFromText(
                 // already-existing dot-ticked bus event (triggers.ts). Heal-only (no corpus
                 // shield carries this phrase).
                 (h.kind === 'heal' ? detectEnemyDotDamageTrigger(text, healPos) : undefined) ??
+                // Hemlock p2 (ship-kit W3, Task 9): a self-repair anchored in the "when Corrosion
+                // spreads … repairs 5% … per enemy affected" sentence rides the NEW
+                // on-corrosion-spread reactive trigger (position-scoped) — wired onto the NEW
+                // corrosion-spread bus event (combat/events.ts), emitted by the engine's
+                // end-of-round Toxic Overflow spread mechanic (ledger #49). Heal-only (no corpus
+                // shield carries this phrase). The heal targets SELF; only the SCALING count reads
+                // the affected-ally ids (eventCtx.spreadAffectedIds.length) via the scaling wiring.
+                (h.kind === 'heal' ? detectCorrosionSpreadTrigger(text, healPos) : undefined) ??
                 (h.kind === 'shield'
                     ? // Laika p1/p2 (ship-kit W3, Task 7): a self-shield anchored in the "upon
                       // removing Shield from an enemy" sentence rides the NEW on-own-shield-strip
@@ -2763,6 +2773,20 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const ability = selectedBuffToAbility(buff, target);
         // defensive: round-trip buffs may lack the flag; parser buffs already set it
         if (ability.autoFilled === undefined) ability.autoFilled = true;
+        // ship-kit W3 (Hemlock, Task 9): Toxic Overflow's ENTIRE mechanic is the engine's
+        // end-of-round Corrosion-spread (ledger #49) — the engine reads it off the per-victim TIMED
+        // enemy-debuff store and REMOVES it on spread. Both require a numeric, finite duration; the
+        // game text states none, so the generic buff auto-fill left it duration-undefined (which
+        // classifies as an un-removable, always-active aura). Stamp the spread window here so it
+        // lands as a removable timed debuff. Targeted by name — Toxic Overflow is the sole corpus
+        // status with this end-of-round conditional-removal behaviour.
+        if (
+            ability.config.type === 'debuff' &&
+            ability.config.buffName === TOXIC_OVERFLOW &&
+            ability.config.duration === undefined
+        ) {
+            ability.config.duration = TOXIC_OVERFLOW_DURATION;
+        }
         const slot = slotForBuffSource(buff.skillSource);
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
         // SP-E, Task E4: Belladonna's "convert the Corrosion into Acidic Decay ... 1% per 10

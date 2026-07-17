@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Hemlock's Toxic Overflow is now modeled — at the end of each round, an enemy carrying Toxic Overflow and at least 1 stack of Corrosion spreads Corrosion I (3 turns) to its adjacent allies and loses Toxic Overflow. Hemlock's passive self-repair now triggers on that spread, healing 5% of her max HP for each enemy the spread affects, instead of healing a flat 5% every single turn.",
     "Combat sim: Pestilence's second passive now inflicts Corrosion II (2 turns) on every enemy that cleanses a debuff, matching the skill text — previously this clause was not modeled at all (only the debuff-duration reduction on allies was).",
     "Combat sim: Laika's passive self-shield now triggers only when she actually removes Shield from an enemy (her charged skill), instead of granting 30% of her max HP as a shield every single turn regardless of whether her active or charged skill was used.",
     "Combat sim: Sansi's passive self-repair now triggers only when an enemy is actually repaired (up to 3 times per round) and heals 5% of her max HP for each enemy repaired, instead of healing a flat 5% every single turn regardless of enemy activity.",

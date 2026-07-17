@@ -212,6 +212,56 @@ describe.skipIf(!csvAvailable())(
 );
 
 describe.skipIf(!csvAvailable())(
+    'Task 9 — Hemlock Corrosion-spread heal + Toxic Overflow end-of-round spread (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Hemlock p2 — "When Corrosion spreads this Unit repairs 5% of its max HP per enemy affected" rides on-corrosion-spread, count-scaled (spread-affected-count)', () => {
+            const rec = recordFor('Hemlock');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const heal = passive.abilities.find((a) => a.type === 'heal' && a.target === 'self');
+            expect(heal).toBeDefined();
+            // Reacts to a REAL Corrosion-spread event (the Toxic Overflow end-of-round mechanic) —
+            // NOT fired every cast (on-cast), which made the self-heal fire on every round.
+            expect(heal!.trigger).toBe('on-corrosion-spread');
+            expect(heal!.config.type).toBe('heal');
+            if (heal!.config.type === 'heal') {
+                expect(heal!.config.pct).toBe(5);
+                expect(heal!.config.basis).toBe('hp');
+            }
+            // "per enemy affected" → reactive event-count scaling: the amount multiplies the base
+            // 5% by the number of enemies the spread affected (eventCtx.spreadAffectedIds.length).
+            expect(heal!.scaling?.countSource).toBe('spread-affected-count');
+            expect(heal!.scaling?.perUnit).toBe(5);
+            // No live-state Condition backs a reactive count-source scaling.
+            expect(heal!.scaling?.conditionIndex).toBeUndefined();
+        });
+
+        it('Hemlock charged — "inflicts Toxic Overflow" is a TIMED debuff (finite numeric duration), not an effect-less/aura debuff, so the end-of-round mechanic can read + remove it', () => {
+            const rec = recordFor('Hemlock');
+            const s = ship({ chargeSkillText: rec.charge });
+            const { slots } = buildShipAbilities(s);
+            const charged = slot(slots, 'charged')!;
+            const debuff = charged.abilities.find(
+                (a) => a.config.type === 'debuff' && a.config.buffName === 'Toxic Overflow'
+            );
+            expect(debuff).toBeDefined();
+            expect(debuff!.target).toBe('enemy');
+            if (debuff!.config.type === 'debuff') {
+                // The end-of-round spread mechanic reads Toxic Overflow via the per-victim TIMED
+                // enemy-debuff store and REMOVES it on spread — both require a numeric duration
+                // (an undefined duration classifies the status as an un-removable aura). Before
+                // this task the debuff carried NO duration (effect-less aura).
+                expect(typeof debuff!.config.duration).toBe('number');
+                expect(debuff!.config.duration as number).toBeGreaterThan(0);
+                expect(Number.isFinite(debuff!.config.duration as number)).toBe(true);
+                expect(debuff!.config.application).toBe('inflict');
+            }
+        });
+    }
+);
+
+describe.skipIf(!csvAvailable())(
     'Regression — Sokol Blast must stay on-cast despite a co-located extra-action kill phrase (verbatim docs/ship-skills.csv)',
     () => {
         it('Sokol p2 — "gains 1 stack of Blast every turn and grants one extra end of round action upon a kill, once per round" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {

@@ -212,6 +212,14 @@ export type AbilityTrigger =
     // the fire to casts that actually stripped shield (Laika's CHARGED skill only — the active
     // skill's cleanse+damage never reaches stripShieldPct).
     | 'on-own-shield-strip'
+    // Ship-kit Wave 3, Task 9: fires when Corrosion SPREADS on the battlefield (the NEW
+    // `corrosion-spread` bus event — combat/events.ts — emitted by the engine's end-of-round Toxic
+    // Overflow mechanic, ledger #49). Hemlock's "When Corrosion spreads this Unit repairs 5% of its
+    // max HP per enemy affected" rides this: a SELF-target heal whose amount count-scales by the
+    // number of enemies the spread affected (eventCtx.spreadAffectedIds.length). Scoped in
+    // triggers.ts to spreads whose SOURCE is opposing the owner (the affected units are the owner's
+    // enemies — "per enemy affected"), which is also what makes it team-symmetric.
+    | 'on-corrosion-spread'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
     // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
@@ -284,6 +292,9 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Ship-kit Wave 3, Task 7: self-scoped reaction to THIS unit stripping an enemy's shield
     // (Laika self-shield).
     'on-own-shield-strip',
+    // Ship-kit Wave 3, Task 9: opposing-scoped reaction to Corrosion spreading (the end-of-round
+    // Toxic Overflow mechanic, ledger #49) — Hemlock's count-scaled self-heal.
+    'on-corrosion-spread',
 ]);
 
 export type ConditionSubject =
@@ -534,8 +545,11 @@ export interface OutgoingHitContext {
  *  live-state Condition counts an additive `conditionIndex` scaling reads: the count comes
  *  from the triggering reactive event's eventCtx, not from a drain-time ConditionContext.
  *  - 'repaired-enemy-count' → eventCtx.repairedEnemyIds.length (Sansi's "5% for every enemy
- *    repaired"). Task 9 (Hemlock's "per enemy affected") reuses this primitive. */
-export type ReactiveScalingCountSource = 'repaired-enemy-count';
+ *    repaired").
+ *  - 'spread-affected-count' → eventCtx.spreadAffectedIds.length (Hemlock's "5% per enemy
+ *    affected" — the number of adjacent allies a Corrosion spread landed Corrosion I on, ship-kit
+ *    W3 Task 9). Reuses the exact same primitive as 'repaired-enemy-count'. */
+export type ReactiveScalingCountSource = 'repaired-enemy-count' | 'spread-affected-count';
 
 export interface ScalingRule {
     /** Index into Ability.conditions of the live-state count Condition (additive PR6b / damage
