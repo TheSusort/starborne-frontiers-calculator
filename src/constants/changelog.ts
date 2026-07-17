@@ -6,6 +6,9 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Amartya's active skill now inflicts Defense Down II and Inc. Repair Down II on all enemies (matching the skill text), instead of only a single enemy.",
+    "Combat sim: Meiying now re-gains Stealth at the start of every turn — her passive reads 'at the start of combat and every turn' — instead of gaining it once at the start of combat and then going without after it expires.",
+    "Combat sim: Harvester's Speed Up I is now granted together with her extra end-of-round action when an allied unit is destroyed, instead of never being applied.",
     "Combat sim: Hemlock's Toxic Overflow is now modeled — at the end of each round, an enemy carrying Toxic Overflow and at least 1 stack of Corrosion spreads Corrosion I (3 turns) to its adjacent allies and loses Toxic Overflow. Hemlock's passive self-repair now triggers on that spread, healing 5% of her max HP for each enemy the spread affects, instead of healing a flat 5% every single turn.",
     "Combat sim: Pestilence's second passive now inflicts Corrosion II (2 turns) on every enemy that cleanses a debuff, matching the skill text — previously this clause was not modeled at all (only the debuff-duration reduction on allies was).",
     "Combat sim: Laika's passive self-shield now triggers only when she actually removes Shield from an enemy (her charged skill), instead of granting 30% of her max HP as a shield every single turn regardless of whether her active or charged skill was used.",
