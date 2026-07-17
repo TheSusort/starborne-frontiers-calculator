@@ -28,8 +28,8 @@ import { Ship } from '../../../types/ship';
 import { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
 
-/** A Ship carrying Stalwart's first-passive (30%) counterattack skill text, verbatim from
- *  constants/ships.ts. Parsed through the real registry → an on-attacked `counter` ability
+/** A Ship carrying Stalwart's first-passive (30%) counterattack skill text.
+ *  Parsed through the real registry → an on-attacked `counter` ability
  *  (requirePrimaryTarget) plus the co-located `Legion Discipline II` self-buff. */
 function stalwartShip(passiveText: string): Ship {
     return {

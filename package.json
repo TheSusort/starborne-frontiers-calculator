@@ -54,7 +54,8 @@
         "audit:skills": "tsx scripts/auditSkills.ts",
         "trace:ship": "tsx scripts/traceShip.ts",
         "audit:kit-ledger": "tsx scripts/writeKitLedger.ts",
-        "fetch:ship-skills": "tsx scripts/fetch-ship-skills.ts"
+        "fetch:ship-skills": "tsx scripts/fetch-ship-skills.ts",
+        "fetch:ship-data": "tsx scripts/fetch-ship-data.ts"
     },
     "browserslist": {
         "production": [
