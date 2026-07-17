@@ -3620,6 +3620,21 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
             }
         });
 
+        it('Zeolite p2 (R2 refit-active): "+30% damage when hitting a Defender" is gated on enemy-type Defender', () => {
+            const zeoliteP2 = ship({
+                secondPassiveSkillText:
+                    'This Unit increases <unit-damage>damage by 30%</unit-damage> when hitting a Defender and <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
+            });
+            const passive = slot(buildShipAbilities(zeoliteP2).slots, 'passive')!;
+            const mod = passive.abilities.find(
+                (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+            )!;
+            expect(mod).toBeDefined();
+            expect(mod.conditions).toEqual([
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+            ]);
+        });
+
         it('Cobalt active: emits exactly ONE purge with trigger on-cast (active slot unaffected)', () => {
             const cobalt = ship({
                 activeSkillText:

@@ -615,6 +615,20 @@ function parseModifiers(text: string): ParsedModifier[] {
             if (/\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)) {
                 conditions.push(...enemyEffectConditions(enemyEffectNamesFromClause(text)));
             }
+            // Enemy-type gate (Zeolite's "increases damage by 30% when hitting a Defender").
+            // Verb set differs from the crit-damage branch's template (adds hitting/attacking)
+            // and tolerates an optional article ("hitting a Defender" vs Lodolite's "to defenders").
+            const typeM = sentence.match(
+                /\b(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i
+            );
+            if (typeM) {
+                conditions.push({
+                    subject: 'enemy-type',
+                    derivable: true,
+                    requiredEnemyType: (typeM[1].charAt(0).toUpperCase() +
+                        typeM[1].slice(1).toLowerCase()) as EnemyBaseClass,
+                });
+            }
             const hpCond = hpThresholdFromSentence(sentence);
             if (hpCond) conditions.push(hpCond);
             out.push({
