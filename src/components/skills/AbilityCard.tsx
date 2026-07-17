@@ -47,6 +47,8 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     debuff: 'Debuff',
     dot: 'Damage over Time',
     'extend-dot': 'Extend DoTs',
+    // wave 5-6: wired in later tasks — placeholder label only, no editor UI yet.
+    'extend-status': 'Extend Status',
     'detonate-dot': 'Detonate DoTs',
     'accumulate-detonate': 'Accumulate & Detonate',
     charge: 'Charge',

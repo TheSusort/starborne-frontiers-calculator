@@ -13,6 +13,11 @@ export type AbilityType =
     | 'debuff'
     | 'dot'
     | 'extend-dot'
+    // Wave 4 (Sokol/Ripper/Lev): generic extend-status — grows every eligible timed
+    // buff or debuff by N turns (StatusEngine selfMaps/enemyMaps), the clean inverse of
+    // the shipped duration-reduce ('cleanse' mode:'reduce-duration'). Distinct from
+    // 'extend-dot', which operates on the separate DoT tick-stack store, not these maps.
+    | 'extend-status'
     | 'detonate-dot'
     | 'accumulate-detonate'
     | 'charge'
@@ -687,6 +692,11 @@ export type AbilityConfig =
           chanceFromCritPower?: boolean;
           scope?: 'active' | 'inflicted';
       }
+    // Wave 4: generic extend-status (Sokol/Ripper/Lev) — extends every eligible timed
+    // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
+    // `turns`. See src/utils/combat/statusEngine.ts extendAllBuffsDuration/
+    // extendAllDebuffsDuration.
+    | { type: 'extend-status'; statusKind: 'buff' | 'debuff'; turns: number }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
     // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy while
     // active (`turns`), then detonates for `pct`% of the accumulated total on expiry.

@@ -1889,6 +1889,151 @@ describe('reduceAllDebuffsDuration', () => {
     );
 });
 
+// Wave 4 (Sokol/Ripper): extendAllDebuffsDuration / extendAllBuffsDuration — the clean
+// inverse of reduceAllDebuffsDuration above. Same stores and eligibility rules (timed only,
+// skip isUnremovable(name, turnsRemaining)) but ADD instead of subtract, and extending can
+// never expire an entry (no deletion pass).
+describe('extendAllDebuffsDuration', () => {
+    const timedEnemyStatus = (
+        buffName: string,
+        duration: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration,
+        payload: { buffName, stacks: 1, parsedEffects: { defense: -5 } },
+    });
+
+    it('extends every timed debuff on the actor and never expires one', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 2));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+        const affected = eng.extendAllDebuffsDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(affected).toBe(2);
+        const timed = eng.timedAbilityStatuses('enemy');
+        expect(timed.find((s) => s.payload.buffName === 'Armor Break')?.active.turnsRemaining).toBe(
+            3
+        );
+        expect(
+            timed.find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining
+        ).toBe(4);
+    });
+
+    it('skips UNREMOVABLE_STATUSES, still extends the other eligible debuffs', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // 'Acidic Decay' is a real member of UNREMOVABLE_STATUSES.
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+        const affected = eng.extendAllDebuffsDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(affected).toBe(1);
+        const timed = eng.timedAbilityStatuses('enemy');
+        expect(
+            timed.find((s) => s.payload.buffName === 'Acidic Decay')?.active.turnsRemaining
+        ).toBe(3); // untouched
+        expect(
+            timed.find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining
+        ).toBe(4); // extended
+    });
+
+    it('returns 0 for an unknown actor', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+
+        expect(eng.extendAllDebuffsDuration('nope', 1)).toBe(0);
+    });
+
+    it.each([0, -1, NaN, Infinity])(
+        'is a no-op for a non-positive / non-finite turns (%s)',
+        (turns) => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+            const affected = eng.extendAllDebuffsDuration(DEFAULT_ENEMY_TARGET, turns);
+
+            expect(affected).toBe(0);
+            expect(
+                eng.timedAbilityStatuses('enemy').find((s) => s.payload.buffName === 'Defense Down')
+                    ?.active.turnsRemaining
+            ).toBe(3);
+        }
+    );
+});
+
+describe('extendAllBuffsDuration', () => {
+    it('extends every timed self buff on the actor (selfMaps) and never expires one', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 2), 'attacker');
+
+        const affected = eng.extendAllBuffsDuration('attacker', 1);
+
+        expect(affected).toBe(1);
+        expect(
+            eng
+                .timedAbilityStatuses('self', 'attacker')
+                .find((s) => s.payload.buffName === 'Attack Up')?.active.turnsRemaining
+        ).toBe(3);
+    });
+
+    it('does not grow a permanent/persistent-stacking buff (separate map)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        // 'Overload' is a member of PERSISTENT_STACKING_BUFFS — applyTimedAbilityStatus routes
+        // it through the persistent door into persistentSelfMaps, which extendAllBuffsDuration
+        // (selfMaps only) never touches.
+        const persistentOverload: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            kind: 'timed',
+            side: 'self',
+            sourceSlot: 'active',
+            conditions: [],
+            duration: 2, // ignored — name routes to the persistent map
+            payload: { buffName: 'Overload', stacks: 1, parsedEffects: { attack: 10 } },
+        };
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, persistentOverload, 'attacker');
+        expect(eng.timedAbilityStatuses('self', 'attacker')[0].active.turnsRemaining).toBe(
+            'permanent'
+        );
+
+        const affected = eng.extendAllBuffsDuration('attacker', 5);
+
+        expect(affected).toBe(0);
+        expect(eng.timedAbilityStatuses('self', 'attacker')[0].active.turnsRemaining).toBe(
+            'permanent'
+        );
+    });
+
+    it('returns 0 for an unknown actor', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+
+        expect(eng.extendAllBuffsDuration('nope', 1)).toBe(0);
+    });
+
+    it('is a no-op for turns <= 0', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 2), 'attacker');
+
+        const affected = eng.extendAllBuffsDuration('attacker', 0);
+
+        expect(affected).toBe(0);
+        expect(
+            eng
+                .timedAbilityStatuses('self', 'attacker')
+                .find((s) => s.payload.buffName === 'Attack Up')?.active.turnsRemaining
+        ).toBe(2);
+    });
+});
+
 describe('clearRemovable', () => {
     // A persistent-stacking debuff fixture (Defense Shred) on the default enemy target.
     const persistentShred = (): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
