@@ -66,5 +66,27 @@ describe.skipIf(!csvAvailable())(
             expect(heal).toBeDefined();
             expect(heal.target).toBe('self');
         });
+
+        it('B3: Panon passive (R2) — "applies Barrier Recharging to itself" targets self, not enemy', () => {
+            const rec = recordFor('Panon');
+            // Third passive (R4) is empty in the CSV, so the second passive (R2) is the
+            // refit-active row per getShipSkillRows.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const s = ship({ refits: [{}, {}] as any, secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive');
+            expect(passive).toBeDefined();
+
+            // Pre-fix this is misclassified as an ENEMY debuff (config.type 'debuff'), so match
+            // on buffName across both buff/debuff configs and assert the corrected shape.
+            const barrierRecharging = passive!.abilities.find(
+                (a) =>
+                    (a.config.type === 'buff' || a.config.type === 'debuff') &&
+                    a.config.buffName === 'Barrier Recharging'
+            );
+            expect(barrierRecharging).toBeDefined();
+            expect(barrierRecharging!.target).toBe('self');
+            expect(barrierRecharging!.type).toBe('buff');
+        });
     }
 );

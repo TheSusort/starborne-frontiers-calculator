@@ -4521,10 +4521,24 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
 /**
  * Maps a verb to a target side, cross-referencing BUFFS type for the ambiguous "apply" forms.
  * An "apply" verb with a buff-type effect → self; anything else → enemy.
+ *
+ * `followingText` (the text segment immediately after the buff-name tag) carries an explicit
+ * self-referential object when present — "applies <Buff> TO ITSELF" (Panon's Barrier
+ * Recharging, registered as a debuff-typed status even though Panon applies it to itself as a
+ * self-buff gate). That explicit object overrides the BUFFS-type heuristic, which would
+ * otherwise misroute it to 'enemy' purely because the named status happens to be registered
+ * type:'debuff' (Finding B3). No corpus "applies" clause pairs an unrelated "itself" in the
+ * immediately-following text with an actual enemy-targeted debuff (verified against
+ * docs/ship-skills.csv), so this is safe to check unconditionally for apply forms.
  */
-function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
+function verbToTarget(
+    verb: string,
+    buffName: string,
+    followingText: string = ''
+): 'self' | 'enemy' {
     if (SELF_VERBS.has(verb)) return 'self';
     if (ENEMY_VERBS.has(verb)) return 'enemy';
+    if (/\bitself\b/i.test(followingText)) return 'self';
     // apply forms: use BUFFS type to disambiguate
     const found = BUFFS.find((b) => b.name === buffName);
     return found?.type === 'buff' ? 'self' : 'enemy';
@@ -4698,16 +4712,19 @@ export function parseSkillEffects(
         const verb = findVerb(segments, i);
         if (verb === null || verb === undefined) continue; // skip verb or no verb
 
+        // Text immediately following the buff-name tag — used both as verbToTarget's explicit-
+        // object override (Step 2) and as the duration scan source (Step 3).
+        const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';
+
         // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed).
         // Player-side grants get ally-scope granularity from the granting clause (team walk);
         // enemy debuffs stay 'enemy'.
-        const side = verbToTarget(verb, buffName);
+        const side = verbToTarget(verb, buffName, nextText);
         const target: SkillEffect['target'] =
             side === 'self' ? detectGrantScope(skillText, buffName) : 'enemy';
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
-        const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';
         let duration: number | 'recurring' | null = null;
         const durationMatch = DURATION_RE.exec(nextText);
         if (durationMatch) {
