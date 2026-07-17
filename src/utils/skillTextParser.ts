@@ -1092,6 +1092,13 @@ export function detectGrantConditions(
         return [{ subject: 'ally-critically-repaired', derivable: false }];
     }
 
+    // Ship-kit Wave 4, Task 3: "If this Unit has Shield" — a self-shield-presence gate
+    // (APEX's charged Disable). Live-derived from the caster's own shieldPool at cast time.
+    // Checked before enemy-type/other rules — no overlap with those phrasings.
+    if (/\bif\s+this\s+unit\s+has\s+shield\b/i.test(low)) {
+        return [{ subject: 'self-shield', derivable: true }];
+    }
+
     // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
     // derivable:false condition would always be met — evaluateConditions.ts:30).
     if (REPAIRED_THIS_ROUND_RE.test(low)) {

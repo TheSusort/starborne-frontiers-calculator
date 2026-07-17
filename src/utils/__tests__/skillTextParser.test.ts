@@ -2489,6 +2489,14 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('detectGrantConditions: APEX "If this Unit has Shield" → self-shield gate on Disable', () => {
+        const text =
+            'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has Shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
+        expect(detectGrantConditions(text, 'Disable')).toEqual([
+            { subject: 'self-shield', derivable: true },
+        ]);
+    });
+
     it('parseConditionalDamage: IonScorp "but when attacking a Defender, it deals 200%" → +10 delta gated Defender', () => {
         const text =
             'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';

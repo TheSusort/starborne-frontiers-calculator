@@ -1432,6 +1432,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetSpeed: enemy.stats.speed,
         targetCurrentHp: enemy.currentHp,
         targetCritPower: enemy.stats.critDamage,
+        // Ship-kit Wave 4, Task 3: the caster's own shield-presence gate, live-derived from
+        // actor.shieldPool (SAME field/derivation as modifierCtx's selfShielded below) — REQUIRED
+        // here because THIS ctx (not modifierCtx) gates the TIMED ENEMY DEBUFF application just
+        // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check at :1476). APEX's
+        // charged Disable ("If this Unit has Shield, the primary target is inflicted with
+        // Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
+        // defaults false here (buildRoundContext's DPS-safe default) and the debuff would never
+        // land regardless of the caster's real shieldPool, which is just as wrong as the
+        // original unconditional-inflict bug this task fixes.
+        selfShielded: actor.shieldPool > 0,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
