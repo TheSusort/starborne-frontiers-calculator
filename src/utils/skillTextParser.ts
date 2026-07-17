@@ -16,6 +16,7 @@ import {
     Condition,
     ConditionSubject,
     ControlEffect,
+    ReactiveScalingCountSource,
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
 import { getShipSkillRows } from './ship/skillRows';
@@ -1197,10 +1198,16 @@ export function detectGrantConditions(
     // Provoked or Taunted"). Subject-aware guard: "against Taunted or Provoked enemies" (Rikra)
     // is an ENEMY state gating a damage bonus — handled by parseEnemyEffectDamageBonus, NOT a
     // self gate on this buff. Skip when the status adjective directly qualifies "enemies".
+    // Ship-kit Wave 3, Task 4: ALSO skip Amartya's "When an enemy defender gains Taunt, this Unit
+    // inflicts Exposed" — subject-first "an enemy ... gains Taunt" is the on-enemy-taunt-gained
+    // REACTIVE TRIGGER phrasing (ENEMY_GAINS_TAUNT_RE), not a self-status gate; without this
+    // exclusion the bare word "Taunt" here would wrongly spawn a `self-buff:'Taunt'` condition
+    // that gates the whole Exposed grant behind Amartya herself having Taunt (never true) — a
+    // regression this task's new phrasing would otherwise introduce into this pre-existing rule.
     const enemyStatusAttributed =
         /(?:taunt(?:ed)?|provoke[ds]?)(?:\s+or\s+(?:taunt(?:ed)?|provoke[ds]?))?\s+enem(?:y|ies)\b/i.test(
             low
-        );
+        ) || ENEMY_GAINS_TAUNT_RE.test(clause);
     const statuses: string[] = [];
     if (!enemyStatusAttributed) {
         if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
@@ -1299,6 +1306,15 @@ const OWN_DEBUFF_RESISTED_RE = /\bits\s+debuff\s+is\s+resisted\b/i;
 // corpus reaction (docs/ship-skills.csv). The loose [^.]*? gaps cross the "within the Active
 // pattern" positional qualifier and any tag text between "ally" and "shield"/"destroyed".
 const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bdestroyed\b/i;
+// Ship-kit Wave 3, Task 4: "When an enemy defender gains Taunt" — Amartya's Exposed grant
+// (docs/ship-skills.csv row 4, second/third passive: "When an enemy defender gains Taunt, this
+// Unit inflicts N stacks of Exposed on that defender."). Distinct from ENEMY_BUFFED_RE (any-buff,
+// "gets/is/are/becomes buffed") — this is name-specific to Taunt and requires the "gains" verb, so
+// it does not co-match any self-gain "this Unit gains Taunt" phrasing elsewhere in the corpus
+// (Sabertooth/Isha/Xarrow's own Taunt self-grants all use "this Unit gains", not "an enemy...
+// gains"). Corpus-verified (docs/ship-skills.csv, grep "enemy[^.]*gains[^.]*taunt"): only
+// Amartya's two passive rows match.
+const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -1330,6 +1346,9 @@ const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bde
  *    (Overload lifecycle, Task 4: Butcher Marauder Rage II).
  *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (PR-B2: Ravager's Hacking Module
  *    Overdrive grant; inflictor-scoped mirror of the resister-side on-debuff-resisted).
+ *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained' (Ship-kit Wave 3, Task 4:
+ *    Amartya's Exposed grant). Narrow and name-specific to Taunt — distinct from the broad,
+ *    unfiltered on-enemy-buffed (ENEMY_BUFFED_RE).
  *
  * Other reactive phrasings (when-attacked, ally-crit, …) are NOT derivable this phase and stay
  * undefined (manual modelling). Reference data: docs/ship-skills.csv.
@@ -1379,6 +1398,11 @@ export function detectReactiveTrigger(
     // grant). See ENEMY_BUFFED_RE's doc comment for the corpus-verification that only Nuqtu's
     // clauses match.
     if (ENEMY_BUFFED_RE.test(clause)) return 'on-enemy-buffed';
+    // Ship-kit Wave 3, Task 4: "when an enemy [defender] gains Taunt" → on-enemy-taunt-gained
+    // (Amartya's Exposed grant). Checked AFTER the broad ENEMY_BUFFED_RE (harmless ordering here —
+    // ENEMY_BUFFED_RE's own "gets/is/are/becomes buffed" phrasing never matches "gains Taunt", so
+    // this branch is only ever reached via ENEMY_GAINS_TAUNT_RE's own distinct match).
+    if (ENEMY_GAINS_TAUNT_RE.test(clause)) return 'on-enemy-taunt-gained';
     // Overload lifecycle (Task 4). REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
     // kill-removal share one comma-joined sentence ("gains Overload when an enemy performs a repair,
     // upon killing an enemy, this Unit removes Overload") — the grant must resolve to
@@ -2527,6 +2551,12 @@ export function detectProtectionTransformToDot(text: string): { turns: number } 
 const ENEMY_PERFORMING_REPAIR_RE = /\bon\s+any\s+enemy\s+performing\s+an?\s+repairs?\b/i;
 const ENEMY_DEFENDER_DIRECTLY_REPAIRED_RE =
     /\bwhen\s+an?\s+enemy\s+defender\s+is\s+directly\s+repaired\b/i;
+// ship-kit W3 (Sansi): the GENERAL "when an enemy is directly repaired" phrasing (no
+// "defender" role word) — a SELF-repair reaction, so it routes nowhere on the recipient
+// (recipientTargeted stays unset; the heal targets self and only the SCALING count reads
+// repairedEnemyIds). Distinct from Amartya's "enemy DEFENDER is directly repaired" above
+// (which lands a debuff "on that defender"). Corpus-verified unique (docs/ship-skills.csv).
+const ENEMY_DIRECTLY_REPAIRED_RE = /\bwhen\s+an?\s+enemy\s+is\s+directly\s+repaired\b/i;
 
 /**
  * Sentence-scoped (mirrors detectDamageReactionTrigger/detectHpCrossingTrigger) detector for
@@ -2550,7 +2580,87 @@ export function detectEnemyRepairedTrigger(
     if (ENEMY_PERFORMING_REPAIR_RE.test(stripped)) {
         return { trigger: 'on-enemy-repaired' };
     }
+    // ship-kit W3 (Sansi): general "when an enemy is directly repaired" — checked LAST so the
+    // more-specific "defender" variant above wins its recipientTargeted flag. No recipient
+    // routing (Sansi's heal is self-targeted).
+    if (ENEMY_DIRECTLY_REPAIRED_RE.test(stripped)) {
+        return { trigger: 'on-enemy-repaired' };
+    }
     return undefined;
+}
+
+// ship-kit W3 (Anemone, Task 6): "When an enemy takes damage from a Damage over Time effect,
+// repair 5% of this Unit's Max HP." Distinct from Anemone's own FIRST-passive sentence ("This
+// Unit takes 25% less direct damage from enemies debuffed with a Damage over Time effect."),
+// which shares the "Damage over Time effect" tail but never the leading "when an enemy takes
+// damage from" phrase — sentence-scoped detection (below) keeps the two apart regardless.
+// Corpus-verified unique phrasing (docs/ship-skills.csv).
+const ENEMY_TAKES_DOT_DAMAGE_RE =
+    /\bwhen\s+an?\s+enemy\s+takes\s+damage\s+from\s+an?\s+damage\s+over\s+time\s+effect\b/i;
+
+/**
+ * Sentence-scoped (mirrors detectEnemyRepairedTrigger's rawSentenceAround + stripUnitTags shape)
+ * detector for Anemone's "when an enemy takes damage from a Damage over Time effect" reaction.
+ * Returns undefined outside that sentence — so an anchor landing in a different sentence (e.g.
+ * the co-located "takes 25% less direct damage from … Damage over Time" passive clause) is never
+ * co-triggered. Reference data: docs/ship-skills.csv (Anemone).
+ */
+export function detectEnemyDotDamageTrigger(
+    text: string,
+    pos: number
+): 'on-enemy-dot-damage' | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const stripped = stripUnitTags(sentence);
+    return ENEMY_TAKES_DOT_DAMAGE_RE.test(stripped) ? 'on-enemy-dot-damage' : undefined;
+}
+
+// ship-kit W3 (Hemlock, Task 9): "When Corrosion spreads this Unit repairs 5% …". Corpus-verified
+// unique phrasing (docs/ship-skills.csv). "Spread" is the end-of-round Toxic Overflow mechanic
+// (ledger #49): a unit with Toxic Overflow + Corrosion inflicts Corrosion I on its adjacent allies
+// at end of round — the engine emits `corrosion-spread`, which this trigger rides.
+const CORROSION_SPREADS_RE = /\bwhen\s+corrosion\s+spreads\b/i;
+
+/**
+ * Sentence-scoped (mirrors detectEnemyDotDamageTrigger's rawSentenceAround + stripUnitTags shape)
+ * detector for Hemlock's "when Corrosion spreads" self-repair reaction. Returns undefined outside
+ * that sentence so a heal anchor in a different clause (Hemlock's co-located "gains 1 charge …
+ * after it inflicts a debuff") is never co-triggered. Reference data: docs/ship-skills.csv (Hemlock).
+ */
+export function detectCorrosionSpreadTrigger(
+    text: string,
+    pos: number
+): 'on-corrosion-spread' | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const stripped = stripUnitTags(sentence);
+    return CORROSION_SPREADS_RE.test(stripped) ? 'on-corrosion-spread' : undefined;
+}
+
+// ship-kit W3 (Laika, Task 7): "… upon removing Shield from an enemy." Corpus-verified unique
+// phrasing (grep docs/ship-skills.csv: Laika's two passive-tier variants — 20%/refit-inactive and
+// 30%/refit-active — are the ONLY rows carrying "removing Shield from an enemy"). Laika's own
+// "Shield" word here is NOT <unit-damage>-tagged (only the granted-shield pct earlier in the same
+// sentence is), so a plain (untagged) regex suffices — kept sentence-scoped + stripUnitTags anyway
+// to mirror detectEnemyDotDamageTrigger's shape and stay robust to a future tagged variant.
+const SHIELD_STRIPPED_RE = /\bupon\s+removing\s+shield\s+from\s+an\s+enem/i;
+
+/**
+ * Sentence-scoped (mirrors detectEnemyDotDamageTrigger's rawSentenceAround + stripUnitTags shape)
+ * detector for Laika's "upon removing Shield from an enemy" self-shield reaction. Returns
+ * undefined outside that sentence. Wired onto the NEW `shield-stripped` bus event (combat/
+ * events.ts); self-scoped in triggers.ts (mirrors on-own-cleanse) since it's the STRIPPING
+ * actor's own reaction to its OWN action, not an opposing-side reaction. Reference data:
+ * docs/ship-skills.csv (Laika).
+ */
+export function detectShieldStrippedTrigger(
+    text: string,
+    pos: number
+): 'on-own-shield-strip' | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const stripped = stripUnitTags(sentence);
+    return SHIELD_STRIPPED_RE.test(stripped) ? 'on-own-shield-strip' : undefined;
 }
 
 // Once-per-round-per-ENEMY cap on a reactive debuff (Ruiner's Bomb: "once per round per
@@ -3245,6 +3355,41 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     };
 }
 
+/**
+ * Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round action
+ * AND Speed Up I for 6 turns" — parseExtraAction correctly resolves the extra-action grant to
+ * on-ally-destroyed (sentence-level death-phrase detection), but the co-located Speed Up I buff
+ * is a separate ability (a plain buff grant, not an extra-action) so it falls through to the
+ * generic on-cast default. This detector lets a sibling buff sharing the SAME sentence as an
+ * extra-action death phrase inherit that trigger.
+ *
+ * Deliberately gated on EXTRA_ACTION_RE (the "gains/grants/gives … extra … action" phrase)
+ * FIRST, not just the bare death phrase: several unrelated ships (Butcher/Mangler/Ravager/
+ * Asphyxiator's Overload — "gains 1 stack of Overload every turn and loses Overload upon
+ * killing an enemy") share a sentence with a kill/death phrase but carry NO extra-action grant.
+ * Without this gate, their co-located Overload buff would be wrongly co-triggered to
+ * on-enemy-destroyed, breaking its every-turn accumulation (caught by overloadLifecycle.test.ts
+ * during Wave 3 development). Requiring the extra-action phrase in the SAME sentence scopes this
+ * to genuine extra-action-adjacent buffs (Harvester) only.
+ *
+ * Position/sentence-scoped via rawSentenceAround (same raw-text sentence bounds as
+ * phrasePosTrigger) so an unrelated buff sitting in a DIFFERENT sentence is never co-triggered.
+ * Reference data: docs/ship-skills.csv.
+ */
+export function detectExtraActionCoTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    if (!text) return undefined;
+    const sentence = rawSentenceAround(text, anchorPos);
+    if (!sentence || !EXTRA_ACTION_RE.test(sentence)) return undefined;
+    return EXTRA_ACTION_ENEMY_DESTROYED_RE.test(sentence)
+        ? 'on-enemy-destroyed'
+        : EXTRA_ACTION_ALLY_DESTROYED_RE.test(sentence)
+          ? 'on-ally-destroyed'
+          : undefined;
+}
+
 // --- Healing-calculator parsers: heal / shield / cleanse -----------------------------
 //
 // These extract heal & shield grants (and cleanse counts) for the healing calculator.
@@ -3301,9 +3446,15 @@ export interface ParsedHealAbility {
     /** PR6b: per-count repair scaling — the repair grows by `perUnit`% per matched `condition`
      *  count (Oleander "additional 8.5% repair for each debuffed enemy" → base kept + perUnit
      *  bonus; Meatshield "repairs 1.5% … for each debuff on itself" → pure per-count, `pct` is
-     *  zeroed and the whole repair is the perUnit scaling). Model fidelity only — no DPS/sim
-     *  consumer today; a future healing calculator reads it via the Ability-level scaling rule. */
-    scaling?: { perUnit: number; condition: Condition };
+     *  zeroed and the whole repair is the perUnit scaling). The `condition`-based (live-state)
+     *  form is model fidelity only — no DPS/sim consumer. ship-kit W3 adds the `countSource`
+     *  form (Sansi "repairs 5% for every enemy repaired"): the count comes from the reactive
+     *  event, `pct` is KEPT, and the reactive heal executor multiplies it by that count. */
+    scaling?: { perUnit: number; condition?: Condition; countSource?: ReactiveScalingCountSource };
+    /** ship-kit W3 (Sansi "limited to 3 times per Round"): a numeric per-round cap on how many
+     *  times the reactive heal may fire each round. buildShipAbilities threads it to
+     *  Ability.maxPerRound (enforced executor-side). Absent → no per-round limit. */
+    maxPerRound?: number;
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -3530,6 +3681,36 @@ function parseHealCountScaling(
     return null;
 }
 
+// ship-kit W3 (Sansi): reactive event-count repair scaling — "repairs 5% FOR EVERY enemy
+// repaired". The count is the number of enemies repaired by the triggering event
+// (eventCtx.repairedEnemyIds.length), NOT a live-state Condition, so this is distinct from
+// parseHealCountScaling's "for each <live count>" form above. `pct` is KEPT (the per-unit rate);
+// the reactive heal executor multiplies it by the event count.
+const REPAIRED_ENEMY_COUNT_RE = /\bfor every enemy repaired\b/i;
+// ship-kit W3 (Hemlock, Task 9): reactive event-count repair scaling — "repairs 5% … PER enemy
+// affected". The count is the number of adjacent allies a Corrosion spread landed Corrosion I on
+// (eventCtx.spreadAffectedIds.length), stamped by the on-corrosion-spread listener. Same primitive
+// as Sansi's above; `pct` is KEPT (the per-unit rate) and the executor multiplies it by the count.
+const SPREAD_AFFECTED_COUNT_RE = /\bper enemy affected\b/i;
+// ship-kit W3 (Sansi): numeric per-round cap — "limited to 3 times per Round". Generalizes the
+// boolean once-per-round caps. Threaded to Ability.maxPerRound and enforced executor-side.
+const MAX_PER_ROUND_RE = /\blimited to\s+(\d+)\s+times?\s+per\s+round\b/i;
+
+/** Reactive event-count repair scaling in a heal sentence (Sansi). Returns the countSource + the
+ *  per-unit rate (== the base pct) when present, else null. Only plain on-cast repairs (no
+ *  leech/damage-reaction) carry it — mirrors parseHealCountScaling's gating in the caller. */
+function parseHealEventCountScaling(
+    sentence: string,
+    basePct: number
+): { perUnit: number; countSource: ReactiveScalingCountSource } | null {
+    if (REPAIRED_ENEMY_COUNT_RE.test(sentence))
+        return { perUnit: basePct, countSource: 'repaired-enemy-count' };
+    // ship-kit W3 (Hemlock): "per enemy affected" — the Corrosion-spread affected-count source.
+    if (SPREAD_AFFECTED_COUNT_RE.test(sentence))
+        return { perUnit: basePct, countSource: 'spread-affected-count' };
+    return null;
+}
+
 export function parseHealAbilities(text: string | null | undefined): ParsedHealAbility[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -3673,6 +3854,16 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 kind === 'heal' && !leechBasis && !damageReaction
                     ? parseHealCountScaling(sentence, pct)
                     : null;
+            // ship-kit W3 (Sansi): reactive event-count scaling ("for every enemy repaired") takes
+            // precedence over the live-state "for each" form when both somehow matched — Sansi
+            // carries only the former. Same gating (plain on-cast repairs only).
+            const eventCountScaling =
+                kind === 'heal' && !leechBasis && !damageReaction && !countScaling
+                    ? parseHealEventCountScaling(sentence, pct)
+                    : null;
+            // ship-kit W3 (Sansi): numeric per-round cap ("limited to N times per Round").
+            const maxPerRoundMatch = MAX_PER_ROUND_RE.exec(sentence);
+            const maxPerRound = maxPerRoundMatch ? parseInt(maxPerRoundMatch[1], 10) : undefined;
             results.push({
                 kind,
                 pct: countScaling?.zeroBase ? 0 : pct,
@@ -3690,7 +3881,15 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                               condition: countScaling.condition,
                           },
                       }
-                    : {}),
+                    : eventCountScaling
+                      ? {
+                            scaling: {
+                                perUnit: eventCountScaling.perUnit,
+                                countSource: eventCountScaling.countSource,
+                            },
+                        }
+                      : {}),
+                ...(maxPerRound !== undefined ? { maxPerRound } : {}),
             });
             // Valkyrie: "this Unit and the ally with the lowest ..." — dual recipient → emit a
             // second SELF entry mirroring the first (5% each, same basis/scope).
@@ -4273,10 +4472,12 @@ export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passi
 export interface SkillEffect {
     buffName: string;
     // Player-side granularity (team-walk ally-scope): 'self' = caster only, 'ally' = a single
-    // chosen ally, 'all-allies' = every player actor. 'enemy' = enemy debuff. The combat engine
-    // routes 'ally'/'all-allies' grants from a walked team ship onto the right actors; for the
-    // attacker's own sim 'self' and 'all-allies' both fold onto its side (zero churn).
-    target: 'self' | 'ally' | 'all-allies' | 'enemy';
+    // chosen ally, 'all-allies' = every player actor. 'enemy' = single-target enemy debuff,
+    // 'all-enemies' = enemy debuff scoped to the whole opposing team (detectEnemyGrantScope).
+    // The combat engine routes 'ally'/'all-allies' grants from a walked team ship onto the right
+    // actors, and fans an 'all-enemies' debuff over aoeVictimIds generically; for the attacker's
+    // own sim 'self' and 'all-allies' both fold onto its side (zero churn).
+    target: 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enemies';
     duration: number | 'recurring' | null;
     stacks?: number;
     source: SkillSource;
@@ -4715,6 +4916,19 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
 }
 
 /**
+ * Resolves the enemy-side scope of an inflicted/applied debuff from its granting clause, mirroring
+ * `detectGrantScope`'s clause resolution (`resolveBuffClause`, so "Inc."/"Out." abbreviation
+ * periods don't break sentence splitting) but testing for an "all enemies" receiver instead of an
+ * ally one. Same broad, sentence-level phrasing check `parsePurge` uses for its own 'enemy' vs
+ * 'all-enemies' split (`/all\s+enemies/`) — most debuffs are single-target ('enemy'); only an
+ * explicit "on all enemies" grant widens to the whole opposing team.
+ */
+function detectEnemyGrantScope(skillText: string, buffName: string): 'enemy' | 'all-enemies' {
+    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    return /all\s+enemies/.test(resolved) ? 'all-enemies' : 'enemy';
+}
+
+/**
  * Maps a verb to how a debuff lands: "inflict" forms are resistible, "apply" forms are
  * guaranteed. Only meaningful for enemy debuffs; returns undefined for self-buff verbs.
  */
@@ -4749,10 +4963,12 @@ export function parseSkillEffects(
 
         // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed).
         // Player-side grants get ally-scope granularity from the granting clause (team walk);
-        // enemy debuffs stay 'enemy'.
+        // enemy debuffs get enemy-scope granularity ('enemy' vs 'all-enemies') the same way.
         const side = verbToTarget(verb, buffName, nextText);
         const target: SkillEffect['target'] =
-            side === 'self' ? detectGrantScope(skillText, buffName) : 'enemy';
+            side === 'self'
+                ? detectGrantScope(skillText, buffName)
+                : detectEnemyGrantScope(skillText, buffName);
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment

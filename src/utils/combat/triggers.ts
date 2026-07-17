@@ -192,6 +192,20 @@ export interface Intent {
          *  via `reactiveRecipients`, instead of the default heal target. Mirrors
          *  repairedAllyIds/shieldRecipientIds. A `self`-target reaction (Morao) ignores it. */
         cleansedAllyIds?: string[];
+        /** Ship-kit W3 (Pestilence): the enemy ids ACTUALLY cleansed by an OPPOSING actor's
+         *  cleanse-performed event (cleanse-performed.targets — the recipients whose debuffs were
+         *  really removed). The `on-enemy-cleansed` listener stamps this so Pestilence's reactive
+         *  `dot` ability (target 'all-enemies') fans Corrosion II out over EXACTLY those enemies
+         *  ("on all cleansed enemies"), instead of the single-victim/dummy-sink fallback. Mirrors
+         *  the own-side `cleansedAllyIds` above. Ignored by non-dot cleanse reactors (Grif's damage
+         *  proc routes via counterTargetId). */
+        cleansedEnemyIds?: string[];
+        /** Ship-kit W3 (Hemlock, Task 9): the adjacent-ally ids a Corrosion SPREAD landed Corrosion
+         *  I on (corrosion-spread.affectedIds), stamped by the on-corrosion-spread listener. Read
+         *  ONLY for its `.length` by the reactive heal executor's `spread-affected-count` scaling
+         *  ("repairs 5% per enemy affected"); Hemlock's heal is self-target so the ids themselves
+         *  are never routed. Mirrors repairedEnemyIds' count-only use. */
+        spreadAffectedIds?: string[];
         /** SP-E, Task E4: the ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
          *  the convert-dot executor to resolve the correct CombatActor (via ctx.actorById) whose
@@ -302,6 +316,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    former (counterTargetId), Amartya's Defense Shred fans out over the latter.
  *  - on-enemy-cleansed → cleanse-performed where isOpposing(casterId)
  *    (any opposing-side actor's cleanse cast). One enqueue per cast.
+ *  - on-enemy-dot-damage → dot-ticked where isOpposing(targetId) (ship-kit W3, Task 6: Anemone's
+ *    self-heal reacting to ANY opposing actor taking a DoT tick, any dotType). One enqueue per
+ *    tick. Stamps eventCtx.victimId = the tick's target (dummy-sink convention) — inert for
+ *    Anemone's self-target heal (reactiveRecipients never reads victimId for target==='self').
  *  - on-own-cleanse → cleanse-performed where casterId === ownerId (Phase 3 PR-H: Cultivator's
  *    ally-repair, Morao's self-repair + Defense Up II). Self-scoped — the OWN-cleanse counterpart
  *    of on-enemy-cleansed. Stamps eventCtx.cleansedAllyIds = e.targets (the actually-cleansed
@@ -838,6 +856,22 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     break;
+                case 'on-enemy-dot-damage':
+                    bus.on('dot-ticked', (e) => {
+                        // Ship-kit W3 (Task 6, Anemone): opposing-scoped reaction to an ENEMY-side
+                        // actor taking a DoT TICK (any dotType). Stamp victimId = the tick's real
+                        // target (dummy-sink convention, investigation appendix §E) — Anemone's
+                        // heal is SELF-target, so `reactiveRecipients` resolves it to
+                        // [intent.ownerId] regardless (target==='self' branch never reads
+                        // victimId); the stamp exists for parity with every other Wave 3 case and
+                        // for any future non-self consumer of this trigger.
+                        if (isOpposing(e.targetId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, victimId: e.targetId },
+                            });
+                    });
+                    break;
                 case 'on-enemy-cleansed':
                     bus.on('cleanse-performed', (e) => {
                         // Opposing-scoped: any opposing-side actor's cleanse. For the player
@@ -847,10 +881,20 @@ export function registerReactiveListeners(args: {
                         // damage lands on the REAL cleanser in positional mode. In DPS/healing mode
                         // the only opposing actor IS the dummy `enemy`, so counterTargetId ===
                         // ctx.enemy.id and this is byte-identical there.
+                        // Ship-kit W3 (Pestilence): ALSO stamp cleansedEnemyIds = e.targets (the
+                        // enemies whose debuffs were actually removed) so a reactive `dot` ability
+                        // (target 'all-enemies') fans Corrosion II out over ALL cleansed enemies —
+                        // mirrors on-own-cleanse's cleansedAllyIds. counterTargetId (single cleanser)
+                        // is kept for Grif's single-target damage proc; the two consumers read
+                        // different fields, so both coexist.
                         if (isOpposing(e.casterId))
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, counterTargetId: e.casterId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    counterTargetId: e.casterId,
+                                    cleansedEnemyIds: e.targets,
+                                },
                             });
                     });
                     break;
@@ -862,6 +906,29 @@ export function registerReactiveListeners(args: {
                         // gaining one. Nuqtu's self-cleanse + Terran Bolster III are both
                         // self-target — no eventCtx capture needed. One enqueue per application.
                         if (isOpposing(e.actorId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-taunt-gained':
+                    bus.on('buff-applied', (e) => {
+                        // Ship-kit Wave 3, Task 4: Opposing-scoped AND buff-name-filtered mirror
+                        // of on-enemy-buffed — Amartya's "When an enemy defender gains Taunt, this
+                        // Unit inflicts 2 stacks of Exposed on that defender" needs the Taunt-
+                        // specific gate (on-enemy-buffed fires for ANY buff, unfiltered).
+                        // Stamp counterTargetId = e.actorId (the defender that GAINED Taunt — the
+                        // buff-applied recipient), NOT victimId: Exposed builds as a `type:'debuff'`
+                        // ability (mirrors its sibling Defense Shred), and the debuff executor
+                        // (executeIntent, cfg.type === 'debuff') routes single-target "on that
+                        // enemy" reactions via eventCtx.counterTargetId — it never reads
+                        // eventCtx.victimId (that field is consumed only by the dot/convert-dot
+                        // branches). counterTargetId is exactly the field on-enemy-repaired/
+                        // on-enemy-cleansed/on-enemy-charged-cast already use for this same
+                        // single-recipient routing shape — without it, the debuff executor falls
+                        // back to ctx.enemy.id (the DPS dummy sink) in positional/team battle.
+                        if (isOpposing(e.actorId) && e.buffName === 'Taunt')
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.actorId },
+                            });
                     });
                     break;
                 case 'on-own-cleanse':
@@ -877,6 +944,42 @@ export function registerReactiveListeners(args: {
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, cleansedAllyIds: e.targets },
+                            });
+                    });
+                    break;
+                case 'on-own-shield-strip':
+                    bus.on('shield-stripped', (e) => {
+                        // Ship-kit W3 (Task 7): Self-scoped: THIS owner stripped an enemy's
+                        // shield (Laika). Laika's own reactive shield ability is target:'self'
+                        // (reactiveRecipients routes self-target to [intent.ownerId] regardless
+                        // of eventCtx — mirrors on-enemy-buffed/Nuqtu's bare enqueue), so no
+                        // eventCtx stamp is needed to route the recipient; this case exists
+                        // purely to GATE the fire to casts that ACTUALLY stripped shield (the
+                        // charged skill only — the active skill's cleanse+damage never reaches
+                        // stripShieldPct/emits shield-stripped, see events.ts's jsdoc).
+                        if (e.casterId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-corrosion-spread':
+                    bus.on('corrosion-spread', (e) => {
+                        // Ship-kit W3 (Task 9, Hemlock): Corrosion spread at end of round (the Toxic
+                        // Overflow mechanic, ledger #49). Opposing-scoped on the SOURCE: the spread
+                        // originates from a unit OPPOSING this owner, so the affected units are the
+                        // owner's enemies — "repairs 5% per ENEMY affected" (this is also what makes
+                        // it team-symmetric: an enemy-side Hemlock heals off a player-side spread).
+                        // Hemlock's heal is target:'self' (reactiveRecipients routes it to [ownerId]
+                        // regardless), so the affected ids are stamped ONLY for the executor's
+                        // spread-affected-count scaling to read `.length` — never for recipient
+                        // routing. One enqueue per spread event. Skip when no allies were affected
+                        // (empty spread) — a zero-count heal would fire and needlessly touch the
+                        // reactive pipeline; "per enemy affected" of nothing is nothing.
+                        if (isOpposing(e.sourceId) && e.affectedIds.length > 0)
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    spreadAffectedIds: e.affectedIds,
+                                },
                             });
                     });
                     break;
@@ -1207,6 +1310,11 @@ export interface IntentExecContext {
     recipientMaxHpFor?: (victimId: string) => number;
     /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
     oncePerRoundConsumed?: Set<string>;
+    /** ship-kit W3 (Sansi): per-(owner,ability) fire COUNT this round — the numeric generalization
+     *  of oncePerRoundConsumed, backing Ability.maxPerRound. Incremented on each successful reactive
+     *  fire; the gate blocks once the count reaches the cap. Reset each round in the engine (shared
+     *  across both sides, like oncePerRoundConsumed). Absent → no cap is ever enforced. */
+    perRoundFireCounts?: Map<string, number>;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -1761,6 +1869,21 @@ function passesOncePerRoundGate(intent: Intent, ctx: IntentExecContext): boolean
     const onceKey = `${intent.ownerId}:${intent.ability.id}`;
     if (ctx.oncePerRoundConsumed?.has(onceKey)) return false;
     ctx.oncePerRoundConsumed?.add(onceKey);
+    return true;
+}
+
+/** ship-kit W3 numeric per-round cap (Sansi's "limited to 3 times per Round") — the counting
+ *  generalization of passesOncePerRoundGate. Returns false once this (owner, ability) has already
+ *  fired `maxPerRound` times this round; otherwise increments the count and returns true.
+ *  Pass-through (always true, no counting) when the ability has no maxPerRound. Call AFTER the
+ *  proc/once-per-round gates so a blocked fire never advances the count. */
+function passesMaxPerRoundGate(intent: Intent, ctx: IntentExecContext): boolean {
+    const cap = intent.ability.maxPerRound;
+    if (cap === undefined) return true;
+    const key = `${intent.ownerId}:${intent.ability.id}`;
+    const fired = ctx.perRoundFireCounts?.get(key) ?? 0;
+    if (fired >= cap) return false;
+    ctx.perRoundFireCounts?.set(key, fired + 1);
     return true;
 }
 
@@ -2379,6 +2502,91 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
+        // Push the DoT stack onto ONE resolved victim's containers + emit the discrete
+        // dot-applied. Owner-routed (Task 6): entries are stamped with the firing owner's id so
+        // the per-entry tick attributes to (and scales with) the applier; bombs snapshot the
+        // owner's last-turn effective attack + affinity. Shared by the single-victim path below
+        // and the Pestilence multi-recipient fan-out above (identical per-victim landing).
+        const landDotOn = (victim: CombatActor | undefined, victimId: string): void => {
+            if (cfg.dotType === 'corrosion') {
+                (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
+                    stacks: cfg.stacks,
+                    tier: cfg.tier,
+                    remainingRounds: cfg.duration,
+                    sourceId: intent.ownerId,
+                });
+            } else if (cfg.dotType === 'inferno') {
+                (victim?.infernoEntries ?? ctx.infernoEntries).push({
+                    stacks: cfg.stacks,
+                    tier: cfg.tier,
+                    remainingRounds: cfg.duration,
+                    sourceId: intent.ownerId,
+                });
+            } else if (cfg.dotType === 'bomb') {
+                // Bomb damagePerStack needs the OWNER's effective attack. Before the owner's first
+                // turn this run (faster enemy, round 1) there is no ctx — skip (same guard as today,
+                // now per owner). Affinity comes from the owner's last-turn ctx too.
+                const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+                if (ownerCtx === undefined) return;
+                (victim?.pendingBombs ?? ctx.pendingBombs).push({
+                    countdown: Math.max(1, cfg.duration),
+                    damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
+                    stacks: cfg.stacks,
+                    tier: cfg.tier,
+                    sourceId: intent.ownerId,
+                    affinityMult: ownerCtx.affinityMult,
+                    // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
+                    // does not carry the owner's live detonation modifier; documented approximation —
+                    // no shipped reactive bomb applier also wears Voidfire.
+                    detonationDamageModifier: 0,
+                    // Same approximation: reactive ctx does not carry the live splash modifier.
+                    splashModifier: 0,
+                });
+            }
+            // Discrete infliction event — sourceId = the owner so the application is chainable
+            // and feeds OTHER owners' on-ally-debuff-inflicted dot-applied listeners (Task 6 seam).
+            ctx.bus.emit({
+                type: 'dot-applied',
+                sourceId: intent.ownerId,
+                targetId: victimId,
+                round: ctx.round,
+                dotType: cfg.dotType,
+                stacks: cfg.stacks,
+            });
+        };
+
+        // Ship-kit W3 (Pestilence): a reactive DoT whose ability targets 'all-enemies' and whose
+        // triggering event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
+        // Corrosion II … on all cleansed enemies"), mirroring the all-enemies-over-aoeVictimIds
+        // pattern but keyed off the reactive event's actual cleansed ids — NOT the single-victim /
+        // dummy sink. ONE landing draw gates the whole fire (like the single-victim path below);
+        // the per-victim Block-Debuff resist is checked inside the loop (no RNG → order-safe).
+        const cleansedEnemyIds = intent.eventCtx?.cleansedEnemyIds;
+        if (
+            intent.ability.target === 'all-enemies' &&
+            cleansedEnemyIds &&
+            cleansedEnemyIds.length > 0
+        ) {
+            const liveLanding = owner.liveDebuffLandingChance ?? 1;
+            if (!owner.debuffLandingGate(liveLanding)) return;
+            for (const cid of cleansedEnemyIds) {
+                const victim = ctx.actorById?.(cid);
+                const victimId = victim?.id ?? cid;
+                if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+                    emitBlockDebuffResist(
+                        ctx.bus,
+                        intent.ownerId,
+                        victimId,
+                        ctx.round,
+                        dotResistLabel(cfg.dotType, cfg.tier)
+                    );
+                    continue;
+                }
+                landDotOn(victim, victimId);
+            }
+            return;
+        }
+
         // Resolve the REAL victim (same seam the convert-dot branch uses): a reactive DoT must
         // land on the enemy the triggering event carries (e.g. on-ally-crit-dot → "on that
         // enemy", the ally's actual victim), NOT the fixed DPS dummy `enemy` sink. When no victim
@@ -2410,54 +2618,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // guard (the owner applied this DoT on its own turn → the field is set).
         const liveLanding = owner.liveDebuffLandingChance ?? 1;
         if (!owner.debuffLandingGate(liveLanding)) return;
-        // Owner-routed (Task 6): DoT entries are stamped with the firing owner's id so the
-        // enemy's per-entry tick attributes to (and scales with) the applier; bombs snapshot
-        // the owner's last-turn effective attack + affinity.
-        if (cfg.dotType === 'corrosion') {
-            (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
-                stacks: cfg.stacks,
-                tier: cfg.tier,
-                remainingRounds: cfg.duration,
-                sourceId: intent.ownerId,
-            });
-        } else if (cfg.dotType === 'inferno') {
-            (victim?.infernoEntries ?? ctx.infernoEntries).push({
-                stacks: cfg.stacks,
-                tier: cfg.tier,
-                remainingRounds: cfg.duration,
-                sourceId: intent.ownerId,
-            });
-        } else if (cfg.dotType === 'bomb') {
-            // Bomb damagePerStack needs the OWNER's effective attack. Before the owner's first
-            // turn this run (faster enemy, round 1) there is no ctx — skip (same guard as today,
-            // now per owner). Affinity comes from the owner's last-turn ctx too.
-            const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-            if (ownerCtx === undefined) return;
-            (victim?.pendingBombs ?? ctx.pendingBombs).push({
-                countdown: Math.max(1, cfg.duration),
-                damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
-                stacks: cfg.stacks,
-                tier: cfg.tier,
-                sourceId: intent.ownerId,
-                affinityMult: ownerCtx.affinityMult,
-                // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
-                // does not carry the owner's live detonation modifier; documented approximation —
-                // no shipped reactive bomb applier also wears Voidfire.
-                detonationDamageModifier: 0,
-                // Same approximation: reactive ctx does not carry the live splash modifier.
-                splashModifier: 0,
-            });
-        }
-        // Discrete infliction event — sourceId = the owner so the application is chainable
-        // and feeds OTHER owners' on-ally-debuff-inflicted dot-applied listeners (Task 6 seam).
-        ctx.bus.emit({
-            type: 'dot-applied',
-            sourceId: intent.ownerId,
-            targetId: victimId,
-            round: ctx.round,
-            dotType: cfg.dotType,
-            stacks: cfg.stacks,
-        });
+        landDotOn(victim, victimId);
         return;
     }
 
@@ -2552,6 +2713,33 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         if (!passesProcChanceGate(intent, ctx)) return;
         if (!passesOncePerRoundGate(intent, ctx)) return;
+        // ship-kit W3 (Sansi): numeric per-round cap ("limited to 3 times per Round"). Checked
+        // AFTER the proc/once-per-round gates so a blocked fire never burns a charge; a
+        // no-maxPerRound heal is byte-identical (pass-through).
+        if (!passesMaxPerRoundGate(intent, ctx)) return;
+        // ship-kit W3 (Sansi): reactive event-count scaling — "repairs 5% FOR EVERY enemy
+        // repaired". The effective % is `scaling.perUnit × count`, where count is the number of
+        // enemies repaired by the triggering heal-performed event (eventCtx.repairedEnemyIds —
+        // stamped by the on-enemy-repaired listener from the REAL repaired-actor ids, so in a
+        // positional team battle this counts the actual multi-enemy repair, not the DPS dummy).
+        // Undefined countSource → 1× (byte-identical for every existing reactive heal/shield).
+        // ship-kit W3 (Hemlock, Task 9): the sibling count-source — "repairs 5% PER enemy affected".
+        // count = the number of adjacent allies the Corrosion spread landed Corrosion I on
+        // (eventCtx.spreadAffectedIds, stamped by the on-corrosion-spread listener from the real
+        // affected-actor ids), so a positional multi-ally spread heals proportionally.
+        const eventCountMultiplier =
+            intent.ability.scaling?.countSource === 'repaired-enemy-count'
+                ? (intent.eventCtx?.repairedEnemyIds?.length ?? 0)
+                : intent.ability.scaling?.countSource === 'spread-affected-count'
+                  ? (intent.eventCtx?.spreadAffectedIds?.length ?? 0)
+                  : undefined;
+        // The per-unit rate for a count-scaled heal is scaling.perUnit (== the parsed base pct);
+        // for a plain heal it is cfg.pct. A zero count (defensive — the trigger only fires on a
+        // repair event, so count >= 1 in practice) grants nothing.
+        const effectivePct =
+            eventCountMultiplier !== undefined
+                ? intent.ability.scaling!.perUnit * eventCountMultiplier
+                : cfg.pct;
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
         // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
@@ -2656,11 +2844,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             let raw =
                 cfg.type === 'heal'
                     ? basisValue *
-                      (cfg.pct / 100) *
+                      (effectivePct / 100) *
                       (1 + owner.healModifier / 100) *
                       (1 + ownerOutgoing / 100) *
                       (1 + incomingPctFor(rid) / 100)
-                    : basisValue * (cfg.pct / 100);
+                    : basisValue * (effectivePct / 100);
             // D-PR6: recipient-side incoming-heal amplification (Exuberance) — HEAL case ONLY (NOT
             // shields). Rolls the recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
             if (cfg.type === 'heal')

@@ -29,7 +29,7 @@ describe('PR6b heal-scaling', () => {
         const heal = healOf(slot(buildShipAbilities(s).slots, 'active')!.abilities)!;
         // Base repair stays 100%; the +8.5% per debuffed enemy is a scaling bonus on top.
         expect(heal.config).toMatchObject({ type: 'heal', pct: 100, basis: 'hp' });
-        const idx = heal.scaling!.conditionIndex;
+        const idx = heal.scaling!.conditionIndex!;
         expect(heal.scaling).toMatchObject({ perUnit: 8.5 });
         expect(heal.conditions[idx]).toMatchObject({ subject: 'enemy-debuff', derivable: true });
     });
@@ -43,7 +43,7 @@ describe('PR6b heal-scaling', () => {
         const heal = healOf(slot(buildShipAbilities(s).slots, 'charged')!.abilities)!;
         // Purely per-count: total = 1.5% × (debuffs on self), so base 0 + perUnit 1.5.
         expect(heal.config).toMatchObject({ type: 'heal', pct: 0, basis: 'hp' });
-        const idx = heal.scaling!.conditionIndex;
+        const idx = heal.scaling!.conditionIndex!;
         expect(heal.scaling).toMatchObject({ perUnit: 1.5 });
         expect(heal.conditions[idx]).toMatchObject({ subject: 'self-debuff', derivable: true });
     });

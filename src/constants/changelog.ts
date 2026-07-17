@@ -6,6 +6,14 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Amartya's active skill now inflicts Defense Down II and Inc. Repair Down II on all enemies (matching the skill text), instead of only a single enemy.",
+    "Combat sim: Meiying now re-gains Stealth at the start of every turn — her passive reads 'at the start of combat and every turn' — instead of gaining it once at the start of combat and then going without after it expires.",
+    "Combat sim: Harvester's Speed Up I is now granted together with her extra end-of-round action when an allied unit is destroyed, instead of never being applied.",
+    "Combat sim: Hemlock's Toxic Overflow is now modeled — at the end of each round, an enemy carrying Toxic Overflow and at least 1 stack of Corrosion spreads Corrosion I (3 turns) to its adjacent allies and loses Toxic Overflow. Hemlock's passive self-repair now triggers on that spread, healing 5% of her max HP for each enemy the spread affects, instead of healing a flat 5% every single turn.",
+    "Combat sim: Pestilence's second passive now inflicts Corrosion II (2 turns) on every enemy that cleanses a debuff, matching the skill text — previously this clause was not modeled at all (only the debuff-duration reduction on allies was).",
+    "Combat sim: Laika's passive self-shield now triggers only when she actually removes Shield from an enemy (her charged skill), instead of granting 30% of her max HP as a shield every single turn regardless of whether her active or charged skill was used.",
+    "Combat sim: Sansi's passive self-repair now triggers only when an enemy is actually repaired (up to 3 times per round) and heals 5% of her max HP for each enemy repaired, instead of healing a flat 5% every single turn regardless of enemy activity.",
+    "Combat sim: Anemone's passive self-repair now triggers only when an enemy actually takes damage from a Damage over Time effect, instead of healing 5% of her max HP on every single turn regardless of whether any enemy is affected by a DoT.",
     'Combat log now shows resisted debuffs, expired buffs, destroyed shields, and Cheat Death saves.',
     "DPS calculator: end-of-round damage procs (like Rhodium's hit on the enemy with the most buffs, or Incinerator's burn) now count toward the reported damage and DPS. Previously they fired but their damage was dropped from the summary because it landed just after the round's totals were tallied.",
     "Combat sim: reactive damage procs now actually reduce the target's HP in positioned battles and show up in damage dealt and damage taken, instead of being tracked but never applied — and each now hits its correct target: FrontLine's on-enemy-charged-cast hit, Grif's on-cleanse hit, Paracelsus's on-destroyed and Vindicator's on-resist retaliations, Rhodium's end-of-round hit on the enemy with the most buffs, Chakara's start-of-round hit on the highest-Speed enemy, and Judge's / Incinerator's round-boundary hits on every enemy below 50% HP / afflicted with Inferno respectively.",
@@ -101,6 +109,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Quixilver no longer grants a phantom team-wide shield every round — its passive text 'if it has shield equal to 100% of its max HP' is a condition, not a shield to grant, and was being misread as a large unconditional shield to all allies.",
     "Skill parsing target fixes: Rikra's on-kill repair and Panon's Barrier Recharging now correctly apply to themselves (previously Rikra's self-repair could land on a different ally, and Panon applied Barrier Recharging to the enemy — which also stopped her own incoming-damage reduction from working). Panguan's Stealth now triggers on being directly damaged and applies to herself, instead of being granted to the whole team on every cast.",
     "Combat sim: Graphite's charged skill now shields all allies (matching its active skill), instead of only shielding itself.",
+    'Combat sim: Amartya now inflicts 2 stacks of Exposed on an enemy defender the instant it gains Taunt, matching her legendary refit passive — previously this was silently gated behind a bogus condition requiring Amartya herself to have Taunt (which never happens), so it never fired at all.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

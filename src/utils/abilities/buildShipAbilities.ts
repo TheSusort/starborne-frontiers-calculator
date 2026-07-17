@@ -72,6 +72,9 @@ import {
     parseHighestSpeedEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
+    detectEnemyDotDamageTrigger,
+    detectCorrosionSpreadTrigger,
+    detectShieldStrippedTrigger,
     ONCE_PER_ROUND_PER_ENEMY_RE,
     PURGE_MORE_RE,
     parseControlInflicts,
@@ -111,6 +114,7 @@ import {
     parseDefenseSubstitution,
     findBuffNamePos,
     maskAbbrev,
+    detectExtraActionCoTrigger,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -118,6 +122,7 @@ import {
     DOT_TIER_MAP,
 } from '../calculators/skillBuffAutoFill';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
+import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -1621,6 +1626,44 @@ function abilitiesFromText(
         }
     }
 
+    // Ship-kit W3 (Pestilence): "When an enemy cleanses a Debuff this unit inflicts Corrosion II
+    // for 2 turns on all cleansed enemies" — a reactive PASSIVE-slot DoT. No existing path can
+    // produce this: buildDoTAutoFill scans ONLY active/charge sources (passive-slot DoTs are
+    // categorically excluded) and dotAbility() hardcodes trigger:'on-cast'. Build it directly here,
+    // mirroring the Crocus on-ally-crit-dot block above but gated on — and taking its trigger from —
+    // detectEnemyCleanseTrigger, which sentence-scopes the DoT's anchor to the "when an enemy
+    // cleanses a Debuff" clause (shares ENEMY_CLEANSE_RE with the named-buff grant path). A normal
+    // active/charge DoT never matches (no cleanse clause) → the buildDoTAutoFill path stays the sole
+    // producer for those; the named-buff cleanse grants (Arum/Yarrow/Larkspur) carry no DoT name
+    // (DOT_TIER_MAP miss) so they never reach here either. target:'all-enemies' marks the
+    // multi-recipient fan-out — the reactive dot executor lands it on eventCtx.cleansedEnemyIds
+    // (the actual cleansed enemies), never the DPS dummy sink.
+    for (const eff of parseSkillEffects(text, 'active')) {
+        const dotInfo = DOT_TIER_MAP[eff.buffName];
+        if (!dotInfo) continue;
+        const dotPos = findBuffNamePos(text, eff.buffName);
+        const cleanseDotTrigger = detectEnemyCleanseTrigger(text, dotPos >= 0 ? dotPos : 0);
+        if (!cleanseDotTrigger) continue;
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'dot',
+                target: 'all-enemies',
+                trigger: cleanseDotTrigger, // 'on-enemy-cleansed'
+                conditions: [],
+                config: {
+                    type: 'dot',
+                    dotType: dotInfo.type,
+                    tier: dotInfo.tier,
+                    stacks: eff.stacks ?? 1,
+                    duration: typeof eff.duration === 'number' ? eff.duration : 2,
+                },
+                autoFilled: true,
+            },
+            pos: dotPos >= 0 ? dotPos : MAX_POS,
+        });
+    }
+
     const detonate = parseDetonateDoT(text);
     if (detonate) {
         const detonatePos = text.search(/detonat/i);
@@ -1832,8 +1875,36 @@ function abilitiesFromText(
                 // scoped). Position-scoping keeps Hayyan's sibling on-own-cleanse repair (a
                 // different sentence) untouched.
                 detectAllyDebuffedTrigger(text, healPos) ??
+                // Sansi p2 (ship-kit W3): a self-repair anchored in the "when an enemy is directly
+                // repaired … repairs 5% for every enemy repaired" sentence rides the
+                // on-enemy-repaired reactive trigger (position-scoped) — the SAME live trigger
+                // Amartya's Defense Shred debuff rides (buildShipAbilities enemy-debuff path). The
+                // heal targets SELF; only the SCALING count reads the repaired-enemy ids
+                // (eventCtx.repairedEnemyIds.length) via the scaling wiring below. Enforced at most
+                // maxPerRound times per round (also wired below).
+                detectEnemyRepairedTrigger(text, healPos)?.trigger ??
+                // Anemone p2 (ship-kit W3, Task 6): a self-repair anchored in the "when an enemy
+                // takes damage from a Damage over Time effect" sentence rides the NEW
+                // on-enemy-dot-damage reactive trigger (position-scoped) — wired onto the
+                // already-existing dot-ticked bus event (triggers.ts). Heal-only (no corpus
+                // shield carries this phrase).
+                (h.kind === 'heal' ? detectEnemyDotDamageTrigger(text, healPos) : undefined) ??
+                // Hemlock p2 (ship-kit W3, Task 9): a self-repair anchored in the "when Corrosion
+                // spreads … repairs 5% … per enemy affected" sentence rides the NEW
+                // on-corrosion-spread reactive trigger (position-scoped) — wired onto the NEW
+                // corrosion-spread bus event (combat/events.ts), emitted by the engine's
+                // end-of-round Toxic Overflow spread mechanic (ledger #49). Heal-only (no corpus
+                // shield carries this phrase). The heal targets SELF; only the SCALING count reads
+                // the affected-ally ids (eventCtx.spreadAffectedIds.length) via the scaling wiring.
+                (h.kind === 'heal' ? detectCorrosionSpreadTrigger(text, healPos) : undefined) ??
                 (h.kind === 'shield'
-                    ? (detectDebuffInflictedTrigger(text, healPos) ??
+                    ? // Laika p1/p2 (ship-kit W3, Task 7): a self-shield anchored in the "upon
+                      // removing Shield from an enemy" sentence rides the NEW on-own-shield-strip
+                      // reactive trigger (position-scoped) — wired onto the NEW shield-stripped
+                      // bus event (combat/events.ts), self-scoped in triggers.ts (mirrors
+                      // on-own-cleanse). Shield-only (no corpus heal carries this phrase).
+                      (detectShieldStrippedTrigger(text, healPos) ??
+                      detectDebuffInflictedTrigger(text, healPos) ??
                       // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
                       // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
                       detectStasisAppliedTrigger(text, healPos))
@@ -1901,8 +1972,14 @@ function abilitiesFromText(
         // after any damage-reaction conditions and referenced by an Ability-level scaling rule
         // (mirrors the damage-scaling convention). Model fidelity — no DPS/sim consumer today.
         const healConditions: Condition[] = [...damageReactionConditions];
-        let healScaling: { conditionIndex: number; perUnit: number } | undefined;
-        if (h.scaling) {
+        let healScaling: ScalingRule | undefined;
+        if (h.scaling?.countSource) {
+            // ship-kit W3 (Sansi): reactive event-count scaling — the count comes from the
+            // triggering event (repairedEnemyIds.length), NOT a live-state Condition, so no
+            // condition is pushed and `conditionIndex` is omitted. The reactive heal executor
+            // multiplies the base pct by that count.
+            healScaling = { perUnit: h.scaling.perUnit, countSource: h.scaling.countSource };
+        } else if (h.scaling?.condition) {
             healScaling = { conditionIndex: healConditions.length, perUnit: h.scaling.perUnit };
             healConditions.push(h.scaling.condition);
         }
@@ -1919,6 +1996,8 @@ function abilitiesFromText(
                     : {}),
                 conditions: healConditions,
                 ...(healScaling ? { scaling: healScaling } : {}),
+                // ship-kit W3 (Sansi): numeric per-round cap ("limited to 3 times per Round").
+                ...(h.maxPerRound !== undefined ? { maxPerRound: h.maxPerRound } : {}),
                 config: {
                     type: h.kind,
                     pct: h.pct,
@@ -2694,6 +2773,22 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const ability = selectedBuffToAbility(buff, target);
         // defensive: round-trip buffs may lack the flag; parser buffs already set it
         if (ability.autoFilled === undefined) ability.autoFilled = true;
+        // ship-kit W3 (Hemlock, Task 9): Toxic Overflow's ENTIRE mechanic is the engine's
+        // end-of-round Corrosion-spread (ledger #49) — the engine reads it off the per-victim TIMED
+        // enemy-debuff store and REMOVES it on spread. That requires a NUMERIC duration (an undefined
+        // duration classifies as an un-removable, always-active aura), but NOT a FINITE one: the game
+        // rule is that Toxic Overflow lingers until it spreads, with no turn-based expiry. A finite
+        // window would wrongly expire it before a late-arriving Corrosion could trigger the spread.
+        // Stamp the non-expiring TOXIC_OVERFLOW_DURATION (Number.POSITIVE_INFINITY) here so it lands
+        // as a REMOVABLE but non-expiring timed debuff. Targeted by name — Toxic Overflow is the sole
+        // corpus status with this end-of-round conditional-removal behaviour.
+        if (
+            ability.config.type === 'debuff' &&
+            ability.config.buffName === TOXIC_OVERFLOW &&
+            ability.config.duration === undefined
+        ) {
+            ability.config.duration = TOXIC_OVERFLOW_DURATION;
+        }
         const slot = slotForBuffSource(buff.skillSource);
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
         // SP-E, Task E4: Belladonna's "convert the Corrosion into Acidic Decay ... 1% per 10
@@ -2775,6 +2870,31 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             rowText
         ) {
             reactiveTrigger = detectAllyInflictsGrantTrigger(rowText, buff.buffName);
+        }
+        // Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round
+        // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
+        // via parseExtraAction, but Speed Up I is a separate (plain) buff ability that otherwise
+        // falls through to the on-cast default. Position-scoped on THIS buff's own sentence
+        // (rather than buffName-scoped) so a co-located death-trigger phrase is only inherited
+        // when it actually shares the sentence — an unrelated buff elsewhere in the row text is
+        // unaffected.
+        //
+        // Reuse the same Overload-lifecycle guard as detectReactiveTrigger above
+        // (isAccumulatingGrant): Sokol's "gains 1 stack of Blast every turn and grants one extra
+        // end of round action upon a kill, once per round" shares ITS OWN sentence with both the
+        // EXTRA_ACTION_RE phrase and the enemy-death phrase, so detectExtraActionCoTrigger alone
+        // would co-trigger the recurring/accumulating Blast stack onto on-enemy-destroyed — gating
+        // its every-turn accrual behind a kill, the exact regression class the guard above exists
+        // to prevent. isAccumulatingGrant must gate this branch too, since it runs after (and was
+        // never re-applied here).
+        if (
+            reactiveTrigger === undefined &&
+            !isAccumulatingGrant &&
+            ability.config.type === 'buff' &&
+            rowText &&
+            pos >= 0
+        ) {
+            reactiveTrigger = detectExtraActionCoTrigger(rowText, pos);
         }
         if (reactiveTrigger) {
             ability.trigger = reactiveTrigger;
@@ -2947,6 +3067,19 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (ability.trigger === 'on-cast' && rowText && !isAccumulatingBuff) {
             const preCombatTrigger = detectPreCombatBuffTrigger(rowText, buff.buffName);
             if (preCombatTrigger) ability.trigger = preCombatTrigger;
+            // Meiying p2: "At the start of combat and every turn, this Unit gains Stealth for 2
+            // turns" — detectPreCombatBuffTrigger already excludes this clause from the one-time
+            // 'pre-combat' relabel above (its own "every turn" exclusion), but nothing previously
+            // promoted it to the recurring 'start-of-turn' trigger it actually needs, so it fell
+            // through to the default 'on-cast'. Pure reuse of the already-exported, already
+            // position-scoped detectEveryTurnTrigger (shares EVERY_TURN_RE with the heal/shield
+            // cascade at line ~1790) — no new detector/regex/trigger-literal required. Guarded by
+            // the same !isAccumulatingBuff check above, so per-round stacking auras
+            // (Overload/Blast/Warding-Screen) are untouched.
+            else {
+                const everyTurnTrigger = detectEveryTurnTrigger(rowText, pos);
+                if (everyTurnTrigger) ability.trigger = everyTurnTrigger;
+            }
         }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
     };
@@ -2980,7 +3113,10 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         ) {
             continue;
         }
-        mergeBuff(buff, 'enemy');
+        // Player-side grants carry granular effectTarget (self/ally/all-allies, wired above);
+        // enemy debuffs now do too ('enemy' vs 'all-enemies' — detectEnemyGrantScope). Defaults
+        // to 'enemy' for round-trip debuffs that predate the effectTarget field.
+        mergeBuff(buff, buff.effectTarget ?? 'enemy');
     }
 
     // Phase 4c PR 1 (Task 8): damage-reaction DoT inflictions on the PASSIVE row (Warden

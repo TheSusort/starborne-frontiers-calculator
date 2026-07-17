@@ -308,7 +308,10 @@ export function anyOfGroupIndices(conditions: Condition[], idx: number): number[
 export function scaledBonus(ability: Ability, ctx: ConditionContext): number {
     if (!ability.scaling) return 0;
     const idx = ability.scaling.conditionIndex;
-    if (!ability.conditions[idx]) return 0;
+    // Reactive event-count scaling (ship-kit W3 `countSource`) references no live-state
+    // Condition — it is applied by the reactive heal/shield executor, not this additive
+    // count-scaling path — so it contributes no DPS/damage bonus here.
+    if (idx == null || !ability.conditions[idx]) return 0;
     // Sum across the scaling source's anyOf OR-group so a binary "X or Y" bonus (Rikra's
     // Taunted/Provoked) fires on either; a lone condition is a singleton group → unchanged.
     const count = anyOfGroupIndices(ability.conditions, idx).reduce(

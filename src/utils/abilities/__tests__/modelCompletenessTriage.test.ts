@@ -396,7 +396,7 @@ describe('SP-D — count-based gates', () => {
                     a.scaling !== undefined
             );
             expect(scaled?.scaling).toBeDefined();
-            expect(scaled!.conditions[scaled!.scaling!.conditionIndex].subject).toBe(
+            expect(scaled!.conditions[scaled!.scaling!.conditionIndex!].subject).toBe(
                 'enemy-dot-count'
             );
         }

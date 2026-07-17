@@ -258,6 +258,37 @@ export type CombatEvent =
           effect: ControlEffect;
           round: number;
       } & ReactiveStamp)
+    /** Ship-kit Wave 3 (Task 7, Laika): a caster's ability actually reduced a victim's shield
+     *  pool via `stripShieldPct` (playerTurn.ts) — EITHER the I6 (Lodolite) purge-coupled 100%
+     *  strip, OR the standalone PR9(b) `type:'shield-strip'` ability (APEX/Laika/Malvex).
+     *  Emitted ONLY when the pool was > 0 immediately before the strip (a strip attempt against
+     *  an already-empty pool removes nothing and is suppressed) — mirrors `purge-performed`'s
+     *  0-removed suppression. `casterId` = the stripping actor; `targetId` = the victim whose
+     *  shield was reduced; `pct` = the percentage of the CURRENT pool removed (the same `pct`
+     *  argument passed to `stripShieldPct` — 100 for the I6 branch, `ab.config.pct` for PR9(b)).
+     *  The `on-own-shield-strip` listener (triggers.ts) filters `casterId === ownerId`. */
+    | ({
+          type: 'shield-stripped';
+          casterId: string;
+          targetId: string;
+          round: number;
+          pct: number;
+      } & ReactiveStamp)
+    /** Ship-kit Wave 3 (Task 9, Hemlock/ledger #49): Corrosion SPREAD at the end of a round. The
+     *  engine's end-of-round Toxic Overflow mechanic (engine.ts) emits this for each unit that held
+     *  Toxic Overflow AND ≥1 stack of Corrosion: it inflicted Corrosion I (3 turns) on that unit's
+     *  adjacent allies and removed its Toxic Overflow. `sourceId` = the unit that held Toxic
+     *  Overflow (the spread origin); `affectedIds` = the adjacent allies that RECEIVED Corrosion I
+     *  (possibly empty if the holder had no living adjacent allies). Team-symmetric — emitted for
+     *  holders on either side. Hemlock's `on-corrosion-spread` self-heal (triggers.ts) rides it,
+     *  scaling by `affectedIds.length` ("per enemy affected"), scoped to spreads whose `sourceId`
+     *  opposes the reactor. */
+    | ({
+          type: 'corrosion-spread';
+          sourceId: string;
+          affectedIds: string[];
+          round: number;
+      } & ReactiveStamp)
     /** A victim's shield pool was fully depleted by a DIRECT hit (SP-F F2, AEGIS). Emitted from
      *  the shared `applyVictimDamage` immediately after the shield-drain line, ONLY when the pool
      *  was > 0 immediately before this hit's absorb and reaches exactly 0 after it, AND the hit

@@ -855,9 +855,25 @@ function applyAccumulators(args: {
  *   - I6: the `stripsShield` flag on a 'purge' ability (gated on the purge landing).
  *   - PR9(b): the standalone `type:'shield-strip'` ability (APEX/Laika/Malvex, unconditional
  *     on-cast — see parseShieldStrip's doc comment for why these stay mutually exclusive).
+ *
+ * Ship-kit Wave 3 (Task 7, Laika): emits `shield-stripped` (combat/events.ts) HERE — the one
+ * shared mutation site both call sites route through — rather than at each call site, so there
+ * is exactly one emit point and no risk of a double-emit if a future third caller appears.
+ * Suppressed when the pool was already 0 (nothing to remove) or the strip is a no-op, mirroring
+ * `purge-performed`'s 0-removed suppression.
  */
-function stripShieldPct(victim: CombatActor, pct: number): void {
-    victim.shieldPool = Math.max(0, victim.shieldPool * (1 - pct / 100));
+function stripShieldPct(
+    victim: CombatActor,
+    pct: number,
+    bus: CombatEventBus,
+    casterId: string,
+    round: number
+): void {
+    const before = victim.shieldPool;
+    victim.shieldPool = Math.max(0, before * (1 - pct / 100));
+    if (before > 0 && victim.shieldPool < before) {
+        bus.emit({ type: 'shield-stripped', casterId, targetId: victim.id, pct, round });
+    }
 }
 
 /**
@@ -2436,7 +2452,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             const victim =
                                 opposingVictimById?.get(vid) ??
                                 (vid === enemy.id ? enemy : undefined);
-                            if (victim) stripShieldPct(victim, 100);
+                            if (victim) stripShieldPct(victim, 100, bus, actor.id, r);
                         }
                     }
                 }
@@ -2460,7 +2476,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 for (const vid of recipients) {
                     const victim =
                         opposingVictimById?.get(vid) ?? (vid === enemy.id ? enemy : undefined);
-                    if (victim) stripShieldPct(victim, ab.config.pct);
+                    if (victim) stripShieldPct(victim, ab.config.pct, bus, actor.id, r);
                 }
             }
         }

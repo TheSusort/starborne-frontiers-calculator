@@ -829,15 +829,20 @@ describe('parseSkillEffects', () => {
         });
     });
 
-    it('parses "inflicting" (gerund) as an enemy debuff', () => {
+    it('parses "inflicting" (gerund) as an enemy debuff, scoped all-enemies', () => {
         const result = parseSkillEffects(
             'This Unit attacks all enemies, dealing <unit-damage>240% damage</unit-damage> and inflicting <unit-skill>Stasis</unit-skill> for 2 turns.',
             'active'
         );
+        // "attacks all enemies, … inflicting Stasis" is genuinely team-wide (matches the real
+        // corpus precedent, e.g. Curator's "deals 60% damage to all enemies, and inflicts
+        // Attack Down III …"), so the debuff carries all-enemies scope — previously collapsed
+        // to the coarser 'enemy' under the binary enemy/all-enemies-blind parser (ship-kit W3
+        // Task 1: detectEnemyGrantScope).
         expect(result).toEqual([
             {
                 buffName: 'Stasis',
-                target: 'enemy',
+                target: 'all-enemies',
                 duration: 2,
                 source: 'active',
                 application: 'inflict',

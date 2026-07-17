@@ -187,6 +187,39 @@ export type AbilityTrigger =
     // when an ally within the Active pattern has their Shield destroyed" — the sole corpus user.
     // Opposite direction of on-shield-applied (grant vs loss).
     | 'on-ally-shield-destroyed'
+    // Ship-kit Wave 3, Task 4: fires when an OPPOSING-side actor gains the named "Taunt" buff
+    // (rides the existing `buff-applied` event, opposing-scoped on actorId — the buff RECIPIENT
+    // — AND filtered on buffName === 'Taunt'). Narrow, single-purpose trigger deliberately
+    // separate from `on-enemy-buffed` (which fires for ANY buff, unfiltered) — Amartya's "When an
+    // enemy defender gains Taunt, this Unit inflicts 2 stacks of Exposed on that defender" needs
+    // the Taunt-specific gate, not a broad any-buff reaction. Routes onto the actual Taunt
+    // recipient via eventCtx.counterTargetId — this is a debuff ability, whose executor reads
+    // counterTargetId (NOT victimId, which only dot/convert-dot consume; see triggers.ts).
+    | 'on-enemy-taunt-gained'
+    // Ship-kit Wave 3, Task 6: fires when an OPPOSING-side actor takes a Damage over Time TICK
+    // (rides the existing `dot-ticked` event — combat/events.ts — opposing-scoped on targetId,
+    // ANY dotType). Anemone's "When an enemy takes damage from a Damage over Time effect,
+    // repair 5% of this Unit's Max HP" — a SELF-target heal, so eventCtx.victimId (stamped by
+    // the triggers.ts case) only documents the DoT-tick target; the self-heal recipient
+    // resolves via reactiveRecipients' target==='self' branch and never reads victimId.
+    | 'on-enemy-dot-damage'
+    // Ship-kit Wave 3, Task 7: fires when THIS unit's own action actually removed Shield from an
+    // OPPOSING actor (rides the NEW `shield-stripped` bus event — combat/events.ts — self-scoped
+    // on casterId === ownerId, mirroring `on-own-cleanse`'s self-scoped shape). Laika's "This Unit
+    // gains a Shield equal to 30% of its Max HP upon removing Shield from an enemy" — a SELF-target
+    // shield, so no eventCtx capture is needed to route the recipient (reactiveRecipients' target
+    // === 'self' branch always resolves to [ownerId] regardless); the case exists purely to GATE
+    // the fire to casts that actually stripped shield (Laika's CHARGED skill only — the active
+    // skill's cleanse+damage never reaches stripShieldPct).
+    | 'on-own-shield-strip'
+    // Ship-kit Wave 3, Task 9: fires when Corrosion SPREADS on the battlefield (the NEW
+    // `corrosion-spread` bus event — combat/events.ts — emitted by the engine's end-of-round Toxic
+    // Overflow mechanic, ledger #49). Hemlock's "When Corrosion spreads this Unit repairs 5% of its
+    // max HP per enemy affected" rides this: a SELF-target heal whose amount count-scales by the
+    // number of enemies the spread affected (eventCtx.spreadAffectedIds.length). Scoped in
+    // triggers.ts to spreads whose SOURCE is opposing the owner (the affected units are the owner's
+    // enemies — "per enemy affected"), which is also what makes it team-symmetric.
+    | 'on-corrosion-spread'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
     // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
@@ -250,6 +283,18 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-shield-applied',
     // SP-F F2: ally-scoped reaction to an ally's shield pool being fully depleted (AEGIS).
     'on-ally-shield-destroyed',
+    // Ship-kit Wave 3, Task 4: opposing-scoped reaction to an enemy actor gaining Taunt (Amartya
+    // Exposed).
+    'on-enemy-taunt-gained',
+    // Ship-kit Wave 3, Task 6: opposing-scoped reaction to an enemy actor taking a DoT tick
+    // (Anemone heal).
+    'on-enemy-dot-damage',
+    // Ship-kit Wave 3, Task 7: self-scoped reaction to THIS unit stripping an enemy's shield
+    // (Laika self-shield).
+    'on-own-shield-strip',
+    // Ship-kit Wave 3, Task 9: opposing-scoped reaction to Corrosion spreading (the end-of-round
+    // Toxic Overflow mechanic, ledger #49) — Hemlock's count-scaled self-heal.
+    'on-corrosion-spread',
 ]);
 
 export type ConditionSubject =
@@ -496,10 +541,29 @@ export interface OutgoingHitContext {
     targetHigherAttack: boolean;
 }
 
+/** Source of a reactive event-count scaling multiplier (ship-kit W3). Distinct from the
+ *  live-state Condition counts an additive `conditionIndex` scaling reads: the count comes
+ *  from the triggering reactive event's eventCtx, not from a drain-time ConditionContext.
+ *  - 'repaired-enemy-count' → eventCtx.repairedEnemyIds.length (Sansi's "5% for every enemy
+ *    repaired").
+ *  - 'spread-affected-count' → eventCtx.spreadAffectedIds.length (Hemlock's "5% per enemy
+ *    affected" — the number of adjacent allies a Corrosion spread landed Corrosion I on, ship-kit
+ *    W3 Task 9). Reuses the exact same primitive as 'repaired-enemy-count'. */
+export type ReactiveScalingCountSource = 'repaired-enemy-count' | 'spread-affected-count';
+
 export interface ScalingRule {
-    conditionIndex: number;
+    /** Index into Ability.conditions of the live-state count Condition (additive PR6b / damage
+     *  scaling: base + perUnit×count). OMITTED for reactive event-count scaling (`countSource`),
+     *  where the count comes from the triggering event rather than a Condition. */
+    conditionIndex?: number;
     perUnit: number;
     cap?: number;
+    /** ship-kit W3: reactive event-count MULTIPLICATIVE scaling. When set, the reactive
+     *  heal/shield executor computes the effective % as `perUnit × count`, where `count` is
+     *  drawn from the triggering event (see ReactiveScalingCountSource) — NOT the additive
+     *  base + perUnit×count form the conditionIndex path uses. `conditionIndex` is unused when
+     *  this is present (there is no live-state Condition to reference). */
+    countSource?: ReactiveScalingCountSource;
 }
 
 // NOTE: spelling mirrors the existing codebase intentionally — ModifierChannel /
@@ -886,6 +950,13 @@ export interface Ability {
      *  AbilityConfig variants — this is the top-level Ability flag (read via
      *  `intent.ability.oncePerRound`), honoring the spec's "no AbilityConfig change". */
     oncePerRound?: boolean;
+    /** ship-kit W3: this reactive applies at most N times per round (keyed on (owner, ability)),
+     *  a numeric GENERALIZATION of the boolean `oncePerRound` above. Sansi's on-enemy-repaired
+     *  heal ("limited to 3 times per Round") sets `maxPerRound: 3`: at most three qualifying
+     *  repair EVENTS trigger the heal each round (a multi-recipient AoE repair is one event).
+     *  Enforced executor-side via IntentExecContext.perRoundFireCounts (incremented on each
+     *  successful fire, blocked once the count reaches the cap). Absent → no per-round limit. */
+    maxPerRound?: number;
     /** Phase 3 PR-E: this reactive applies at most once per round PER ALLY (keyed on
      *  (owner, ability, eventCtx.damagedAllyId)), rather than once per round overall.
      *  Oleander's "once per ally per round" RoT grant: a different ally inflicting a
