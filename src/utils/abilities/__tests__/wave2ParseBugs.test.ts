@@ -108,3 +108,25 @@ describe.skipIf(!csvAvailable())(
         });
     }
 );
+
+describe.skipIf(!csvAvailable())(
+    'Task C — Graphite charged-shield all-allies flip (verbatim docs/ship-skills.csv)',
+    () => {
+        it('C1: Graphite charged slot — the co-cast "Out. Damage Up III" buff flips the shield to all-allies, matching the active slot', () => {
+            const rec = recordFor('Graphite');
+            const s = ship({
+                chargeSkillText: rec.charge,
+                chargeSkillCharge: rec.chargeCharge,
+            });
+            const { slots } = buildShipAbilities(s);
+            const charged = slot(slots, 'charged');
+            expect(charged).toBeDefined();
+
+            const shield = abilitiesOfType(charged!.abilities, 'shield').find(
+                (a) => a.config.type === 'shield' && a.config.pct === 180
+            );
+            expect(shield).toBeDefined();
+            expect(shield!.target).toBe('all-allies');
+        });
+    }
+);

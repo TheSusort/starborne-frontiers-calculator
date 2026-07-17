@@ -110,6 +110,7 @@ import {
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
     findBuffNamePos,
+    maskAbbrev,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -1851,7 +1852,13 @@ function abilitiesFromText(
                       },
                   ]
                 : [];
-        const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
+        // maskAbbrev (length-preserving) runs BEFORE the pct-position search/sentenceContaining so
+        // an "Inc."/"Out." abbreviation period inside a co-cast buff name (Graphite's charged-slot
+        // "Out. Damage Up III") is not treated as a sentence boundary — otherwise it splits the
+        // buff name out of the shield's detected sentence and the all-allies flip below never
+        // matches (Finding C1). eff.buffName is masked the same way so both sides of the
+        // `.includes` check line up.
+        const healPlain = maskAbbrev(stripTags(text).replace(/<br\s*\/?>/gi, '. '));
         const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
         const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
         const shieldCoCastAllAlliesGrant =
@@ -1862,7 +1869,7 @@ function abilitiesFromText(
             skillEffectsForSlot.some(
                 (eff) =>
                     eff.target === 'all-allies' &&
-                    healSentence.toLowerCase().includes(eff.buffName.toLowerCase())
+                    healSentence.toLowerCase().includes(maskAbbrev(eff.buffName).toLowerCase())
             );
         const oncePerCombat =
             reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);

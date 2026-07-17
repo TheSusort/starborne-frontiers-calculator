@@ -961,9 +961,11 @@ function splitSentences(text: string): string[] {
 
 // Non-whitespace sentinel that replaces the space after an "Inc."/"Out." abbreviation period so
 // splitSentences does not treat it as a sentence boundary. Restored to a plain space after
-// splitting. Shared by resolveBuffClause and parseExtraAction.
-const ABBR_MARK = '\u0001';
-const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
+// splitting. Shared by resolveBuffClause, parseExtraAction, and buildShipAbilities' healPlain/
+// shield-cocast sentence construction (Finding C1 -- the "Out. Damage Up III" abbreviation
+// period otherwise splits the co-cast buff name out of the shield's detected sentence).
+export const ABBR_MARK = '\u0001';
+export const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
 
 // Escapes literal regex-special characters for use inside a dynamically built pattern.
 function escapeRegExp(s: string): string {
