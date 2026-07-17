@@ -2615,6 +2615,32 @@ export function detectEnemyDotDamageTrigger(
     return ENEMY_TAKES_DOT_DAMAGE_RE.test(stripped) ? 'on-enemy-dot-damage' : undefined;
 }
 
+// ship-kit W3 (Laika, Task 7): "… upon removing Shield from an enemy." Corpus-verified unique
+// phrasing (grep docs/ship-skills.csv: Laika's two passive-tier variants — 20%/refit-inactive and
+// 30%/refit-active — are the ONLY rows carrying "removing Shield from an enemy"). Laika's own
+// "Shield" word here is NOT <unit-damage>-tagged (only the granted-shield pct earlier in the same
+// sentence is), so a plain (untagged) regex suffices — kept sentence-scoped + stripUnitTags anyway
+// to mirror detectEnemyDotDamageTrigger's shape and stay robust to a future tagged variant.
+const SHIELD_STRIPPED_RE = /\bupon\s+removing\s+shield\s+from\s+an\s+enem/i;
+
+/**
+ * Sentence-scoped (mirrors detectEnemyDotDamageTrigger's rawSentenceAround + stripUnitTags shape)
+ * detector for Laika's "upon removing Shield from an enemy" self-shield reaction. Returns
+ * undefined outside that sentence. Wired onto the NEW `shield-stripped` bus event (combat/
+ * events.ts); self-scoped in triggers.ts (mirrors on-own-cleanse) since it's the STRIPPING
+ * actor's own reaction to its OWN action, not an opposing-side reaction. Reference data:
+ * docs/ship-skills.csv (Laika).
+ */
+export function detectShieldStrippedTrigger(
+    text: string,
+    pos: number
+): 'on-own-shield-strip' | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const stripped = stripUnitTags(sentence);
+    return SHIELD_STRIPPED_RE.test(stripped) ? 'on-own-shield-strip' : undefined;
+}
+
 // Once-per-round-per-ENEMY cap on a reactive debuff (Ruiner's Bomb: "once per round per
 // enemy") — distinct from the plain "once per round" cap (which caps once per round OVERALL).
 // Exported: buildShipAbilities.ts's passive DoT-reaction loop tests it directly.

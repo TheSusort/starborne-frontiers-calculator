@@ -258,6 +258,22 @@ export type CombatEvent =
           effect: ControlEffect;
           round: number;
       } & ReactiveStamp)
+    /** Ship-kit Wave 3 (Task 7, Laika): a caster's ability actually reduced a victim's shield
+     *  pool via `stripShieldPct` (playerTurn.ts) — EITHER the I6 (Lodolite) purge-coupled 100%
+     *  strip, OR the standalone PR9(b) `type:'shield-strip'` ability (APEX/Laika/Malvex).
+     *  Emitted ONLY when the pool was > 0 immediately before the strip (a strip attempt against
+     *  an already-empty pool removes nothing and is suppressed) — mirrors `purge-performed`'s
+     *  0-removed suppression. `casterId` = the stripping actor; `targetId` = the victim whose
+     *  shield was reduced; `pct` = the percentage of the CURRENT pool removed (the same `pct`
+     *  argument passed to `stripShieldPct` — 100 for the I6 branch, `ab.config.pct` for PR9(b)).
+     *  The `on-own-shield-strip` listener (triggers.ts) filters `casterId === ownerId`. */
+    | ({
+          type: 'shield-stripped';
+          casterId: string;
+          targetId: string;
+          round: number;
+          pct: number;
+      } & ReactiveStamp)
     /** A victim's shield pool was fully depleted by a DIRECT hit (SP-F F2, AEGIS). Emitted from
      *  the shared `applyVictimDamage` immediately after the shield-drain line, ONLY when the pool
      *  was > 0 immediately before this hit's absorb and reaches exactly 0 after it, AND the hit

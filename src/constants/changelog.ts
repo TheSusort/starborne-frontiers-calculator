@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Laika's passive self-shield now triggers only when she actually removes Shield from an enemy (her charged skill), instead of granting 30% of her max HP as a shield every single turn regardless of whether her active or charged skill was used.",
     "Combat sim: Sansi's passive self-repair now triggers only when an enemy is actually repaired (up to 3 times per round) and heals 5% of her max HP for each enemy repaired, instead of healing a flat 5% every single turn regardless of enemy activity.",
     "Combat sim: Anemone's passive self-repair now triggers only when an enemy actually takes damage from a Damage over Time effect, instead of healing 5% of her max HP on every single turn regardless of whether any enemy is affected by a DoT.",
     'Combat log now shows resisted debuffs, expired buffs, destroyed shields, and Cheat Death saves.',

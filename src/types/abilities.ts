@@ -203,6 +203,15 @@ export type AbilityTrigger =
     // the triggers.ts case) only documents the DoT-tick target; the self-heal recipient
     // resolves via reactiveRecipients' target==='self' branch and never reads victimId.
     | 'on-enemy-dot-damage'
+    // Ship-kit Wave 3, Task 7: fires when THIS unit's own action actually removed Shield from an
+    // OPPOSING actor (rides the NEW `shield-stripped` bus event — combat/events.ts — self-scoped
+    // on casterId === ownerId, mirroring `on-own-cleanse`'s self-scoped shape). Laika's "This Unit
+    // gains a Shield equal to 30% of its Max HP upon removing Shield from an enemy" — a SELF-target
+    // shield, so no eventCtx capture is needed to route the recipient (reactiveRecipients' target
+    // === 'self' branch always resolves to [ownerId] regardless); the case exists purely to GATE
+    // the fire to casts that actually stripped shield (Laika's CHARGED skill only — the active
+    // skill's cleanse+damage never reaches stripShieldPct).
+    | 'on-own-shield-strip'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
     // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
@@ -272,6 +281,9 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Ship-kit Wave 3, Task 6: opposing-scoped reaction to an enemy actor taking a DoT tick
     // (Anemone heal).
     'on-enemy-dot-damage',
+    // Ship-kit Wave 3, Task 7: self-scoped reaction to THIS unit stripping an enemy's shield
+    // (Laika self-shield).
+    'on-own-shield-strip',
 ]);
 
 export type ConditionSubject =

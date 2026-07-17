@@ -923,6 +923,19 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     break;
+                case 'on-own-shield-strip':
+                    bus.on('shield-stripped', (e) => {
+                        // Ship-kit W3 (Task 7): Self-scoped: THIS owner stripped an enemy's
+                        // shield (Laika). Laika's own reactive shield ability is target:'self'
+                        // (reactiveRecipients routes self-target to [intent.ownerId] regardless
+                        // of eventCtx — mirrors on-enemy-buffed/Nuqtu's bare enqueue), so no
+                        // eventCtx stamp is needed to route the recipient; this case exists
+                        // purely to GATE the fire to casts that ACTUALLY stripped shield (the
+                        // charged skill only — the active skill's cleanse+damage never reaches
+                        // stripShieldPct/emits shield-stripped, see events.ts's jsdoc).
+                        if (e.casterId === ownerId) enqueue(intent);
+                    });
+                    break;
                 case 'on-enemy-purged':
                     bus.on('purge-performed', (e) => {
                         // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).

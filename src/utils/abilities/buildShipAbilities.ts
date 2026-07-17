@@ -73,6 +73,7 @@ import {
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     detectEnemyDotDamageTrigger,
+    detectShieldStrippedTrigger,
     ONCE_PER_ROUND_PER_ENEMY_RE,
     PURGE_MORE_RE,
     parseControlInflicts,
@@ -1849,7 +1850,13 @@ function abilitiesFromText(
                 // shield carries this phrase).
                 (h.kind === 'heal' ? detectEnemyDotDamageTrigger(text, healPos) : undefined) ??
                 (h.kind === 'shield'
-                    ? (detectDebuffInflictedTrigger(text, healPos) ??
+                    ? // Laika p1/p2 (ship-kit W3, Task 7): a self-shield anchored in the "upon
+                      // removing Shield from an enemy" sentence rides the NEW on-own-shield-strip
+                      // reactive trigger (position-scoped) — wired onto the NEW shield-stripped
+                      // bus event (combat/events.ts), self-scoped in triggers.ts (mirrors
+                      // on-own-cleanse). Shield-only (no corpus heal carries this phrase).
+                      (detectShieldStrippedTrigger(text, healPos) ??
+                      detectDebuffInflictedTrigger(text, healPos) ??
                       // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
                       // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
                       detectStasisAppliedTrigger(text, healPos))
