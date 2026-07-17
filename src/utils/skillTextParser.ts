@@ -207,7 +207,18 @@ export function parseSkillDamage(text: string): number {
         // tag content or the following text actually mentions damage.
         const content = match[1].toLowerCase();
         if (!content.includes('damage') && !following.includes('damage')) continue;
-        const numeric = parseInt(match[1], 10);
+        let numeric = parseInt(match[1], 10);
+        // Non-numeric-leading base-damage tag: "Damage equal to 70%" (Madax's active — the tag
+        // itself carries the base multiplier, unlike the "damage equal to X% of its Defense/max
+        // HP" additional-damage shape, which is always excluded above by the "of its"/"of this"
+        // following-text check before reaching this line). Scoped narrowly to a LEADING
+        // "damage equal to" so it can't pick up an unrelated "Shield equal to X%" tag (Malvex,
+        // FrontLine) or an "increases damage by X%" conditional modifier tag (Zeolite, Obsidian)
+        // elsewhere in the corpus, neither of which is base skill damage.
+        if (isNaN(numeric)) {
+            const damageEqualTo = /^damage\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%/i.exec(match[1]);
+            if (damageEqualTo) numeric = parseFloat(damageEqualTo[1]);
+        }
         if (!isNaN(numeric)) return numeric;
     }
     return 0;
