@@ -537,6 +537,24 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             };
         }
     }
+    // "deals X% damage, but when attacking a <class>, it deals Y% damage" — the same replacement
+    // shape as "increased to" above (IonScorp), just worded with "but … it deals Y%" instead of
+    // "increased to Y%". Modeled identically: base X plus a conditional (Y − X) bonus gated on the
+    // enemy class. Placed alongside incTo — this phrasing has no "additional" either.
+    const butWhen = stripUnitTags(text).match(
+        /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*but\s+when\s+(?:attacking|targeting|damaging|against)\s+an?\s+(attacker|defender|debuffer|supporter)s?,?\s*(?:it\s+)?deals?\s+(\d+(?:\.\d+)?)\s*%/i
+    );
+    if (butWhen) {
+        const delta = parseFloat(butWhen[3]) - parseFloat(butWhen[1]);
+        if (delta > 0) {
+            return {
+                pct: delta,
+                condition: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: capType(butWhen[2]),
+            };
+        }
+    }
     // Fallback: flat "additional N% damage when attacking a <enemy class>" bonus.
     const typed = ENEMY_TYPE_BONUS_RE.exec(stripUnitTags(text));
     if (typed) {

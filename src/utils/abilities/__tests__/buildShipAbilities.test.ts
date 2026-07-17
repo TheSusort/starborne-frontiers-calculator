@@ -899,6 +899,21 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    it('IonScorp charged: 190 base damage carries Defender-gated +10 scaling (→200 vs Defender)', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
+            chargeSkillCharge: 1,
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const dmg = abilityOfType(charged.abilities, 'damage')!;
+        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 190 });
+        expect(dmg.conditions).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+        ]);
+        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 10 });
+    });
+
     it('"% more damage for each debuff on the enemy" scales on a DERIVABLE enemy-debuff count', () => {
         // The sim derives enemy debuff counts per round (landed debuffs + DoT entries),
         // so this for-each modifier must track them live, not a manual count.

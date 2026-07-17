@@ -2489,6 +2489,17 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('parseConditionalDamage: IonScorp "but when attacking a Defender, it deals 200%" → +10 delta gated Defender', () => {
+        const text =
+            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 10,
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        });
+    });
+
     it('classifies "after dealing damage to an enemy with 2 or more debuffs" as enemy-debuff gte 2 (Bayah)', () => {
         const text =
             'This Unit gains <unit-skill>Terran Bolster II</unit-skill> and inflicts <unit-skill>Speed Down II</unit-skill> on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.';
