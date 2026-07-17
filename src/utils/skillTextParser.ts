@@ -4252,7 +4252,10 @@ const APPLICATION_VERBS = new Set([...SELF_VERBS, ...ENEMY_VERBS, ...AMBIGUOUS_V
 // reference to an existing effect being extended, not a fresh application.
 const ADJECTIVAL_MARKER = 'newly';
 const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists', 'when']);
-const DURATION_RE = /for\s+(\d+)\s+turns?/i;
+// `\s*` (not `\s+`) between the number and "turn(s)" tolerates a CSV concatenation typo
+// ("for 1turn." — Morao's active) where the tag-removal boundary leaves no space. `\s+` before
+// the number is left mandatory since "for" is always followed by a real space in the corpus.
+const DURATION_RE = /for\s+(\d+)\s*turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
