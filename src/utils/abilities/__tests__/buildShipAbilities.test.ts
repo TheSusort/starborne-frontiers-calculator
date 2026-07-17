@@ -2862,7 +2862,7 @@ describe('buildShipAbilities', () => {
         });
 
         it('Liberator (constants phrasing): "grants N charge to all allies" also emits the all-allies charge', () => {
-            // The in-app ship text (constants/ships.ts) reads "this unit grants 1 charge to all
+            // An older in-game phrasing reads "this unit grants 1 charge to all
             // allies" (verb-first), distinct from the CSV's "all allies add 1 charge". Both must
             // emit the same all-allies on-enemy-destroyed charge ability.
             const s = ship({
@@ -3399,10 +3399,9 @@ describe('buildShipAbilities chargeLossImmune', () => {
 // ── ship-kit correctness backlog: ignoresForcedTargeting (ignore Taunt/Provoke) ────────────
 // Judge/Stalwart/Yuyan/Huanying/Valkyrie/Vanguard's kit text states their attacks "ignore
 // Taunt and Provoke". RAW active-skill strings from docs/ship-skills.csv (the Supabase-fetched
-// master), fed through the production buildShipAbilities(ship) path. We do NOT source from the
-// SHIPS constant (src/constants/ships.ts): it is deprecated, untagged, differently-worded, and
-// missing skill text for some of these ships (e.g. Vanguard) — so a SHIPS-based test silently
-// drops those ships. Tagged CSV text is what production actually parses.
+// master), fed through the production buildShipAbilities(ship) path. Skill data's master is
+// Supabase ship_templates → docs/ship-skills.csv; tagged CSV text is what production actually
+// parses, so fixtures use it verbatim rather than any hand-maintained constant.
 describe('buildShipAbilities ignoresForcedTargeting', () => {
     it.each([
         [

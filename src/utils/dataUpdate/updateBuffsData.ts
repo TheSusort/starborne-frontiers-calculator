@@ -2,11 +2,27 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import * as fs from 'fs';
 import * as path from 'path';
-import { SHIPS } from '../../constants/ships';
 import { fetchBuffsFromRocky } from './updateBuffsDataFetcher';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Ship names come from the Supabase ship_templates snapshot (docs/ship-data.json),
+// generated via `npm run fetch:ship-data`. Read directly via fs — the constants/ships.ts
+// SHIPS constant was deleted (deprecated/stale); importing scripts/lib from src would also
+// trip the src/scripts ESLint boundary.
+const SHIP_DATA_PATH = path.resolve(__dirname, '../../../docs/ship-data.json');
+
+function loadShipNames(): string[] {
+    if (!fs.existsSync(SHIP_DATA_PATH)) {
+        console.error(
+            `ERROR: ${SHIP_DATA_PATH} not found. Run \`npm run fetch:ship-data\` first to generate docs/ship-data.json.`
+        );
+        process.exit(1);
+    }
+    const parsed = JSON.parse(fs.readFileSync(SHIP_DATA_PATH, 'utf8')) as Array<{ name: string }>;
+    return parsed.map((s) => s.name);
+}
 
 // Manual description overrides applied after fetching upstream data.
 // Add entries here when the upstream source has incorrect descriptions.
@@ -53,11 +69,12 @@ async function updateBuffsData() {
     const errors: string[] = [];
 
     // Process all ships to collect unique buffs
-    for (const [_, ship] of Object.entries(SHIPS)) {
+    const shipNames = loadShipNames();
+    for (const name of shipNames) {
         try {
             /* eslint-disable-next-line no-console */
-            console.log(`Fetching buffs for ${ship.name}`);
-            const buffs = await fetchBuffsFromRocky(ship.name);
+            console.log(`Fetching buffs for ${name}`);
+            const buffs = await fetchBuffsFromRocky(name);
 
             // Add each buff to the map (duplicates will be overwritten with same data)
             buffs.forEach((buff) => {
@@ -68,11 +85,11 @@ async function updateBuffsData() {
             await new Promise((resolve) => setTimeout(resolve, 1000));
         } catch (error: unknown) {
             if (error instanceof Error) {
-                console.error(`Error updating buffs for ${ship.name}:`, error);
-                errors.push(`Error with ${ship.name}: ${error.message}`);
+                console.error(`Error updating buffs for ${name}:`, error);
+                errors.push(`Error with ${name}: ${error.message}`);
             } else {
-                console.error(`Error updating buffs for ${ship.name}:`, error);
-                errors.push(`Error with ${ship.name}: Unknown error occurred`);
+                console.error(`Error updating buffs for ${name}:`, error);
+                errors.push(`Error with ${name}: Unknown error occurred`);
             }
         }
     }

@@ -3025,7 +3025,7 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
 // distinct from parseChargeGain's self-targeted contract (which disqualifies "all allies" /
 // "when an enemy dies"). Two real phrasings:
 //   • docs/ship-skills.csv: "When an enemy dies, all allies add N charge to their Charged Skills"
-//   • constants/ships.ts:    "When an enemy dies, this unit grants N charge to all allies"
+//   • an older in-game phrasing: "When an enemy dies, this unit grants N charge to all allies"
 // Both forms appear within the same "when an enemy dies …" sentence (no '.' between). The two
 // alternatives below cover "all allies add/gain N" and "grants N charge … all allies".
 // Returns the per-ally charge amount, or null. Lookbehind-free.
