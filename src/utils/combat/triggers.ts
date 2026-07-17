@@ -192,6 +192,14 @@ export interface Intent {
          *  via `reactiveRecipients`, instead of the default heal target. Mirrors
          *  repairedAllyIds/shieldRecipientIds. A `self`-target reaction (Morao) ignores it. */
         cleansedAllyIds?: string[];
+        /** Ship-kit W3 (Pestilence): the enemy ids ACTUALLY cleansed by an OPPOSING actor's
+         *  cleanse-performed event (cleanse-performed.targets — the recipients whose debuffs were
+         *  really removed). The `on-enemy-cleansed` listener stamps this so Pestilence's reactive
+         *  `dot` ability (target 'all-enemies') fans Corrosion II out over EXACTLY those enemies
+         *  ("on all cleansed enemies"), instead of the single-victim/dummy-sink fallback. Mirrors
+         *  the own-side `cleansedAllyIds` above. Ignored by non-dot cleanse reactors (Grif's damage
+         *  proc routes via counterTargetId). */
+        cleansedEnemyIds?: string[];
         /** SP-E, Task E4: the ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
          *  the convert-dot executor to resolve the correct CombatActor (via ctx.actorById) whose
@@ -867,10 +875,20 @@ export function registerReactiveListeners(args: {
                         // damage lands on the REAL cleanser in positional mode. In DPS/healing mode
                         // the only opposing actor IS the dummy `enemy`, so counterTargetId ===
                         // ctx.enemy.id and this is byte-identical there.
+                        // Ship-kit W3 (Pestilence): ALSO stamp cleansedEnemyIds = e.targets (the
+                        // enemies whose debuffs were actually removed) so a reactive `dot` ability
+                        // (target 'all-enemies') fans Corrosion II out over ALL cleansed enemies —
+                        // mirrors on-own-cleanse's cleansedAllyIds. counterTargetId (single cleanser)
+                        // is kept for Grif's single-target damage proc; the two consumers read
+                        // different fields, so both coexist.
                         if (isOpposing(e.casterId))
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, counterTargetId: e.casterId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    counterTargetId: e.casterId,
+                                    cleansedEnemyIds: e.targets,
+                                },
                             });
                     });
                     break;
@@ -2455,6 +2473,91 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
+        // Push the DoT stack onto ONE resolved victim's containers + emit the discrete
+        // dot-applied. Owner-routed (Task 6): entries are stamped with the firing owner's id so
+        // the per-entry tick attributes to (and scales with) the applier; bombs snapshot the
+        // owner's last-turn effective attack + affinity. Shared by the single-victim path below
+        // and the Pestilence multi-recipient fan-out above (identical per-victim landing).
+        const landDotOn = (victim: CombatActor | undefined, victimId: string): void => {
+            if (cfg.dotType === 'corrosion') {
+                (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
+                    stacks: cfg.stacks,
+                    tier: cfg.tier,
+                    remainingRounds: cfg.duration,
+                    sourceId: intent.ownerId,
+                });
+            } else if (cfg.dotType === 'inferno') {
+                (victim?.infernoEntries ?? ctx.infernoEntries).push({
+                    stacks: cfg.stacks,
+                    tier: cfg.tier,
+                    remainingRounds: cfg.duration,
+                    sourceId: intent.ownerId,
+                });
+            } else if (cfg.dotType === 'bomb') {
+                // Bomb damagePerStack needs the OWNER's effective attack. Before the owner's first
+                // turn this run (faster enemy, round 1) there is no ctx — skip (same guard as today,
+                // now per owner). Affinity comes from the owner's last-turn ctx too.
+                const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+                if (ownerCtx === undefined) return;
+                (victim?.pendingBombs ?? ctx.pendingBombs).push({
+                    countdown: Math.max(1, cfg.duration),
+                    damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
+                    stacks: cfg.stacks,
+                    tier: cfg.tier,
+                    sourceId: intent.ownerId,
+                    affinityMult: ownerCtx.affinityMult,
+                    // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
+                    // does not carry the owner's live detonation modifier; documented approximation —
+                    // no shipped reactive bomb applier also wears Voidfire.
+                    detonationDamageModifier: 0,
+                    // Same approximation: reactive ctx does not carry the live splash modifier.
+                    splashModifier: 0,
+                });
+            }
+            // Discrete infliction event — sourceId = the owner so the application is chainable
+            // and feeds OTHER owners' on-ally-debuff-inflicted dot-applied listeners (Task 6 seam).
+            ctx.bus.emit({
+                type: 'dot-applied',
+                sourceId: intent.ownerId,
+                targetId: victimId,
+                round: ctx.round,
+                dotType: cfg.dotType,
+                stacks: cfg.stacks,
+            });
+        };
+
+        // Ship-kit W3 (Pestilence): a reactive DoT whose ability targets 'all-enemies' and whose
+        // triggering event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
+        // Corrosion II … on all cleansed enemies"), mirroring the all-enemies-over-aoeVictimIds
+        // pattern but keyed off the reactive event's actual cleansed ids — NOT the single-victim /
+        // dummy sink. ONE landing draw gates the whole fire (like the single-victim path below);
+        // the per-victim Block-Debuff resist is checked inside the loop (no RNG → order-safe).
+        const cleansedEnemyIds = intent.eventCtx?.cleansedEnemyIds;
+        if (
+            intent.ability.target === 'all-enemies' &&
+            cleansedEnemyIds &&
+            cleansedEnemyIds.length > 0
+        ) {
+            const liveLanding = owner.liveDebuffLandingChance ?? 1;
+            if (!owner.debuffLandingGate(liveLanding)) return;
+            for (const cid of cleansedEnemyIds) {
+                const victim = ctx.actorById?.(cid);
+                const victimId = victim?.id ?? cid;
+                if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+                    emitBlockDebuffResist(
+                        ctx.bus,
+                        intent.ownerId,
+                        victimId,
+                        ctx.round,
+                        dotResistLabel(cfg.dotType, cfg.tier)
+                    );
+                    continue;
+                }
+                landDotOn(victim, victimId);
+            }
+            return;
+        }
+
         // Resolve the REAL victim (same seam the convert-dot branch uses): a reactive DoT must
         // land on the enemy the triggering event carries (e.g. on-ally-crit-dot → "on that
         // enemy", the ally's actual victim), NOT the fixed DPS dummy `enemy` sink. When no victim
@@ -2486,54 +2589,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // guard (the owner applied this DoT on its own turn → the field is set).
         const liveLanding = owner.liveDebuffLandingChance ?? 1;
         if (!owner.debuffLandingGate(liveLanding)) return;
-        // Owner-routed (Task 6): DoT entries are stamped with the firing owner's id so the
-        // enemy's per-entry tick attributes to (and scales with) the applier; bombs snapshot
-        // the owner's last-turn effective attack + affinity.
-        if (cfg.dotType === 'corrosion') {
-            (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
-                stacks: cfg.stacks,
-                tier: cfg.tier,
-                remainingRounds: cfg.duration,
-                sourceId: intent.ownerId,
-            });
-        } else if (cfg.dotType === 'inferno') {
-            (victim?.infernoEntries ?? ctx.infernoEntries).push({
-                stacks: cfg.stacks,
-                tier: cfg.tier,
-                remainingRounds: cfg.duration,
-                sourceId: intent.ownerId,
-            });
-        } else if (cfg.dotType === 'bomb') {
-            // Bomb damagePerStack needs the OWNER's effective attack. Before the owner's first
-            // turn this run (faster enemy, round 1) there is no ctx — skip (same guard as today,
-            // now per owner). Affinity comes from the owner's last-turn ctx too.
-            const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-            if (ownerCtx === undefined) return;
-            (victim?.pendingBombs ?? ctx.pendingBombs).push({
-                countdown: Math.max(1, cfg.duration),
-                damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
-                stacks: cfg.stacks,
-                tier: cfg.tier,
-                sourceId: intent.ownerId,
-                affinityMult: ownerCtx.affinityMult,
-                // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
-                // does not carry the owner's live detonation modifier; documented approximation —
-                // no shipped reactive bomb applier also wears Voidfire.
-                detonationDamageModifier: 0,
-                // Same approximation: reactive ctx does not carry the live splash modifier.
-                splashModifier: 0,
-            });
-        }
-        // Discrete infliction event — sourceId = the owner so the application is chainable
-        // and feeds OTHER owners' on-ally-debuff-inflicted dot-applied listeners (Task 6 seam).
-        ctx.bus.emit({
-            type: 'dot-applied',
-            sourceId: intent.ownerId,
-            targetId: victimId,
-            round: ctx.round,
-            dotType: cfg.dotType,
-            stacks: cfg.stacks,
-        });
+        landDotOn(victim, victimId);
         return;
     }
 

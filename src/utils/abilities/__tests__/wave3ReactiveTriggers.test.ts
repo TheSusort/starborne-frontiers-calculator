@@ -173,6 +173,45 @@ describe.skipIf(!csvAvailable())(
 );
 
 describe.skipIf(!csvAvailable())(
+    'Task 8 — Pestilence reactive Corrosion DoT on enemy-cleanse (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Pestilence p2 — "When an enemy cleanses a Debuff this unit inflicts Corrosion II for 2 turns on all cleansed enemies" builds a reactive dot on on-enemy-cleansed', () => {
+            const rec = recordFor('Pestilence');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const dot = passive.abilities.find((a) => a.config.type === 'dot' && a.type === 'dot');
+            expect(dot).toBeDefined();
+            // Reacts to an ENEMY cleansing a debuff — NOT fired every cast (on-cast). NO code path
+            // produced a reactive passive-slot DoT before this task (buildDoTAutoFill scans only
+            // active/charge sources; dotAbility() hardcodes on-cast).
+            expect(dot!.trigger).toBe('on-enemy-cleansed');
+            // Multi-recipient marker: the DoT lands on ALL cleansed enemies. `all-enemies` is the
+            // fan-out signal; the reactive dot executor keys the actual recipients off the cleanse
+            // event's cleansedEnemyIds (not the DPS dummy sink).
+            expect(dot!.target).toBe('all-enemies');
+            expect(dot!.config.type).toBe('dot');
+            if (dot!.config.type === 'dot') {
+                // Corrosion II → DOT_TIER_MAP potency tier 6 (the roman "II" is the game label;
+                // the engine stores the numeric per-tick potency).
+                expect(dot!.config.dotType).toBe('corrosion');
+                expect(dot!.config.tier).toBe(6);
+                expect(dot!.config.duration).toBe(2);
+            }
+            // Regression: the first sentence's reduce-duration cleanse must still be present
+            // (on-debuff-inflicted, all-allies) — don't regress it while adding the DoT clause.
+            const reduce = passive.abilities.find(
+                (a) =>
+                    a.config.type === 'cleanse' &&
+                    a.config.mode === 'reduce-duration' &&
+                    a.trigger === 'on-debuff-inflicted'
+            );
+            expect(reduce).toBeDefined();
+        });
+    }
+);
+
+describe.skipIf(!csvAvailable())(
     'Regression — Sokol Blast must stay on-cast despite a co-located extra-action kill phrase (verbatim docs/ship-skills.csv)',
     () => {
         it('Sokol p2 — "gains 1 stack of Blast every turn and grants one extra end of round action upon a kill, once per round" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {

@@ -1624,6 +1624,44 @@ function abilitiesFromText(
         }
     }
 
+    // Ship-kit W3 (Pestilence): "When an enemy cleanses a Debuff this unit inflicts Corrosion II
+    // for 2 turns on all cleansed enemies" — a reactive PASSIVE-slot DoT. No existing path can
+    // produce this: buildDoTAutoFill scans ONLY active/charge sources (passive-slot DoTs are
+    // categorically excluded) and dotAbility() hardcodes trigger:'on-cast'. Build it directly here,
+    // mirroring the Crocus on-ally-crit-dot block above but gated on — and taking its trigger from —
+    // detectEnemyCleanseTrigger, which sentence-scopes the DoT's anchor to the "when an enemy
+    // cleanses a Debuff" clause (shares ENEMY_CLEANSE_RE with the named-buff grant path). A normal
+    // active/charge DoT never matches (no cleanse clause) → the buildDoTAutoFill path stays the sole
+    // producer for those; the named-buff cleanse grants (Arum/Yarrow/Larkspur) carry no DoT name
+    // (DOT_TIER_MAP miss) so they never reach here either. target:'all-enemies' marks the
+    // multi-recipient fan-out — the reactive dot executor lands it on eventCtx.cleansedEnemyIds
+    // (the actual cleansed enemies), never the DPS dummy sink.
+    for (const eff of parseSkillEffects(text, 'active')) {
+        const dotInfo = DOT_TIER_MAP[eff.buffName];
+        if (!dotInfo) continue;
+        const dotPos = findBuffNamePos(text, eff.buffName);
+        const cleanseDotTrigger = detectEnemyCleanseTrigger(text, dotPos >= 0 ? dotPos : 0);
+        if (!cleanseDotTrigger) continue;
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'dot',
+                target: 'all-enemies',
+                trigger: cleanseDotTrigger, // 'on-enemy-cleansed'
+                conditions: [],
+                config: {
+                    type: 'dot',
+                    dotType: dotInfo.type,
+                    tier: dotInfo.tier,
+                    stacks: eff.stacks ?? 1,
+                    duration: typeof eff.duration === 'number' ? eff.duration : 2,
+                },
+                autoFilled: true,
+            },
+            pos: dotPos >= 0 ? dotPos : MAX_POS,
+        });
+    }
+
     const detonate = parseDetonateDoT(text);
     if (detonate) {
         const detonatePos = text.search(/detonat/i);
