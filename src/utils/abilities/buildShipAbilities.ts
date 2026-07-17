@@ -2775,11 +2775,13 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (ability.autoFilled === undefined) ability.autoFilled = true;
         // ship-kit W3 (Hemlock, Task 9): Toxic Overflow's ENTIRE mechanic is the engine's
         // end-of-round Corrosion-spread (ledger #49) — the engine reads it off the per-victim TIMED
-        // enemy-debuff store and REMOVES it on spread. Both require a numeric, finite duration; the
-        // game text states none, so the generic buff auto-fill left it duration-undefined (which
-        // classifies as an un-removable, always-active aura). Stamp the spread window here so it
-        // lands as a removable timed debuff. Targeted by name — Toxic Overflow is the sole corpus
-        // status with this end-of-round conditional-removal behaviour.
+        // enemy-debuff store and REMOVES it on spread. That requires a NUMERIC duration (an undefined
+        // duration classifies as an un-removable, always-active aura), but NOT a FINITE one: the game
+        // rule is that Toxic Overflow lingers until it spreads, with no turn-based expiry. A finite
+        // window would wrongly expire it before a late-arriving Corrosion could trigger the spread.
+        // Stamp the non-expiring TOXIC_OVERFLOW_DURATION (Number.POSITIVE_INFINITY) here so it lands
+        // as a REMOVABLE but non-expiring timed debuff. Targeted by name — Toxic Overflow is the sole
+        // corpus status with this end-of-round conditional-removal behaviour.
         if (
             ability.config.type === 'debuff' &&
             ability.config.buffName === TOXIC_OVERFLOW &&

@@ -13,12 +13,22 @@
 /** The named debuff Hemlock's charged skill inflicts; the end-of-round spread mechanic keys on it. */
 export const TOXIC_OVERFLOW = 'Toxic Overflow';
 
-/** Turns Toxic Overflow persists while it waits for the holder to carry Corrosion at an
- *  end-of-round check. The game text states no explicit duration (it lingers until it spreads and
- *  is then removed); a finite window is used so the status classifies as a REMOVABLE timed debuff
- *  (an undefined duration would make it an un-removable aura) and so it expires if it never finds
- *  Corrosion to spread. Chosen to comfortably outlast the round it is applied in. */
-export const TOXIC_OVERFLOW_DURATION = 3;
+/** Duration Toxic Overflow is applied with. The game rule is that it LINGERS until a qualifying
+ *  end-of-round check spreads it and then removes it — it has NO turn-based expiry. A finite window
+ *  is wrong: if Corrosion first arrives several rounds after Toxic Overflow lands, a finite duration
+ *  would have already expired the status and it could never spread.
+ *
+ *  Represented as `Number.POSITIVE_INFINITY` — the same non-expiring representation the engine
+ *  already uses for cast-path Cheat-Death grants (engine.ts): it stays a plain numeric duration
+ *  (so the status classifies as a REMOVABLE timed debuff, not an undefined-duration un-removable
+ *  aura, and the `kind: 'timed'` variant's `duration: number` contract holds), yet never decrements
+ *  to expiry (`Infinity − 1 === Infinity`; the Post-Turn expiry check compares `<= 0`). Crucially it
+ *  is NOT routed into the persistent-stacking machinery — that routing is gated solely on
+ *  `PERSISTENT_STACKING_BUFFS.has(name)`, and Toxic Overflow is not a member — so it lands in the
+ *  ordinary per-victim timed enemy-debuff store where the engine's targeted
+ *  `removeTimedEnemyStatus(holderId, TOXIC_OVERFLOW)` (a raw family delete, no unremovable guard)
+ *  removes it the moment it spreads. */
+export const TOXIC_OVERFLOW_DURATION = Number.POSITIVE_INFINITY;
 
 /** The Corrosion tier the spread inflicts — "Corrosion I" (matches DOT_TIER_MAP['Corrosion I'].tier
  *  in skillBuffAutoFill.ts; the roman "I" is the game label, the engine stores the numeric per-tick

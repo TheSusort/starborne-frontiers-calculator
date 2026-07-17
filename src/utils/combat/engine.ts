@@ -8202,11 +8202,23 @@ export function runCombat(input: CombatEngineInput): {
         // lives in the per-victim TIMED enemy-debuff store (ownerDebuffNames reads it); Corrosion
         // lives on the actor's corrosionEntries. adjacentAllyIdsFor resolves the holder's SAME-SIDE
         // adjacent allies (board-neighbours positionally, all same-side allies otherwise).
+        // Snapshot the qualifying spreaders BEFORE applying any spread. Applying spreads inline
+        // while iterating would let an EARLIER holder's spread deposit a Corrosion stack on a
+        // LATER holder, which — read live via totalStacks below — would then chain-spread that same
+        // round off a stack it only just received. That is order-dependent (it hinges on allActors
+        // ordering) and breaks combat symmetry/determinism. Collecting the holders that pass every
+        // guard against the fixed round-end state first, then applying from that snapshot, makes the
+        // spread order-independent: a holder spreads this round only if it already carried Corrosion
+        // when the round ended (a stack received THIS round spreads only the FOLLOWING round).
+        const toxicSpreaders: CombatActor[] = [];
         for (const holder of allActors) {
             if (holder.id === enemy.id) continue; // vestigial DPS dummy — never a real holder
             if (holder.destroyedRound !== undefined) continue;
             if (!ownerDebuffNames(holder.id).includes(TOXIC_OVERFLOW)) continue;
             if (totalStacks(holder.corrosionEntries) < 1) continue;
+            toxicSpreaders.push(holder);
+        }
+        for (const holder of toxicSpreaders) {
             const affectedIds = bySide(
                 isEnemySide(holder.id) ? 'enemy' : 'player'
             ).adjacentAllyIdsFor(holder.id);

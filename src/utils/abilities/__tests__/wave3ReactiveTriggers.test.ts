@@ -237,7 +237,7 @@ describe.skipIf(!csvAvailable())(
             expect(heal!.scaling?.conditionIndex).toBeUndefined();
         });
 
-        it('Hemlock charged — "inflicts Toxic Overflow" is a TIMED debuff (finite numeric duration), not an effect-less/aura debuff, so the end-of-round mechanic can read + remove it', () => {
+        it('Hemlock charged — "inflicts Toxic Overflow" is a TIMED debuff (numeric, non-expiring duration), not an effect-less/aura debuff, so the end-of-round mechanic can read + remove it', () => {
             const rec = recordFor('Hemlock');
             const s = ship({ chargeSkillText: rec.charge });
             const { slots } = buildShipAbilities(s);
@@ -249,12 +249,15 @@ describe.skipIf(!csvAvailable())(
             expect(debuff!.target).toBe('enemy');
             if (debuff!.config.type === 'debuff') {
                 // The end-of-round spread mechanic reads Toxic Overflow via the per-victim TIMED
-                // enemy-debuff store and REMOVES it on spread — both require a numeric duration
+                // enemy-debuff store and REMOVES it on spread — this requires a NUMERIC duration
                 // (an undefined duration classifies the status as an un-removable aura). Before
-                // this task the debuff carried NO duration (effect-less aura).
+                // this task the debuff carried NO duration (effect-less aura). The duration is
+                // NON-EXPIRING (Number.POSITIVE_INFINITY): the game rule is that Toxic Overflow
+                // lingers until it spreads, with no turn-based expiry — a finite window would
+                // wrongly remove it before a late-arriving Corrosion could trigger the spread.
                 expect(typeof debuff!.config.duration).toBe('number');
                 expect(debuff!.config.duration as number).toBeGreaterThan(0);
-                expect(Number.isFinite(debuff!.config.duration as number)).toBe(true);
+                expect(debuff!.config.duration).toBe(Number.POSITIVE_INFINITY);
                 expect(debuff!.config.application).toBe('inflict');
             }
         });
