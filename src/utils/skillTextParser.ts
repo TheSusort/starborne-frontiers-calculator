@@ -3245,6 +3245,41 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     };
 }
 
+/**
+ * Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round action
+ * AND Speed Up I for 6 turns" — parseExtraAction correctly resolves the extra-action grant to
+ * on-ally-destroyed (sentence-level death-phrase detection), but the co-located Speed Up I buff
+ * is a separate ability (a plain buff grant, not an extra-action) so it falls through to the
+ * generic on-cast default. This detector lets a sibling buff sharing the SAME sentence as an
+ * extra-action death phrase inherit that trigger.
+ *
+ * Deliberately gated on EXTRA_ACTION_RE (the "gains/grants/gives … extra … action" phrase)
+ * FIRST, not just the bare death phrase: several unrelated ships (Butcher/Mangler/Ravager/
+ * Asphyxiator's Overload — "gains 1 stack of Overload every turn and loses Overload upon
+ * killing an enemy") share a sentence with a kill/death phrase but carry NO extra-action grant.
+ * Without this gate, their co-located Overload buff would be wrongly co-triggered to
+ * on-enemy-destroyed, breaking its every-turn accumulation (caught by overloadLifecycle.test.ts
+ * during Wave 3 development). Requiring the extra-action phrase in the SAME sentence scopes this
+ * to genuine extra-action-adjacent buffs (Harvester) only.
+ *
+ * Position/sentence-scoped via rawSentenceAround (same raw-text sentence bounds as
+ * phrasePosTrigger) so an unrelated buff sitting in a DIFFERENT sentence is never co-triggered.
+ * Reference data: docs/ship-skills.csv.
+ */
+export function detectExtraActionCoTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    if (!text) return undefined;
+    const sentence = rawSentenceAround(text, anchorPos);
+    if (!sentence || !EXTRA_ACTION_RE.test(sentence)) return undefined;
+    return EXTRA_ACTION_ENEMY_DESTROYED_RE.test(sentence)
+        ? 'on-enemy-destroyed'
+        : EXTRA_ACTION_ALLY_DESTROYED_RE.test(sentence)
+          ? 'on-ally-destroyed'
+          : undefined;
+}
+
 // --- Healing-calculator parsers: heal / shield / cleanse -----------------------------
 //
 // These extract heal & shield grants (and cleanse counts) for the healing calculator.

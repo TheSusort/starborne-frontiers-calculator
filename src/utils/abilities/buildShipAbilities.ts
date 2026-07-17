@@ -111,6 +111,7 @@ import {
     parseDefenseSubstitution,
     findBuffNamePos,
     maskAbbrev,
+    detectExtraActionCoTrigger,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -2775,6 +2776,21 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             rowText
         ) {
             reactiveTrigger = detectAllyInflictsGrantTrigger(rowText, buff.buffName);
+        }
+        // Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round
+        // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
+        // via parseExtraAction, but Speed Up I is a separate (plain) buff ability that otherwise
+        // falls through to the on-cast default. Position-scoped on THIS buff's own sentence
+        // (rather than buffName-scoped) so a co-located death-trigger phrase is only inherited
+        // when it actually shares the sentence — an unrelated buff elsewhere in the row text is
+        // unaffected.
+        if (
+            reactiveTrigger === undefined &&
+            ability.config.type === 'buff' &&
+            rowText &&
+            pos >= 0
+        ) {
+            reactiveTrigger = detectExtraActionCoTrigger(rowText, pos);
         }
         if (reactiveTrigger) {
             ability.trigger = reactiveTrigger;

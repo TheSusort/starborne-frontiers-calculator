@@ -67,3 +67,20 @@ describe.skipIf(!csvAvailable())(
         });
     }
 );
+
+describe.skipIf(!csvAvailable())(
+    'Task 3 — Harvester Speed Up I shares the on-ally-destroyed trigger (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Harvester p2 — "When an allied Unit is destroyed, this Unit gains 1 extra end of round action and Speed Up I for 6 turns" co-triggers Speed Up I on on-ally-destroyed', () => {
+            const rec = recordFor('Harvester');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const speedUp = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Speed Up I'
+            );
+            expect(speedUp).toBeDefined();
+            expect(speedUp!.trigger).toBe('on-ally-destroyed');
+        });
+    }
+);
