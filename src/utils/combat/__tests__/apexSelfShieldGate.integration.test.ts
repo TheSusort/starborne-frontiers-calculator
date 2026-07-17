@@ -111,6 +111,24 @@ describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 
         healTargetId: 'attacker', // activates the cast-path self-shield-grant block
     });
 
+    // Counts the `control-applied` reaction event (effect:'disable') fired by APEX's charged
+    // control-twin ability — the OTHER half of the self-shield-gated Disable model
+    // (buildShipAbilities.ts:3237-3238 makes the control ability inherit the named debuff's
+    // self-shield condition, but that inherited condition is only meaningful if the ctx
+    // gateFiringAbilities evaluates it against actually carries `selfShielded` — playerTurn.ts's
+    // `ctx` at ~1900, review follow-up to this task). The combat log's kind:'control' Disable
+    // entry is driven by this same event, so asserting it here covers the log-visible symptom
+    // too.
+    const countControlAppliedDisable = (includeSelfShield: boolean): number => {
+        const bus = createEventBus();
+        let count = 0;
+        bus.on('control-applied', (e) => {
+            if (e.type === 'control-applied' && e.effect === 'disable') count++;
+        });
+        runCombat({ ...makeInput(includeSelfShield), bus });
+        return count;
+    };
+
     it('Case A: APEX never grants herself a shield → round-2 charged Disable does NOT inflict', () => {
         const result = runCombat(makeInput(false));
         expect(result.rounds).toHaveLength(2);
@@ -119,6 +137,9 @@ describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 
         // The unconditional co-debuff from the SAME charged cast still lands — proves the
         // charged skill genuinely fired round 2 (not just "everything gated off").
         expect(namesR2).toContain('Attack Down II');
+        // The control-type twin (effect:'disable') must be suppressed too — same gate,
+        // same ctx, same round.
+        expect(countControlAppliedDisable(false)).toBe(0);
     });
 
     it('Case B: APEX holds a shield (round-1 self-grant) at the round-2 charged cast → Disable inflicts for 2 turns', () => {
@@ -127,6 +148,10 @@ describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 
         const namesR2 = result.rounds[1].activeEnemyDebuffs.map((d) => d.buffName);
         expect(namesR2).toContain('Disable');
         expect(namesR2).toContain('Attack Down II');
+        // The control-type twin must ALSO fire — it drives `control-applied` (on-stasis-applied-
+        // style reactions) and the combat log's kind:'control' Disable entry, which are otherwise
+        // invisible in `activeEnemyDebuffs` alone.
+        expect(countControlAppliedDisable(true)).toBeGreaterThan(0);
     });
 });
 
@@ -183,11 +208,33 @@ describe('APEX charged Disable — team symmetry (ENEMY-side APEX gates the SAME
         return count;
     };
 
+    // Team-symmetry counterpart of countControlAppliedDisable above — the control-type twin's
+    // gate ctx (playerTurn.ts's `ctx`) is built on the SAME acting-actor code path regardless of
+    // which side APEX is fighting on, so an enemy-side APEX must gate the control-applied event
+    // identically to a player-side APEX.
+    const countControlAppliedDisableByApex = (includeSelfShield: boolean): number => {
+        const bus = createEventBus();
+        let count = 0;
+        bus.on('control-applied', (e) => {
+            if (
+                e.type === 'control-applied' &&
+                e.casterId === 'apex-enemy' &&
+                e.effect === 'disable'
+            ) {
+                count++;
+            }
+        });
+        runCombat({ ...focusInput(buildEnemyApex(includeSelfShield)), bus });
+        return count;
+    };
+
     it('Case A (enemy side): APEX never self-shields → Disable never lands on the player focus', () => {
         expect(countDisableAppliedByApex(false)).toBe(0);
+        expect(countControlAppliedDisableByApex(false)).toBe(0);
     });
 
     it('Case B (enemy side): APEX holds a shield at the round-2 charged cast → Disable lands on the player focus', () => {
         expect(countDisableAppliedByApex(true)).toBeGreaterThan(0);
+        expect(countControlAppliedDisableByApex(true)).toBeGreaterThan(0);
     });
 });

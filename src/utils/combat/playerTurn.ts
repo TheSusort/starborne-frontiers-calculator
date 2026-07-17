@@ -1949,6 +1949,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // in DPS/non-positional mode → default 1 (single-target DPS, the faithful "Tygr doesn't
         // add charge against one target" behaviour).
         enemiesHitThisCast: aoeVictimIds?.length,
+        // Ship-kit Wave 4, Task 3 (review follow-up): SAME field/derivation as preDebuffGateCtx
+        // (:1444) and modifierCtx (:1724) above — REQUIRED here because THIS ctx is what
+        // gateFiringAbilities consumes just below (:1956) to gate `type:'control'` payload
+        // abilities. APEX's charged Disable is modelled BOTH as a named debuff (gated by
+        // preDebuffGateCtx) AND as a `control`-type ability (effect:'disable', gated by this
+        // ctx) — both twins carry the same self-shield condition (buildShipAbilities.ts
+        // :3237-3238), so both need selfShielded here or the control twin is permanently
+        // suppressed regardless of the caster's real shieldPool (control-applied never fires,
+        // the combat log's kind:'control' Disable entry never appears — even with a shield).
+        selfShielded: actor.shieldPool > 0,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
