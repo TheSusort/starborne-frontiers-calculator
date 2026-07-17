@@ -132,6 +132,23 @@ describe.skipIf(!csvAvailable())(
 );
 
 describe.skipIf(!csvAvailable())(
+    'Task 6 — Anemone heal triggers on enemy-takes-DoT-damage (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Anemone p2 — "When an enemy takes damage from a Damage over Time effect, repair 5% of this Unit\'s Max HP" resolves to on-enemy-dot-damage', () => {
+            const rec = recordFor('Anemone');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const heal = passive.abilities.find(
+                (a) => a.config.type === 'heal' && a.type === 'heal' && a.target === 'self'
+            );
+            expect(heal).toBeDefined();
+            expect(heal!.trigger).toBe('on-enemy-dot-damage');
+        });
+    }
+);
+
+describe.skipIf(!csvAvailable())(
     'Regression — Sokol Blast must stay on-cast despite a co-located extra-action kill phrase (verbatim docs/ship-skills.csv)',
     () => {
         it('Sokol p2 — "gains 1 stack of Blast every turn and grants one extra end of round action upon a kill, once per round" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {

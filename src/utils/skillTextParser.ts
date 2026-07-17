@@ -2589,6 +2589,32 @@ export function detectEnemyRepairedTrigger(
     return undefined;
 }
 
+// ship-kit W3 (Anemone, Task 6): "When an enemy takes damage from a Damage over Time effect,
+// repair 5% of this Unit's Max HP." Distinct from Anemone's own FIRST-passive sentence ("This
+// Unit takes 25% less direct damage from enemies debuffed with a Damage over Time effect."),
+// which shares the "Damage over Time effect" tail but never the leading "when an enemy takes
+// damage from" phrase — sentence-scoped detection (below) keeps the two apart regardless.
+// Corpus-verified unique phrasing (docs/ship-skills.csv).
+const ENEMY_TAKES_DOT_DAMAGE_RE =
+    /\bwhen\s+an?\s+enemy\s+takes\s+damage\s+from\s+an?\s+damage\s+over\s+time\s+effect\b/i;
+
+/**
+ * Sentence-scoped (mirrors detectEnemyRepairedTrigger's rawSentenceAround + stripUnitTags shape)
+ * detector for Anemone's "when an enemy takes damage from a Damage over Time effect" reaction.
+ * Returns undefined outside that sentence — so an anchor landing in a different sentence (e.g.
+ * the co-located "takes 25% less direct damage from … Damage over Time" passive clause) is never
+ * co-triggered. Reference data: docs/ship-skills.csv (Anemone).
+ */
+export function detectEnemyDotDamageTrigger(
+    text: string,
+    pos: number
+): 'on-enemy-dot-damage' | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const stripped = stripUnitTags(sentence);
+    return ENEMY_TAKES_DOT_DAMAGE_RE.test(stripped) ? 'on-enemy-dot-damage' : undefined;
+}
+
 // Once-per-round-per-ENEMY cap on a reactive debuff (Ruiner's Bomb: "once per round per
 // enemy") — distinct from the plain "once per round" cap (which caps once per round OVERALL).
 // Exported: buildShipAbilities.ts's passive DoT-reaction loop tests it directly.

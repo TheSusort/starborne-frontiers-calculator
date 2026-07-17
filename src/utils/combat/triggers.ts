@@ -302,6 +302,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    former (counterTargetId), Amartya's Defense Shred fans out over the latter.
  *  - on-enemy-cleansed → cleanse-performed where isOpposing(casterId)
  *    (any opposing-side actor's cleanse cast). One enqueue per cast.
+ *  - on-enemy-dot-damage → dot-ticked where isOpposing(targetId) (ship-kit W3, Task 6: Anemone's
+ *    self-heal reacting to ANY opposing actor taking a DoT tick, any dotType). One enqueue per
+ *    tick. Stamps eventCtx.victimId = the tick's target (dummy-sink convention) — inert for
+ *    Anemone's self-target heal (reactiveRecipients never reads victimId for target==='self').
  *  - on-own-cleanse → cleanse-performed where casterId === ownerId (Phase 3 PR-H: Cultivator's
  *    ally-repair, Morao's self-repair + Defense Up II). Self-scoped — the OWN-cleanse counterpart
  *    of on-enemy-cleansed. Stamps eventCtx.cleansedAllyIds = e.targets (the actually-cleansed
@@ -835,6 +839,22 @@ export function registerReactiveListeners(args: {
                                     counterTargetId: e.casterId,
                                     repairedEnemyIds: e.targets,
                                 },
+                            });
+                    });
+                    break;
+                case 'on-enemy-dot-damage':
+                    bus.on('dot-ticked', (e) => {
+                        // Ship-kit W3 (Task 6, Anemone): opposing-scoped reaction to an ENEMY-side
+                        // actor taking a DoT TICK (any dotType). Stamp victimId = the tick's real
+                        // target (dummy-sink convention, investigation appendix §E) — Anemone's
+                        // heal is SELF-target, so `reactiveRecipients` resolves it to
+                        // [intent.ownerId] regardless (target==='self' branch never reads
+                        // victimId); the stamp exists for parity with every other Wave 3 case and
+                        // for any future non-self consumer of this trigger.
+                        if (isOpposing(e.targetId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, victimId: e.targetId },
                             });
                     });
                     break;

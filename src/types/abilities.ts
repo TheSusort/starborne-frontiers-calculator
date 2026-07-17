@@ -196,6 +196,13 @@ export type AbilityTrigger =
     // recipient via eventCtx.counterTargetId — this is a debuff ability, whose executor reads
     // counterTargetId (NOT victimId, which only dot/convert-dot consume; see triggers.ts).
     | 'on-enemy-taunt-gained'
+    // Ship-kit Wave 3, Task 6: fires when an OPPOSING-side actor takes a Damage over Time TICK
+    // (rides the existing `dot-ticked` event — combat/events.ts — opposing-scoped on targetId,
+    // ANY dotType). Anemone's "When an enemy takes damage from a Damage over Time effect,
+    // repair 5% of this Unit's Max HP" — a SELF-target heal, so eventCtx.victimId (stamped by
+    // the triggers.ts case) only documents the DoT-tick target; the self-heal recipient
+    // resolves via reactiveRecipients' target==='self' branch and never reads victimId.
+    | 'on-enemy-dot-damage'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
     // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
@@ -262,6 +269,9 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Ship-kit Wave 3, Task 4: opposing-scoped reaction to an enemy actor gaining Taunt (Amartya
     // Exposed).
     'on-enemy-taunt-gained',
+    // Ship-kit Wave 3, Task 6: opposing-scoped reaction to an enemy actor taking a DoT tick
+    // (Anemone heal).
+    'on-enemy-dot-damage',
 ]);
 
 export type ConditionSubject =

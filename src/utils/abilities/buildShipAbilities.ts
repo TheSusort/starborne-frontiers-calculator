@@ -72,6 +72,7 @@ import {
     parseHighestSpeedEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
+    detectEnemyDotDamageTrigger,
     ONCE_PER_ROUND_PER_ENEMY_RE,
     PURGE_MORE_RE,
     parseControlInflicts,
@@ -1841,6 +1842,12 @@ function abilitiesFromText(
                 // (eventCtx.repairedEnemyIds.length) via the scaling wiring below. Enforced at most
                 // maxPerRound times per round (also wired below).
                 detectEnemyRepairedTrigger(text, healPos)?.trigger ??
+                // Anemone p2 (ship-kit W3, Task 6): a self-repair anchored in the "when an enemy
+                // takes damage from a Damage over Time effect" sentence rides the NEW
+                // on-enemy-dot-damage reactive trigger (position-scoped) — wired onto the
+                // already-existing dot-ticked bus event (triggers.ts). Heal-only (no corpus
+                // shield carries this phrase).
+                (h.kind === 'heal' ? detectEnemyDotDamageTrigger(text, healPos) : undefined) ??
                 (h.kind === 'shield'
                     ? (detectDebuffInflictedTrigger(text, healPos) ??
                       // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
