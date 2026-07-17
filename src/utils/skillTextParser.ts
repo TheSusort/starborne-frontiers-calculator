@@ -207,7 +207,18 @@ export function parseSkillDamage(text: string): number {
         // tag content or the following text actually mentions damage.
         const content = match[1].toLowerCase();
         if (!content.includes('damage') && !following.includes('damage')) continue;
-        const numeric = parseInt(match[1], 10);
+        let numeric = parseInt(match[1], 10);
+        // Non-numeric-leading base-damage tag: "Damage equal to 70%" (Madax's active — the tag
+        // itself carries the base multiplier, unlike the "damage equal to X% of its Defense/max
+        // HP" additional-damage shape, which is always excluded above by the "of its"/"of this"
+        // following-text check before reaching this line). Scoped narrowly to a LEADING
+        // "damage equal to" so it can't pick up an unrelated "Shield equal to X%" tag (Malvex,
+        // FrontLine) or an "increases damage by X%" conditional modifier tag (Zeolite, Obsidian)
+        // elsewhere in the corpus, neither of which is base skill damage.
+        if (isNaN(numeric)) {
+            const damageEqualTo = /^damage\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%/i.exec(match[1]);
+            if (damageEqualTo) numeric = parseFloat(damageEqualTo[1]);
+        }
         if (!isNaN(numeric)) return numeric;
     }
     return 0;
@@ -950,15 +961,42 @@ function splitSentences(text: string): string[] {
 
 // Non-whitespace sentinel that replaces the space after an "Inc."/"Out." abbreviation period so
 // splitSentences does not treat it as a sentence boundary. Restored to a plain space after
-// splitting. Shared by resolveBuffClause and parseExtraAction.
-const ABBR_MARK = '\u0001';
-const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
+// splitting. Shared by resolveBuffClause, parseExtraAction, and buildShipAbilities' healPlain/
+// shield-cocast sentence construction (Finding C1 -- the "Out. Damage Up III" abbreviation
+// period otherwise splits the co-cast buff name out of the shield's detected sentence).
+export const ABBR_MARK = '\u0001';
+export const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
+
+// Escapes literal regex-special characters for use inside a dynamically built pattern.
+function escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Word-boundary-aware search for a buff/debuff name within text. A bare substring test
+ * (`text.includes(name)` / `text.indexOf(name)`) can match a SHORTER name INSIDE a longer word --
+ * e.g. "Stealth" matches inside "Stealthed" (Panguan: "Friendly Stealthed units deal 40% more
+ * direct damage." was picked as Stealth's clause instead of the sentence that actually GRANTS
+ * it, "This Unit Gains Stealth ... when directly damaged"). Boundaries are enforced with explicit
+ * `(^|\W)` / `(?:\W|$)` groups rather than `\b`, so a buffName that begins or ends with a non-word
+ * character (e.g. "+10% HP") still boundary-matches correctly; both are zero-width-or-consumed
+ * assertions, not lookbehinds, so they are safe under the iOS Safari 15 no-lookbehind constraint
+ * used elsewhere in this file. The leading boundary is a real captured char, so the returned index
+ * is offset past it. Shared by resolveBuffClause and buildShipAbilities' buff-name anchor (B4).
+ */
+export function findBuffNamePos(text: string, buffName: string): number {
+    if (!text || !buffName) return -1;
+    const re = new RegExp(`(^|\\W)(${escapeRegExp(buffName)})(?:\\W|$)`);
+    const m = re.exec(text);
+    return m ? m.index + m[1].length : -1;
+}
 
 function resolveBuffClause(skillText: string, buffName: string): string {
     const plain = maskAbbrev(stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. '));
     const maskedName = maskAbbrev(buffName).toLowerCase();
     const sentences = splitSentences(plain);
-    const clauseMasked = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? plain;
+    const clauseMasked =
+        sentences.find((s) => findBuffNamePos(s.toLowerCase(), maskedName) >= 0) ?? plain;
     return clauseMasked.split(ABBR_MARK).join(' ');
 }
 
@@ -3425,11 +3463,16 @@ function resolveHealTarget(sentence: string): {
     // them for 8%") → the pronoun is plural → all-allies. Checked first because the
     // singular rule below would otherwise capture the bare \bthem\b.
     if (/\ball\s+allies\b[^.;]*\bthem\b/.test(s)) return { target: 'all-allies', explicit: true };
+    // Rikra: "... for each enemy Unit destroyed by the attack upon killing them" — this
+    // "them" refers back to the slain ENEMY units (the heal is a bare self-repair keyed by
+    // kill count), not a heal recipient. Strip that antecedent before testing the generic
+    // \bthem\b ally signal below so it isn't misread as an ally recipient (Finding B2).
+    const sWithoutKillAntecedent = s.replace(/\b(?:killing|destroying)\s+them\b/g, '');
     // Singular ally detection takes priority over the bare "their" heuristic so that
     // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
     if (
         /\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b|most\s+missing\s+health|\bthe\s+other\s+ally\b/.test(
-            s
+            sWithoutKillAntecedent
         )
     )
         return { target: 'ally', explicit: true };
@@ -3502,6 +3545,17 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // below by HEAL_ADDITIONAL_RE inheriting the primary's target — skip it here so
             // it isn't double-counted (and so it doesn't inherit the wrong target/basis).
             if (kind === 'heal' && /equal\s+to/i.test(m[0])) continue;
+            // Quixilver: "if it has shield equal to 100% of its max HP" is a THRESHOLD
+            // CONDITION gating a Barrier grant elsewhere in the sentence, not a shield GRANT
+            // itself — every real shield grant in the corpus is phrased "gains/grants Shield
+            // equal to N%" (verified against docs/ship-skills.csv), never "has Shield equal
+            // to". Skip a match whose immediately preceding word is "has" so this condition
+            // phrasing doesn't fabricate a phantom shield-grant ability (Finding B1).
+            if (
+                kind === 'shield' &&
+                /\bhas\s*$/i.test(plain.slice(Math.max(0, m.index - 20), m.index))
+            )
+                continue;
             const { start: sentenceStart, text: sentence } = sentenceBoundsAround(plain, m.index);
             if (HEAL_DISQUALIFY_RE.test(sentence)) continue;
             // Scope both basis resolution and the continuation scan to the match's own
@@ -3797,8 +3851,16 @@ const PURGE_RE = /\bpurges?\s+(?:(\d+|all)|an?\b)/gi;
 // Sentence-scoped (applied to the purge's own sentence). Matches "for every 50% crit power".
 const CRIT_POWER_SCALING_RE = /for\s+every\s+(\d+)\s*%?\s*crit\s+power/i;
 
-// "cleanses N" — must NOT match "purges". Trailing clause names the recipient.
-const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
+// "cleanses N" — must NOT match "purges". Trailing clause names the recipient. The trailing
+// boundary is normally a plain \b, but stripUnitTags can concatenate a tag boundary directly
+// onto the following word with no space (Cultivator's active: "<unit-aid>cleanses 1</unit-aid>
+// debuff." → "cleanses 1debuff." after tag removal) — a digit run immediately followed by a
+// letter is NOT a \b, so tolerate that case via the `[a-z]` lookahead alternative too. Scoped to
+// ONLY the digit branch (Finding B5) — applying it to `all` too would let a future "cleanses
+// allies of a debuff" false-match "cleanses all" as a count-all cleanse (no such text exists in
+// the corpus today). A single capturing group is kept (rather than one per alternative) so
+// `m[1]` below still reads the whole matched count-or-"all" token unchanged.
+const CLEANSE_RE = /\bcleanses?\s+(\d+(?=\b|[a-z])|all\b)/gi;
 
 /**
  * Parses purge grants ("purges N buffs from <recipient>"). Purge is enemy-targeting only.
@@ -4248,7 +4310,10 @@ const APPLICATION_VERBS = new Set([...SELF_VERBS, ...ENEMY_VERBS, ...AMBIGUOUS_V
 // reference to an existing effect being extended, not a fresh application.
 const ADJECTIVAL_MARKER = 'newly';
 const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists', 'when']);
-const DURATION_RE = /for\s+(\d+)\s+turns?/i;
+// `\s*` (not `\s+`) between the number and "turn(s)" tolerates a CSV concatenation typo
+// ("for 1turn." — Morao's active) where the tag-removal boundary leaves no space. `\s+` before
+// the number is left mandatory since "for" is always followed by a real space in the corpus.
+const DURATION_RE = /for\s+(\d+)\s*turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
@@ -4487,10 +4552,24 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
 /**
  * Maps a verb to a target side, cross-referencing BUFFS type for the ambiguous "apply" forms.
  * An "apply" verb with a buff-type effect → self; anything else → enemy.
+ *
+ * `followingText` (the text segment immediately after the buff-name tag) carries an explicit
+ * self-referential object when present — "applies <Buff> TO ITSELF" (Panon's Barrier
+ * Recharging, registered as a debuff-typed status even though Panon applies it to itself as a
+ * self-buff gate). That explicit object overrides the BUFFS-type heuristic, which would
+ * otherwise misroute it to 'enemy' purely because the named status happens to be registered
+ * type:'debuff' (Finding B3). No corpus "applies" clause pairs an unrelated "itself" in the
+ * immediately-following text with an actual enemy-targeted debuff (verified against
+ * docs/ship-skills.csv), so this is safe to check unconditionally for apply forms.
  */
-function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
+function verbToTarget(
+    verb: string,
+    buffName: string,
+    followingText: string = ''
+): 'self' | 'enemy' {
     if (SELF_VERBS.has(verb)) return 'self';
     if (ENEMY_VERBS.has(verb)) return 'enemy';
+    if (/\bitself\b/i.test(followingText)) return 'self';
     // apply forms: use BUFFS type to disambiguate
     const found = BUFFS.find((b) => b.name === buffName);
     return found?.type === 'buff' ? 'self' : 'enemy';
@@ -4664,16 +4743,19 @@ export function parseSkillEffects(
         const verb = findVerb(segments, i);
         if (verb === null || verb === undefined) continue; // skip verb or no verb
 
+        // Text immediately following the buff-name tag — used both as verbToTarget's explicit-
+        // object override (Step 2) and as the duration scan source (Step 3).
+        const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';
+
         // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed).
         // Player-side grants get ally-scope granularity from the granting clause (team walk);
         // enemy debuffs stay 'enemy'.
-        const side = verbToTarget(verb, buffName);
+        const side = verbToTarget(verb, buffName, nextText);
         const target: SkillEffect['target'] =
             side === 'self' ? detectGrantScope(skillText, buffName) : 'enemy';
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
-        const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';
         let duration: number | 'recurring' | null = null;
         const durationMatch = DURATION_RE.exec(nextText);
         if (durationMatch) {

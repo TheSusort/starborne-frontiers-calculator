@@ -109,6 +109,8 @@ import {
     detectConvertDot,
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
+    findBuffNamePos,
+    maskAbbrev,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -1597,7 +1599,7 @@ function abilitiesFromText(
         for (const eff of parseSkillEffects(text, 'active')) {
             const info = DOT_TIER_MAP[eff.buffName];
             if (!info) continue;
-            const allyCritDotPos = text.indexOf(eff.buffName);
+            const allyCritDotPos = findBuffNamePos(text, eff.buffName);
             out.push({
                 ability: {
                     id: nextId(),
@@ -1850,7 +1852,13 @@ function abilitiesFromText(
                       },
                   ]
                 : [];
-        const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
+        // maskAbbrev (length-preserving) runs BEFORE the pct-position search/sentenceContaining so
+        // an "Inc."/"Out." abbreviation period inside a co-cast buff name (Graphite's charged-slot
+        // "Out. Damage Up III") is not treated as a sentence boundary — otherwise it splits the
+        // buff name out of the shield's detected sentence and the all-allies flip below never
+        // matches (Finding C1). eff.buffName is masked the same way so both sides of the
+        // `.includes` check line up.
+        const healPlain = maskAbbrev(stripTags(text).replace(/<br\s*\/?>/gi, '. '));
         const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
         const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
         const shieldCoCastAllAlliesGrant =
@@ -1861,7 +1869,7 @@ function abilitiesFromText(
             skillEffectsForSlot.some(
                 (eff) =>
                     eff.target === 'all-allies' &&
-                    healSentence.toLowerCase().includes(eff.buffName.toLowerCase())
+                    healSentence.toLowerCase().includes(maskAbbrev(eff.buffName).toLowerCase())
             );
         const oncePerCombat =
             reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);
@@ -2333,7 +2341,7 @@ function abilitiesFromText(
     // named self-buff on a reactive trigger. parseSelfBuffRemovals (Task 5) scopes the trigger to
     // the removal clause's position; the buff is cleared from ALL self stores (scope: 'all').
     for (const rem of parseSelfBuffRemovals(text)) {
-        const removePos = text.indexOf(rem.buffName);
+        const removePos = findBuffNamePos(text, rem.buffName);
         out.push({
             ability: {
                 id: nextId(),
@@ -2712,7 +2720,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             };
             ability.trigger = 'on-ally-debuff-inflicted';
             ability.target = 'enemy';
-            const convertPos = rowText.indexOf(buff.buffName);
+            const convertPos = findBuffNamePos(rowText, buff.buffName);
             pushToSlot(bySlot, slot, [{ ability, pos: convertPos >= 0 ? convertPos : MAX_POS }]);
             return;
         }
@@ -2745,7 +2753,9 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         }
         // Position anchor: index of the buff name in the row text (order-irrelevant for
         // buff/debuff abilities, but placed consistently so ties resolve by insertion order).
-        const pos = rowText ? rowText.indexOf(buff.buffName) : -1;
+        // Word-boundary-aware (Finding B4) so a short buff name isn't mistaken for a substring
+        // of a longer word (Panguan's "Stealth" inside "Stealthed").
+        const pos = rowText ? findBuffNamePos(rowText, buff.buffName) : -1;
         // Epic PR4: a split-sentence "… also gains <Buff>" continuing an IMMEDIATELY PRECEDING
         // "At the start of the round, this Unit gains …" sentence (Nayra p2's Offensive Affinity
         // Override, Isha p1/p2's Defensive Affinity Override) has no round-start phrase of its
@@ -2989,7 +2999,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // reaction-sentence DoT infliction never carries) — 'passive1' is a neutral stand-in.
         for (const eff of parseSkillEffects(passiveRowText, 'passive1')) {
             if (eff.target !== 'enemy' || !DOT_TIER_MAP[eff.buffName]) continue;
-            const pos = passiveRowText.indexOf(eff.buffName);
+            const pos = findBuffNamePos(passiveRowText, eff.buffName);
             const reaction =
                 pos >= 0 ? detectDamageReactionTrigger(passiveRowText, pos) : undefined;
             // Phase 3 PR-F: Ruiner's "This Unit inflicts Bomb II … on any enemy performing a
