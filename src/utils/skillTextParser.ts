@@ -1643,6 +1643,36 @@ export function parseExtendDoT(text: string | null | undefined): number | null {
     return m ? parseInt(m[1], 10) : null;
 }
 
+// Ship-kit Wave 4, Task 5: generic buff/debuff DURATION EXTENSION — the inverse of
+// parseDebuffDurationReduction, and a sibling of EXTEND_DOT_RE (which is DoT-tick-store-only
+// and requires the literal "Damage Over Time" phrase). Two surface forms in the corpus:
+//   active voice:  "extends [their] active <Buffs|Debuffs> by N turn(s)"   (Sokol, Ripper)
+//   passive voice: "<buffs|debuffs> [are] extended by N turn(s)"           (Lev)
+// Both carry a negative lookahead for "damage over time" so a row that ALSO has a DoT-extend
+// clause elsewhere in the same (period-scoped) segment never double-matches here — the
+// corpus never combines them on one clause, but the guard is cheap insurance (mirrors the
+// audit rule's own DoT exclusion, per the investigation doc).
+const EXTEND_STATUS_ACTIVE_RE =
+    /extends?\b(?![^.]*\bdamage over time\b)[^.]*?\bactive\s+(buffs|debuffs)\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+const EXTEND_STATUS_PASSIVE_RE =
+    /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+
+/**
+ * Parses a generic buff/debuff duration-extension clause into its turns + statusKind, or null
+ * when absent. Runs over stripUnitTags(text) so both the `<unit-aid>`-wrapped active-voice form
+ * (Sokol/Ripper) and the plain passive-voice form (Lev) match. Reference: docs/ship-skills.csv.
+ */
+export function parseExtendStatus(
+    text: string | null | undefined
+): { turns: number; statusKind: 'buff' | 'debuff' } | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text);
+    const m = EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? EXTEND_STATUS_PASSIVE_RE.exec(plain);
+    if (!m) return null;
+    const kind: 'buff' | 'debuff' = m[1].toLowerCase().startsWith('debuff') ? 'debuff' : 'buff';
+    return { turns: parseInt(m[2], 10), statusKind: kind };
+}
+
 // "extend(s/ed) … by/for N turn(s) … chance … crit power" — a duration extension whose chance is
 // the crit-power stat (Valerian, Belladonna). The trigger gates it: an ally inflicting → the
 // team-dependent ally-inflicts-debuff; otherwise a self crit ("with a Critical hit") → self-crit.

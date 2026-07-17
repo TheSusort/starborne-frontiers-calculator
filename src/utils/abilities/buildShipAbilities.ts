@@ -46,6 +46,7 @@ import {
     detectTargetHpGate,
     parseHpThresholdCondition,
     parseExtendDoT,
+    parseExtendStatus,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
     parseBombCountdownReduce,
@@ -1557,6 +1558,74 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: extendPos >= 0 ? extendPos : MAX_POS,
+        });
+    }
+
+    // Ship-kit Wave 4, Task 5: generic buff/debuff DURATION EXTENSION — the inverse of the
+    // debuff-duration-reduction mechanic above, riding the NEW extend-status ability type
+    // (Task 4's StatusEngine primitives; executors are Task 6). Distinct from extend-dot
+    // above (a different store — DoT tick stacks, not the StatusEngine buff/debuff maps).
+    // Three corpus shapes, all sentence-scoped off the "extend"/"extended" match:
+    //  - Sokol (charged): "extends active Debuffs by 1 turn" — no "all allies"/"all enemies"
+    //    subject in the clause → default target 'enemy' (the primary/hit enemy, mirroring
+    //    extend-dot's own 'enemy' default).
+    //  - Ripper (passive R2): "All allies extend their active Buffs by 1 turn" — the "All
+    //    allies" subject (checked in the PREFIX before the extend verb, so it can never
+    //    false-match a later "all allies" clause in the same sentence — see Lev) → target
+    //    'all-allies'. This is an ADDITIONAL ability alongside the co-located Marauder Rage
+    //    II self-buff parsed elsewhere in this function — this block never touches out[0]/
+    //    mutates any existing entry, so that self-buff keeps parsing unchanged.
+    //  - Lev (charged): "If a critical hit occurs, all hit enemies have their debuffs
+    //    extended by 1 turn and all allies are granted Crit Power Up II for 2 turns." — the
+    //    "all hit enemies" subject precedes "extended" → target 'all-enemies'; the LATER
+    //    "all allies are granted…" clause (a different, unrelated buff-grant subject) is
+    //    excluded from the subject check by construction (prefix-only), so it can never
+    //    flip Lev's target to 'all-allies'.
+    //
+    // Lev on-crit shape — THIS TASK'S JUDGMENT CALL (see task-5-report.md for the full
+    // writeup): kept on trigger:'on-cast' with a live-derivable `self-crit` CONDITION
+    // (abilityStatusGating.ts LIVE_SUBJECTS), gated the SAME way parseCritPowerExtend's
+    // Valerian condition is above (conditions:[{subject:'self-crit', derivable:true}]) —
+    // NOT the reactive 'on-crit' AbilityTrigger. Rationale: 'on-crit' as a LIVE_TRIGGER has
+    // exactly one corpus user (buildEquipmentAbilities' Bloodthirst, a SELF-target reactive
+    // heal) and carries no AoE fan-out plumbing — reactiveRecipients has no 'all-enemies'
+    // branch, and the reactive on-crit listener stamps no hit-enemy ids in eventCtx. Staying
+    // on-cast instead reuses the SAME aoeVictimIds fan-out the on-cast purge/steal blocks
+    // already use for "all hit enemies" semantics (this cast's actual hit set), which is the
+    // literal wording of Lev's clause — reusing existing on-cast plumbing rather than adding
+    // new reactive machinery. Task 6's executor MUST honor this shape (on-cast + condition).
+    const extendStatus = parseExtendStatus(text);
+    if (extendStatus) {
+        const plainForExtend = stripTags(text);
+        const extendVerbMatch = /\bextend(?:s|ed)?\b/i.exec(plainForExtend);
+        const extendStatusIdx = extendVerbMatch ? extendVerbMatch.index : -1;
+        const extendSentence =
+            extendStatusIdx >= 0 ? sentenceContaining(plainForExtend, extendStatusIdx) : '';
+        const localVerbIdx = extendSentence.search(/\bextend(?:s|ed)?\b/i);
+        const extendSubjectPrefix =
+            localVerbIdx >= 0 ? extendSentence.slice(0, localVerbIdx) : extendSentence;
+        const extendTarget: AbilityTarget = /\ball\s+allies\b/i.test(extendSubjectPrefix)
+            ? 'all-allies'
+            : /\ball\s+(?:hit\s+)?enemies\b/i.test(extendSubjectPrefix)
+              ? 'all-enemies'
+              : 'enemy';
+        const extendCritGated = /\bcritical\s+hit\s+occurs\b/i.test(extendSentence);
+        const extendStatusPos = text.search(/extend/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'extend-status',
+                target: extendTarget,
+                trigger: 'on-cast',
+                conditions: extendCritGated ? [{ subject: 'self-crit', derivable: true }] : [],
+                config: {
+                    type: 'extend-status',
+                    statusKind: extendStatus.statusKind,
+                    turns: extendStatus.turns,
+                },
+                autoFilled: true,
+            },
+            pos: extendStatusPos >= 0 ? extendStatusPos : MAX_POS,
         });
     }
 

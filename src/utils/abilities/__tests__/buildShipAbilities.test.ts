@@ -402,6 +402,73 @@ describe('buildShipAbilities', () => {
         expect(ext.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
     });
 
+    describe('extend-status (ship-kit wave 4, Task 5)', () => {
+        it('Sokol charged: damage + extend-status(debuff) on the enemy', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit deals <unit-damage>150% damage</unit-damage> and extends active <unit-aid>Debuffs</unit-aid> by 1 turn.',
+                chargeSkillCharge: 2,
+            });
+            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+            expect(abilityOfType(charged.abilities, 'damage')!.config).toMatchObject({
+                multiplier: 150,
+            });
+            const extend = abilityOfType(charged.abilities, 'extend-status')!;
+            expect(extend.config).toEqual({
+                type: 'extend-status',
+                statusKind: 'debuff',
+                turns: 1,
+            });
+            expect(extend.target).toBe('enemy');
+            expect(extend.trigger).toBe('on-cast');
+            expect(extend.conditions).toEqual([]);
+        });
+
+        it('Ripper passive R2: Marauder Rage II self-buff STILL present + extend-status(buff) on all-allies', () => {
+            const s = ship({
+                // factory default refits + only secondPassiveSkillText → getShipSkillRows picks Passive R2
+                secondPassiveSkillText:
+                    'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const rage = abilityOfType(passive.abilities, 'buff');
+            expect(rage).toMatchObject({
+                config: { type: 'buff', buffName: 'Marauder Rage II' },
+            });
+            const extend = abilityOfType(passive.abilities, 'extend-status')!;
+            expect(extend.config).toEqual({
+                type: 'extend-status',
+                statusKind: 'buff',
+                turns: 1,
+            });
+            expect(extend.target).toBe('all-allies');
+            expect(extend.trigger).toBe('on-cast');
+            expect(extend.conditions).toEqual([]);
+        });
+
+        it('Lev charged: extend-status(debuff) on all-enemies, gated on a self-crit condition', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit deals <unit-damage>230% damage</unit-damage> plus an additional <unit-damage>20%</unit-damage> for each debuff on the enemy. If a critical hit occurs, all hit enemies have their debuffs extended by 1 turn and all allies are granted <unit-skill>Crit Power Up II</unit-skill> for 2 turns.',
+                chargeSkillCharge: 3,
+            });
+            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+            const extend = abilityOfType(charged.abilities, 'extend-status')!;
+            expect(extend.config).toEqual({
+                type: 'extend-status',
+                statusKind: 'debuff',
+                turns: 1,
+            });
+            expect(extend.target).toBe('all-enemies');
+            // Lev's on-crit shape (this task's judgment call): trigger stays 'on-cast', gated by
+            // the live-derivable 'self-crit' condition — mirrors Valerian's crit-power-extend
+            // condition above and reuses the on-cast all-enemies aoeVictimIds fan-out (Task 6),
+            // rather than the reactive on-crit LIVE_TRIGGER (which has no AoE fan-out precedent).
+            expect(extend.trigger).toBe('on-cast');
+            expect(extend.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+        });
+    });
+
     it('Crocus passive: ally-crit-DoT routes through the on-ally-crit-dot reactive trigger (conditions empty)', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -11,6 +11,7 @@ import {
     detectGrantConditions,
     parseHpThresholdCondition,
     parseExtendDoT,
+    parseExtendStatus,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
     parseAllyCritDot,
@@ -1256,6 +1257,38 @@ describe('parseExtendDoT', () => {
 
     it('does not match a debuff-duration extension that is not a DoT', () => {
         expect(parseExtendDoT('extends the duration of all buffs by 1 turn.')).toBeNull();
+    });
+});
+
+describe('parseExtendStatus', () => {
+    it('parses Sokol active-voice debuff extend', () => {
+        expect(parseExtendStatus('extends active <unit-aid>Debuffs</unit-aid> by 1 turn')).toEqual({
+            turns: 1,
+            statusKind: 'debuff',
+        });
+    });
+
+    it('parses Ripper active-voice buff extend', () => {
+        expect(
+            parseExtendStatus('All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn')
+        ).toEqual({ turns: 1, statusKind: 'buff' });
+    });
+
+    it('parses Lev passive-voice debuff extend', () => {
+        expect(parseExtendStatus('all hit enemies have their debuffs extended by 1 turn')).toEqual({
+            turns: 1,
+            statusKind: 'debuff',
+        });
+    });
+
+    it('does NOT match extend-dot "damage over time" wording', () => {
+        expect(parseExtendStatus('extends damage over time effects by 1 turn')).toBeNull();
+    });
+
+    it('returns null for absent/empty text', () => {
+        expect(parseExtendStatus('')).toBeNull();
+        expect(parseExtendStatus(null)).toBeNull();
+        expect(parseExtendStatus(undefined)).toBeNull();
     });
 });
 
