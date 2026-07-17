@@ -2980,7 +2980,10 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         ) {
             continue;
         }
-        mergeBuff(buff, 'enemy');
+        // Player-side grants carry granular effectTarget (self/ally/all-allies, wired above);
+        // enemy debuffs now do too ('enemy' vs 'all-enemies' — detectEnemyGrantScope). Defaults
+        // to 'enemy' for round-trip debuffs that predate the effectTarget field.
+        mergeBuff(buff, buff.effectTarget ?? 'enemy');
     }
 
     // Phase 4c PR 1 (Task 8): damage-reaction DoT inflictions on the PASSIVE row (Warden

@@ -32,9 +32,13 @@ export function buildSkillBuffAutoFill(ship: Ship): SkillBuffAutoFill {
         // selfBuffs = all PLAYER-SIDE effects (self/ally/all-allies). The legacy DPS picker
         // path treats every entry here as player-side (unchanged); the builder reads each
         // entry's effectTarget to route ally/all-allies grants to the right actors.
-        selfBuffs: toSelectedBuffs(effects.filter((e) => e.target !== 'enemy')),
+        selfBuffs: toSelectedBuffs(
+            effects.filter((e) => e.target !== 'enemy' && e.target !== 'all-enemies')
+        ),
+        // enemyDebuffs = both single-target ('enemy') and whole-team ('all-enemies') debuffs —
+        // the builder reads effectTarget to stamp the right ability target either way.
         enemyDebuffs: toSelectedBuffs(
-            effects.filter((e) => e.target === 'enemy'),
+            effects.filter((e) => e.target === 'enemy' || e.target === 'all-enemies'),
             sourceChargeCount,
             sourceStartCharged
         ),

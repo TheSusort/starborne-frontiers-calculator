@@ -4273,10 +4273,12 @@ export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passi
 export interface SkillEffect {
     buffName: string;
     // Player-side granularity (team-walk ally-scope): 'self' = caster only, 'ally' = a single
-    // chosen ally, 'all-allies' = every player actor. 'enemy' = enemy debuff. The combat engine
-    // routes 'ally'/'all-allies' grants from a walked team ship onto the right actors; for the
-    // attacker's own sim 'self' and 'all-allies' both fold onto its side (zero churn).
-    target: 'self' | 'ally' | 'all-allies' | 'enemy';
+    // chosen ally, 'all-allies' = every player actor. 'enemy' = single-target enemy debuff,
+    // 'all-enemies' = enemy debuff scoped to the whole opposing team (detectEnemyGrantScope).
+    // The combat engine routes 'ally'/'all-allies' grants from a walked team ship onto the right
+    // actors, and fans an 'all-enemies' debuff over aoeVictimIds generically; for the attacker's
+    // own sim 'self' and 'all-allies' both fold onto its side (zero churn).
+    target: 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enemies';
     duration: number | 'recurring' | null;
     stacks?: number;
     source: SkillSource;
@@ -4715,6 +4717,19 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
 }
 
 /**
+ * Resolves the enemy-side scope of an inflicted/applied debuff from its granting clause, mirroring
+ * `detectGrantScope`'s clause resolution (`resolveBuffClause`, so "Inc."/"Out." abbreviation
+ * periods don't break sentence splitting) but testing for an "all enemies" receiver instead of an
+ * ally one. Same broad, sentence-level phrasing check `parsePurge` uses for its own 'enemy' vs
+ * 'all-enemies' split (`/all\s+enemies/`) — most debuffs are single-target ('enemy'); only an
+ * explicit "on all enemies" grant widens to the whole opposing team.
+ */
+function detectEnemyGrantScope(skillText: string, buffName: string): 'enemy' | 'all-enemies' {
+    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    return /all\s+enemies/.test(resolved) ? 'all-enemies' : 'enemy';
+}
+
+/**
  * Maps a verb to how a debuff lands: "inflict" forms are resistible, "apply" forms are
  * guaranteed. Only meaningful for enemy debuffs; returns undefined for self-buff verbs.
  */
@@ -4749,10 +4764,12 @@ export function parseSkillEffects(
 
         // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed).
         // Player-side grants get ally-scope granularity from the granting clause (team walk);
-        // enemy debuffs stay 'enemy'.
+        // enemy debuffs get enemy-scope granularity ('enemy' vs 'all-enemies') the same way.
         const side = verbToTarget(verb, buffName, nextText);
         const target: SkillEffect['target'] =
-            side === 'self' ? detectGrantScope(skillText, buffName) : 'enemy';
+            side === 'self'
+                ? detectGrantScope(skillText, buffName)
+                : detectEnemyGrantScope(skillText, buffName);
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
