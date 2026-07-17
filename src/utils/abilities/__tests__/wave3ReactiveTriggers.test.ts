@@ -50,3 +50,20 @@ describe.skipIf(!csvAvailable())(
         });
     }
 );
+
+describe.skipIf(!csvAvailable())(
+    'Task 2 — Meiying recurring Stealth uses start-of-turn trigger (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Meiying p2 — "At the start of combat and every turn, this Unit gains Stealth for 2 turns" is start-of-turn', () => {
+            const rec = recordFor('Meiying');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const stealth = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Stealth'
+            );
+            expect(stealth).toBeDefined();
+            expect(stealth!.trigger).toBe('start-of-turn');
+        });
+    }
+);

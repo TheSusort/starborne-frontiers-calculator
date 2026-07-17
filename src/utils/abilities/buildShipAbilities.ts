@@ -2947,6 +2947,19 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (ability.trigger === 'on-cast' && rowText && !isAccumulatingBuff) {
             const preCombatTrigger = detectPreCombatBuffTrigger(rowText, buff.buffName);
             if (preCombatTrigger) ability.trigger = preCombatTrigger;
+            // Meiying p2: "At the start of combat and every turn, this Unit gains Stealth for 2
+            // turns" — detectPreCombatBuffTrigger already excludes this clause from the one-time
+            // 'pre-combat' relabel above (its own "every turn" exclusion), but nothing previously
+            // promoted it to the recurring 'start-of-turn' trigger it actually needs, so it fell
+            // through to the default 'on-cast'. Pure reuse of the already-exported, already
+            // position-scoped detectEveryTurnTrigger (shares EVERY_TURN_RE with the heal/shield
+            // cascade at line ~1790) — no new detector/regex/trigger-literal required. Guarded by
+            // the same !isAccumulatingBuff check above, so per-round stacking auras
+            // (Overload/Blast/Warding-Screen) are untouched.
+            else {
+                const everyTurnTrigger = detectEveryTurnTrigger(rowText, pos);
+                if (everyTurnTrigger) ability.trigger = everyTurnTrigger;
+            }
         }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
     };
