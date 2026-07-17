@@ -3513,6 +3513,17 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // below by HEAL_ADDITIONAL_RE inheriting the primary's target — skip it here so
             // it isn't double-counted (and so it doesn't inherit the wrong target/basis).
             if (kind === 'heal' && /equal\s+to/i.test(m[0])) continue;
+            // Quixilver: "if it has shield equal to 100% of its max HP" is a THRESHOLD
+            // CONDITION gating a Barrier grant elsewhere in the sentence, not a shield GRANT
+            // itself — every real shield grant in the corpus is phrased "gains/grants Shield
+            // equal to N%" (verified against docs/ship-skills.csv), never "has Shield equal
+            // to". Skip a match whose immediately preceding word is "has" so this condition
+            // phrasing doesn't fabricate a phantom shield-grant ability (Finding B1).
+            if (
+                kind === 'shield' &&
+                /\bhas\s*$/i.test(plain.slice(Math.max(0, m.index - 20), m.index))
+            )
+                continue;
             const { start: sentenceStart, text: sentence } = sentenceBoundsAround(plain, m.index);
             if (HEAL_DISQUALIFY_RE.test(sentence)) continue;
             // Scope both basis resolution and the continuation scan to the match's own
