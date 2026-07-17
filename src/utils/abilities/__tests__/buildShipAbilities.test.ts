@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, Skill } from '../../../types/abilities';
+import { SHIPS } from '../../../constants/ships';
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3393,6 +3394,31 @@ describe('buildShipAbilities chargeLossImmune', () => {
         });
         const result = buildShipAbilities(s);
         expect(result.chargeLossImmune).toBeFalsy();
+    });
+});
+
+// ── ship-kit correctness backlog: ignoresForcedTargeting (ignore Taunt/Provoke) ────────────
+// Judge/Stalwart/Yuyan/Huanying/Valkyrie's real src/constants/ships.ts skill text states
+// their attacks "ignore Taunt and Provoke". This exercises the REAL SHIPS.* data through the
+// production buildShipAbilities(ship) path (not hand-built skill text), so a wording drift in
+// ships.ts would fail this test rather than a hand-typed fixture staying green forever.
+describe('buildShipAbilities ignoresForcedTargeting', () => {
+    it.each([
+        ['Judge', SHIPS.JUDGE],
+        ['Stalwart', SHIPS.STALWART],
+        ['Yuyan', SHIPS.YUYAN],
+        ['Huanying', SHIPS.HUANYING],
+        ['Valkyrie', SHIPS.VALKYRIE],
+    ])('%s: ignoresForcedTargeting=true from real ships.ts skill text', (_name, data) => {
+        const s = ship(data);
+        const result = buildShipAbilities(s);
+        expect(result.ignoresForcedTargeting).toBe(true);
+    });
+
+    it('unrelated ship (Kafa): ignoresForcedTargeting is absent (falsy) when no ignore clause', () => {
+        const s = ship(SHIPS.KAFA);
+        const result = buildShipAbilities(s);
+        expect(result.ignoresForcedTargeting).toBeFalsy();
     });
 });
 

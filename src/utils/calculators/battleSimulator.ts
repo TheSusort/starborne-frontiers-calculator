@@ -862,6 +862,7 @@ export function simulateBattle(
             // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
             doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
             chargeLossImmune: plan.shipSkills.chargeLossImmune,
+            ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
             walk: {
                 shipSkills: plan.shipSkills,
                 stats: toWalkStats(plan.stats),
@@ -900,6 +901,7 @@ export function simulateBattle(
                 // engine input so the break-mark gate reads the flag from the CombatActor.
                 doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
                 chargeLossImmune: plan.shipSkills.chargeLossImmune,
+                ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
@@ -976,6 +978,7 @@ export function simulateBattle(
         // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,
+        ignoresForcedTargeting: focus.shipSkills.ignoresForcedTargeting,
         ...preFightModifiersFor(focus.id),
         // Positional team battle: the engine builds the positioned enemy roster from the
         // enemyAttackers presence and runs the heal/shield pipeline off this flag (SP-U U5 R6
