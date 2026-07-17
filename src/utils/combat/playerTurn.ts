@@ -2502,6 +2502,59 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
+    // Wave 4 (Task 6): on-cast extend-status (Sokol charged debuff-extend; Ripper passive
+    // all-allies buff-extend; Lev charged all-enemies debuff-extend gated on self-crit). Pure
+    // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
+    // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
+    // Sourced from BOTH the firing slot (gatedSkill: Sokol/Lev, charged) AND the always-active
+    // passive slot (gatedPassive: Ripper) — mirroring the healAbilities combine (:2733-2739
+    // below) and the extendDoTs/extendInflictedDoTs combine (:2236/:2351 above), since a
+    // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
+    // in the corpus) would silently skip Ripper's passive-slot extend ability.
+    // conditionsMet(ab.conditions, ctx) evaluates Lev's self-crit gate against THIS cast's live
+    // `ctx.roundCrit` (set at buildRoundContext above from `roundCrit = critHits > 0`) — the
+    // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
+    // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
+    // DPS mode: extendAllDebuffsDuration/extendAllBuffsDuration return 0 against an empty/
+    // missing store (dummy sink, no team) → no-op → byte-identical.
+    if (targetId !== undefined) {
+        for (const ab of [...(gatedSkill?.abilities ?? []), ...(gatedPassive?.abilities ?? [])]) {
+            if (
+                ab.config.type !== 'extend-status' ||
+                ab.trigger !== 'on-cast' ||
+                !conditionsMet(ab.conditions, ctx)
+            ) {
+                continue;
+            }
+            const { statusKind, turns } = ab.config;
+            if (statusKind === 'debuff') {
+                // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy
+                // footprint (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the
+                // purge/shield-strip blocks above use.
+                const recipients =
+                    ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+                for (const vid of recipients) {
+                    statusEngine.extendAllDebuffsDuration(vid, turns);
+                }
+            } else {
+                // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses
+                // (:2118-2123 above): healing-mode roster when present, else the live same-side
+                // roster, narrowed through supportRecipients (the caster's own footprint pattern,
+                // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
+                // buffs extend too, matching "All allies extend their active Buffs").
+                const isEnemyCaster = actor.side === 'enemy';
+                const allyRoster = args.healing
+                    ? isEnemyCaster
+                        ? args.healing.enemyIds
+                        : args.healing.playerIds
+                    : (sameSideLiving ?? []).map((a) => a.id);
+                for (const rid of supportRecipients(ab.target, allyRoster)) {
+                    statusEngine.extendAllBuffsDuration(rid, turns);
+                }
+            }
+        }
+    }
+
     // ====================================================================
     // HEALING MODE — heal/shield/cleanse consumption against the live heal
     // target (healing-calc adoption). FULLY GATED on `args.healing`: DPS mode
