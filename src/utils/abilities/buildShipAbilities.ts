@@ -1598,7 +1598,7 @@ function abilitiesFromText(
         for (const eff of parseSkillEffects(text, 'active')) {
             const info = DOT_TIER_MAP[eff.buffName];
             if (!info) continue;
-            const allyCritDotPos = text.indexOf(eff.buffName);
+            const allyCritDotPos = findBuffNamePos(text, eff.buffName);
             out.push({
                 ability: {
                     id: nextId(),
@@ -2334,7 +2334,7 @@ function abilitiesFromText(
     // named self-buff on a reactive trigger. parseSelfBuffRemovals (Task 5) scopes the trigger to
     // the removal clause's position; the buff is cleared from ALL self stores (scope: 'all').
     for (const rem of parseSelfBuffRemovals(text)) {
-        const removePos = text.indexOf(rem.buffName);
+        const removePos = findBuffNamePos(text, rem.buffName);
         out.push({
             ability: {
                 id: nextId(),
@@ -2992,7 +2992,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // reaction-sentence DoT infliction never carries) — 'passive1' is a neutral stand-in.
         for (const eff of parseSkillEffects(passiveRowText, 'passive1')) {
             if (eff.target !== 'enemy' || !DOT_TIER_MAP[eff.buffName]) continue;
-            const pos = passiveRowText.indexOf(eff.buffName);
+            const pos = findBuffNamePos(passiveRowText, eff.buffName);
             const reaction =
                 pos >= 0 ? detectDamageReactionTrigger(passiveRowText, pos) : undefined;
             // Phase 3 PR-F: Ruiner's "This Unit inflicts Bomb II … on any enemy performing a
