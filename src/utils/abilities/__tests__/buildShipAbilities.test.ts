@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, Skill } from '../../../types/abilities';
-import { SHIPS } from '../../../constants/ships';
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3398,26 +3397,47 @@ describe('buildShipAbilities chargeLossImmune', () => {
 });
 
 // ── ship-kit correctness backlog: ignoresForcedTargeting (ignore Taunt/Provoke) ────────────
-// Judge/Stalwart/Yuyan/Huanying/Valkyrie's real src/constants/ships.ts skill text states
-// their attacks "ignore Taunt and Provoke". This exercises the REAL SHIPS.* data through the
-// production buildShipAbilities(ship) path (not hand-built skill text), so a wording drift in
-// ships.ts would fail this test rather than a hand-typed fixture staying green forever.
+// Judge/Stalwart/Yuyan/Huanying/Valkyrie/Vanguard's kit text states their attacks "ignore
+// Taunt and Provoke". RAW active-skill strings from docs/ship-skills.csv (the Supabase-fetched
+// master), fed through the production buildShipAbilities(ship) path. We do NOT source from the
+// SHIPS constant (src/constants/ships.ts): it is deprecated, untagged, differently-worded, and
+// missing skill text for some of these ships (e.g. Vanguard) — so a SHIPS-based test silently
+// drops those ships. Tagged CSV text is what production actually parses.
 describe('buildShipAbilities ignoresForcedTargeting', () => {
     it.each([
-        ['Judge', SHIPS.JUDGE],
-        ['Stalwart', SHIPS.STALWART],
-        ['Yuyan', SHIPS.YUYAN],
-        ['Huanying', SHIPS.HUANYING],
-        ['Valkyrie', SHIPS.VALKYRIE],
-    ])('%s: ignoresForcedTargeting=true from real ships.ts skill text', (_name, data) => {
-        const s = ship(data);
-        const result = buildShipAbilities(s);
+        [
+            'Judge',
+            "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, deals <unit-damage>230% damage</unit-damage>, and applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn.",
+        ],
+        [
+            'Stalwart',
+            'This Unit deals <unit-damage>200% damage</unit-damage>, ignoring <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, and applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn.',
+        ],
+        [
+            'Yuyan',
+            "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, deals <unit-damage>170% damage</unit-damage>, applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn, and inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns.",
+        ],
+        [
+            'Huanying',
+            'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, dealing <unit-damage>120% damage</unit-damage> and inflicting <unit-skill>Bomb I</unit-skill> for 2 turns.',
+        ],
+        [
+            'Valkyrie',
+            'This Unit deals <unit-damage>200% damage</unit-damage> and ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>.<br />Inflict <unit-skill>Defense Down II</unit-skill> for 2 turns and apply <unit-skill>Concentrate Fire</unit-skill> for 1 turn.',
+        ],
+        [
+            'Vanguard',
+            "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> and deals <unit-damage>100% damage</unit-damage>.",
+        ],
+    ])('%s: ignoresForcedTargeting=true from CSV active-skill text', (_name, activeSkillText) => {
+        const result = buildShipAbilities(ship({ activeSkillText }));
         expect(result.ignoresForcedTargeting).toBe(true);
     });
 
-    it('unrelated ship (Kafa): ignoresForcedTargeting is absent (falsy) when no ignore clause', () => {
-        const s = ship(SHIPS.KAFA);
-        const result = buildShipAbilities(s);
+    it('unrelated ship (no ignore clause): ignoresForcedTargeting is absent (falsy)', () => {
+        const activeSkillText =
+            'This Unit deals <unit-damage>50% damage</unit-damage> plus an additional amount equal to <unit-damage>60%</unit-damage> of its Defense and inflicts <unit-skill>Defense Down I</unit-skill> for 1 turn.';
+        const result = buildShipAbilities(ship({ activeSkillText }));
         expect(result.ignoresForcedTargeting).toBeFalsy();
     });
 });
