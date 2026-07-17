@@ -977,16 +977,18 @@ function escapeRegExp(s: string): string {
  * (`text.includes(name)` / `text.indexOf(name)`) can match a SHORTER name INSIDE a longer word --
  * e.g. "Stealth" matches inside "Stealthed" (Panguan: "Friendly Stealthed units deal 40% more
  * direct damage." was picked as Stealth's clause instead of the sentence that actually GRANTS
- * it, "This Unit Gains Stealth ... when directly damaged"). `\b` boundaries are a zero-width
- * assertion, not a lookbehind, so they are safe under the iOS Safari 15 no-lookbehind constraint
- * used elsewhere in this file. Shared by resolveBuffClause and buildShipAbilities' buff-name
- * position anchor (Finding B4).
+ * it, "This Unit Gains Stealth ... when directly damaged"). Boundaries are enforced with explicit
+ * `(^|\W)` / `(?:\W|$)` groups rather than `\b`, so a buffName that begins or ends with a non-word
+ * character (e.g. "+10% HP") still boundary-matches correctly; both are zero-width-or-consumed
+ * assertions, not lookbehinds, so they are safe under the iOS Safari 15 no-lookbehind constraint
+ * used elsewhere in this file. The leading boundary is a real captured char, so the returned index
+ * is offset past it. Shared by resolveBuffClause and buildShipAbilities' buff-name anchor (B4).
  */
 export function findBuffNamePos(text: string, buffName: string): number {
     if (!text || !buffName) return -1;
-    const re = new RegExp(`\\b${escapeRegExp(buffName)}\\b`);
+    const re = new RegExp(`(^|\\W)(${escapeRegExp(buffName)})(?:\\W|$)`);
     const m = re.exec(text);
-    return m ? m.index : -1;
+    return m ? m.index + m[1].length : -1;
 }
 
 function resolveBuffClause(skillText: string, buffName: string): string {
