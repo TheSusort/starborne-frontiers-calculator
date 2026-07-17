@@ -3436,11 +3436,16 @@ function resolveHealTarget(sentence: string): {
     // them for 8%") → the pronoun is plural → all-allies. Checked first because the
     // singular rule below would otherwise capture the bare \bthem\b.
     if (/\ball\s+allies\b[^.;]*\bthem\b/.test(s)) return { target: 'all-allies', explicit: true };
+    // Rikra: "... for each enemy Unit destroyed by the attack upon killing them" — this
+    // "them" refers back to the slain ENEMY units (the heal is a bare self-repair keyed by
+    // kill count), not a heal recipient. Strip that antecedent before testing the generic
+    // \bthem\b ally signal below so it isn't misread as an ally recipient (Finding B2).
+    const sWithoutKillAntecedent = s.replace(/\b(?:killing|destroying)\s+them\b/g, '');
     // Singular ally detection takes priority over the bare "their" heuristic so that
     // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
     if (
         /\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b|most\s+missing\s+health|\bthe\s+other\s+ally\b/.test(
-            s
+            sWithoutKillAntecedent
         )
     )
         return { target: 'ally', explicit: true };

@@ -53,5 +53,18 @@ describe.skipIf(!csvAvailable())(
             );
             expect(phantomShield).toBeUndefined();
         });
+
+        it('B2: Rikra passive (R2) — "repairs 60% of its Max HP ... upon killing them" self-heal targets self, not ally', () => {
+            const rec = recordFor('Rikra');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const s = ship({ refits: [{}, {}] as any, secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive');
+            expect(passive).toBeDefined();
+
+            const heal = abilitiesOfType(passive!.abilities, 'heal')[0];
+            expect(heal).toBeDefined();
+            expect(heal.target).toBe('self');
+        });
     }
 );
