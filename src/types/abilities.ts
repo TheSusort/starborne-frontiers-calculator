@@ -187,6 +187,14 @@ export type AbilityTrigger =
     // when an ally within the Active pattern has their Shield destroyed" — the sole corpus user.
     // Opposite direction of on-shield-applied (grant vs loss).
     | 'on-ally-shield-destroyed'
+    // Ship-kit Wave 3, Task 4: fires when an OPPOSING-side actor gains the named "Taunt" buff
+    // (rides the existing `buff-applied` event, opposing-scoped on actorId — the buff RECIPIENT
+    // — AND filtered on buffName === 'Taunt'). Narrow, single-purpose trigger deliberately
+    // separate from `on-enemy-buffed` (which fires for ANY buff, unfiltered) — Amartya's "When an
+    // enemy defender gains Taunt, this Unit inflicts 2 stacks of Exposed on that defender" needs
+    // the Taunt-specific gate, not a broad any-buff reaction. Routes onto the actual Taunt
+    // recipient via eventCtx.victimId (positional/team-battle fidelity — see triggers.ts).
+    | 'on-enemy-taunt-gained'
     // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
     // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
     // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
@@ -250,6 +258,9 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-shield-applied',
     // SP-F F2: ally-scoped reaction to an ally's shield pool being fully depleted (AEGIS).
     'on-ally-shield-destroyed',
+    // Ship-kit Wave 3, Task 4: opposing-scoped reaction to an enemy actor gaining Taunt (Amartya
+    // Exposed).
+    'on-enemy-taunt-gained',
 ]);
 
 export type ConditionSubject =

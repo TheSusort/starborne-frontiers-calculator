@@ -864,6 +864,29 @@ export function registerReactiveListeners(args: {
                         if (isOpposing(e.actorId)) enqueue(intent);
                     });
                     break;
+                case 'on-enemy-taunt-gained':
+                    bus.on('buff-applied', (e) => {
+                        // Ship-kit Wave 3, Task 4: Opposing-scoped AND buff-name-filtered mirror
+                        // of on-enemy-buffed — Amartya's "When an enemy defender gains Taunt, this
+                        // Unit inflicts 2 stacks of Exposed on that defender" needs the Taunt-
+                        // specific gate (on-enemy-buffed fires for ANY buff, unfiltered).
+                        // Stamp counterTargetId = e.actorId (the defender that GAINED Taunt — the
+                        // buff-applied recipient), NOT victimId: Exposed builds as a `type:'debuff'`
+                        // ability (mirrors its sibling Defense Shred), and the debuff executor
+                        // (executeIntent, cfg.type === 'debuff') routes single-target "on that
+                        // enemy" reactions via eventCtx.counterTargetId — it never reads
+                        // eventCtx.victimId (that field is consumed only by the dot/convert-dot
+                        // branches). counterTargetId is exactly the field on-enemy-repaired/
+                        // on-enemy-cleansed/on-enemy-charged-cast already use for this same
+                        // single-recipient routing shape — without it, the debuff executor falls
+                        // back to ctx.enemy.id (the DPS dummy sink) in positional/team battle.
+                        if (isOpposing(e.actorId) && e.buffName === 'Taunt')
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.actorId },
+                            });
+                    });
+                    break;
                 case 'on-own-cleanse':
                     bus.on('cleanse-performed', (e) => {
                         // Self-scoped: THIS owner performed the cleanse (Cultivator/Morao). Stamp

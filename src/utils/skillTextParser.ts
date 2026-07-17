@@ -1197,10 +1197,16 @@ export function detectGrantConditions(
     // Provoked or Taunted"). Subject-aware guard: "against Taunted or Provoked enemies" (Rikra)
     // is an ENEMY state gating a damage bonus — handled by parseEnemyEffectDamageBonus, NOT a
     // self gate on this buff. Skip when the status adjective directly qualifies "enemies".
+    // Ship-kit Wave 3, Task 4: ALSO skip Amartya's "When an enemy defender gains Taunt, this Unit
+    // inflicts Exposed" — subject-first "an enemy ... gains Taunt" is the on-enemy-taunt-gained
+    // REACTIVE TRIGGER phrasing (ENEMY_GAINS_TAUNT_RE), not a self-status gate; without this
+    // exclusion the bare word "Taunt" here would wrongly spawn a `self-buff:'Taunt'` condition
+    // that gates the whole Exposed grant behind Amartya herself having Taunt (never true) — a
+    // regression this task's new phrasing would otherwise introduce into this pre-existing rule.
     const enemyStatusAttributed =
         /(?:taunt(?:ed)?|provoke[ds]?)(?:\s+or\s+(?:taunt(?:ed)?|provoke[ds]?))?\s+enem(?:y|ies)\b/i.test(
             low
-        );
+        ) || ENEMY_GAINS_TAUNT_RE.test(clause);
     const statuses: string[] = [];
     if (!enemyStatusAttributed) {
         if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
@@ -1299,6 +1305,15 @@ const OWN_DEBUFF_RESISTED_RE = /\bits\s+debuff\s+is\s+resisted\b/i;
 // corpus reaction (docs/ship-skills.csv). The loose [^.]*? gaps cross the "within the Active
 // pattern" positional qualifier and any tag text between "ally" and "shield"/"destroyed".
 const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bdestroyed\b/i;
+// Ship-kit Wave 3, Task 4: "When an enemy defender gains Taunt" — Amartya's Exposed grant
+// (docs/ship-skills.csv row 4, second/third passive: "When an enemy defender gains Taunt, this
+// Unit inflicts N stacks of Exposed on that defender."). Distinct from ENEMY_BUFFED_RE (any-buff,
+// "gets/is/are/becomes buffed") — this is name-specific to Taunt and requires the "gains" verb, so
+// it does not co-match any self-gain "this Unit gains Taunt" phrasing elsewhere in the corpus
+// (Sabertooth/Isha/Xarrow's own Taunt self-grants all use "this Unit gains", not "an enemy...
+// gains"). Corpus-verified (docs/ship-skills.csv, grep "enemy[^.]*gains[^.]*taunt"): only
+// Amartya's two passive rows match.
+const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -1330,6 +1345,9 @@ const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bde
  *    (Overload lifecycle, Task 4: Butcher Marauder Rage II).
  *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (PR-B2: Ravager's Hacking Module
  *    Overdrive grant; inflictor-scoped mirror of the resister-side on-debuff-resisted).
+ *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained' (Ship-kit Wave 3, Task 4:
+ *    Amartya's Exposed grant). Narrow and name-specific to Taunt — distinct from the broad,
+ *    unfiltered on-enemy-buffed (ENEMY_BUFFED_RE).
  *
  * Other reactive phrasings (when-attacked, ally-crit, …) are NOT derivable this phase and stay
  * undefined (manual modelling). Reference data: docs/ship-skills.csv.
@@ -1379,6 +1397,11 @@ export function detectReactiveTrigger(
     // grant). See ENEMY_BUFFED_RE's doc comment for the corpus-verification that only Nuqtu's
     // clauses match.
     if (ENEMY_BUFFED_RE.test(clause)) return 'on-enemy-buffed';
+    // Ship-kit Wave 3, Task 4: "when an enemy [defender] gains Taunt" → on-enemy-taunt-gained
+    // (Amartya's Exposed grant). Checked AFTER the broad ENEMY_BUFFED_RE (harmless ordering here —
+    // ENEMY_BUFFED_RE's own "gets/is/are/becomes buffed" phrasing never matches "gains Taunt", so
+    // this branch is only ever reached via ENEMY_GAINS_TAUNT_RE's own distinct match).
+    if (ENEMY_GAINS_TAUNT_RE.test(clause)) return 'on-enemy-taunt-gained';
     // Overload lifecycle (Task 4). REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
     // kill-removal share one comma-joined sentence ("gains Overload when an enemy performs a repair,
     // upon killing an enemy, this Unit removes Overload") — the grant must resolve to

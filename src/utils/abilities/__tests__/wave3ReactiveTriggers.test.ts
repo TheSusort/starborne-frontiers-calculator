@@ -86,6 +86,23 @@ describe.skipIf(!csvAvailable())(
 );
 
 describe.skipIf(!csvAvailable())(
+    'Task 4 — Amartya Exposed triggers on enemy-gains-Taunt (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Amartya p2 — "When an enemy defender gains Taunt, this Unit inflicts N stacks of Exposed on that defender" resolves to on-enemy-taunt-gained', () => {
+            const rec = recordFor('Amartya');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const exposed = passive.abilities.find(
+                (a) => a.config.type === 'debuff' && a.config.buffName === 'Exposed'
+            );
+            expect(exposed).toBeDefined();
+            expect(exposed!.trigger).toBe('on-enemy-taunt-gained');
+        });
+    }
+);
+
+describe.skipIf(!csvAvailable())(
     'Regression — Sokol Blast must stay on-cast despite a co-located extra-action kill phrase (verbatim docs/ship-skills.csv)',
     () => {
         it('Sokol p2 — "gains 1 stack of Blast every turn and grants one extra end of round action upon a kill, once per round" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {

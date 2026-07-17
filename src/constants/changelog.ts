@@ -101,6 +101,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Quixilver no longer grants a phantom team-wide shield every round — its passive text 'if it has shield equal to 100% of its max HP' is a condition, not a shield to grant, and was being misread as a large unconditional shield to all allies.",
     "Skill parsing target fixes: Rikra's on-kill repair and Panon's Barrier Recharging now correctly apply to themselves (previously Rikra's self-repair could land on a different ally, and Panon applied Barrier Recharging to the enemy — which also stopped her own incoming-damage reduction from working). Panguan's Stealth now triggers on being directly damaged and applies to herself, instead of being granted to the whole team on every cast.",
     "Combat sim: Graphite's charged skill now shields all allies (matching its active skill), instead of only shielding itself.",
+    'Combat sim: Amartya now inflicts 2 stacks of Exposed on an enemy defender the instant it gains Taunt, matching her legendary refit passive — previously this was silently gated behind a bogus condition requiring Amartya herself to have Taunt (which never happens), so it never fired at all.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
