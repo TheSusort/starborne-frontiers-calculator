@@ -194,20 +194,26 @@ describe('Sansi (player-side) — reactive heal SCALES by the repaired-enemy cou
     });
 });
 
-describe('Sansi (player-side) — per-round cap: at most 3 reactive heals per round', () => {
-    it('4 separate enemy repairs in one round fire the heal only 3 times (limited to 3 per Round)', () => {
-        // Four enemies each self-heal once → four heal-performed events in round 1. Sansi's cap
-        // blocks the 4th reactive fire.
+describe('Sansi (player-side) — per-round cap: at most 3 reactive heals per round, RESET each round', () => {
+    it('4 enemy repairs per round over TWO rounds fire the heal 3 times EACH round (6 total) — the cap resets, it is not global', () => {
+        // Four enemies each self-heal once PER round (on-cast active fires every round) → four
+        // heal-performed events in round 1 AND four in round 2. Sansi's cap blocks the 4th reactive
+        // fire within EACH round. Two rounds prove the counter RESETS per round: a global cap would
+        // fire only 3 times total (all in round 1); a per-round cap fires 3 + 3 = 6.
         const enemies = [
             enemyActor('enemy-1', 1000, [selfHeal('h1')]),
             enemyActor('enemy-2', 900, [selfHeal('h2')]),
             enemyActor('enemy-3', 800, [selfHeal('h3')]),
             enemyActor('enemy-4', 700, [selfHeal('h4')]),
         ];
-        const reactiveHeals = collectReactiveHeals(playerSansiBase(enemies)).filter(
-            (e) => e.casterId === 'attacker'
-        );
-        expect(reactiveHeals).toHaveLength(3);
+        const reactiveHeals = collectReactiveHeals({
+            ...playerSansiBase(enemies),
+            numRounds: 2,
+        }).filter((e) => e.casterId === 'attacker');
+
+        expect(reactiveHeals).toHaveLength(6);
+        expect(reactiveHeals.filter((e) => e.round === 1)).toHaveLength(3);
+        expect(reactiveHeals.filter((e) => e.round === 2)).toHaveLength(3);
     });
 });
 

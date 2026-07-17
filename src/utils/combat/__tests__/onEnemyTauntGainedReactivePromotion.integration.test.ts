@@ -4,11 +4,16 @@
  *
  * Amartya's second passive (verbatim from docs/ship-skills.csv, the Taunt clause): "When an
  * enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 2 stacks of
- * <unit-skill>Exposed</unit-skill> on that defender." Before this task this fell through to the
- * default `trigger:'on-cast'` (an unconditioned, always-fires grant) — no phrasing detector
- * recognized "gains Taunt" (its sibling clause, "is directly repaired", already resolved
- * correctly via the pre-existing `on-enemy-repaired` trigger — proving the reactive-trigger
- * machinery itself works fine; only this specific phrasing was unrecognized).
+ * <unit-skill>Exposed</unit-skill> on that defender." Before this task the clause was broken in TWO
+ * compounding ways, so the net effect was that Exposed NEVER fired at all: (1) no phrasing detector
+ * recognized "gains Taunt", so the trigger fell through to the default `trigger:'on-cast'`; AND (2)
+ * `detectGrantConditions` rule 5 matched the bare word "Taunt" in the clause and spawned a spurious
+ * `self-buff:'Taunt'` condition, gating the whole grant behind Amartya herself having Taunt — which
+ * never happens. The sibling clause "is directly repaired" already resolved correctly via the
+ * pre-existing `on-enemy-repaired` trigger (proving the reactive-trigger machinery itself works
+ * fine); only this specific phrasing was unrecognized AND mis-gated. The fix recognizes the
+ * "an enemy … gains Taunt" phrasing (routing it to `on-enemy-taunt-gained`) and skips the rule-5
+ * self-Taunt gate for it.
  *
  * Exercised through the REAL production pipeline (`buildShipAbilities` fed verbatim skill text,
  * never a hand-built ability). Follows the `onEnemyRepairedReactivePromotion.integration.test.ts`
@@ -18,8 +23,8 @@
  * literal id `'enemy'` — engine.ts:1526). This is exactly the dummy-sink failure class documented
  * in `project_reactive_dot_routing_and_dummy_gate` (PR #244): a reactive listener that forgets to
  * route via eventCtx is invisible in single-dummy DPS/trace mode but breaks real multi-actor team
- * battles. A control run (no Taunt granted) proves the trigger doesn't fire unconditionally
- * (would have been the pre-fix behavior).
+ * battles. A control run (no Taunt granted) proves the FIXED trigger is properly conditional —
+ * it fires only when an enemy actually gains Taunt (pre-fix it never fired at all; see above).
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
