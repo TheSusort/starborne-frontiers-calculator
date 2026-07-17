@@ -3797,8 +3797,12 @@ const PURGE_RE = /\bpurges?\s+(?:(\d+|all)|an?\b)/gi;
 // Sentence-scoped (applied to the purge's own sentence). Matches "for every 50% crit power".
 const CRIT_POWER_SCALING_RE = /for\s+every\s+(\d+)\s*%?\s*crit\s+power/i;
 
-// "cleanses N" — must NOT match "purges". Trailing clause names the recipient.
-const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
+// "cleanses N" — must NOT match "purges". Trailing clause names the recipient. The trailing
+// boundary is normally a plain \b, but stripUnitTags can concatenate a tag boundary directly
+// onto the following word with no space (Cultivator's active: "<unit-aid>cleanses 1</unit-aid>
+// debuff." → "cleanses 1debuff." after tag removal) — a digit run immediately followed by a
+// letter is NOT a \b, so tolerate that case via the `[a-z]` lookahead alternative too.
+const CLEANSE_RE = /\bcleanses?\s+(\d+|all)(?=\b|[a-z])/gi;
 
 /**
  * Parses purge grants ("purges N buffs from <recipient>"). Purge is enemy-targeting only.
