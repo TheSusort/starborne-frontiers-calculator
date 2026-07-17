@@ -1833,6 +1833,14 @@ function abilitiesFromText(
                 // scoped). Position-scoping keeps Hayyan's sibling on-own-cleanse repair (a
                 // different sentence) untouched.
                 detectAllyDebuffedTrigger(text, healPos) ??
+                // Sansi p2 (ship-kit W3): a self-repair anchored in the "when an enemy is directly
+                // repaired … repairs 5% for every enemy repaired" sentence rides the
+                // on-enemy-repaired reactive trigger (position-scoped) — the SAME live trigger
+                // Amartya's Defense Shred debuff rides (buildShipAbilities enemy-debuff path). The
+                // heal targets SELF; only the SCALING count reads the repaired-enemy ids
+                // (eventCtx.repairedEnemyIds.length) via the scaling wiring below. Enforced at most
+                // maxPerRound times per round (also wired below).
+                detectEnemyRepairedTrigger(text, healPos)?.trigger ??
                 (h.kind === 'shield'
                     ? (detectDebuffInflictedTrigger(text, healPos) ??
                       // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
@@ -1902,8 +1910,14 @@ function abilitiesFromText(
         // after any damage-reaction conditions and referenced by an Ability-level scaling rule
         // (mirrors the damage-scaling convention). Model fidelity — no DPS/sim consumer today.
         const healConditions: Condition[] = [...damageReactionConditions];
-        let healScaling: { conditionIndex: number; perUnit: number } | undefined;
-        if (h.scaling) {
+        let healScaling: ScalingRule | undefined;
+        if (h.scaling?.countSource) {
+            // ship-kit W3 (Sansi): reactive event-count scaling — the count comes from the
+            // triggering event (repairedEnemyIds.length), NOT a live-state Condition, so no
+            // condition is pushed and `conditionIndex` is omitted. The reactive heal executor
+            // multiplies the base pct by that count.
+            healScaling = { perUnit: h.scaling.perUnit, countSource: h.scaling.countSource };
+        } else if (h.scaling?.condition) {
             healScaling = { conditionIndex: healConditions.length, perUnit: h.scaling.perUnit };
             healConditions.push(h.scaling.condition);
         }
@@ -1920,6 +1934,8 @@ function abilitiesFromText(
                     : {}),
                 conditions: healConditions,
                 ...(healScaling ? { scaling: healScaling } : {}),
+                // ship-kit W3 (Sansi): numeric per-round cap ("limited to 3 times per Round").
+                ...(h.maxPerRound !== undefined ? { maxPerRound: h.maxPerRound } : {}),
                 config: {
                     type: h.kind,
                     pct: h.pct,

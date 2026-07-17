@@ -1230,6 +1230,11 @@ export interface IntentExecContext {
     recipientMaxHpFor?: (victimId: string) => number;
     /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
     oncePerRoundConsumed?: Set<string>;
+    /** ship-kit W3 (Sansi): per-(owner,ability) fire COUNT this round — the numeric generalization
+     *  of oncePerRoundConsumed, backing Ability.maxPerRound. Incremented on each successful reactive
+     *  fire; the gate blocks once the count reaches the cap. Reset each round in the engine (shared
+     *  across both sides, like oncePerRoundConsumed). Absent → no cap is ever enforced. */
+    perRoundFireCounts?: Map<string, number>;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -1784,6 +1789,21 @@ function passesOncePerRoundGate(intent: Intent, ctx: IntentExecContext): boolean
     const onceKey = `${intent.ownerId}:${intent.ability.id}`;
     if (ctx.oncePerRoundConsumed?.has(onceKey)) return false;
     ctx.oncePerRoundConsumed?.add(onceKey);
+    return true;
+}
+
+/** ship-kit W3 numeric per-round cap (Sansi's "limited to 3 times per Round") — the counting
+ *  generalization of passesOncePerRoundGate. Returns false once this (owner, ability) has already
+ *  fired `maxPerRound` times this round; otherwise increments the count and returns true.
+ *  Pass-through (always true, no counting) when the ability has no maxPerRound. Call AFTER the
+ *  proc/once-per-round gates so a blocked fire never advances the count. */
+function passesMaxPerRoundGate(intent: Intent, ctx: IntentExecContext): boolean {
+    const cap = intent.ability.maxPerRound;
+    if (cap === undefined) return true;
+    const key = `${intent.ownerId}:${intent.ability.id}`;
+    const fired = ctx.perRoundFireCounts?.get(key) ?? 0;
+    if (fired >= cap) return false;
+    ctx.perRoundFireCounts?.set(key, fired + 1);
     return true;
 }
 
@@ -2575,6 +2595,27 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         if (!passesProcChanceGate(intent, ctx)) return;
         if (!passesOncePerRoundGate(intent, ctx)) return;
+        // ship-kit W3 (Sansi): numeric per-round cap ("limited to 3 times per Round"). Checked
+        // AFTER the proc/once-per-round gates so a blocked fire never burns a charge; a
+        // no-maxPerRound heal is byte-identical (pass-through).
+        if (!passesMaxPerRoundGate(intent, ctx)) return;
+        // ship-kit W3 (Sansi): reactive event-count scaling — "repairs 5% FOR EVERY enemy
+        // repaired". The effective % is `scaling.perUnit × count`, where count is the number of
+        // enemies repaired by the triggering heal-performed event (eventCtx.repairedEnemyIds —
+        // stamped by the on-enemy-repaired listener from the REAL repaired-actor ids, so in a
+        // positional team battle this counts the actual multi-enemy repair, not the DPS dummy).
+        // Undefined countSource → 1× (byte-identical for every existing reactive heal/shield).
+        const eventCountMultiplier =
+            intent.ability.scaling?.countSource === 'repaired-enemy-count'
+                ? (intent.eventCtx?.repairedEnemyIds?.length ?? 0)
+                : undefined;
+        // The per-unit rate for a count-scaled heal is scaling.perUnit (== the parsed base pct);
+        // for a plain heal it is cfg.pct. A zero count (defensive — the trigger only fires on a
+        // repair event, so count >= 1 in practice) grants nothing.
+        const effectivePct =
+            eventCountMultiplier !== undefined
+                ? intent.ability.scaling!.perUnit * eventCountMultiplier
+                : cfg.pct;
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
         // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
@@ -2679,11 +2720,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             let raw =
                 cfg.type === 'heal'
                     ? basisValue *
-                      (cfg.pct / 100) *
+                      (effectivePct / 100) *
                       (1 + owner.healModifier / 100) *
                       (1 + ownerOutgoing / 100) *
                       (1 + incomingPctFor(rid) / 100)
-                    : basisValue * (cfg.pct / 100);
+                    : basisValue * (effectivePct / 100);
             // D-PR6: recipient-side incoming-heal amplification (Exuberance) — HEAL case ONLY (NOT
             // shields). Rolls the recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
             if (cfg.type === 'heal')

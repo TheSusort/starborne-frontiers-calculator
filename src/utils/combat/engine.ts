@@ -1322,6 +1322,9 @@ interface ReactiveSideCtx {
     lastStandingId?: string;
     /** D-PR14 Bulwark: per-round once-per-(owner,ability) consume set (shared across both sides). */
     oncePerRoundConsumed?: Set<string>;
+    /** ship-kit W3 (Sansi): per-round fire COUNT per (owner,ability) backing Ability.maxPerRound
+     *  (shared across both sides, like oncePerRoundConsumed). */
+    perRoundFireCounts?: Map<string, number>;
     /** Per-side adjacent-allies resolver (Fortifying Shroud). See IntentExecContext. */
     adjacentAllyIdsFor: (ownerId: string) => string[];
     /** Per-side support footprint resolver (pattern-scoped reactive grants). See IntentExecContext. */
@@ -6070,6 +6073,7 @@ export function runCombat(input: CombatEngineInput): {
                         firstActivatorId: sideCtx.firstActivatorId,
                         lastStandingId: sideCtx.lastStandingId,
                         oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
+                        perRoundFireCounts: sideCtx.perRoundFireCounts,
                         // D-PR8: live not-hit-this-round gate (Alacrity). hitThisRound is a single
                         // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
                         // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
@@ -6097,6 +6101,9 @@ export function runCombat(input: CombatEngineInput): {
         // D-PR14: per-round state — reset each round (declared inside the round loop).
         let firstActivatorId: string | undefined;
         const oncePerRoundConsumed = new Set<string>();
+        // ship-kit W3 (Sansi): per-round fire counts backing Ability.maxPerRound — reset each round
+        // alongside oncePerRoundConsumed, shared across both drain sides.
+        const perRoundFireCounts = new Map<string, number>();
 
         // C2b-2: opposing actor with the most buffs (Rhodium's enemy-most-buffs purge). Buff
         // count via selfBuffNamesForOwners (incl. unremovable — fine for SELECTION; removal still
@@ -6237,6 +6244,7 @@ export function runCombat(input: CombatEngineInput): {
             firstActivatorId,
             lastStandingId: soleSurvivorOf(allPlayerActors),
             oncePerRoundConsumed,
+            perRoundFireCounts,
             adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
         });
@@ -6269,6 +6277,7 @@ export function runCombat(input: CombatEngineInput): {
             firstActivatorId,
             lastStandingId: soleSurvivorOf(enemyAttackerActors),
             oncePerRoundConsumed,
+            perRoundFireCounts,
             adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
         });

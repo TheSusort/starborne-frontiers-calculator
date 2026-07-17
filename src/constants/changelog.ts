@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Sansi's passive self-repair now triggers only when an enemy is actually repaired (up to 3 times per round) and heals 5% of her max HP for each enemy repaired, instead of healing a flat 5% every single turn regardless of enemy activity.",
     'Combat log now shows resisted debuffs, expired buffs, destroyed shields, and Cheat Death saves.',
     "DPS calculator: end-of-round damage procs (like Rhodium's hit on the enemy with the most buffs, or Incinerator's burn) now count toward the reported damage and DPS. Previously they fired but their damage was dropped from the summary because it landed just after the round's totals were tallied.",
     "Combat sim: reactive damage procs now actually reduce the target's HP in positioned battles and show up in damage dealt and damage taken, instead of being tracked but never applied — and each now hits its correct target: FrontLine's on-enemy-charged-cast hit, Grif's on-cleanse hit, Paracelsus's on-destroyed and Vindicator's on-resist retaliations, Rhodium's end-of-round hit on the enemy with the most buffs, Chakara's start-of-round hit on the highest-Speed enemy, and Judge's / Incinerator's round-boundary hits on every enemy below 50% HP / afflicted with Inferno respectively.",

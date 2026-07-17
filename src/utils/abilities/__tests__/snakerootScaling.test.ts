@@ -36,13 +36,13 @@ describe('Snakeroot per-DoT-entry damage scaling (model-completeness SP-D, PR-D3
         // deals 0% damage, so the base <unit-damage> multiplier must be zeroed, not kept flat.
         expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 0 });
         expect(dmg.scaling).toBeDefined();
-        expect(dmg.conditions[dmg.scaling!.conditionIndex]).toMatchObject({
+        expect(dmg.conditions[dmg.scaling!.conditionIndex!]).toMatchObject({
             subject: 'enemy-dot-count',
             derivable: true,
         });
         // No countComparator/countThreshold on the scaling-source condition — bare, so
         // evaluateCondition returns the RAW DoT-entry count (Task 3 precedent), not a 0/1 gate.
-        expect(dmg.conditions[dmg.scaling!.conditionIndex].countComparator).toBeUndefined();
+        expect(dmg.conditions[dmg.scaling!.conditionIndex!].countComparator).toBeUndefined();
 
         // 120% per 4 entries = 30 percentage points per entry. `enemy-dot-count` resolves to
         // the raw INTEGER entry count (0, 1, 2, …) — the same percentage-point convention as
@@ -62,7 +62,7 @@ describe('Snakeroot per-DoT-entry damage scaling (model-completeness SP-D, PR-D3
         const dmg = abilityOfType(abilities, 'damage')!;
 
         expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 0 });
-        expect(dmg.conditions[dmg.scaling!.conditionIndex]).toMatchObject({
+        expect(dmg.conditions[dmg.scaling!.conditionIndex!]).toMatchObject({
             subject: 'enemy-dot-count',
             derivable: true,
         });

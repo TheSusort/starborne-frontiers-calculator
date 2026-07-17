@@ -16,6 +16,7 @@ import {
     Condition,
     ConditionSubject,
     ControlEffect,
+    ReactiveScalingCountSource,
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
 import { getShipSkillRows } from './ship/skillRows';
@@ -2550,6 +2551,12 @@ export function detectProtectionTransformToDot(text: string): { turns: number } 
 const ENEMY_PERFORMING_REPAIR_RE = /\bon\s+any\s+enemy\s+performing\s+an?\s+repairs?\b/i;
 const ENEMY_DEFENDER_DIRECTLY_REPAIRED_RE =
     /\bwhen\s+an?\s+enemy\s+defender\s+is\s+directly\s+repaired\b/i;
+// ship-kit W3 (Sansi): the GENERAL "when an enemy is directly repaired" phrasing (no
+// "defender" role word) — a SELF-repair reaction, so it routes nowhere on the recipient
+// (recipientTargeted stays unset; the heal targets self and only the SCALING count reads
+// repairedEnemyIds). Distinct from Amartya's "enemy DEFENDER is directly repaired" above
+// (which lands a debuff "on that defender"). Corpus-verified unique (docs/ship-skills.csv).
+const ENEMY_DIRECTLY_REPAIRED_RE = /\bwhen\s+an?\s+enemy\s+is\s+directly\s+repaired\b/i;
 
 /**
  * Sentence-scoped (mirrors detectDamageReactionTrigger/detectHpCrossingTrigger) detector for
@@ -2571,6 +2578,12 @@ export function detectEnemyRepairedTrigger(
         return { trigger: 'on-enemy-repaired', recipientTargeted: true };
     }
     if (ENEMY_PERFORMING_REPAIR_RE.test(stripped)) {
+        return { trigger: 'on-enemy-repaired' };
+    }
+    // ship-kit W3 (Sansi): general "when an enemy is directly repaired" — checked LAST so the
+    // more-specific "defender" variant above wins its recipientTargeted flag. No recipient
+    // routing (Sansi's heal is self-targeted).
+    if (ENEMY_DIRECTLY_REPAIRED_RE.test(stripped)) {
         return { trigger: 'on-enemy-repaired' };
     }
     return undefined;
@@ -3359,9 +3372,15 @@ export interface ParsedHealAbility {
     /** PR6b: per-count repair scaling — the repair grows by `perUnit`% per matched `condition`
      *  count (Oleander "additional 8.5% repair for each debuffed enemy" → base kept + perUnit
      *  bonus; Meatshield "repairs 1.5% … for each debuff on itself" → pure per-count, `pct` is
-     *  zeroed and the whole repair is the perUnit scaling). Model fidelity only — no DPS/sim
-     *  consumer today; a future healing calculator reads it via the Ability-level scaling rule. */
-    scaling?: { perUnit: number; condition: Condition };
+     *  zeroed and the whole repair is the perUnit scaling). The `condition`-based (live-state)
+     *  form is model fidelity only — no DPS/sim consumer. ship-kit W3 adds the `countSource`
+     *  form (Sansi "repairs 5% for every enemy repaired"): the count comes from the reactive
+     *  event, `pct` is KEPT, and the reactive heal executor multiplies it by that count. */
+    scaling?: { perUnit: number; condition?: Condition; countSource?: ReactiveScalingCountSource };
+    /** ship-kit W3 (Sansi "limited to 3 times per Round"): a numeric per-round cap on how many
+     *  times the reactive heal may fire each round. buildShipAbilities threads it to
+     *  Ability.maxPerRound (enforced executor-side). Absent → no per-round limit. */
+    maxPerRound?: number;
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -3588,6 +3607,28 @@ function parseHealCountScaling(
     return null;
 }
 
+// ship-kit W3 (Sansi): reactive event-count repair scaling — "repairs 5% FOR EVERY enemy
+// repaired". The count is the number of enemies repaired by the triggering event
+// (eventCtx.repairedEnemyIds.length), NOT a live-state Condition, so this is distinct from
+// parseHealCountScaling's "for each <live count>" form above. `pct` is KEPT (the per-unit rate);
+// the reactive heal executor multiplies it by the event count.
+const REPAIRED_ENEMY_COUNT_RE = /\bfor every enemy repaired\b/i;
+// ship-kit W3 (Sansi): numeric per-round cap — "limited to 3 times per Round". Generalizes the
+// boolean once-per-round caps. Threaded to Ability.maxPerRound and enforced executor-side.
+const MAX_PER_ROUND_RE = /\blimited to\s+(\d+)\s+times?\s+per\s+round\b/i;
+
+/** Reactive event-count repair scaling in a heal sentence (Sansi). Returns the countSource + the
+ *  per-unit rate (== the base pct) when present, else null. Only plain on-cast repairs (no
+ *  leech/damage-reaction) carry it — mirrors parseHealCountScaling's gating in the caller. */
+function parseHealEventCountScaling(
+    sentence: string,
+    basePct: number
+): { perUnit: number; countSource: ReactiveScalingCountSource } | null {
+    if (REPAIRED_ENEMY_COUNT_RE.test(sentence))
+        return { perUnit: basePct, countSource: 'repaired-enemy-count' };
+    return null;
+}
+
 export function parseHealAbilities(text: string | null | undefined): ParsedHealAbility[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -3731,6 +3772,16 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 kind === 'heal' && !leechBasis && !damageReaction
                     ? parseHealCountScaling(sentence, pct)
                     : null;
+            // ship-kit W3 (Sansi): reactive event-count scaling ("for every enemy repaired") takes
+            // precedence over the live-state "for each" form when both somehow matched — Sansi
+            // carries only the former. Same gating (plain on-cast repairs only).
+            const eventCountScaling =
+                kind === 'heal' && !leechBasis && !damageReaction && !countScaling
+                    ? parseHealEventCountScaling(sentence, pct)
+                    : null;
+            // ship-kit W3 (Sansi): numeric per-round cap ("limited to N times per Round").
+            const maxPerRoundMatch = MAX_PER_ROUND_RE.exec(sentence);
+            const maxPerRound = maxPerRoundMatch ? parseInt(maxPerRoundMatch[1], 10) : undefined;
             results.push({
                 kind,
                 pct: countScaling?.zeroBase ? 0 : pct,
@@ -3748,7 +3799,15 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                               condition: countScaling.condition,
                           },
                       }
-                    : {}),
+                    : eventCountScaling
+                      ? {
+                            scaling: {
+                                perUnit: eventCountScaling.perUnit,
+                                countSource: eventCountScaling.countSource,
+                            },
+                        }
+                      : {}),
+                ...(maxPerRound !== undefined ? { maxPerRound } : {}),
             });
             // Valkyrie: "this Unit and the ally with the lowest ..." — dual recipient → emit a
             // second SELF entry mirroring the first (5% each, same basis/scope).

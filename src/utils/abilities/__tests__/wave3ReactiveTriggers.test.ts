@@ -103,6 +103,35 @@ describe.skipIf(!csvAvailable())(
 );
 
 describe.skipIf(!csvAvailable())(
+    'Task 5 — Sansi on-enemy-repaired heal with count-scaling + per-round cap (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Sansi p2 — "when an enemy is directly repaired, limited to 3 times per Round, this Unit repairs 5% for every enemy repaired" rides on-enemy-repaired, pct 5, count-scaled, capped 3/round', () => {
+            const rec = recordFor('Sansi');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const heal = passive.abilities.find(
+                (a) => a.config.type === 'heal' && a.type === 'heal' && a.target === 'self'
+            );
+            expect(heal).toBeDefined();
+            // Trigger: reacts to an enemy being repaired, NOT fired every cast (on-cast).
+            expect(heal!.trigger).toBe('on-enemy-repaired');
+            // Base per-unit rate is kept at 5% (config.pct); the count multiplies it at drain time.
+            expect(heal!.config.type).toBe('heal');
+            if (heal!.config.type === 'heal') expect(heal!.config.pct).toBe(5);
+            // Scaling rule: reactive event-count source (repaired-enemy count), perUnit == base pct.
+            expect(heal!.scaling).toBeDefined();
+            expect(heal!.scaling!.countSource).toBe('repaired-enemy-count');
+            expect(heal!.scaling!.perUnit).toBe(5);
+            // Event-count scaling references NO live-state condition.
+            expect(heal!.scaling!.conditionIndex).toBeUndefined();
+            // Numeric per-round cap.
+            expect(heal!.maxPerRound).toBe(3);
+        });
+    }
+);
+
+describe.skipIf(!csvAvailable())(
     'Regression — Sokol Blast must stay on-cast despite a co-located extra-action kill phrase (verbatim docs/ship-skills.csv)',
     () => {
         it('Sokol p2 — "gains 1 stack of Blast every turn and grants one extra end of round action upon a kill, once per round" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {

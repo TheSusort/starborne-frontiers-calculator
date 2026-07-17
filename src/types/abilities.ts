@@ -508,10 +508,26 @@ export interface OutgoingHitContext {
     targetHigherAttack: boolean;
 }
 
+/** Source of a reactive event-count scaling multiplier (ship-kit W3). Distinct from the
+ *  live-state Condition counts an additive `conditionIndex` scaling reads: the count comes
+ *  from the triggering reactive event's eventCtx, not from a drain-time ConditionContext.
+ *  - 'repaired-enemy-count' → eventCtx.repairedEnemyIds.length (Sansi's "5% for every enemy
+ *    repaired"). Task 9 (Hemlock's "per enemy affected") reuses this primitive. */
+export type ReactiveScalingCountSource = 'repaired-enemy-count';
+
 export interface ScalingRule {
-    conditionIndex: number;
+    /** Index into Ability.conditions of the live-state count Condition (additive PR6b / damage
+     *  scaling: base + perUnit×count). OMITTED for reactive event-count scaling (`countSource`),
+     *  where the count comes from the triggering event rather than a Condition. */
+    conditionIndex?: number;
     perUnit: number;
     cap?: number;
+    /** ship-kit W3: reactive event-count MULTIPLICATIVE scaling. When set, the reactive
+     *  heal/shield executor computes the effective % as `perUnit × count`, where `count` is
+     *  drawn from the triggering event (see ReactiveScalingCountSource) — NOT the additive
+     *  base + perUnit×count form the conditionIndex path uses. `conditionIndex` is unused when
+     *  this is present (there is no live-state Condition to reference). */
+    countSource?: ReactiveScalingCountSource;
 }
 
 // NOTE: spelling mirrors the existing codebase intentionally — ModifierChannel /
@@ -898,6 +914,13 @@ export interface Ability {
      *  AbilityConfig variants — this is the top-level Ability flag (read via
      *  `intent.ability.oncePerRound`), honoring the spec's "no AbilityConfig change". */
     oncePerRound?: boolean;
+    /** ship-kit W3: this reactive applies at most N times per round (keyed on (owner, ability)),
+     *  a numeric GENERALIZATION of the boolean `oncePerRound` above. Sansi's on-enemy-repaired
+     *  heal ("limited to 3 times per Round") sets `maxPerRound: 3`: at most three qualifying
+     *  repair EVENTS trigger the heal each round (a multi-recipient AoE repair is one event).
+     *  Enforced executor-side via IntentExecContext.perRoundFireCounts (incremented on each
+     *  successful fire, blocked once the count reaches the cap). Absent → no per-round limit. */
+    maxPerRound?: number;
     /** Phase 3 PR-E: this reactive applies at most once per round PER ALLY (keyed on
      *  (owner, ability, eventCtx.damagedAllyId)), rather than once per round overall.
      *  Oleander's "once per ally per round" RoT grant: a different ally inflicting a
