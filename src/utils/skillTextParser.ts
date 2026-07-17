@@ -965,11 +965,34 @@ function splitSentences(text: string): string[] {
 const ABBR_MARK = '\u0001';
 const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
 
+// Escapes literal regex-special characters for use inside a dynamically built pattern.
+function escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Word-boundary-aware search for a buff/debuff name within text. A bare substring test
+ * (`text.includes(name)` / `text.indexOf(name)`) can match a SHORTER name INSIDE a longer word --
+ * e.g. "Stealth" matches inside "Stealthed" (Panguan: "Friendly Stealthed units deal 40% more
+ * direct damage." was picked as Stealth's clause instead of the sentence that actually GRANTS
+ * it, "This Unit Gains Stealth ... when directly damaged"). `\b` boundaries are a zero-width
+ * assertion, not a lookbehind, so they are safe under the iOS Safari 15 no-lookbehind constraint
+ * used elsewhere in this file. Shared by resolveBuffClause and buildShipAbilities' buff-name
+ * position anchor (Finding B4).
+ */
+export function findBuffNamePos(text: string, buffName: string): number {
+    if (!text || !buffName) return -1;
+    const re = new RegExp(`\\b${escapeRegExp(buffName)}\\b`);
+    const m = re.exec(text);
+    return m ? m.index : -1;
+}
+
 function resolveBuffClause(skillText: string, buffName: string): string {
     const plain = maskAbbrev(stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. '));
     const maskedName = maskAbbrev(buffName).toLowerCase();
     const sentences = splitSentences(plain);
-    const clauseMasked = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? plain;
+    const clauseMasked =
+        sentences.find((s) => findBuffNamePos(s.toLowerCase(), maskedName) >= 0) ?? plain;
     return clauseMasked.split(ABBR_MARK).join(' ');
 }
 

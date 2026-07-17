@@ -88,5 +88,23 @@ describe.skipIf(!csvAvailable())(
             expect(barrierRecharging!.target).toBe('self');
             expect(barrierRecharging!.type).toBe('buff');
         });
+
+        it('B4: Panguan passive (R2) — the Stealth grant anchors to "Gains Stealth ... when directly damaged", not the "Stealthed" sentence', () => {
+            const rec = recordFor('Panguan');
+            // Third passive (R4) is empty in the CSV, so the second passive (R2) is the
+            // refit-active row per getShipSkillRows.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const s = ship({ refits: [{}, {}] as any, secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive');
+            expect(passive).toBeDefined();
+
+            const stealth = passive!.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Stealth'
+            );
+            expect(stealth).toBeDefined();
+            expect(stealth!.target).toBe('self');
+            expect(stealth!.trigger).toBe('on-attacked');
+        });
     }
 );

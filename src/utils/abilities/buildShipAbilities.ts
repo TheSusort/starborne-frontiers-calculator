@@ -109,6 +109,7 @@ import {
     detectConvertDot,
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
+    findBuffNamePos,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -2712,7 +2713,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             };
             ability.trigger = 'on-ally-debuff-inflicted';
             ability.target = 'enemy';
-            const convertPos = rowText.indexOf(buff.buffName);
+            const convertPos = findBuffNamePos(rowText, buff.buffName);
             pushToSlot(bySlot, slot, [{ ability, pos: convertPos >= 0 ? convertPos : MAX_POS }]);
             return;
         }
@@ -2745,7 +2746,9 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         }
         // Position anchor: index of the buff name in the row text (order-irrelevant for
         // buff/debuff abilities, but placed consistently so ties resolve by insertion order).
-        const pos = rowText ? rowText.indexOf(buff.buffName) : -1;
+        // Word-boundary-aware (Finding B4) so a short buff name isn't mistaken for a substring
+        // of a longer word (Panguan's "Stealth" inside "Stealthed").
+        const pos = rowText ? findBuffNamePos(rowText, buff.buffName) : -1;
         // Epic PR4: a split-sentence "… also gains <Buff>" continuing an IMMEDIATELY PRECEDING
         // "At the start of the round, this Unit gains …" sentence (Nayra p2's Offensive Affinity
         // Override, Isha p1/p2's Defensive Affinity Override) has no round-start phrase of its
