@@ -52,6 +52,16 @@ describe.skipIf(!csvAvailable())(
                 (a) => a.config.type === 'shield' && a.config.pct === 100
             );
             expect(phantomShield).toBeUndefined();
+
+            // The "100% max HP" clause was gating a real grant ("...this Unit grants all
+            // allies Barrier for 1 hit"), not the phantom shield — make sure fixing the
+            // phantom didn't also drop the legitimate Barrier buff.
+            const barrierGrant = passive!.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Barrier'
+            );
+            expect(barrierGrant).toBeDefined();
+            expect(barrierGrant!.type).toBe('buff');
+            expect(barrierGrant!.target).toBe('self');
         });
 
         it('B2: Rikra passive (R2) — "repairs 60% of its Max HP ... upon killing them" self-heal targets self, not ally', () => {
