@@ -970,8 +970,10 @@ export function registerReactiveListeners(args: {
                         // Hemlock's heal is target:'self' (reactiveRecipients routes it to [ownerId]
                         // regardless), so the affected ids are stamped ONLY for the executor's
                         // spread-affected-count scaling to read `.length` — never for recipient
-                        // routing. One enqueue per spread event.
-                        if (isOpposing(e.sourceId))
+                        // routing. One enqueue per spread event. Skip when no allies were affected
+                        // (empty spread) — a zero-count heal would fire and needlessly touch the
+                        // reactive pipeline; "per enemy affected" of nothing is nothing.
+                        if (isOpposing(e.sourceId) && e.affectedIds.length > 0)
                             enqueue({
                                 ...intent,
                                 eventCtx: {
