@@ -3851,8 +3851,12 @@ const CRIT_POWER_SCALING_RE = /for\s+every\s+(\d+)\s*%?\s*crit\s+power/i;
 // boundary is normally a plain \b, but stripUnitTags can concatenate a tag boundary directly
 // onto the following word with no space (Cultivator's active: "<unit-aid>cleanses 1</unit-aid>
 // debuff." → "cleanses 1debuff." after tag removal) — a digit run immediately followed by a
-// letter is NOT a \b, so tolerate that case via the `[a-z]` lookahead alternative too.
-const CLEANSE_RE = /\bcleanses?\s+(\d+|all)(?=\b|[a-z])/gi;
+// letter is NOT a \b, so tolerate that case via the `[a-z]` lookahead alternative too. Scoped to
+// ONLY the digit branch (Finding B5) — applying it to `all` too would let a future "cleanses
+// allies of a debuff" false-match "cleanses all" as a count-all cleanse (no such text exists in
+// the corpus today). A single capturing group is kept (rather than one per alternative) so
+// `m[1]` below still reads the whole matched count-or-"all" token unchanged.
+const CLEANSE_RE = /\bcleanses?\s+(\d+(?=\b|[a-z])|all\b)/gi;
 
 /**
  * Parses purge grants ("purges N buffs from <recipient>"). Purge is enemy-targeting only.
