@@ -84,3 +84,20 @@ describe.skipIf(!csvAvailable())(
         });
     }
 );
+
+describe.skipIf(!csvAvailable())(
+    'Regression — Sokol Blast must stay on-cast despite a co-located extra-action kill phrase (verbatim docs/ship-skills.csv)',
+    () => {
+        it('Sokol p2 — "gains 1 stack of Blast every turn and grants one extra end of round action upon a kill, once per round" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {
+            const rec = recordFor('Sokol');
+            const s = ship({ secondPassiveSkillText: rec.passives[1] });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive')!;
+            const blast = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Blast'
+            );
+            expect(blast).toBeDefined();
+            expect(blast!.trigger).toBe('on-cast');
+        });
+    }
+);

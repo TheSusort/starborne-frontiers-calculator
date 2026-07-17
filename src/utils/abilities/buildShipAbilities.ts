@@ -2784,8 +2784,18 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // (rather than buffName-scoped) so a co-located death-trigger phrase is only inherited
         // when it actually shares the sentence — an unrelated buff elsewhere in the row text is
         // unaffected.
+        //
+        // Reuse the same Overload-lifecycle guard as detectReactiveTrigger above
+        // (isAccumulatingGrant): Sokol's "gains 1 stack of Blast every turn and grants one extra
+        // end of round action upon a kill, once per round" shares ITS OWN sentence with both the
+        // EXTRA_ACTION_RE phrase and the enemy-death phrase, so detectExtraActionCoTrigger alone
+        // would co-trigger the recurring/accumulating Blast stack onto on-enemy-destroyed — gating
+        // its every-turn accrual behind a kill, the exact regression class the guard above exists
+        // to prevent. isAccumulatingGrant must gate this branch too, since it runs after (and was
+        // never re-applied here).
         if (
             reactiveTrigger === undefined &&
+            !isAccumulatingGrant &&
             ability.config.type === 'buff' &&
             rowText &&
             pos >= 0
