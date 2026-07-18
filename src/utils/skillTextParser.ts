@@ -737,6 +737,17 @@ export function detectIgnoresForcedTargeting(
     return skillTexts.some((t) => !!t && IGNORES_FORCED_TARGETING_RE.test(stripUnitTags(t)));
 }
 
+// W6: "This Unit ignores Stealth effects" — a ship-wide stealth-ignoring passive (Lodolite).
+// Requires ignor… THEN stealth THEN effect within a sentence so the per-attack "can target
+// Stealthed enemies" clause and plain "gains Stealth" grants do NOT match.
+const IGNORES_STEALTH_RE = /\bignor\w*\b[^.]*\bstealth\b[^.]*\beffects?\b/i;
+
+/** True if any given skill text states the unit ignores Stealth effects (ship-wide targeting
+ *  bypass). Per-ship: uniform across active/charged/passive. */
+export function detectIgnoresStealth(...skillTexts: Array<string | null | undefined>): boolean {
+    return skillTexts.some((t) => !!t && IGNORES_STEALTH_RE.test(stripUnitTags(t)));
+}
+
 // Phrases that disqualify a charge phrase from being a self-gain we model: ally-grant to
 // others only. The enemy-REPAIR phrasings were lifted OUT (Phase 4c PR 4): a self charge
 // gain "when an enemy repairs" now rides the LIVE on-enemy-repaired trigger (Zosimos) —
@@ -2877,6 +2888,16 @@ const IGNORES_DEFENSE_RE = /ignores?\s+defense/i;
  *  Reference data: docs/ship-skills.csv. */
 export function parseIgnoresDefense(text: string | null | undefined): boolean {
     return !!text && IGNORES_DEFENSE_RE.test(stripUnitTags(text));
+}
+
+// W6: "This attack can target Stealthed enemies" — a per-attack stealth-targeting bypass.
+// Requires the "can target … Stealthed … enem" ordering so the ship-wide "ignores Stealth
+// effects" passive (no "can target") does NOT match here.
+const CAN_TARGET_STEALTHED_RE = /\bcan target\b[^.]*\bstealthed\b[^.]*\benem/i;
+
+/** True when the given attack text states it can target Stealthed enemies (per-ability bypass). */
+export function parseIgnoresStealth(text: string | null | undefined): boolean {
+    return !!text && CAN_TARGET_STEALTHED_RE.test(stripUnitTags(text));
 }
 
 // SP-F F4 (Wusheng): "deals 220% damage WITH AFFINITY ADVANTAGE …" — the charged hit is forced

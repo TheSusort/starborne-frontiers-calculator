@@ -11,6 +11,10 @@ export interface ParsedTarget {
     raw: string;
     side: TargetSide;
     selection: TargetSelection;
+    /** Ship-kit W6: this cast can target Stealthed enemies — the positional resolver skips the
+     *  stealth visibility filter. Set by battleSimulator from the per-slot config.ignoresStealth.
+     *  Absent → normal stealth filtering. */
+    ignoresStealth?: boolean;
 }
 
 export type PatternShape =

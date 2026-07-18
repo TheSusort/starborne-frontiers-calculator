@@ -111,7 +111,7 @@ export function applyPositionalDamage(args: {
     /** The live roster; re-read each hit (it mutates as victims die). */
     opposingLiving: CombatActor[];
     statusOf?: (id: string) => ActorTargetingStatus | undefined;
-    acting?: { ignoresForcedTargeting?: boolean; provokedBy?: string };
+    acting?: { ignoresForcedTargeting?: boolean; ignoresStealth?: boolean; provokedBy?: string };
     defenseProfileOf: (v: CombatActor) => VictimDefenseProfile;
     /**
      * Engine wrapper — decrements the victim's currentHp (Task 8 passes applyOutgoingToEnemy)

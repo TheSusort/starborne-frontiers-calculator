@@ -85,10 +85,12 @@ import {
     detectCleanseOncePerRound,
     parseNoCrit,
     parseIgnoresDefense,
+    parseIgnoresStealth,
     parseForceAffinityAdvantage,
     parseDoesntBreakStasis,
     parseChargeLossImmune,
     detectIgnoresForcedTargeting,
+    detectIgnoresStealth,
     parseChargeRemoval,
     parseSelfBuffRemovals,
     parseEnemyChargedCastReaction,
@@ -1114,6 +1116,8 @@ function abilitiesFromText(
         // Ship-kit W5 (Demolisher bomb-splash): "This damage ignores Defense" — bypasses the
         // target's Defense mitigation term at the reactive damage executor (Task C3).
         const ignoresDefense = parseIgnoresDefense(text);
+        // Ship-kit W6 (Lodolite/Rhodium/Selenite): "This attack can target Stealthed enemies".
+        const ignoresStealth = parseIgnoresStealth(text);
         // SP-F F4 (Wusheng): "deals 220% damage with affinity advantage" forces this on-cast hit
         // (and its paired Stasis 'apply' landing) to affinity advantage at the engine seams.
         const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
@@ -1154,6 +1158,7 @@ function abilitiesFromText(
                     ...(noCrit ? { noCrit: true } : {}),
                     ...(forceAffinityAdvantage ? { forceAffinityAdvantage: true } : {}),
                     ...(ignoresDefense ? { ignoresDefense: true } : {}),
+                    ...(ignoresStealth ? { ignoresStealth: true } : {}),
                 },
                 autoFilled: true,
             },
@@ -3426,10 +3431,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         ...getShipSkillRows(ship).map((row) => row.text)
     );
 
+    // Ship-kit W6: "This Unit ignores Stealth effects" (Lodolite) — same refit-resolved rows.
+    const ignoresStealth = detectIgnoresStealth(...getShipSkillRows(ship).map((row) => row.text));
+
     return {
         slots,
         ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
+        ...(ignoresStealth ? { ignoresStealth: true } : {}),
     };
 }
