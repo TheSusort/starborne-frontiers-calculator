@@ -247,6 +247,66 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
         expect(splashes.every((e) => e.sourceId === 'e-caster')).toBe(true);
     });
 
+    it('CRITICAL review fix: a bomb detonating on a PLAYER ally (own side) does NOT splash the enemy roster', () => {
+        // Reviewer repro: the on-bomb-detonated listener (triggers.ts) previously enqueued for
+        // EVERY bomb detonation with no side guard. Here 'attacker' is the player-side Demolisher
+        // owner, but the bomb bursts on 'ally' — a SEPARATE actor on the OWNER'S OWN side (e.g.
+        // an enemy's Bomb landing on a player teammate). Pre-fix: the listener fired anyway,
+        // stamped eventCtx.victimId = 'ally', and the adjacent-enemies executor called
+        // ctx.adjacentOpposingIdsFor('ally') — which looks 'ally' up in the ENEMY roster, fails
+        // to find it (owner undefined), and (adjacency.ts's non-positional fallback) returned the
+        // ENTIRE living enemy roster with adjacency ignored — splashing tgt/nbrA/nbrB/far all at
+        // once. Post-fix: isOpposing('ally') is false for the player-side listener, so the
+        // splash never fires at all.
+        const { events } = collect(
+            CASTER_BASE({
+                teamActors: [
+                    {
+                        id: 'ally',
+                        speed: 1,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        position: 'T4',
+                        walk: {
+                            shipSkills: { slots: [] } as ShipSkills,
+                            stats: {
+                                attack: 0,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                defence: 0,
+                                hp: 1_000_000_000,
+                                hacking: 0,
+                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    } as TeamActorEngineInput,
+                ],
+                __testTapActors: (actors: CombatActor[]) => {
+                    actors.find((a) => a.id === 'ally')?.pendingBombs.push(bomb('some-enemy'));
+                },
+            })
+        );
+
+        // Sanity: the own-side bomb still detonates (the harness is live) ...
+        const bombDet = events.filter((e): e is BombDetonated => e.type === 'bomb-detonated');
+        expect(bombDet.some((e) => e.victimId === 'ally')).toBe(true);
+
+        // ... but produces ZERO reactive splash — none of the enemy roster (tgt/nbrA/nbrB/far)
+        // takes any damage from it.
+        const splashes = events.filter(
+            (e): e is ReactiveDamagePerformed => e.type === 'reactive-damage-performed'
+        );
+        expect(splashes).toHaveLength(0);
+    });
+
     it('DPS invariance: single-dummy (non-positional) mode never splashes and leaves DPS byte-identical', () => {
         // No position/enemyAttackers — the legacy focus-dummy path. The dummy is the sole
         // enemy-side actor, so adjacentAllyIdsFor(dummy) resolves to the empty set (no OTHER

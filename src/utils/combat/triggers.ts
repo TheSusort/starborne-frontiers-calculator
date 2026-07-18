@@ -635,7 +635,15 @@ export function registerReactiveListeners(args: {
                     // attack. Both fields are existing eventCtx channels (on-attacked already
                     // stamps them for the counter-routing / damage-taken-basis consumers) — this
                     // listener is just a second writer, gated by its own distinct event type.
-                    bus.on('bomb-detonated', (e) =>
+                    bus.on('bomb-detonated', (e) => {
+                        // Only react to a bomb that exploded on an ENEMY (opposing this owner) —
+                        // the corpus clauses are "When a Bomb explodes on an enemy…". Without
+                        // this, an own-side bomb burst (e.g. an enemy's Bomb on a player ally)
+                        // would fire the splash and mis-resolve the anchor against the wrong
+                        // roster (adjacentOpposingIdsFor falls back to the FULL opposing roster
+                        // when the anchor isn't found there). Mirrors the isOpposing guard every
+                        // sibling on-enemy-* case above uses.
+                        if (!isOpposing(e.victimId)) return;
                         enqueue({
                             ...intent,
                             eventCtx: {
@@ -643,8 +651,8 @@ export function registerReactiveListeners(args: {
                                 victimId: e.victimId,
                                 triggerDamage: e.damage,
                             },
-                        })
-                    );
+                        });
+                    });
                     break;
                 case 'on-stasis-applied':
                     bus.on('control-applied', (e) => {
