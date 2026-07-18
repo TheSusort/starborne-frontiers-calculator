@@ -2494,6 +2494,19 @@ const DocumentationPage: React.FC = () => {
                                         and current shield pool for the round.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Enemy Adjacency:</span> Some
+                                        skills splash their effect onto enemies adjacent to the
+                                        target on the board, either including the targeted enemy
+                                        (e.g. Asphyxiator&apos;s Inferno and Stasis) or hitting only
+                                        its neighbours (e.g. Vindicator&apos;s Provoke and Out.
+                                        Damage Down, Meiying&apos;s Stasis). Demolisher&apos;s
+                                        passive also detonates a splash equal to 100% of the
+                                        exploded Bomb&apos;s damage onto the bombed enemy&apos;s
+                                        neighbours, ignoring Defense and unable to critically hit.
+                                        This resolves on the positioned board; in the single-target
+                                        DPS calculator there are no neighbours, so it has no effect.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
                                         ship into any of the four team slots and its real skills are
                                         parsed and simulated — the same full ability editor as the

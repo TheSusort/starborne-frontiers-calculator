@@ -70,6 +70,38 @@ describe.skipIf(!csvAvailable())(
     }
 );
 
+// Synthetic fixtures: feed hand-written skill text through the real `buildShipAbilities`
+// (NOT docs/ship-skills.csv), so the DoT adjacency parser→builder wiring stays covered in CI
+// even when the gitignored reference CSV is absent (the suite above skips there).
+describe('Task B1 — DoT enemy-adjacency splash target (synthetic, CSV-independent)', () => {
+    it('active Inferno III DoT targets target-and-adjacent-enemies (splash phrase present)', () => {
+        const text =
+            'This Unit inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all enemies adjacent to it.';
+        const { slots } = buildShipAbilities(ship({ activeSkillText: text }));
+        const active = slot(slots, 'active');
+        expect(active).toBeDefined();
+
+        const infernoDots = abilitiesOfType(active!.abilities, 'dot').filter(
+            (a) => a.config.type === 'dot' && a.config.dotType === 'inferno'
+        );
+        expect(infernoDots.length).toBeGreaterThan(0);
+        expect(infernoDots[0].target).toBe('target-and-adjacent-enemies');
+    });
+
+    it('charged-slot Inferno III DoT stays enemy (no adjacency phrase)', () => {
+        const text = 'This Unit inflicts <unit-skill>Inferno III</unit-skill> for 3 turns.';
+        const { slots } = buildShipAbilities(ship({ chargeSkillText: text }));
+        const charged = slot(slots, 'charged');
+        expect(charged).toBeDefined();
+
+        const infernoDots = abilitiesOfType(charged!.abilities, 'dot').filter(
+            (a) => a.config.type === 'dot' && a.config.dotType === 'inferno'
+        );
+        expect(infernoDots.length).toBeGreaterThan(0);
+        expect(infernoDots[0].target).toBe('enemy');
+    });
+});
+
 describe('adjacentEnemyScopeForName — synthetic clause isolation (CSV-independent)', () => {
     it('"on the targeted enemy and all enemies adjacent to it" resolves to target-and-adjacent-enemies', () => {
         const text =

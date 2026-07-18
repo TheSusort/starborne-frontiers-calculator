@@ -91,6 +91,31 @@ describe.skipIf(!csvAvailable())(
     }
 );
 
+// Synthetic fixture: feed a hand-written Demolisher-shaped passive text through the real
+// `buildShipAbilities` (NOT docs/ship-skills.csv), so the bomb-splash parser→builder wiring
+// stays covered in CI even when the gitignored reference CSV is absent (the suite above skips
+// there).
+describe('Task C1 — Demolisher bomb-splash parser routing (synthetic, CSV-independent)', () => {
+    it('routes a synthetic R2 passive 100% splash to on-bomb-detonated / adjacent-enemies / ignoresDefense+noCrit', () => {
+        const text =
+            "When a Bomb explodes on an enemy, this Unit deals <unit-damage>100% of the Bomb's damage</unit-damage> to all adjacent enemies. This damage ignores Defense and cannot result in a critical hit.";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const s = ship({ refits: [{}, {}] as any, secondPassiveSkillText: text });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive).toBeDefined();
+
+        const splash = abilitiesOfType(passive!.abilities, 'damage').find(
+            (a) => a.config.type === 'damage' && a.config.multiplier === 100
+        );
+        expect(splash).toBeDefined();
+        expect(splash?.trigger).toBe('on-bomb-detonated');
+        expect(splash?.target).toBe('adjacent-enemies');
+        expect(splash?.config.type === 'damage' && splash.config.ignoresDefense).toBe(true);
+        expect(splash?.config.type === 'damage' && splash.config.noCrit).toBe(true);
+    });
+});
+
 describe('Task C1 — parseIgnoresDefense / extended parseNoCrit (synthetic)', () => {
     it('parseIgnoresDefense detects "ignores Defense"', () => {
         expect(
