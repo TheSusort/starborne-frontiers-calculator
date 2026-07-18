@@ -92,6 +92,9 @@ export type AbilityTarget =
     | 'adjacent-allies' // Fortifying Shroud: living same-side allies on neighbouring board
     // cells (non-positional → all same-side allies). Resolved via
     // IntentExecContext.adjacentAllyIdsFor.
+    | 'adjacent-enemies' // living opposing actors adjacent to the anchor (target excluded).
+    // Resolved via adjacentAllyIdsFor(anchorId) with the enemy TARGET as anchor.
+    | 'target-and-adjacent-enemies' // the anchor (primary target) PLUS its adjacent enemies.
     | 'enemy'
     | 'all-enemies'
     | 'enemy-most-buffs'

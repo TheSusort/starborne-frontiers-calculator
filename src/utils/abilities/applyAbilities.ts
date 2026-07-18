@@ -172,6 +172,8 @@ const ENEMY_FACING_TARGETS: ReadonlySet<Ability['target']> = new Set([
     'all-enemies',
     'enemy-most-buffs',
     'enemy-highest-attack',
+    'adjacent-enemies',
+    'target-and-adjacent-enemies',
 ]);
 
 /**
