@@ -63,14 +63,21 @@ interface Placement {
         critDamage: number;
         defensePenetration: number;
         hacking: number;
+        security?: number;
         defence: number;
         hp: number;
     };
 }
 
-// hacking 200 vs default security 0 → debuffLandingChance saturates to 1.0, so the shared DoT
+// hacking 200 vs default security 100 → debuffLandingChance saturates to 1.0, so the shared DoT
 // landing roll (roundDebuffLanded, playerTurn.ts) always lands — deterministic, no RNG flake.
-const place = (s: Ship, position: Position, attack: number, hp: number): Placement => ({
+const place = (
+    s: Ship,
+    position: Position,
+    attack: number,
+    hp: number,
+    security?: number
+): Placement => ({
     ship: s,
     position,
     statOverrides: {
@@ -79,6 +86,7 @@ const place = (s: Ship, position: Position, attack: number, hp: number): Placeme
         critDamage: 0,
         defensePenetration: 0,
         hacking: 200,
+        ...(security !== undefined ? { security } : {}),
         defence: 0,
         hp,
     },
@@ -124,6 +132,48 @@ describe('Ship-kit W5 Task B2: target-and-adjacent-enemies Inferno DoT fan-out (
         const recipients = infernoRecipients(result, 'attacker');
 
         expect(recipients).toContain(TGT);
+        expect(recipients).toContain(NBR_A);
+        expect(recipients).toContain(NBR_B);
+        expect(recipients).not.toContain(FAR);
+    });
+});
+
+/**
+ * Per-victim independence (code-review fix, B2): the review found the splash loop nested
+ * inside the PRIMARY target's own Block-Debuff-immunity/landing gates, so a neighbour's
+ * Inferno depended on the PRIMARY's security and the PRIMARY's single shared landing roll —
+ * never the neighbour's own (reintroducing the defect PR #185 fixed for non-DoT debuffs).
+ * Here the PRIMARY ('tgt') is given security 300 — hacking 200 vs security 300 clamps
+ * debuffLandingChance to 0, so the PRIMARY's shared `roundDebuffLanded()` roll deterministically
+ * FAILS (no RNG mocking; same saturation mechanism the `place` helper's default 100 security
+ * relies on for a deterministic PASS). Both neighbours keep the default security (100) → their
+ * OWN `landsDebuffOnVictim` roll deterministically LANDS. Under the OLD (pre-fix) placement the
+ * splash loop lived inside `if (dotsLanded)` — which is false here — so neither neighbour would
+ * receive Inferno at all; this assertion is the load-bearing proof the splash is independent.
+ */
+describe('Ship-kit W5 Task B2: per-victim independence — a neighbour lands Inferno even when the PRIMARY resists', () => {
+    const run = (caster: Ship) =>
+        simulateBattle({
+            playerTeam: [place(caster, 'M4', 1000, 1e9)],
+            enemyTeam: [
+                place(dummy('tgt'), 'M4', 1, 1e9, 300), // primary target: security 300 → its own landing roll always fails
+                place(dummy('nbrA'), 'M3', 1, 1e9), // neighbour of M4, default security → always lands
+                place(dummy('nbrB'), 'T3', 1, 1e9), // neighbour of M4, default security → always lands
+                place(dummy('far'), 'T1', 1, 1e9), // NOT a neighbour of M4
+            ],
+            rounds: 1,
+        });
+
+    const TGT = 'e:tgt:0';
+    const NBR_A = 'e:nbrA:1';
+    const NBR_B = 'e:nbrB:2';
+    const FAR = 'e:far:3';
+
+    it('the primary resists its own DoT but both neighbours still accrue Inferno independently', () => {
+        const result = run(splashCaster('atk'));
+        const recipients = infernoRecipients(result, 'attacker');
+
+        expect(recipients).not.toContain(TGT);
         expect(recipients).toContain(NBR_A);
         expect(recipients).toContain(NBR_B);
         expect(recipients).not.toContain(FAR);

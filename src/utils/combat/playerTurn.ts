@@ -2371,47 +2371,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         ...(critHits > 0 ? { viaCrit: true } : {}),
                     }),
             });
-
-            // Ship-kit W5: fan splash-scoped DoTs (Asphyxiator active Inferno) onto the
-            // target's board-neighbours. 'target-and-adjacent-enemies' already hit the primary
-            // via the call above; here we add each adjacent enemy. 'adjacent-enemies'
-            // (neighbours only) was filtered OUT of the primary apply above and is applied only
-            // here. Positional-only: adjacentEnemyIdsFor returns [] / is undefined for the DPS
-            // dummy sink (targetId undefined there), so DPS is byte-identical. Gated by the
-            // same `dotsLanded` shared roll as the primary — a splash never applies when the
-            // round's DoT landing roll failed. affinityMult reused as the caster's own value
-            // (correct for the corpus: Asphyxiator's splash is Inferno, which doesn't consume
-            // affinityMult at apply time; only pendingBombs snapshot it, and no corpus bomb-DoT
-            // splashes exist) — true per-victim affinity is deferred.
-            const splashDots = dotsConfig.filter((d) => d.splashTarget !== undefined);
-            if (splashDots.length > 0 && targetId !== undefined && adjacentEnemyIdsFor) {
-                for (const rid of adjacentEnemyIdsFor(targetId)) {
-                    const victim = opposingVictimById?.get(rid);
-                    if (!victim) continue;
-                    applyNewDoTs({
-                        dotsConfig: splashDots,
-                        effectiveAttack,
-                        affinityMult,
-                        detonationDamageModifier: dmgStats.detonationDamageModifier,
-                        splashModifier: dmgStats.bombSplashModifier,
-                        sourceId: actor.id,
-                        corrosionEntries: victim.corrosionEntries,
-                        infernoEntries: victim.infernoEntries,
-                        genericDoTEntries: victim.genericDoTEntries,
-                        pendingBombs: victim.pendingBombs,
-                        emitDotApplied: (dotType, stacks) =>
-                            bus.emit({
-                                type: 'dot-applied',
-                                sourceId: actor.id,
-                                targetId: rid,
-                                round: r,
-                                dotType,
-                                stacks,
-                                ...(critHits > 0 ? { viaCrit: true } : {}),
-                            }),
-                    });
-                }
-            }
         }
 
         // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
@@ -2434,6 +2393,49 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
         if (dotsLanded) {
             applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
+        }
+    }
+
+    // Ship-kit W5: fan splash-scoped DoTs (Asphyxiator active Inferno) onto the target's
+    // board-neighbours. 'target-and-adjacent-enemies' hits the primary via the block above
+    // ('adjacent-enemies', neighbours-only, is filtered OUT of the primary apply and applied
+    // ONLY here). Runs INDEPENDENTLY of the primary's Block-Debuff immunity/`dotsLanded` gate
+    // above (review fix, B2) — each neighbour rolls its OWN landing via `landsDebuffOnVictim`
+    // (Block-Debuff + hacking-vs-security, mirrors PR #185 for non-DoT debuffs), so a neighbour
+    // can be hit even when the primary resists (immune or failed its own roll), and vice versa.
+    // Positional-only: adjacentEnemyIdsFor returns [] / is undefined for the DPS dummy sink
+    // (targetId undefined there), so DPS is byte-identical. affinityMult reused as the caster's
+    // own value (correct for the corpus: Asphyxiator's splash is Inferno, which doesn't consume
+    // affinityMult at apply time; only pendingBombs snapshot it, and no corpus bomb-DoT splashes
+    // exist) — true per-victim affinity is deferred.
+    const splashDots = dotsConfig.filter((d) => d.splashTarget !== undefined);
+    if (splashDots.length > 0 && targetId !== undefined && adjacentEnemyIdsFor) {
+        for (const rid of adjacentEnemyIdsFor(targetId)) {
+            const victim = opposingVictimById?.get(rid);
+            if (!victim) continue;
+            if (!landsDebuffOnVictim('inflict', victim)) continue; // per-victim landing gate
+            applyNewDoTs({
+                dotsConfig: splashDots,
+                effectiveAttack,
+                affinityMult,
+                detonationDamageModifier: dmgStats.detonationDamageModifier,
+                splashModifier: dmgStats.bombSplashModifier,
+                sourceId: actor.id,
+                corrosionEntries: victim.corrosionEntries,
+                infernoEntries: victim.infernoEntries,
+                genericDoTEntries: victim.genericDoTEntries,
+                pendingBombs: victim.pendingBombs,
+                emitDotApplied: (dotType, stacks) =>
+                    bus.emit({
+                        type: 'dot-applied',
+                        sourceId: actor.id,
+                        targetId: rid,
+                        round: r,
+                        dotType,
+                        stacks,
+                        ...(critHits > 0 ? { viaCrit: true } : {}),
+                    }),
+            });
         }
     }
 
