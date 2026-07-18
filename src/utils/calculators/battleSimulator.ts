@@ -49,7 +49,7 @@ import { buildShipAbilitiesWithEquipment } from '../abilities/buildShipAbilities
 import type { ShipSkills } from '../../types/abilities';
 import type { GearPiece } from '../../types/gear';
 import { selectFiringSkill } from '../abilities/applyAbilities';
-import { parseShipTargeting, SkillTargeting } from '../targetingParser';
+import { parseShipTargeting, SkillTargeting, ParsedTarget } from '../targetingParser';
 import { buildCombatLog } from '../combat/log/buildCombatLog';
 import type { CombatLogRound } from '../combat/log/types';
 import type { FactionName } from '../../constants/factions';
@@ -683,6 +683,10 @@ interface PlacementPlan {
     /** True when a refit-active skill row declares the ship "starts combat fully charged"
      *  (Chimei). Seeds `charges = chargeCount` on the engine actor + the initialCharge map. */
     startCharged: boolean;
+    /** W6: per-slot stealth-targeting bypass, derived from the built damage configs. Stamped onto
+     *  the active/charged ParsedTarget at the actor-input build sites. */
+    activeIgnoresStealth: boolean;
+    chargedIgnoresStealth: boolean;
 }
 
 function planPlacement(
@@ -691,6 +695,19 @@ function planPlacement(
     getGearPiece?: (id: string) => GearPiece | undefined
 ): PlacementPlan {
     const targeting = parseShipTargeting(p.ship);
+    const shipSkills = getGearPiece
+        ? buildShipAbilitiesWithEquipment(p.ship, getGearPiece)
+        : buildShipAbilities(p.ship);
+    // W6: does the given slot carry a damage ability whose built config declares the
+    // per-cast stealth-targeting bypass (Lodolite/Rhodium/Selenite's "This attack can target
+    // Stealthed enemies.")? config.ignoresStealth is the single source (Task 1) — this derives
+    // the per-slot boolean that gets stamped onto the corresponding ParsedTarget below.
+    const slotBypass = (slot: 'active' | 'charged'): boolean =>
+        shipSkills.slots
+            .find((s) => s.slot === slot)
+            ?.abilities.some(
+                (a) => a.config.type === 'damage' && a.config.ignoresStealth === true
+            ) ?? false;
     // Use the ACTIVE targeting (target + pattern) as the default axes. Charged targeting is
     // threaded separately (`chargedTargeting`) — SP-F F5: it now drives the damage footprint
     // AND the target selection on a charge-firing turn (not just support-footprint resolution),
@@ -702,9 +719,7 @@ function planPlacement(
         faction: p.ship.faction,
         role: p.ship.type,
         stats: resolveStats(p),
-        shipSkills: getGearPiece
-            ? buildShipAbilitiesWithEquipment(p.ship, getGearPiece)
-            : buildShipAbilities(p.ship),
+        shipSkills,
         affinity: p.ship.affinity,
         targeting: targeting.active,
         chargedTargeting: targeting.charged ?? targeting.active,
@@ -713,8 +728,18 @@ function planPlacement(
         // (getShipSkillRows returns only the refit-active passive), so a below-threshold
         // refit count automatically drops the declaring passive and the ship starts at 0.
         startCharged: detectFullyCharged(getShipSkillRows(p.ship).map((r) => r.text)),
+        activeIgnoresStealth: slotBypass('active'),
+        chargedIgnoresStealth: slotBypass('charged'),
     };
 }
+
+/** W6: stamp `ignoresStealth` onto a ParsedTarget when this slot's bypass flag is on — a FRESH
+ *  object, never a mutation, because `parseShipTargeting` returns `charged === active` (the SAME
+ *  object reference) when the ship's charged targeting columns are empty; mutating in place would
+ *  make the active/charged bypass flags clobber each other. When `on` is false, the SAME
+ *  reference is returned so every non-bypass ship stays byte-identical. */
+const withStealthBypass = (t: ParsedTarget | undefined, on: boolean): ParsedTarget | undefined =>
+    t && on ? { ...t, ignoresStealth: true } : t;
 
 /**
  * Thin adapter over the combat engine: positions two squads, runs a fixed-round mutual
@@ -846,13 +871,16 @@ export function simulateBattle(
             enemyDebuffs: [],
             ...preFightModifiersFor(plan.id),
             position: plan.position,
-            target: plan.targeting?.target,
+            target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
             // SP-F F5 (charged-skill targeting): thread the charged TARGET selection alongside
             // the charged pattern above — drives both the damage footprint and the target
             // selection on a charge-firing turn. Falls back to the active target when unset.
-            chargedTarget: plan.chargedTargeting?.target,
+            chargedTarget: withStealthBypass(
+                plan.chargedTargeting?.target,
+                plan.chargedIgnoresStealth
+            ),
             // SP-F F5 (Meatshield defense-substitution): thread the ship role (Ship.type) for
             // role-filtered classification ("non-defender ally" gate).
             role: plan.role,
@@ -863,6 +891,9 @@ export function simulateBattle(
             doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
             chargeLossImmune: plan.shipSkills.chargeLossImmune,
             ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
+            // W6: ship-wide stealth-targeting bypass (Lodolite's "This Unit ignores Stealth
+            // effects."). Team-symmetric with the focus/enemy branches below.
+            ignoresStealth: plan.shipSkills.ignoresStealth,
             walk: {
                 shipSkills: plan.shipSkills,
                 stats: toWalkStats(plan.stats),
@@ -902,16 +933,22 @@ export function simulateBattle(
                 doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
                 chargeLossImmune: plan.shipSkills.chargeLossImmune,
                 ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
+                // W6: ship-wide stealth-targeting bypass. Team-symmetric with the teamActors/
+                // focus branches.
+                ignoresStealth: plan.shipSkills.ignoresStealth,
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
                 position: plan.position,
-                target: plan.targeting?.target,
+                target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
                 pattern: plan.targeting?.pattern,
                 chargedPattern: plan.chargedTargeting?.pattern,
                 // SP-F F5 (charged-skill targeting): thread the charged TARGET selection
                 // alongside the charged pattern above (team-symmetric with the teamActors branch).
-                chargedTarget: plan.chargedTargeting?.target,
+                chargedTarget: withStealthBypass(
+                    plan.chargedTargeting?.target,
+                    plan.chargedIgnoresStealth
+                ),
                 affinity: plan.affinity,
             };
         }
@@ -963,12 +1000,15 @@ export function simulateBattle(
         security: focus.stats.security,
         enemySecurity: enemyRepSecurity,
         position: focus.position,
-        target: focus.targeting?.target,
+        target: withStealthBypass(focus.targeting?.target, focus.activeIgnoresStealth),
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,
         // SP-F F5 (charged-skill targeting): thread the charged TARGET selection alongside the
         // charged pattern above (team-symmetric with the teamActors/enemyAttackers branches).
-        chargedTarget: focus.chargedTargeting?.target,
+        chargedTarget: withStealthBypass(
+            focus.chargedTargeting?.target,
+            focus.chargedIgnoresStealth
+        ),
         // SP-F F5: thread the focus actor's ship role (Ship.type) for role-filtered
         // classification (Meatshield defense-substitution's "non-defender ally" gate). Team
         // symmetry with the teamActors/enemyAttackers branches above.
@@ -979,6 +1019,9 @@ export function simulateBattle(
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,
         ignoresForcedTargeting: focus.shipSkills.ignoresForcedTargeting,
+        // W6: ship-wide stealth-targeting bypass. Team-symmetric with the teamActors/
+        // enemyAttackers branches.
+        ignoresStealth: focus.shipSkills.ignoresStealth,
         ...preFightModifiersFor(focus.id),
         // Positional team battle: the engine builds the positioned enemy roster from the
         // enemyAttackers presence and runs the heal/shield pipeline off this flag (SP-U U5 R6
