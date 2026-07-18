@@ -619,6 +619,10 @@ export type AbilityConfig =
            *  100, critPenalty 0, no debuff-landing disadvantage. Read at the three affinity seams
            *  in playerTurn.ts. Absent → the real computed matchup (byte-identical default). */
           forceAffinityAdvantage?: boolean;
+          /** Ship-kit W5 (Demolisher bomb-splash): this damage bypasses the target's Defense
+           *  mitigation term. Consumed by the REACTIVE damage executor (applyReactiveDamage,
+           *  Task C3); the on-cast damage path ignores it. Absent → normal mitigation. */
+          ignoresDefense?: boolean;
       }
     | {
           type: 'counter';

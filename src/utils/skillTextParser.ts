@@ -2852,8 +2852,12 @@ export function parseAccumulateDetonate(
 // "<subject> cannot critically hit" — the no-crit attaches to whatever noun precedes it.
 // We flag the ATTACK as no-crit unless that subject is a repair/heal (e.g. Pallas's "this
 // repair cannot critically hit", which sits after an unrelated "the damage dealt").
-// Tolerates the "cannont" misspelling in the source data (Provider).
-const NO_CRIT_RE = /(\w+)\s+(?:cannot|cannont)\s+critically\s+hit\b/gi;
+// Tolerates the "cannont" misspelling in the source data (Provider). Ship-kit W5 (Demolisher
+// passive): "cannot result in a critical hit" is an alternate phrasing of the same no-crit
+// clause ("This damage ... cannot result in a critical hit"), added alongside the original
+// "critically hit" form.
+const NO_CRIT_RE =
+    /(\w+)\s+(?:cannot|cannont)\s+(?:critically\s+hit|result\s+in\s+a\s+critical\s+hit)\b/gi;
 const NO_CRIT_HEAL_SUBJECTS = new Set(['repair', 'repairs', 'heal', 'heals']);
 
 /** Whether a skill's attack/damage cannot critically hit. Reference data: docs/ship-skills.csv. */
@@ -2863,6 +2867,16 @@ export function parseNoCrit(text: string | null | undefined): boolean {
         if (!NO_CRIT_HEAL_SUBJECTS.has(m[1].toLowerCase())) return true;
     }
     return false;
+}
+
+// Ship-kit W5 (Demolisher bomb-splash): "This damage ignores Defense ..." — the splash damage
+// bypasses the target's Defense mitigation term entirely. Boolean only; the flag rides the
+// damage config (ignoresDefense) and is consumed by the REACTIVE damage executor (Task C3).
+const IGNORES_DEFENSE_RE = /ignores?\s+defense/i;
+/** Whether a skill's damage clause ignores the target's Defense (Demolisher bomb-splash).
+ *  Reference data: docs/ship-skills.csv. */
+export function parseIgnoresDefense(text: string | null | undefined): boolean {
+    return !!text && IGNORES_DEFENSE_RE.test(stripUnitTags(text));
 }
 
 // SP-F F4 (Wusheng): "deals 220% damage WITH AFFINITY ADVANTAGE …" — the charged hit is forced
@@ -5011,12 +5025,14 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
 // "all enemies adjacent to X" must NOT match the plain all-enemies widen. Two flavours:
 //  - "the targeted enemy and all enemies adjacent to it/the enemy" → anchor INCLUDED
 //  - "(to) all enemies adjacent to the (original) target"           → anchor EXCLUDED
-// Tolerates the docs/ship-skills.csv "adjavent" typo. (Demolisher's bare "all adjavent
-// enemies" — no "target" word — is added by a later task; do not add it here.)
+//  - "all adjacent enemies" (bare, no "target"/"to" — Demolisher's passive bomb-splash:
+//    "deals 100% of the Bomb's damage to all adjavent enemies") → anchor EXCLUDED, same
+//    scope as the "to ... target" flavour above.
+// Tolerates the docs/ship-skills.csv "adjavent" typo.
 const TARGET_AND_ADJACENT_ENEMY_RE =
     /targeted\s+enemy\s+and\s+all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:it|the\s+enemy)/i;
 const ADJACENT_ENEMY_ONLY_RE =
-    /all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:the\s+)?(?:original\s+)?target/i;
+    /all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:the\s+)?(?:original\s+)?target|all\s+adja[cv]ent\s+enem(?:y|ies)/i;
 
 /**
  * Detects whether a resolved (sentence/sub-clause scoped) buff clause carries one of the two
@@ -5057,6 +5073,23 @@ export function adjacentEnemyScopeForName(
 ): 'adjacent-enemies' | 'target-and-adjacent-enemies' | null {
     const resolved = resolveBuffClause(skillText, name).toLowerCase();
     return detectAdjacentEnemyScope(narrowToBuffSubClause(resolved, name));
+}
+
+/**
+ * Position-scoped enemy-adjacency resolver for a NAMELESS damage clause (a base-damage ability
+ * has no buff name to anchor on, unlike adjacentEnemyScopeForName). Mirrors phrasePosTrigger's
+ * raw-text sentence scoping (rawSentenceAround) so `anchorPos` — a position into the raw `text`,
+ * same basis as the trigger detectors' `damagePos` — maps to the sentence actually carrying the
+ * damage clause, and an unrelated adjacency phrase elsewhere in the text can't leak in.
+ * Ship-kit W5 (Demolisher passive): "... deals 100% of the Bomb's damage to all adjavent
+ * enemies" resolves to 'adjacent-enemies'.
+ */
+export function adjacentEnemyScopeAtPos(
+    text: string,
+    anchorPos: number
+): 'adjacent-enemies' | 'target-and-adjacent-enemies' | null {
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence === undefined ? null : detectAdjacentEnemyScope(sentence);
 }
 
 /**
