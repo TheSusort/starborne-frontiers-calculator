@@ -154,6 +154,10 @@ export interface CombatActor {
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. */
     ignoresForcedTargeting?: boolean;
+    /** Attacker ignores the Stealth targeting filter on ALL its casts (Lodolite's "ignores
+     *  Stealth effects" passive). Positional plumbing — set at construction, consumed by
+     *  resolvePositionalTarget via acting.ignoresStealth. */
+    ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site in engine.ts (§4.5 Akula exception) — if true, the victim is never recorded into
      *  turnStasisHitVictims and stasisBreakPending is never set. */
@@ -186,6 +190,7 @@ export function createActor(
         startCharged?: boolean;
         position?: Position;
         ignoresForcedTargeting?: boolean;
+        ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
         affinity?: AffinityName;
         chargeLossImmune?: boolean;
@@ -212,6 +217,7 @@ export function createActor(
         pendingAccumulators: [],
         position: partial.position,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
+        ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,
         affinity: partial.affinity,
         turnsTaken: 0,

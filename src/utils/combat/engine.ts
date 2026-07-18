@@ -462,6 +462,8 @@ export interface EnemyActorInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
+    // W6: ship-wide stealth-targeting bypass.
+    ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
@@ -585,6 +587,7 @@ export function buildEnemyPlayerActorRuntime(
         startCharged: e.startCharged,
         position: e.position,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
+        ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
         chargeLossImmune: e.chargeLossImmune,
         affinity: e.affinity,
@@ -980,6 +983,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
+    // W6: ship-wide stealth-targeting bypass.
+    ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
@@ -1117,6 +1122,8 @@ export interface CombatEngineInput {
         position?: Position;
         /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
         ignoresForcedTargeting?: boolean;
+        // W6: ship-wide stealth-targeting bypass.
+        ignoresStealth?: boolean;
         /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
          *  site (§4.5 Akula exception). Optional — undefined treated as false. */
         doesntBreakStasis?: boolean;
@@ -1154,6 +1161,8 @@ export interface CombatEngineInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
+    // W6: ship-wide stealth-targeting bypass.
+    ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
@@ -1539,6 +1548,7 @@ export function runCombat(input: CombatEngineInput): {
         startCharged,
         position: input.position,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
+        ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
         chargeLossImmune: input.chargeLossImmune,
         affinity: input.affinity,
@@ -1622,6 +1632,7 @@ export function runCombat(input: CombatEngineInput): {
             startCharged: t.startCharged,
             position: t.position,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
+            ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
             chargeLossImmune: t.chargeLossImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
@@ -4966,6 +4977,8 @@ export function runCombat(input: CombatEngineInput): {
             target: ParsedTarget;
             actingPosition: Position;
             ignoresForcedTargeting?: boolean;
+            // W6: ship-wide stealth-targeting bypass.
+            ignoresStealth?: boolean;
             actingId: string;
             opposingLiving: CombatActor[];
             applyToVictim: (
@@ -5016,6 +5029,7 @@ export function runCombat(input: CombatEngineInput): {
                     statusOf: statusLookupFor(args.opposingLiving),
                     acting: {
                         ignoresForcedTargeting: args.ignoresForcedTargeting,
+                        ignoresStealth: args.ignoresStealth,
                         provokedBy: provokerOf(statusEngine, args.actingId),
                     },
                     defenseProfileOf: (v) => {
@@ -5489,6 +5503,7 @@ export function runCombat(input: CombatEngineInput): {
                           statusLookupFor(tb.opposingRoster),
                           {
                               ignoresForcedTargeting: a.ignoresForcedTargeting,
+                              ignoresStealth: a.ignoresStealth,
                               provokedBy: provokerOf(statusEngine, a.id),
                           }
                       )
@@ -5763,6 +5778,7 @@ export function runCombat(input: CombatEngineInput): {
                 target: sel.target,
                 actingPosition: actor.position!,
                 ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                ignoresStealth: actor.ignoresStealth,
                 actingId: actor.id,
                 opposingLiving: tb.opposingRoster,
                 applyToVictim: tb.applyToVictim,
