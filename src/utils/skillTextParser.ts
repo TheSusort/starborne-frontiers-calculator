@@ -5046,6 +5046,20 @@ function narrowToBuffSubClause(clause: string, buffName: string): string {
 }
 
 /**
+ * Resolve the enemy-adjacency scope for a named effect (DoT type name, buff name, control
+ * effect) using the same clause resolution the debuff-scope path uses: sentence-scope via
+ * resolveBuffClause, then narrow to the name's "then"-sub-clause, then adjacency-match.
+ * Returns null when the effect's clause carries no enemy-adjacency phrasing.
+ */
+export function adjacentEnemyScopeForName(
+    skillText: string,
+    name: string
+): 'adjacent-enemies' | 'target-and-adjacent-enemies' | null {
+    const resolved = resolveBuffClause(skillText, name).toLowerCase();
+    return detectAdjacentEnemyScope(narrowToBuffSubClause(resolved, name));
+}
+
+/**
  * Resolves the enemy-side scope of an inflicted/applied debuff from its granting clause, mirroring
  * `detectGrantScope`'s clause resolution (`resolveBuffClause`, so "Inc."/"Out." abbreviation
  * periods don't break sentence splitting) but testing for an "all enemies" receiver instead of an

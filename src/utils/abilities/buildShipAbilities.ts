@@ -118,6 +118,7 @@ import {
     maskAbbrev,
     detectExtraActionCoTrigger,
     detectEnemyGrantScope,
+    adjacentEnemyScopeForName,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -2893,6 +2894,11 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 ? detectReactiveTrigger(rowText, entry.type)
                 : undefined;
             if (reactiveTrigger) ability.trigger = reactiveTrigger;
+            // Enemy-adjacency splash (Asphyxiator active Inferno III: "on the targeted enemy
+            // and all enemies adjacent to it"). Charged Inferno's adjacency phrase belongs to a
+            // separate Stasis sentence, so it resolves to null and the DoT stays 'enemy'.
+            const adjacentScope = rowText ? adjacentEnemyScopeForName(rowText, entry.type) : null;
+            if (adjacentScope) ability.target = adjacentScope;
             return { ability, pos: pos >= 0 ? pos : MAX_POS };
         });
         if (!dots.length) continue;
