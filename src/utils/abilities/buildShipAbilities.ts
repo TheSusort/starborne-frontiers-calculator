@@ -3379,18 +3379,11 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     //     exists), i.e. a dead, mislabeled entry forever. Drop the control ability outright
     //     instead — the named debuff/buff twin remains the sole model of the effect, and no
     //     spurious on-cast control-applied fires.
-    const CONTROL_TWIN_TAG: Record<ControlEffect, string> = {
-        stasis: 'Stasis',
-        provoke: 'Provoke',
-        'concentrate-fire': 'Concentrate Fire',
-        disable: 'Disable',
-        taunt: 'Taunt',
-    };
     for (const positioned of bySlot.values()) {
         for (let i = positioned.length - 1; i >= 0; i--) {
             const ability = positioned[i].ability;
             if (ability.type !== 'control' || ability.config.type !== 'control') continue;
-            const tag = CONTROL_TWIN_TAG[ability.config.effect];
+            const tag = CONTROL_EFFECT_DISPLAY_NAME[ability.config.effect];
             const twinType = ability.config.effect === 'taunt' ? 'buff' : 'debuff';
             const twin = positioned.find(
                 (p) =>
