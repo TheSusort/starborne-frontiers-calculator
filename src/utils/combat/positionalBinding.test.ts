@@ -199,3 +199,27 @@ describe('resolvePositionalTarget — Provoke redirect + ignore gating', () => {
         ).toBe('front');
     });
 });
+
+describe('resolvePositionalTarget — Wave 6 stealth bypass', () => {
+    // e-front = M4 (front-most, stealthed), e-back = M1 (back-most, visible).
+    // Default 'front' selection would be filtered off the stealthed e-front and land on e-back.
+    const enemies = [actor('e-front', 'M4'), actor('e-back', 'M1')];
+    const so = statusFrom({ 'e-front': { stealthed: true } });
+
+    it('without bypass: the visible back actor is targeted (stealthed front filtered out)', () => {
+        expect(resolvePositionalTarget('M4', enemyTarget('front'), enemies, so)?.id).toBe('e-back');
+    });
+
+    it('acting.ignoresStealth: the stealthed front-most actor is targeted', () => {
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                ignoresStealth: true,
+            })?.id
+        ).toBe('e-front');
+    });
+
+    it('target.ignoresStealth (per-cast): the stealthed front-most actor is targeted', () => {
+        const target: ParsedTarget = { ...enemyTarget('front'), ignoresStealth: true };
+        expect(resolvePositionalTarget('M4', target, enemies, so, {})?.id).toBe('e-front');
+    });
+});

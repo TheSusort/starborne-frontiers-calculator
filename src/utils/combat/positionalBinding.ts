@@ -36,19 +36,22 @@ export function isPositional(
  *   3. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
  *      Bypasses stealth (forced-targeting override). Falls through if the provoker is dead/absent.
  *      Skipped when `acting.ignoresForcedTargeting` is true.
- *   4. Stealth filter — drop stealthed cells; if that empties the set, restore all.
+ *   4. Stealth filter — drop stealthed cells; if that empties the set, restore all. Skipped
+ *      entirely when the acting attacker (ship-level `acting.ignoresStealth`) or this cast's
+ *      target (per-ability `target.ignoresStealth`) ignores Stealth (Ship-kit W6).
  * `statusOf(id)` returning `undefined` is treated as all-false (never throws/skips).
  *
  * @param acting - Optional context for the acting attacker. `provokedBy` is the id of the
  *   actor that provoked this attacker (pre-resolved by the engine). `ignoresForcedTargeting`
- *   skips both Taunt and Provoke overrides, but NOT Concentrate Fire.
+ *   skips both Taunt and Provoke overrides, but NOT Concentrate Fire. `ignoresStealth` skips
+ *   the stealth visibility filter (step 4) for this attacker.
  */
 export function resolvePositionalTarget(
     actorPosition: Position,
     target: ParsedTarget,
     opposingLiving: CombatActor[],
     statusOf?: (id: string) => ActorTargetingStatus | undefined,
-    acting?: { ignoresForcedTargeting?: boolean; provokedBy?: string }
+    acting?: { ignoresForcedTargeting?: boolean; ignoresStealth?: boolean; provokedBy?: string }
 ): CombatActor | null {
     const byCell = new Map<Position, CombatActor>();
     for (const a of opposingLiving) {
@@ -107,10 +110,13 @@ export function resolvePositionalTarget(
             }
         }
 
-        // 4. Stealth filter — restore all if every candidate is stealthed.
-        const visible = cells.filter((p) => !statusOf(byCell.get(p)!.id)?.stealthed);
-        if (visible.length) {
-            cells = visible;
+        // 4. Stealth filter — restore all if every candidate is stealthed. Skipped entirely when
+        //    the acting attacker (ship-level) OR this cast's target (per-ability) ignores Stealth.
+        if (!acting?.ignoresStealth && !target.ignoresStealth) {
+            const visible = cells.filter((p) => !statusOf(byCell.get(p)!.id)?.stealthed);
+            if (visible.length) {
+                cells = visible;
+            }
         }
     }
 
