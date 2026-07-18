@@ -214,6 +214,10 @@ export function dotsFromSkill(skill: Skill | undefined): DoTApplicationConfig {
             tier: ability.config.tier,
             stacks: ability.config.stacks,
             duration: ability.config.duration,
+            ...(ability.target === 'adjacent-enemies' ||
+            ability.target === 'target-and-adjacent-enemies'
+                ? { splashTarget: ability.target }
+                : {}),
         });
     }
     return config;
