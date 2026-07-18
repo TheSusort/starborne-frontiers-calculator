@@ -628,7 +628,23 @@ export function registerReactiveListeners(args: {
                     bus.on('round-ended', () => enqueue(intent));
                     break;
                 case 'on-bomb-detonated':
-                    bus.on('bomb-detonated', () => enqueue(intent));
+                    // Ship-kit W5 Task C3 (Demolisher): stamp the bomb VICTIM's id + the burst's
+                    // own damage into eventCtx so the reactive `damage` executor's `adjacent-
+                    // enemies` branch can anchor its fan-out on the bombed enemy (NOT the owner)
+                    // and scale the splash off the bomb's own payout rather than the owner's
+                    // attack. Both fields are existing eventCtx channels (on-attacked already
+                    // stamps them for the counter-routing / damage-taken-basis consumers) — this
+                    // listener is just a second writer, gated by its own distinct event type.
+                    bus.on('bomb-detonated', (e) =>
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                victimId: e.victimId,
+                                triggerDamage: e.damage,
+                            },
+                        })
+                    );
                     break;
                 case 'on-stasis-applied':
                     bus.on('control-applied', (e) => {
@@ -1190,6 +1206,15 @@ export interface IntentExecContext {
      *  `adjacent-allies` buff target. Engine-populated per side. Absent / undefined → the
      *  recipient resolver falls back to ctx.playerIds (all same-side allies). */
     adjacentAllyIdsFor?: (ownerId: string) => string[];
+    /** Ship-kit W5 Task C3 (Demolisher bomb-splash): OPPOSING-side ids adjacent to `anchorId` on
+     *  the board (living, anchor excluded), feeding the `adjacent-enemies` reactive-damage
+     *  target. Distinct from `adjacentAllyIdsFor` (which is bound to the DRAIN side, i.e. the
+     *  owner's OWN side — correct for an 'adjacent-allies' buff, but wrong here: the anchor is
+     *  the bombed enemy, on the side OPPOSITE the owner). Engine-populated per drain side as the
+     *  OPPOSING side's `adjacentAllyIdsFor` (mirrors `livingOpposingActorIds`'s same-direction
+     *  wiring). Absent / no anchor → the executor treats the fan-out as empty (never falls back
+     *  to the dummy sink). */
+    adjacentOpposingIdsFor?: (anchorId: string) => string[];
     /** Living ally ids on the owner's ACTIVE support pattern footprint (reactives). Absent when
      *  non-positional or the owner has no support pattern → legacy team-wide routing. */
     footprintAllyIdsFor?: (ownerId: string) => string[] | undefined;
@@ -1216,7 +1241,13 @@ export interface IntentExecContext {
      *  never mutated a specific victim's HP (was credit-only pre-fix). Absent → the damage
      *  branch is inert (unit fixtures / DPS mode w/o delegate). `allowDeadOwner` (PR-B1,
      *  Paracelsus) lets an on-destroyed retaliation fire even though its owner is already
-     *  stamped destroyedRound — the reaction is BORN of that same death. */
+     *  stamped destroyedRound — the reaction is BORN of that same death. Ship-kit W5 Task C3
+     *  (Demolisher bomb-splash) adds `opts`: `flatBasis` (present) computes `raw` as a straight
+     *  `flatBasis × multiplier/100` copy — no owner-attack basis, no defense mitigation, no crit
+     *  roll (deliberately no affinity re-application either — see engine.ts's applyReactiveDamage
+     *  doc for the full rationale). `ignoresDefense` (without `flatBasis`) is the non-flat
+     *  generality path: the normal attack-basis/crit walk runs, but the victim's Defense term is
+     *  bypassed (defence: 0). Both undefined (every pre-C3 caller) → byte-identical to before. */
     applyReactiveDamage?: (
         ownerId: string,
         victimId: string,
@@ -1225,7 +1256,8 @@ export interface IntentExecContext {
         hits: number,
         noCrit: boolean,
         hpBasisPct?: number,
-        allowDeadOwner?: boolean
+        allowDeadOwner?: boolean,
+        opts?: { ignoresDefense?: boolean; flatBasis?: number }
         // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
         // the combat log (reactive-damage-performed); void/0 when the proc was guarded (dead
         // victim, non-positive) or the delegate is absent (unit fixtures).
@@ -3076,6 +3108,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // ability's per-victim enemy conditions (hp-threshold <50% / enemy-debuff Inferno). The
             // once-per-round gate above already fired ONCE for the whole proc (all victims share it).
             victimIds = resolveAoEReactiveDamageVictims(intent, ctx);
+        } else if (tgt === 'adjacent-enemies') {
+            // Ship-kit W5 Task C3 (Demolisher bomb-splash): anchor on the BOMB VICTIM
+            // (eventCtx.victimId, stamped by the on-bomb-detonated listener above) rather than
+            // ctx.enemy/counterTargetId — the splash must land on the bombed enemy's own
+            // adjacent enemies, not "an enemy of the owner". `ctx.adjacentOpposingIdsFor` (NOT
+            // `adjacentAllyIdsFor`, which is bound to the OWNER's own drain side — wrong
+            // direction here: the anchor is on the side OPPOSITE the owner) resolves the
+            // anchor's OWN-side neighbours within the OPPOSING roster — team-symmetric (a player
+            // owner reads the enemy roster and vice versa) and excludes the anchor itself. No
+            // anchor (a damage-type ability reached via some OTHER trigger, or a fixture that
+            // never stamped victimId) → empty, never falls back to the dummy sink.
+            const anchorId = intent.eventCtx?.victimId;
+            victimIds =
+                anchorId !== undefined ? (ctx.adjacentOpposingIdsFor?.(anchorId) ?? []) : [];
         } else {
             victimIds = [intent.eventCtx?.counterTargetId ?? ctx.enemy.id];
         }
@@ -3087,7 +3133,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 intent.ability.id,
                 cfg.multiplier,
                 cfg.hits ?? 1,
-                cfg.noCrit ?? false
+                cfg.noCrit ?? false,
+                undefined, // hpBasisPct — inert on this path (the hpBasisPct branch above returns early)
+                false, // allowDeadOwner
+                // Ship-kit W5 Task C3: flatBasis/ignoresDefense are ONLY ever non-inert for
+                // Demolisher's splash (the sole ability carrying cfg.ignoresDefense===true AND
+                // reachable via a trigger — on-bomb-detonated — that stamps eventCtx.triggerDamage;
+                // every other reactive `damage` ability either has cfg.ignoresDefense undefined
+                // OR fires from a trigger that never stamps triggerDamage, so this object is a
+                // no-op passenger for them — byte-identical to the pre-C3 call with no 9th arg).
+                {
+                    ignoresDefense: cfg.ignoresDefense === true,
+                    flatBasis: intent.eventCtx?.triggerDamage,
+                }
             );
             emitReactiveDamageLog(ctx, intent.ownerId, victimId, outcome);
         }

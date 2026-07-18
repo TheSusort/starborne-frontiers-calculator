@@ -1341,6 +1341,11 @@ interface ReactiveSideCtx {
     perRoundFireCounts?: Map<string, number>;
     /** Per-side adjacent-allies resolver (Fortifying Shroud). See IntentExecContext. */
     adjacentAllyIdsFor: (ownerId: string) => string[];
+    /** Ship-kit W5 Task C3 (Demolisher bomb-splash): OPPOSING-side adjacent-ids resolver — mirrors
+     *  `livingOpposingActorIds`'s same-direction wiring (player drain → enemy roster, enemy drain
+     *  → player roster), but narrowed to board-neighbours of the given anchor instead of the
+     *  whole roster. See IntentExecContext. */
+    adjacentOpposingIdsFor?: (anchorId: string) => string[];
     /** Per-side support footprint resolver (pattern-scoped reactive grants). See IntentExecContext. */
     footprintAllyIdsFor: (ownerId: string) => string[] | undefined;
 }
@@ -4624,7 +4629,16 @@ export function runCombat(input: CombatEngineInput): {
             hits: number,
             noCrit: boolean,
             hpBasisPct?: number,
-            allowDeadOwner?: boolean
+            allowDeadOwner?: boolean,
+            // Ship-kit W5 Task C3 (Demolisher bomb-splash). `flatBasis`: this proc is a FLAT copy
+            // of some OTHER already-resolved damage figure (the bomb's own burst,
+            // eventCtx.triggerDamage) rather than owner-attack × multiplier — raw is computed
+            // directly, skipping `victimHitDamage` ENTIRELY (no defense, no crit roll, no
+            // affinity). `ignoresDefense` (without `flatBasis`): the normal attack-basis/crit walk
+            // still runs, but the victim's Defense term is bypassed (defence: 0) — kept minimal,
+            // for generality beyond Demolisher's own (flat) path. Both absent (every pre-C3
+            // caller) → byte-identical to the pre-C3 body below.
+            opts?: { ignoresDefense?: boolean; flatBasis?: number }
         ): { dealt: number; didCrit: boolean } | void => {
             const owner = allActorsById.get(ownerId);
             const victim = allActorsById.get(victimId);
@@ -4649,54 +4663,80 @@ export function runCombat(input: CombatEngineInput): {
             const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
             const victimStats = effectiveStatsOf(statusEngine, selfBuffLookup, victim);
 
-            // Deterministic per-(owner, ability) crit gate — a NEW map (reactiveDamageCritGates),
-            // never Math.random. `noCrit` short-circuits the roll entirely: a flagged ability
-            // (Grif "cannot critically hit", Rhodium "cannot critically hit") never creates a gate
-            // key, so it can never crit by construction, matching the flag rather than relying on
-            // the executor to withhold crit eligibility. A 0%-crit owner ALSO skips the roll — a
-            // guaranteed-miss draw would still consume a value from the shared seeded RNG stream
-            // and perturb every later gate's schedule (proc gates, debuff landing) for ships that
-            // can never crit anyway. Live-checked per call, so a mid-fight crit buff starts
-            // drawing from that point on.
-            const didCrit =
-                !noCrit &&
-                ownerStats.crit > 0 &&
-                rollRateGate(
-                    reactiveDamageCritGates,
-                    `${ownerId}:${abilityId}`,
-                    ownerStats.crit / 100
+            let raw: number;
+            let didCrit: boolean;
+
+            if (opts?.flatBasis !== undefined) {
+                // Ship-kit W5 Task C3 (Demolisher bomb-splash): a FLAT copy of the triggering
+                // event's OWN already-resolved damage (the bomb's burst) — raw = flatBasis ×
+                // multiplier/100 (100% = a straight copy), computed DIRECTLY with no
+                // `victimHitDamage` call at all: no owner-attack basis, no Defense mitigation, no
+                // crit roll (a flat copy can never crit by design — `noCrit` is honoured by
+                // construction, not by a flag check), and deliberately NO affinity
+                // re-application. Affinity rationale: the bomb's `damage` already resolved the
+                // ORIGINAL applier's affinity matchup against the BOMBED victim; re-running
+                // affinity math here would apply THIS neighbour's affinity to a hit that never
+                // actually had a matchup against it — the burst is a single already-realized
+                // number being copied, not a new attack being rolled. Mirrors the
+                // bomb-splash-on-death precedent (engine.ts ~4187, `splashDamageForBomb`), which
+                // is likewise flat/no-affinity.
+                raw = Math.round((opts.flatBasis * multiplier) / 100);
+                didCrit = false;
+            } else {
+                // Deterministic per-(owner, ability) crit gate — a NEW map (reactiveDamageCritGates),
+                // never Math.random. `noCrit` short-circuits the roll entirely: a flagged ability
+                // (Grif "cannot critically hit", Rhodium "cannot critically hit") never creates a gate
+                // key, so it can never crit by construction, matching the flag rather than relying on
+                // the executor to withhold crit eligibility. A 0%-crit owner ALSO skips the roll — a
+                // guaranteed-miss draw would still consume a value from the shared seeded RNG stream
+                // and perturb every later gate's schedule (proc gates, debuff landing) for ships that
+                // can never crit anyway. Live-checked per call, so a mid-fight crit buff starts
+                // drawing from that point on.
+                didCrit =
+                    !noCrit &&
+                    ownerStats.crit > 0 &&
+                    rollRateGate(
+                        reactiveDamageCritGates,
+                        `${ownerId}:${abilityId}`,
+                        ownerStats.crit / 100
+                    );
+
+                // Vindicator on-resist: raw = owner effective max HP × hpBasisPct% (mitigated below the
+                // same as any direct hit — defence + affinity + crit). Otherwise attack × multiplier.
+                const basisStat =
+                    hpBasisPct !== undefined ? recipientMaxHp(ownerId) : ownerStats.attack;
+                const basisPct = hpBasisPct !== undefined ? hpBasisPct : multiplier;
+
+                raw = victimHitDamage(
+                    {
+                        effectiveAttack: basisStat,
+                        // Fold hit count into the multiplier and pass hits:1 (mirrors
+                        // applyCounterAttack) — models the reactive proc as ONE consolidated hit.
+                        multiplierPct: basisPct * hits,
+                        secondaryStatValue: 0,
+                        hits: 1,
+                        effectiveCritDamage: ownerStats.critDamage,
+                        outgoingDamageBuffPct: 0,
+                        incomingDamageModifierPct: 0,
+                        defensePenetrationPct: ownerStats.defensePenetration,
+                        attackerAffinity: owner.affinity ?? 'antimatter',
+                    },
+                    {
+                        // SP-F F5: Meatshield defense-substitution (approximation) — see the
+                        // substitutedDefenceFor doc comment above for the full rule. Ship-kit W5
+                        // Task C3: `ignoresDefense` (non-flat generality path) bypasses the
+                        // victim's Defense term entirely (defence: 0) instead of the normal
+                        // substituted defence.
+                        defence: opts?.ignoresDefense
+                            ? 0
+                            : substitutedDefenceFor(victim, victimStats.defence),
+                        defenceModifierPct: 0,
+                        affinity: victim.affinity ?? 'antimatter',
+                    },
+                    didCrit,
+                    1 // roleScale: a reactive proc is a single full hit
                 );
-
-            // Vindicator on-resist: raw = owner effective max HP × hpBasisPct% (mitigated below the
-            // same as any direct hit — defence + affinity + crit). Otherwise attack × multiplier.
-            const basisStat =
-                hpBasisPct !== undefined ? recipientMaxHp(ownerId) : ownerStats.attack;
-            const basisPct = hpBasisPct !== undefined ? hpBasisPct : multiplier;
-
-            const raw = victimHitDamage(
-                {
-                    effectiveAttack: basisStat,
-                    // Fold hit count into the multiplier and pass hits:1 (mirrors
-                    // applyCounterAttack) — models the reactive proc as ONE consolidated hit.
-                    multiplierPct: basisPct * hits,
-                    secondaryStatValue: 0,
-                    hits: 1,
-                    effectiveCritDamage: ownerStats.critDamage,
-                    outgoingDamageBuffPct: 0,
-                    incomingDamageModifierPct: 0,
-                    defensePenetrationPct: ownerStats.defensePenetration,
-                    attackerAffinity: owner.affinity ?? 'antimatter',
-                },
-                {
-                    // SP-F F5: Meatshield defense-substitution (approximation) — see the
-                    // substitutedDefenceFor doc comment above for the full rule.
-                    defence: substitutedDefenceFor(victim, victimStats.defence),
-                    defenceModifierPct: 0,
-                    affinity: victim.affinity ?? 'antimatter',
-                },
-                didCrit,
-                1 // roleScale: a reactive proc is a single full hit
-            );
+            }
             // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
             // credits nothing), matching the pre-fix zero-damage guard.
             if (raw <= 0) {
@@ -6154,6 +6194,9 @@ export function runCombat(input: CombatEngineInput): {
                         // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
+                        // Ship-kit W5 Task C3: OPPOSING-side counterpart (Demolisher bomb-splash's
+                        // 'adjacent-enemies' anchor resolution). See IntentExecContext.
+                        adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
                         footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
                     });
                 }
@@ -6308,6 +6351,10 @@ export function runCombat(input: CombatEngineInput): {
             oncePerRoundConsumed,
             perRoundFireCounts,
             adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
+            // Ship-kit W5 Task C3: a player-owned reactive's 'adjacent-enemies' anchor (the bomb
+            // victim) lives on the ENEMY side — mirrors livingOpposingActorIds' direction, not
+            // adjacentAllyIdsFor's (which stays bound to this drain's OWN side, player).
+            adjacentOpposingIdsFor: bySide('enemy').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
         });
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
@@ -6341,6 +6388,9 @@ export function runCombat(input: CombatEngineInput): {
             oncePerRoundConsumed,
             perRoundFireCounts,
             adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
+            // Ship-kit W5 Task C3: mirror of playerDrainCtx's wiring — an enemy-owned reactive's
+            // 'adjacent-enemies' anchor lives on the PLAYER side.
+            adjacentOpposingIdsFor: bySide('player').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
         });
         // SP-U U3: side-parameterized drain replacing the former separate `drainIntents`/
