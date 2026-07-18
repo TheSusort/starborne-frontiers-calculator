@@ -917,6 +917,7 @@ function reduceBombsOnVictim(
         bus.emit({
             type: 'bomb-detonated',
             actorId: bomb.sourceId,
+            victimId: victim.id,
             round,
             stacks: bomb.stacks,
             damage: burst,
@@ -2315,7 +2316,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             infernoEntries,
             pendingBombs,
             emitBombDetonated: (stacks, damage) =>
-                bus.emit({ type: 'bomb-detonated', actorId: actor.id, round: r, stacks, damage }),
+                bus.emit({
+                    type: 'bomb-detonated',
+                    actorId: actor.id,
+                    victimId: enemy.id,
+                    round: r,
+                    stacks,
+                    damage,
+                }),
         });
     }
 

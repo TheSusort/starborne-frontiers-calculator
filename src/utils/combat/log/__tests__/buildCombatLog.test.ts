@@ -1147,7 +1147,14 @@ describe('buildCombatLog', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            ev({ type: 'bomb-detonated', actorId: 'A', round: 1, stacks: 3, damage: 9000 }),
+            ev({
+                type: 'bomb-detonated',
+                actorId: 'A',
+                victimId: 'B',
+                round: 1,
+                stacks: 3,
+                damage: 9000,
+            }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];

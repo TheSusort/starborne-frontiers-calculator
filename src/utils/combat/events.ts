@@ -247,8 +247,18 @@ export type CombatEvent =
      *  normalized value. `actorId` = the bomb's ORIGINAL applier (`PendingBomb.sourceId`)
      *  for `processBombs` and for SP-F F3/Lingshe's forced early detonation via
      *  `bomb-countdown-reduce`; the attacker-turn `detonate()` aggregate branch emits the
-     *  casting `actor.id` instead. Any actor, not always 'attacker'. */
-    | { type: 'bomb-detonated'; actorId: string; round: number; stacks: number; damage: number }
+     *  casting `actor.id` instead. Any actor, not always 'attacker'. `victimId` = the actor
+     *  the bomb detonated ON (the bomb's holder) — distinct from `actorId`, which stays the
+     *  applier/caster per the above. Added for Wave 5 C2 (Demolisher adjacent-enemy splash
+     *  anchoring, consumed by C3); purely additive, no behaviour change. */
+    | {
+          type: 'bomb-detonated';
+          actorId: string;
+          victimId: string;
+          round: number;
+          stacks: number;
+          damage: number;
+      }
     /** A `control` ability resolved on the cast path. `casterId` is the applying actor;
      *  `effect` is the control effect (e.g. 'stasis'). Present-only-when-fired; emitting it
      *  does NOT simulate the control's combat effect. */

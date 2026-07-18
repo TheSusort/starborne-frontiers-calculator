@@ -5279,6 +5279,7 @@ export function runCombat(input: CombatEngineInput): {
                     bus.emit({
                         type: 'bomb-detonated',
                         actorId,
+                        victimId: victim.id,
                         round: r,
                         stacks: result.bombStacks,
                         damage: result.bomb,
@@ -5376,6 +5377,7 @@ export function runCombat(input: CombatEngineInput): {
                     bus.emit({
                         type: 'bomb-detonated',
                         actorId,
+                        victimId: actor.id,
                         round: r,
                         stacks,
                         damage,
@@ -7335,6 +7337,7 @@ export function runCombat(input: CombatEngineInput): {
                             bus.emit({
                                 type: 'bomb-detonated',
                                 actorId,
+                                victimId: enemy.id,
                                 round: r,
                                 stacks,
                                 damage,
