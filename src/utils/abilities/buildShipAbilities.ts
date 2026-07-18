@@ -90,6 +90,7 @@ import {
     parseDoesntBreakStasis,
     parseChargeLossImmune,
     detectIgnoresForcedTargeting,
+    detectIgnoresStealth,
     parseChargeRemoval,
     parseSelfBuffRemovals,
     parseEnemyChargedCastReaction,
@@ -3430,10 +3431,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         ...getShipSkillRows(ship).map((row) => row.text)
     );
 
+    // Ship-kit W6: "This Unit ignores Stealth effects" (Lodolite) — same refit-resolved rows.
+    const ignoresStealth = detectIgnoresStealth(...getShipSkillRows(ship).map((row) => row.text));
+
     return {
         slots,
         ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
+        ...(ignoresStealth ? { ignoresStealth: true } : {}),
     };
 }

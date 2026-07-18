@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIgnoresStealth } from '../../skillTextParser';
+import { parseIgnoresStealth, detectIgnoresStealth } from '../../skillTextParser';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
@@ -63,3 +63,24 @@ describe.skipIf(!csvAvailable())(
         });
     }
 );
+
+describe('Wave 6 — detectIgnoresStealth (ship-wide passive)', () => {
+    it('matches "This Unit ignores Stealth effects"', () => {
+        expect(
+            detectIgnoresStealth('This Unit ignores <unit-skill>Stealth</unit-skill> effects.')
+        ).toBe(true);
+    });
+    it('does NOT match the per-attack clause or a Stealth grant', () => {
+        expect(detectIgnoresStealth('This attack can target Stealthed enemies.')).toBe(false);
+        expect(detectIgnoresStealth('This Unit gains Stealth for 2 turns.')).toBe(false);
+        expect(detectIgnoresStealth(null, undefined)).toBe(false);
+    });
+});
+
+describe.skipIf(!csvAvailable())('Wave 6 — ShipSkills.ignoresStealth', () => {
+    it('Lodolite is true; Rhodium and Selenite are undefined', () => {
+        expect(buildShipAbilities(shipFromCsv('Lodolite')).ignoresStealth).toBe(true);
+        expect(buildShipAbilities(shipFromCsv('Rhodium')).ignoresStealth).toBeUndefined();
+        expect(buildShipAbilities(shipFromCsv('Selenite')).ignoresStealth).toBeUndefined();
+    });
+});

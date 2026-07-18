@@ -1073,4 +1073,9 @@ export interface ShipSkills {
      *  positionalBinding.ts to skip Taunt/Provoke forced-targeting redirects (Concentrate
      *  Fire is unaffected). */
     ignoresForcedTargeting?: boolean;
+    /** True when the ship's passive text declares it ignores Stealth effects (Lodolite).
+     *  Threaded onto CombatActor.ignoresStealth by the engine adapter and consumed by
+     *  positionalBinding.ts to skip the stealth targeting filter on ALL of this ship's casts
+     *  (the per-cast `config.ignoresStealth` handles single-skill bypasses like Rhodium/Selenite). */
+    ignoresStealth?: boolean;
 }

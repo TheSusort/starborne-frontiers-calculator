@@ -737,6 +737,17 @@ export function detectIgnoresForcedTargeting(
     return skillTexts.some((t) => !!t && IGNORES_FORCED_TARGETING_RE.test(stripUnitTags(t)));
 }
 
+// W6: "This Unit ignores Stealth effects" — a ship-wide stealth-ignoring passive (Lodolite).
+// Requires ignor… THEN stealth THEN effect within a sentence so the per-attack "can target
+// Stealthed enemies" clause and plain "gains Stealth" grants do NOT match.
+const IGNORES_STEALTH_RE = /\bignor\w*\b[^.]*\bstealth\b[^.]*\beffects?\b/i;
+
+/** True if any given skill text states the unit ignores Stealth effects (ship-wide targeting
+ *  bypass). Per-ship: uniform across active/charged/passive. */
+export function detectIgnoresStealth(...skillTexts: Array<string | null | undefined>): boolean {
+    return skillTexts.some((t) => !!t && IGNORES_STEALTH_RE.test(stripUnitTags(t)));
+}
+
 // Phrases that disqualify a charge phrase from being a self-gain we model: ally-grant to
 // others only. The enemy-REPAIR phrasings were lifted OUT (Phase 4c PR 4): a self charge
 // gain "when an enemy repairs" now rides the LIVE on-enemy-repaired trigger (Zosimos) —
