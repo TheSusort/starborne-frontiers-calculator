@@ -402,6 +402,73 @@ describe('buildShipAbilities', () => {
         expect(ext.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
     });
 
+    describe('extend-status (ship-kit wave 4, Task 5)', () => {
+        it('Sokol charged: damage + extend-status(debuff) on the enemy', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit deals <unit-damage>150% damage</unit-damage> and extends active <unit-aid>Debuffs</unit-aid> by 1 turn.',
+                chargeSkillCharge: 2,
+            });
+            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+            expect(abilityOfType(charged.abilities, 'damage')!.config).toMatchObject({
+                multiplier: 150,
+            });
+            const extend = abilityOfType(charged.abilities, 'extend-status')!;
+            expect(extend.config).toEqual({
+                type: 'extend-status',
+                statusKind: 'debuff',
+                turns: 1,
+            });
+            expect(extend.target).toBe('enemy');
+            expect(extend.trigger).toBe('on-cast');
+            expect(extend.conditions).toEqual([]);
+        });
+
+        it('Ripper passive R2: Marauder Rage II self-buff STILL present + extend-status(buff) on all-allies', () => {
+            const s = ship({
+                // factory default refits + only secondPassiveSkillText → getShipSkillRows picks Passive R2
+                secondPassiveSkillText:
+                    'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const rage = abilityOfType(passive.abilities, 'buff');
+            expect(rage).toMatchObject({
+                config: { type: 'buff', buffName: 'Marauder Rage II' },
+            });
+            const extend = abilityOfType(passive.abilities, 'extend-status')!;
+            expect(extend.config).toEqual({
+                type: 'extend-status',
+                statusKind: 'buff',
+                turns: 1,
+            });
+            expect(extend.target).toBe('all-allies');
+            expect(extend.trigger).toBe('on-cast');
+            expect(extend.conditions).toEqual([]);
+        });
+
+        it('Lev charged: extend-status(debuff) on all-enemies, gated on a self-crit condition', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit deals <unit-damage>230% damage</unit-damage> plus an additional <unit-damage>20%</unit-damage> for each debuff on the enemy. If a critical hit occurs, all hit enemies have their debuffs extended by 1 turn and all allies are granted <unit-skill>Crit Power Up II</unit-skill> for 2 turns.',
+                chargeSkillCharge: 3,
+            });
+            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+            const extend = abilityOfType(charged.abilities, 'extend-status')!;
+            expect(extend.config).toEqual({
+                type: 'extend-status',
+                statusKind: 'debuff',
+                turns: 1,
+            });
+            expect(extend.target).toBe('all-enemies');
+            // Lev's on-crit shape (this task's judgment call): trigger stays 'on-cast', gated by
+            // the live-derivable 'self-crit' condition — mirrors Valerian's crit-power-extend
+            // condition above and reuses the on-cast all-enemies aoeVictimIds fan-out (Task 6),
+            // rather than the reactive on-crit LIVE_TRIGGER (which has no AoE fan-out precedent).
+            expect(extend.trigger).toBe('on-cast');
+            expect(extend.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+        });
+    });
+
     it('Crocus passive: ally-crit-DoT routes through the on-ally-crit-dot reactive trigger (conditions empty)', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -897,6 +964,21 @@ describe('buildShipAbilities', () => {
                 requiredEnemyType: 'Supporter',
             });
         });
+    });
+
+    it('IonScorp charged: 190 base damage carries Defender-gated +10 scaling (→200 vs Defender)', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
+            chargeSkillCharge: 1,
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const dmg = abilityOfType(charged.abilities, 'damage')!;
+        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 190 });
+        expect(dmg.conditions).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+        ]);
+        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 10 });
     });
 
     it('"% more damage for each debuff on the enemy" scales on a DERIVABLE enemy-debuff count', () => {
@@ -3620,6 +3702,21 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
             }
         });
 
+        it('Zeolite p2 (R2 refit-active): "+30% damage when hitting a Defender" is gated on enemy-type Defender', () => {
+            const zeoliteP2 = ship({
+                secondPassiveSkillText:
+                    'This Unit increases <unit-damage>damage by 30%</unit-damage> when hitting a Defender and <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
+            });
+            const passive = slot(buildShipAbilities(zeoliteP2).slots, 'passive')!;
+            const mod = passive.abilities.find(
+                (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+            )!;
+            expect(mod).toBeDefined();
+            expect(mod.conditions).toEqual([
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+            ]);
+        });
+
         it('Cobalt active: emits exactly ONE purge with trigger on-cast (active slot unaffected)', () => {
             const cobalt = ship({
                 activeSkillText:
@@ -5331,5 +5428,28 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
         expect(blockBuffs[0].trigger).toBe('on-enemy-charged-cast');
         // No on-cast Block Buff sibling that would fire on Curator's own turn.
         expect(blockBuffs.some((a) => a.trigger === 'on-cast')).toBe(false);
+    });
+
+    it('FrontLine passive: "While Shielded, it gains 2500 additional Defense" emits a self-shield-gated flat conditional-stat bonus (ship-kit wave 4, Task 8)', () => {
+        // Verbatim from docs/ship-skills.csv (first_passive_skill_text field, FrontLine row).
+        // R0 passive (refits: []) so firstPassiveSkillText is the active row (getShipSkillRows).
+        const s = ship({
+            refits: [],
+            firstPassiveSkillText:
+                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const cond = abilityOfType(passive.abilities, 'conditional-stat');
+        expect(cond).toBeDefined();
+        expect(cond).toMatchObject({
+            type: 'conditional-stat',
+            target: 'self',
+            config: {
+                type: 'conditional-stat',
+                stat: 'defence',
+                flat: 2500,
+                condition: 'self-shield',
+            },
+        });
     });
 });

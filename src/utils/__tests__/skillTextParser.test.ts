@@ -11,6 +11,7 @@ import {
     detectGrantConditions,
     parseHpThresholdCondition,
     parseExtendDoT,
+    parseExtendStatus,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
     parseAllyCritDot,
@@ -1259,6 +1260,38 @@ describe('parseExtendDoT', () => {
     });
 });
 
+describe('parseExtendStatus', () => {
+    it('parses Sokol active-voice debuff extend', () => {
+        expect(parseExtendStatus('extends active <unit-aid>Debuffs</unit-aid> by 1 turn')).toEqual({
+            turns: 1,
+            statusKind: 'debuff',
+        });
+    });
+
+    it('parses Ripper active-voice buff extend', () => {
+        expect(
+            parseExtendStatus('All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn')
+        ).toEqual({ turns: 1, statusKind: 'buff' });
+    });
+
+    it('parses Lev passive-voice debuff extend', () => {
+        expect(parseExtendStatus('all hit enemies have their debuffs extended by 1 turn')).toEqual({
+            turns: 1,
+            statusKind: 'debuff',
+        });
+    });
+
+    it('does NOT match extend-dot "damage over time" wording', () => {
+        expect(parseExtendStatus('extends damage over time effects by 1 turn')).toBeNull();
+    });
+
+    it('returns null for absent/empty text', () => {
+        expect(parseExtendStatus('')).toBeNull();
+        expect(parseExtendStatus(null)).toBeNull();
+        expect(parseExtendStatus(undefined)).toBeNull();
+    });
+});
+
 describe('parseCritPowerExtend', () => {
     it('parses Valerian self-crit extension with inflicted scope (chance = crit power)', () => {
         // Valerian's EXACT refit-active third passive text (docs/ship-skills.csv).
@@ -2487,6 +2520,25 @@ describe('detectGrantConditions', () => {
         expect(detectGrantConditions(text, 'Disable')).toEqual([
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
         ]);
+    });
+
+    it('detectGrantConditions: APEX "If this Unit has Shield" → self-shield gate on Disable', () => {
+        const text =
+            'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has Shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
+        expect(detectGrantConditions(text, 'Disable')).toEqual([
+            { subject: 'self-shield', derivable: true },
+        ]);
+    });
+
+    it('parseConditionalDamage: IonScorp "but when attacking a Defender, it deals 200%" → +10 delta gated Defender', () => {
+        const text =
+            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 10,
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        });
     });
 
     it('classifies "after dealing damage to an enemy with 2 or more debuffs" as enemy-debuff gte 2 (Bayah)', () => {

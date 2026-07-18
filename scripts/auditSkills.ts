@@ -126,6 +126,20 @@ const RULES: Rule[] = [
         handled: (a) => hasType(a, 'extend-dot'),
     },
     {
+        id: 'extend-status',
+        severity: 'high',
+        // Generic buff/debuff duration EXTEND (the inverse of extend-dot and of
+        // debuff-duration-reduction below): "extends active Buffs/Debuffs by N turn(s)"
+        // (Sokol/Ripper, active voice) or "debuffs extended by N turn(s)" (Lev, passive
+        // voice). Excludes the DoT-specific extend-dot wording so the two rules don't
+        // double-count the same clause.
+        keyword: (t) =>
+            /extend/i.test(t) &&
+            /\b(buffs|debuffs)\b/i.test(t) &&
+            !/(damage over time|\bdot\b)/i.test(t),
+        handled: (a) => hasType(a, 'extend-status'),
+    },
+    {
         id: 'debuff-duration-reduction',
         severity: 'high',
         // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N
@@ -344,6 +358,17 @@ const RULES: Rule[] = [
         // matches exactly these three ships (verified via `grep -io` across every text column).
         keyword: (t) => /transform[a-z]*[^.]*\bdamage over time\b/i.test(t),
         handled: (a) => hasType(a, 'transform-incoming-to-dot'),
+    },
+    {
+        id: 'while-shielded-flat-defence',
+        severity: 'high',
+        // Ship-kit wave 4 Task 8 (FrontLine): "While Shielded, it gains N additional Defense" — a
+        // flat-points DEFENSIVE stat bonus gated on the owner currently holding a shield. Narrow —
+        // corpus-wide this phrasing matches exactly FrontLine (verified via `grep -io "while
+        // shielded[^.]*"` / `"additional defen[cs]e[^.]*"` across docs/ship-skills.csv).
+        keyword: (t) =>
+            /while\s+shielded[,]?\s+(?:it\s+)?gains\s+\d+\s+additional\s+defen[cs]e/i.test(t),
+        handled: (a) => hasType(a, 'conditional-stat'),
     },
 ];
 

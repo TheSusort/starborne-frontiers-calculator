@@ -56,6 +56,13 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // Stasis (a timed ENEMY debuff gated on "3+ Acidic Decay") — without this, both conditions
     // would be neutralized to 'always' and grant/inflict unconditionally.
     'enemy-dot-count',
+    // Ship-kit Wave 4, Task 3: the caster's own shield-presence gate is live-derivable —
+    // buildRoundContext's selfShielded field reads the acting actor's LIVE shieldPool
+    // (`actor.shieldPool > 0`) at cast time. Needed here for APEX's charged Disable (a timed
+    // ENEMY debuff gated on "If this Unit has Shield") — without this, liveGateConditions would
+    // neutralize the condition to 'always' and the debuff would inflict unconditionally, exactly
+    // the bug this task fixes.
+    'self-shield',
 ]);
 
 /**

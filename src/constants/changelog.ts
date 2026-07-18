@@ -6,6 +6,10 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Zeolite's +30% damage passive and IonScorp's 200% charged damage now only apply against Defender-class enemies, matching their skill text — previously Zeolite's bonus applied to every target and IonScorp's charged skill always dealt its base 190%.",
+    "Combat sim: APEX's charged skill now only inflicts Disable when APEX currently has a Shield ('If this Unit has Shield…'), instead of Disabling the target on every charged cast.",
+    'Combat sim: FrontLine now gains +2500 Defense while it has an active Shield, matching its passive — the bonus is re-evaluated each hit, so it applies while shielded and drops off once the shield is gone.',
+    "Combat sim: Sokol, Ripper, and Lev now extend status durations as their skills describe — Sokol's charged skill extends the target's active debuffs by 1 turn, Ripper's passive extends all allies' active buffs by 1 turn, and Lev's charged skill extends all hit enemies' debuffs by 1 turn on a critical hit. Permanent/stacking buffs are unaffected.",
     "Combat sim: Amartya's active skill now inflicts Defense Down II and Inc. Repair Down II on all enemies (matching the skill text), instead of only a single enemy.",
     "Combat sim: Meiying now re-gains Stealth at the start of every turn — her passive reads 'at the start of combat and every turn' — instead of gaining it once at the start of combat and then going without after it expires.",
     "Combat sim: Harvester's Speed Up I is now granted together with her extra end-of-round action when an allied unit is destroyed, instead of never being applied.",

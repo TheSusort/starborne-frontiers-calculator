@@ -36,6 +36,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'dot', dotType: 'corrosion', tier: 3, stacks: 1, duration: 2 };
         case 'extend-dot':
             return { type: 'extend-dot', turns: 1 };
+        case 'extend-status':
+            return { type: 'extend-status', statusKind: 'debuff', turns: 1 };
         case 'detonate-dot':
             return { type: 'detonate-dot', dotType: 'inferno', powerPct: 100 };
         case 'accumulate-detonate':
@@ -108,6 +110,10 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type };
         case 'bomb-countdown-reduce':
             return { type, turns: 1 };
+        // ship-kit wave 4 Task 8: wired directly at the engine's defensive-read seam, no editor
+        // UI yet — placeholder default only.
+        case 'conditional-stat':
+            return { type, stat: 'defence', flat: 0, condition: 'self-shield' };
     }
 };
 
@@ -121,6 +127,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     debuff: 'enemy',
     dot: 'enemy',
     'extend-dot': 'enemy',
+    'extend-status': 'enemy',
     'detonate-dot': 'enemy',
     'accumulate-detonate': 'enemy',
     charge: 'self',
@@ -143,6 +150,9 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'convert-dot': 'enemy',
     'defense-substitution': 'all-allies',
     'bomb-countdown-reduce': 'all-enemies',
+    // ship-kit wave 4 Task 8: wired directly at the engine's defensive-read seam, no editor UI
+    // yet — placeholder default target only.
+    'conditional-stat': 'self',
 };
 
 /**

@@ -1432,6 +1432,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetSpeed: enemy.stats.speed,
         targetCurrentHp: enemy.currentHp,
         targetCritPower: enemy.stats.critDamage,
+        // Ship-kit Wave 4, Task 3: the caster's own shield-presence gate, live-derived from
+        // actor.shieldPool (SAME field/derivation as modifierCtx's selfShielded below) — REQUIRED
+        // here because THIS ctx (not modifierCtx) gates the TIMED ENEMY DEBUFF application just
+        // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check at :1476). APEX's
+        // charged Disable ("If this Unit has Shield, the primary target is inflicted with
+        // Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
+        // defaults false here (buildRoundContext's DPS-safe default) and the debuff would never
+        // land regardless of the caster's real shieldPool, which is just as wrong as the
+        // original unconditional-inflict bug this task fixes.
+        selfShielded: actor.shieldPool > 0,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
@@ -1939,6 +1949,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // in DPS/non-positional mode → default 1 (single-target DPS, the faithful "Tygr doesn't
         // add charge against one target" behaviour).
         enemiesHitThisCast: aoeVictimIds?.length,
+        // Ship-kit Wave 4, Task 3 (review follow-up): SAME field/derivation as preDebuffGateCtx
+        // (:1444) and modifierCtx (:1724) above — REQUIRED here because THIS ctx is what
+        // gateFiringAbilities consumes just below (:1956) to gate `type:'control'` payload
+        // abilities. APEX's charged Disable is modelled BOTH as a named debuff (gated by
+        // preDebuffGateCtx) AND as a `control`-type ability (effect:'disable', gated by this
+        // ctx) — both twins carry the same self-shield condition (buildShipAbilities.ts
+        // :3237-3238), so both need selfShielded here or the control twin is permanently
+        // suppressed regardless of the caster's real shieldPool (control-applied never fires,
+        // the combat log's kind:'control' Disable entry never appears — even with a shield).
+        selfShielded: actor.shieldPool > 0,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
@@ -2478,6 +2498,63 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         opposingVictimById?.get(vid) ?? (vid === enemy.id ? enemy : undefined);
                     if (victim) stripShieldPct(victim, ab.config.pct, bus, actor.id, r);
                 }
+            }
+        }
+    }
+
+    // Wave 4 (Task 6): on-cast extend-status (Sokol charged debuff-extend; Ripper passive
+    // all-allies buff-extend; Lev charged all-enemies debuff-extend gated on self-crit). Pure
+    // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
+    // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
+    // Sourced from BOTH the firing slot (gatedSkill: Sokol/Lev, charged) AND the always-active
+    // passive slot (gatedPassive: Ripper) — mirroring the healAbilities combine (:2733-2739
+    // below) and the extendDoTs/extendInflictedDoTs combine (:2236/:2351 above), since a
+    // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
+    // in the corpus) would silently skip Ripper's passive-slot extend ability.
+    // conditionsMet(ab.conditions, ctx) evaluates Lev's self-crit gate against THIS cast's live
+    // `ctx.roundCrit` (set at buildRoundContext above from `roundCrit = critHits > 0`) — the
+    // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
+    // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
+    // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
+    // and is skipped when there is none (incl. the DPS dummy sink when targetId is unset). The
+    // BUFF branch (Ripper 'all-allies') needs NO enemy target — it must run regardless of
+    // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
+    // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
+    // so both branches no-op harmlessly when the relevant roster is empty.
+    for (const ab of [...(gatedSkill?.abilities ?? []), ...(gatedPassive?.abilities ?? [])]) {
+        if (
+            ab.config.type !== 'extend-status' ||
+            ab.trigger !== 'on-cast' ||
+            !conditionsMet(ab.conditions, ctx)
+        ) {
+            continue;
+        }
+        const { statusKind, turns } = ab.config;
+        if (statusKind === 'debuff') {
+            // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
+            // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
+            // blocks above use. Requires a hit target; skipped when there is none.
+            if (targetId === undefined) continue;
+            const recipients =
+                ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+            for (const vid of recipients) {
+                statusEngine.extendAllDebuffsDuration(vid, turns);
+            }
+        } else {
+            // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses
+            // (:2118-2123 above): healing-mode roster when present, else the live same-side
+            // roster, narrowed through supportRecipients (the caster's own footprint pattern,
+            // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
+            // buffs extend too, matching "All allies extend their active Buffs"). Independent of
+            // targetId — an ally buff-extend needs no enemy target.
+            const isEnemyCaster = actor.side === 'enemy';
+            const allyRoster = args.healing
+                ? isEnemyCaster
+                    ? args.healing.enemyIds
+                    : args.healing.playerIds
+                : (sameSideLiving ?? []).map((a) => a.id);
+            for (const rid of supportRecipients(ab.target, allyRoster)) {
+                statusEngine.extendAllBuffsDuration(rid, turns);
             }
         }
     }

@@ -114,4 +114,11 @@ export const ALLOWLIST: AllowEntry[] = [
         rules: ['accumulate-detonate'],
         reason: 'Passive mentions "When an Echoing Burst explodes" as a heal-on-burst reaction, not an infliction. The charged skill correctly parses the accumulate-detonate; the passive reference is filtered by the parser guard.',
     },
+
+    // extend-status: genuine gap, out of scope for ship-kit wave 4 (Sokol/Ripper/Lev only).
+    {
+        ship: 'Asphyxiator',
+        rules: ['extend-status'],
+        reason: 'passive3: "After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn" is a single-target, on-crit-gated extend of the JUST-APPLIED debuff — a different shape from wave 4\'s generic all-debuffs/all-buffs extend (Sokol/Ripper/Lev). Deferred to a later wave.',
+    },
 ];

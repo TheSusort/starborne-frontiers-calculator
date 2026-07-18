@@ -537,6 +537,24 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             };
         }
     }
+    // "deals X% damage, but when attacking a <class>, it deals Y% damage" — the same replacement
+    // shape as "increased to" above (IonScorp), just worded with "but … it deals Y%" instead of
+    // "increased to Y%". Modeled identically: base X plus a conditional (Y − X) bonus gated on the
+    // enemy class. Placed alongside incTo — this phrasing has no "additional" either.
+    const butWhen = stripUnitTags(text).match(
+        /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*but\s+when\s+(?:attacking|targeting|damaging|against)\s+an?\s+(attacker|defender|debuffer|supporter)s?,?\s*(?:it\s+)?deals?\s+(\d+(?:\.\d+)?)\s*%/i
+    );
+    if (butWhen) {
+        const delta = parseFloat(butWhen[3]) - parseFloat(butWhen[1]);
+        if (delta > 0) {
+            return {
+                pct: delta,
+                condition: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: capType(butWhen[2]),
+            };
+        }
+    }
     // Fallback: flat "additional N% damage when attacking a <enemy class>" bonus.
     const typed = ENEMY_TYPE_BONUS_RE.exec(stripUnitTags(text));
     if (typed) {
@@ -1072,6 +1090,13 @@ export function detectGrantConditions(
 
     if (allyCritRepairGate) {
         return [{ subject: 'ally-critically-repaired', derivable: false }];
+    }
+
+    // Ship-kit Wave 4, Task 3: "If this Unit has Shield" — a self-shield-presence gate
+    // (APEX's charged Disable). Live-derived from the caster's own shieldPool at cast time.
+    // Checked before enemy-type/other rules — no overlap with those phrasings.
+    if (/\bif\s+this\s+unit\s+has\s+shield\b/i.test(low)) {
+        return [{ subject: 'self-shield', derivable: true }];
     }
 
     // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
@@ -1616,6 +1641,36 @@ export function parseExtendDoT(text: string | null | undefined): number | null {
     if (!text) return null;
     const m = EXTEND_DOT_RE.exec(stripUnitTags(text));
     return m ? parseInt(m[1], 10) : null;
+}
+
+// Ship-kit Wave 4, Task 5: generic buff/debuff DURATION EXTENSION — the inverse of
+// parseDebuffDurationReduction, and a sibling of EXTEND_DOT_RE (which is DoT-tick-store-only
+// and requires the literal "Damage Over Time" phrase). Two surface forms in the corpus:
+//   active voice:  "extends [their] active <Buffs|Debuffs> by N turn(s)"   (Sokol, Ripper)
+//   passive voice: "<buffs|debuffs> [are] extended by N turn(s)"           (Lev)
+// Both carry a negative lookahead for "damage over time" so a row that ALSO has a DoT-extend
+// clause elsewhere in the same (period-scoped) segment never double-matches here — the
+// corpus never combines them on one clause, but the guard is cheap insurance (mirrors the
+// audit rule's own DoT exclusion, per the investigation doc).
+const EXTEND_STATUS_ACTIVE_RE =
+    /extends?\b(?![^.]*\bdamage over time\b)[^.]*?\bactive\s+(buffs|debuffs)\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+const EXTEND_STATUS_PASSIVE_RE =
+    /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+
+/**
+ * Parses a generic buff/debuff duration-extension clause into its turns + statusKind, or null
+ * when absent. Runs over stripUnitTags(text) so both the `<unit-aid>`-wrapped active-voice form
+ * (Sokol/Ripper) and the plain passive-voice form (Lev) match. Reference: docs/ship-skills.csv.
+ */
+export function parseExtendStatus(
+    text: string | null | undefined
+): { turns: number; statusKind: 'buff' | 'debuff' } | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text);
+    const m = EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? EXTEND_STATUS_PASSIVE_RE.exec(plain);
+    if (!m) return null;
+    const kind: 'buff' | 'debuff' = m[1].toLowerCase().startsWith('debuff') ? 'debuff' : 'buff';
+    return { turns: parseInt(m[2], 10), statusKind: kind };
 }
 
 // "extend(s/ed) … by/for N turn(s) … chance … crit power" — a duration extension whose chance is
@@ -2861,6 +2916,34 @@ export function parseDefenseSubstitution(text: string | null | undefined): boole
     if (!text) return false;
     const normalised = stripUnitTags(text).replace(/[‘’]/g, '\x27');
     return DEFENSE_SUBSTITUTION_RE.test(normalised);
+}
+
+// Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense." A flat-
+// points DEFENSIVE stat grant, gated on the owner CURRENTLY holding a shield — distinct from
+// every existing "additional <stat>" shape in the corpus, which is all percentage-of-a-stat
+// DAMAGE ("additional damage equal to N% of its Defense/Shield", parseSecondaryDamage). Scoped
+// to the "while shielded ... gains N additional defen[cs]e" phrase so it can't false-hit an
+// unrelated "additional damage" sentence elsewhere in the same (<br />-separated) passive text —
+// verified corpus-wide: exactly one ship (FrontLine, in both the R0 and R2 passive columns of the
+// same clause) matches `grep -io "while shielded[^.]*"`/`"additional defen[cs]e[^.]*"` against
+// docs/ship-skills.csv.
+const WHILE_SHIELDED_FLAT_DEFENCE_RE =
+    /while\s+shielded[,]?\s+(?:it\s+)?gains\s+(\d+)\s+additional\s+defen[cs]e/i;
+
+/**
+ * Returns the flat Defense points granted by a "While Shielded, it gains N additional Defense"
+ * clause, or undefined if no such clause is present. The build layer (buildShipAbilities) turns
+ * this into a `conditional-stat` ability (`condition:'self-shield'`) consumed directly by the
+ * engine's `substitutedDefenceFor` defensive-read seam — never through the on-cast ability-fold/
+ * executor pipeline (see AbilityType's 'conditional-stat' doc comment).
+ */
+export function parseWhileShieldedFlatDefence(text: string | null | undefined): number | undefined {
+    if (!text) return undefined;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const match = WHILE_SHIELDED_FLAT_DEFENCE_RE.exec(plain);
+    if (!match) return undefined;
+    const flat = parseInt(match[1], 10);
+    return isNaN(flat) ? undefined : flat;
 }
 
 /**
