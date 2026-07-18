@@ -32,12 +32,28 @@ Skill text (source of truth = `docs/ship-skills.csv`):
 > "the highest attack enemy is applied with Concentrate Fire" (`enemy-highest-attack` selector,
 > WRONG-PARSE). Wave 6 is stealth-bypass only.
 
-## Design — two signals, OR'd at the engine seam
+## Design — two signals reaching the resolver by two existing carriers
 
 Combat targeting resolves per-attack in `resolvePositionalTarget(actorPosition, target,
-opposingLiving, statusOf, acting)`. The `acting` context already carries `ignoresForcedTargeting`
-and `provokedBy`. We add one more boolean, `ignoresStealth`, fed by two independent parser signals
-that are combined (`||`) at the engine call site before the resolver runs.
+opposingLiving, statusOf, acting)`. It receives BOTH the acting attacker context (`acting`, today
+`{ ignoresForcedTargeting, provokedBy }`) AND the `target: ParsedTarget`. We route the two bypass
+signals through these two existing carriers — **no new engine maps**:
+
+- **Ship-level** ("This Unit ignores Stealth effects" → all casts) rides `acting.ignoresStealth`
+  (clone of `ignoresForcedTargeting`, sourced from `CombatActor.ignoresStealth`).
+- **Per-cast** ("This attack can target Stealthed enemies" → this skill only) rides
+  `ParsedTarget.ignoresStealth`. `ParsedTarget` already flows through every engine target map
+  (`teamTargetById` / `enemyTargetById` / `input.target` and their `charged*` twins), and the
+  charged-vs-active axis is already selected per turn (`willFireChargedFor` →
+  `parsedChargedTargetFor` vs `parsedTargetFor`), so stamping the active vs charged `ParsedTarget`
+  gives correct per-skill granularity for free.
+
+The resolver skips the stealth filter when EITHER signal is set (`acting?.ignoresStealth ||
+target.ignoresStealth`).
+
+**Single source of truth = the per-ability `config.ignoresStealth`.** The parser sets it on the
+damage ability; `battleSimulator` derives the per-slot (`active` / `charged`) bypass by reading
+those built configs and stamps the matching `ParsedTarget`. No text is re-parsed downstream.
 
 ### Signal 1 — per-ability flag (`ability.config.ignoresStealth`)
 
@@ -70,25 +86,49 @@ Exact clone of Wave 1's `ignoresForcedTargeting` end-to-end wiring.
   `battleSimulator` wiring. Grep `ignoresForcedTargeting` for the complete site list.
 - **Covers:** Lodolite (both refit passives carry the clause → flag always true for her).
 
-### Engine seam — combine the two signals
+### Per-cast carrier — `ParsedTarget.ignoresStealth`
 
-At the two paths that build `acting` and call `resolvePositionalTarget`:
-- `engine.ts:5017` (the `acting:` literal) and its resolver call at `engine.ts:5485`
-- `positionalApply.ts:187` (receives `acting` from the engine via `applyPositionalDamage`)
+- **Type:** add `ignoresStealth?: boolean` to `ParsedTarget` (`targetingParser.ts:10`).
+- **battleSimulator (`planPlacement`, ~698):** the built `plan.shipSkills.slots` carry a
+  `slot: SkillSlot`. Derive:
+  ```ts
+  const slotBypass = (slot: 'active' | 'charged') =>
+      plan.shipSkills.slots
+          .find((s) => s.slot === slot)?.abilities
+          .some((a) => a.config.type === 'damage' && a.config.ignoresStealth === true) ?? false;
+  ```
+  Store `activeIgnoresStealth` / `chargedIgnoresStealth` on `PlacementPlan`.
+- **Stamp at the actor-input build sites** (battleSimulator ~849/909/966, where `target:` and
+  `chargedTarget:` are set) via a fresh-object wrap so the active/charged ParsedTargets never
+  share a mutated reference (`parseShipTargeting` returns `charged === active` when unfilled):
+  ```ts
+  const withBypass = (t: ParsedTarget | undefined, on: boolean): ParsedTarget | undefined =>
+      t && on ? { ...t, ignoresStealth: true } : t;
+  // target:        withBypass(plan.targeting?.target, plan.activeIgnoresStealth)
+  // chargedTarget: withBypass(plan.chargedTargeting?.target, plan.chargedIgnoresStealth)
+  ```
+  Absent the flag → the exact same `ParsedTarget` reference → byte-identical for every other ship.
 
-Compute `ignoresStealth = actor.ignoresStealth === true || abilityConfig.ignoresStealth === true`
-where the ability being fired is in scope, and thread it through `acting`. Extend the `acting`
-type on `applyPositionalDamage` (`positionalApply.ts:114`) and `resolvePositionalTarget`
-(`positionalBinding.ts:51`) to include `ignoresStealth?: boolean`.
+### Ship-level engine seam — clone `ignoresForcedTargeting`
+
+Thread `CombatActor.ignoresStealth` into `acting.ignoresStealth` at the two resolver call paths:
+- `engine.ts:5017` (the `acting:` literal in `drivePositionalApply`, sourced from
+  `args.ignoresStealth`) — add `ignoresStealth?` to the `drivePositionalApply` args and pass
+  `actor.ignoresStealth` at the call (~5765).
+- `engine.ts:5491` (`selectTurnTarget`'s `acting:` literal) — add `ignoresStealth: a.ignoresStealth`.
+
+Extend the `acting` type on `applyPositionalDamage` (`positionalApply.ts:114`) and
+`resolvePositionalTarget` (`positionalBinding.ts:51`) to include `ignoresStealth?: boolean`. The
+per-cast flag needs NO engine seam — it already rides `target`.
 
 ### Resolver — skip the stealth filter
 
 In `resolvePositionalTarget` step 4 (`positionalBinding.ts:110-114`):
 
 ```ts
-// 4. Stealth filter — restore all if every candidate is stealthed.
-//    Skipped entirely when the acting attacker (ship-level) or its ability ignores Stealth.
-if (!acting?.ignoresStealth) {
+// 4. Stealth filter — restore all if every candidate is stealthed. Skipped entirely when the
+//    acting attacker (ship-level) OR this cast's target (per-ability) ignores Stealth.
+if (!acting?.ignoresStealth && !target.ignoresStealth) {
     const visible = cells.filter((p) => !statusOf(byCell.get(p)!.id)?.stealthed);
     if (visible.length) {
         cells = visible;
@@ -96,9 +136,9 @@ if (!acting?.ignoresStealth) {
 }
 ```
 
-When `ignoresStealth` is set, stealthed cells stay in the candidate list and `selectTargets`
-resolves the anchor as if no one were stealthed. Concentrate Fire / Taunt / Provoke ordering
-(steps 1-3) is unchanged — stealth bypass only affects the visibility filter.
+When either flag is set, stealthed cells stay in the candidate list and `selectTargets` resolves
+the anchor as if no one were stealthed. Concentrate Fire / Taunt / Provoke ordering (steps 1-3) is
+unchanged — stealth bypass only affects the visibility filter.
 
 ## DPS invariance
 
@@ -106,12 +146,15 @@ The DPS dummy is never Stealthed, so the single-dummy targeting path is byte-ide
 step-4 filter is a no-op there whether or not it runs). All fidelity gain is in the positional
 sim — same profile as Waves 4 and 5. The golden audit (whole `npm test`) must stay green.
 
-## Editor + audit surface
+## Editor + audit surface — NONE (verified out of scope)
 
-- **AbilityCard** damage-config editor: add an `ignoresStealth` checkbox next to `ignoresDefense`
-  (matches the existing per-flag editor pattern; keeps the round-trip lossless).
-- **Audit rule:** teach the kit-audit harness to recognize the stealth-bypass clause so the ledger
-  reflects the closed findings (mirror the `ignoresDefense` / forced-targeting audit entries).
+- **No editor:** the Wave-5 precedent flag `ignoresDefense` has no AbilityCard editor UI, and the
+  engine drives targeting from `ParsedTarget` (derived from the config in `battleSimulator`), not
+  from a user-editable checkbox. Adding one would be misleading dead UI. Skip.
+- **No audit change:** the coverage audit (`scripts/auditSkills.ts`, `skillAuditCoverage.test.ts`)
+  flags triggers / gates / ungated buffs — NOT targeting statements. "This attack can target
+  Stealthed enemies" is not flagged today (no allowlist entry for it on these ships) and this
+  change adds no abilities, so no new findings appear. Verified: full `npm test` stays green.
 
 ## Tests (TDD — red first)
 
@@ -133,11 +176,16 @@ sim — same profile as Waves 4 and 5. The golden audit (whole `npm test`) must 
 ## Execution
 
 Subagent-driven (endorsed multi-task loop):
-1. Types + per-ability parser + build wiring + parser tests.
-2. Ship-level detector + `ShipSkills`/`CombatActor` threading + build test.
-3. Resolver change + `acting` type extension + resolver unit tests.
-4. Engine-seam combination (both call paths) + integration test.
-5. Editor checkbox + audit rule + changelog entry + DocumentationPage if user-facing.
+1. Per-ability parser (`parseIgnoresStealth`) + `config.ignoresStealth` type + build wiring +
+   parser build tests (per-slot: active/charged correct, active-only regression guards).
+2. Ship-level detector (`detectIgnoresStealth`) + `ShipSkills.ignoresStealth` + buildShipAbilities
+   compute + build test.
+3. `ParsedTarget.ignoresStealth` + resolver change + `acting` type extension + resolver unit tests.
+4. Ship-level engine threading (`CombatActor.ignoresStealth`, `createActor`, EngineInput fields,
+   adapter copies, 2 `acting` sites) — grep-driven off `ignoresForcedTargeting`.
+5. battleSimulator per-slot derivation + `PlacementPlan` fields + `withBypass` stamping at the
+   actor-input sites + positional integration test (stealthed enemy targeted by a bypass cast).
+6. Changelog entry + DocumentationPage stealth note.
 
 Per-task spec+quality review; Fable final whole-branch review (target: no Critical/Important);
 then CodeRabbit round on the PR.
