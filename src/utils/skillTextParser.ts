@@ -2879,6 +2879,16 @@ export function parseIgnoresDefense(text: string | null | undefined): boolean {
     return !!text && IGNORES_DEFENSE_RE.test(stripUnitTags(text));
 }
 
+// W6: "This attack can target Stealthed enemies" — a per-attack stealth-targeting bypass.
+// Requires the "can target … Stealthed … enem" ordering so the ship-wide "ignores Stealth
+// effects" passive (no "can target") does NOT match here.
+const CAN_TARGET_STEALTHED_RE = /\bcan target\b[^.]*\bstealthed\b[^.]*\benem/i;
+
+/** True when the given attack text states it can target Stealthed enemies (per-ability bypass). */
+export function parseIgnoresStealth(text: string): boolean {
+    return CAN_TARGET_STEALTHED_RE.test(stripUnitTags(text));
+}
+
 // SP-F F4 (Wusheng): "deals 220% damage WITH AFFINITY ADVANTAGE …" — the charged hit is forced
 // to affinity advantage regardless of the real matchup. Boolean only; the flag rides the damage
 // config (forceAffinityAdvantage) and is consumed at the affinity seams in playerTurn.ts.

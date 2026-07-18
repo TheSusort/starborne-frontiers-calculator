@@ -623,6 +623,11 @@ export type AbilityConfig =
            *  mitigation term. Consumed by the REACTIVE damage executor (applyReactiveDamage,
            *  Task C3); the on-cast damage path ignores it. Absent → normal mitigation. */
           ignoresDefense?: boolean;
+          /** Ship-kit W6 (Lodolite/Rhodium/Selenite): this attack can target Stealthed enemies.
+           *  Single source for the bypass; battleSimulator derives ParsedTarget.ignoresStealth
+           *  (active vs charged slot) from this and the positional resolver skips the stealth
+           *  filter. Absent → normal stealth filtering. */
+          ignoresStealth?: boolean;
       }
     | {
           type: 'counter';
