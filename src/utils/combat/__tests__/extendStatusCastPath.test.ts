@@ -300,6 +300,30 @@ describe('Ripper — on-cast passive all-allies buff-extend', () => {
         expect(selfBuffTurns(statusEngine, runtime.actor.id)).toBe(5);
     });
 
+    // CodeRabbit #264: the buff branch must NOT be gated on an enemy targetId — an all-allies
+    // buff-extend needs no enemy target, so it must still fire when targetId is undefined (DPS
+    // dummy sink / enemy-less cast). Regression for the split-guard fix.
+    it('extends allies even when there is no enemy target (targetId undefined)', () => {
+        const runtime = makeRuntime('ripper', ripperSkills(), {
+            hasChargedSkill: false,
+            chargeCount: 0,
+            startCharged: false,
+        });
+        const enemy = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        seedSelfBuff(statusEngine, runtime.actor.id, 4);
+
+        runPlayerTurn(
+            makeArgs(runtime, enemy, statusEngine, {
+                targetId: undefined,
+                sameSideLiving: [runtime.actor],
+            })
+        );
+
+        expect(selfBuffTurns(statusEngine, runtime.actor.id)).toBe(5);
+    });
+
     // Team symmetry: an ENEMY-side Ripper must extend its ENEMY-side allies' buffs.
     it('is team-symmetric: an ENEMY-side Ripper extends an enemy-side ally the same way', () => {
         const runtime = makeRuntime('enemy-ripper', ripperSkills(), {

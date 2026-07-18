@@ -2515,42 +2515,46 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // `ctx.roundCrit` (set at buildRoundContext above from `roundCrit = critHits > 0`) — the
     // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
     // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
-    // DPS mode: extendAllDebuffsDuration/extendAllBuffsDuration return 0 against an empty/
-    // missing store (dummy sink, no team) → no-op → byte-identical.
-    if (targetId !== undefined) {
-        for (const ab of [...(gatedSkill?.abilities ?? []), ...(gatedPassive?.abilities ?? [])]) {
-            if (
-                ab.config.type !== 'extend-status' ||
-                ab.trigger !== 'on-cast' ||
-                !conditionsMet(ab.conditions, ctx)
-            ) {
-                continue;
+    // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
+    // and is skipped when there is none (incl. the DPS dummy sink when targetId is unset). The
+    // BUFF branch (Ripper 'all-allies') needs NO enemy target — it must run regardless of
+    // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
+    // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
+    // so both branches no-op harmlessly when the relevant roster is empty.
+    for (const ab of [...(gatedSkill?.abilities ?? []), ...(gatedPassive?.abilities ?? [])]) {
+        if (
+            ab.config.type !== 'extend-status' ||
+            ab.trigger !== 'on-cast' ||
+            !conditionsMet(ab.conditions, ctx)
+        ) {
+            continue;
+        }
+        const { statusKind, turns } = ab.config;
+        if (statusKind === 'debuff') {
+            // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
+            // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
+            // blocks above use. Requires a hit target; skipped when there is none.
+            if (targetId === undefined) continue;
+            const recipients =
+                ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+            for (const vid of recipients) {
+                statusEngine.extendAllDebuffsDuration(vid, turns);
             }
-            const { statusKind, turns } = ab.config;
-            if (statusKind === 'debuff') {
-                // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy
-                // footprint (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the
-                // purge/shield-strip blocks above use.
-                const recipients =
-                    ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
-                for (const vid of recipients) {
-                    statusEngine.extendAllDebuffsDuration(vid, turns);
-                }
-            } else {
-                // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses
-                // (:2118-2123 above): healing-mode roster when present, else the live same-side
-                // roster, narrowed through supportRecipients (the caster's own footprint pattern,
-                // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
-                // buffs extend too, matching "All allies extend their active Buffs").
-                const isEnemyCaster = actor.side === 'enemy';
-                const allyRoster = args.healing
-                    ? isEnemyCaster
-                        ? args.healing.enemyIds
-                        : args.healing.playerIds
-                    : (sameSideLiving ?? []).map((a) => a.id);
-                for (const rid of supportRecipients(ab.target, allyRoster)) {
-                    statusEngine.extendAllBuffsDuration(rid, turns);
-                }
+        } else {
+            // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses
+            // (:2118-2123 above): healing-mode roster when present, else the live same-side
+            // roster, narrowed through supportRecipients (the caster's own footprint pattern,
+            // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
+            // buffs extend too, matching "All allies extend their active Buffs"). Independent of
+            // targetId — an ally buff-extend needs no enemy target.
+            const isEnemyCaster = actor.side === 'enemy';
+            const allyRoster = args.healing
+                ? isEnemyCaster
+                    ? args.healing.enemyIds
+                    : args.healing.playerIds
+                : (sameSideLiving ?? []).map((a) => a.id);
+            for (const rid of supportRecipients(ab.target, allyRoster)) {
+                statusEngine.extendAllBuffsDuration(rid, turns);
             }
         }
     }
