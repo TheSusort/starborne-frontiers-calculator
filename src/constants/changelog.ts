@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: Vindicator's Provoke and Asphyxiator's Stasis now correctly apply to the target's adjacent enemies on the board (Provoke to the neighbours only, Stasis to the target and its neighbours), instead of being misapplied as a self-buff on the caster.",
     "Combat sim: Zeolite's +30% damage passive and IonScorp's 200% charged damage now only apply against Defender-class enemies, matching their skill text — previously Zeolite's bonus applied to every target and IonScorp's charged skill always dealt its base 190%.",
     "Combat sim: APEX's charged skill now only inflicts Disable when APEX currently has a Shield ('If this Unit has Shield…'), instead of Disabling the target on every charged cast.",
     'Combat sim: FrontLine now gains +2500 Defense while it has an active Shield, matching its passive — the bonus is re-evaluated each hit, so it applies while shielded and drops off once the shield is gone.',

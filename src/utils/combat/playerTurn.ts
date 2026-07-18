@@ -479,6 +479,13 @@ export interface PlayerTurnArgs {
      *  Absent/[] → the grant is caster-only (byte-identical for every ship without that flag,
      *  and for non-positional/DPS callers that never supply it). */
     adjacentAllyIds?: string[];
+    /** Ship-kit W5 Task A3: resolves the board-neighbours of an ENEMY-side anchor id (the
+     *  resolved `targetId`, not the caster) — feeds the `adjacent-enemies` /
+     *  `target-and-adjacent-enemies` debuff recipientIds fan-out below. Supplied by
+     *  engine.ts's `buildTurnArgs` (team-symmetric via `bySide`/`isEnemySide`, same pattern as
+     *  `adjacentAllyIds` above). Absent → both scopes degrade to their DPS/non-positional
+     *  fallback (see the recipientIds computation). */
+    adjacentEnemyIdsFor?: (anchorId: string) => string[];
     /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
      *  gathered from THIS actor's living same-side allies (source excluded — see
      *  engine.ts's `buildTurnArgs`). Merged into `modifierAbilities` below alongside the
@@ -1001,6 +1008,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetId,
         enemyMostBuffsId,
         adjacentAllyIds,
+        adjacentEnemyIdsFor,
         enemyBuffNames: enemyBuffNamesArg = [],
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -1489,16 +1497,36 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );
         const isAllEnemies = matchingAbility?.target === 'all-enemies';
+        // Ship-kit W5 Task A3: 'adjacent-enemies' / 'target-and-adjacent-enemies' fan the status
+        // over the resolved target's board neighbours (adjacentEnemyIdsFor, engine.ts's
+        // buildTurnArgs — team-symmetric via bySide). Only meaningful once a real `targetId` is
+        // resolved (positional cast on a real opposing actor); DPS/non-positional callers never
+        // supply `adjacentEnemyIdsFor` (or `targetId` is undefined there), so this is [] then.
+        const abTarget = matchingAbility?.target;
+        const adjacentEnemyRecipients: string[] =
+            targetId !== undefined && adjacentEnemyIdsFor ? adjacentEnemyIdsFor(targetId) : [];
         const recipientIds: (string | undefined)[] =
-            positionalLanding && isAllEnemies
-                ? (aoeVictimIds ?? [])
-                : isAllEnemies && aoeVictimIds && aoeVictimIds.length > 0
-                  ? aoeVictimIds
-                  : targetId !== undefined
-                    ? [targetId]
-                    : positionalLanding
-                      ? []
-                      : [undefined];
+            abTarget === 'adjacent-enemies'
+                ? adjacentEnemyRecipients
+                : abTarget === 'target-and-adjacent-enemies'
+                  ? targetId !== undefined
+                      ? [targetId, ...adjacentEnemyRecipients]
+                      : // DPS-parity fallback: no real anchor to fan out from (mirrors the
+                        // plain-'enemy' tail below) — non-positional lands on the dummy sink
+                        // (`[undefined]` → victim resolves to `enemy`), positional-with-no-target
+                        // (shouldn't occur for a real opposing cast) no-ops.
+                        positionalLanding
+                        ? []
+                        : [undefined]
+                  : positionalLanding && isAllEnemies
+                    ? (aoeVictimIds ?? [])
+                    : isAllEnemies && aoeVictimIds && aoeVictimIds.length > 0
+                      ? aoeVictimIds
+                      : targetId !== undefined
+                        ? [targetId]
+                        : positionalLanding
+                          ? []
+                          : [undefined];
 
         let anyLanded = false;
         for (const vid of recipientIds) {

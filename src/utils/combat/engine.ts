@@ -207,8 +207,17 @@ function registerActorAbilityStatuses(
         for (const ability of slot.abilities) {
             const cfg = ability.config;
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
+            // Ship-kit W5 Task A3: the two enemy-adjacency scopes (Vindicator Provoke/Out. Damage
+            // Down I → 'adjacent-enemies'; Asphyxiator Stasis → 'target-and-adjacent-enemies')
+            // are enemy-side debuffs scoped to the resolved target's board neighbours, not self
+            // buffs — omitting them here silently misregisters the status on the CASTER.
             const side: 'self' | 'enemy' =
-                ability.target === 'enemy' || ability.target === 'all-enemies' ? 'enemy' : 'self';
+                ability.target === 'enemy' ||
+                ability.target === 'all-enemies' ||
+                ability.target === 'adjacent-enemies' ||
+                ability.target === 'target-and-adjacent-enemies'
+                    ? 'enemy'
+                    : 'self';
             const accumulating = !!cfg.stackTrigger && cfg.isStackable;
             // Cheat-Death-family grants from a FIRING slot (Hermes/Hayyan charged skills) are
             // cast-path persistent grants, NOT always-on auras: they apply when the slot fires
@@ -5499,6 +5508,15 @@ export function runCombat(input: CombatEngineInput): {
                 // bySide(a.side) (identical for player and enemy casters). Consumed only by a
                 // buff-steal ability whose config carries grantAdjacentAllies.
                 adjacentAllyIds: bySide(a.side).adjacentAllyIdsFor(a.id),
+                // Ship-kit W5 Task A3: resolves the board-neighbours of an ENEMY-side anchor
+                // (the resolved target `tgt`, not the caster) for the 'adjacent-enemies' /
+                // 'target-and-adjacent-enemies' debuff fan-out. Reuses the same side-dispatching
+                // adjacentAllyIdsFor the reactive-trigger registration (~2856) and the buff-steal
+                // grant above already use — passing the target's id resolves ITS OWN side's
+                // neighbours, which (since the target is always opposing this actor) are the
+                // adjacent enemies, team-symmetric for free (bySide handles both directions).
+                adjacentEnemyIdsFor: (anchorId: string): string[] =>
+                    bySide(isEnemySide(anchorId) ? 'enemy' : 'player').adjacentAllyIdsFor(anchorId),
                 // B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route
                 // to the resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId;
                 // the aggregate ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows
