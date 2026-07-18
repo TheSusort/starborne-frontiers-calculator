@@ -40,6 +40,9 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'convert-dot': 'Convert DoT',
     'defense-substitution': 'Defense Substitution',
     'bomb-countdown-reduce': 'Bomb Countdown Reduce',
+    // ship-kit wave 4 Task 8: wired directly at the engine's defensive-read seam, no editor UI
+    // yet — placeholder label only, not yet pickable in a category.
+    'conditional-stat': 'Conditional Stat Bonus',
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [

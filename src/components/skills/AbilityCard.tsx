@@ -70,6 +70,10 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     'convert-dot': 'Convert DoT',
     'defense-substitution': 'Defense Substitution',
     'bomb-countdown-reduce': 'Bomb Countdown Reduce',
+    // ship-kit wave 4 Task 8: wired directly at the engine's defensive-read seam, no editor UI
+    // yet — placeholder label only, no editor UI (falls through to the `default:` "No editable
+    // fields" branch below).
+    'conditional-stat': 'Conditional Stat Bonus',
 };
 
 const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [

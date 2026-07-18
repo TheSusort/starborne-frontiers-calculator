@@ -359,6 +359,17 @@ const RULES: Rule[] = [
         keyword: (t) => /transform[a-z]*[^.]*\bdamage over time\b/i.test(t),
         handled: (a) => hasType(a, 'transform-incoming-to-dot'),
     },
+    {
+        id: 'while-shielded-flat-defence',
+        severity: 'high',
+        // Ship-kit wave 4 Task 8 (FrontLine): "While Shielded, it gains N additional Defense" — a
+        // flat-points DEFENSIVE stat bonus gated on the owner currently holding a shield. Narrow —
+        // corpus-wide this phrasing matches exactly FrontLine (verified via `grep -io "while
+        // shielded[^.]*"` / `"additional defen[cs]e[^.]*"` across docs/ship-skills.csv).
+        keyword: (t) =>
+            /while\s+shielded[,]?\s+(?:it\s+)?gains\s+\d+\s+additional\s+defen[cs]e/i.test(t),
+        handled: (a) => hasType(a, 'conditional-stat'),
+    },
 ];
 
 // Trigger phrasing that should produce a gating condition on a granted buff/debuff.

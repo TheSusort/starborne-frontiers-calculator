@@ -110,6 +110,10 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type };
         case 'bomb-countdown-reduce':
             return { type, turns: 1 };
+        // ship-kit wave 4 Task 8: wired directly at the engine's defensive-read seam, no editor
+        // UI yet — placeholder default only.
+        case 'conditional-stat':
+            return { type, stat: 'defence', flat: 0, condition: 'self-shield' };
     }
 };
 
@@ -146,6 +150,9 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'convert-dot': 'enemy',
     'defense-substitution': 'all-allies',
     'bomb-countdown-reduce': 'all-enemies',
+    // ship-kit wave 4 Task 8: wired directly at the engine's defensive-read seam, no editor UI
+    // yet — placeholder default target only.
+    'conditional-stat': 'self',
 };
 
 /**

@@ -2918,6 +2918,34 @@ export function parseDefenseSubstitution(text: string | null | undefined): boole
     return DEFENSE_SUBSTITUTION_RE.test(normalised);
 }
 
+// Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense." A flat-
+// points DEFENSIVE stat grant, gated on the owner CURRENTLY holding a shield — distinct from
+// every existing "additional <stat>" shape in the corpus, which is all percentage-of-a-stat
+// DAMAGE ("additional damage equal to N% of its Defense/Shield", parseSecondaryDamage). Scoped
+// to the "while shielded ... gains N additional defen[cs]e" phrase so it can't false-hit an
+// unrelated "additional damage" sentence elsewhere in the same (<br />-separated) passive text —
+// verified corpus-wide: exactly one ship (FrontLine, in both the R0 and R2 passive columns of the
+// same clause) matches `grep -io "while shielded[^.]*"`/`"additional defen[cs]e[^.]*"` against
+// docs/ship-skills.csv.
+const WHILE_SHIELDED_FLAT_DEFENCE_RE =
+    /while\s+shielded[,]?\s+(?:it\s+)?gains\s+(\d+)\s+additional\s+defen[cs]e/i;
+
+/**
+ * Returns the flat Defense points granted by a "While Shielded, it gains N additional Defense"
+ * clause, or undefined if no such clause is present. The build layer (buildShipAbilities) turns
+ * this into a `conditional-stat` ability (`condition:'self-shield'`) consumed directly by the
+ * engine's `substitutedDefenceFor` defensive-read seam — never through the on-cast ability-fold/
+ * executor pipeline (see AbilityType's 'conditional-stat' doc comment).
+ */
+export function parseWhileShieldedFlatDefence(text: string | null | undefined): number | undefined {
+    if (!text) return undefined;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const match = WHILE_SHIELDED_FLAT_DEFENCE_RE.exec(plain);
+    if (!match) return undefined;
+    const flat = parseInt(match[1], 10);
+    return isNaN(flat) ? undefined : flat;
+}
+
 /**
  * Parses an enemy-targeted charge removal from skill text. Returns
  * `{ amount, trigger, everyNthEvent?, requiredEnemyType? }` or null if no removal clause is

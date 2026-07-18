@@ -73,7 +73,17 @@ export type AbilityType =
     // bomb reaching <= 0 detonates immediately (bespoke runtime loop in playerTurn.ts,
     // `reduceEnemyBombs` — NOT detonateContainers/detonate(), which credit the CASTER
     // unconditionally and ignore countdown).
-    | 'bomb-countdown-reduce';
+    | 'bomb-countdown-reduce'
+    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains N additional Defense" — a
+    // FLAT-points DEFENSIVE stat bonus gated on the owner CURRENTLY holding a shield
+    // (CombatActor.shieldPool > 0). No-op marker config (mirrors 'defense-substitution' /
+    // 'damage-reflection' / 'buff-duration-extension') — the engine collects every carrier into
+    // a dedicated per-owner map and folds the bonus into `substitutedDefenceFor`'s defensive
+    // read, never through the on-cast ability-fold/executor pipeline. See AbilityConfig's
+    // 'conditional-stat' variant doc comment for why neither `modifier` (percentage-only,
+    // attacker-side DAMAGE-mode fold only) nor `pre-combat-stat` (permanent, no `defence`
+    // option) can express this.
+    | 'conditional-stat';
 
 export type AbilityTarget =
     | 'self'
@@ -928,7 +938,23 @@ export type AbilityConfig =
     // 'buff-duration-extension'. The engine collects every carrier of this config into a
     // dedicated per-owner set and substitutes the carrier's effective defence for a living
     // non-defender ally's own defence at every defence-read site.
-    | { type: 'defense-substitution' };
+    | { type: 'defense-substitution' }
+    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense" — a
+    // flat-points DEFENSIVE stat bonus, gated on the owner CURRENTLY holding a shield
+    // (CombatActor.shieldPool > 0). Distinct from every existing stat-bonus path: `modifier` is
+    // percentage-only and folds ONLY into the attacker-side/DAMAGE-mode read
+    // (effectiveDamageStatsOf via modifierTotalsFromAbilities), never the defensive read;
+    // `pre-combat-stat` is a permanent one-shot with no `defence` option (abilities.ts:887) and
+    // cannot toggle. This is a bare condition+flat marker (mirrors 'defense-substitution' /
+    // 'damage-reflection' / 'buff-duration-extension') — never executed through the ability-fold/
+    // executor pipeline. The engine collects every carrier into a per-owner map
+    // (conditionalDefenceBonusByActorId) and folds `flat` into `substitutedDefenceFor`
+    // (engine.ts), gated live on `hasShield(ownerId)` at EVERY call — so the bonus is
+    // re-evaluated fresh per hit and reverts the instant the shield is consumed/expires, no
+    // separate turn-tick logic needed. `stat`/`condition` are single-member literal unions today
+    // (only a defence flat-bonus gated on self-shield exists in the corpus); widen them if a
+    // second shape is ever needed.
+    | { type: 'conditional-stat'; stat: 'defence'; flat: number; condition: 'self-shield' };
 
 /** Crowd-control effects a `control` ability can apply. The combat effect of each
  *  (Stasis/Disable turn-lockout, Provoke/Taunt/Concentrate-Fire forced-targeting) is

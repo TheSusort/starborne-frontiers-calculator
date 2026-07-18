@@ -3017,6 +3017,29 @@ export function runCombat(input: CombatEngineInput): {
             }
         }
     }
+    // Wave 4 Task 8 (FrontLine, "While Shielded, it gains 2500 additional Defense"): per-actor
+    // flat conditional-defence bonus, keyed by owner id -> flat bonus points. Side-agnostic, built
+    // once from BOTH runtime maps, mirroring defenseSubstitutionCarrierIds. The GATE
+    // (hasShield(ownerId)) is deliberately NOT checked here — it must be re-evaluated fresh on
+    // every substitutedDefenceFor call (hasShield reads the LIVE shieldPool), so the bonus appears
+    // the instant the owner holds a shield and reverts the instant it is consumed/expires. Empty
+    // for actors without the ability → substitutedDefenceFor's added term is 0 for everyone else
+    // (byte-identical to before this task).
+    const conditionalDefenceBonusByActorId = new Map<string, number>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                if (
+                    a.config.type === 'conditional-stat' &&
+                    a.config.stat === 'defence' &&
+                    a.config.condition === 'self-shield'
+                ) {
+                    conditionalDefenceBonusByActorId.set(rt.actor.id, a.config.flat);
+                }
+            }
+        }
+    }
     // Ships whose Protection is consumable (Lionheart R4: "all Protection is removed" after a
     // redirect). Scanned once from both runtime maps, slot-agnostic, mirroring hasAnyProtectionGrant.
     const clearProtectionOnRedirectIds = new Set<string>();
@@ -3106,6 +3129,18 @@ export function runCombat(input: CombatEngineInput): {
     // case): the HIGHEST effective defence among living, same-side carriers wins.
     const substitutedDefenceFor = (victim: CombatActor, fallback: number): number => {
         if (victim.currentHp <= 0) return fallback; // dead victims are never substituted
+        // Wave 4 Task 8 (FrontLine): "While Shielded, it gains 2500 additional Defense" — an
+        // ADDITIVE flat bonus on top of whatever defence value this victim would otherwise read
+        // (the substitution below, or the site's own fallback), gated live on hasShield(victim.id)
+        // so it is re-evaluated fresh on every hit and reverts the instant the shield is consumed
+        // or expires. `hasShield` is declared later in this closure (below) but is already
+        // initialized by the time this function is actually CALLED (deep in the battle loop) —
+        // same closure-ordering convention as every other helper this function reads.
+        const conditionalDefenceBonus = conditionalDefenceBonusByActorId.get(victim.id);
+        const shieldDefenceBonus =
+            conditionalDefenceBonus !== undefined && hasShield(victim.id)
+                ? conditionalDefenceBonus
+                : 0;
         // DEFENDER victims are never substituted (R4 text: "non-defender ally"). Substitution
         // requires PROVING the victim is a known non-defender role — an unknown/missing role
         // (no role data threaded for this actor) stays dormant (no substitution), matching the
@@ -3114,7 +3149,9 @@ export function runCombat(input: CombatEngineInput): {
         // either (mirrors Graphite's role-filtered reaction staying dormant on an unknown role —
         // see triggers.ts's forced-targeting/role-filter gates).
         const victimRole = roleByActorId.get(victim.id);
-        if (!victimRole || matchesRoleCategory(victimRole, ['DEFENDER'])) return fallback;
+        if (!victimRole || matchesRoleCategory(victimRole, ['DEFENDER'])) {
+            return fallback + shieldDefenceBonus;
+        }
         let bestDefence: number | undefined;
         for (const carrierId of defenseSubstitutionCarrierIds) {
             if (carrierId === victim.id) continue; // a carrier never substitutes for itself
@@ -3125,7 +3162,7 @@ export function runCombat(input: CombatEngineInput): {
                 bestDefence = carrierDefence;
             }
         }
-        return bestDefence ?? fallback;
+        return (bestDefence ?? fallback) + shieldDefenceBonus;
     };
 
     // D-PR3: is this actor currently Stealthed? Sibling to isStasised — reads the actor's active

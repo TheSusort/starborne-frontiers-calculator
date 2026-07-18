@@ -113,6 +113,7 @@ import {
     detectConvertDot,
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
+    parseWhileShieldedFlatDefence,
     findBuffNamePos,
     maskAbbrev,
     detectExtraActionCoTrigger,
@@ -2618,6 +2619,35 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: substitutionPos >= 0 ? substitutionPos : MAX_POS,
+        });
+    }
+
+    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense" — a
+    // flat-points DEFENSIVE stat bonus gated on the owner currently holding a shield. No-op
+    // marker config (mirrors defense-substitution above) — the engine collects every carrier
+    // into a per-owner map and folds `flat` into `substitutedDefenceFor`'s defensive read, gated
+    // live on hasShield(ownerId); this ability is NEVER read by the on-cast ability-fold/executor
+    // pipeline. `trigger` is nominal ('on-cast' matches every other no-op marker in this file) —
+    // the bonus is applied dynamically at the defensive read, never fired.
+    const whileShieldedFlatDefence = parseWhileShieldedFlatDefence(text);
+    if (whileShieldedFlatDefence !== undefined) {
+        const whileShieldedPos = text.search(/while\s+shielded/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'conditional-stat',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'conditional-stat',
+                    stat: 'defence',
+                    flat: whileShieldedFlatDefence,
+                    condition: 'self-shield',
+                },
+                autoFilled: true,
+            },
+            pos: whileShieldedPos >= 0 ? whileShieldedPos : MAX_POS,
         });
     }
 

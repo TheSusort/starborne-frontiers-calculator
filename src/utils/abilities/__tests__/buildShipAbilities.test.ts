@@ -5429,4 +5429,27 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
         // No on-cast Block Buff sibling that would fire on Curator's own turn.
         expect(blockBuffs.some((a) => a.trigger === 'on-cast')).toBe(false);
     });
+
+    it('FrontLine passive: "While Shielded, it gains 2500 additional Defense" emits a self-shield-gated flat conditional-stat bonus (ship-kit wave 4, Task 8)', () => {
+        // Verbatim from docs/ship-skills.csv (first_passive_skill_text field, FrontLine row).
+        // R0 passive (refits: []) so firstPassiveSkillText is the active row (getShipSkillRows).
+        const s = ship({
+            refits: [],
+            firstPassiveSkillText:
+                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const cond = abilityOfType(passive.abilities, 'conditional-stat');
+        expect(cond).toBeDefined();
+        expect(cond).toMatchObject({
+            type: 'conditional-stat',
+            target: 'self',
+            config: {
+                type: 'conditional-stat',
+                stat: 'defence',
+                flat: 2500,
+                condition: 'self-shield',
+            },
+        });
+    });
 });
