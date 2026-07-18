@@ -33,7 +33,14 @@ export function abilityToSelectedBuff(ability: Ability, slot: SkillSlot): Select
 }
 
 export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTarget): Ability {
-    const isEnemy = target === 'enemy' || target === 'all-enemies';
+    // Wave 5 (Task A2): the two enemy-adjacency scopes are enemy-side debuffs too (Vindicator's
+    // Provoke, Asphyxiator's Stasis) — without this they'd fall through to the buff branch below
+    // and lose their debuff config (application verb, resistibility).
+    const isEnemy =
+        target === 'enemy' ||
+        target === 'all-enemies' ||
+        target === 'adjacent-enemies' ||
+        target === 'target-and-adjacent-enemies';
     const duration: number | 'recurring' | undefined =
         typeof buff.skillDuration === 'number' || buff.skillDuration === 'recurring'
             ? buff.skillDuration

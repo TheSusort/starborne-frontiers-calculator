@@ -117,6 +117,7 @@ import {
     findBuffNamePos,
     maskAbbrev,
     detectExtraActionCoTrigger,
+    detectEnemyGrantScope,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -129,6 +130,17 @@ import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
 const nextId = () => `ab${counter++}`;
+
+// Maps a parsed ControlEffect back to the display name used in the skill text's <unit-skill>
+// tag (mirrors CONTROL_INFLICTS' `tag` field in skillTextParser.ts), so the control-ability
+// target-scoping step (Wave 5, Task A2) can key `detectEnemyGrantScope` on the right buff name.
+const CONTROL_EFFECT_DISPLAY_NAME: Record<ControlEffect, string> = {
+    stasis: 'Stasis',
+    provoke: 'Provoke',
+    'concentrate-fire': 'Concentrate Fire',
+    disable: 'Disable',
+    taunt: 'Taunt',
+};
 
 /** Strips the inline game markup tags so plain-text regexes can match the row text. */
 function stripTags(text: string): string {
@@ -1796,12 +1808,20 @@ function abilitiesFromText(
     // forced-targeting; the control ability only sources the `control-applied` event
     // (reaction substrate, e.g. Defiant's shield-on-Stasis). Carries no conditions (see the
     // gated-control caveat below); no damage/modifier → DPS pipeline ignores it.
+    // Wave 5 (Task A2): an enemy-side control's target is re-derived via detectEnemyGrantScope
+    // (same clause-adjacency detection as the paired named-status SkillEffect, keyed on the
+    // effect's display name) so an enemy-adjacency phrasing ("Stasis ... on the targeted enemy
+    // and all enemies adjacent to the enemy") routes the control to the same adjacency scope as
+    // its paired debuff, instead of always collapsing to plain 'enemy'.
     for (const ctrl of parseControlInflicts(text)) {
+        const controlTargetName = CONTROL_EFFECT_DISPLAY_NAME[ctrl.effect];
+        const controlTarget =
+            ctrl.side === 'enemy' ? detectEnemyGrantScope(text, controlTargetName) : ctrl.side;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'control',
-                target: ctrl.side, // 'enemy' for inflicted, 'self' for Taunt
+                target: controlTarget, // 'enemy'/adjacency for inflicted, 'self' for Taunt
                 trigger: 'on-cast',
                 // Control abilities carry no conditions: a GATED control (e.g. Crocus's "if
                 // target has >3 debuffs" Stasis) therefore emits control-applied unconditionally

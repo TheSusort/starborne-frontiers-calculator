@@ -167,7 +167,14 @@ export interface SelectedGameBuff {
     // For enemy debuffs: 'inflict' (resistible) vs 'apply' (guaranteed), parsed from the skill verb.
     application?: 'inflict' | 'apply';
     /** Parser ally/enemy-scope (team walk): granular target of the granting clause; absent on manual picks. */
-    effectTarget?: 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enemies';
+    effectTarget?:
+        | 'self'
+        | 'ally'
+        | 'all-allies'
+        | 'enemy'
+        | 'all-enemies'
+        | 'adjacent-enemies'
+        | 'target-and-adjacent-enemies';
     // Lionheart: Protection removed entirely after it redirects a hit (consumable). Carried to
     // the buff ability config so the engine clears stacks post-redirect.
     clearAllOnRedirect?: boolean;

@@ -4557,10 +4557,20 @@ export interface SkillEffect {
     // Player-side granularity (team-walk ally-scope): 'self' = caster only, 'ally' = a single
     // chosen ally, 'all-allies' = every player actor. 'enemy' = single-target enemy debuff,
     // 'all-enemies' = enemy debuff scoped to the whole opposing team (detectEnemyGrantScope).
+    // 'adjacent-enemies' / 'target-and-adjacent-enemies' = enemy debuff scoped to the anchor's
+    // neighbours (excluded/included respectively) — see detectAdjacentEnemyScope. Engine fan-out
+    // for these two is a later task; this file only resolves the scope.
     // The combat engine routes 'ally'/'all-allies' grants from a walked team ship onto the right
     // actors, and fans an 'all-enemies' debuff over aoeVictimIds generically; for the attacker's
     // own sim 'self' and 'all-allies' both fold onto its side (zero churn).
-    target: 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enemies';
+    target:
+        | 'self'
+        | 'ally'
+        | 'all-allies'
+        | 'enemy'
+        | 'all-enemies'
+        | 'adjacent-enemies'
+        | 'target-and-adjacent-enemies';
     duration: number | 'recurring' | null;
     stacks?: number;
     source: SkillSource;
@@ -4998,6 +5008,43 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
     return 'self';
 }
 
+// "all enemies adjacent to X" must NOT match the plain all-enemies widen. Two flavours:
+//  - "the targeted enemy and all enemies adjacent to it/the enemy" → anchor INCLUDED
+//  - "(to) all enemies adjacent to the (original) target"           → anchor EXCLUDED
+// Tolerates the docs/ship-skills.csv "adjavent" typo. (Demolisher's bare "all adjavent
+// enemies" — no "target" word — is added by a later task; do not add it here.)
+const TARGET_AND_ADJACENT_ENEMY_RE =
+    /targeted\s+enemy\s+and\s+all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:it|the\s+enemy)/i;
+const ADJACENT_ENEMY_ONLY_RE =
+    /all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:the\s+)?(?:original\s+)?target/i;
+
+/**
+ * Detects whether a resolved (sentence/sub-clause scoped) buff clause carries one of the two
+ * enemy-adjacency phrasings, returning the matching `AbilityTarget` scope or null when neither
+ * applies. Exported so later tasks (DoT adjacency, engine fan-out) can reuse the same detection.
+ */
+export function detectAdjacentEnemyScope(
+    clause: string
+): 'adjacent-enemies' | 'target-and-adjacent-enemies' | null {
+    if (TARGET_AND_ADJACENT_ENEMY_RE.test(clause)) return 'target-and-adjacent-enemies';
+    if (ADJACENT_ENEMY_ONLY_RE.test(clause)) return 'adjacent-enemies';
+    return null;
+}
+
+// Within an already sentence-scoped clause, isolate the sub-clause that OWNS `buffName` by
+// splitting on the "then" connector (Asphyxiator joins Defense Down III + Inferno III with
+// "then" in one sentence, so Defense Down III's clause would otherwise wrongly see the Inferno
+// adjacency phrase). Returns the sub-clause containing the buff name, or the whole clause if not
+// split (or if the buff name isn't found in any part — defensive fallback). Used only for
+// adjacency/scope detection; deliberately does NOT touch `resolveBuffClause` itself, which is
+// corpus-wide and used by many other detectors.
+function narrowToBuffSubClause(clause: string, buffName: string): string {
+    const parts = clause.split(/\bthen\b/i);
+    const maskedName = maskAbbrev(buffName).toLowerCase();
+    const owning = parts.find((p) => findBuffNamePos(maskAbbrev(p).toLowerCase(), maskedName) >= 0);
+    return owning ?? clause;
+}
+
 /**
  * Resolves the enemy-side scope of an inflicted/applied debuff from its granting clause, mirroring
  * `detectGrantScope`'s clause resolution (`resolveBuffClause`, so "Inc."/"Out." abbreviation
@@ -5005,10 +5052,34 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
  * ally one. Same broad, sentence-level phrasing check `parsePurge` uses for its own 'enemy' vs
  * 'all-enemies' split (`/all\s+enemies/`) — most debuffs are single-target ('enemy'); only an
  * explicit "on all enemies" grant widens to the whole opposing team.
+ *
+ * Enemy-adjacency phrasing ("all enemies adjacent to X") is checked FIRST, on the buff's own
+ * sub-clause (narrowToBuffSubClause) rather than the whole sentence, so it both (a) doesn't get
+ * mistaken for the plain all-enemies widen and (b) doesn't leak across a "then"-joined sibling
+ * clause in the same sentence (Asphyxiator: Defense Down III + Inferno III adjacency).
+ *
+ * The plain all-enemies fallback deliberately runs on the UNNARROWED `resolved` sentence (minus
+ * any adjacency phrasing, stripped below) rather than the narrowed sub-clause: Curator's charge
+ * ("deals 125% damage to all enemies, then inflicts ... Crit Rate Down III") is a genuine
+ * corpus idiom where a "then"-joined debuff inherits the ANTECEDENT clause's "all enemies"
+ * receiver — narrowing to the debuff's own sub-clause would wrongly lose that and collapse it to
+ * 'enemy'. Only the literal adjacency phrasing (already positively identified by
+ * detectAdjacentEnemyScope's regexes) is stripped first, so a sibling "then"-joined ADJACENCY
+ * clause (Asphyxiator: Defense Down III + Inferno III) still can't fool the plain /all\s+enemies/
+ * substring test into widening a clause that was never enemy-adjacent.
  */
-function detectEnemyGrantScope(skillText: string, buffName: string): 'enemy' | 'all-enemies' {
+export function detectEnemyGrantScope(
+    skillText: string,
+    buffName: string
+): 'enemy' | 'all-enemies' | 'adjacent-enemies' | 'target-and-adjacent-enemies' {
     const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
-    return /all\s+enemies/.test(resolved) ? 'all-enemies' : 'enemy';
+    const scoped = narrowToBuffSubClause(resolved, buffName);
+    const adjacent = detectAdjacentEnemyScope(scoped);
+    if (adjacent) return adjacent;
+    const withoutAdjacencyPhrasing = resolved
+        .replace(TARGET_AND_ADJACENT_ENEMY_RE, '')
+        .replace(ADJACENT_ENEMY_ONLY_RE, '');
+    return /all\s+enemies/.test(withoutAdjacencyPhrasing) ? 'all-enemies' : 'enemy';
 }
 
 /**
