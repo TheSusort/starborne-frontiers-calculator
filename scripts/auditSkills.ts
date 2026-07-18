@@ -126,6 +126,20 @@ const RULES: Rule[] = [
         handled: (a) => hasType(a, 'extend-dot'),
     },
     {
+        id: 'extend-status',
+        severity: 'high',
+        // Generic buff/debuff duration EXTEND (the inverse of extend-dot and of
+        // debuff-duration-reduction below): "extends active Buffs/Debuffs by N turn(s)"
+        // (Sokol/Ripper, active voice) or "debuffs extended by N turn(s)" (Lev, passive
+        // voice). Excludes the DoT-specific extend-dot wording so the two rules don't
+        // double-count the same clause.
+        keyword: (t) =>
+            /extend/i.test(t) &&
+            /\b(buffs|debuffs)\b/i.test(t) &&
+            !/(damage over time|\bdot\b)/i.test(t),
+        handled: (a) => hasType(a, 'extend-status'),
+    },
+    {
         id: 'debuff-duration-reduction',
         severity: 'high',
         // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N

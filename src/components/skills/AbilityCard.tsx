@@ -47,7 +47,6 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     debuff: 'Debuff',
     dot: 'Damage over Time',
     'extend-dot': 'Extend DoTs',
-    // wave 5-6: wired in later tasks — placeholder label only, no editor UI yet.
     'extend-status': 'Extend Status',
     'detonate-dot': 'Detonate DoTs',
     'accumulate-detonate': 'Accumulate & Detonate',
@@ -131,6 +130,11 @@ const LEECH_SCOPE_OPTIONS = [
 const EXTEND_DOT_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }[] = [
     { value: 'active', label: 'All active DoTs' },
     { value: 'inflicted', label: 'Only DoTs from this cast' },
+];
+
+const EXTEND_STATUS_KIND_OPTIONS: { value: 'buff' | 'debuff'; label: string }[] = [
+    { value: 'buff', label: 'Buffs' },
+    { value: 'debuff', label: 'Debuffs' },
 ];
 
 const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
@@ -480,6 +484,34 @@ export const AbilityCard: React.FC<Props> = ({
                                     ...config,
                                     scope: value as 'active' | 'inflicted',
                                 })
+                            }
+                        />
+                    </div>
+                );
+
+            case 'extend-status':
+                return (
+                    <div className="flex flex-wrap gap-2">
+                        <Select
+                            label="Status kind"
+                            helpLabel="Buffs extend every active buff on the recipient (self-side); Debuffs extend every active debuff on the recipient (enemy-side)."
+                            value={config.statusKind}
+                            options={EXTEND_STATUS_KIND_OPTIONS}
+                            onChange={(value) =>
+                                updateConfig({
+                                    ...config,
+                                    statusKind: value as 'buff' | 'debuff',
+                                })
+                            }
+                        />
+                        <Input
+                            label="Extend by (turns)"
+                            helpLabel="Adds this many turns to every eligible active Buff/Debuff on the recipient when the skill fires. Permanent (stacking) buffs and recurring auras are unaffected."
+                            type="number"
+                            min={1}
+                            value={config.turns}
+                            onChange={(e) =>
+                                updateConfig({ ...config, turns: toNumber(e.target.value) })
                             }
                         />
                     </div>
