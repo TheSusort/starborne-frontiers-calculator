@@ -3133,6 +3133,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         } else {
             victimIds = [intent.eventCtx?.counterTargetId ?? ctx.enemy.id];
         }
+        // Wave 5 hardening: flatBasis (the flat bomb-damage basis) must apply ONLY to the
+        // bomb-splash — gate it on the actual trigger, not merely on eventCtx.triggerDamage
+        // being present. triggerDamage is also stamped by on-crit/on-attacked listeners for
+        // OTHER mechanics (basis:'damage-dealt'/'damage-taken' reactive heals/shields), so an
+        // adjacent-enemies damage ability reached via one of those triggers would otherwise
+        // silently pick up a flat-copy basis it was never meant to have. Byte-identical today —
+        // Demolisher's splash is the only adjacent-enemies damage ability and it fires from
+        // on-bomb-detonated.
+        const flatBasis =
+            intent.ability.trigger === 'on-bomb-detonated'
+                ? intent.eventCtx?.triggerDamage
+                : undefined;
         for (const victimId of victimIds) {
             if (victimId === undefined) continue;
             const outcome = ctx.applyReactiveDamage?.(
@@ -3152,7 +3164,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // no-op passenger for them — byte-identical to the pre-C3 call with no 9th arg).
                 {
                     ignoresDefense: cfg.ignoresDefense === true,
-                    flatBasis: intent.eventCtx?.triggerDamage,
+                    flatBasis,
                 }
             );
             emitReactiveDamageLog(ctx, intent.ownerId, victimId, outcome);

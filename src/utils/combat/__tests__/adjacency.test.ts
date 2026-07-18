@@ -39,4 +39,9 @@ describe('adjacentAllyIds', () => {
         expect(adjacentAllyIds('owner', [a('owner', 'M2')])).toEqual([]);
         expect(adjacentAllyIds('owner', [])).toEqual([]);
     });
+
+    it('anchor not in roster: returns [] rather than the whole-roster fallback (Wave 5 hardening)', () => {
+        const actors = [a('other1', 'M2'), a('other2', 'T2')];
+        expect(adjacentAllyIds('not-in-roster', actors)).toEqual([]);
+    });
 });
