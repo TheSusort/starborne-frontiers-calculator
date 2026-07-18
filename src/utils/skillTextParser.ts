@@ -2896,8 +2896,8 @@ export function parseIgnoresDefense(text: string | null | undefined): boolean {
 const CAN_TARGET_STEALTHED_RE = /\bcan target\b[^.]*\bstealthed\b[^.]*\benem/i;
 
 /** True when the given attack text states it can target Stealthed enemies (per-ability bypass). */
-export function parseIgnoresStealth(text: string): boolean {
-    return CAN_TARGET_STEALTHED_RE.test(stripUnitTags(text));
+export function parseIgnoresStealth(text: string | null | undefined): boolean {
+    return !!text && CAN_TARGET_STEALTHED_RE.test(stripUnitTags(text));
 }
 
 // SP-F F4 (Wusheng): "deals 220% damage WITH AFFINITY ADVANTAGE …" — the charged hit is forced

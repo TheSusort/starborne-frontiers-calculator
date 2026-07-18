@@ -462,7 +462,7 @@ export interface EnemyActorInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
-    // W6: ship-wide stealth-targeting bypass.
+    /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
@@ -983,7 +983,7 @@ export type TeamActorEngineInput = TeamActorInput & {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
-    // W6: ship-wide stealth-targeting bypass.
+    /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
@@ -1122,7 +1122,7 @@ export interface CombatEngineInput {
         position?: Position;
         /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
         ignoresForcedTargeting?: boolean;
-        // W6: ship-wide stealth-targeting bypass.
+        /** W6: ship-wide stealth-targeting bypass. */
         ignoresStealth?: boolean;
         /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
          *  site (§4.5 Akula exception). Optional — undefined treated as false. */
@@ -1161,7 +1161,7 @@ export interface CombatEngineInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
-    // W6: ship-wide stealth-targeting bypass.
+    /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
@@ -4977,7 +4977,7 @@ export function runCombat(input: CombatEngineInput): {
             target: ParsedTarget;
             actingPosition: Position;
             ignoresForcedTargeting?: boolean;
-            // W6: ship-wide stealth-targeting bypass.
+            /** W6: ship-wide stealth-targeting bypass. */
             ignoresStealth?: boolean;
             actingId: string;
             opposingLiving: CombatActor[];
