@@ -4,6 +4,17 @@ import { BUFFS } from '../../constants/buffs';
 import { parseAllSkillEffects, SkillEffect, detectFullyCharged } from '../skillTextParser';
 import { parseBuffEffects, isStackable } from './buffParser';
 
+// Every enemy-side SkillEffect target scope (single-target, whole-team, and the two
+// enemy-adjacency scopes added in Wave 5 Task A2). Everything else (self/ally/all-allies) is
+// player-side. Shared by the selfBuffs/enemyDebuffs bucketing below so a new enemy-side scope
+// only needs to be added here, not duplicated across both filters.
+const ENEMY_SIDE_TARGETS = new Set<SkillEffect['target']>([
+    'enemy',
+    'all-enemies',
+    'adjacent-enemies',
+    'target-and-adjacent-enemies',
+]);
+
 // DoT buff name prefixes — these go to the DoT config, not the buff picker
 const DOT_PREFIXES = new Set(['Corrosion', 'Inferno', 'Bomb']);
 function isDoTBuffName(name: string): boolean {
@@ -32,13 +43,12 @@ export function buildSkillBuffAutoFill(ship: Ship): SkillBuffAutoFill {
         // selfBuffs = all PLAYER-SIDE effects (self/ally/all-allies). The legacy DPS picker
         // path treats every entry here as player-side (unchanged); the builder reads each
         // entry's effectTarget to route ally/all-allies grants to the right actors.
-        selfBuffs: toSelectedBuffs(
-            effects.filter((e) => e.target !== 'enemy' && e.target !== 'all-enemies')
-        ),
-        // enemyDebuffs = both single-target ('enemy') and whole-team ('all-enemies') debuffs —
-        // the builder reads effectTarget to stamp the right ability target either way.
+        selfBuffs: toSelectedBuffs(effects.filter((e) => !ENEMY_SIDE_TARGETS.has(e.target))),
+        // enemyDebuffs = single-target ('enemy'), whole-team ('all-enemies'), and the two
+        // enemy-adjacency scopes ('adjacent-enemies' / 'target-and-adjacent-enemies', Wave 5
+        // Task A2) — the builder reads effectTarget to stamp the right ability target either way.
         enemyDebuffs: toSelectedBuffs(
-            effects.filter((e) => e.target === 'enemy' || e.target === 'all-enemies'),
+            effects.filter((e) => ENEMY_SIDE_TARGETS.has(e.target)),
             sourceChargeCount,
             sourceStartCharged
         ),

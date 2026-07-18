@@ -4332,6 +4332,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
         );
         expect(debuff).toBeDefined();
         expect(debuff!.trigger).toBe('on-enemy-destroyed');
+        // Wave 5 Task C1: ADJACENT_ENEMY_ONLY_RE widening reclassified "on all adjacent
+        // enemies" from `enemy` to `adjacent-enemies` — lock it in against regression.
+        expect(debuff!.target).toBe('adjacent-enemies');
         const control = passive?.abilities.find(
             (a) =>
                 a.type === 'control' && a.config.type === 'control' && a.config.effect === 'stasis'

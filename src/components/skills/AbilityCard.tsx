@@ -83,6 +83,8 @@ const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [
     { value: 'adjacent-allies', label: 'Adjacent allies' },
     { value: 'enemy', label: 'Enemy' },
     { value: 'all-enemies', label: 'All enemies' },
+    { value: 'adjacent-enemies', label: 'Adjacent enemies' },
+    { value: 'target-and-adjacent-enemies', label: 'Target + adjacent enemies' },
 ];
 
 const MODIFIER_CHANNEL_OPTIONS: { value: ModifierChannel; label: string }[] = [

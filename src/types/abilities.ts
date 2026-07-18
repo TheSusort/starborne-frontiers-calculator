@@ -92,6 +92,9 @@ export type AbilityTarget =
     | 'adjacent-allies' // Fortifying Shroud: living same-side allies on neighbouring board
     // cells (non-positional → all same-side allies). Resolved via
     // IntentExecContext.adjacentAllyIdsFor.
+    | 'adjacent-enemies' // living opposing actors adjacent to the anchor (target excluded).
+    // Resolved via adjacentAllyIdsFor(anchorId) with the enemy TARGET as anchor.
+    | 'target-and-adjacent-enemies' // the anchor (primary target) PLUS its adjacent enemies.
     | 'enemy'
     | 'all-enemies'
     | 'enemy-most-buffs'
@@ -616,6 +619,10 @@ export type AbilityConfig =
            *  100, critPenalty 0, no debuff-landing disadvantage. Read at the three affinity seams
            *  in playerTurn.ts. Absent → the real computed matchup (byte-identical default). */
           forceAffinityAdvantage?: boolean;
+          /** Ship-kit W5 (Demolisher bomb-splash): this damage bypasses the target's Defense
+           *  mitigation term. Consumed by the REACTIVE damage executor (applyReactiveDamage,
+           *  Task C3); the on-cast damage path ignores it. Absent → normal mitigation. */
+          ignoresDefense?: boolean;
       }
     | {
           type: 'counter';

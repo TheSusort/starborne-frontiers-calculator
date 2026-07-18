@@ -84,6 +84,7 @@ import {
     detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
+    parseIgnoresDefense,
     parseForceAffinityAdvantage,
     parseDoesntBreakStasis,
     parseChargeLossImmune,
@@ -117,6 +118,9 @@ import {
     findBuffNamePos,
     maskAbbrev,
     detectExtraActionCoTrigger,
+    detectEnemyGrantScope,
+    adjacentEnemyScopeForName,
+    adjacentEnemyScopeAtPos,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -129,6 +133,17 @@ import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
 const nextId = () => `ab${counter++}`;
+
+// Maps a parsed ControlEffect back to the display name used in the skill text's <unit-skill>
+// tag (mirrors CONTROL_INFLICTS' `tag` field in skillTextParser.ts), so the control-ability
+// target-scoping step (Wave 5, Task A2) can key `detectEnemyGrantScope` on the right buff name.
+const CONTROL_EFFECT_DISPLAY_NAME: Record<ControlEffect, string> = {
+    stasis: 'Stasis',
+    provoke: 'Provoke',
+    'concentrate-fire': 'Concentrate Fire',
+    disable: 'Disable',
+    taunt: 'Taunt',
+};
 
 /** Strips the inline game markup tags so plain-text regexes can match the row text. */
 function stripTags(text: string): string {
@@ -1096,6 +1111,9 @@ function abilitiesFromText(
     } else if (mult > 0) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
+        // Ship-kit W5 (Demolisher bomb-splash): "This damage ignores Defense" — bypasses the
+        // target's Defense mitigation term at the reactive damage executor (Task C3).
+        const ignoresDefense = parseIgnoresDefense(text);
         // SP-F F4 (Wusheng): "deals 220% damage with affinity advantage" forces this on-cast hit
         // (and its paired Stasis 'apply' landing) to affinity advantage at the engine seams.
         const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
@@ -1117,6 +1135,7 @@ function abilitiesFromText(
             detectEndOfRoundDamageTrigger(text, damagePos) ??
             detectRoundStartContinuationTrigger(text, damagePos) ??
             detectAllyCritTrigger(text, damagePos) ??
+            detectBombDetonatedTrigger(text, damagePos) ??
             'on-cast';
         // SP-F F1: emit the BASE branch FIRST (out[0]) so the ungated `.find`-first reads of
         // noCrit/hits below resolve sensibly, and so it stays out[0] for the conditional-scaling
@@ -1134,6 +1153,7 @@ function abilitiesFromText(
                     ...(hits !== undefined ? { hits } : {}),
                     ...(noCrit ? { noCrit: true } : {}),
                     ...(forceAffinityAdvantage ? { forceAffinityAdvantage: true } : {}),
+                    ...(ignoresDefense ? { ignoresDefense: true } : {}),
                 },
                 autoFilled: true,
             },
@@ -1159,6 +1179,25 @@ function abilitiesFromText(
         // text is unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
         if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-highest-speed';
+        }
+        // Ship-kit W5 (Demolisher bomb-splash): the reactive bomb-detonated damage clause
+        // ("... deals 100% of the Bomb's damage to all adjavent enemies") re-targets from the
+        // default 'enemy' to the adjacency scope. GATED on damageTrigger === 'on-bomb-detonated'
+        // (same pattern as the end-of-round/start-of-round retargets above) rather than a bare
+        // sentence-position check: an on-cast damage clause can share its SENTENCE with an
+        // unrelated debuff/control clause that owns its own adjacency phrase (Asphyxiator's
+        // "...deals 175% damage, then inflicts Inferno III... on the targeted enemy and all
+        // enemies adjacent to it" — the adjacency belongs to Inferno III, not the 175% hit;
+        // Vindicator's "...deals 100% damage and applies Provoke... to all enemies adjacent to
+        // the target" — the adjacency belongs to Provoke, not the 100% hit). Both are corpus
+        // regressions caught by the Task C1 corpus-regression check and fixed by this gate,
+        // which restricts the position-scoped adjacency read to the one trigger only Demolisher's
+        // passive carries.
+        if (damageTrigger === 'on-bomb-detonated') {
+            const adjacentDamageScope = adjacentEnemyScopeAtPos(text, damagePos);
+            if (adjacentDamageScope) {
+                out[0].ability.target = adjacentDamageScope;
+            }
         }
         if (instead) {
             // Replacement branch (Provoked/Taunted): reuses the base's hits/noCrit — both
@@ -1796,12 +1835,20 @@ function abilitiesFromText(
     // forced-targeting; the control ability only sources the `control-applied` event
     // (reaction substrate, e.g. Defiant's shield-on-Stasis). Carries no conditions (see the
     // gated-control caveat below); no damage/modifier → DPS pipeline ignores it.
+    // Wave 5 (Task A2): an enemy-side control's target is re-derived via detectEnemyGrantScope
+    // (same clause-adjacency detection as the paired named-status SkillEffect, keyed on the
+    // effect's display name) so an enemy-adjacency phrasing ("Stasis ... on the targeted enemy
+    // and all enemies adjacent to the enemy") routes the control to the same adjacency scope as
+    // its paired debuff, instead of always collapsing to plain 'enemy'.
     for (const ctrl of parseControlInflicts(text)) {
+        const controlTargetName = CONTROL_EFFECT_DISPLAY_NAME[ctrl.effect];
+        const controlTarget =
+            ctrl.side === 'enemy' ? detectEnemyGrantScope(text, controlTargetName) : ctrl.side;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'control',
-                target: ctrl.side, // 'enemy' for inflicted, 'self' for Taunt
+                target: controlTarget, // 'enemy'/adjacency for inflicted, 'self' for Taunt
                 trigger: 'on-cast',
                 // Control abilities carry no conditions: a GATED control (e.g. Crocus's "if
                 // target has >3 debuffs" Stasis) therefore emits control-applied unconditionally
@@ -2873,6 +2920,11 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 ? detectReactiveTrigger(rowText, entry.type)
                 : undefined;
             if (reactiveTrigger) ability.trigger = reactiveTrigger;
+            // Enemy-adjacency splash (Asphyxiator active Inferno III: "on the targeted enemy
+            // and all enemies adjacent to it"). Charged Inferno's adjacency phrase belongs to a
+            // separate Stasis sentence, so it resolves to null and the DoT stays 'enemy'.
+            const adjacentScope = rowText ? adjacentEnemyScopeForName(rowText, entry.type) : null;
+            if (adjacentScope) ability.target = adjacentScope;
             return { ability, pos: pos >= 0 ? pos : MAX_POS };
         });
         if (!dots.length) continue;
@@ -3327,18 +3379,11 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     //     exists), i.e. a dead, mislabeled entry forever. Drop the control ability outright
     //     instead — the named debuff/buff twin remains the sole model of the effect, and no
     //     spurious on-cast control-applied fires.
-    const CONTROL_TWIN_TAG: Record<ControlEffect, string> = {
-        stasis: 'Stasis',
-        provoke: 'Provoke',
-        'concentrate-fire': 'Concentrate Fire',
-        disable: 'Disable',
-        taunt: 'Taunt',
-    };
     for (const positioned of bySlot.values()) {
         for (let i = positioned.length - 1; i >= 0; i--) {
             const ability = positioned[i].ability;
             if (ability.type !== 'control' || ability.config.type !== 'control') continue;
-            const tag = CONTROL_TWIN_TAG[ability.config.effect];
+            const tag = CONTROL_EFFECT_DISPLAY_NAME[ability.config.effect];
             const twinType = ability.config.effect === 'taunt' ? 'buff' : 'debuff';
             const twin = positioned.find(
                 (p) =>

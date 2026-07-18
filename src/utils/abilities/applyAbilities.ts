@@ -172,6 +172,8 @@ const ENEMY_FACING_TARGETS: ReadonlySet<Ability['target']> = new Set([
     'all-enemies',
     'enemy-most-buffs',
     'enemy-highest-attack',
+    'adjacent-enemies',
+    'target-and-adjacent-enemies',
 ]);
 
 /**
@@ -212,6 +214,10 @@ export function dotsFromSkill(skill: Skill | undefined): DoTApplicationConfig {
             tier: ability.config.tier,
             stacks: ability.config.stacks,
             duration: ability.config.duration,
+            ...(ability.target === 'adjacent-enemies' ||
+            ability.target === 'target-and-adjacent-enemies'
+                ? { splashTarget: ability.target }
+                : {}),
         });
     }
     return config;
