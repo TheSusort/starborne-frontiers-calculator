@@ -122,6 +122,18 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Graphite's charged skill now shields all allies (matching its active skill), instead of only shielding itself.",
     'Combat sim: Amartya now inflicts 2 stacks of Exposed on an enemy defender the instant it gains Taunt, matching her legendary refit passive — previously this was silently gated behind a bogus condition requiring Amartya herself to have Taunt (which never happens), so it never fired at all.',
     "Combat sim: Meiying's Stasis-on-kill now only triggers when the enemy she kills is carrying a debuff, matching her passive text ('upon killing an enemy with a Debuff') — previously it fired on every kill regardless of the victim's debuff status.",
+    "Combat sim: Lionheart's on-crit Attack Up II (active) and Attack Up III (charged) now buff only its adjacent allies, matching 'to all adjacent allies' — previously they buffed the entire team.",
+    "Combat sim: Centurion's charged skill now also grants 2 stacks of Core Charge I to its adjacent allies (in addition to its own 4 stacks) — previously the adjacent-ally grant was dropped.",
+    "Combat sim: Lev's charged skill now grants Crit Power Up II to all allies only when a critical hit occurs, matching 'If a critical hit occurs' — previously it applied on every charged cast regardless of whether the hit crit.",
+    "Combat sim: Chimei's Stealth grant to low-HP non-defender allies now fires at the end of the round, matching her skill text, instead of on cast.",
+    "Combat sim: Selenite's start-of-round Concentrate Fire now targets the enemy with the highest Attack specifically, instead of a generic enemy.",
+    "Combat sim: Quixilver's passive now grants Barrier to all allies, matching 'grants all allies Barrier' — previously it only granted Barrier to itself.",
+    "Combat sim: Xcellence's active skill now also inflicts Stasis for 2 turns, matching her skill text — previously this clause was dropped entirely.",
+    'Combat sim: when an enemy resists a debuff Xcellence inflicts, she now deals damage equal to 115% of her current Shield, matching her passive — previously not modeled.',
+    "Combat sim: when placed adjacent to a Supporter, Madax now increases that Supporter's Defense by 20% of its own Defense, matching its passive — previously this was mis-modeled as a self-heal.",
+    'Combat sim: after applying Corrosion with a critical hit, Wisteria now also inflicts Inferno II for 2 turns, matching its passive — previously only the Corrosion-extend half was modeled.',
+    'Combat sim: Wusheng now loses Stealth when directly damaged while Stealthed, matching its passive — previously the Stealth stayed until normal expiry.',
+    "Combat sim: Lingshe's detonation damage now scales with her crit power (1% more damage per 10% crit power), matching her passive — previously this bonus was not modeled.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
