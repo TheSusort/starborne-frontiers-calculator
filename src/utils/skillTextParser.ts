@@ -2411,6 +2411,28 @@ export function parseHighestSpeedEnemyTarget(
     return sentence !== undefined && HIGHEST_SPEED_ENEMY_RE.test(sentence);
 }
 
+// "the highest attack enemy" — Selenite's enemy-highest-attack target axis (Ship-kit W8 Task 5).
+// Narrowly matched (hyphen-or-space between "highest" and "attack") so it doesn't retarget other
+// ships' plain enemy debuffs that merely co-occur with "Attack" text elsewhere in the sentence.
+// Verified against RAW CSV: '…the highest attack enemy is applied with Concentrate Fire for 1
+// turn.'
+const HIGHEST_ATTACK_ENEMY_RE = /\bhighest[- ]attack\s+enemy\b/i;
+
+/**
+ * Returns true when `anchorPos` falls inside the sentence carrying the "highest attack enemy"
+ * phrase (Selenite p3's start-of-round Concentrate Fire debuff); otherwise false.
+ * Position-scoped on the RAW text (mirrors parseHighestSpeedEnemyTarget's sentence-scoping).
+ * Reference data: docs/ship-skills.csv (Selenite).
+ */
+export function parseHighestAttackEnemyTarget(
+    text: string | null | undefined,
+    anchorPos: number
+): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && HIGHEST_ATTACK_ENEMY_RE.test(sentence);
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.

@@ -71,6 +71,7 @@ import {
     detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
     parseHighestSpeedEnemyTarget,
+    parseHighestAttackEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     detectEnemyDotDamageTrigger,
@@ -3286,7 +3287,31 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // Player-side grants carry granular effectTarget (self/ally/all-allies, wired above);
         // enemy debuffs now do too ('enemy' vs 'all-enemies' — detectEnemyGrantScope). Defaults
         // to 'enemy' for round-trip debuffs that predate the effectTarget field.
-        mergeBuff(buff, buff.effectTarget ?? 'enemy');
+        let enemyTarget: AbilityTarget = buff.effectTarget ?? 'enemy';
+        // Ship-kit W8 (Task 5): Selenite p3's round-start "the highest attack enemy is applied
+        // with Concentrate Fire" re-targets from the plain 'enemy' default to 'enemy-highest-
+        // attack' (the selector already resolves live at applyAbilities.ts, used by gear procs —
+        // this wires an existing selector, not a new one). Sentence/position-scoped on this buff's
+        // own name anchor (mirrors parseHighestSpeedEnemyTarget's damagePos scoping above) and
+        // gated on the plain 'enemy' scope only, so a co-located all-enemies/adjacent debuff in
+        // the same row is unaffected. Other ships' Concentrate Fire debuffs (Huanying, Judge,
+        // Lodolite, Stalwart, Vanguard, Yuyan) carry no "highest attack enemy" phrase, so the
+        // narrow regex leaves them at the plain 'enemy' target.
+        if (enemyTarget === 'enemy') {
+            const slotForThisBuff = slotForBuffSource(buff.skillSource);
+            const rowTextForThisBuff = getSkillRowForSlot(ship, slotForThisBuff)?.text ?? '';
+            const buffPos = rowTextForThisBuff
+                ? findBuffNamePos(rowTextForThisBuff, buff.buffName)
+                : -1;
+            if (
+                rowTextForThisBuff &&
+                buffPos >= 0 &&
+                parseHighestAttackEnemyTarget(rowTextForThisBuff, buffPos)
+            ) {
+                enemyTarget = 'enemy-highest-attack';
+            }
+        }
+        mergeBuff(buff, enemyTarget);
     }
 
     // Phase 4c PR 1 (Task 8): damage-reaction DoT inflictions on the PASSIVE row (Warden

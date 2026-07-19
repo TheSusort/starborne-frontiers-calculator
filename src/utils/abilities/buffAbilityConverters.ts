@@ -36,11 +36,16 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
     // Wave 5 (Task A2): the two enemy-adjacency scopes are enemy-side debuffs too (Vindicator's
     // Provoke, Asphyxiator's Stasis) — without this they'd fall through to the buff branch below
     // and lose their debuff config (application verb, resistibility).
+    // Ship-kit W8 (Task 5): 'enemy-highest-attack' is likewise an enemy-side selector (Selenite's
+    // round-start Concentrate Fire) — without it here, mergeBuff's retarget to
+    // 'enemy-highest-attack' would silently fall through to the 'buff' branch below and lose the
+    // debuff config (application verb, resistibility), same failure mode as the adjacency scopes.
     const isEnemy =
         target === 'enemy' ||
         target === 'all-enemies' ||
         target === 'adjacent-enemies' ||
-        target === 'target-and-adjacent-enemies';
+        target === 'target-and-adjacent-enemies' ||
+        target === 'enemy-highest-attack';
     const duration: number | 'recurring' | undefined =
         typeof buff.skillDuration === 'number' || buff.skillDuration === 'recurring'
             ? buff.skillDuration
