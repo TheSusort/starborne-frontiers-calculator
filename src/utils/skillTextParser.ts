@@ -1152,8 +1152,12 @@ export function detectGrantConditions(
         }));
     }
 
-    // 2. self-crit (active voice: this unit critically hits/damages — NOT "is critically hit")
-    if (/critically (?:hits|damag)/i.test(low)) {
+    // 2. self-crit (active voice: this unit critically hits/damages — NOT "is critically hit").
+    // Ship-kit Wave 8, Task 3: ALSO matches "if a critical hit occurs" (Lev's charged buff-grant
+    // clause) — the same phrasing the co-located extend-status ability already gates on via
+    // /critical hit occurs/i (buildShipAbilities.ts ~1657). Trigger stays on-cast; this only adds
+    // the condition, mirroring that ability's shape exactly.
+    if (/critically (?:hits|damag)|\bcritical\s+hit\s+occurs\b/i.test(low)) {
         return [{ subject: 'self-crit', derivable: true }];
     }
 
