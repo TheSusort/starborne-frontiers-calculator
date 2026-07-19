@@ -612,6 +612,32 @@ function parseModifiers(text: string): ParsedModifier[] {
         }
     }
 
+    // Wave 8, Task 14: "N% more detonation damage per M% crit power" (Lingshe refit-active:
+    // "This Unit deals 1% more detonation damage per 10% crit power it has.") → a
+    // detonationDamage-channel modifier scaling with the caster's own live crit power, modelled
+    // EXACTLY on the Wildfire dotDamage crit-power modifier above (~563-613). The detonationDamage
+    // channel is already fully consumed by the engine (applyAbilities.ts, effectiveStats.ts,
+    // detonation.ts/engine.ts) and snapshotted onto each PendingBomb at cast time
+    // (playerTurn.ts:822) — same snapshot-at-application approximation as Voidfire's affinity
+    // snapshot: Lingshe's bonus applies to her own bombs (applier=detonator) but NOT to foreign
+    // bombs she detonates via countdown-reduce.
+    const detonationCritPowerM = plain.match(
+        /(\d+(?:\.\d+)?)%\s+more\s+detonation\s+damage\s+per\s+(\d+(?:\.\d+)?)%\s+crit\s+power/i
+    );
+    if (detonationCritPowerM) {
+        const detValue = parseFloat(detonationCritPowerM[1]);
+        const per = parseFloat(detonationCritPowerM[2]);
+        const conditions: Condition[] = [{ subject: 'self-crit-power', derivable: true }];
+        out.push({
+            channel: 'detonationDamage',
+            value: 0,
+            isMultiplicative: false,
+            target: 'self',
+            conditions,
+            scaling: { conditionIndex: conditions.length - 1, perUnit: detValue / per },
+        });
+    }
+
     // "increases [outgoing] [direct] Damage by [up to] N% [to enemies with <effect> / below X% HP]"
     // → an outgoing-damage bonus (Obsidian). HP-proportional phrasings (Akula's "up to 30%
     // based on the target's current HP percentage") become a scaling modifier on the live
