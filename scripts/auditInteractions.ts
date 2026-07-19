@@ -105,6 +105,25 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // Seeded here so calibration doesn't depend on a single small battery happening to sample every
 // one of these; the calibration gate still empirically tops this set up (and hard-fails if a
 // residual diff survives even the top-up) rather than trusting the seed blindly.
+//
+// CORRECTED (review): this set is NOT superseded by the `survivedWholeBattle` guard below and is
+// NOT dead weight — the two fixes solve different problems. `survivedWholeBattle` only handles
+// premature-death cascades (a ship dying early empties its whole remaining kind-set on one side).
+// This exclusion set is what handles opponent-driven log noise: on the REAL 148-ship corpus
+// (not the inert-only calibration battery), forcing this set empty and re-running the
+// differential oracle at seed 1/count 5 produces 3 additional opponent-noise differentials that
+// the guard does NOT catch (Aegis dot-ticked+detonation, Yuyan debuff-resisted, Quixilver
+// buff+buff-expired — verified empirically). Both fixes are necessary; neither subsumes the
+// other. Excluding these kinds trades away differential-oracle coverage for them audit-wide —
+// the ablation oracle is unaffected and remains the live signal for bugs in these areas (see the
+// Task 10 report's "Differential sensitivity trade-off" concern).
+//
+// KNOWN LIMITATION: the calibration gate above only ever exercises the inert-only battery (ships
+// with an empty class-tag set have no interaction primitives, so any raw diff there is harness
+// noise by construction). It does NOT run a "guard-only, no exclusions" configuration against the
+// real corpus, so calibration passing clean is not evidence that the exclusion set could safely
+// be dropped — the 3-differential regression above only shows up when actually fuzzing the real
+// corpus, which calibration by design does not do.
 const BASE_EXCLUDED_KINDS = new Set<string>([
     'death',
     'cheat-death',
@@ -116,6 +135,10 @@ const BASE_EXCLUDED_KINDS = new Set<string>([
     'shield-destroyed',
 ]);
 
+// Module-level mutable state, ordering invariant: calibration MUST run before any restrictDiff
+// call — this single-shot synchronous CLI guarantees that via main()'s sequencing (runCalibration()
+// is invoked, and completes, before the fuzz loop that calls playerDifferential()/restrictDiff()
+// begins). Do not read this before runCalibration() in any refactor.
 let FOCUS_ONLY_KINDS = new Set<string>(BASE_EXCLUDED_KINDS);
 
 function restrictDiff(raw: FingerprintDiff | null): FingerprintDiff | null {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAuditArgs } from '../../../../scripts/lib/auditArgs';
+import { parseAuditArgs } from '../auditArgs';
 
 describe('parseAuditArgs', () => {
     it('defaults to seed=1, count=10 with no flags', () => {
