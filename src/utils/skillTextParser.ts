@@ -5023,6 +5023,26 @@ function buffGrantSpan(
 }
 
 /**
+ * Finds the character position of the (0-based) Nth occurrence of `name` inside `text` via
+ * repeated plain substring search — a direct generalization of the single-occurrence
+ * `text.indexOf(name)` `detectGrantScope` used before ship-kit W8 Task 2. Returns -1 only when
+ * NO occurrence exists; if fewer than `occurrenceIndex + 1` occurrences exist, returns the LAST
+ * occurrence actually found (defensive: an out-of-range index degrades to "closest available"
+ * rather than losing position entirely).
+ */
+function findNthOccurrencePos(text: string, name: string, occurrenceIndex: number): number {
+    let pos = -1;
+    let searchFrom = 0;
+    for (let n = 0; n <= occurrenceIndex; n++) {
+        const idx = text.indexOf(name, searchFrom);
+        if (idx === -1) return pos;
+        pos = idx;
+        searchFrom = idx + name.length;
+    }
+    return pos;
+}
+
+/**
  * Resolves the player-side ally-scope of a granted buff from its GRANTING CLAUSE, using the
  * same masking-aware clause resolver (`resolveBuffClause`) as condition detection so "Inc."/
  * "Out." abbreviation periods don't break sentence splitting.
@@ -5045,16 +5065,27 @@ function buffGrantSpan(
  *
  * For the attacker's own sim 'self' and 'all-allies' are equivalent (both fold onto the
  * attacker's side); the distinction only matters when the engine walks a team ship's grants.
+ *
+ * `occurrenceIndex` (0-based, ship-kit W8 Task 2): a SAME buff name can be granted to two
+ * DIFFERENT scopes within one clause (Centurion's charge: "This Unit gains 4 stacks of Core
+ * Charge I and grants all adjacent allies 2 stacks of Core Charge I …" — self, then
+ * adjacent-allies). Resolving scope from the buff name's FIRST occurrence (plain `indexOf`)
+ * would make every grant of that name in the clause resolve identically, silently collapsing
+ * the second grant's scope onto the first. The caller (parseSkillEffects, which already walks
+ * one <unit-skill> segment per occurrence) passes which occurrence this call is for so the
+ * governing verb/receiver is read from THAT grant's own span. Defaults to 0 (first occurrence)
+ * — byte-identical for every buff name granted only once in its clause.
  */
 function detectGrantScope(
     skillText: string,
-    buffName: string
+    buffName: string,
+    occurrenceIndex = 0
 ): 'self' | 'ally' | 'all-allies' | 'adjacent-allies' {
     const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
     // Strip trigger/condition sub-clauses so an ally mentioned only as the TRIGGER ("after an
     // ally is critically repaired") doesn't leak ally-scope onto a buff the caster grants itself.
     const clause = stripConditionClauses(resolved);
-    const buffStart = clause.indexOf(buffName.toLowerCase());
+    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), occurrenceIndex);
     const { verb, subject, object } = buffGrantSpan(
         clause,
         buffStart === -1 ? clause.length : buffStart
@@ -5219,12 +5250,21 @@ export function parseSkillEffects(
 
     const segments = parseSkillText(skillText);
     const effects: SkillEffect[] = [];
+    // Ship-kit W8 Task 2: counts how many <unit-skill> tags of THIS buff name have already been
+    // walked, so a buff name granted twice in one clause (Centurion: self x4 + adjacent-allies
+    // x2, same "Core Charge I") resolves each occurrence's scope independently instead of both
+    // collapsing onto the first grant's scope. Incremented for every tagged occurrence (even one
+    // later skipped for lacking a verb) so the count always matches this segment's true position
+    // among the buff name's occurrences in the raw text.
+    const buffNameOccurrence = new Map<string, number>();
 
     for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
         if (seg.type !== 'unit-skill') continue;
 
         const buffName = seg.text;
+        const occurrenceIndex = buffNameOccurrence.get(buffName) ?? 0;
+        buffNameOccurrence.set(buffName, occurrenceIndex + 1);
 
         // Step 1: Find application verb
         const verb = findVerb(segments, i);
@@ -5240,7 +5280,7 @@ export function parseSkillEffects(
         const side = verbToTarget(verb, buffName, nextText);
         const target: SkillEffect['target'] =
             side === 'self'
-                ? detectGrantScope(skillText, buffName)
+                ? detectGrantScope(skillText, buffName, occurrenceIndex)
                 : detectEnemyGrantScope(skillText, buffName);
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 

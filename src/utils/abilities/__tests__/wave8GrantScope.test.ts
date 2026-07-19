@@ -52,3 +52,27 @@ describe.skipIf(!csvAvailable())('Wave 8 Task 1 — detectGrantScope adjacent-al
         expect(ability?.target).toBe('all-allies');
     });
 });
+
+describe.skipIf(!csvAvailable())(
+    'Wave 8 Task 2 — Centurion dual-scope Core Charge I grant (occurrence-aware detectGrantScope)',
+    () => {
+        // Centurion charge: "This Unit gains 4 stacks of Core Charge I and grants all adjacent
+        // allies 2 stacks of Core Charge I then deals …" — the SAME buff name is granted TWICE
+        // in one clause, to two DIFFERENT scopes. Both grants must survive as distinct abilities
+        // with their own stack counts.
+        it('Centurion charge: BOTH Core Charge I grants survive (self x4, adjacent-allies x2)', () => {
+            const abilities = buildShipAbilities(shipFromCsv('Centurion'));
+            const buffAbilities = abilities.slots
+                .flatMap((s) => s.abilities)
+                .filter((a) => a.config.type === 'buff' && a.config.buffName === 'Core Charge I');
+
+            const ccSelf = buffAbilities.find((a) => a.target === 'self');
+            const ccAdj = buffAbilities.find((a) => a.target === 'adjacent-allies');
+
+            expect(ccSelf).toBeDefined();
+            expect(ccAdj).toBeDefined();
+            expect(ccSelf?.config.type === 'buff' && ccSelf.config.stacks).toBe(4);
+            expect(ccAdj?.config.type === 'buff' && ccAdj.config.stacks).toBe(2);
+        });
+    }
+);
