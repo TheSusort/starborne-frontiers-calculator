@@ -10,9 +10,10 @@
  *
  * The fix routes it to the existing reactive `on-debuff-inflicted` trigger (parser: present-tense
  * self-subject recognizer). Warden inflicts Provoke every active turn, so Out. Damage Down II now
- * lands on those turns. The follow-up is ITSELF a debuff, so the on-debuff-inflicted listener
- * carries a `!e.reactive` self-chain guard (else its own reactive debuff-applied would re-enter
- * and blow MAX_INTENT_GENERATIONS).
+ * lands on those turns. The follow-up is ITSELF a debuff, so its own debuff-applied is branded
+ * `viaDebuffInflictedReaction` and the on-debuff-inflicted listener skips it — a precise self-chain
+ * guard (else the reaction would re-enter and blow MAX_INTENT_GENERATIONS), while debuffs from
+ * other reactive triggers (on-crit/on-attacked) still chain as before.
  *
  * Real production kit via buildShipAbilities (mirrors apexSelfShieldGate.integration.test.ts).
  */
