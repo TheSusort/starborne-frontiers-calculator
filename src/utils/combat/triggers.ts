@@ -446,7 +446,17 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
-                        if (e.sourceId === ownerId) enqueue(intent);
+                        // Ship-kit W7 (Warden): `!e.viaDebuffInflictedReaction` breaks a SELF-chain.
+                        // Warden's "when this Unit inflicts a Debuff → Out. Damage Down II" follow-up
+                        // is ITSELF a debuff; without this guard its own debuff-applied would re-enter
+                        // this listener and re-apply every generation until MAX_INTENT_GENERATIONS
+                        // throws. The flag is set ONLY on debuffs applied by an on-debuff-inflicted-
+                        // triggered ability, so debuffs from OTHER reactive triggers (on-crit's
+                        // Crit Shred feeding an on-debuff-inflicted charge — triggers.test scenario 10)
+                        // still chain here as before. Existing consumers (Butcher/Pestilence/APEX)
+                        // inflict their gating debuffs from non-on-debuff-inflicted paths, unaffected.
+                        if (e.sourceId === ownerId && !e.viaDebuffInflictedReaction)
+                            enqueue(intent);
                     });
                     bus.on('dot-applied', (e) => {
                         if (e.sourceId === ownerId) enqueue(intent);
@@ -652,6 +662,20 @@ export function registerReactiveListeners(args: {
                                 triggerDamage: e.damage,
                             },
                         });
+                    });
+                    break;
+                case 'on-self-bomb-detonated':
+                    // Ship-kit W7 (Lingshe): DETONATOR-scoped — fires only when THIS owner ACTIVELY
+                    // caused the burst ("When this Unit detonates a Bomb it gains Stealth"). The
+                    // `detonatorId` field names the detonating caster (detonate()/positional
+                    // detonate → the caster; reduceBombsOnVictim → the countdown-reduce caster) and
+                    // is UNDEFINED for a natural countdown-0 expiry, which nobody detonates. Keys off
+                    // `detonatorId`, NOT `actorId` (the bomb's original applier) — so a bomb Lingshe
+                    // detonates that some OTHER ship applied still grants her Stealth, and a bomb
+                    // SHE applied that expires naturally (or another ship detonates) does not.
+                    // Team-symmetric: any owner registered on either side gates identically.
+                    bus.on('bomb-detonated', (e) => {
+                        if (e.detonatorId === ownerId) enqueue(intent);
                     });
                     break;
                 case 'on-stasis-applied':
@@ -2508,12 +2532,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     applicationTargetId
                 );
                 // Discrete infliction event — sourceId = the owner so the application is chainable.
+                // Ship-kit W7: brand the event when THIS reaction is itself an on-debuff-inflicted
+                // follow-up (Warden's Out. Damage Down II), so the on-debuff-inflicted listener
+                // skips it and the reaction cannot re-trigger itself (bounded, no generation-cap
+                // throw). Other reactive debuffs (on-crit/on-attacked) stay unbranded → still chain.
                 ctx.bus.emit({
                     type: 'debuff-applied',
                     sourceId: intent.ownerId,
                     targetId: debuffTargetId,
                     round: ctx.round,
                     buffName: cfg.buffName,
+                    ...(intent.ability.trigger === 'on-debuff-inflicted'
+                        ? { viaDebuffInflictedReaction: true as const }
+                        : {}),
                 });
             } else {
                 // A persistent-stacking name (would have landed as a never-expiring stack)

@@ -1291,13 +1291,24 @@ const EVERY_TURN_RE = /\b(?:each|every)\s+turn\b/i;
 // phrase uses no application verb (Chakara's R2 passive; unique in the corpus). findVerb treats
 // it as a self-receive ('gains') so the buff segments extract.
 const STARTS_ROUND_WITH_RE = /\bstarts?\s+(?:each|every|the)\s+round\s+with\b/i;
+// VICTIM-scoped bomb-burst phrasing → on-bomb-detonated. Fires whenever a Bomb bursts on an
+// opposing actor, regardless of WHO caused it (the engine listener keys off the opposing victim).
 // Phase 3 PR-D: "explodes on (an|the) enemy" generalises the trigger beyond the literal word
 // "bomb" so Valkyrie's named bomb-type effect ("an Echoing Burst explodes on an enemy") also
 // rides on-bomb-detonated. Verified against docs/ship-skills.csv (grep "explod"): Demolisher
-// ("a/A bomb explodes on an enemy", already covered by the "bomb explodes" alternate) and
-// Valkyrie are the ONLY two rows using "explod" in the whole corpus, so this alternate cannot
-// co-trigger any other ship's kit.
-const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes|explodes on (?:an|the) enemy)/i;
+// ("a/A bomb explodes on an enemy") and Valkyrie are the ONLY two rows using "explod" in the
+// whole corpus, so this alternate cannot co-trigger any other ship's kit.
+// Ship-kit W7: the DETONATOR-scoped "detonates a bomb" alternate was SPLIT OUT into
+// SELF_DETONATES_BOMB_RE below — it is a different trigger (on-self-bomb-detonated), fired only
+// when THIS unit actively causes the burst, not on any bomb bursting on an enemy.
+const BOMB_DETONATE_RE = /(?:bomb explodes|explodes on (?:an|the) enemy)/i;
+// DETONATOR-scoped "When this Unit detonates a Bomb …" → on-self-bomb-detonated (Lingshe's
+// Stealth grant). Corpus-verified (docs/ship-skills.csv, grep "detonates a"): Lingshe is the ONLY
+// ship whose reactive clause uses this phrasing (its OTHER passives use "inflicts a Bomb", a
+// different trigger; the active/charge "detonates <Corrosion|Inferno|Bomb> effects" are cast-path
+// detonation abilities, not reactive-trigger clauses). Distinct from BOMB_DETONATE_RE so a bomb
+// bursting on an enemy from ANY source no longer wrongly grants Lingshe Stealth.
+const SELF_DETONATES_BOMB_RE = /detonates?\s+a\s+bomb/i;
 // "when an enemy cleanses a debuff" — a player reaction to an ENEMY cleanse (Phase 4c PR 4):
 // Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
 // buff/debuff grant onto the LIVE on-enemy-cleansed trigger. Reference data: docs/ship-skills.csv.
@@ -1334,6 +1345,14 @@ const KILL_TRIGGER_RE =
     /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
+// Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted
+// (Warden's Out. Damage Down II follow-up). APPLYING_DEBUFF_RE above only matches the gerund
+// ("on inflicting"), so this present-tense form previously fell through to on-cast — landing a
+// passive-slot enemy timed debuff in a dispatch path the engine never fires. SELF-scoped ("this
+// Unit") so it never co-matches an ally/enemy-subject infliction (those are on-ally-debuff-
+// inflicted / on-attacked, resolved elsewhere). Corpus-verified: Warden is the only ship with
+// this exact phrasing.
+const SELF_INFLICTS_DEBUFF_RE = /\bwhen\s+this\s+unit\s+inflicts\s+(?:a\s+)?debuff/i;
 // "If its debuff is resisted" — Ravager's INFLICTOR-side reaction (the debuff THIS unit
 // inflicted got resisted). Distinct from the resister-side "when this Unit resists a debuff"
 // (parseOnResistHpDamage). Corpus-verified: Ravager is the only "its debuff is resisted" row.
@@ -1415,6 +1434,10 @@ export function detectReactiveTrigger(
     // docs/ship-skills.csv — Volk/Xcellence's start-of-turn heal/shield use separate,
     // non-buff parse paths untouched by this branch).
     if (START_OF_TURN_CHARGE_RE.test(clause)) return 'start-of-turn';
+    // Ship-kit W7: DETONATOR-scoped "this Unit detonates a Bomb" (Lingshe) is checked BEFORE the
+    // victim-scoped "bomb explodes" family — the two are mutually exclusive by phrasing, but this
+    // ordering makes the detonator reading win unambiguously.
+    if (SELF_DETONATES_BOMB_RE.test(clause)) return 'on-self-bomb-detonated';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
     // "when Cheat Death activates" → on-cheat-death-activated (Yazid's Barrier grant in the
     // repair sentence). Tycho's below-40%-HP Barrier is a different reactive (deferred), so this
@@ -1447,6 +1470,8 @@ export function detectReactiveTrigger(
     if (ENEMY_REPAIRS_RE.test(clause)) return 'on-enemy-repaired';
     if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
+    // Ship-kit W7: present-tense self-subject "when this Unit inflicts a Debuff" (Warden).
+    if (SELF_INFLICTS_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     // Paracelsus: "Upon being killed by direct Damage … grants allies <buff>" — the named-buff
     // half of an on-destroyed clause. Mirrors Faust's detectKilledByDirectDamageTrigger (which
     // routes the purge half); here the buffName-scoped clause carries the same phrase.
@@ -1766,12 +1791,14 @@ export function detectAllyCritDotTrigger(
 
 /**
  * Returns 'on-bomb-detonated' when `anchorPos` (the ability's raw-text anchor position) falls
- * inside the sentence carrying a bomb-detonation phrase (BOMB_DETONATE_RE — "detonates a bomb" /
- * "bomb explodes" / "explodes on an enemy"); otherwise undefined. Position-scoped on the RAW
- * text (mirrors detectAllyCritDotTrigger). This is the HEAL-builder counterpart to the existing
- * buff (detectReactiveTrigger, Lingshe) and charge-removal (parseChargeRemoval, Demolisher)
- * on-bomb-detonated readings of the same phrasing (Phase 3 PR-D: Valkyrie's self+lowest-HP-ally
- * repair on Echoing Burst detonation). Reference data: docs/ship-skills.csv.
+ * inside the sentence carrying the VICTIM-scoped bomb-burst phrase (BOMB_DETONATE_RE — "bomb
+ * explodes" / "explodes on an enemy"); otherwise undefined. Position-scoped on the RAW text
+ * (mirrors detectAllyCritDotTrigger). This is the HEAL-builder counterpart to the charge-removal
+ * (parseChargeRemoval, Demolisher) on-bomb-detonated reading of the same phrasing (Phase 3 PR-D:
+ * Valkyrie's self+lowest-HP-ally repair on Echoing Burst detonation). The DETONATOR-scoped
+ * "detonates a bomb" phrasing (Lingshe) is deliberately NOT matched here — it rides the separate
+ * on-self-bomb-detonated trigger via detectReactiveTrigger (Ship-kit W7). Reference data:
+ * docs/ship-skills.csv.
  */
 export function detectBombDetonatedTrigger(
     text: string | null | undefined,

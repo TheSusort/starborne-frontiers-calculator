@@ -5334,6 +5334,10 @@ export function runCombat(input: CombatEngineInput): {
                         type: 'bomb-detonated',
                         actorId,
                         victimId: victim.id,
+                        // Ship-kit W7: the positional detonate caster IS the detonator (the burst
+                        // is caused by this cast's detonate ability — SP-F F1: "the detonating
+                        // caster (actorId) is the source-attacker").
+                        detonatorId: actorId,
                         round: r,
                         stacks: result.bombStacks,
                         damage: result.bomb,

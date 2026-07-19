@@ -285,10 +285,14 @@ describe('cluster 6 — on-bomb-detonated', () => {
 
     const LINGSHE_P3 =
         'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.';
-    it('Lingshe: Stealth on own-detonation already rides on-bomb-detonated (FP lock)', () => {
+    // Ship-kit W7: the earlier triage FP-lock ("already rides on-bomb-detonated") was itself the
+    // bug — Lingshe's "when this Unit DETONATES a Bomb" is DETONATOR-scoped and now rides the
+    // dedicated on-self-bomb-detonated trigger, so a bomb bursting on an enemy from ANY source no
+    // longer wrongly grants her Stealth (only bursts SHE causes do).
+    it('Lingshe: Stealth on own-detonation rides on-self-bomb-detonated (W7 — detonator-scoped)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: LINGSHE_P3 }, 'passive');
         const buff = ab.find((a) => a.type === 'buff');
-        expect(buff?.trigger).toBe('on-bomb-detonated');
+        expect(buff?.trigger).toBe('on-self-bomb-detonated');
     });
 });
 

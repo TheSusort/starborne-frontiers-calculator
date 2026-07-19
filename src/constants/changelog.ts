@@ -6,6 +6,8 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat sim: Lingshe now gains Stealth only when she herself detonates a Bomb (her charged skill), instead of gaining it from any Bomb bursting anywhere in the battle — including bombs that simply expire on their own or that another ship detonates.',
+    'Combat sim: Warden now inflicts Out. Damage Down II when it inflicts a debuff (via its active Provoke or charged Corrosion II), matching its passive — previously this follow-up debuff never applied at all.',
     "Combat sim: enemy-adjacency splash is now modeled. Vindicator's Provoke and charged Out. Damage Down I hit the enemies adjacent to the target (the target excluded), and Asphyxiator's Stasis hits the target and its adjacent enemies — instead of being misapplied as a self-buff on the caster. Meiying's Stasis now also correctly hits all adjacent enemies.",
     "Combat sim: Asphyxiator's active skill now inflicts Inferno III on the targeted enemy AND its board neighbours, matching her skill text — previously the Inferno DoT only ever landed on the primary target.",
     "Combat sim: Demolisher's passive splash is now modeled — when a Bomb explodes on an enemy, Demolisher deals 100% of the Bomb's damage to all enemies adjacent to it. This splash ignores Defense and cannot critically hit, matching the skill text; previously it was dropped entirely.",

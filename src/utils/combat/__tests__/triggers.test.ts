@@ -766,25 +766,27 @@ describe('Phase 3 reactive triggers', () => {
     });
 
     // ----------------------------------------------------------------------
-    // Scenario 11 — generation cap: a self-amplifying on-debuff-inflicted timed
-    // enemy debuff (its own application emits debuff-applied, re-triggering it).
-    // The family rule absorbs the re-apply, but a landed-but-family-blocked
-    // application still emits ⇒ unbounded chain ⇒ throws MAX_INTENT_GENERATIONS.
+    // Scenario 11 — self-chain guard (Ship-kit W7): an on-debuff-inflicted DEBUFF whose own
+    // application would re-trigger itself (Warden's Out. Damage Down II shape). BEFORE W7 this
+    // was an unbounded chain that threw MAX_INTENT_GENERATIONS; the guard now brands the reaction's
+    // own debuff-applied (`viaDebuffInflictedReaction`) so the on-debuff-inflicted listener skips
+    // it — the chain is BOUNDED (Def Down applies from the cast-path Seed Down infliction, then
+    // does NOT feed itself). No throw. The generation-cap backstop still exists for genuinely
+    // pathological loops (see the separate 'exposes a finite MAX_INTENT_GENERATIONS backstop' test).
     // ----------------------------------------------------------------------
-    it('scenario 11: self-amplifying debuff trigger throws the generation cap error (no hang)', () => {
+    it('scenario 11: a self-amplifying on-debuff-inflicted debuff is now BOUNDED (W7 self-chain guard), no throw', () => {
         const loopSkills = (): ShipSkills => ({
             slots: [
                 {
                     slot: 'active',
                     abilities: [
                         ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
-                        // Seed: a normal on-cast timed debuff inflicts once per cast, emitting
-                        // debuff-applied (sourceId attacker) → kicks off the self-amplifying chain.
+                        // Seed: a normal on-cast timed debuff inflicts once per cast, emitting an
+                        // UNBRANDED debuff-applied (sourceId attacker) → feeds Def Down once.
                         timedEnemyDebuff('Seed Down'),
-                        // Self-amplifying: trigger:'on-debuff-inflicted' on a debuff whose own
-                        // application emits debuff-applied → re-triggers itself. The family rule
-                        // absorbs the re-apply (tier equal, not longer), but a landed-but-family-
-                        // blocked application STILL emits, so the chain never terminates.
+                        // trigger:'on-debuff-inflicted' whose own application emits debuff-applied.
+                        // Pre-W7 that re-triggered itself (unbounded); now the W7 guard brands its
+                        // own event so it cannot re-feed this listener → bounded.
                         ab({
                             type: 'debuff',
                             target: 'enemy',
@@ -803,16 +805,25 @@ describe('Phase 3 reactive triggers', () => {
                 },
             ],
         });
-        expect(() =>
-            runCombat(
-                baseInput({
-                    shipSkills: loopSkills(),
-                    hasChargedSkill: false,
-                    chargeCount: 0,
-                    numRounds: 3,
-                })
-            )
-        ).toThrow(/MAX_INTENT_GENERATIONS/);
+        const bus = createEventBus();
+        let defDown = 0;
+        bus.on('debuff-applied', (e) => {
+            if (e.type === 'debuff-applied' && e.buffName === 'Def Down') defDown++;
+        });
+        // Completing at all proves the generation cap is not hit.
+        const result = runCombat(
+            baseInput({
+                shipSkills: loopSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                numRounds: 3,
+                bus,
+            })
+        );
+        expect(result.rounds).toHaveLength(3);
+        // Def Down applies once per active cast (fed by Seed Down), never self-amplifying.
+        expect(defDown).toBeGreaterThan(0);
+        expect(defDown).toBeLessThanOrEqual(3);
     });
 
     // ----------------------------------------------------------------------
