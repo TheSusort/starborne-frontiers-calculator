@@ -3294,9 +3294,9 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // this wires an existing selector, not a new one). Sentence/position-scoped on this buff's
         // own name anchor (mirrors parseHighestSpeedEnemyTarget's damagePos scoping above) and
         // gated on the plain 'enemy' scope only, so a co-located all-enemies/adjacent debuff in
-        // the same row is unaffected. Other ships' Concentrate Fire debuffs (Huanying, Judge,
-        // Lodolite, Stalwart, Vanguard, Yuyan) carry no "highest attack enemy" phrase, so the
-        // narrow regex leaves them at the plain 'enemy' target.
+        // the same row is unaffected. The other seven Concentrate Fire ships in the corpus
+        // (Huanying, Judge, Lodolite, Stalwart, Valkyrie, Vanguard, Yuyan) carry no "highest
+        // attack enemy" phrase, so the narrow regex leaves them at the plain 'enemy' target.
         if (enemyTarget === 'enemy') {
             const slotForThisBuff = slotForBuffSource(buff.skillSource);
             const rowTextForThisBuff = getSkillRowForSlot(ship, slotForThisBuff)?.text ?? '';

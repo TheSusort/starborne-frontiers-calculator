@@ -303,6 +303,20 @@ describe('buffAbilitiesToSelectedBuffs', () => {
         expect(enemyDebuffs[0].buffName).toBe('Weaken');
     });
 
+    it('routes an enemy-highest-attack target debuff into enemyDebuffs (Selenite Concentrate Fire)', () => {
+        const ctx = buildStaticBuffContext({});
+        const concentrateFire = debuffAbility({
+            target: 'enemy-highest-attack',
+        });
+        const { selfBuffs, enemyDebuffs } = buffAbilitiesToSelectedBuffs(
+            skills([concentrateFire]),
+            ctx
+        );
+        expect(selfBuffs).toHaveLength(0);
+        expect(enemyDebuffs).toHaveLength(1);
+        expect(enemyDebuffs[0].buffName).toBe('Weaken');
+    });
+
     it('routes an all-allies target buff into selfBuffs', () => {
         const ctx = buildStaticBuffContext({});
         const allAlliesBuff = buffAbility({
