@@ -531,25 +531,25 @@ git commit -m "feat(interaction-audit): seeded battle runner + result invariants
 
 ---
 
-## Task 4: Invariant catalog — damage conservation + team symmetry
+## Task 4: Invariant catalog — damage conservation (team-symmetry DEFERRED)
 
-**REVISED (live-shape correction): stack-caps is DROPPED.** `ShipRoundState.activeBuffs` is a **deduplicated `Set<string>` of buff NAMES** (battleSimulator.ts:315,445) — it carries NO stack counts, and `ShipRoundState` exposes no per-buff stack count anywhere. So a stack-cap violation is **not observable from `BattleResult`**. Persistent-stacking correctness was also already covered by prior epics (`persistentStackingBuffs.ts` + the stacking epic). This task ships `damage-conservation` (pure) + `team-symmetry` (cross-run).
+**REVISED twice during execution:**
+1. **stack-caps DROPPED** — `ShipRoundState.activeBuffs` is a deduplicated `Set<string>` of buff NAMES (battleSimulator.ts:315,445), no stack counts anywhere in `ShipRoundState`, so a stack-cap violation is **not observable from `BattleResult`**. Persistent-stacking is already covered by prior epics.
+2. **team-symmetry DEFERRED to a controlled-conditions redesign** (see the "Deferred: controlled team-symmetry" section after Task 11). The naive "swap sides, same seed, compare amounts" check is **structurally confounded** and fires on a correct engine: (a) two identical ships tie on speed → the equal-speed tie-break (`state.ts:288`, player-side-first) gives the player-side ship first-mover advantage; (b) the RNG stream is keyed by `ownerId` (`attacker` vs `e:...`), so the same physical ship draws a different crit stream by side. Both make amounts differ across the swap independent of any bug. It ALSO already surfaced a real engine bug manually (FINDING-001, enemy-side charge detonation) — captured — so no coverage is lost by deferring the automated form.
+
+**This task ships `damage-conservation` only.**
 
 **Files:**
 - Modify: `src/utils/combat/audit/invariants.ts`
-- Modify: `src/utils/combat/audit/reproducibility.ts`
 - Modify: `src/utils/combat/audit/__tests__/invariants.test.ts`
-- Modify: `src/utils/combat/audit/__tests__/reproducibility.test.ts`
 
 **Interfaces:**
 - Consumes: everything from Task 3 — `checkInvariants(result)` and `runSeededBattle(input, seed)`.
-- Produces: extends `checkInvariants(result)` with `damage-conservation` (pure result check); adds `checkTeamSymmetry(input, seed): InvariantViolation[]` to `reproducibility.ts` (a CROSS-RUN check — it runs a mirror battle, so it does NOT belong in the pure `checkInvariants`).
+- Produces: extends `checkInvariants(result)` with `damage-conservation` (pure result check). `reproducibility.ts` stays at its Task-3 state (`checkReproducibility` only).
 
-**Note on damage-conservation (see Global Constraints — Protection caveat):** assert per-round `Σ ships.damageDealt ≈ Σ ships.damageTaken` (allow a tiny float epsilon, e.g. `> 1`), but SKIP any round where Protection was active. **Detect a Protection round via `ShipRoundState.activeBuffs.includes('Protection')`** on any ship in that round (there is NO protection/redirect entry kind in the combat log — confirmed; Protection is a buff, so `activeBuffs` is the pure, reliable signal). This keeps the check pure over `result` — do NOT thread ship-tag flags into `checkInvariants`. Confirm the exact buff name string (`'Protection'`) against `src/utils/combat/protectionTransfer.ts` before relying on it.
+**Note on damage-conservation (see Global Constraints — Protection caveat):** assert per-round `Σ ships.damageDealt ≈ Σ ships.damageTaken` (allow a tiny float epsilon, e.g. `> 1`), but SKIP any round where Protection was active. **Detect a Protection round via `ShipRoundState.activeBuffs.includes('Protection')`** on any ship in that round (there is NO protection/redirect entry kind in the combat log — confirmed; Protection is a buff, so `activeBuffs` is the pure, reliable signal). This keeps the check pure over `result`. Confirm the exact buff name string (`'Protection'`) against `src/utils/combat/protectionTransfer.ts` (line ~65) before relying on it.
 
-**Note on team-symmetry:** build a mirror input (swap `playerTeam`↔`enemyTeam`, keep positions), run BOTH via `runSeededBattle(_, seed)` under the SAME seed, and assert the mirrored outcome winner flips consistently and per-actor `damageDealt` totals match across the swap. This is the check most likely to surface HARNESS asymmetry first — see Task 10's calibration gate. If a symmetric mirror battle does NOT come back symmetric, that is a HARNESS or ENGINE finding — report it (do not weaken the check); the Task-10 calibration gate exists precisely to catch this before real fuzzing.
-
-- [ ] **Step 1: Write failing tests.** Add a `damage-conservation` case to `invariants.test.ts` and a `checkTeamSymmetry` case to `reproducibility.test.ts`. Craft: a corrupted round where `ΣdamageDealt`/`ΣdamageTaken` diverge on a NON-protection battle → `damage-conservation`; a symmetric two-of-the-same-ship mirror battle → `checkTeamSymmetry` returns `[]`. Use the Task-3 real-ship builder + `runSeededBattle`.
+- [ ] **Step 1: Write failing test.** Add a `damage-conservation` case to `invariants.test.ts`: a corrupted round where `ΣdamageDealt`/`ΣdamageTaken` diverge on a NON-protection battle → flagged. Keep a clean-battle case asserting `checkInvariants(result)` returns `[]` on the real 20-round battle.
 
 ```typescript
 // append to invariants.test.ts (checkInvariants takes ONLY result)
@@ -562,25 +562,19 @@ describe('checkInvariants — conservation', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify the new tests fail**
+- [ ] **Step 2: Run to verify it fails** (`npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts`; `damage-conservation` not produced yet).
 
-Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts src/utils/combat/audit/__tests__/reproducibility.test.ts`
-Expected: FAIL — new ids not produced yet.
+- [ ] **Step 3: Implement.** Add `damageConservation(result)` to `checkInvariants`'s spread (pure, Task-3 shape): iterate rounds, sum `ships.damageDealt` and `ships.damageTaken`, SKIP rounds where any ship's `activeBuffs` includes `'Protection'`, push on `Math.abs(dealt - taken) > 1`.
 
-- [ ] **Step 3: Implement.** Add `damageConservation(result)` to `checkInvariants`'s spread (pure, Task-3 shape): iterate rounds, sum `ships.damageDealt` and `ships.damageTaken`, SKIP rounds where any ship's `activeBuffs` includes `'Protection'`, push on `Math.abs(dealt - taken) > 1`. Add `checkTeamSymmetry(input, seed)` to `reproducibility.ts` — mirror the input, run both sides via `runSeededBattle(_, seed)` under the same seed, compare winner (must be the mirror side) + per-actor `damageDealt` totals across the swap.
+**Implementer caution:** if the un-corrupted `damage-conservation` check fires on a REAL clean battle, that is a genuine finding (a reconciliation edge the `ShipRoundState.damageDealt` docstring warns about — e.g. redirected DoT-tick batches). Do NOT loosen the epsilon or narrow the battle to force green — STOP and report the round + numbers. (Verified during execution: it holds clean on the 20-round Demolisher mirror.)
 
-**Implementer caution:** if the un-corrupted `damage-conservation` check or `checkTeamSymmetry` fires on a REAL clean battle, that is a genuine finding (an engine asymmetry or a reconciliation edge the `ShipRoundState.damageDealt` docstring warns about — e.g. redirected DoT-tick batches). Do NOT loosen the epsilon or narrow the battle to force green — STOP and report it with the round and numbers so the controller can adjudicate (it may be a real Task-10 finding, not a test problem).
-
-- [ ] **Step 4: Run to verify all pass**
-
-Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts src/utils/combat/audit/__tests__/reproducibility.test.ts`
-Expected: PASS (all).
+- [ ] **Step 4: Run to verify pass** (`npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/utils/combat/audit/invariants.ts src/utils/combat/audit/reproducibility.ts src/utils/combat/audit/__tests__/invariants.test.ts src/utils/combat/audit/__tests__/reproducibility.test.ts
-git commit -m "feat(interaction-audit): damage-conservation invariant + team-symmetry check"
+git add src/utils/combat/audit/invariants.ts src/utils/combat/audit/__tests__/invariants.test.ts
+git commit -m "feat(interaction-audit): damage-conservation invariant (team-symmetry deferred — see FINDING-001)"
 ```
 
 ---
@@ -885,9 +879,9 @@ git commit -m "feat(interaction-audit): ledger writer (json + md, needs-triage s
 - Consumes: every pure module (Tasks 2–9) + `loadShipDataRecords` (`scripts/lib/shipDataSnapshot`).
 - Produces: the runnable `npm run audit:interactions -- --seed <N> --count <M>` command that writes `docs/interaction-audit-ledger.{json,md}` and prints a summary.
 
-**Calibration gate (the spec's Wave-0 step):** the CLI's FIRST action, before any fuzzing, is a self-check: run a battery of `count` compositions containing ONLY ships with an empty class tag set (inert ships), all via `runSeededBattle(_, seed)`, and assert `checkInvariants(result)` + `checkReproducibility` + `checkTeamSymmetry` + `runDifferential` return zero findings. If the inert battery produces findings, those are HARNESS asymmetries (focus-vs-walked instrumentation, symmetry setup) — the CLI prints `CALIBRATION FAILED` with the offending invariant and exits non-zero WITHOUT writing a ledger. Only once calibration is clean does it fuzz the real tagged corpus. This prevents harness noise from polluting the findings ledger.
+**Calibration gate (the spec's Wave-0 step):** the CLI's FIRST action, before any fuzzing, is a self-check: run a battery of `count` compositions containing ONLY ships with an empty class tag set (inert ships), all via `runSeededBattle(_, seed)`, and assert `checkInvariants(result)` + `checkReproducibility` + `runDifferential` return zero findings. (team-symmetry is NOT part of calibration — it's deferred; see the controlled-team-symmetry section.) If the inert battery produces findings, those are HARNESS asymmetries (focus-vs-walked instrumentation) — the CLI prints `CALIBRATION FAILED` with the offending invariant and exits non-zero WITHOUT writing a ledger. Only once calibration is clean does it fuzz the real tagged corpus. This prevents harness noise from polluting the findings ledger.
 
-- [ ] **Step 1: Write the CLI** — parse `--seed`/`--count`; `loadShipDataRecords()`; `tagShip` each; run the calibration gate (inert-only battery); on pass, for each seed in `[seed, seed+count)`: `composeBattle(seed, tagged)` → `runSeededBattle(input, seed)` → `checkInvariants(result)` + `checkReproducibility(input, seed)` + `checkTeamSymmetry(input, seed)` + differential (per player ship vs its `buildStandardScenario` solo, BOTH via `runSeededBattle(_, seed)`) + ablation on top tagged pairs (via `runAblation(a, b, seed)`); `minimizeComposition` any invariant/differential violation (the `stillFails` predicate re-runs via `runSeededBattle(_, seed)`); collect `Finding`s; `writeLedger`. Print `compositionsRun`, `confirmed`, `needsTriage` counts.
+- [ ] **Step 1: Write the CLI** — parse `--seed`/`--count`; `loadShipDataRecords()`; `tagShip` each; run the calibration gate (inert-only battery); on pass, for each seed in `[seed, seed+count)`: `composeBattle(seed, tagged)` → `runSeededBattle(input, seed)` → `checkInvariants(result)` + `checkReproducibility(input, seed)` + differential (per player ship vs its `buildStandardScenario` solo, BOTH via `runSeededBattle(_, seed)`) + ablation on top tagged pairs (via `runAblation(a, b, seed)`); `minimizeComposition` any invariant/differential violation (the `stillFails` predicate re-runs via `runSeededBattle(_, seed)`); collect `Finding`s; `writeLedger`. Print `compositionsRun`, `confirmed`, `needsTriage` counts.
 
 - [ ] **Step 2: Add the npm script** to `package.json`:
 
@@ -964,11 +958,22 @@ git commit -m "test(interaction-audit): permanent seeded invariant regression ga
 ## Self-Review
 
 **Spec coverage:**
-- Seeded runner (RNG correction) → Task 3 (`seededBattle.ts`). Oracle A: pure result invariants (hp-bounds, no-dead-acts [reformulated: corpse-acts-in-later-round], damage-conservation) → Tasks 3–4; cross-run checks (reproducibility, team-symmetry) → `reproducibility.ts`, Tasks 3–4. **stack-caps DROPPED** — stack counts are not observable from `BattleResult` (`activeBuffs` is a name-only Set); persistent-stacking already covered by prior epics. Oracle B (differential) → Task 5. Oracle C (ablation) → Task 6. Fuzzer → Task 7. Minimizer → Task 8. Interaction-class tagging → Task 2. Canonical stats → Task 1. Discovery ledger → Task 9. CLI + calibration → Task 10. Regression gate → Task 11. Non-goals (no magnitude/gear/UI/auto-fix) honored throughout. ✅
+- Seeded runner (RNG correction) → Task 3 (`seededBattle.ts`). Oracle A: pure result invariants (hp-bounds, no-dead-acts [reformulated: corpse-acts-in-later-round], damage-conservation) → Tasks 3–4; cross-run check (reproducibility) → `reproducibility.ts`, Task 3. **stack-caps DROPPED** (not observable from `BattleResult`). **team-symmetry DEFERRED** to a controlled-conditions redesign (naive form confounded by tie-break + ownerId-keyed RNG; already found FINDING-001 manually). Oracle B (differential) → Task 5. Oracle C (ablation) → Task 6. Fuzzer → Task 7. Minimizer → Task 8. Interaction-class tagging → Task 2. Canonical stats → Task 1. Discovery ledger → Task 9. CLI + calibration → Task 10. Regression gate → Task 11. Non-goals (no magnitude/gear/UI/auto-fix) honored throughout. ✅
 - Risk: ablation triage → `needsTriage` bucket (Tasks 6, 9). Risk: harness-asymmetry calibration → explicit calibration gate (Task 10). ✅
 - File-placement refinement (pure logic in `src/utils/combat/audit/`, not `scripts/lib/interaction/`) documented in File Structure with rationale (avoids `src → scripts` dep for the regression gate). ✅
 - **RNG correction:** production combat uses `Math.random`; every battle routes through `runSeededBattle`; `mulberry32` + seed seams reused from `rateAccumulator`. ✅
 
 **Placeholder scan:** Tasks 2, 4, 6, 9, 10 intentionally defer some exact property reads to implement-time discovery (real `Ability` shape, `activeBuffs` encoding, Protection log marker, `CombatLogTurn.entries` field name) with a concrete grep/inspection instruction each — these are unknowable from the types alone and MUST be verified against live shapes, not guessed. All algorithmic logic and all testable contracts are concrete.
 
-**Type consistency:** `Finding`/`InvariantViolation`/`FingerprintDiff`/`AblationResult`/`InteractionClass` defined once (Task 1), consumed unchanged downstream. `runSeededBattle(input, seed)`, `checkInvariants(result)` (result-only — corrected), `checkReproducibility(input, seed)`, `checkTeamSymmetry(input, seed)`, `fingerprintActor(result, actorId)`, `composeBattle(seed, tagged)`, `runAblation(a, b, seed)`, `minimizeComposition(input, stillFails)`, `tagShip(ship)`, `canonicalPlacement(ship, position)` signatures stable across all references. ✅
+**Type consistency:** `Finding`/`InvariantViolation`/`FingerprintDiff`/`AblationResult`/`InteractionClass` defined once (Task 1), consumed unchanged downstream. `runSeededBattle(input, seed)`, `checkInvariants(result)` (result-only — corrected), `checkReproducibility(input, seed)`, `fingerprintActor(result, actorId)`, `composeBattle(seed, tagged)`, `runAblation(a, b, seed)`, `minimizeComposition(input, stillFails)`, `tagShip(ship)`, `canonicalPlacement(ship, position)` signatures stable across all references. (`checkTeamSymmetry` deferred.) ✅
+
+---
+
+## Deferred: controlled team-symmetry (post-Task-11 follow-up)
+
+The team-symmetry oracle is uniquely valuable — it's the ONLY oracle that catches **enemy-side** execution bugs (the differential oracle only compares a ship on the player side, solo vs composition). It already found FINDING-001 (enemy-side charge detonation never fires) manually. But the naive "swap sides, same seed, compare amounts" form is confounded by two documented engine facts, so it must be redesigned with controls before it can be an automated check:
+
+1. **Equal-speed tie-break** (`state.ts:288`, player-side-first): identical ships tie → player-side first-mover advantage. **Control:** run the symmetry probe with DISTINCT speeds so turn order is speed-determined (symmetric under swap), OR use a no-death fixed-round window where killing-blow order is irrelevant.
+2. **RNG stream keyed by `ownerId`** (`attacker` vs `e:...`): the same physical ship draws different crit sequences by side. **Control:** neutralize RNG — set `crit = 0` (and any other RNG-gated stat) on all placements via `statOverrides`, making damage deterministic and stream-independent. FINDING-001's bug is RNG-independent (an exec-path gap), so it STILL shows under crit=0.
+
+**Redesign sketch:** `checkTeamSymmetry(input, seed)` builds a CONTROLLED mirror — crit=0 on every placement, distinct descending speeds, enough HP / few enough rounds that no ship dies — runs original + mirror under the same seed, and compares each PHYSICAL ship's total `damageDealt` across the swap (matched by (side,position)→mirrored-(side,position), NOT by actorId, since `playerTeam[0]` always mints `'attacker'`). A correct engine → equal; an exec-path asymmetry (FINDING-001 class) → flagged. This lives OUTSIDE the always-green Task-11 gate (charge-detonation ships fail it until the engine bug is fixed); it belongs in the Task-10 discovery pass as a finding-generator. Give this its own brainstorm → plan before implementing — the control set may need iteration to reach zero false-positives on a known-good engine.
