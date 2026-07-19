@@ -52,3 +52,13 @@ describe('checkInvariants — pure result checks', () => {
         expect(checkInvariants(result).some((x) => x.invariant === 'no-dead-acts')).toBe(false);
     });
 });
+
+describe('checkInvariants — conservation', () => {
+    it('flags a per-round damageDealt/damageTaken mismatch on a non-protection battle', () => {
+        const result = runSeededBattle(battle(), 1); // Demolisher mirror — no Protection
+        result.rounds[0].ships[0].damageDealt += 5000; // break the ledger
+        expect(checkInvariants(result).some((x) => x.invariant === 'damage-conservation')).toBe(
+            true
+        );
+    });
+});
