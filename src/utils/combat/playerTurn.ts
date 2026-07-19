@@ -910,8 +910,17 @@ function reduceBombsOnVictim(
     detonatorId: string,
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
 ): void {
-    for (let i = victim.pendingBombs.length - 1; i >= 0; i--) {
-        const bomb = victim.pendingBombs[i];
+    // Bind the array reference ONCE, exactly as the sibling `processBombs` does with its
+    // `args.pendingBombs` param. A forced detonation can kill the victim, and the engine's
+    // bomb-splash-on-death then REASSIGNS `victim.pendingBombs = []` (not an in-place mutation).
+    // Re-reading the live field mid-loop would strand this index into that emptied array and throw
+    // (interaction-audit FINDING-002: Lingshe + a multi-bomb planter). Holding the pre-death
+    // snapshot lets every countdown-0 bomb detonate, matching the natural burst on an actor's own
+    // turn. `.splice` on this reference stays correct in the survive case (same object as the live
+    // field) and is a harmless no-op on the detached snapshot in the death case.
+    const bombs = victim.pendingBombs;
+    for (let i = bombs.length - 1; i >= 0; i--) {
+        const bomb = bombs[i];
         bomb.countdown -= turns;
         if (bomb.countdown > 0) continue;
         const burst =
@@ -935,7 +944,7 @@ function reduceBombsOnVictim(
             victim.shieldPool -= shieldDrain;
             victim.currentHp = Math.max(0, victim.currentHp - (burst - shieldDrain));
         }
-        victim.pendingBombs.splice(i, 1);
+        bombs.splice(i, 1);
     }
 }
 

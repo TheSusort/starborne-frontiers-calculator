@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat sim: fixed a crash when Lingshe's Bomb-countdown reduction detonated a Bomb that killed an enemy still carrying other Bombs (e.g. paired with a Bomb planter like Sha Xing or Panguan). All of that enemy's due Bombs now detonate correctly instead of aborting the simulation.",
     'Combat sim: Zeolite now purges 1 buff from an enemy Defender whenever it deals damage to one, matching its passive — previously this follow-up purge never applied at all.',
     'Combat sim: Lingshe now gains Stealth only when she herself detonates a Bomb (her charged skill), instead of gaining it from any Bomb bursting anywhere in the battle — including bombs that simply expire on their own or that another ship detonates.',
     'Combat sim: Warden now inflicts Out. Damage Down II when it inflicts a debuff (via its active Provoke or charged Corrosion II), matching its passive — previously this follow-up debuff never applied at all.',
