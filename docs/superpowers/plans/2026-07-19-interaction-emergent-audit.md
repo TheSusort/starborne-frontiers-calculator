@@ -4,13 +4,15 @@
 
 **Goal:** Build a deterministic fuzzing + invariant/differential/ablation audit harness that hunts multi-ship interaction bugs the single-ship ship-kit correctness epic could not see, emitting a triageable ledger and a permanent regression gate.
 
-**Architecture:** Pure oracle/fuzzer logic lives in `src/utils/combat/audit/` (so the `src` regression test imports it directly — no `src → scripts` dependency). A thin CLI in `scripts/` loads `docs/ship-data.json`, drives the pure modules, and writes the ledger. Everything runs through the existing `simulateBattle`, which is fully deterministic (no `Math.random`), so cross-run diffs are exact.
+**Architecture:** Pure oracle/fuzzer logic lives in `src/utils/combat/audit/` (so the `src` regression test imports it directly — no `src → scripts` dependency). A thin CLI in `scripts/` loads `docs/ship-data.json`, drives the pure modules, and writes the ledger. Every battle runs through `simulateBattle` **wrapped by a seeded RNG** (`runSeededBattle`): production combat draws crit/hit/landing from `Math.random` via `rateAccumulator`, so the harness installs a fixed seed (`setupKeyedTestRng(seed)`) around each run and resets after — making runs byte-reproducible so cross-run diffs are exact.
+
+> **CORRECTION (discovered during Task 3):** The design spec's "no `Math.random`, engine is deterministic" enabling fact was WRONG. `rateAccumulator.ts:18` is `let rng = Math.random` — production combat is genuinely random. Determinism is achievable ONLY by pinning the engine's existing seed seams. This is why `runSeededBattle` exists and every oracle uses it instead of raw `simulateBattle`.
 
 **Tech Stack:** TypeScript, Vitest (`npm test`), `tsx` (script runner), the existing combat engine (`simulateBattle`).
 
 ## Global Constraints
 
-- **Determinism, always:** No `Math.random`, no `Date.now()`, no argless `new Date()` anywhere in harness code (engine + scripts convention). The fuzzer uses a seeded PRNG (`mulberry32`). Copied verbatim from spec.
+- **Determinism via seeding (CORRECTED):** production combat uses `Math.random` (via `rateAccumulator.ts`), so every battle MUST run through `runSeededBattle(input, seed)` — which calls `setupKeyedTestRng(seed)` before `simulateBattle` and `resetRateGateRng()` after (try/finally). Same seed → byte-identical result (verified). Harness code itself uses no `Math.random`/`Date.now()`/argless `new Date()`. **Reuse the engine's existing `mulberry32` and seed seams from `src/utils/calculators/rateAccumulator.ts`** — do NOT hand-roll a second PRNG the engine never consults.
 - **No ground truth:** Oracles assert internal-consistency invariants and cross-run diffs ONLY. No magnitude/expected-number checks.
 - **Reuse, don't reinvent:** `simulateBattle(input: BattleSimulationInput): BattleResult` (`src/utils/calculators/battleSimulator.ts:774`); `buildShipAbilities` for tagging; `collectActorEntryKinds` semantics for fingerprints; ledger format mirrors `docs/ship-kit-correctness-ledger.{json,md}`.
 - **Canonical stats only:** every ship instantiated at level-60 base stats via `statOverrides` from `ship.baseStats` (the `traceScenario.placement()` pattern). No gear/refit/engineering fuzzing.
@@ -27,11 +29,13 @@
 src/utils/combat/audit/
   ├── types.ts          # shared harness types (InteractionClass, InvariantViolation, Finding, …)
   ├── fixtures.ts       # canonicalPlacement(ship, position) — level-60 base-stat BattlePlacement
+  ├── seededBattle.ts   # runSeededBattle(input, seed) — setupKeyedTestRng→simulateBattle→reset; the ONLY way oracles run battles
   ├── classes.ts        # tagShip(ship): Set<InteractionClass> — derived from buildShipAbilities
-  ├── invariants.ts     # checkInvariants(input, result): InvariantViolation[]
+  ├── invariants.ts     # checkInvariants(input, result): InvariantViolation[] — pure result-inspecting only
+  ├── reproducibility.ts # checkReproducibility(input, seed) — two seeded runs must match (needs the runner, not a pure result check)
   ├── fingerprint.ts    # fingerprintActor(result, actorId) + diffFingerprints + runDifferential
   ├── ablation.ts       # runAblation(a, b, rosterById): AblationResult
-  ├── compose.ts        # mulberry32 PRNG + composeBattle(seed, pools): BattleSimulationInput
+  ├── compose.ts        # composeBattle(seed, pools): BattleSimulationInput — reuses mulberry32 from rateAccumulator
   ├── minimize.ts       # minimizeComposition(input, stillFails): BattleSimulationInput
   └── __tests__/        # one *.test.ts per module above
 src/utils/combat/__tests__/interactionInvariants.integration.test.ts   # permanent seeded gate
@@ -299,88 +303,146 @@ git commit -m "feat(interaction-audit): interaction-class tagging derived from p
 
 ---
 
-## Task 3: Invariant catalog — HP bounds, no-dead-acts, determinism
+## Task 3: Seeded battle runner + core result invariants + reproducibility
+
+**REVISED (RNG correction):** production combat uses `Math.random` (`rateAccumulator.ts:18`). This task first builds the seeded runner every later oracle depends on, then the two pure result-invariants, then a reproducibility check that exercises the seeding. `determinism` is NOT a pure result check — it must re-run battles, so it lives in `reproducibility.ts`, not in `checkInvariants`.
 
 **Files:**
+- Create: `src/utils/combat/audit/seededBattle.ts`
 - Create: `src/utils/combat/audit/invariants.ts`
+- Create: `src/utils/combat/audit/reproducibility.ts`
+- Test: `src/utils/combat/audit/__tests__/seededBattle.test.ts`
 - Test: `src/utils/combat/audit/__tests__/invariants.test.ts`
+- Test: `src/utils/combat/audit/__tests__/reproducibility.test.ts`
 
 **Interfaces:**
-- Consumes: `InvariantViolation` (Task 1); `BattleSimulationInput`, `BattleResult`, `simulateBattle` (existing).
-- Produces: `checkInvariants(input: BattleSimulationInput, result: BattleResult): InvariantViolation[]`.
+- Consumes: `InvariantViolation` (Task 1); `canonicalPlacement` (Task 1); `simulateBattle`, `BattleSimulationInput`, `BattleResult` (existing); `setupKeyedTestRng`, `resetRateGateRng` from `src/utils/calculators/rateAccumulator` (existing).
+- Produces:
+  - `runSeededBattle(input: BattleSimulationInput, seed: number): BattleResult`
+  - `checkInvariants(result: BattleResult): InvariantViolation[]` (pure, result only)
+  - `checkReproducibility(input: BattleSimulationInput, seed: number): InvariantViolation[]`
 
-**Note:** These three read only `result.rounds[].ships[]` (`hpPct`, `shieldPct`, `alive`) and `result.rounds[].turnOrder`, plus a second `simulateBattle` call for determinism. Build a small in-test battle from two real ships via `canonicalPlacement`; do NOT hand-forge a `BattleResult` (it must come from the engine to be meaningful).
+**Test-ship note:** use a real ship that loads via `buildTraceShip` from `scripts/lib/traceShipFactory` (e.g. `buildTraceShip('Demolisher')`) — `loadShipDataByName` returns raw `ShipData` without `baseStats`, so it is NOT a drop-in for `canonicalPlacement`. Verified: `buildTraceShip('Demolisher')` produces a `Ship` with `baseStats`.
+
+### Step group A — `seededBattle.ts` (the runner every oracle uses)
 
 - [ ] **Step 1: Write the failing test**
+
+Create `src/utils/combat/audit/__tests__/seededBattle.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { runSeededBattle } from '../seededBattle';
+import { canonicalPlacement } from '../fixtures';
+import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
+import type { BattleSimulationInput } from '../../../calculators/battleSimulator';
+import type { Ship } from '../../../../types/ship';
+
+const battle = (): BattleSimulationInput => ({
+    playerTeam: [canonicalPlacement(buildTraceShip('Demolisher') as Ship, 'T1')],
+    enemyTeam: [canonicalPlacement(buildTraceShip('Lodolite') as Ship, 'M2')],
+    rounds: 20,
+});
+
+describe('runSeededBattle', () => {
+    it('is byte-reproducible for the same seed', () => {
+        const a = JSON.stringify(runSeededBattle(battle(), 1));
+        const b = JSON.stringify(runSeededBattle(battle(), 1));
+        expect(a).toBe(b);
+    });
+
+    it('differs across seeds (RNG actually flows)', () => {
+        const a = JSON.stringify(runSeededBattle(battle(), 1));
+        const b = JSON.stringify(runSeededBattle(battle(), 2));
+        expect(a).not.toBe(b);
+    });
+});
+```
+
+- [ ] **Step 2: Run → RED** (`npx vitest --run src/utils/combat/audit/__tests__/seededBattle.test.ts`; cannot find module).
+
+- [ ] **Step 3: Implement `seededBattle.ts`**
+
+```typescript
+import { simulateBattle, type BattleSimulationInput, type BattleResult } from '../../calculators/battleSimulator';
+import { setupKeyedTestRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+
+/** Run a battle under a pinned RNG seed so the result is byte-reproducible.
+ *  Production combat draws crit/hit/landing from Math.random via rateAccumulator;
+ *  setupKeyedTestRng installs a seeded keyed sub-stream provider for the duration
+ *  of this call, and resetRateGateRng restores Math.random afterward. The reset
+ *  runs in finally so a throwing battle never leaks the seeded RNG into later runs. */
+export function runSeededBattle(input: BattleSimulationInput, seed: number): BattleResult {
+    setupKeyedTestRng(seed);
+    try {
+        return simulateBattle(input);
+    } finally {
+        resetRateGateRng();
+    }
+}
+```
+
+(Confirm the exact exported names `setupKeyedTestRng` / `resetRateGateRng` in `rateAccumulator.ts` before implementing — they are the SP-0 rng-decouple seams.)
+
+- [ ] **Step 4: Run → GREEN** (both tests pass).
+
+### Step group B — `invariants.ts` (pure result checks: hp-bounds, no-dead-acts)
+
+- [ ] **Step 5: Write the failing test**
 
 Create `src/utils/combat/audit/__tests__/invariants.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { checkInvariants } from '../invariants';
+import { runSeededBattle } from '../seededBattle';
 import { canonicalPlacement } from '../fixtures';
-import { simulateBattle, type BattleSimulationInput } from '../../../calculators/battleSimulator';
-import { loadShipDataByName } from '../../../../../scripts/lib/shipDataSnapshot';
+import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
+import type { BattleSimulationInput } from '../../../calculators/battleSimulator';
+import type { Ship } from '../../../../types/ship';
 
-const ships = loadShipDataByName();
 const battle = (): BattleSimulationInput => ({
-    playerTeam: [canonicalPlacement(ships.get('Vindicator') as never, 'T1')],
-    enemyTeam: [canonicalPlacement(ships.get('Vindicator') as never, 'T1')],
+    playerTeam: [canonicalPlacement(buildTraceShip('Demolisher') as Ship, 'T1')],
+    enemyTeam: [canonicalPlacement(buildTraceShip('Demolisher') as Ship, 'M2')],
     rounds: 20,
 });
 
-describe('checkInvariants — core three', () => {
-    it('reports no violations for a normal deterministic battle', () => {
-        const input = battle();
-        const result = simulateBattle(input);
-        expect(checkInvariants(input, result)).toEqual([]);
+describe('checkInvariants — pure result checks', () => {
+    it('reports no violations for a normal battle', () => {
+        const result = runSeededBattle(battle(), 1);
+        expect(checkInvariants(result)).toEqual([]);
     });
 
     it('flags an hpPct outside [0,100]', () => {
-        const input = battle();
-        const result = simulateBattle(input);
-        // Corrupt one round's ship state to prove the check fires.
+        const result = runSeededBattle(battle(), 1);
         result.rounds[0].ships[0].hpPct = 140;
-        const v = checkInvariants(input, result);
-        expect(v.some((x) => x.invariant === 'hp-bounds')).toBe(true);
+        expect(checkInvariants(result).some((x) => x.invariant === 'hp-bounds')).toBe(true);
     });
 
     it('flags a dead actor appearing in turnOrder', () => {
-        const input = battle();
-        const result = simulateBattle(input);
+        const result = runSeededBattle(battle(), 1);
         const dead = result.rounds[0].ships[0];
         dead.alive = false;
         result.rounds[0].turnOrder = [dead.actorId];
-        const v = checkInvariants(input, result);
-        expect(v.some((x) => x.invariant === 'no-dead-acts')).toBe(true);
+        expect(checkInvariants(result).some((x) => x.invariant === 'no-dead-acts')).toBe(true);
     });
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 6: Run → RED.**
 
-Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts`
-Expected: FAIL — cannot find module `../invariants`.
-
-- [ ] **Step 3: Implement the three invariants**
-
-Create `src/utils/combat/audit/invariants.ts`:
+- [ ] **Step 7: Implement `invariants.ts`** (note: `checkInvariants` takes ONLY `result` now — no `input`, no `simulateBattle` import, no `determinism`):
 
 ```typescript
 import type { InvariantViolation } from './types';
-import { simulateBattle, type BattleSimulationInput, type BattleResult } from '../../calculators/battleSimulator';
+import type { BattleResult } from '../../calculators/battleSimulator';
 
 function hpBounds(result: BattleResult): InvariantViolation[] {
     const out: InvariantViolation[] = [];
     for (const r of result.rounds) {
         for (const s of r.ships) {
             if (s.hpPct < 0 || s.hpPct > 100) {
-                out.push({
-                    invariant: 'hp-bounds',
-                    round: r.round,
-                    actorId: s.actorId,
-                    detail: `hpPct ${s.hpPct} outside [0,100]`,
-                });
+                out.push({ invariant: 'hp-bounds', round: r.round, actorId: s.actorId, detail: `hpPct ${s.hpPct} outside [0,100]` });
             }
         }
     }
@@ -393,43 +455,78 @@ function noDeadActs(result: BattleResult): InvariantViolation[] {
         const deadIds = new Set(r.ships.filter((s) => !s.alive).map((s) => s.actorId));
         for (const actorId of r.turnOrder) {
             if (deadIds.has(actorId)) {
-                out.push({
-                    invariant: 'no-dead-acts',
-                    round: r.round,
-                    actorId,
-                    detail: `dead actor ${actorId} present in turnOrder`,
-                });
+                out.push({ invariant: 'no-dead-acts', round: r.round, actorId, detail: `dead actor ${actorId} present in turnOrder` });
             }
         }
     }
     return out;
 }
 
-function determinism(input: BattleSimulationInput, result: BattleResult): InvariantViolation[] {
-    const rerun = simulateBattle(input);
-    const a = JSON.stringify(result);
-    const b = JSON.stringify(rerun);
-    if (a !== b) {
-        return [{ invariant: 'determinism', round: 0, detail: 'two runs of the same input diverged' }];
-    }
-    return [];
-}
-
-export function checkInvariants(input: BattleSimulationInput, result: BattleResult): InvariantViolation[] {
-    return [...hpBounds(result), ...noDeadActs(result), ...determinism(input, result)];
+export function checkInvariants(result: BattleResult): InvariantViolation[] {
+    return [...hpBounds(result), ...noDeadActs(result)];
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 8: Run → GREEN.**
 
-Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts`
-Expected: PASS (3 tests).
+### Step group C — `reproducibility.ts` (the corrected determinism check)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Write the failing test**
+
+Create `src/utils/combat/audit/__tests__/reproducibility.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { checkReproducibility } from '../reproducibility';
+import { canonicalPlacement } from '../fixtures';
+import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
+import type { BattleSimulationInput } from '../../../calculators/battleSimulator';
+import type { Ship } from '../../../../types/ship';
+
+const battle = (): BattleSimulationInput => ({
+    playerTeam: [canonicalPlacement(buildTraceShip('Demolisher') as Ship, 'T1')],
+    enemyTeam: [canonicalPlacement(buildTraceShip('Lodolite') as Ship, 'M2')],
+    rounds: 20,
+});
+
+describe('checkReproducibility', () => {
+    it('returns no violation for a seeded battle (byte-reproducible)', () => {
+        expect(checkReproducibility(battle(), 1)).toEqual([]);
+    });
+});
+```
+
+- [ ] **Step 10: Run → RED.**
+
+- [ ] **Step 11: Implement `reproducibility.ts`** (re-seeds via `runSeededBattle` between the two runs — the whole point; a raw double `simulateBattle` would ALWAYS differ):
+
+```typescript
+import type { InvariantViolation } from './types';
+import type { BattleSimulationInput } from '../../calculators/battleSimulator';
+import { runSeededBattle } from './seededBattle';
+
+/** Two runs of the same (input, seed) must be byte-identical. This guards
+ *  nondeterminism OTHER than the (now-pinned) RNG — Map-iteration order, leaked
+ *  global state, etc. runSeededBattle re-seeds each call, so any diff is a real bug. */
+export function checkReproducibility(input: BattleSimulationInput, seed: number): InvariantViolation[] {
+    const a = JSON.stringify(runSeededBattle(input, seed));
+    const b = JSON.stringify(runSeededBattle(input, seed));
+    if (a !== b) {
+        return [{ invariant: 'reproducibility', round: 0, detail: `two seeded runs (seed ${seed}) diverged` }];
+    }
+    return [];
+}
+```
+
+- [ ] **Step 12: Run → GREEN.**
+
+- [ ] **Step 13: Full suite + commit**
+
+Run `npm test` once (never `vitest -u`), then:
 
 ```bash
-git add src/utils/combat/audit/invariants.ts src/utils/combat/audit/__tests__/invariants.test.ts
-git commit -m "feat(interaction-audit): invariant catalog — hp-bounds, no-dead-acts, determinism"
+git add src/utils/combat/audit/seededBattle.ts src/utils/combat/audit/invariants.ts src/utils/combat/audit/reproducibility.ts src/utils/combat/audit/__tests__/seededBattle.test.ts src/utils/combat/audit/__tests__/invariants.test.ts src/utils/combat/audit/__tests__/reproducibility.test.ts
+git commit -m "feat(interaction-audit): seeded battle runner + result invariants + reproducibility"
 ```
 
 ---
@@ -441,48 +538,46 @@ git commit -m "feat(interaction-audit): invariant catalog — hp-bounds, no-dead
 - Modify: `src/utils/combat/audit/__tests__/invariants.test.ts`
 
 **Interfaces:**
-- Consumes: everything from Task 3.
-- Produces: extends `checkInvariants` with `stack-caps`, `damage-conservation`, `team-symmetry`.
+- Consumes: everything from Task 3 — `checkInvariants(result)` and `runSeededBattle(input, seed)`.
+- Produces: extends `checkInvariants(result)` with `stack-caps` and `damage-conservation` (both pure result checks); adds `checkTeamSymmetry(input, seed): InvariantViolation[]` to `reproducibility.ts` (a CROSS-RUN check — it runs a mirror battle, so it does NOT belong in the pure `checkInvariants`).
 
-**Note on damage-conservation (see Global Constraints — Protection caveat):** assert per-round `Σ ships.damageDealt ≈ Σ ships.damageTaken` (allow a tiny float epsilon), but SKIP any round where a Protection redirect was active. Detect a Protection round from `result.combatLog` (a redirect/protection entry) — find the real marker at implement time (`grep -rn "protection\|redirect" src/utils/combat/log`). If no reliable marker exists, restrict the invariant to compositions with zero `protection-redirect`-tagged ships (pass that flag into `checkInvariants`). Prefer the log marker.
+**Note on damage-conservation (see Global Constraints — Protection caveat):** assert per-round `Σ ships.damageDealt ≈ Σ ships.damageTaken` (allow a tiny float epsilon), but SKIP any round where a Protection redirect was active. Detect a Protection round from `result.combatLog` (a redirect/protection entry) — find the real marker at implement time (`grep -rn "protection\|redirect" src/utils/combat/log`). If no reliable marker exists, keep the check pure by scanning the log for a Protection marker and skipping those rounds; do NOT thread ship-tag flags into `checkInvariants` (its signature is `(result)` only). Prefer the log marker.
 
 **Note on stack-caps:** for each round, no `activeBuffs` entry may exceed its declared cap. Persistent-stacking caps live in `src/constants/persistentStackingBuffs.ts`. `activeBuffs: string[]` may encode stacks as repeated names or `Name xN` — inspect a real battle's `activeBuffs` shape first (`console.log` one round) and parse accordingly.
 
-**Note on team-symmetry:** build a mirror input (swap `playerTeam`↔`enemyTeam`, keep positions), run both, and assert the mirrored outcome winner flips consistently and per-actor `damageDealt` totals match across the swap. This is the invariant most likely to surface HARNESS asymmetry first — see Task 10's calibration gate.
+**Note on team-symmetry:** build a mirror input (swap `playerTeam`↔`enemyTeam`, keep positions), run BOTH via `runSeededBattle(_, seed)` under the SAME seed, and assert the mirrored outcome winner flips consistently and per-actor `damageDealt` totals match across the swap. This is the check most likely to surface HARNESS asymmetry first — see Task 10's calibration gate.
 
-- [ ] **Step 1: Write failing tests** for the three new invariants (extend the existing `describe`). Craft each: a hand-corrupted `activeBuffs` exceeding a known cap → `stack-caps`; a corrupted round where `ΣdamageDealt` and `ΣdamageTaken` diverge on a NON-protection battle → `damage-conservation`; a deliberately asymmetric stubbed pair of results → `team-symmetry`. Use the same real-ship battle builder as Task 3.
+- [ ] **Step 1: Write failing tests.** Extend `invariants.test.ts` for `stack-caps` + `damage-conservation` (pure result checks). Add `checkTeamSymmetry` cases to `reproducibility.test.ts`. Craft each: a hand-corrupted `activeBuffs` exceeding a known cap → `stack-caps`; a corrupted round where `ΣdamageDealt`/`ΣdamageTaken` diverge on a NON-protection battle → `damage-conservation`; a symmetric two-of-the-same-ship mirror battle → `checkTeamSymmetry` returns `[]`. Use the Task-3 real-ship builder + `runSeededBattle`.
 
 ```typescript
-// append to invariants.test.ts
-describe('checkInvariants — conservation & symmetry', () => {
+// append to invariants.test.ts (checkInvariants now takes ONLY result)
+describe('checkInvariants — conservation', () => {
     it('flags a per-round damageDealt/damageTaken mismatch on a non-protection battle', () => {
-        const input = battle(); // two Vindicators — no Protection
-        const result = simulateBattle(input);
+        const result = runSeededBattle(battle(), 1); // Demolisher mirror — no Protection
         result.rounds[0].ships[0].damageDealt += 5000; // break the ledger
-        const v = checkInvariants(input, result);
-        expect(v.some((x) => x.invariant === 'damage-conservation')).toBe(true);
+        expect(checkInvariants(result).some((x) => x.invariant === 'damage-conservation')).toBe(true);
     });
-    // + stack-caps test + team-symmetry test (see Notes for construction)
+    // + stack-caps test (see Notes)
 });
 ```
 
 - [ ] **Step 2: Run to verify the new tests fail**
 
-Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts`
-Expected: FAIL — new invariant ids not produced yet.
+Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts src/utils/combat/audit/__tests__/reproducibility.test.ts`
+Expected: FAIL — new ids not produced yet.
 
-- [ ] **Step 3: Implement the three invariants** and add them to `checkInvariants`'s spread. `damageConservation` iterates rounds, computes both sums, skips Protection rounds, and pushes on `Math.abs(dealt - taken) > 1`. `stackCaps` parses `activeBuffs` against the persistent-stacking cap table. `teamSymmetry` runs the mirror input and compares. Keep each a pure named function following Task 3's shape.
+- [ ] **Step 3: Implement.** Add `stackCaps(result)` + `damageConservation(result)` to `checkInvariants`'s spread (pure, Task-3 shape). Add `checkTeamSymmetry(input, seed)` to `reproducibility.ts` — mirror the input, run both sides via `runSeededBattle(_, seed)`, compare winner + per-actor `damageDealt`. `damageConservation` iterates rounds, sums both, skips Protection rounds, pushes on `Math.abs(dealt - taken) > 1`. `stackCaps` parses `activeBuffs` against the persistent-stacking cap table.
 
 - [ ] **Step 4: Run to verify all pass**
 
-Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts`
+Run: `npx vitest --run src/utils/combat/audit/__tests__/invariants.test.ts src/utils/combat/audit/__tests__/reproducibility.test.ts`
 Expected: PASS (all).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/utils/combat/audit/invariants.ts src/utils/combat/audit/__tests__/invariants.test.ts
-git commit -m "feat(interaction-audit): invariants — stack-caps, damage-conservation, team-symmetry"
+git add src/utils/combat/audit/invariants.ts src/utils/combat/audit/reproducibility.ts src/utils/combat/audit/__tests__/invariants.test.ts src/utils/combat/audit/__tests__/reproducibility.test.ts
+git commit -m "feat(interaction-audit): stack-caps + damage-conservation invariants + team-symmetry check"
 ```
 
 ---
@@ -500,7 +595,7 @@ git commit -m "feat(interaction-audit): invariants — stack-caps, damage-conser
   - `diffFingerprints(shipName, actorId, solo, comp): FingerprintDiff | null`
   - `runDifferential(soloResult, compResult, shipName, soloActorId, compActorId): FingerprintDiff | null`
 
-**Note:** `fingerprintActor` walks `result.combatLog` (rounds → `startOfRound`/`turns`/`endOfRound` → entries and their nested `reactions`) collecting the `kind` of every entry whose `actorId` matches — the multi-round analog of `collectActorEntryKinds` (`scripts/lib/kitBundle.ts:52`). Resolve the composition actorId via `compResult.roster` (match by ship name + position), NEVER assume `'attacker'`.
+**Note:** `fingerprintActor` walks `result.combatLog` (rounds → `startOfRound`/`turns`/`endOfRound` → entries and their nested `reactions`) collecting the `kind` of every entry whose `actorId` matches — the multi-round analog of `collectActorEntryKinds` (`scripts/lib/kitBundle.ts:52`). Resolve the composition actorId via `compResult.roster` (match by ship name + position), NEVER assume `'attacker'`. These three functions are PURE over already-run `BattleResult`s (unit tests use hand-built fake results). **Consumer contract (Task 10):** the solo and composition results passed to `runDifferential` MUST both come from `runSeededBattle(_, seed)` under the SAME seed, or the fingerprint diff is polluted by RNG divergence rather than real interference.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -620,8 +715,8 @@ git commit -m "feat(interaction-audit): actor fingerprint + differential diff"
 - Test: `src/utils/combat/audit/__tests__/ablation.test.ts`
 
 **Interfaces:**
-- Consumes: `fingerprintActor` (Task 5); `AblationResult` (Task 1); `canonicalPlacement`; `simulateBattle`.
-- Produces: `runAblation(a: Ship, b: Ship): AblationResult` — runs `{a}`, `{b}`, `{a,b}` (a as focus, b as ally, both vs a fixed neutral enemy) and reports whether a's or b's fingerprint in the combined run contains kinds absent from its own solo run.
+- Consumes: `fingerprintActor` (Task 5); `AblationResult` (Task 1); `canonicalPlacement`; `runSeededBattle` (Task 3).
+- Produces: `runAblation(a: Ship, b: Ship, seed: number): AblationResult` — runs `{a}`, `{b}`, `{a,b}` (a as focus, b as ally, both vs a fixed neutral enemy) ALL via `runSeededBattle(_, seed)` under the same seed, and reports whether a's or b's fingerprint in the combined run contains kinds absent from its own solo run.
 
 **Note:** ablation is the NOISIEST oracle (real synergy looks like divergence), so it never emits a confirmed Finding — its output lands in the ledger's `needsTriage` bucket (Task 9/10). The test asserts the MECHANIC (divergence detection), not any specific real-ship result.
 
@@ -629,7 +724,7 @@ git commit -m "feat(interaction-audit): actor fingerprint + differential diff"
 
 - [ ] **Step 2: Run to verify it fails.** Expected: cannot find module `../ablation`.
 
-- [ ] **Step 3: Implement `runAblation`:** build three `BattleSimulationInput`s via `canonicalPlacement` against one fixed neutral enemy ship (a plain attacker), `simulateBattle` each, `fingerprintActor` a and b in the combined vs their solo runs (resolve actorIds via each result's `roster`), set `diverges = extraInCombined.length > 0` for either, and compose `detail`.
+- [ ] **Step 3: Implement `runAblation`:** build three `BattleSimulationInput`s via `canonicalPlacement` against one fixed neutral enemy ship (a plain attacker), run each via `runSeededBattle(_, seed)` under the SAME seed, `fingerprintActor` a and b in the combined vs their solo runs (resolve actorIds via each result's `roster`), set `diverges = extraInCombined.length > 0` for either, and compose `detail`.
 
 - [ ] **Step 4: Run to verify pass.**
 
@@ -649,58 +744,41 @@ git commit -m "feat(interaction-audit): ablation/superposition oracle (needs-tri
 - Test: `src/utils/combat/audit/__tests__/compose.test.ts`
 
 **Interfaces:**
-- Consumes: `InteractionClass`, `canonicalPlacement`; `Ship`, `Position`, `BattleSimulationInput`.
+- Consumes: `InteractionClass`, `canonicalPlacement`; `Ship`, `Position`, `BattleSimulationInput`; **`mulberry32` from `src/utils/calculators/rateAccumulator`** (already exported there — REUSE it, do NOT define a second copy).
 - Produces:
-  - `mulberry32(seed: number): () => number` — pure PRNG in [0,1).
   - `composeBattle(seed: number, tagged: { ship: Ship; classes: Set<InteractionClass> }[]): BattleSimulationInput`
 
-**Note:** valid slots are the game's positions — reuse the position list from `traceScenario.ts` / `src/types/encounters` (confirm the exact `Position` literals). 4 ships/side, distinct positions per side. Draw policy: pick a primary class present in the corpus, draw the first ship from that class's pool, then fill remaining 7 slots biased (decaying probability) toward the same/adjacent classes; fall back to any ship so the battle always fills. Ships MAY repeat across sides but not within a side's position set.
+**Note:** valid slots are the game's positions — reuse the position list from `traceScenario.ts` / `src/types/encounters` (confirm the exact `Position` literals). 4 ships/side, distinct positions per side. Draw policy: pick a primary class present in the corpus, draw the first ship from that class's pool, then fill remaining 7 slots biased (decaying probability) toward the same/adjacent classes; fall back to any ship so the battle always fills. Ships MAY repeat across sides but not within a side's position set. The composition seed is independent of the battle-RNG seed used by `runSeededBattle` (Task 10 passes the same integer to both — fine, they consume different streams).
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { mulberry32, composeBattle } from '../compose';
-
-describe('mulberry32', () => {
-    it('is deterministic for a given seed', () => {
-        const a = mulberry32(42);
-        const b = mulberry32(42);
-        expect([a(), a(), a()]).toEqual([b(), b(), b()]);
-    });
-});
+import { composeBattle } from '../compose';
+import { tagShip } from '../classes';
+import { loadShipDataRecords } from '../../../../../scripts/lib/shipDataSnapshot';
+// Build tagged corpus from real ships — but note loadShipDataRecords returns ShipData; use
+// buildTraceShip(name) to get a Ship with baseStats when a placement is needed, OR confirm
+// composeBattle only needs the fields present on the loaded records + tags.
 
 describe('composeBattle', () => {
     it('produces an identical composition for the same seed', () => {
-        const tagged = /* build from loadShipDataByName + tagShip */ [] as never;
+        const tagged = loadShipDataRecords().map((ship) => ({ ship: ship as never, classes: tagShip(ship as never) }));
         const one = composeBattle(7, tagged);
         const two = composeBattle(7, tagged);
         expect(JSON.stringify(one)).toEqual(JSON.stringify(two));
         expect(one.playerTeam).toHaveLength(4);
         expect(one.enemyTeam).toHaveLength(4);
-        const positions = one.playerTeam.map((p) => p.position);
-        expect(new Set(positions).size).toBe(4); // distinct slots per side
+        expect(new Set(one.playerTeam.map((p) => p.position)).size).toBe(4); // distinct slots per side
     });
 });
 ```
 
+(If `composeBattle` must return placements with real `baseStats`, resolve each drawn ship via `buildTraceShip(name)` inside `composeBattle` rather than from the raw `ShipData` record — decide this when you inspect what `canonicalPlacement` needs.)
+
 - [ ] **Step 2: Run to verify it fails.** Expected: cannot find module `../compose`.
 
-- [ ] **Step 3: Implement `mulberry32` + `composeBattle`.**
-
-```typescript
-export function mulberry32(seed: number): () => number {
-    let a = seed >>> 0;
-    return function () {
-        a |= 0;
-        a = (a + 0x6d2b79f5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
-// composeBattle: use rng = mulberry32(seed); draw primary class, ships, slots per the policy note.
-```
+- [ ] **Step 3: Implement `composeBattle`** — `import { mulberry32 } from '../../calculators/rateAccumulator';` then `const rng = mulberry32(seed);` and draw primary class, ships, slots per the policy note. Do NOT redefine `mulberry32`.
 
 - [ ] **Step 4: Run to verify pass.**
 
@@ -804,9 +882,9 @@ git commit -m "feat(interaction-audit): ledger writer (json + md, needs-triage s
 - Consumes: every pure module (Tasks 2–9) + `loadShipDataRecords` (`scripts/lib/shipDataSnapshot`).
 - Produces: the runnable `npm run audit:interactions -- --seed <N> --count <M>` command that writes `docs/interaction-audit-ledger.{json,md}` and prints a summary.
 
-**Calibration gate (the spec's Wave-0 step):** the CLI's FIRST action, before any fuzzing, is a self-check: run a battery of `count` compositions containing ONLY ships with an empty class tag set (inert ships), and assert `checkInvariants` + `runDifferential` return zero findings. If the inert battery produces findings, those are HARNESS asymmetries (focus-vs-walked instrumentation, symmetry setup) — the CLI prints `CALIBRATION FAILED` with the offending invariant and exits non-zero WITHOUT writing a ledger. Only once calibration is clean does it fuzz the real tagged corpus. This prevents harness noise from polluting the findings ledger.
+**Calibration gate (the spec's Wave-0 step):** the CLI's FIRST action, before any fuzzing, is a self-check: run a battery of `count` compositions containing ONLY ships with an empty class tag set (inert ships), all via `runSeededBattle(_, seed)`, and assert `checkInvariants(result)` + `checkReproducibility` + `checkTeamSymmetry` + `runDifferential` return zero findings. If the inert battery produces findings, those are HARNESS asymmetries (focus-vs-walked instrumentation, symmetry setup) — the CLI prints `CALIBRATION FAILED` with the offending invariant and exits non-zero WITHOUT writing a ledger. Only once calibration is clean does it fuzz the real tagged corpus. This prevents harness noise from polluting the findings ledger.
 
-- [ ] **Step 1: Write the CLI** — parse `--seed`/`--count`; `loadShipDataRecords()`; `tagShip` each; run the calibration gate (inert-only battery); on pass, for each seed in `[seed, seed+count)`: `composeBattle` → `simulateBattle` → `checkInvariants` + differential (per player ship vs its `buildStandardScenario` solo) + ablation on top tagged pairs; `minimizeComposition` any invariant/differential violation; collect `Finding`s; `writeLedger`. Print `compositionsRun`, `confirmed`, `needsTriage` counts.
+- [ ] **Step 1: Write the CLI** — parse `--seed`/`--count`; `loadShipDataRecords()`; `tagShip` each; run the calibration gate (inert-only battery); on pass, for each seed in `[seed, seed+count)`: `composeBattle(seed, tagged)` → `runSeededBattle(input, seed)` → `checkInvariants(result)` + `checkReproducibility(input, seed)` + `checkTeamSymmetry(input, seed)` + differential (per player ship vs its `buildStandardScenario` solo, BOTH via `runSeededBattle(_, seed)`) + ablation on top tagged pairs (via `runAblation(a, b, seed)`); `minimizeComposition` any invariant/differential violation (the `stillFails` predicate re-runs via `runSeededBattle(_, seed)`); collect `Finding`s; `writeLedger`. Print `compositionsRun`, `confirmed`, `needsTriage` counts.
 
 - [ ] **Step 2: Add the npm script** to `package.json`:
 
@@ -834,9 +912,9 @@ git commit -m "feat(interaction-audit): CLI entry + Wave-0 calibration gate + np
 - Create: `src/utils/combat/__tests__/interactionInvariants.integration.test.ts`
 
 **Interfaces:**
-- Consumes: `checkInvariants`, `composeBattle`, `tagShip`, `canonicalPlacement`, `loadShipDataRecords`, `simulateBattle`.
+- Consumes: `checkInvariants(result)`, `checkReproducibility`, `composeBattle`, `tagShip`, `loadShipDataRecords`, `runSeededBattle`.
 
-**Note:** this runs inside `npm test` (the golden audit). It fuzzes a FIXED small seed set (e.g. seeds 1–25) over the real tagged corpus and asserts `checkInvariants` returns `[]` for every composition. Plus: any minimized repro discovered by the Task-10 run that turned out to be a real bug gets added here as an explicit named case after its fix ships (seed pinned). Keep the seed count small enough to stay well under a few seconds so it doesn't bloat the suite.
+**Note:** this runs inside `npm test` (the golden audit). It fuzzes a FIXED small seed set (e.g. seeds 1–25) over the real tagged corpus, runs each via `runSeededBattle(input, seed)`, and asserts `checkInvariants(result)` returns `[]` for every composition (plus a spot `checkReproducibility` on a couple of seeds). Any minimized repro discovered by the Task-10 run that turned out to be a real bug gets added here as an explicit named case after its fix ships (seed pinned). Keep the seed count small enough to stay well under a few seconds so it doesn't bloat the suite.
 
 - [ ] **Step 1: Write the test**
 
@@ -845,7 +923,7 @@ import { describe, it, expect } from 'vitest';
 import { checkInvariants } from '../audit/invariants';
 import { composeBattle } from '../audit/compose';
 import { tagShip } from '../audit/classes';
-import { simulateBattle } from '../../calculators/battleSimulator';
+import { runSeededBattle } from '../audit/seededBattle';
 import { loadShipDataRecords } from '../../../../scripts/lib/shipDataSnapshot';
 
 const tagged = loadShipDataRecords().map((ship) => ({ ship, classes: tagShip(ship as never) }));
@@ -854,8 +932,8 @@ describe('interaction invariants regression gate', () => {
     for (let seed = 1; seed <= 25; seed++) {
         it(`seed ${seed} composition holds all invariants`, () => {
             const input = composeBattle(seed, tagged as never);
-            const result = simulateBattle(input);
-            expect(checkInvariants(input, result)).toEqual([]);
+            const result = runSeededBattle(input, seed);
+            expect(checkInvariants(result)).toEqual([]);
         });
     }
 });
@@ -883,10 +961,11 @@ git commit -m "test(interaction-audit): permanent seeded invariant regression ga
 ## Self-Review
 
 **Spec coverage:**
-- Oracle A (invariants) → Tasks 3–4. Oracle B (differential) → Task 5. Oracle C (ablation) → Task 6. Fuzzer → Task 7. Minimizer → Task 8. Interaction-class tagging → Task 2. Canonical stats → Task 1. Discovery ledger → Task 9. CLI + calibration → Task 10. Regression gate → Task 11. Non-goals (no magnitude/gear/UI/auto-fix) honored throughout. ✅
+- Seeded runner (RNG correction) → Task 3 (`seededBattle.ts`). Oracle A: pure result invariants (hp-bounds, no-dead-acts, stack-caps, damage-conservation) → Tasks 3–4; cross-run checks (reproducibility, team-symmetry) → `reproducibility.ts`, Tasks 3–4. Oracle B (differential) → Task 5. Oracle C (ablation) → Task 6. Fuzzer → Task 7. Minimizer → Task 8. Interaction-class tagging → Task 2. Canonical stats → Task 1. Discovery ledger → Task 9. CLI + calibration → Task 10. Regression gate → Task 11. Non-goals (no magnitude/gear/UI/auto-fix) honored throughout. ✅
 - Risk: ablation triage → `needsTriage` bucket (Tasks 6, 9). Risk: harness-asymmetry calibration → explicit calibration gate (Task 10). ✅
 - File-placement refinement (pure logic in `src/utils/combat/audit/`, not `scripts/lib/interaction/`) documented in File Structure with rationale (avoids `src → scripts` dep for the regression gate). ✅
+- **RNG correction:** production combat uses `Math.random`; every battle routes through `runSeededBattle`; `mulberry32` + seed seams reused from `rateAccumulator`. ✅
 
 **Placeholder scan:** Tasks 2, 4, 6, 9, 10 intentionally defer some exact property reads to implement-time discovery (real `Ability` shape, `activeBuffs` encoding, Protection log marker, `CombatLogTurn.entries` field name) with a concrete grep/inspection instruction each — these are unknowable from the types alone and MUST be verified against live shapes, not guessed. All algorithmic logic and all testable contracts are concrete.
 
-**Type consistency:** `Finding`/`InvariantViolation`/`FingerprintDiff`/`AblationResult`/`InteractionClass` defined once (Task 1), consumed unchanged downstream. `checkInvariants(input, result)`, `fingerprintActor(result, actorId)`, `composeBattle(seed, tagged)`, `minimizeComposition(input, stillFails)`, `tagShip(ship)`, `canonicalPlacement(ship, position)` signatures stable across all references. ✅
+**Type consistency:** `Finding`/`InvariantViolation`/`FingerprintDiff`/`AblationResult`/`InteractionClass` defined once (Task 1), consumed unchanged downstream. `runSeededBattle(input, seed)`, `checkInvariants(result)` (result-only — corrected), `checkReproducibility(input, seed)`, `checkTeamSymmetry(input, seed)`, `fingerprintActor(result, actorId)`, `composeBattle(seed, tagged)`, `runAblation(a, b, seed)`, `minimizeComposition(input, stillFails)`, `tagShip(ship)`, `canonicalPlacement(ship, position)` signatures stable across all references. ✅
