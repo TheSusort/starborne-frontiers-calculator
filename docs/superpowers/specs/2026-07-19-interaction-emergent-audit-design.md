@@ -18,16 +18,30 @@ ships' primitives — leader auras, reactive cascades, persistent stacking, deto
 protection/redirect — all live in one 4v4 and collide. Given how many reactive/stacking engine
 primitives accreted over Waves 3–8, this is where latent bugs most likely remain.
 
-## Key enabling fact
+## Key enabling fact (CORRECTED 2026-07-19, during Task 3)
 
-The combat engine is **fully deterministic**: there is no `Math.random` anywhere in the combat
-path. Hit/crit/affinity resolve through an expected-value probability-tier gate
-(`playerTurn.ts:79` — *"A deterministic event gate: maps a probability/rate to a fire/no-fire
-decision"*). Same input → byte-identical output. Therefore:
+> **Original claim (WRONG):** "The engine is fully deterministic — no `Math.random`." This was based
+> on an incomplete grep (only `src/utils/combat/`, missing `src/utils/calculators/rateAccumulator.ts`).
 
-- Differential and ablation diffs are **exact**, not statistical — no RNG-noise thresholding.
-- The determinism invariant is nearly free (guards only accidental nondeterminism: Map iteration
-  order, etc.).
+The truth: **production combat is genuinely random.** `rateAccumulator.ts:18` is `let rng =
+Math.random`, and crit/hit/landing gates draw from it. Two raw `simulateBattle` calls on the same
+input diverge.
+
+BUT determinism is **achievable and cheap**, because the engine already ships the SP-0 rng-decouple
+seams: `setupKeyedTestRng(seed)` installs a seeded keyed sub-stream provider, `resetRateGateRng()`
+restores `Math.random`, and `mulberry32(seed)` is the seeded PRNG. Verified: wrapping a run in
+`setupKeyedTestRng(seed)` / `resetRateGateRng()` makes it **byte-reproducible** (same seed →
+identical, different seed → different).
+
+The harness therefore runs EVERY battle through `runSeededBattle(input, seed)` (seed → run → reset).
+Under that discipline the original consequences still hold:
+
+- Differential and ablation diffs are **exact**, not statistical — provided both sides run under the
+  same seed (a consumer contract, enforced by `runSeededBattle`).
+- Reproducibility is a real check (two seeded runs must match), guarding nondeterminism OTHER than
+  the now-pinned RNG (Map iteration order, leaked global state).
+- `mulberry32` and the seed seams are **reused** from `rateAccumulator` — the fuzzer does not
+  hand-roll a second PRNG the engine never consults.
 
 ## Reuse surface (do not reinvent)
 
