@@ -26,6 +26,7 @@ import {
     parseDamageReflection,
     parseSecondaryDamage,
     parseOnResistHpDamage,
+    parseOnResistShieldDamage,
     parseKilledByDirectHpDamage,
     parseShieldStrip,
     parseConditionalDamage,
@@ -1417,6 +1418,36 @@ function abilitiesFromText(
                     autoFilled: true,
                 },
                 pos: onKilledIdx >= 0 ? onKilledIdx : MAX_POS,
+            });
+        }
+
+        // Xcellence p2: "When an enemy resists a debuff infliction, this Unit deals damage
+        // equal to X% of this Unit's current shield." Ship-kit W8 — an INFLICTOR-scoped
+        // sibling of the Vindicator proc above: THIS unit inflicted the debuff and the ENEMY
+        // resisted it, so it routes on the on-own-debuff-resisted trigger (not
+        // on-debuff-resisted) — that trigger stamps counterTargetId = the resister, exactly
+        // the enemy this reaction should retaliate against. multiplier:0 — the amount rides
+        // shieldBasisPct (owner's current shield), read by the same reactive-damage executor
+        // that already reads hpBasisPct.
+        const onResistShield = parseOnResistShieldDamage(text);
+        if (onResistShield) {
+            const onResistShieldIdx = text.search(/<unit-damage>/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-own-debuff-resisted',
+                    conditions: [],
+                    config: {
+                        type: 'damage',
+                        multiplier: 0,
+                        hits: 1,
+                        shieldBasisPct: onResistShield.pct,
+                    },
+                    autoFilled: true,
+                },
+                pos: onResistShieldIdx >= 0 ? onResistShieldIdx : MAX_POS,
             });
         }
     }

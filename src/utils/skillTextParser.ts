@@ -362,8 +362,9 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // prefix keeps non-<br> tags inline (only sentence boundaries are normalized) —
     // sufficient for the known texts, where the guard words are plain prose. This is the
     // SAME guard that keeps Xcellence's "when an enemy resists a debuff infliction, this
-    // Unit deals damage equal to 115% of this Unit's current shield" reactive proc
-    // unmodeled (deferred, not this on-cast mechanic) even though its stat is 'shield' too.
+    // Unit deals damage equal to 115% of this Unit's current shield" reactive proc out of
+    // this on-cast mechanic even though its stat is 'shield' too — it is modeled separately
+    // by parseOnResistShieldDamage below (Ship-kit W8).
     const plainBefore = text.slice(0, match.index).replace(/<br\s*\/?>/gi, '. ');
     const sentenceStart = Math.max(plainBefore.lastIndexOf('. '), plainBefore.lastIndexOf('; '));
     const sentencePrefix = plainBefore.slice(sentenceStart + 1).toLowerCase();
@@ -429,6 +430,27 @@ export function parseOnResistHpDamage(text: string | null | undefined): { pct: n
     if (!text) return null;
     const re =
         /when\s+this\s+unit\s+resists\s+a\s+debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
+    const m = re.exec(text);
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    return isNaN(pct) ? null : { pct };
+}
+
+/**
+ * Ship-kit W8 — Xcellence p2 reactive proc: "When an enemy resists a debuff infliction, this
+ * Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield.."
+ * INFLICTOR-scoped sibling of parseOnResistHpDamage — the subject is "an enemy" (the resister),
+ * not "this Unit" (contrast Vindicator's "When THIS UNIT resists…"), so this reads as "when an
+ * enemy resists A DEBUFF [THIS UNIT INFLICTED]": the on-own-debuff-resisted trigger (inflictor-
+ * scoped mirror of on-debuff-resisted, triggers.ts ~775), not Vindicator's on-debuff-resisted.
+ * The basis is the owner's CURRENT SHIELD rather than max HP. Standalone REACTIVE damage — NOT
+ * an on-cast rider (parseSecondaryDamage's sentence guard deliberately excludes this same
+ * clause, see its comment above). Returns { pct } or null.
+ */
+export function parseOnResistShieldDamage(text: string | null | undefined): { pct: number } | null {
+    if (!text) return null;
+    const re =
+        /when\s+an\s+enemy\s+resists\s+a\s+debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+current\s+shield/i;
     const m = re.exec(text);
     if (!m) return null;
     const pct = parseFloat(m[1]);

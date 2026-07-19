@@ -1288,6 +1288,9 @@ export interface IntentExecContext {
         hits: number,
         noCrit: boolean,
         hpBasisPct?: number,
+        /** Ship-kit W8 (Xcellence on-resist): sibling of hpBasisPct — basis is the owner's
+         *  CURRENT SHIELD instead of max HP. Mutually exclusive with hpBasisPct in the corpus. */
+        shieldBasisPct?: number,
         allowDeadOwner?: boolean,
         opts?: { ignoresDefense?: boolean; flatBasis?: number }
         // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
@@ -3082,13 +3085,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
-        // HP-basis reactive (Vindicator on-resist): REQUIRES a routed inflictor (counterTargetId)
-        // — no fallback to ctx.enemy (you cannot retaliate against no-one). Frequency: one proc per
+        // HP/Shield-basis reactive (Vindicator on-resist HP / Xcellence on-resist Shield,
+        // Ship-kit W8): REQUIRES a routed inflictor (counterTargetId) — no fallback to
+        // ctx.enemy (you cannot retaliate against no-one). Frequency: one proc per
         // triggering enemy action, keyed (owner, ability, round, source) so multiple debuffs
         // resisted from ONE cast collapse to a single proc while two DIFFERENT enemies each proc.
         // (oncePerRoundConsumed is the per-round set; a 3-part key never collides with the 2-part
         // keys passesOncePerRoundGate uses.)
-        if (cfg.hpBasisPct !== undefined) {
+        if (cfg.hpBasisPct !== undefined || cfg.shieldBasisPct !== undefined) {
             const sourceId = intent.eventCtx?.counterTargetId;
             if (sourceId === undefined) return;
             const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}`;
@@ -3098,10 +3102,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 intent.ownerId,
                 sourceId,
                 intent.ability.id,
-                cfg.multiplier, // inert on this path — the engine reads hpBasisPct, not multiplier, when set
+                cfg.multiplier, // inert on this path — the engine reads hpBasisPct/shieldBasisPct, not multiplier, when set
                 cfg.hits ?? 1,
                 cfg.noCrit ?? false,
                 cfg.hpBasisPct,
+                // Ship-kit W8 (Xcellence): shieldBasisPct sibling of hpBasisPct — mutually
+                // exclusive in the corpus (no row sets both).
+                cfg.shieldBasisPct,
                 // PR-B1 (Paracelsus): an on-destroyed retaliation's owner is already dead by the
                 // time this drains — fromOwnDeath (stamped by the on-destroyed listener) lets the
                 // executor's owner-alive gate stand aside for this one reaction, same exemption the
@@ -3185,7 +3192,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 cfg.multiplier,
                 cfg.hits ?? 1,
                 cfg.noCrit ?? false,
-                undefined, // hpBasisPct — inert on this path (the hpBasisPct branch above returns early)
+                undefined, // hpBasisPct — inert on this path (the hpBasisPct/shieldBasisPct branch above returns early)
+                undefined, // shieldBasisPct — inert on this path, same reason
                 false, // allowDeadOwner
                 // Ship-kit W5 Task C3: flatBasis/ignoresDefense are ONLY ever non-inert for
                 // Demolisher's splash (the sole ability carrying cfg.ignoresDefense===true AND

@@ -622,6 +622,13 @@ export type AbilityConfig =
            *  of attack × multiplier. Reactive-damage path only (applyReactiveDamage); the on-cast
            *  damage path ignores it. */
           hpBasisPct?: number;
+          /** Ship-kit W8 (Xcellence on-resist): sibling of hpBasisPct — when set, the REACTIVE
+           *  damage executor computes the pre-mitigation raw from the owner's CURRENT SHIELD ×
+           *  shieldBasisPct (percent) instead of attack × multiplier. Reactive-damage path only
+           *  (applyReactiveDamage); the on-cast damage path ignores it. Mutually exclusive with
+           *  hpBasisPct in practice (no corpus row sets both), but hpBasisPct wins if both were
+           *  ever set (matches the executor's precedence order). */
+          shieldBasisPct?: number;
           /** SP-F F4 (Wusheng): the charged skill "deals 220% damage WITH affinity advantage".
            *  When set, this cast (and its paired 'apply' debuff landing) is forced to affinity
            *  ADVANTAGE regardless of the real attacker/target matchup — damageMod +25, critCap

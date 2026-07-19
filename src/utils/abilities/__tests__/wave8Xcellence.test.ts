@@ -51,3 +51,29 @@ describe.skipIf(!csvAvailable())('Wave 8 Task 7 — Xcellence active untagged St
         expect(stasis?.target).toBe('enemy');
     });
 });
+
+// Xcellence's refit-active passive (R2, docs/ship-skills.csv second_passive_skill_text):
+// "…When an enemy resists a debuff infliction, this Unit deals damage equal to <unit-damage>
+// 115%</unit-damage> of this Unit's current shield.." — a reactive on-resist proc whose basis
+// is the OWNER's current shield rather than max HP (the Vindicator on-resist analog,
+// parseOnResistHpDamage). Subject is "an enemy resists" (the enemy resisted A DEBUFF THIS UNIT
+// inflicted), an INFLICTOR-scoped proc, so it routes on 'on-own-debuff-resisted' (the mirror of
+// Vindicator's self-resisted 'on-debuff-resisted'). Field names verified against the shipped
+// hpBasisPct sibling (buildShipAbilities.ts's Vindicator wiring): multiplier:0, the amount rides
+// a dedicated *BasisPct field, not `pct`.
+describe.skipIf(!csvAvailable())(
+    'Wave 8 Task 8 — Xcellence on-resist shield-basis reactive damage',
+    () => {
+        it('passive emits an on-own-debuff-resisted damage ability with shieldBasisPct 115', () => {
+            const abilities = buildShipAbilities(shipFromCsv('Xcellence'));
+            const passive = abilities.slots.find((s) => s.slot === 'passive')?.abilities ?? [];
+
+            const onResist = passive.find(
+                (a) => a.type === 'damage' && a.trigger === 'on-own-debuff-resisted'
+            );
+            expect(onResist).toBeDefined();
+            expect(onResist?.target).toBe('enemy');
+            expect(onResist?.config).toMatchObject({ type: 'damage', shieldBasisPct: 115 });
+        });
+    }
+);
