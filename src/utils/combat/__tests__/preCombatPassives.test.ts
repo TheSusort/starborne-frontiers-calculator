@@ -8,16 +8,14 @@
  *   M2 ↔ T1, T2, M1, M3, B1, B2 — cells like M4/T4/B4 are NOT adjacent to M2.
  */
 import { describe, it, expect } from 'vitest';
-import {
-    applyPreCombatShipPassives,
-    type PreCombatPlanLike,
-} from '../preCombatPassives';
+import { applyPreCombatShipPassives, type PreCombatPlanLike } from '../preCombatPassives';
 import type { PreFightStatBlock } from '../preFight/types';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ship } from '../../../types/ship';
 import type { ShipTypeName } from '../../../constants/shipTypes';
 import type { Position } from '../../../types/encounters';
 import type { ShipSkills } from '../../../types/abilities';
+import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 
 // ─── Real corpus passive texts (docs/ship-skills.csv verbatim) ─────────────────────────
 const LIONHEART_TEXT =
@@ -156,6 +154,56 @@ describe('applyPreCombatShipPassives — role-conditional (Enforcer)', () => {
     });
 });
 
+/** Real production shipSkills for a ship carrying a CSV record's texts verbatim (mirrors
+ *  wave8Madax.test.ts's helper — full refit so the refit-resolved passive row is honored). */
+function shipFromCsv(name: string): Ship {
+    const rec = loadShipSkillRecords().find((r) => r.name.toUpperCase() === name.toUpperCase());
+    if (!rec) throw new Error(`docs/ship-skills.csv: no record for "${name}"`);
+    return makeShip({
+        refits: [{}, {}, {}, {}] as unknown as Ship['refits'],
+        activeSkillText: rec.active,
+        chargeSkillText: rec.charge,
+        chargeSkillCharge: rec.chargeCharge,
+        firstPassiveSkillText: rec.passives[0],
+        secondPassiveSkillText: rec.passives[1],
+        thirdPassiveSkillText: rec.passives[2],
+    });
+}
+
+describe.skipIf(!csvAvailable())(
+    'applyPreCombatShipPassives — adjacent-allies grant gated by requiresAdjacentRole (Madax)',
+    () => {
+        // Madax's refit-active passive: "...When adjacent to a Supporter, this Unit receives
+        // 30% more Repairs and increases that Supporter's Defense by 20% of this Unit's
+        // Defense." The existence gate (line ~90-96) only asks WHETHER a qualifying adjacent
+        // ally exists; the recipient set for `target: 'adjacent-allies'` must additionally be
+        // FILTERED to just that role — a non-Supporter neighbour must not also receive it.
+        const madaxSkills = (): ShipSkills => buildShipAbilities(shipFromCsv('Madax'));
+
+        it('grants Defense ONLY to the adjacent Supporter, not to a non-Supporter also adjacent', () => {
+            const madax = makePlan('mad', 'M2', {
+                shipSkills: madaxSkills(),
+                stats: { defence: 1000 },
+            });
+            const supporter = makePlan('sup', 'M3', { role: 'SUPPORTER' });
+            const attacker = makePlan('atk', 'T1', { role: 'ATTACKER' }); // also adjacent to M2
+
+            const applied = applyPreCombatShipPassives([madax, supporter, attacker]);
+
+            expect(supporter.stats.defence).toBe(500 + 0.2 * 1000); // 700
+            expect(attacker.stats.defence).toBe(500); // untouched — not a Supporter
+            expect(applied.some((g) => g.recipientId === 'atk' && g.stat === 'defence')).toBe(
+                false
+            );
+            expect(
+                applied.some(
+                    (g) => g.recipientId === 'sup' && g.stat === 'defence' && g.amount === 200
+                )
+            ).toBe(true);
+        });
+    }
+);
+
 describe('applyPreCombatShipPassives — simultaneity (frozen snapshot)', () => {
     it("Defiant's +20% own hp is computed from the PRE-grant snapshot, excluding Lionheart's gift; both apply", () => {
         // Lionheart(M2) ↔ Defiant(M3) adjacent; Supporter(M4) ↔ Defiant(M3) adjacent,
@@ -193,9 +241,7 @@ describe('applyPreCombatShipPassives — slot gating and no-op safety', () => {
         const activeOnly = buildShipAbilities(makeShip({ activeSkillText: LIONHEART_TEXT }));
         expect(
             activeOnly.slots.some(
-                (s) =>
-                    s.slot === 'active' &&
-                    s.abilities.some((a) => a.type === 'pre-combat-stat')
+                (s) => s.slot === 'active' && s.abilities.some((a) => a.type === 'pre-combat-stat')
             )
         ).toBe(true); // precondition: the ability exists on the active slot
         const owner = makePlan('own', 'M2', { shipSkills: activeOnly, stats: { hp: 20_000 } });
