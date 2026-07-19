@@ -4617,18 +4617,22 @@ export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passi
 export interface SkillEffect {
     buffName: string;
     // Player-side granularity (team-walk ally-scope): 'self' = caster only, 'ally' = a single
-    // chosen ally, 'all-allies' = every player actor. 'enemy' = single-target enemy debuff,
-    // 'all-enemies' = enemy debuff scoped to the whole opposing team (detectEnemyGrantScope).
-    // 'adjacent-enemies' / 'target-and-adjacent-enemies' = enemy debuff scoped to the anchor's
-    // neighbours (excluded/included respectively) — see detectAdjacentEnemyScope. Engine fan-out
-    // for these two is a later task; this file only resolves the scope.
-    // The combat engine routes 'ally'/'all-allies' grants from a walked team ship onto the right
-    // actors, and fans an 'all-enemies' debuff over aoeVictimIds generically; for the attacker's
-    // own sim 'self' and 'all-allies' both fold onto its side (zero churn).
+    // chosen ally, 'all-allies' = every player actor, 'adjacent-allies' = board-adjacent player
+    // actors only (Lionheart's crit-buff grants — ship-kit W8 Task 1; see detectGrantScope).
+    // 'enemy' = single-target enemy debuff, 'all-enemies' = enemy debuff scoped to the whole
+    // opposing team (detectEnemyGrantScope). 'adjacent-enemies' / 'target-and-adjacent-enemies' =
+    // enemy debuff scoped to the anchor's neighbours (excluded/included respectively) — see
+    // detectAdjacentEnemyScope. Engine fan-out for these two is a later task; this file only
+    // resolves the scope.
+    // The combat engine routes 'ally'/'all-allies'/'adjacent-allies' grants from a walked team
+    // ship onto the right actors, and fans an 'all-enemies' debuff over aoeVictimIds generically;
+    // for the attacker's own sim 'self'/'all-allies'/'adjacent-allies' all fold onto its side
+    // (zero churn).
     target:
         | 'self'
         | 'ally'
         | 'all-allies'
+        | 'adjacent-allies'
         | 'enemy'
         | 'all-enemies'
         | 'adjacent-enemies'
@@ -4940,6 +4944,13 @@ const SINGLE_ALLY_RE =
 // Ally-scoped (team-wide) grant phrasings: bare plural "allies" (subsumes "all allies"), "friendly …".
 // Note: bare "allies" subsumes "all allies", so the explicit "all allies" alternative is omitted.
 const ALL_ALLIES_RE = /friendly|allies/i;
+// Ship-kit W8 Task 1 (Lionheart): a receiver naming "(all) adjacent allies" bare — the crit-buff
+// grant "grants Attack Up II to all adjacent allies for 1 turn." — is board-adjacency scoped, not
+// team-wide. Tested BEFORE ALL_ALLIES_RE (which would otherwise match the "allies" substring and
+// swallow it as all-allies) but ONLY when the receiver is adjacency-ONLY: Tormenter's combined
+// "grants X to itself and all adjacent allies" receiver still routes all-allies (self + adjacent
+// together is broader than adjacency alone) — see the SELF_RECEIVER_RE co-check at the call site.
+const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 // A grant whose receiver is explicitly the caster ("grants itself X").
 const SELF_RECEIVER_RE = /\bitself\b/i;
 // Granting (bestowing) verbs — the caster confers the buff on a (possibly explicit) receiver.
@@ -5023,6 +5034,7 @@ function buffGrantSpan(
  *      · This-Unit / no subject ("This Unit gains X")                        → 'self'
  *  - BESTOWING verb ("grants") — the OBJECT (receiver) takes the buff:
  *      · explicit self receiver ("grants itself X")                          → 'self'
+ *      · bare adjacency receiver ("grants X to all adjacent allies")         → 'adjacent-allies'
  *      · team receiver ("grants all allies X" / "grants X to all allies")    → 'all-allies'
  *      · single-ally receiver ("grants the/an/that ally X", "grants them X") → 'ally'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
@@ -5034,7 +5046,10 @@ function buffGrantSpan(
  * For the attacker's own sim 'self' and 'all-allies' are equivalent (both fold onto the
  * attacker's side); the distinction only matters when the engine walks a team ship's grants.
  */
-function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' | 'all-allies' {
+function detectGrantScope(
+    skillText: string,
+    buffName: string
+): 'self' | 'ally' | 'all-allies' | 'adjacent-allies' {
     const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
     // Strip trigger/condition sub-clauses so an ally mentioned only as the TRIGGER ("after an
     // ally is critically repaired") doesn't leak ally-scope onto a buff the caster grants itself.
@@ -5052,11 +5067,17 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
         return 'self';
     }
 
-    // Bestowing verb (grants) → route by the OBJECT (the receiver of the grant). Team and ally
-    // receivers are tested BEFORE the self ("itself") receiver so a combined receiver like
-    // "grants Out. Damage Up I to itself and all adjacent allies" (Tormenter) routes all-allies,
-    // not self — "itself" only pins to self when it is the SOLE receiver (Nuqtu's "grants itself").
+    // Bestowing verb (grants) → route by the OBJECT (the receiver of the grant). Adjacency-ONLY
+    // and team receivers are tested BEFORE the self ("itself") receiver so a combined receiver
+    // like "grants Out. Damage Up I to itself and all adjacent allies" (Tormenter) still routes
+    // all-allies, not self — "itself" only pins to self when it is the SOLE receiver (Nuqtu's
+    // "grants itself"). Ship-kit W8 Task 1 (Lionheart): the adjacency check is co-guarded on the
+    // ABSENCE of "itself" so Tormenter's combined receiver (broader than adjacency alone) falls
+    // through to the plain all-allies branch below instead of being caught here.
     if (verb !== null && GRANT_VERB_RE.test(verb)) {
+        if (ADJACENT_ALLIES_RE.test(object) && !SELF_RECEIVER_RE.test(object)) {
+            return 'adjacent-allies';
+        }
         if (ALL_ALLIES_RE.test(object)) return 'all-allies';
         if (SINGLE_ALLY_RE.test(object)) return 'ally';
         if (SELF_RECEIVER_RE.test(object)) return 'self';
@@ -5066,6 +5087,9 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
 
     // No identifiable verb (defensive): fall back to the prior phrasing-only heuristic.
     if (SINGLE_ALLY_RE.test(clause)) return 'ally';
+    if (ADJACENT_ALLIES_RE.test(clause) && !SELF_RECEIVER_RE.test(clause)) {
+        return 'adjacent-allies';
+    }
     if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
     return 'self';
 }
