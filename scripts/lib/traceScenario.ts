@@ -63,13 +63,31 @@ const plainAlly = (): Ship => fillerBase('trace-ally-plain', 'PlainAlly', 'ATTAC
 const fragileAlly = (): Ship =>
     fillerBase('trace-ally-fragile', 'FragileAlly', 'ATTACKER', { hp: 40_000, defence: 100, speed: 105 });
 
+// Audit-calibration: the enemies carry LOW security (20) so the reviewed ship's hacking-based
+// debuffs/DoTs actually LAND and can be observed. The whole corpus has BASE hacking 64–122
+// (median ~87, no gear in this synthetic scenario), and landing chance = clamp(hacking − security,
+// 0, 100)/100 — so the old fillerBase security (150, above every ship's hacking) gave a CATEGORICAL
+// 0% landing for every hacking-based effect: every DoT/debuff ship looked broken (e.g. Demolisher's
+// Bomb III "never applied" was purely this, not an engine bug). At security 20 a median ship lands
+// ~67% and the lowest-hacking ship ~44% — enough to reliably surface the ability over 30 rounds
+// while still leaving a realistic resist tail. This is an OBSERVABILITY concession, not a realism
+// claim; resist behaviour has its own dedicated unit tests (dynamicLanding / anchorDebuffLanding).
+// DO NOT raise this back toward ship-hacking magnitude without re-checking the DoT/debuff findings.
+const ENEMY_SECURITY = 20;
+
 const enemyAttacker = (id: string, name: string, affinity: AffinityName, attack: number): Ship => ({
-    ...fillerBase(id, name, 'ATTACKER', { attack, hp: 240_000, speed: 100 }),
+    ...fillerBase(id, name, 'ATTACKER', { attack, hp: 240_000, speed: 100, security: ENEMY_SECURITY }),
     affinity,
 });
 
 const enemyDebuffer = (id: string, name: string, attack: number): Ship => ({
-    ...fillerBase(id, name, 'ATTACKER', { attack, hp: 240_000, speed: 105, hacking: 260 }),
+    ...fillerBase(id, name, 'ATTACKER', {
+        attack,
+        hp: 240_000,
+        speed: 105,
+        hacking: 260,
+        security: ENEMY_SECURITY,
+    }),
     activeSkillText:
         'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns.',
 });
