@@ -12,20 +12,9 @@ const battle = (): BattleSimulationInput => ({
     rounds: 20,
 });
 
-// NOTE: the "no violations" sanity check below uses rounds: 1, not the shared 20-round
-// `battle()` fixture. Confirmed live: with 20 rounds, this exact Demolisher-mirror matchup
-// legitimately trips `no-dead-acts` by round 2 for most seeds — NOT an engine bug. A unit's
-// `turn-started` fires (so it lands in `turnOrder`), then a start-of-turn bomb/DoT
-// detonation kills it before it gets an `attack` entry — its combatLog turn-slot ends in a
-// bare `death`. `alive` is an end-of-round snapshot, so "acted this round" and "dead by
-// round-end" are not mutually exclusive in real combat. This is a known false-positive
-// source in the `no-dead-acts` invariant as specified (out of scope to redesign here — see
-// task report), so the sanity fixture below is scoped to 1 round (verified violation-free
-// across seeds 1-5) to avoid asserting on that disputed edge case.
 describe('checkInvariants — pure result checks', () => {
     it('reports no violations for a normal battle', () => {
-        const oneRoundBattle: BattleSimulationInput = { ...battle(), rounds: 1 };
-        const result = runSeededBattle(oneRoundBattle, 1);
+        const result = runSeededBattle(battle(), 1);
         expect(checkInvariants(result)).toEqual([]);
     });
 
@@ -35,11 +24,31 @@ describe('checkInvariants — pure result checks', () => {
         expect(checkInvariants(result).some((x) => x.invariant === 'hp-bounds')).toBe(true);
     });
 
-    it('flags a dead actor appearing in turnOrder', () => {
-        const result = runSeededBattle(battle(), 1);
+    it('flags a dead actor whose corpse appears in turnOrder in a LATER round', () => {
+        const result = runSeededBattle({ ...battle(), rounds: 2 }, 1);
         const dead = result.rounds[0].ships[0];
-        dead.alive = false;
-        result.rounds[0].turnOrder = [dead.actorId];
-        expect(checkInvariants(result).some((x) => x.invariant === 'no-dead-acts')).toBe(true);
+        dead.alive = false; // dead as of round 1
+        const round2 = result.rounds[1];
+        round2.turnOrder = [...round2.turnOrder, dead.actorId]; // corpse acts in round 2
+        const violations = checkInvariants(result);
+        expect(
+            violations.some(
+                (x) =>
+                    x.invariant === 'no-dead-acts' &&
+                    x.actorId === dead.actorId &&
+                    x.round === round2.round
+            )
+        ).toBe(true);
+    });
+
+    it('does NOT flag an actor appearing only in its own death-round turnOrder', () => {
+        // Single-round result: no later round exists, so there is nothing for the actor's
+        // own-round appearance to be measured "later than" — isolates the "died and acted in
+        // the same round" case from any real (unmutated) appearance in a later round.
+        const result = runSeededBattle({ ...battle(), rounds: 1 }, 1);
+        const dead = result.rounds[0].ships[0];
+        dead.alive = false; // dead as of round 1
+        result.rounds[0].turnOrder = [dead.actorId]; // legal: died THIS round, still acted this round
+        expect(checkInvariants(result).some((x) => x.invariant === 'no-dead-acts')).toBe(false);
     });
 });

@@ -23,4 +23,17 @@ describe('runSeededBattle', () => {
         const b = JSON.stringify(runSeededBattle(battle(), 2));
         expect(a).not.toBe(b);
     });
+
+    it('resets the RNG (via finally) even when the battle throws', () => {
+        const throwingBattle: BattleSimulationInput = { ...battle(), playerTeam: [] };
+        expect(() => runSeededBattle(throwingBattle, 1)).toThrow();
+
+        // If the `finally` in runSeededBattle didn't run, the seeded RNG installed for the
+        // throwing call above would leak into this normal call, and reproducibility across
+        // two identical calls (the observable behaviour production code relies on) would be
+        // the first thing to break.
+        const a = JSON.stringify(runSeededBattle(battle(), 1));
+        const b = JSON.stringify(runSeededBattle(battle(), 1));
+        expect(a).toBe(b);
+    });
 });
