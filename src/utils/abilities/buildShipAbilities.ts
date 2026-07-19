@@ -53,6 +53,8 @@ import {
     parseBombCountdownReduce,
     parseAllyCritDot,
     detectAllyCritDotTrigger,
+    parseSelfCritDotEffect,
+    detectSelfCritDotTrigger,
     detectBombDetonatedTrigger,
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
@@ -1783,6 +1785,50 @@ function abilitiesFromText(
                 },
                 pos: allyCritDotPos >= 0 ? allyCritDotPos : MAX_POS,
             });
+        }
+    }
+
+    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of the Crocus on-ally-crit-dot block
+    // above — "This Unit ... after applying <DoT> with a Critical hit, inflicts <DoT> for N
+    // turns" (R0) / "inflicts <DoT> for N turns after applying <DoT> with a Critical hit ..."
+    // (R2, refit-active). Deliberately NOT reusing the parseSkillEffects tag walk the
+    // on-ally-crit-dot block uses above: Wisteria's own TRIGGER clause names a DoT ("applying
+    // Corrosion with a Critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that
+    // walk would mint a phantom Corrosion dot from the trigger's own named DoT (see
+    // parseSelfCritDotEffect's comment; buildShipAbilities.test.ts's "no phantom Corrosion dot"
+    // guard covers exactly this). parseSelfCritDotEffect instead anchors on the "inflicts X for
+    // N turns" clause specifically, in EITHER ordering, so only the genuinely injected DoT
+    // (Inferno II) is ever extracted, landing on the SAME reactive on-self-crit-dot trigger
+    // machinery (see triggers.ts/types/abilities.ts).
+    const selfCritDotEffect = parseSelfCritDotEffect(text);
+    if (selfCritDotEffect) {
+        const info = DOT_TIER_MAP[selfCritDotEffect.buffName];
+        if (info) {
+            const selfCritDotPos = findBuffNamePos(text, selfCritDotEffect.buffName);
+            const selfCritDotTrigger = detectSelfCritDotTrigger(
+                text,
+                selfCritDotPos >= 0 ? selfCritDotPos : 0
+            );
+            if (selfCritDotTrigger) {
+                out.push({
+                    ability: {
+                        id: nextId(),
+                        type: 'dot',
+                        target: 'enemy',
+                        trigger: selfCritDotTrigger, // 'on-self-crit-dot'
+                        conditions: [],
+                        config: {
+                            type: 'dot',
+                            dotType: info.type,
+                            tier: info.tier,
+                            stacks: 1,
+                            duration: selfCritDotEffect.turns,
+                        },
+                        autoFilled: true,
+                    },
+                    pos: selfCritDotPos >= 0 ? selfCritDotPos : MAX_POS,
+                });
+            }
         }
     }
 

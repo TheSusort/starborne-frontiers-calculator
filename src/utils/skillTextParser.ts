@@ -1823,6 +1823,77 @@ export function detectAllyCritDotTrigger(
     return phrasePosTrigger(text, ALLY_CRIT_DOT_RE, anchorPos, 'on-ally-crit-dot');
 }
 
+// Ship-kit W8 Task 10 (Wisteria): self-subject mirror of ALLY_CRIT_DOT_RE (Crocus's "when an
+// ally inflicts a DoT with a critical hit"). Wisteria's own-cast phrasing instead uses
+// "applying" (not "inflicts a DoT ... with a critical hit") and carries no "ally" subject
+// (self-implied by "This Unit"):
+//  - R0: "This Unit, after applying Corrosion with a Critical hit, inflicts Inferno II for 2
+//    turns."
+//  - R2 (refit-active): "This Unit inflicts Inferno II for 2 turns after applying Corrosion
+//    with a Critical hit and extends the newly applied Corrosion by 1 turn ..."
+// Verified zero-collision across docs/ship-skills.csv: of the 8 ships whose skill text contains
+// "critical hit", Wisteria is the only one pairing "applying ... critical hit" with a
+// same-sentence "inflicts ... for N turns" (Asphyxiator uses "applies" + no re-infliction
+// clause; Valerian/Crocus use "inflicts/inflicting" for the TRIGGER verb, not "applying"). The
+// generic `[^.]*` gap (not `[\w\s]+?`) so this works against BOTH the raw tagged text
+// (phrasePosTrigger's sentence scan) and the stripped text (parseSelfCritDot/
+// parseSelfCritDotEffect below).
+const SELF_CRIT_DOT_RE = /\bafter\s+applying\b[^.]*\bwith\s+a\s+critical\s+hit\b/i;
+
+/** Whether a skill triggers "after applying a DoT with a Critical hit" (self-scoped, manual). */
+export function parseSelfCritDot(text: string | null | undefined): boolean {
+    if (!text) return false;
+    const plain = stripUnitTags(text);
+    return !/\ball(?:y|ies)\b/i.test(plain) && SELF_CRIT_DOT_RE.test(plain);
+}
+
+/**
+ * Returns 'on-self-crit-dot' when `anchorPos` (the ability's raw-text anchor position) falls
+ * inside the sentence carrying the "after applying <DoT> with a Critical hit" phrase (self-
+ * scoped — THIS unit's own crit-cast DoT infliction, not an ally's); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectAllyCritDotTrigger). This is the self-subject
+ * sibling of on-ally-crit-dot — see buildShipAbilities' dot-effects branch for the consuming
+ * side (Wisteria). Reference data: docs/ship-skills.csv.
+ */
+export function detectSelfCritDotTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    if (!text || /\ball(?:y|ies)\b/i.test(stripUnitTags(text))) return undefined;
+    return phrasePosTrigger(text, SELF_CRIT_DOT_RE, anchorPos, 'on-self-crit-dot');
+}
+
+// Extracts the buffName + duration of the DoT actually INJECTED by the self-crit-dot trigger
+// (e.g. "Inferno II" / 2), in EITHER clause ordering. Deliberately NOT a generic
+// parseSkillEffects tag walk: the trigger clause itself names a DoT ("applying Corrosion with
+// a Critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — a naive per-tag loop
+// (like the on-ally-crit-dot block above) would mint a phantom Corrosion dot from the TRIGGER'S
+// OWN named DoT, which carries no "for N turns" of its own (buildShipAbilities.test.ts's "no
+// phantom Corrosion dot" guard covers exactly this). Anchoring on the "inflicts X for N turns"
+// clause specifically — in either ordering relative to the trigger clause — means only the
+// genuinely injected DoT is ever extracted. Operates on the STRIPPED text only (buffName must
+// come out clean for the DOT_TIER_MAP lookup).
+const SELF_CRIT_DOT_EFFECT_ORDER_A_RE =
+    /\binflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?\s+after\s+applying\s+[\w\s]+?\s+with\s+a\s+critical\s+hit/i;
+const SELF_CRIT_DOT_EFFECT_ORDER_B_RE =
+    /after\s+applying\s+[\w\s]+?\s+with\s+a\s+critical\s+hit[^.]*?\binflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?/i;
+
+/**
+ * Parses the DoT actually injected by a "after applying <DoT> with a Critical hit" self-crit
+ * trigger (Wisteria: Inferno II / 2 turns), or undefined when absent. See the block comment
+ * above for why this is a dedicated extraction rather than a parseSkillEffects tag walk.
+ */
+export function parseSelfCritDotEffect(
+    text: string | null | undefined
+): { buffName: string; turns: number } | undefined {
+    if (!text || !parseSelfCritDot(text)) return undefined;
+    const plain = stripUnitTags(text);
+    const m =
+        SELF_CRIT_DOT_EFFECT_ORDER_A_RE.exec(plain) ?? SELF_CRIT_DOT_EFFECT_ORDER_B_RE.exec(plain);
+    if (!m) return undefined;
+    return { buffName: m[1].trim(), turns: parseInt(m[2], 10) };
+}
+
 /**
  * Returns 'on-bomb-detonated' when `anchorPos` (the ability's raw-text anchor position) falls
  * inside the sentence carrying the VICTIM-scoped bomb-burst phrase (BOMB_DETONATE_RE — "bomb

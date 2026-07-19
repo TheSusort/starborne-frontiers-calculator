@@ -512,6 +512,27 @@ export function registerReactiveListeners(args: {
                         }
                     });
                     break;
+                case 'on-self-crit-dot':
+                    bus.on('dot-applied', (e) => {
+                        // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of
+                        // on-ally-crit-dot above — THIS unit's OWN crit-cast DoT infliction
+                        // (sourceId === ownerId), not an ally's. One enqueue per qualifying
+                        // infliction event.
+                        if (e.viaCrit && e.sourceId === ownerId) {
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    // Land the injected DoT on the SAME enemy this cast just hit
+                                    // (the reactive `dot` executor's victimId seam), not the DPS
+                                    // dummy sink.
+                                    victimId: e.targetId,
+                                    dotType: e.dotType,
+                                },
+                            });
+                        }
+                    });
+                    break;
                 case 'on-ally-critically-repaired':
                     bus.on('heal-performed', (e) => {
                         // The OWNER's own crit repair of an ALLY (Pallas: "when this unit

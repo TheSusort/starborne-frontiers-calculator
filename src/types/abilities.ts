@@ -124,6 +124,10 @@ export type AbilityTrigger =
     | 'on-debuff-inflicted'
     | 'on-ally-debuff-inflicted'
     | 'on-ally-crit-dot'
+    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of on-ally-crit-dot — THIS unit's
+    // OWN crit-cast DoT infliction ("after applying Corrosion with a Critical hit, inflicts
+    // Inferno II for 2 turns"), not an ally's. See buildShipAbilities' dot-effects branch.
+    | 'on-self-crit-dot'
     | 'on-ally-critically-repaired'
     | 'on-ally-crit'
     | 'on-stasis-applied'
@@ -272,6 +276,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Phase 3 PR-H: self-scoped reaction to THIS unit's own cleanse actually removing a debuff.
     'on-own-cleanse',
     'on-ally-crit-dot',
+    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of on-ally-crit-dot.
+    'on-self-crit-dot',
     'on-ally-critically-repaired',
     'on-ally-crit',
     'on-stasis-applied',
