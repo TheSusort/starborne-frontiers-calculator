@@ -42,13 +42,18 @@ export function abilityToSelectedBuff(ability: Ability, slot: SkillSlot): Select
 // Ship-kit W8 (review fix): previously only selectedBuffToAbility had this full set;
 // buffAbilitiesToSelectedBuffs used a narrower inline check and misclassified
 // 'enemy-highest-attack' as a self-buff in the DPS preview panel.
+// Ship-kit W8 (CodeRabbit round): 'enemy-most-buffs' and 'enemy-highest-speed' are likewise
+// enemy-side highest/most selectors (see AbilityTarget in src/types/abilities.ts) — same
+// misclassification risk if a buff/debuff config is ever retargeted to them.
 function isEnemyTarget(target: AbilityTarget): boolean {
     return (
         target === 'enemy' ||
         target === 'all-enemies' ||
         target === 'adjacent-enemies' ||
         target === 'target-and-adjacent-enemies' ||
-        target === 'enemy-highest-attack'
+        target === 'enemy-highest-attack' ||
+        target === 'enemy-most-buffs' ||
+        target === 'enemy-highest-speed'
     );
 }
 

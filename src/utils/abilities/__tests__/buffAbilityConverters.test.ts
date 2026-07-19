@@ -317,6 +317,31 @@ describe('buffAbilitiesToSelectedBuffs', () => {
         expect(enemyDebuffs[0].buffName).toBe('Weaken');
     });
 
+    it('routes an enemy-most-buffs target debuff into enemyDebuffs', () => {
+        const ctx = buildStaticBuffContext({});
+        const mostBuffs = debuffAbility({
+            target: 'enemy-most-buffs',
+        });
+        const { selfBuffs, enemyDebuffs } = buffAbilitiesToSelectedBuffs(skills([mostBuffs]), ctx);
+        expect(selfBuffs).toHaveLength(0);
+        expect(enemyDebuffs).toHaveLength(1);
+        expect(enemyDebuffs[0].buffName).toBe('Weaken');
+    });
+
+    it('routes an enemy-highest-speed target debuff into enemyDebuffs', () => {
+        const ctx = buildStaticBuffContext({});
+        const highestSpeed = debuffAbility({
+            target: 'enemy-highest-speed',
+        });
+        const { selfBuffs, enemyDebuffs } = buffAbilitiesToSelectedBuffs(
+            skills([highestSpeed]),
+            ctx
+        );
+        expect(selfBuffs).toHaveLength(0);
+        expect(enemyDebuffs).toHaveLength(1);
+        expect(enemyDebuffs[0].buffName).toBe('Weaken');
+    });
+
     it('routes an all-allies target buff into selfBuffs', () => {
         const ctx = buildStaticBuffContext({});
         const allAlliesBuff = buffAbility({

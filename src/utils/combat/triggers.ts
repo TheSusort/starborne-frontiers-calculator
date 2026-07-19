@@ -2297,8 +2297,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // signature. Reads the slain actor's OWN per-target debuff store (ownerDebuffNamesFor is the
     // same reader `selfDebuffNames`/`buildActorConditionContext` already use for a target's
     // debuffs); no victimId (every other reactive trigger, or DPS mode) → false, byte-identical.
+    // Ship-kit W8 (CodeRabbit round): explicitly gated on trigger==='on-enemy-destroyed' — other
+    // triggers (on-deal-damage, on-bomb-detonated, on-ally-crit-dot, on-self-crit-dot,
+    // on-enemy-dot-damage, on-ally-debuff-inflicted) also stamp eventCtx.victimId, but with
+    // different semantics (the current cast's target, not a killed unit); without this guard
+    // their victimId would be misread here as "the enemy this trigger just killed".
     const drainCtx =
-        intent.eventCtx?.victimId !== undefined
+        intent.ability.trigger === 'on-enemy-destroyed' && intent.eventCtx?.victimId !== undefined
             ? {
                   ...baseDrainCtx,
                   killedEnemyHadDebuff:
@@ -3336,7 +3341,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // same source Meatshield's defense-substitution and Graphite's roleFilter already use).
         // An unknown role (`roleOf` undefined / no ship picked) never matches — conservative,
         // mirrors matchesRoleCategory's contract elsewhere.
-        const enemyTypeCond = intent.ability.conditions.find((c) => c.subject === 'enemy-type');
+        // Ship-kit W8 (CodeRabbit round): scoped to trigger==='on-deal-damage', symmetric with the
+        // scrub above — a hypothetical purge with a genuinely PvE-class `enemy-type` condition on
+        // a DIFFERENT trigger was never scrubbed from gateConditions, so re-deriving+re-evaluating
+        // it here via ctx.roleOf would double-gate/misread it against the wrong target.
+        const enemyTypeCond =
+            intent.ability.trigger === 'on-deal-damage'
+                ? intent.ability.conditions.find((c) => c.subject === 'enemy-type')
+                : undefined;
         if (enemyTypeCond?.requiredEnemyType) {
             const matchesRole = matchesRoleCategory(ctx.roleOf?.(targetId), [
                 enemyTypeCond.requiredEnemyType.toUpperCase() as ShipRoleCategory,
