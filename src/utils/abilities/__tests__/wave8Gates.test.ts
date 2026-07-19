@@ -46,3 +46,25 @@ describe.skipIf(!csvAvailable())(
         });
     }
 );
+
+describe.skipIf(!csvAvailable())(
+    'Wave 8 Task 4 — Chimei end-of-round Stealth grant trigger',
+    () => {
+        // Chimei's third passive: "At the end of the round, non-defender allies below 40% HP are
+        // granted Stealth for 1 turn." followed by a SEPARATE "At the start of the round, all allies
+        // with Stealth repairs..." sentence. The Stealth grant must classify as 'end-of-round', not
+        // 'on-cast' (its prior misclassification) — and the sibling start-of-round repair clause
+        // must NOT bleed into this grant's trigger (resolveBuffClause is sentence-scoped, so the two
+        // clauses stay separate). Out of scope for this task: the "non-defender"/"below 40% HP"
+        // conditions themselves — only the trigger classification is fixed here.
+        it("Stealth grant carries trigger 'end-of-round'", () => {
+            const abilities = buildShipAbilities(shipFromCsv('Chimei'));
+            const stealth = abilities.slots
+                .flatMap((s) => s.abilities)
+                .find((a) => a.config.type === 'buff' && a.config.buffName === 'Stealth');
+
+            expect(stealth).toBeDefined();
+            expect(stealth?.trigger).toBe('end-of-round');
+        });
+    }
+);

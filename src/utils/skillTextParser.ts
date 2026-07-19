@@ -1431,6 +1431,14 @@ export function detectReactiveTrigger(
     // observe a real hit count before any turn has fired).
     if (hitCountConditionFromClause(clause.toLowerCase())) return 'on-deal-damage';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
+    // Ship-kit W8, Task 4: "at the end of the round" → end-of-round (Chimei's non-defender
+    // below-40%-HP Stealth grant). Shares END_OF_ROUND_RE with detectEndOfRoundPurgeTrigger/
+    // detectEndOfRoundDamageTrigger (Rhodium) — same phrase, buff-grant call site. Checked
+    // AFTER start-of-round since resolveBuffClause is sentence-scoped (Chimei's grant sentence
+    // only contains "end of the round"; the sibling "start of the round" repair sentence is a
+    // separate clause keyed on the same buff name but matched first by resolveBuffClause, so it
+    // never reaches here) — this ordering just mirrors the existing rule for readability.
+    if (END_OF_ROUND_RE.test(clause)) return 'end-of-round';
     // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
     // shares its governing trailing phrase with its sibling charge ability (already
     // start-of-turn via START_OF_TURN_CHARGE_RE in the charge-specific parser); this was the
