@@ -5,7 +5,6 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { PERSISTENT_STACKING_BUFFS } from '../../../constants/persistentStackingBuffs';
 import type { InteractionClass } from './types';
 
-const DETONATION_TYPES = new Set<AbilityType>(['detonate-dot', 'accumulate-detonate']);
 const CLEANSE_PURGE_TYPES = new Set<AbilityType>(['cleanse', 'purge']);
 const SHIELD_TYPES = new Set<AbilityType>(['shield', 'incoming-shield-grant']);
 
@@ -36,9 +35,27 @@ function isPersistentStacking(ability: Ability): boolean {
 
 /** The Protection damage-transfer mechanic (protectionTransfer.ts's protectionStacks) is keyed
  *  entirely on the literal buff name "Protection" — the same signal used at runtime, so this
- *  predicate stays in sync with the engine's own recognition of the mechanic. */
+ *  predicate stays in sync with the engine's own recognition of the mechanic. Routed through
+ *  grantedBuffNames() (not a direct config.buffName read) so all three grant-name predicates
+ *  in this file share one lookup path. */
 function isProtectionRedirect(ability: Ability): boolean {
-    return ability.config.type === 'buff' && ability.config.buffName === 'Protection';
+    return grantedBuffNames(ability.config).includes('Protection');
+}
+
+/** Detonation-bomb: the Bomb DoT specifically (dotType 'bomb'), not any of
+ *  `detonate-dot`'s other dotType variants — Crocus/Incinerator detonate Corrosion/Inferno,
+ *  which are a different mechanic entirely and must NOT be tagged here. `accumulate-detonate`
+ *  (Echoing Burst: accumulate-damage-then-detonate) is unrelated to the Bomb DoT and is
+ *  excluded from this signal outright.
+ *
+ *  Also covers ships that PLANT the Bomb DoT (a `dot` ability with dotType 'bomb', e.g.
+ *  Huanying/Mangler/Panguan/Ruiner/Sha Xing — see docs/ship-skills.csv) even when they never
+ *  detonate it themselves, so the class reads as "participates in the Bomb interaction",
+ *  matching how the other primitive-driven classes here (control/shield/cleanse-purge) tag
+ *  on ANY participation, not just one side of the mechanic. */
+function isDetonationBomb(ability: Ability): boolean {
+    const { config } = ability;
+    return (config.type === 'detonate-dot' || config.type === 'dot') && config.dotType === 'bomb';
 }
 
 function grantsStealthBuff(ability: Ability): boolean {
@@ -76,7 +93,7 @@ export function tagShip(ship: Ship): Set<InteractionClass> {
         if (isLeaderAuraSkill(skill)) tags.add('leader-aura');
 
         for (const ability of skill.abilities) {
-            if (DETONATION_TYPES.has(ability.type)) tags.add('detonation-bomb');
+            if (isDetonationBomb(ability)) tags.add('detonation-bomb');
             if (ability.type === 'control') tags.add('control');
             if (CLEANSE_PURGE_TYPES.has(ability.type)) tags.add('cleanse-purge');
             if (SHIELD_TYPES.has(ability.type)) tags.add('shield');

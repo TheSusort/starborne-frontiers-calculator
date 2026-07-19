@@ -14,6 +14,13 @@ import type { Ship } from '../../../../types/ship';
 //   `detonate-dot` ability (dotType: 'bomb') -> unambiguous detonation-bomb.
 // - Bedrock's only skill text is "This Unit deals 90% damage." with null charge/passives -> a
 //   plain attacker with no interaction primitives at all.
+// - Crocus's charged skill "detonates Corrosion effects at 180% power" parses to a
+//   `detonate-dot` ability with dotType 'corrosion', NOT 'bomb' -> must NOT be detonation-bomb.
+// - Incinerator's charged skill "detonates Inferno effects with 180% of their power" parses to
+//   a `detonate-dot` ability with dotType 'inferno', NOT 'bomb' -> must NOT be detonation-bomb.
+// - Valkyrie's charged skill inflicts "Echoing Burst" (accumulate-detonate: accumulate damage
+//   then detonate on expiry), which has no relationship to the Bomb DoT -> must NOT be
+//   detonation-bomb either.
 
 function requireCsv(): void {
     if (!csvAvailable()) {
@@ -38,6 +45,39 @@ describe('tagShip', () => {
 
         const tags = tagShip(ship as Ship);
         expect(tags.has('detonation-bomb')).toBe(true);
+    });
+
+    it('does NOT tag Crocus (detonates Corrosion, not Bomb) as detonation-bomb', () => {
+        const record = loadShipSkillRecords().find((r) => r.name === 'Crocus');
+        expect(record?.charge).toMatch(/detonates.*corrosion/i);
+
+        const ship = buildTraceShip('Crocus');
+        expect(ship).not.toBeNull();
+
+        const tags = tagShip(ship as Ship);
+        expect(tags.has('detonation-bomb')).toBe(false);
+    });
+
+    it('does NOT tag Incinerator (detonates Inferno, not Bomb) as detonation-bomb', () => {
+        const record = loadShipSkillRecords().find((r) => r.name === 'Incinerator');
+        expect(record?.charge).toMatch(/detonates.*inferno/i);
+
+        const ship = buildTraceShip('Incinerator');
+        expect(ship).not.toBeNull();
+
+        const tags = tagShip(ship as Ship);
+        expect(tags.has('detonation-bomb')).toBe(false);
+    });
+
+    it('does NOT tag Valkyrie (Echoing Burst accumulate-detonate, unrelated to Bomb) as detonation-bomb', () => {
+        const record = loadShipSkillRecords().find((r) => r.name === 'Valkyrie');
+        expect(record?.charge).toMatch(/echoing burst/i);
+
+        const ship = buildTraceShip('Valkyrie');
+        expect(ship).not.toBeNull();
+
+        const tags = tagShip(ship as Ship);
+        expect(tags.has('detonation-bomb')).toBe(false);
     });
 
     it('tags a plain attacker with only damage skills as an empty class set', () => {
