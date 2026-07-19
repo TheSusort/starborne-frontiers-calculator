@@ -38,3 +38,17 @@ describe.skipIf(!csvAvailable())(
         });
     }
 );
+
+describe.skipIf(!csvAvailable())(
+    'Wave 8 Task 6 — Quixilver Barrier grant targets all-allies (receiver-aware condition strip)',
+    () => {
+        it('Quixilver third passive: "…if it has shield equal to 100% of its max HP, this Unit grants all allies Barrier…" resolves Barrier to all-allies, not self', () => {
+            const abilities = buildShipAbilities(shipFromCsv('Quixilver'));
+            const barrier = abilities.slots
+                .flatMap((s) => s.abilities)
+                .find((a) => a.config.type === 'buff' && a.config.buffName === 'Barrier');
+
+            expect(barrier?.target).toBe('all-allies');
+        });
+    }
+);

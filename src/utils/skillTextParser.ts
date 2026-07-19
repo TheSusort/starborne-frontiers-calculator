@@ -5001,7 +5001,10 @@ const ANY_GRANT_VERB_RE =
 // directly damaged, …") isn't mistaken for the buff's receiver. Two comma/clause-boundary
 // anchored forms, lookbehind-free (iOS Safari 15):
 //  - leading:  "When/After/While/If … , <receiver clause>"  → drop up to the first comma
-//  - trailing: "<receiver clause> when/after/while/if …"    → drop from the keyword onward
+//  - trailing: "<condition clause> when/after/while/if …"   → drop from the keyword onward,
+//    UNLESS that trailing condition is itself followed by ", this Unit grants/applies/gives …"
+//    (Quixilver), in which case the strip stops right before that comma so the receiver
+//    clause survives (ship-kit W8 Task 6).
 // The receiver phrasing ("this Unit grants the ally X" / "X allies gain Y") survives, so a
 // genuine post-condition ally receiver (Provider: "…, this Unit grants the ally RoT III") is
 // still classified ally. The clause is the same one `resolveBuffClause` already split on
@@ -5011,10 +5014,19 @@ function stripConditionClauses(clause: string): string {
     let out = clause;
     // Leading "When/After/While/If … ," — only when it precedes the rest via a comma.
     out = out.replace(/^\s*(?:when|after|while|if)\b[^,]*,\s*/i, '');
-    // Trailing " when/after/while/if …" condition (to end of clause).
-    // LOSSY: a post-condition receiver clause is destroyed here; the default-self fallback covers
-    // the live corpus. A future "if …, all allies gain X" phrasing would need receiver-aware stripping.
-    out = out.replace(/\s+\b(?:when|after|while|if)\b.*$/i, '');
+    // Trailing " when/after/while/if …" condition (to end of clause) — receiver-aware
+    // (ship-kit W8 Task 6): when the condition is itself followed by a comma and a
+    // "this Unit grants/applies/gives …" receiver clause (Quixilver: "…if it has shield equal
+    // to 100% of its max HP, this Unit grants all allies Barrier…"), the strip stops right
+    // before that comma so the receiver clause survives instead of being deleted wholesale.
+    // Scoped narrowly to the literal "this unit <verb>" receiver phrasing (matched on the
+    // already-lowercased clause) so ships whose trailing condition has NO such receiver clause
+    // after it still get the original full-strip-to-end-of-clause behavior via the fallback
+    // alternative.
+    out = out.replace(
+        /\s+\b(?:when|after|while|if)\b(?:[\s\S]*?(?=,\s*this unit (?:grants|applies|gives)\b)|[\s\S]*)/i,
+        ''
+    );
     return out;
 }
 
