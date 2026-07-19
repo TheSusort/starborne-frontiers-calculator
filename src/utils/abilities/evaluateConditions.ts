@@ -106,6 +106,13 @@ export interface ConditionContext {
      *  supplies a roster (battle sim). Absent (single-ship DPS / any caller without a roster) →
      *  `ally-on-team` falls back to the manual assume-met path, byte-identical to before. */
     allyTeamNames?: string[];
+    /** Ship-kit W8 Task 13 (Meiying) -- true when the enemy THIS on-enemy-destroyed reaction just
+     *  killed carried at least one debuff at the moment it died. Live-derived by the engine from
+     *  the victim's own per-target debuff store (eventCtx.victimId), computed only when a victim
+     *  was actually resolved for this intent. Defaults false (DPS mode / no on-enemy-destroyed
+     *  victim) -- inert for every other reactive trigger and every other on-enemy-destroyed
+     *  ability (none of which carry this condition). */
+    killedEnemyHadDebuff?: boolean;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -166,6 +173,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'enemy-dot-count':
             if (cond.buffName) return ctx.enemyDotFamilyCounts?.[cond.buffName] ?? 0;
             return ctx.enemyDotCount ?? 0;
+        case 'killed-enemy-had-debuff':
+            return ctx.killedEnemyHadDebuff ? 1 : 0;
         case 'stat-vs-target': {
             const self =
                 cond.compareStat === 'crit-power'

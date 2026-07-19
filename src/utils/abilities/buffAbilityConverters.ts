@@ -32,15 +32,33 @@ export function abilityToSelectedBuff(ability: Ability, slot: SkillSlot): Select
     };
 }
 
-export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTarget): Ability {
-    // Wave 5 (Task A2): the two enemy-adjacency scopes are enemy-side debuffs too (Vindicator's
-    // Provoke, Asphyxiator's Stasis) — without this they'd fall through to the buff branch below
-    // and lose their debuff config (application verb, resistibility).
-    const isEnemy =
+// Shared enemy-target classifier — used by BOTH selectedBuffToAbility and
+// buffAbilitiesToSelectedBuffs so the two conversion directions can't drift apart on which
+// AbilityTarget values count as "enemy-side". Wave 5 (Task A2): the two enemy-adjacency scopes
+// are enemy-side debuffs too (Vindicator's Provoke, Asphyxiator's Stasis) — without them a
+// buff/debuff round-trip would fall through to the 'buff' branch and lose the debuff config
+// (application verb, resistibility). Ship-kit W8 (Task 5): 'enemy-highest-attack' is likewise an
+// enemy-side selector (Selenite's round-start Concentrate Fire) — same failure mode if omitted.
+// Ship-kit W8 (review fix): previously only selectedBuffToAbility had this full set;
+// buffAbilitiesToSelectedBuffs used a narrower inline check and misclassified
+// 'enemy-highest-attack' as a self-buff in the DPS preview panel.
+// Ship-kit W8 (CodeRabbit round): 'enemy-most-buffs' and 'enemy-highest-speed' are likewise
+// enemy-side highest/most selectors (see AbilityTarget in src/types/abilities.ts) — same
+// misclassification risk if a buff/debuff config is ever retargeted to them.
+function isEnemyTarget(target: AbilityTarget): boolean {
+    return (
         target === 'enemy' ||
         target === 'all-enemies' ||
         target === 'adjacent-enemies' ||
-        target === 'target-and-adjacent-enemies';
+        target === 'target-and-adjacent-enemies' ||
+        target === 'enemy-highest-attack' ||
+        target === 'enemy-most-buffs' ||
+        target === 'enemy-highest-speed'
+    );
+}
+
+export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTarget): Ability {
+    const isEnemy = isEnemyTarget(target);
     const duration: number | 'recurring' | undefined =
         typeof buff.skillDuration === 'number' || buff.skillDuration === 'recurring'
             ? buff.skillDuration
@@ -136,7 +154,7 @@ export function buffAbilitiesToSelectedBuffs(
             if (!conditionsMet(staticGateConditions(ability.conditions), staticCtx)) continue;
             const sb = abilityToSelectedBuff(ability, slot.slot);
             if (!sb) continue;
-            if (ability.target === 'enemy' || ability.target === 'all-enemies') {
+            if (isEnemyTarget(ability.target)) {
                 enemyDebuffs.push(sb);
             } else {
                 selfBuffs.push(sb);

@@ -4640,6 +4640,11 @@ export function runCombat(input: CombatEngineInput): {
             hits: number,
             noCrit: boolean,
             hpBasisPct?: number,
+            // Ship-kit W8 (Xcellence on-resist): sibling of hpBasisPct — when set (and
+            // hpBasisPct is not), raw = owner's CURRENT SHIELD × shieldBasisPct% instead of
+            // attack × multiplier. Mutually exclusive with hpBasisPct in the corpus; hpBasisPct
+            // takes precedence if both were ever set.
+            shieldBasisPct?: number,
             allowDeadOwner?: boolean,
             // Ship-kit W5 Task C3 (Demolisher bomb-splash). `flatBasis`: this proc is a FLAT copy
             // of some OTHER already-resolved damage figure (the bomb's own burst,
@@ -4713,10 +4718,21 @@ export function runCombat(input: CombatEngineInput): {
                     );
 
                 // Vindicator on-resist: raw = owner effective max HP × hpBasisPct% (mitigated below the
-                // same as any direct hit — defence + affinity + crit). Otherwise attack × multiplier.
+                // same as any direct hit — defence + affinity + crit). Ship-kit W8 (Xcellence):
+                // shieldBasisPct sibling uses the owner's CURRENT SHIELD (live shieldPool) as the
+                // basis instead. Otherwise attack × multiplier.
                 const basisStat =
-                    hpBasisPct !== undefined ? recipientMaxHp(ownerId) : ownerStats.attack;
-                const basisPct = hpBasisPct !== undefined ? hpBasisPct : multiplier;
+                    hpBasisPct !== undefined
+                        ? recipientMaxHp(ownerId)
+                        : shieldBasisPct !== undefined
+                          ? owner.shieldPool
+                          : ownerStats.attack;
+                const basisPct =
+                    hpBasisPct !== undefined
+                        ? hpBasisPct
+                        : shieldBasisPct !== undefined
+                          ? shieldBasisPct
+                          : multiplier;
 
                 raw = victimHitDamage(
                     {
@@ -6160,6 +6176,12 @@ export function runCombat(input: CombatEngineInput): {
                         // corrosionEntries closures above (side-biased to the player's single
                         // opposing focus). Combat-wide map — no per-side sideCtx field needed.
                         actorById: (id) => allActorsById.get(id),
+                        // Ship-kit W8 Task 12: side-agnostic ship-role lookup (the SAME
+                        // roleByActorId map Meatshield's defense-substitution and Graphite's
+                        // roleFilter already consume) — feeds the reactive `purge` branch's
+                        // per-victim `enemy-type` re-check (Zeolite: "when dealing damage to a
+                        // Defender"), team-symmetrically.
+                        roleOf: (id) => roleByActorId.get(id),
                         // SP-E, Task E4: live hacking/critDamage for `id` (either side), feeding
                         // Belladonna's conversion-chance (hacking) and paired extend-chance
                         // (critDamage) gates. Same statusEngine/selfBuffLookup every other

@@ -362,8 +362,9 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // prefix keeps non-<br> tags inline (only sentence boundaries are normalized) —
     // sufficient for the known texts, where the guard words are plain prose. This is the
     // SAME guard that keeps Xcellence's "when an enemy resists a debuff infliction, this
-    // Unit deals damage equal to 115% of this Unit's current shield" reactive proc
-    // unmodeled (deferred, not this on-cast mechanic) even though its stat is 'shield' too.
+    // Unit deals damage equal to 115% of this Unit's current shield" reactive proc out of
+    // this on-cast mechanic even though its stat is 'shield' too — it is modeled separately
+    // by parseOnResistShieldDamage below (Ship-kit W8).
     const plainBefore = text.slice(0, match.index).replace(/<br\s*\/?>/gi, '. ');
     const sentenceStart = Math.max(plainBefore.lastIndexOf('. '), plainBefore.lastIndexOf('; '));
     const sentencePrefix = plainBefore.slice(sentenceStart + 1).toLowerCase();
@@ -429,6 +430,27 @@ export function parseOnResistHpDamage(text: string | null | undefined): { pct: n
     if (!text) return null;
     const re =
         /when\s+this\s+unit\s+resists\s+a\s+debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
+    const m = re.exec(text);
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    return isNaN(pct) ? null : { pct };
+}
+
+/**
+ * Ship-kit W8 — Xcellence p2 reactive proc: "When an enemy resists a debuff infliction, this
+ * Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield.."
+ * INFLICTOR-scoped sibling of parseOnResistHpDamage — the subject is "an enemy" (the resister),
+ * not "this Unit" (contrast Vindicator's "When THIS UNIT resists…"), so this reads as "when an
+ * enemy resists A DEBUFF [THIS UNIT INFLICTED]": the on-own-debuff-resisted trigger (inflictor-
+ * scoped mirror of on-debuff-resisted, triggers.ts ~775), not Vindicator's on-debuff-resisted.
+ * The basis is the owner's CURRENT SHIELD rather than max HP. Standalone REACTIVE damage — NOT
+ * an on-cast rider (parseSecondaryDamage's sentence guard deliberately excludes this same
+ * clause, see its comment above). Returns { pct } or null.
+ */
+export function parseOnResistShieldDamage(text: string | null | undefined): { pct: number } | null {
+    if (!text) return null;
+    const re =
+        /when\s+an\s+enemy\s+resists\s+a\s+debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+current\s+shield/i;
     const m = re.exec(text);
     if (!m) return null;
     const pct = parseFloat(m[1]);
@@ -1091,16 +1113,25 @@ export function detectGrantConditions(
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
     // "after an ally is critically repaired" — a team-dependent reactive trigger (manual).
     const allyCritRepairGate = /\ball(?:y|ies)\b[^.]*\bcritically\s+repaired\b/i.test(low);
+    // Ship-kit W8 Task 13: "killing an enemy WITH A DEBUFF" (Meiying) — the kill trigger's
+    // qualifier. KILL_TRIGGER_RE resolves the TRIGGER (on-enemy-destroyed) elsewhere; this
+    // separately gates the GRANTED debuff on the slain enemy having carried a debuff.
+    const killedEnemyHadDebuffGate = KILL_WITH_DEBUFF_RE.test(low);
     // Only conditional clauses produce conditions.
     if (
         !/\b(when|if|while|after)\b|affected by|targeting|damaging|against/.test(low) &&
         !appliesDebuffGate &&
-        !allyCritRepairGate
+        !allyCritRepairGate &&
+        !killedEnemyHadDebuffGate
     )
         return [];
 
     if (allyCritRepairGate) {
         return [{ subject: 'ally-critically-repaired', derivable: false }];
+    }
+
+    if (killedEnemyHadDebuffGate) {
+        return [{ subject: 'killed-enemy-had-debuff', derivable: true }];
     }
 
     // Ship-kit Wave 4, Task 3: "If this Unit has Shield" — a self-shield-presence gate
@@ -1152,8 +1183,12 @@ export function detectGrantConditions(
         }));
     }
 
-    // 2. self-crit (active voice: this unit critically hits/damages — NOT "is critically hit")
-    if (/critically (?:hits|damag)/i.test(low)) {
+    // 2. self-crit (active voice: this unit critically hits/damages — NOT "is critically hit").
+    // Ship-kit Wave 8, Task 3: ALSO matches "if a critical hit occurs" (Lev's charged buff-grant
+    // clause) — the same phrasing the co-located extend-status ability already gates on via
+    // /critical hit occurs/i (buildShipAbilities.ts ~1657). Trigger stays on-cast; this only adds
+    // the condition, mirroring that ability's shape exactly.
+    if (/critically (?:hits|damag)|\bcritical\s+hit\s+occurs\b/i.test(low)) {
         return [{ subject: 'self-crit', derivable: true }];
     }
 
@@ -1343,6 +1378,15 @@ const ENEMY_BUFFED_RE =
 // Asphyxiator/Butcher), "when an enemy dies". Reference data: docs/ship-skills.csv.
 const KILL_TRIGGER_RE =
     /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
+// Ship-kit W8 Task 13 (Meiying): "killing an enemy WITH A DEBUFF" — the qualifier
+// KILL_TRIGGER_RE's bare "killing an (enemy|opponent)" alternate drops (that shared regex also
+// feeds the on-enemy-destroyed TRIGGER classification for every OTHER kill-reactive ship —
+// Mangler/Ravager/Butcher/Obsidian/Valiant/Sokol have no such qualifier and must stay ungated).
+// Kept as a SEPARATE regex, consumed only by detectGrantConditions below, so it attaches a
+// gating CONDITION onto the debuff a kill-clause grants without touching trigger resolution any
+// other kill clause shares. Verified corpus-unique to Meiying (docs/ship-skills.csv, grep "with a
+// Debuff").
+const KILL_WITH_DEBUFF_RE = /\bkilling\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 // Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted
@@ -1427,6 +1471,14 @@ export function detectReactiveTrigger(
     // observe a real hit count before any turn has fired).
     if (hitCountConditionFromClause(clause.toLowerCase())) return 'on-deal-damage';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
+    // Ship-kit W8, Task 4: "at the end of the round" → end-of-round (Chimei's non-defender
+    // below-40%-HP Stealth grant). Shares END_OF_ROUND_RE with detectEndOfRoundPurgeTrigger/
+    // detectEndOfRoundDamageTrigger (Rhodium) — same phrase, buff-grant call site. Checked
+    // AFTER start-of-round since resolveBuffClause is sentence-scoped (Chimei's grant sentence
+    // only contains "end of the round"; the sibling "start of the round" repair sentence is a
+    // separate clause keyed on the same buff name but matched first by resolveBuffClause, so it
+    // never reaches here) — this ordering just mirrors the existing rule for readability.
+    if (END_OF_ROUND_RE.test(clause)) return 'end-of-round';
     // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
     // shares its governing trailing phrase with its sibling charge ability (already
     // start-of-turn via START_OF_TURN_CHARGE_RE in the charge-specific parser); this was the
@@ -1562,6 +1614,14 @@ export function detectPreCombatShieldTrigger(
 // segment on the un-stripped text. Comma/period boundaries never fall inside <unit-skill> tags, so
 // segmentation is identical with or without tags; only the index mapping is fragile.
 const REMOVAL_SEGMENT_BOUNDARY = /[,.;](?=\s|$)|<br\s*\/?>/gi;
+// Ship-kit Wave 8 Task 11 (Wusheng): "If directly damaged while <buff> is active, remove <buff>."
+// Unlike DR_DIRECT_DAMAGE_RE (the general reaction detector, which deliberately excludes "if" —
+// Panon's "If this Unit is directly damaged" is a conditional GRANT, out of scope there), this
+// window-scoped removal detector accepts BOTH "if" and "when": detectRemovalTriggerAt only ever
+// runs on a window already anchored at a removal verb (parseSelfBuffRemovals' scan), so there is
+// no risk of over-matching an unrelated conditional grant sentence — Panon never reaches this
+// function at all (it has no "loses/removes/remove <unit-skill>" clause to scan for).
+const REMOVAL_DIRECT_DAMAGE_RE = /\b(?:if|when)\s+directly\s+damaged\b|\bwhen\s+attacked\b/i;
 function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
     const masked = maskAbbrev(text);
     // Collect segment boundary spans [start,end) keyed by their terminator position so we can find
@@ -1592,12 +1652,23 @@ function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
     if (ENEMY_REPAIRS_RE.test(window)) return 'on-enemy-repaired';
     if (APPLYING_DEBUFF_RE.test(window)) return 'on-debuff-inflicted';
     if (START_OF_ROUND_RE.test(window)) return 'start-of-round';
+    // Wave 8 Task 11: "if/when directly damaged, remove <buff>" (Wusheng) — the self-scoped
+    // direct-damage reaction, mirroring HEAL_DAMAGE_REACTION_RE's "when … directly damaged"
+    // shape but scoped to this removal window only (see REMOVAL_DIRECT_DAMAGE_RE doc above).
+    if (REMOVAL_DIRECT_DAMAGE_RE.test(window)) return 'on-attacked';
     return 'on-cast';
 }
 
 // Active removal: "loses/removes <unit-skill>NAME</unit-skill>" (Mangler/Ravager/Asphyxiator/
-// Butcher-R1/Ruiner). Passive removal: "<unit-skill>NAME</unit-skill> is lost" (Butcher-R2).
-const SELF_BUFF_REMOVAL_ACTIVE_RE = /\b(?:loses|removes)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
+// Butcher-R1/Ruiner), plus the bare imperative "remove <unit-skill>NAME</unit-skill>" (Wusheng
+// Wave 8 Task 11: "…remove Stealth."). Corpus-verified (docs/ship-skills.csv): the ONLY two
+// "remove[s]? <unit-skill>" matches in the whole sheet are Ruiner's "removes Overload" (already
+// covered by the `removes` alternative) and Wusheng's "remove Stealth" — no ship uses the bare
+// imperative to describe removing a buff FROM AN ENEMY, so broadening to `remove` cannot mint a
+// phantom removal anywhere else. Passive removal: "<unit-skill>NAME</unit-skill> is lost"
+// (Butcher-R2).
+const SELF_BUFF_REMOVAL_ACTIVE_RE =
+    /\b(?:loses|removes|remove)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
 const SELF_BUFF_REMOVAL_PASSIVE_RE = /<unit-skill>([^<]+)<\/unit-skill>\s+is\s+lost\b/gi;
 
 /**
@@ -1789,6 +1860,77 @@ export function detectAllyCritDotTrigger(
     return phrasePosTrigger(text, ALLY_CRIT_DOT_RE, anchorPos, 'on-ally-crit-dot');
 }
 
+// Ship-kit W8 Task 10 (Wisteria): self-subject mirror of ALLY_CRIT_DOT_RE (Crocus's "when an
+// ally inflicts a DoT with a critical hit"). Wisteria's own-cast phrasing instead uses
+// "applying" (not "inflicts a DoT ... with a critical hit") and carries no "ally" subject
+// (self-implied by "This Unit"):
+//  - R0: "This Unit, after applying Corrosion with a Critical hit, inflicts Inferno II for 2
+//    turns."
+//  - R2 (refit-active): "This Unit inflicts Inferno II for 2 turns after applying Corrosion
+//    with a Critical hit and extends the newly applied Corrosion by 1 turn ..."
+// Verified zero-collision across docs/ship-skills.csv: of the 8 ships whose skill text contains
+// "critical hit", Wisteria is the only one pairing "applying ... critical hit" with a
+// same-sentence "inflicts ... for N turns" (Asphyxiator uses "applies" + no re-infliction
+// clause; Valerian/Crocus use "inflicts/inflicting" for the TRIGGER verb, not "applying"). The
+// generic `[^.]*` gap (not `[\w\s]+?`) so this works against BOTH the raw tagged text
+// (phrasePosTrigger's sentence scan) and the stripped text (parseSelfCritDot/
+// parseSelfCritDotEffect below).
+const SELF_CRIT_DOT_RE = /\bafter\s+applying\b[^.]*\bwith\s+a\s+critical\s+hit\b/i;
+
+/** Whether a skill triggers "after applying a DoT with a Critical hit" (self-scoped, manual). */
+export function parseSelfCritDot(text: string | null | undefined): boolean {
+    if (!text) return false;
+    const plain = stripUnitTags(text);
+    return !/\ball(?:y|ies)\b/i.test(plain) && SELF_CRIT_DOT_RE.test(plain);
+}
+
+/**
+ * Returns 'on-self-crit-dot' when `anchorPos` (the ability's raw-text anchor position) falls
+ * inside the sentence carrying the "after applying <DoT> with a Critical hit" phrase (self-
+ * scoped — THIS unit's own crit-cast DoT infliction, not an ally's); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectAllyCritDotTrigger). This is the self-subject
+ * sibling of on-ally-crit-dot — see buildShipAbilities' dot-effects branch for the consuming
+ * side (Wisteria). Reference data: docs/ship-skills.csv.
+ */
+export function detectSelfCritDotTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    if (!text || /\ball(?:y|ies)\b/i.test(stripUnitTags(text))) return undefined;
+    return phrasePosTrigger(text, SELF_CRIT_DOT_RE, anchorPos, 'on-self-crit-dot');
+}
+
+// Extracts the buffName + duration of the DoT actually INJECTED by the self-crit-dot trigger
+// (e.g. "Inferno II" / 2), in EITHER clause ordering. Deliberately NOT a generic
+// parseSkillEffects tag walk: the trigger clause itself names a DoT ("applying Corrosion with
+// a Critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — a naive per-tag loop
+// (like the on-ally-crit-dot block above) would mint a phantom Corrosion dot from the TRIGGER'S
+// OWN named DoT, which carries no "for N turns" of its own (buildShipAbilities.test.ts's "no
+// phantom Corrosion dot" guard covers exactly this). Anchoring on the "inflicts X for N turns"
+// clause specifically — in either ordering relative to the trigger clause — means only the
+// genuinely injected DoT is ever extracted. Operates on the STRIPPED text only (buffName must
+// come out clean for the DOT_TIER_MAP lookup).
+const SELF_CRIT_DOT_EFFECT_ORDER_A_RE =
+    /\binflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?\s+after\s+applying\s+[\w\s]+?\s+with\s+a\s+critical\s+hit/i;
+const SELF_CRIT_DOT_EFFECT_ORDER_B_RE =
+    /after\s+applying\s+[\w\s]+?\s+with\s+a\s+critical\s+hit[^.]*?\binflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?/i;
+
+/**
+ * Parses the DoT actually injected by a "after applying <DoT> with a Critical hit" self-crit
+ * trigger (Wisteria: Inferno II / 2 turns), or undefined when absent. See the block comment
+ * above for why this is a dedicated extraction rather than a parseSkillEffects tag walk.
+ */
+export function parseSelfCritDotEffect(
+    text: string | null | undefined
+): { buffName: string; turns: number } | undefined {
+    if (!text || !parseSelfCritDot(text)) return undefined;
+    const plain = stripUnitTags(text);
+    const m =
+        SELF_CRIT_DOT_EFFECT_ORDER_A_RE.exec(plain) ?? SELF_CRIT_DOT_EFFECT_ORDER_B_RE.exec(plain);
+    if (!m) return undefined;
+    return { buffName: m[1].trim(), turns: parseInt(m[2], 10) };
+}
+
 /**
  * Returns 'on-bomb-detonated' when `anchorPos` (the ability's raw-text anchor position) falls
  * inside the sentence carrying the VICTIM-scoped bomb-burst phrase (BOMB_DETONATE_RE — "bomb
@@ -1926,8 +2068,15 @@ export function detectDebuffInflictedTrigger(
 //   - `parseSkillEffects` — the named-status *application* path that actually applies the debuff.
 // The control ability is purely additive; nothing here suppresses those other paths.
 //
-// Stasis keeps its ORIGINAL loose regex verbatim (byte-identity, zero golden churn). The three
-// enemy-side effects (Provoke / Concentrate Fire / Disable) anchor on an application verb that is
+// Stasis keeps its ORIGINAL loose regex, PLUS (ship-kit W8 Task 7) an untagged fallback for a
+// bare "Stasis for N turn(s)" inflict (Xcellence's active: "Inflicts <Speed Down II> for 2 turns
+// and Stasis for 2 turn." — Stasis itself carries no <unit-skill> wrapper, unlike Speed Down II).
+// The fallback alternative requires the trailing "for N turn(s)" duration text so it stays
+// anchored to a genuine inflict, not any other bare mention of "Stasis" in the same sentence as
+// an inflict/applies verb (e.g. Defiant's "gains Shield ... when applying Stasis" has no trailing
+// duration and uses "applying", which isn't in the verb set anyway — still excluded). Tagged
+// ships are byte-identical: the tagged alternative is tried first and, being present, always wins.
+// The three enemy-side effects (Provoke / Concentrate Fire / Disable) anchor on an application verb that is
 // either immediately tag-adjacent OR governs a coordinated list ("inflicts <Defense Down II> for
 // 2 turns, and <Provoke>" — Kafa): the verb, then zero-or-more "<unit-skill>…</unit-skill> [for N
 // turns]" items joined by commas/"and", then the target tag. This still ignores a control word in
@@ -1945,7 +2094,8 @@ export function detectDebuffInflictedTrigger(
 const CONTROL_LIST_PREFIX =
     '(?:\\s+<unit-skill>[^<]*<\\/unit-skill>(?:\\s+for\\s+\\d+\\s+turns?)?,?\\s+and)*';
 const ENEMY_INFLICT_VERB = '\\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\\b';
-const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
+const STASIS_INFLICT_RE =
+    /\b(?:inflicts?|applies)\b[^.]*?(?:<unit-skill>\s*Stasis\b|Stasis\s+for\s+\d+\s*turns?)/i;
 
 const CONTROL_INFLICTS: {
     effect: ControlEffect;
@@ -2010,8 +2160,15 @@ export function parseControlInflicts(
         // builder sorts emission order by `pos`).
         const match = c.re.exec(text);
         if (!match) continue;
+        // Ship-kit W8 Task 7: the <unit-skill> tag is OPTIONAL here too (mirrors STASIS_INFLICT_RE
+        // above) so a bare, untagged inflict (Xcellence's "and Stasis for 2 turn") still locates a
+        // real position instead of falling back to MAX_POS. Only c.re matching at all determines
+        // whether an untagged mention counts as a genuine inflict (Stasis' fallback alternative
+        // requires trailing "for N turns"); this just finds WHERE within that already-confirmed
+        // match the name sits. No effect on the other (still tag-only) control effects, since their
+        // matched text always contains the tag.
         const tagRe = new RegExp(
-            `<unit-skill>\\s*${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+            `(?:<unit-skill>\\s*)?${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
             'i'
         );
         const tagMatch = tagRe.exec(match[0]);
@@ -2340,6 +2497,51 @@ export function detectKilledByDirectDamageTrigger(
     return phrasePosTrigger(text, KILLED_BY_DIRECT_RE, anchorPos, 'on-destroyed');
 }
 
+// Ship-kit W8 Task 12: "… purges 1 buff from the enemy when dealing damage to a Defender"
+// (Zeolite passive). Verified against RAW CSV: 'This Unit purges 1 buff from the enemy when
+// dealing damage to a Defender.' Position-scoped (mirrors detectKilledByDirectDamageTrigger).
+const DEAL_DAMAGE_TO_ROLE_RE =
+    /\bwhen\s+dealing\s+damage\s+to\s+(?:an?\s+)?(?:defender|attacker|debuffer|supporter)s?\b/i;
+
+/**
+ * Returns 'on-deal-damage' when `anchorPos` falls inside the sentence carrying the "when
+ * dealing damage to a <Role>" phrase (Zeolite's passive purge reactive); otherwise undefined.
+ * Reuses the SAME 'on-deal-damage' trigger Burner's on-deal-damage Inferno rider already
+ * drives (triggers.ts) — the owner's own damage-dealing turn, victim-routed via eventCtx.victimId.
+ */
+export function detectDealDamageToRoleTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, DEAL_DAMAGE_TO_ROLE_RE, anchorPos, 'on-deal-damage');
+}
+
+// "to/against/targeting/damaging/attacking/hitting a <Role>" — the SAME enemy-class extraction
+// buildShipAbilities.ts's outgoing-damage-modifier branch already uses for Zeolite's "+30%
+// damage when hitting a Defender" gate (Wave 4). Reused here so both halves of Zeolite's
+// passive ("+30%… Defender" / "purges… Defender") read the role from one shared pattern.
+const ENEMY_ROLE_CLAUSE_RE =
+    /\b(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i;
+
+/**
+ * Extracts the `enemy-type` Condition from the sentence containing `anchorPos` (Zeolite's
+ * on-deal-damage purge, Task 12) — e.g. "when dealing damage to a Defender" → requiredEnemyType
+ * 'Defender'. Sentence-scoped on RAW text (mirrors detectRepairedThisRoundCondition). Undefined
+ * when no role phrase is present in that sentence.
+ */
+export function detectPurgeEnemyTypeCondition(
+    text: string | null | undefined,
+    anchorPos: number
+): Condition | undefined {
+    if (!text) return undefined;
+    const sentence = rawSentenceAround(text, anchorPos);
+    if (sentence === undefined) return undefined;
+    const m = ENEMY_ROLE_CLAUSE_RE.exec(sentence);
+    return m
+        ? { subject: 'enemy-type', derivable: true, requiredEnemyType: capType(m[1]) }
+        : undefined;
+}
+
 // "repaired this round" — Nayra's charged purge + its Stasis/Exposed inflicts. The
 // gate word ("if"/"when") is already verified by detectGrantConditions' conditional
 // guard / by rawSentenceAround's sentence scoping, so the phrase alone is enough.
@@ -2397,6 +2599,28 @@ export function parseHighestSpeedEnemyTarget(
     if (!text) return false;
     const sentence = rawSentenceAround(text, anchorPos);
     return sentence !== undefined && HIGHEST_SPEED_ENEMY_RE.test(sentence);
+}
+
+// "the highest attack enemy" — Selenite's enemy-highest-attack target axis (Ship-kit W8 Task 5).
+// Narrowly matched (hyphen-or-space between "highest" and "attack") so it doesn't retarget other
+// ships' plain enemy debuffs that merely co-occur with "Attack" text elsewhere in the sentence.
+// Verified against RAW CSV: '…the highest attack enemy is applied with Concentrate Fire for 1
+// turn.'
+const HIGHEST_ATTACK_ENEMY_RE = /\bhighest[- ]attack\s+enemy\b/i;
+
+/**
+ * Returns true when `anchorPos` falls inside the sentence carrying the "highest attack enemy"
+ * phrase (Selenite p3's start-of-round Concentrate Fire debuff); otherwise false.
+ * Position-scoped on the RAW text (mirrors parseHighestSpeedEnemyTarget's sentence-scoping).
+ * Reference data: docs/ship-skills.csv (Selenite).
+ */
+export function parseHighestAttackEnemyTarget(
+    text: string | null | undefined,
+    anchorPos: number
+): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && HIGHEST_ATTACK_ENEMY_RE.test(sentence);
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
@@ -3871,6 +4095,17 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // below by HEAL_ADDITIONAL_RE inheriting the primary's target — skip it here so
             // it isn't double-counted (and so it doesn't inherit the wrong target/basis).
             if (kind === 'heal' && /equal\s+to/i.test(m[0])) continue;
+            // Madax (ship-kit W8 Task 9): "…receives 30% more Repairs and increases that
+            // Supporter's Defense by 20% of this Unit's Defense" — HEAL_REPAIR_RE's lazy
+            // `[^%.;]*?` walk matches the NOUN "Repairs" (not the repair verb) and, finding no
+            // period/semicolon before the next '%', walks straight past the intervening
+            // "increases <role>'s <stat> by" clause to that UNRELATED grant's own "20%",
+            // fabricating a phantom self-heal (basis 'defense', pct 20). That clause is a
+            // stat GRANT to the adjacent Supporter ally, not a repair amount — parsed
+            // separately by PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE below. Reject any repair match
+            // whose captured percentage belongs to this "increases <owner>'s <stat> by N%"
+            // shape rather than a genuine repair amount.
+            if (/\bincreases\b[^%.;]*'s\b[^%.;]*\bby\b/i.test(m[0])) continue;
             // Quixilver: "if it has shield equal to 100% of its max HP" is a THRESHOLD
             // CONDITION gating a Barrier grant elsewhere in the sentence, not a shield GRANT
             // itself — every real shield grant in the corpus is phrased "gains/grants Shield
@@ -4493,10 +4728,11 @@ export function detectFullyCharged(texts: (string | undefined)[]): boolean {
  * PR F4: a permanent pre-fight base-stat grant parsed from a ship passive. Consumed by
  * buildShipAbilities into a `pre-combat-stat` ability (trigger 'pre-combat'); the battle
  * sim's pre-fight layer (F5) applies it to plan stats before round 1. Corpus (docs/
- * ship-skills.csv): Lionheart, Centurion, Enforcer, Defiant, Stalwart.
+ * ship-skills.csv): Lionheart, Centurion, Enforcer, Defiant, Stalwart, Madax (Task 9 —
+ * 'defence' donor grant to the adjacent Supporter, see PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE).
  */
 export interface PreCombatStatGrant {
-    stat: 'hp' | 'attack' | 'crit' | 'hacking';
+    stat: 'hp' | 'attack' | 'crit' | 'hacking' | 'defence';
     value: number;
     /** 'flat': absolute points. 'percent-of-own': % of the RECIPIENT's pre-fight stat.
      *  'percent-of-donor': % of the GRANTING ship's pre-fight stat (Lionheart). */
@@ -4525,17 +4761,41 @@ const PRE_COMBAT_PER_ADJACENT_ATTACK_RE =
 //   C1 trailing gate (Enforcer): "… this Unit gains +15% crit rate and +10% hacking if
 //   adjacent to a supporter."
 //   C2 leading gate (Defiant/Stalwart): "When (this Unit is) adjacent to a Supporter, this
-//   Unit gains 20% HP/Attack." — Madax's "receives 30% more Repairs…" has no "gains" and
-//   deliberately stays unparsed (out of scope).
+//   Unit gains 20% HP/Attack." — Madax's "receives 30% more Repairs…" has no "gains" verb, so
+//   it never matches this pattern; its "increases that Supporter's Defense by 20%…" clause is
+//   a DIFFERENT shape (a donor grant to the adjacent ally, not a self-gain) — see Pattern D
+//   below (Task 9).
 const PRE_COMBAT_ROLE_GATE_TRAILING_RE =
     /this unit gains ([^.;]+?)\s+(?:if|when|while)\s+adjacent to an?\s+(supporter|defender|attacker|debuffer)\b/gi;
 const PRE_COMBAT_ROLE_GATE_LEADING_RE =
     /when (?:this unit is )?adjacent to an?\s+(supporter|defender|attacker|debuffer),\s*this unit gains ([^.;]+?)(?=[.;]|$)/gi;
 
+// Pattern D (Madax, Task 9): "When adjacent to a Supporter, this Unit … increases that
+// Supporter's Defense by 20% of this Unit's Defense." — a DONOR-scaled stat grant to the
+// specific adjacent ally of the named role (not a self-gain, so Pattern C's "gains" verb
+// doesn't apply). Reuses the existing 'adjacent-allies' target (Pattern A, Lionheart) plus
+// the existing requiresAdjacentRole gate (Pattern C) rather than introducing a new target —
+// buildShipAbilities/preCombatPassives already thread both through generically. The role
+// backreference (\1) ties "that <role>'s" back to the same role named in the leading gate.
+const PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE =
+    /when (?:this unit is )?adjacent to an?\s+(supporter|defender|attacker|debuffer),[^.;]*\bincreases\s+that\s+\1'?s\s+(defense|attack|hp|max\s*hp)\s+by\s+(\d+(?:\.\d+)?)\s*%\s*of\s+this\s+unit'?s\s+(?:defense|attack|hp|max\s*hp)/gi;
+
 // Stat-list splitter for pattern C: "+15% crit rate and +10% hacking" / "20% HP" / "20% Attack".
 // crit rate is a percentage-only stat, so "+15% crit rate" is a FLAT 15-point grant; hacking/
 // hp/attack scale the recipient's own stat (percent-of-own).
 const PRE_COMBAT_STAT_LIST_RE = /\+?(\d+(?:\.\d+)?)%\s*(crit(?:ical)?\s*rate|hacking|hp|attack)/gi;
+
+// Stat-keyword mapping for pattern D's granted stat ("Defense"/"Attack"/"HP"/"Max HP") to the
+// engine's PreFightStatBlock key. Distinct from preCombatStatFromKeyword (pattern C — self
+// grants only support hp/attack/crit/hacking) because pattern D also supports 'defence',
+// spelled to match PreFightStatBlock/DerivedCombatStats (British spelling), not
+// ParsedHealAbility's American 'defense'.
+function donorRoleGrantStatFromKeyword(keyword: string): 'defence' | 'attack' | 'hp' {
+    const k = keyword.toLowerCase().replace(/\s+/g, '');
+    if (k === 'defense' || k === 'defence') return 'defence';
+    if (k === 'attack') return 'attack';
+    return 'hp';
+}
 
 function preCombatStatFromKeyword(keyword: string): {
     stat: 'hp' | 'attack' | 'crit' | 'hacking';
@@ -4609,6 +4869,22 @@ export function parsePreCombatStatGrants(text: string | null | undefined): PreCo
         emitRoleGated(m[2], m.index + m[0].indexOf(m[2]), m[1]);
     }
 
+    // Pattern D (Madax, Task 9): donor-scaled stat grant to the adjacent ally of the named
+    // role — target 'adjacent-allies' (Pattern A's shape) combined with requiresAdjacentRole
+    // (Pattern C's gate), valueKind 'percent-of-donor' (this Unit's own stat, not the
+    // recipient's).
+    PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE.lastIndex = 0;
+    while ((m = PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE.exec(plain)) !== null) {
+        results.push({
+            stat: donorRoleGrantStatFromKeyword(m[2]),
+            value: parseFloat(m[3]),
+            valueKind: 'percent-of-donor',
+            target: 'adjacent-allies',
+            requiresAdjacentRole: m[1].toUpperCase() as ShipRoleCategory,
+            pos: m.index,
+        });
+    }
+
     return results;
 }
 
@@ -4617,18 +4893,22 @@ export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passi
 export interface SkillEffect {
     buffName: string;
     // Player-side granularity (team-walk ally-scope): 'self' = caster only, 'ally' = a single
-    // chosen ally, 'all-allies' = every player actor. 'enemy' = single-target enemy debuff,
-    // 'all-enemies' = enemy debuff scoped to the whole opposing team (detectEnemyGrantScope).
-    // 'adjacent-enemies' / 'target-and-adjacent-enemies' = enemy debuff scoped to the anchor's
-    // neighbours (excluded/included respectively) — see detectAdjacentEnemyScope. Engine fan-out
-    // for these two is a later task; this file only resolves the scope.
-    // The combat engine routes 'ally'/'all-allies' grants from a walked team ship onto the right
-    // actors, and fans an 'all-enemies' debuff over aoeVictimIds generically; for the attacker's
-    // own sim 'self' and 'all-allies' both fold onto its side (zero churn).
+    // chosen ally, 'all-allies' = every player actor, 'adjacent-allies' = board-adjacent player
+    // actors only (Lionheart's crit-buff grants — ship-kit W8 Task 1; see detectGrantScope).
+    // 'enemy' = single-target enemy debuff, 'all-enemies' = enemy debuff scoped to the whole
+    // opposing team (detectEnemyGrantScope). 'adjacent-enemies' / 'target-and-adjacent-enemies' =
+    // enemy debuff scoped to the anchor's neighbours (excluded/included respectively) — see
+    // detectAdjacentEnemyScope. Engine fan-out for these two is a later task; this file only
+    // resolves the scope.
+    // The combat engine routes 'ally'/'all-allies'/'adjacent-allies' grants from a walked team
+    // ship onto the right actors, and fans an 'all-enemies' debuff over aoeVictimIds generically;
+    // for the attacker's own sim 'self'/'all-allies'/'adjacent-allies' all fold onto its side
+    // (zero churn).
     target:
         | 'self'
         | 'ally'
         | 'all-allies'
+        | 'adjacent-allies'
         | 'enemy'
         | 'all-enemies'
         | 'adjacent-enemies'
@@ -4940,6 +5220,13 @@ const SINGLE_ALLY_RE =
 // Ally-scoped (team-wide) grant phrasings: bare plural "allies" (subsumes "all allies"), "friendly …".
 // Note: bare "allies" subsumes "all allies", so the explicit "all allies" alternative is omitted.
 const ALL_ALLIES_RE = /friendly|allies/i;
+// Ship-kit W8 Task 1 (Lionheart): a receiver naming "(all) adjacent allies" bare — the crit-buff
+// grant "grants Attack Up II to all adjacent allies for 1 turn." — is board-adjacency scoped, not
+// team-wide. Tested BEFORE ALL_ALLIES_RE (which would otherwise match the "allies" substring and
+// swallow it as all-allies) but ONLY when the receiver is adjacency-ONLY: Tormenter's combined
+// "grants X to itself and all adjacent allies" receiver still routes all-allies (self + adjacent
+// together is broader than adjacency alone) — see the SELF_RECEIVER_RE co-check at the call site.
+const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 // A grant whose receiver is explicitly the caster ("grants itself X").
 const SELF_RECEIVER_RE = /\bitself\b/i;
 // Granting (bestowing) verbs — the caster confers the buff on a (possibly explicit) receiver.
@@ -4956,7 +5243,10 @@ const ANY_GRANT_VERB_RE =
 // directly damaged, …") isn't mistaken for the buff's receiver. Two comma/clause-boundary
 // anchored forms, lookbehind-free (iOS Safari 15):
 //  - leading:  "When/After/While/If … , <receiver clause>"  → drop up to the first comma
-//  - trailing: "<receiver clause> when/after/while/if …"    → drop from the keyword onward
+//  - trailing: "<condition clause> when/after/while/if …"   → drop from the keyword onward,
+//    UNLESS that trailing condition is itself followed by ", this Unit grants/applies/gives …"
+//    (Quixilver), in which case the strip stops right before that comma so the receiver
+//    clause survives (ship-kit W8 Task 6).
 // The receiver phrasing ("this Unit grants the ally X" / "X allies gain Y") survives, so a
 // genuine post-condition ally receiver (Provider: "…, this Unit grants the ally RoT III") is
 // still classified ally. The clause is the same one `resolveBuffClause` already split on
@@ -4966,10 +5256,19 @@ function stripConditionClauses(clause: string): string {
     let out = clause;
     // Leading "When/After/While/If … ," — only when it precedes the rest via a comma.
     out = out.replace(/^\s*(?:when|after|while|if)\b[^,]*,\s*/i, '');
-    // Trailing " when/after/while/if …" condition (to end of clause).
-    // LOSSY: a post-condition receiver clause is destroyed here; the default-self fallback covers
-    // the live corpus. A future "if …, all allies gain X" phrasing would need receiver-aware stripping.
-    out = out.replace(/\s+\b(?:when|after|while|if)\b.*$/i, '');
+    // Trailing " when/after/while/if …" condition (to end of clause) — receiver-aware
+    // (ship-kit W8 Task 6): when the condition is itself followed by a comma and a
+    // "this Unit grants/applies/gives …" receiver clause (Quixilver: "…if it has shield equal
+    // to 100% of its max HP, this Unit grants all allies Barrier…"), the strip stops right
+    // before that comma so the receiver clause survives instead of being deleted wholesale.
+    // Scoped narrowly to the literal "this unit <verb>" receiver phrasing (matched on the
+    // already-lowercased clause) so ships whose trailing condition has NO such receiver clause
+    // after it still get the original full-strip-to-end-of-clause behavior via the fallback
+    // alternative.
+    out = out.replace(
+        /\s+\b(?:when|after|while|if)\b(?:[\s\S]*?(?=,\s*this unit (?:grants|applies|gives)\b)|[\s\S]*)/i,
+        ''
+    );
     return out;
 }
 
@@ -5012,6 +5311,26 @@ function buffGrantSpan(
 }
 
 /**
+ * Finds the character position of the (0-based) Nth occurrence of `name` inside `text` via
+ * repeated plain substring search — a direct generalization of the single-occurrence
+ * `text.indexOf(name)` `detectGrantScope` used before ship-kit W8 Task 2. Returns -1 only when
+ * NO occurrence exists; if fewer than `occurrenceIndex + 1` occurrences exist, returns the LAST
+ * occurrence actually found (defensive: an out-of-range index degrades to "closest available"
+ * rather than losing position entirely).
+ */
+function findNthOccurrencePos(text: string, name: string, occurrenceIndex: number): number {
+    let pos = -1;
+    let searchFrom = 0;
+    for (let n = 0; n <= occurrenceIndex; n++) {
+        const idx = text.indexOf(name, searchFrom);
+        if (idx === -1) return pos;
+        pos = idx;
+        searchFrom = idx + name.length;
+    }
+    return pos;
+}
+
+/**
  * Resolves the player-side ally-scope of a granted buff from its GRANTING CLAUSE, using the
  * same masking-aware clause resolver (`resolveBuffClause`) as condition detection so "Inc."/
  * "Out." abbreviation periods don't break sentence splitting.
@@ -5023,6 +5342,7 @@ function buffGrantSpan(
  *      · This-Unit / no subject ("This Unit gains X")                        → 'self'
  *  - BESTOWING verb ("grants") — the OBJECT (receiver) takes the buff:
  *      · explicit self receiver ("grants itself X")                          → 'self'
+ *      · bare adjacency receiver ("grants X to all adjacent allies")         → 'adjacent-allies'
  *      · team receiver ("grants all allies X" / "grants X to all allies")    → 'all-allies'
  *      · single-ally receiver ("grants the/an/that ally X", "grants them X") → 'ally'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
@@ -5033,13 +5353,27 @@ function buffGrantSpan(
  *
  * For the attacker's own sim 'self' and 'all-allies' are equivalent (both fold onto the
  * attacker's side); the distinction only matters when the engine walks a team ship's grants.
+ *
+ * `occurrenceIndex` (0-based, ship-kit W8 Task 2): a SAME buff name can be granted to two
+ * DIFFERENT scopes within one clause (Centurion's charge: "This Unit gains 4 stacks of Core
+ * Charge I and grants all adjacent allies 2 stacks of Core Charge I …" — self, then
+ * adjacent-allies). Resolving scope from the buff name's FIRST occurrence (plain `indexOf`)
+ * would make every grant of that name in the clause resolve identically, silently collapsing
+ * the second grant's scope onto the first. The caller (parseSkillEffects, which already walks
+ * one <unit-skill> segment per occurrence) passes which occurrence this call is for so the
+ * governing verb/receiver is read from THAT grant's own span. Defaults to 0 (first occurrence)
+ * — byte-identical for every buff name granted only once in its clause.
  */
-function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' | 'all-allies' {
+function detectGrantScope(
+    skillText: string,
+    buffName: string,
+    occurrenceIndex = 0
+): 'self' | 'ally' | 'all-allies' | 'adjacent-allies' {
     const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
     // Strip trigger/condition sub-clauses so an ally mentioned only as the TRIGGER ("after an
     // ally is critically repaired") doesn't leak ally-scope onto a buff the caster grants itself.
     const clause = stripConditionClauses(resolved);
-    const buffStart = clause.indexOf(buffName.toLowerCase());
+    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), occurrenceIndex);
     const { verb, subject, object } = buffGrantSpan(
         clause,
         buffStart === -1 ? clause.length : buffStart
@@ -5052,11 +5386,17 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
         return 'self';
     }
 
-    // Bestowing verb (grants) → route by the OBJECT (the receiver of the grant). Team and ally
-    // receivers are tested BEFORE the self ("itself") receiver so a combined receiver like
-    // "grants Out. Damage Up I to itself and all adjacent allies" (Tormenter) routes all-allies,
-    // not self — "itself" only pins to self when it is the SOLE receiver (Nuqtu's "grants itself").
+    // Bestowing verb (grants) → route by the OBJECT (the receiver of the grant). Adjacency-ONLY
+    // and team receivers are tested BEFORE the self ("itself") receiver so a combined receiver
+    // like "grants Out. Damage Up I to itself and all adjacent allies" (Tormenter) still routes
+    // all-allies, not self — "itself" only pins to self when it is the SOLE receiver (Nuqtu's
+    // "grants itself"). Ship-kit W8 Task 1 (Lionheart): the adjacency check is co-guarded on the
+    // ABSENCE of "itself" so Tormenter's combined receiver (broader than adjacency alone) falls
+    // through to the plain all-allies branch below instead of being caught here.
     if (verb !== null && GRANT_VERB_RE.test(verb)) {
+        if (ADJACENT_ALLIES_RE.test(object) && !SELF_RECEIVER_RE.test(object)) {
+            return 'adjacent-allies';
+        }
         if (ALL_ALLIES_RE.test(object)) return 'all-allies';
         if (SINGLE_ALLY_RE.test(object)) return 'ally';
         if (SELF_RECEIVER_RE.test(object)) return 'self';
@@ -5066,6 +5406,9 @@ function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' 
 
     // No identifiable verb (defensive): fall back to the prior phrasing-only heuristic.
     if (SINGLE_ALLY_RE.test(clause)) return 'ally';
+    if (ADJACENT_ALLIES_RE.test(clause) && !SELF_RECEIVER_RE.test(clause)) {
+        return 'adjacent-allies';
+    }
     if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
     return 'self';
 }
@@ -5195,12 +5538,21 @@ export function parseSkillEffects(
 
     const segments = parseSkillText(skillText);
     const effects: SkillEffect[] = [];
+    // Ship-kit W8 Task 2: counts how many <unit-skill> tags of THIS buff name have already been
+    // walked, so a buff name granted twice in one clause (Centurion: self x4 + adjacent-allies
+    // x2, same "Core Charge I") resolves each occurrence's scope independently instead of both
+    // collapsing onto the first grant's scope. Incremented for every tagged occurrence (even one
+    // later skipped for lacking a verb) so the count always matches this segment's true position
+    // among the buff name's occurrences in the raw text.
+    const buffNameOccurrence = new Map<string, number>();
 
     for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
         if (seg.type !== 'unit-skill') continue;
 
         const buffName = seg.text;
+        const occurrenceIndex = buffNameOccurrence.get(buffName) ?? 0;
+        buffNameOccurrence.set(buffName, occurrenceIndex + 1);
 
         // Step 1: Find application verb
         const verb = findVerb(segments, i);
@@ -5216,7 +5568,7 @@ export function parseSkillEffects(
         const side = verbToTarget(verb, buffName, nextText);
         const target: SkillEffect['target'] =
             side === 'self'
-                ? detectGrantScope(skillText, buffName)
+                ? detectGrantScope(skillText, buffName, occurrenceIndex)
                 : detectEnemyGrantScope(skillText, buffName);
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
@@ -5328,6 +5680,30 @@ export function parseSkillEffects(
             // conjoined path consistent so a trailing "and Cheat Death for N turns" can't stamp
             // a finite window either.
             duration: CHEAT_DEATH_BUFFS.has(canonical) ? 'recurring' : parseInt(conjoined[2], 10),
+            source,
+        });
+    }
+
+    // Supplementary pass (ship-kit W8 Task 7): a BARE, untagged "Stasis" conjoined onto a tagged
+    // enemy inflict ("Inflicts <Speed Down II> for 2 turns and Stasis for 2 turn." — Xcellence's
+    // active). The segment loop above only walks tagged <unit-skill> occurrences, so this trailing
+    // enemy-side Stasis has no governing verb/tag of its own and would otherwise be silently
+    // dropped (mirrors CONJOINED_SELF_GRANT_RE's shape, but for the ENEMY side). Scoped narrowly to
+    // Stasis specifically — it is the only untagged inflict found corpus-wide (docs/ship-skills.csv)
+    // — and anchored on "and Stasis for N turn(s)" so it never matches a bare mention of Stasis in
+    // an unrelated clause (e.g. Defiant's "gains Shield ... when applying Stasis" has no trailing
+    // duration and uses "applying", excluded from the verb set below). `turns?` tolerates the CSV's
+    // "for 2 turn" singular typo, same tolerance as DURATION_RE.
+    const BARE_STASIS_INFLICT_RE =
+        /\b(?:inflicts?|applies)\b[^.]*?\band\s+Stasis\s+for\s+(\d+)\s*turns?/i;
+    const bareStasis = BARE_STASIS_INFLICT_RE.exec(rawText);
+    if (bareStasis && !alreadyEmitted.has('Stasis')) {
+        alreadyEmitted.add('Stasis');
+        effects.push({
+            buffName: 'Stasis',
+            target: 'enemy',
+            duration: parseInt(bareStasis[1], 10),
+            application: 'inflict',
             source,
         });
     }

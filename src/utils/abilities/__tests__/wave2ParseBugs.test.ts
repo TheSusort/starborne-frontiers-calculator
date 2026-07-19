@@ -55,18 +55,16 @@ describe.skipIf(!csvAvailable())(
 
             // The "100% max HP" clause was gating a real grant ("...this Unit grants all
             // allies Barrier for 1 hit"), not the phantom shield — make sure fixing the
-            // phantom didn't also drop the legitimate Barrier buff.
-            // NOTE: we intentionally do NOT assert this Barrier's target. The clause says
-            // "grants all allies Barrier" but the parser currently resolves it to target='self'
-            // — a separate WRONG-PARSE surfaced during Wave 2 but OUT OF SCOPE for it (not in the
-            // ledger; Quixilver's only Wave 2 finding was the phantom shield). Asserting 'self'
-            // here would lock that bug in as expected; a later wave should fix the target and
-            // then tighten this assertion.
+            // phantom didn't also drop the legitimate Barrier buff. Ship-kit W8 Task 6 made
+            // `stripConditionClauses`'s trailing strip receiver-aware, so the "this Unit
+            // grants all allies Barrier" receiver clause now survives and resolves to
+            // all-allies (previously fell back to self — see wave8Targets.test.ts).
             const barrierGrant = passive!.abilities.find(
                 (a) => a.config.type === 'buff' && a.config.buffName === 'Barrier'
             );
             expect(barrierGrant).toBeDefined();
             expect(barrierGrant!.type).toBe('buff');
+            expect(barrierGrant!.target).toBe('all-allies');
         });
 
         it('B2: Rikra passive (R2) — "repairs 60% of its Max HP ... upon killing them" self-heal targets self, not ally', () => {

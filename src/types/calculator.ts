@@ -175,6 +175,7 @@ export interface SelectedGameBuff {
         | 'self'
         | 'ally'
         | 'all-allies'
+        | 'adjacent-allies'
         | 'enemy'
         | 'all-enemies'
         | 'adjacent-enemies'

@@ -40,7 +40,7 @@ export interface PreCombatPlanLike {
 export interface AppliedPreCombatGrant {
     ownerId: string;
     recipientId: string;
-    stat: 'hp' | 'attack' | 'crit' | 'hacking';
+    stat: 'hp' | 'attack' | 'crit' | 'hacking' | 'defence';
     amount: number;
 }
 
@@ -96,8 +96,20 @@ export function applyPreCombatShipPassives(plans: PreCombatPlanLike[]): AppliedP
                 }
 
                 const perAllyFactor = config.perAdjacentAlly ? adjacentPlans.length : 1;
+                // Recipient set: adjacent-allies grants gated by `requiresAdjacentRole` go
+                // ONLY to the adjacent allies matching that role (Madax → "that Supporter's
+                // Defense", not every neighbour) — the existence gate above only asked
+                // WHETHER the grant fires, not WHO receives it. Self-targeted role-gated
+                // grants (Enforcer/Defiant/Stalwart) are unaffected: they always resolve to
+                // [owner] regardless of role, same as before.
                 const recipients =
-                    ability.target === 'adjacent-allies' ? adjacentPlans : [owner];
+                    ability.target === 'adjacent-allies'
+                        ? requiredRole !== undefined
+                            ? adjacentPlans.filter((p) =>
+                                  matchesRoleCategory(p.role, [requiredRole])
+                              )
+                            : adjacentPlans
+                        : [owner];
 
                 for (const recipient of recipients) {
                     const recipientSnapshot = snapshot.get(recipient.id);

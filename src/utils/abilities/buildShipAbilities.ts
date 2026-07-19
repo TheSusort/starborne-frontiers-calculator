@@ -26,6 +26,7 @@ import {
     parseDamageReflection,
     parseSecondaryDamage,
     parseOnResistHpDamage,
+    parseOnResistShieldDamage,
     parseKilledByDirectHpDamage,
     parseShieldStrip,
     parseConditionalDamage,
@@ -52,6 +53,8 @@ import {
     parseBombCountdownReduce,
     parseAllyCritDot,
     detectAllyCritDotTrigger,
+    parseSelfCritDotEffect,
+    detectSelfCritDotTrigger,
     detectBombDetonatedTrigger,
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
@@ -69,8 +72,11 @@ import {
     detectEndOfRoundDamageTrigger,
     detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
+    detectDealDamageToRoleTrigger,
+    detectPurgeEnemyTypeCondition,
     detectMostBuffsTarget,
     parseHighestSpeedEnemyTarget,
+    parseHighestAttackEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     detectEnemyDotDamageTrigger,
@@ -604,6 +610,32 @@ function parseModifiers(text: string): ParsedModifier[] {
                 scaling: { conditionIndex: conditions.length - 1, perUnit: dotValue / per },
             });
         }
+    }
+
+    // Wave 8, Task 14: "N% more detonation damage per M% crit power" (Lingshe refit-active:
+    // "This Unit deals 1% more detonation damage per 10% crit power it has.") → a
+    // detonationDamage-channel modifier scaling with the caster's own live crit power, modelled
+    // EXACTLY on the Wildfire dotDamage crit-power modifier above (~563-613). The detonationDamage
+    // channel is already fully consumed by the engine (applyAbilities.ts, effectiveStats.ts,
+    // detonation.ts/engine.ts) and snapshotted onto each PendingBomb at cast time
+    // (playerTurn.ts:822) — same snapshot-at-application approximation as Voidfire's affinity
+    // snapshot: Lingshe's bonus applies to her own bombs (applier=detonator) but NOT to foreign
+    // bombs she detonates via countdown-reduce.
+    const detonationCritPowerM = plain.match(
+        /(\d+(?:\.\d+)?)%\s+more\s+detonation\s+damage\s+per\s+(\d+(?:\.\d+)?)%\s+crit\s+power/i
+    );
+    if (detonationCritPowerM) {
+        const detValue = parseFloat(detonationCritPowerM[1]);
+        const per = parseFloat(detonationCritPowerM[2]);
+        const conditions: Condition[] = [{ subject: 'self-crit-power', derivable: true }];
+        out.push({
+            channel: 'detonationDamage',
+            value: 0,
+            isMultiplicative: false,
+            target: 'self',
+            conditions,
+            scaling: { conditionIndex: conditions.length - 1, perUnit: detValue / per },
+        });
     }
 
     // "increases [outgoing] [direct] Damage by [up to] N% [to enemies with <effect> / below X% HP]"
@@ -1418,6 +1450,36 @@ function abilitiesFromText(
                 pos: onKilledIdx >= 0 ? onKilledIdx : MAX_POS,
             });
         }
+
+        // Xcellence p2: "When an enemy resists a debuff infliction, this Unit deals damage
+        // equal to X% of this Unit's current shield." Ship-kit W8 — an INFLICTOR-scoped
+        // sibling of the Vindicator proc above: THIS unit inflicted the debuff and the ENEMY
+        // resisted it, so it routes on the on-own-debuff-resisted trigger (not
+        // on-debuff-resisted) — that trigger stamps counterTargetId = the resister, exactly
+        // the enemy this reaction should retaliate against. multiplier:0 — the amount rides
+        // shieldBasisPct (owner's current shield), read by the same reactive-damage executor
+        // that already reads hpBasisPct.
+        const onResistShield = parseOnResistShieldDamage(text);
+        if (onResistShield) {
+            const onResistShieldIdx = text.search(/<unit-damage>/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-own-debuff-resisted',
+                    conditions: [],
+                    config: {
+                        type: 'damage',
+                        multiplier: 0,
+                        hits: 1,
+                        shieldBasisPct: onResistShield.pct,
+                    },
+                    autoFilled: true,
+                },
+                pos: onResistShieldIdx >= 0 ? onResistShieldIdx : MAX_POS,
+            });
+        }
     }
 
     // PR9(b): standalone "removes X% of the enemy Shield" (APEX/Laika/Malvex) — coordinate
@@ -1751,6 +1813,50 @@ function abilitiesFromText(
                 },
                 pos: allyCritDotPos >= 0 ? allyCritDotPos : MAX_POS,
             });
+        }
+    }
+
+    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of the Crocus on-ally-crit-dot block
+    // above — "This Unit ... after applying <DoT> with a Critical hit, inflicts <DoT> for N
+    // turns" (R0) / "inflicts <DoT> for N turns after applying <DoT> with a Critical hit ..."
+    // (R2, refit-active). Deliberately NOT reusing the parseSkillEffects tag walk the
+    // on-ally-crit-dot block uses above: Wisteria's own TRIGGER clause names a DoT ("applying
+    // Corrosion with a Critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that
+    // walk would mint a phantom Corrosion dot from the trigger's own named DoT (see
+    // parseSelfCritDotEffect's comment; buildShipAbilities.test.ts's "no phantom Corrosion dot"
+    // guard covers exactly this). parseSelfCritDotEffect instead anchors on the "inflicts X for
+    // N turns" clause specifically, in EITHER ordering, so only the genuinely injected DoT
+    // (Inferno II) is ever extracted, landing on the SAME reactive on-self-crit-dot trigger
+    // machinery (see triggers.ts/types/abilities.ts).
+    const selfCritDotEffect = parseSelfCritDotEffect(text);
+    if (selfCritDotEffect) {
+        const info = DOT_TIER_MAP[selfCritDotEffect.buffName];
+        if (info) {
+            const selfCritDotPos = findBuffNamePos(text, selfCritDotEffect.buffName);
+            const selfCritDotTrigger = detectSelfCritDotTrigger(
+                text,
+                selfCritDotPos >= 0 ? selfCritDotPos : 0
+            );
+            if (selfCritDotTrigger) {
+                out.push({
+                    ability: {
+                        id: nextId(),
+                        type: 'dot',
+                        target: 'enemy',
+                        trigger: selfCritDotTrigger, // 'on-self-crit-dot'
+                        conditions: [],
+                        config: {
+                            type: 'dot',
+                            dotType: info.type,
+                            tier: info.tier,
+                            stacks: 1,
+                            duration: selfCritDotEffect.turns,
+                        },
+                        autoFilled: true,
+                    },
+                    pos: selfCritDotPos >= 0 ? selfCritDotPos : MAX_POS,
+                });
+            }
         }
     }
 
@@ -2289,10 +2395,12 @@ function abilitiesFromText(
 
     // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge
     // trigger is detected in the purge's own sentence (C2b-2): Iridium "when directly damaged"
-    // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors are added
-    // in later tasks. A passive purge with NO detected trigger is NOT emitted (Sefuba's chain
-    // stays on PURGE_MORE_RE below; Zeolite's "when dealing damage to a Defender" stays
-    // deferred). Purge is enemy-only (no support-flip).
+    // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors, plus
+    // Zeolite's "when dealing damage to a Defender" (Wave 8 Task 12) → on-deal-damage, carrying
+    // an `enemy-type` Defender condition (see detectPurgeEnemyTypeCondition below — same
+    // extraction the outgoing-damage-modifier branch above uses for Zeolite's sibling "+30%
+    // damage when hitting a Defender" gate). A passive purge with NO detected trigger is NOT
+    // emitted (Sefuba's chain stays on PURGE_MORE_RE below). Purge is enemy-only (no support-flip).
     //
     // C2b-3 update: Nayra's "if the target was repaired this round, purge all buffs" now emits
     // with conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
@@ -2317,7 +2425,8 @@ function abilitiesFromText(
             detectDamageReactionTrigger(text, purgePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
                 : (detectEndOfRoundPurgeTrigger(text, purgePos) ?? // Rhodium
-                  detectKilledByDirectDamageTrigger(text, purgePos)); // Faust
+                  detectKilledByDirectDamageTrigger(text, purgePos) ?? // Faust
+                  detectDealDamageToRoleTrigger(text, purgePos)); // Zeolite (Task 12)
         const trigger: AbilityTrigger | undefined =
             slot === 'active' || slot === 'charged' ? 'on-cast' : passiveTrigger;
         if (!trigger) continue; // passive purge with no recognized trigger → not emitted
@@ -2327,13 +2436,24 @@ function abilitiesFromText(
             ? 'enemy-most-buffs'
             : p.target;
         const repairedCond = detectRepairedThisRoundCondition(text, purgePos);
+        // Task 12: an on-deal-damage purge (Zeolite) is gated on the DAMAGED enemy being the
+        // named role (Defender) — reuses the enemy-type extraction shared with the +30%
+        // damage-modifier branch above. Only computed for the on-deal-damage trigger so no
+        // other purge (Iridium/Rhodium/Faust) picks up a spurious condition.
+        const enemyTypeCond =
+            trigger === 'on-deal-damage'
+                ? detectPurgeEnemyTypeCondition(text, purgePos)
+                : undefined;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'purge',
                 target,
                 trigger,
-                conditions: repairedCond ? [repairedCond] : [],
+                conditions: [
+                    ...(repairedCond ? [repairedCond] : []),
+                    ...(enemyTypeCond ? [enemyTypeCond] : []),
+                ],
                 config: {
                     type: 'purge',
                     count: p.count,
@@ -2555,6 +2675,15 @@ function abilitiesFromText(
     // Overload lose-on-kill (and "removes"/"is lost" phrasings): the 5 Marauder ships drop a
     // named self-buff on a reactive trigger. parseSelfBuffRemovals (Task 5) scopes the trigger to
     // the removal clause's position; the buff is cleared from ALL self stores (scope: 'all').
+    //
+    // Wave 8 Task 11 (Wusheng): an `on-attacked` removal ("if directly damaged … remove Stealth")
+    // additionally gates on the named buff still being ACTIVE at drain time — unlike the Marauder
+    // kill/repair/debuff triggers (which fire unconditionally; removeSelfBuffByName is a safe
+    // no-op if the buff was never present, so those never needed a gate), Wusheng's text is
+    // explicitly conditional ("if directly damaged WHILE Stealth is active"). The generic
+    // `self-buff` ConditionSubject (evaluateConditions.ts) already reads a live buff-presence
+    // count off the owner's snapshot, so this reuses existing machinery rather than adding a new
+    // condition kind.
     for (const rem of parseSelfBuffRemovals(text)) {
         const removePos = findBuffNamePos(text, rem.buffName);
         out.push({
@@ -2563,7 +2692,10 @@ function abilitiesFromText(
                 type: 'remove-self-buff',
                 target: 'self',
                 trigger: rem.trigger,
-                conditions: [],
+                conditions:
+                    rem.trigger === 'on-attacked'
+                        ? [{ subject: 'self-buff', buffName: rem.buffName, derivable: true }]
+                        : [],
                 config: { type: 'remove-self-buff', buffName: rem.buffName, scope: 'all' },
                 autoFilled: true,
             },
@@ -3286,7 +3418,31 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // Player-side grants carry granular effectTarget (self/ally/all-allies, wired above);
         // enemy debuffs now do too ('enemy' vs 'all-enemies' — detectEnemyGrantScope). Defaults
         // to 'enemy' for round-trip debuffs that predate the effectTarget field.
-        mergeBuff(buff, buff.effectTarget ?? 'enemy');
+        let enemyTarget: AbilityTarget = buff.effectTarget ?? 'enemy';
+        // Ship-kit W8 (Task 5): Selenite p3's round-start "the highest attack enemy is applied
+        // with Concentrate Fire" re-targets from the plain 'enemy' default to 'enemy-highest-
+        // attack' (the selector already resolves live at applyAbilities.ts, used by gear procs —
+        // this wires an existing selector, not a new one). Sentence/position-scoped on this buff's
+        // own name anchor (mirrors parseHighestSpeedEnemyTarget's damagePos scoping above) and
+        // gated on the plain 'enemy' scope only, so a co-located all-enemies/adjacent debuff in
+        // the same row is unaffected. The other seven Concentrate Fire ships in the corpus
+        // (Huanying, Judge, Lodolite, Stalwart, Valkyrie, Vanguard, Yuyan) carry no "highest
+        // attack enemy" phrase, so the narrow regex leaves them at the plain 'enemy' target.
+        if (enemyTarget === 'enemy') {
+            const slotForThisBuff = slotForBuffSource(buff.skillSource);
+            const rowTextForThisBuff = getSkillRowForSlot(ship, slotForThisBuff)?.text ?? '';
+            const buffPos = rowTextForThisBuff
+                ? findBuffNamePos(rowTextForThisBuff, buff.buffName)
+                : -1;
+            if (
+                rowTextForThisBuff &&
+                buffPos >= 0 &&
+                parseHighestAttackEnemyTarget(rowTextForThisBuff, buffPos)
+            ) {
+                enemyTarget = 'enemy-highest-attack';
+            }
+        }
+        mergeBuff(buff, enemyTarget);
     }
 
     // Phase 4c PR 1 (Task 8): damage-reaction DoT inflictions on the PASSIVE row (Warden

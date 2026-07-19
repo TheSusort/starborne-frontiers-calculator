@@ -6,7 +6,7 @@ import {
     SkillSlot,
 } from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
-import type { ShipTypeName } from '../../constants/shipTypes';
+import type { ShipTypeName, ShipRoleCategory } from '../../constants/shipTypes';
 import {
     DoTType,
     EnemyBaseClass,
@@ -512,6 +512,27 @@ export function registerReactiveListeners(args: {
                         }
                     });
                     break;
+                case 'on-self-crit-dot':
+                    bus.on('dot-applied', (e) => {
+                        // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of
+                        // on-ally-crit-dot above — THIS unit's OWN crit-cast DoT infliction
+                        // (sourceId === ownerId), not an ally's. One enqueue per qualifying
+                        // infliction event.
+                        if (e.viaCrit && e.sourceId === ownerId) {
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    // Land the injected DoT on the SAME enemy this cast just hit
+                                    // (the reactive `dot` executor's victimId seam), not the DPS
+                                    // dummy sink.
+                                    victimId: e.targetId,
+                                    dotType: e.dotType,
+                                },
+                            });
+                        }
+                    });
+                    break;
                 case 'on-ally-critically-repaired':
                     bus.on('heal-performed', (e) => {
                         // The OWNER's own crit repair of an ALLY (Pallas: "when this unit
@@ -879,7 +900,20 @@ export function registerReactiveListeners(args: {
                         // Opposing-scoped: fires when any opposing-side actor is destroyed.
                         // For the player call: dummy wall + enemy attackers.
                         // For the enemy call: any player actor. One enqueue per destruction event.
-                        if (isOpposing(e.actorId)) enqueue(intent);
+                        // Ship-kit W8 Task 13 (Meiying): stamp victimId = the slain actor (mirrors
+                        // every other Wave 5/7 reactive seam) so (a) an `adjacent-enemies`-target
+                        // debuff twin (Stasis) can anchor its fan-out on the KILLED enemy's own
+                        // neighbours (the debuff executor's adjacent-enemies branch below), and
+                        // (b) the drain-time `killed-enemy-had-debuff` condition can read the
+                        // slain unit's OWN debuff store (recordDestroyed runs before this event
+                        // fires and never clears it) rather than the fight-wide enemy-debuff
+                        // count. Inert for every OTHER on-enemy-destroyed ability (Sokol/
+                        // Liberator's extra-action/charge branches never read eventCtx).
+                        if (isOpposing(e.actorId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, victimId: e.actorId },
+                            });
                     });
                     break;
                 case 'on-enemy-repaired':
@@ -1288,6 +1322,9 @@ export interface IntentExecContext {
         hits: number,
         noCrit: boolean,
         hpBasisPct?: number,
+        /** Ship-kit W8 (Xcellence on-resist): sibling of hpBasisPct — basis is the owner's
+         *  CURRENT SHIELD instead of max HP. Mutually exclusive with hpBasisPct in the corpus. */
+        shieldBasisPct?: number,
         allowDeadOwner?: boolean,
         opts?: { ignoresDefense?: boolean; flatBasis?: number }
         // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
@@ -1341,6 +1378,15 @@ export interface IntentExecContext {
      *  ally). Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
      *  that don't exercise convert-dot. */
     actorById?: (actorId: string) => CombatActor | undefined;
+    /** Ship-kit W8 Task 12: resolve ANY actor's ship role (Ship.type) by id, either side — the
+     *  SAME `roleByActorId` map (side-agnostic by key) Meatshield's defense-substitution and
+     *  Graphite's `roleFilter` reaction-time check already consume. Used by the reactive `purge`
+     *  branch to re-check an `enemy-type` gate (scrubbed from the generic drain gate above)
+     *  against the REAL victim of an on-deal-damage purge (Zeolite: "… when dealing damage to a
+     *  Defender"), team-symmetrically. Optional — absent in unit-test ctxs that don't drive it
+     *  (an `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory
+     *  always false → conservative no-op, byte-identical to before this task). */
+    roleOf?: (actorId: string) => ShipTypeName | undefined;
     /** SP-E, Task E4: live (buff-folded) hacking/critDamage for `actorId`, either side. Used by
      *  the convert-dot executor to compute the conversion chance (hacking) and the paired
      *  crit-power extend chance (critDamage). Optional — absent in unit-test ctxs that don't
@@ -2223,14 +2269,48 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         !(c.subject === 'hp-threshold' && c.hpSubject !== 'self') &&
                         c.subject !== 'enemy-debuff'
                 )
-              : intent.ability.conditions;
+              : // Ship-kit W8 Task 12 (Zeolite): an on-deal-damage purge's `enemy-type` gate
+                // ("purges 1 buff … when dealing damage to a Defender") must check the ACTUAL
+                // victim THIS event carries (eventCtx.victimId/counterTargetId), not the single
+                // fight-wide `ctx.enemyType` the generic gate below reads — that field describes
+                // only the DPS-mode dummy enemy's class and is hardcoded undefined for an
+                // enemy-owned reaction (see engine.ts's seedPassiveTimedStatuses call site), so it
+                // can never be team-symmetric. Scrubbed here, re-checked in the `purge` branch
+                // below against `ctx.roleOf(targetId)` — `roleByActorId`/`roleOf` is side-agnostic
+                // by key (Meatshield/Graphite precedent), so this works identically for a
+                // player-owned or enemy-owned Zeolite. Gated strictly on
+                // type==='purge' && trigger==='on-deal-damage' so no other purge is touched.
+                intent.ability.type === 'purge' && intent.ability.trigger === 'on-deal-damage'
+                ? intent.ability.conditions.filter((c) => c.subject !== 'enemy-type')
+                : intent.ability.conditions;
 
     // Drain-time condition gate against CURRENT engine state — one gate for every branch,
     // built against the OWNER's snapshot (Task 6). liveGateConditions neutralizes
     // non-derivable-on-non-live subjects to 'always'; manual conditions keep literal gating
     // (manualCount). A failed gate is a silent skip (no resisted record).
     const gateConditions = liveGateConditions(scrubbedConditions);
-    if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
+    const baseDrainCtx = buildDrainContext(ctx, intent.ownerId);
+    // Ship-kit W8 Task 13 (Meiying): the `killed-enemy-had-debuff` gate is keyed to the SPECIFIC
+    // victim THIS on-enemy-destroyed intent carries (eventCtx.victimId, stamped by the listener
+    // above), not the fight-wide owner-scoped context buildDrainContext returns — so it is folded
+    // in here as a targeted override rather than threaded through buildDrainContext's owner-only
+    // signature. Reads the slain actor's OWN per-target debuff store (ownerDebuffNamesFor is the
+    // same reader `selfDebuffNames`/`buildActorConditionContext` already use for a target's
+    // debuffs); no victimId (every other reactive trigger, or DPS mode) → false, byte-identical.
+    // Ship-kit W8 (CodeRabbit round): explicitly gated on trigger==='on-enemy-destroyed' — other
+    // triggers (on-deal-damage, on-bomb-detonated, on-ally-crit-dot, on-self-crit-dot,
+    // on-enemy-dot-damage, on-ally-debuff-inflicted) also stamp eventCtx.victimId, but with
+    // different semantics (the current cast's target, not a killed unit); without this guard
+    // their victimId would be misread here as "the enemy this trigger just killed".
+    const drainCtx =
+        intent.ability.trigger === 'on-enemy-destroyed' && intent.eventCtx?.victimId !== undefined
+            ? {
+                  ...baseDrainCtx,
+                  killedEnemyHadDebuff:
+                      ownerDebuffNamesFor(ctx.statusEngine, intent.eventCtx.victimId).length > 0,
+              }
+            : baseDrainCtx;
+    if (!conditionsMet(gateConditions, drainCtx)) return;
 
     if (cfg.type === 'charge') {
         if (!passesOncePerRoundGate(intent, ctx)) return;
@@ -2500,10 +2580,22 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // fan-out, but for enemy-side recipients. Distinct from Ruiner's REPAIRER-targeted Bomb
         // (same on-enemy-repaired trigger, same event), which stays on the singular
         // counterTargetId route below (an empty list falls back to it defensively).
+        // Ship-kit W8 Task 13 (Meiying): `adjacent-enemies` fan-out for a REACTIVE debuff — no
+        // prior reactive `debuff`-type ability used this target (Wave 5's adjacency work covered
+        // the ON-CAST fan-out in playerTurn.ts and the reactive `damage` executor's bomb-splash
+        // branch above; this is the first REACTIVE debuff consumer). Anchors on the SLAIN enemy
+        // (eventCtx.victimId, stamped by the on-enemy-destroyed listener), mirrors the damage
+        // branch's adjacent-enemies resolution exactly: `ctx.adjacentOpposingIdsFor` resolves the
+        // anchor's own-side neighbours within the OPPOSING roster (team-symmetric), excluding the
+        // anchor itself. No anchor → empty, never falls back to the default enemy.
         const applicationTargetIds: (string | undefined)[] =
             intent.ability.repairedRecipientTargeted && intent.eventCtx?.repairedEnemyIds?.length
                 ? intent.eventCtx.repairedEnemyIds
-                : [counterTargetId];
+                : intent.ability.target === 'adjacent-enemies'
+                  ? intent.eventCtx?.victimId !== undefined
+                      ? (ctx.adjacentOpposingIdsFor?.(intent.eventCtx.victimId) ?? [])
+                      : []
+                  : [counterTargetId];
         for (const applicationTargetId of applicationTargetIds) {
             // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists
             // every incoming timed debuff. Gate immunity into the landing condition so the
@@ -3082,13 +3174,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
-        // HP-basis reactive (Vindicator on-resist): REQUIRES a routed inflictor (counterTargetId)
-        // — no fallback to ctx.enemy (you cannot retaliate against no-one). Frequency: one proc per
+        // HP/Shield-basis reactive (Vindicator on-resist HP / Xcellence on-resist Shield,
+        // Ship-kit W8): REQUIRES a routed inflictor (counterTargetId) — no fallback to
+        // ctx.enemy (you cannot retaliate against no-one). Frequency: one proc per
         // triggering enemy action, keyed (owner, ability, round, source) so multiple debuffs
         // resisted from ONE cast collapse to a single proc while two DIFFERENT enemies each proc.
         // (oncePerRoundConsumed is the per-round set; a 3-part key never collides with the 2-part
         // keys passesOncePerRoundGate uses.)
-        if (cfg.hpBasisPct !== undefined) {
+        if (cfg.hpBasisPct !== undefined || cfg.shieldBasisPct !== undefined) {
             const sourceId = intent.eventCtx?.counterTargetId;
             if (sourceId === undefined) return;
             const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}`;
@@ -3098,10 +3191,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 intent.ownerId,
                 sourceId,
                 intent.ability.id,
-                cfg.multiplier, // inert on this path — the engine reads hpBasisPct, not multiplier, when set
+                cfg.multiplier, // inert on this path — the engine reads hpBasisPct/shieldBasisPct, not multiplier, when set
                 cfg.hits ?? 1,
                 cfg.noCrit ?? false,
                 cfg.hpBasisPct,
+                // Ship-kit W8 (Xcellence): shieldBasisPct sibling of hpBasisPct — mutually
+                // exclusive in the corpus (no row sets both).
+                cfg.shieldBasisPct,
                 // PR-B1 (Paracelsus): an on-destroyed retaliation's owner is already dead by the
                 // time this drains — fromOwnDeath (stamped by the on-destroyed listener) lets the
                 // executor's owner-alive gate stand aside for this one reaction, same exemption the
@@ -3185,7 +3281,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 cfg.multiplier,
                 cfg.hits ?? 1,
                 cfg.noCrit ?? false,
-                undefined, // hpBasisPct — inert on this path (the hpBasisPct branch above returns early)
+                undefined, // hpBasisPct — inert on this path (the hpBasisPct/shieldBasisPct branch above returns early)
+                undefined, // shieldBasisPct — inert on this path, same reason
                 false, // allowDeadOwner
                 // Ship-kit W5 Task C3: flatBasis/ignoresDefense are ONLY ever non-inert for
                 // Demolisher's splash (the sole ability carrying cfg.ignoresDefense===true AND
@@ -3228,11 +3325,37 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // enemy. statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
         // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
         // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
-        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the turn's enemy.
+        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the REAL
+        // victim this event carries (eventCtx.victimId — Task 12's on-deal-damage purge,
+        // Zeolite: "purges 1 buff from the enemy when dealing damage to a Defender" — the
+        // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam)
+        // else the turn's enemy.
         const targetId =
             intent.ability.target === 'enemy-most-buffs'
                 ? (ctx.enemyWithMostBuffs?.(intent.ownerId) ?? ctx.enemyId)
-                : (intent.eventCtx?.counterTargetId ?? ctx.enemyId);
+                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId ?? ctx.enemyId);
+        // Task 12 (Zeolite): the `enemy-type` gate was scrubbed from the generic drain-time
+        // condition check above (it only sees the single fight-wide dummy class) — re-check it
+        // HERE against the ACTUAL victim's role via `ctx.roleOf` (side-agnostic —
+        // roleByActorId is populated from BOTH TeamActorInput.role and EnemyActorInput.role, the
+        // same source Meatshield's defense-substitution and Graphite's roleFilter already use).
+        // An unknown role (`roleOf` undefined / no ship picked) never matches — conservative,
+        // mirrors matchesRoleCategory's contract elsewhere.
+        // Ship-kit W8 (CodeRabbit round): scoped to trigger==='on-deal-damage', symmetric with the
+        // scrub above — a hypothetical purge with a genuinely PvE-class `enemy-type` condition on
+        // a DIFFERENT trigger was never scrubbed from gateConditions, so re-deriving+re-evaluating
+        // it here via ctx.roleOf would double-gate/misread it against the wrong target.
+        const enemyTypeCond =
+            intent.ability.trigger === 'on-deal-damage'
+                ? intent.ability.conditions.find((c) => c.subject === 'enemy-type')
+                : undefined;
+        if (enemyTypeCond?.requiredEnemyType) {
+            const matchesRole = matchesRoleCategory(ctx.roleOf?.(targetId), [
+                enemyTypeCond.requiredEnemyType.toUpperCase() as ShipRoleCategory,
+            ]);
+            const gateMet = enemyTypeCond.negate ? !matchesRole : matchesRole;
+            if (!gateMet) return;
+        }
         const removed = ctx.statusEngine.purge(targetId, cfg.count);
         if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
             ctx.bus.emit({

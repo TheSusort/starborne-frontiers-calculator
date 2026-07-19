@@ -3691,16 +3691,22 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
             expect(purges[0].trigger).toBe('on-enemy-purged'); // PURGE_MORE_RE path, not generic loop
         });
 
-        it('Zeolite p1: passive emits ZERO purge abilities ("when dealing damage to a Defender" has no detected damage-reaction trigger)', () => {
+        it('Zeolite p1 (Wave 8 Task 12): passive emits ONE purge, on-deal-damage, gated on enemy-type Defender', () => {
             const zeoliteP1 = ship({
                 firstPassiveSkillText:
                     'This Unit <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
             });
-            const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive');
-            // Either no passive slot at all, or if a slot exists it has no purge abilities.
-            if (passive) {
-                expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+            const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].target).toBe('enemy');
+            expect(purges[0].trigger).toBe('on-deal-damage');
+            if (purges[0].config.type === 'purge') {
+                expect(purges[0].config.count).toBe(1);
             }
+            expect(purges[0].conditions).toEqual([
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+            ]);
         });
 
         it('Zeolite p2 (R2 refit-active): "+30% damage when hitting a Defender" is gated on enemy-type Defender', () => {
@@ -4759,16 +4765,31 @@ describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conv
 // passive text, so the phantom DoT does not reproduce for any of the four ships. These tests were
 // RED-checked (asserted the phantom absent) BEFORE any parser change and already passed —
 // confirmed FALSE POSITIVE; no parser change was made for this family. Kept as regression guards.
+// UPDATE (Ship-kit W8 Task 10): Wisteria's "after applying Corrosion with a Critical hit,
+// inflicts Inferno II" clause was itself UNMODELED (a real gap, distinct from the sweep's
+// false-positive phantom-DoT claim) — it now mints a genuine self-crit-dot Inferno II ability.
+// The phantom-Corrosion guard this test exists for still holds (see the updated assertion
+// below); Valerian/Lingshe/Belladonna remain untouched false positives.
 describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE under real usage)', () => {
-    it('Wisteria passive1 (R0): no phantom Corrosion dot from the "after applying Corrosion" trigger phrase', () => {
+    it('Wisteria passive1 (R0): "after applying Corrosion with a Critical hit, inflicts Inferno II" mints ONLY the Inferno II dot — no phantom Corrosion dot', () => {
+        // Ship-kit W8 Task 10: this clause is now modeled (self-subject on-crit-after-Corrosion
+        // secondary-DoT injection, mirroring Crocus's ally-scoped on-ally-crit-dot). The ORIGINAL
+        // "no phantom Corrosion dot" guard still holds — DOT_TIER_MAP has a bare 'Corrosion' entry
+        // and a naive tag walk would mint a second, wrong dot from the trigger clause's own named
+        // DoT — so this test now asserts exactly ONE dot ability (Inferno II), never two.
         const s = ship({
             refits: [] as never,
             firstPassiveSkillText:
                 'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
         });
         const { slots } = buildShipAbilities(s);
-        const passive = slot(slots, 'passive');
-        expect(passive?.abilities.some((a) => a.type === 'dot') ?? false).toBe(false);
+        const passive = slot(slots, 'passive')!;
+        const dots = passive.abilities.filter((a) => a.type === 'dot');
+        expect(dots).toHaveLength(1);
+        expect(dots[0]).toMatchObject({
+            trigger: 'on-self-crit-dot',
+            config: { type: 'dot', dotType: 'inferno', tier: 30, duration: 2 },
+        });
     });
 
     it('Valerian passive2 (R2): no phantom Corrosion dot from "After inflicting Corrosion with a Critical hit"', () => {

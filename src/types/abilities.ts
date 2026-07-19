@@ -124,6 +124,10 @@ export type AbilityTrigger =
     | 'on-debuff-inflicted'
     | 'on-ally-debuff-inflicted'
     | 'on-ally-crit-dot'
+    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of on-ally-crit-dot — THIS unit's
+    // OWN crit-cast DoT infliction ("after applying Corrosion with a Critical hit, inflicts
+    // Inferno II for 2 turns"), not an ally's. See buildShipAbilities' dot-effects branch.
+    | 'on-self-crit-dot'
     | 'on-ally-critically-repaired'
     | 'on-ally-crit'
     | 'on-stasis-applied'
@@ -272,6 +276,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Phase 3 PR-H: self-scoped reaction to THIS unit's own cleanse actually removing a debuff.
     'on-own-cleanse',
     'on-ally-crit-dot',
+    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of on-ally-crit-dot.
+    'on-self-crit-dot',
     'on-ally-critically-repaired',
     'on-ally-crit',
     'on-stasis-applied',
@@ -428,7 +434,18 @@ export type ConditionSubject =
     // subject must never be satisfied by e.g. a landed Stasis. Also a SCALING source (Snakeroot's
     // "for every 4 stacks of damage over time" — reads the raw count, not just a gate). Always
     // derivable:true.
-    | 'enemy-dot-count';
+    | 'enemy-dot-count'
+    // Ship-kit W8 Task 13 (Meiying): binary gate -- the enemy THIS on-enemy-destroyed reaction
+    // just killed carried at least one debuff (of any kind) at the moment it died. Distinct from
+    // `enemy-debuff` (which reads the FIGHT-WIDE enemyDebuffCount/enemyDebuffNames, not a specific
+    // victim) -- this subject is keyed to the SLAIN unit via the reactive intent's
+    // eventCtx.victimId (threaded by the on-enemy-destroyed listener, mirroring victimId's use in
+    // every other Wave 5/7 reactive seam), so a kill on an UNDEBUFFED enemy correctly evaluates to
+    // 0 even while OTHER living enemies carry debuffs. Live-derived by the engine
+    // (ConditionContext.killedEnemyHadDebuff) from the victim's own per-target debuff store at
+    // drain time; defaults false (DPS mode / no victim resolved) -- inert for every OTHER
+    // on-enemy-destroyed ability, which never carries this condition. Always derivable:true.
+    | 'killed-enemy-had-debuff';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -622,6 +639,13 @@ export type AbilityConfig =
            *  of attack × multiplier. Reactive-damage path only (applyReactiveDamage); the on-cast
            *  damage path ignores it. */
           hpBasisPct?: number;
+          /** Ship-kit W8 (Xcellence on-resist): sibling of hpBasisPct — when set, the REACTIVE
+           *  damage executor computes the pre-mitigation raw from the owner's CURRENT SHIELD ×
+           *  shieldBasisPct (percent) instead of attack × multiplier. Reactive-damage path only
+           *  (applyReactiveDamage); the on-cast damage path ignores it. Mutually exclusive with
+           *  hpBasisPct in practice (no corpus row sets both), but hpBasisPct wins if both were
+           *  ever set (matches the executor's precedence order). */
+          shieldBasisPct?: number;
           /** SP-F F4 (Wusheng): the charged skill "deals 220% damage WITH affinity advantage".
            *  When set, this cast (and its paired 'apply' debuff landing) is forced to affinity
            *  ADVANTAGE regardless of the real attacker/target matchup — damageMod +25, critCap
@@ -925,7 +949,7 @@ export type AbilityConfig =
     // at apply time), so `conditions` stays empty.
     | {
           type: 'pre-combat-stat';
-          stat: 'hp' | 'attack' | 'crit' | 'hacking';
+          stat: 'hp' | 'attack' | 'crit' | 'hacking' | 'defence';
           value: number;
           /** 'flat': absolute points. 'percent-of-own': % of the RECIPIENT's pre-fight stat.
            *  'percent-of-donor': % of the GRANTING ship's pre-fight stat (Lionheart). */
