@@ -6176,6 +6176,12 @@ export function runCombat(input: CombatEngineInput): {
                         // corrosionEntries closures above (side-biased to the player's single
                         // opposing focus). Combat-wide map — no per-side sideCtx field needed.
                         actorById: (id) => allActorsById.get(id),
+                        // Ship-kit W8 Task 12: side-agnostic ship-role lookup (the SAME
+                        // roleByActorId map Meatshield's defense-substitution and Graphite's
+                        // roleFilter already consume) — feeds the reactive `purge` branch's
+                        // per-victim `enemy-type` re-check (Zeolite: "when dealing damage to a
+                        // Defender"), team-symmetrically.
+                        roleOf: (id) => roleByActorId.get(id),
                         // SP-E, Task E4: live hacking/critDamage for `id` (either side), feeding
                         // Belladonna's conversion-chance (hacking) and paired extend-chance
                         // (critDamage) gates. Same statusEngine/selfBuffLookup every other

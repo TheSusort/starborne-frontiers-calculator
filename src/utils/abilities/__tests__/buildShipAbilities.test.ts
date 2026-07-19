@@ -3691,16 +3691,22 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
             expect(purges[0].trigger).toBe('on-enemy-purged'); // PURGE_MORE_RE path, not generic loop
         });
 
-        it('Zeolite p1: passive emits ZERO purge abilities ("when dealing damage to a Defender" has no detected damage-reaction trigger)', () => {
+        it('Zeolite p1 (Wave 8 Task 12): passive emits ONE purge, on-deal-damage, gated on enemy-type Defender', () => {
             const zeoliteP1 = ship({
                 firstPassiveSkillText:
                     'This Unit <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
             });
-            const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive');
-            // Either no passive slot at all, or if a slot exists it has no purge abilities.
-            if (passive) {
-                expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+            const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].target).toBe('enemy');
+            expect(purges[0].trigger).toBe('on-deal-damage');
+            if (purges[0].config.type === 'purge') {
+                expect(purges[0].config.count).toBe(1);
             }
+            expect(purges[0].conditions).toEqual([
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+            ]);
         });
 
         it('Zeolite p2 (R2 refit-active): "+30% damage when hitting a Defender" is gated on enemy-type Defender', () => {

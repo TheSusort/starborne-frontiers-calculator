@@ -2479,6 +2479,51 @@ export function detectKilledByDirectDamageTrigger(
     return phrasePosTrigger(text, KILLED_BY_DIRECT_RE, anchorPos, 'on-destroyed');
 }
 
+// Ship-kit W8 Task 12: "… purges 1 buff from the enemy when dealing damage to a Defender"
+// (Zeolite passive). Verified against RAW CSV: 'This Unit purges 1 buff from the enemy when
+// dealing damage to a Defender.' Position-scoped (mirrors detectKilledByDirectDamageTrigger).
+const DEAL_DAMAGE_TO_ROLE_RE =
+    /\bwhen\s+dealing\s+damage\s+to\s+(?:an?\s+)?(?:defender|attacker|debuffer|supporter)s?\b/i;
+
+/**
+ * Returns 'on-deal-damage' when `anchorPos` falls inside the sentence carrying the "when
+ * dealing damage to a <Role>" phrase (Zeolite's passive purge reactive); otherwise undefined.
+ * Reuses the SAME 'on-deal-damage' trigger Burner's on-deal-damage Inferno rider already
+ * drives (triggers.ts) — the owner's own damage-dealing turn, victim-routed via eventCtx.victimId.
+ */
+export function detectDealDamageToRoleTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, DEAL_DAMAGE_TO_ROLE_RE, anchorPos, 'on-deal-damage');
+}
+
+// "to/against/targeting/damaging/attacking/hitting a <Role>" — the SAME enemy-class extraction
+// buildShipAbilities.ts's outgoing-damage-modifier branch already uses for Zeolite's "+30%
+// damage when hitting a Defender" gate (Wave 4). Reused here so both halves of Zeolite's
+// passive ("+30%… Defender" / "purges… Defender") read the role from one shared pattern.
+const ENEMY_ROLE_CLAUSE_RE =
+    /\b(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i;
+
+/**
+ * Extracts the `enemy-type` Condition from the sentence containing `anchorPos` (Zeolite's
+ * on-deal-damage purge, Task 12) — e.g. "when dealing damage to a Defender" → requiredEnemyType
+ * 'Defender'. Sentence-scoped on RAW text (mirrors detectRepairedThisRoundCondition). Undefined
+ * when no role phrase is present in that sentence.
+ */
+export function detectPurgeEnemyTypeCondition(
+    text: string | null | undefined,
+    anchorPos: number
+): Condition | undefined {
+    if (!text) return undefined;
+    const sentence = rawSentenceAround(text, anchorPos);
+    if (sentence === undefined) return undefined;
+    const m = ENEMY_ROLE_CLAUSE_RE.exec(sentence);
+    return m
+        ? { subject: 'enemy-type', derivable: true, requiredEnemyType: capType(m[1]) }
+        : undefined;
+}
+
 // "repaired this round" — Nayra's charged purge + its Stasis/Exposed inflicts. The
 // gate word ("if"/"when") is already verified by detectGrantConditions' conditional
 // guard / by rawSentenceAround's sentence scoping, so the phrase alone is enough.

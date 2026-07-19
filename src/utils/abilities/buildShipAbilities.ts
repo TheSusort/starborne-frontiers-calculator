@@ -72,6 +72,8 @@ import {
     detectEndOfRoundDamageTrigger,
     detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
+    detectDealDamageToRoleTrigger,
+    detectPurgeEnemyTypeCondition,
     detectMostBuffsTarget,
     parseHighestSpeedEnemyTarget,
     parseHighestAttackEnemyTarget,
@@ -2367,10 +2369,12 @@ function abilitiesFromText(
 
     // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge
     // trigger is detected in the purge's own sentence (C2b-2): Iridium "when directly damaged"
-    // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors are added
-    // in later tasks. A passive purge with NO detected trigger is NOT emitted (Sefuba's chain
-    // stays on PURGE_MORE_RE below; Zeolite's "when dealing damage to a Defender" stays
-    // deferred). Purge is enemy-only (no support-flip).
+    // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors, plus
+    // Zeolite's "when dealing damage to a Defender" (Wave 8 Task 12) → on-deal-damage, carrying
+    // an `enemy-type` Defender condition (see detectPurgeEnemyTypeCondition below — same
+    // extraction the outgoing-damage-modifier branch above uses for Zeolite's sibling "+30%
+    // damage when hitting a Defender" gate). A passive purge with NO detected trigger is NOT
+    // emitted (Sefuba's chain stays on PURGE_MORE_RE below). Purge is enemy-only (no support-flip).
     //
     // C2b-3 update: Nayra's "if the target was repaired this round, purge all buffs" now emits
     // with conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
@@ -2395,7 +2399,8 @@ function abilitiesFromText(
             detectDamageReactionTrigger(text, purgePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
                 : (detectEndOfRoundPurgeTrigger(text, purgePos) ?? // Rhodium
-                  detectKilledByDirectDamageTrigger(text, purgePos)); // Faust
+                  detectKilledByDirectDamageTrigger(text, purgePos) ?? // Faust
+                  detectDealDamageToRoleTrigger(text, purgePos)); // Zeolite (Task 12)
         const trigger: AbilityTrigger | undefined =
             slot === 'active' || slot === 'charged' ? 'on-cast' : passiveTrigger;
         if (!trigger) continue; // passive purge with no recognized trigger → not emitted
@@ -2405,13 +2410,24 @@ function abilitiesFromText(
             ? 'enemy-most-buffs'
             : p.target;
         const repairedCond = detectRepairedThisRoundCondition(text, purgePos);
+        // Task 12: an on-deal-damage purge (Zeolite) is gated on the DAMAGED enemy being the
+        // named role (Defender) — reuses the enemy-type extraction shared with the +30%
+        // damage-modifier branch above. Only computed for the on-deal-damage trigger so no
+        // other purge (Iridium/Rhodium/Faust) picks up a spurious condition.
+        const enemyTypeCond =
+            trigger === 'on-deal-damage'
+                ? detectPurgeEnemyTypeCondition(text, purgePos)
+                : undefined;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'purge',
                 target,
                 trigger,
-                conditions: repairedCond ? [repairedCond] : [],
+                conditions: [
+                    ...(repairedCond ? [repairedCond] : []),
+                    ...(enemyTypeCond ? [enemyTypeCond] : []),
+                ],
                 config: {
                     type: 'purge',
                     count: p.count,

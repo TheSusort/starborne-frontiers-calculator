@@ -6,7 +6,7 @@ import {
     SkillSlot,
 } from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
-import type { ShipTypeName } from '../../constants/shipTypes';
+import type { ShipTypeName, ShipRoleCategory } from '../../constants/shipTypes';
 import {
     DoTType,
     EnemyBaseClass,
@@ -1365,6 +1365,15 @@ export interface IntentExecContext {
      *  ally). Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
      *  that don't exercise convert-dot. */
     actorById?: (actorId: string) => CombatActor | undefined;
+    /** Ship-kit W8 Task 12: resolve ANY actor's ship role (Ship.type) by id, either side — the
+     *  SAME `roleByActorId` map (side-agnostic by key) Meatshield's defense-substitution and
+     *  Graphite's `roleFilter` reaction-time check already consume. Used by the reactive `purge`
+     *  branch to re-check an `enemy-type` gate (scrubbed from the generic drain gate above)
+     *  against the REAL victim of an on-deal-damage purge (Zeolite: "… when dealing damage to a
+     *  Defender"), team-symmetrically. Optional — absent in unit-test ctxs that don't drive it
+     *  (an `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory
+     *  always false → conservative no-op, byte-identical to before this task). */
+    roleOf?: (actorId: string) => ShipTypeName | undefined;
     /** SP-E, Task E4: live (buff-folded) hacking/critDamage for `actorId`, either side. Used by
      *  the convert-dot executor to compute the conversion chance (hacking) and the paired
      *  crit-power extend chance (critDamage). Optional — absent in unit-test ctxs that don't
@@ -2247,7 +2256,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         !(c.subject === 'hp-threshold' && c.hpSubject !== 'self') &&
                         c.subject !== 'enemy-debuff'
                 )
-              : intent.ability.conditions;
+              : // Ship-kit W8 Task 12 (Zeolite): an on-deal-damage purge's `enemy-type` gate
+                // ("purges 1 buff … when dealing damage to a Defender") must check the ACTUAL
+                // victim THIS event carries (eventCtx.victimId/counterTargetId), not the single
+                // fight-wide `ctx.enemyType` the generic gate below reads — that field describes
+                // only the DPS-mode dummy enemy's class and is hardcoded undefined for an
+                // enemy-owned reaction (see engine.ts's seedPassiveTimedStatuses call site), so it
+                // can never be team-symmetric. Scrubbed here, re-checked in the `purge` branch
+                // below against `ctx.roleOf(targetId)` — `roleByActorId`/`roleOf` is side-agnostic
+                // by key (Meatshield/Graphite precedent), so this works identically for a
+                // player-owned or enemy-owned Zeolite. Gated strictly on
+                // type==='purge' && trigger==='on-deal-damage' so no other purge is touched.
+                intent.ability.type === 'purge' && intent.ability.trigger === 'on-deal-damage'
+                ? intent.ability.conditions.filter((c) => c.subject !== 'enemy-type')
+                : intent.ability.conditions;
 
     // Drain-time condition gate against CURRENT engine state — one gate for every branch,
     // built against the OWNER's snapshot (Task 6). liveGateConditions neutralizes
@@ -3257,11 +3279,30 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // enemy. statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
         // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
         // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
-        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the turn's enemy.
+        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the REAL
+        // victim this event carries (eventCtx.victimId — Task 12's on-deal-damage purge,
+        // Zeolite: "purges 1 buff from the enemy when dealing damage to a Defender" — the
+        // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam)
+        // else the turn's enemy.
         const targetId =
             intent.ability.target === 'enemy-most-buffs'
                 ? (ctx.enemyWithMostBuffs?.(intent.ownerId) ?? ctx.enemyId)
-                : (intent.eventCtx?.counterTargetId ?? ctx.enemyId);
+                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId ?? ctx.enemyId);
+        // Task 12 (Zeolite): the `enemy-type` gate was scrubbed from the generic drain-time
+        // condition check above (it only sees the single fight-wide dummy class) — re-check it
+        // HERE against the ACTUAL victim's role via `ctx.roleOf` (side-agnostic —
+        // roleByActorId is populated from BOTH TeamActorInput.role and EnemyActorInput.role, the
+        // same source Meatshield's defense-substitution and Graphite's roleFilter already use).
+        // An unknown role (`roleOf` undefined / no ship picked) never matches — conservative,
+        // mirrors matchesRoleCategory's contract elsewhere.
+        const enemyTypeCond = intent.ability.conditions.find((c) => c.subject === 'enemy-type');
+        if (enemyTypeCond?.requiredEnemyType) {
+            const matchesRole = matchesRoleCategory(ctx.roleOf?.(targetId), [
+                enemyTypeCond.requiredEnemyType.toUpperCase() as ShipRoleCategory,
+            ]);
+            const gateMet = enemyTypeCond.negate ? !matchesRole : matchesRole;
+            if (!gateMet) return;
+        }
         const removed = ctx.statusEngine.purge(targetId, cfg.count);
         if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
             ctx.bus.emit({
