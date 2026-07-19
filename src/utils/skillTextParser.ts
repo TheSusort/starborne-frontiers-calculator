@@ -1113,16 +1113,25 @@ export function detectGrantConditions(
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
     // "after an ally is critically repaired" — a team-dependent reactive trigger (manual).
     const allyCritRepairGate = /\ball(?:y|ies)\b[^.]*\bcritically\s+repaired\b/i.test(low);
+    // Ship-kit W8 Task 13: "killing an enemy WITH A DEBUFF" (Meiying) — the kill trigger's
+    // qualifier. KILL_TRIGGER_RE resolves the TRIGGER (on-enemy-destroyed) elsewhere; this
+    // separately gates the GRANTED debuff on the slain enemy having carried a debuff.
+    const killedEnemyHadDebuffGate = KILL_WITH_DEBUFF_RE.test(low);
     // Only conditional clauses produce conditions.
     if (
         !/\b(when|if|while|after)\b|affected by|targeting|damaging|against/.test(low) &&
         !appliesDebuffGate &&
-        !allyCritRepairGate
+        !allyCritRepairGate &&
+        !killedEnemyHadDebuffGate
     )
         return [];
 
     if (allyCritRepairGate) {
         return [{ subject: 'ally-critically-repaired', derivable: false }];
+    }
+
+    if (killedEnemyHadDebuffGate) {
+        return [{ subject: 'killed-enemy-had-debuff', derivable: true }];
     }
 
     // Ship-kit Wave 4, Task 3: "If this Unit has Shield" — a self-shield-presence gate
@@ -1369,6 +1378,15 @@ const ENEMY_BUFFED_RE =
 // Asphyxiator/Butcher), "when an enemy dies". Reference data: docs/ship-skills.csv.
 const KILL_TRIGGER_RE =
     /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
+// Ship-kit W8 Task 13 (Meiying): "killing an enemy WITH A DEBUFF" — the qualifier
+// KILL_TRIGGER_RE's bare "killing an (enemy|opponent)" alternate drops (that shared regex also
+// feeds the on-enemy-destroyed TRIGGER classification for every OTHER kill-reactive ship —
+// Mangler/Ravager/Butcher/Obsidian/Valiant/Sokol have no such qualifier and must stay ungated).
+// Kept as a SEPARATE regex, consumed only by detectGrantConditions below, so it attaches a
+// gating CONDITION onto the debuff a kill-clause grants without touching trigger resolution any
+// other kill clause shares. Verified corpus-unique to Meiying (docs/ship-skills.csv, grep "with a
+// Debuff").
+const KILL_WITH_DEBUFF_RE = /\bkilling\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 // Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted

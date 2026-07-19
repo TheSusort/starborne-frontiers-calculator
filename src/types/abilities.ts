@@ -434,7 +434,18 @@ export type ConditionSubject =
     // subject must never be satisfied by e.g. a landed Stasis. Also a SCALING source (Snakeroot's
     // "for every 4 stacks of damage over time" — reads the raw count, not just a gate). Always
     // derivable:true.
-    | 'enemy-dot-count';
+    | 'enemy-dot-count'
+    // Ship-kit W8 Task 13 (Meiying): binary gate -- the enemy THIS on-enemy-destroyed reaction
+    // just killed carried at least one debuff (of any kind) at the moment it died. Distinct from
+    // `enemy-debuff` (which reads the FIGHT-WIDE enemyDebuffCount/enemyDebuffNames, not a specific
+    // victim) -- this subject is keyed to the SLAIN unit via the reactive intent's
+    // eventCtx.victimId (threaded by the on-enemy-destroyed listener, mirroring victimId's use in
+    // every other Wave 5/7 reactive seam), so a kill on an UNDEBUFFED enemy correctly evaluates to
+    // 0 even while OTHER living enemies carry debuffs. Live-derived by the engine
+    // (ConditionContext.killedEnemyHadDebuff) from the victim's own per-target debuff store at
+    // drain time; defaults false (DPS mode / no victim resolved) -- inert for every OTHER
+    // on-enemy-destroyed ability, which never carries this condition. Always derivable:true.
+    | 'killed-enemy-had-debuff';
 
 export interface Condition {
     subject: ConditionSubject;

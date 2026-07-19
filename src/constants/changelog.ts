@@ -121,6 +121,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Skill parsing target fixes: Rikra's on-kill repair and Panon's Barrier Recharging now correctly apply to themselves (previously Rikra's self-repair could land on a different ally, and Panon applied Barrier Recharging to the enemy — which also stopped her own incoming-damage reduction from working). Panguan's Stealth now triggers on being directly damaged and applies to herself, instead of being granted to the whole team on every cast.",
     "Combat sim: Graphite's charged skill now shields all allies (matching its active skill), instead of only shielding itself.",
     'Combat sim: Amartya now inflicts 2 stacks of Exposed on an enemy defender the instant it gains Taunt, matching her legendary refit passive — previously this was silently gated behind a bogus condition requiring Amartya herself to have Taunt (which never happens), so it never fired at all.',
+    "Combat sim: Meiying's Stasis-on-kill now only triggers when the enemy she kills is carrying a debuff, matching her passive text ('upon killing an enemy with a Debuff') — previously it fired on every kill regardless of the victim's debuff status.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

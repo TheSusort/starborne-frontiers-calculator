@@ -900,7 +900,20 @@ export function registerReactiveListeners(args: {
                         // Opposing-scoped: fires when any opposing-side actor is destroyed.
                         // For the player call: dummy wall + enemy attackers.
                         // For the enemy call: any player actor. One enqueue per destruction event.
-                        if (isOpposing(e.actorId)) enqueue(intent);
+                        // Ship-kit W8 Task 13 (Meiying): stamp victimId = the slain actor (mirrors
+                        // every other Wave 5/7 reactive seam) so (a) an `adjacent-enemies`-target
+                        // debuff twin (Stasis) can anchor its fan-out on the KILLED enemy's own
+                        // neighbours (the debuff executor's adjacent-enemies branch below), and
+                        // (b) the drain-time `killed-enemy-had-debuff` condition can read the
+                        // slain unit's OWN debuff store (recordDestroyed runs before this event
+                        // fires and never clears it) rather than the fight-wide enemy-debuff
+                        // count. Inert for every OTHER on-enemy-destroyed ability (Sokol/
+                        // Liberator's extra-action/charge branches never read eventCtx).
+                        if (isOpposing(e.actorId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, victimId: e.actorId },
+                            });
                     });
                     break;
                 case 'on-enemy-repaired':
@@ -2276,7 +2289,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // non-derivable-on-non-live subjects to 'always'; manual conditions keep literal gating
     // (manualCount). A failed gate is a silent skip (no resisted record).
     const gateConditions = liveGateConditions(scrubbedConditions);
-    if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
+    const baseDrainCtx = buildDrainContext(ctx, intent.ownerId);
+    // Ship-kit W8 Task 13 (Meiying): the `killed-enemy-had-debuff` gate is keyed to the SPECIFIC
+    // victim THIS on-enemy-destroyed intent carries (eventCtx.victimId, stamped by the listener
+    // above), not the fight-wide owner-scoped context buildDrainContext returns — so it is folded
+    // in here as a targeted override rather than threaded through buildDrainContext's owner-only
+    // signature. Reads the slain actor's OWN per-target debuff store (ownerDebuffNamesFor is the
+    // same reader `selfDebuffNames`/`buildActorConditionContext` already use for a target's
+    // debuffs); no victimId (every other reactive trigger, or DPS mode) → false, byte-identical.
+    const drainCtx =
+        intent.eventCtx?.victimId !== undefined
+            ? {
+                  ...baseDrainCtx,
+                  killedEnemyHadDebuff:
+                      ownerDebuffNamesFor(ctx.statusEngine, intent.eventCtx.victimId).length > 0,
+              }
+            : baseDrainCtx;
+    if (!conditionsMet(gateConditions, drainCtx)) return;
 
     if (cfg.type === 'charge') {
         if (!passesOncePerRoundGate(intent, ctx)) return;
@@ -2546,10 +2575,22 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // fan-out, but for enemy-side recipients. Distinct from Ruiner's REPAIRER-targeted Bomb
         // (same on-enemy-repaired trigger, same event), which stays on the singular
         // counterTargetId route below (an empty list falls back to it defensively).
+        // Ship-kit W8 Task 13 (Meiying): `adjacent-enemies` fan-out for a REACTIVE debuff — no
+        // prior reactive `debuff`-type ability used this target (Wave 5's adjacency work covered
+        // the ON-CAST fan-out in playerTurn.ts and the reactive `damage` executor's bomb-splash
+        // branch above; this is the first REACTIVE debuff consumer). Anchors on the SLAIN enemy
+        // (eventCtx.victimId, stamped by the on-enemy-destroyed listener), mirrors the damage
+        // branch's adjacent-enemies resolution exactly: `ctx.adjacentOpposingIdsFor` resolves the
+        // anchor's own-side neighbours within the OPPOSING roster (team-symmetric), excluding the
+        // anchor itself. No anchor → empty, never falls back to the default enemy.
         const applicationTargetIds: (string | undefined)[] =
             intent.ability.repairedRecipientTargeted && intent.eventCtx?.repairedEnemyIds?.length
                 ? intent.eventCtx.repairedEnemyIds
-                : [counterTargetId];
+                : intent.ability.target === 'adjacent-enemies'
+                  ? intent.eventCtx?.victimId !== undefined
+                      ? (ctx.adjacentOpposingIdsFor?.(intent.eventCtx.victimId) ?? [])
+                      : []
+                  : [counterTargetId];
         for (const applicationTargetId of applicationTargetIds) {
             // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists
             // every incoming timed debuff. Gate immunity into the landing condition so the
