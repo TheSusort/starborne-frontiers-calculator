@@ -127,7 +127,14 @@ export type AbilityTrigger =
     | 'on-ally-critically-repaired'
     | 'on-ally-crit'
     | 'on-stasis-applied'
+    // VICTIM-scoped: a Bomb bursts on an opposing actor, regardless of who caused it
+    // ("When a Bomb explodes on an enemy …" — Demolisher's splash/charge-removal, Valkyrie).
     | 'on-bomb-detonated'
+    // DETONATOR-scoped: THIS unit actively causes a Bomb to detonate ("When this Unit
+    // detonates a Bomb …" — Lingshe's Stealth grant). Filtered on the bomb-detonated event's
+    // `detonatorId` (the actor whose skill forced/triggered the burst), NOT `actorId` (the
+    // bomb's original applier). Natural countdown expiry has no detonator → never fires this.
+    | 'on-self-bomb-detonated'
     | 'on-attacked'
     | 'on-ally-attacked'
     | 'on-ally-destroyed'
@@ -269,6 +276,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-crit',
     'on-stasis-applied',
     'on-bomb-detonated',
+    // Ship-kit W7 (Lingshe): DETONATOR-scoped bomb-detonation reaction (see AbilityTrigger).
+    'on-self-bomb-detonated',
     'on-attacked',
     'on-ally-attacked',
     'on-destroyed',

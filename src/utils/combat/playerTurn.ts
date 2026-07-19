@@ -903,6 +903,11 @@ function reduceBombsOnVictim(
     turns: number,
     round: number,
     bus: CombatEventBus,
+    // Ship-kit W7: the actor whose bomb-countdown-reduce cast is forcing this detonation (Lingshe).
+    // Distinct from `bomb.sourceId` (the ORIGINAL applier, kept as `actorId` for attribution) — it
+    // becomes the event's `detonatorId` so Lingshe's on-self-bomb-detonated Stealth grant fires
+    // for a burst SHE caused even on bombs another ship applied.
+    detonatorId: string,
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
 ): void {
     for (let i = victim.pendingBombs.length - 1; i >= 0; i--) {
@@ -918,6 +923,7 @@ function reduceBombsOnVictim(
             type: 'bomb-detonated',
             actorId: bomb.sourceId,
             victimId: victim.id,
+            detonatorId,
             round,
             stacks: bomb.stacks,
             damage: burst,
@@ -950,6 +956,9 @@ function reduceEnemyBombs(args: {
     opposingVictimById: Map<string, CombatActor> | undefined;
     round: number;
     bus: CombatEventBus;
+    // Ship-kit W7: the caster forcing these detonations (Lingshe) — becomes each burst's
+    // `detonatorId`. See reduceBombsOnVictim.
+    detonatorId: string;
     landsTimedEnemyApplicationLive: (application?: 'inflict' | 'apply') => boolean;
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
 }): void {
@@ -970,6 +979,7 @@ function reduceEnemyBombs(args: {
                 ab.config.turns,
                 args.round,
                 args.bus,
+                args.detonatorId,
                 args.forceDetonateBomb
             );
         }
@@ -2282,6 +2292,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         opposingVictimById,
         round: r,
         bus,
+        detonatorId: actor.id, // Ship-kit W7: the countdown-reduce caster is the detonator.
         landsTimedEnemyApplicationLive,
         forceDetonateBomb: args.forceDetonateBomb,
     });
@@ -2320,6 +2331,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     type: 'bomb-detonated',
                     actorId: actor.id,
                     victimId: enemy.id,
+                    // Ship-kit W7: this cast's own detonate ability caused the burst — the caster
+                    // IS the detonator (here actorId and detonatorId coincide, but they diverge on
+                    // the reduceBombsOnVictim path where actorId is the original applier).
+                    detonatorId: actor.id,
                     round: r,
                     stacks,
                     damage,

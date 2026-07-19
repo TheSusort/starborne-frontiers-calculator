@@ -24,8 +24,10 @@ import { DoTType } from '../../types/calculator';
  *    (`PendingBomb.sourceId`) for `processBombs` AND for SP-F F3/Lingshe's forced early
  *    detonation via `bomb-countdown-reduce`; the attacker-turn `detonate()` aggregate
  *    branch instead emits the casting `actor.id`. Either way — any actor, not always
- *    'attacker'. Only feeds log/attribution: the on-bomb-detonated listener is global
- *    and ignores `actorId`.
+ *    'attacker'. `actorId` feeds log/attribution; the VICTIM-scoped `on-bomb-detonated`
+ *    listener is global over `actorId` (keys off `victimId` being opposing). The separate
+ *    DETONATOR-scoped `on-self-bomb-detonated` listener (Ship-kit W7/Lingshe) keys off the
+ *    additive `detonatorId` field (who actively caused the burst; undefined for natural expiry).
  *  - `control-applied`: emitted on the CAST path when the firing skill carries a `control`
  *    ability (e.g. Defiant's charged Stasis inflict). `casterId` is the applying actor;
  *    `effect` is the control effect. Present-only-when-fired. Emitting it does NOT make the
@@ -92,13 +94,20 @@ export type CombatEvent =
     | ({ type: 'buff-expired'; actorId: string; round: number; buffName: string } & ReactiveStamp)
     /** Discrete infliction events ONLY — emitted once at the round of application.
      *  `sourceId` is the actor that inflicted the debuff (e.g. 'attacker' or a team
-     *  actor id). NOT emitted for recurring/aura per-round re-applications. */
+     *  actor id). NOT emitted for recurring/aura per-round re-applications.
+     *  `viaDebuffInflictedReaction` (Ship-kit W7): set when this debuff was applied BY an
+     *  `on-debuff-inflicted`-triggered ability (Warden's Out. Damage Down II). The
+     *  `on-debuff-inflicted` listener ignores such events so a debuff-inflicted reaction whose
+     *  own follow-up is itself a debuff cannot re-trigger ITSELF (an unbounded self-chain that
+     *  would otherwise hit MAX_INTENT_GENERATIONS). Debuffs from OTHER reactive triggers
+     *  (on-crit/on-attacked) carry no flag and still feed on-debuff-inflicted as before. */
     | ({
           type: 'debuff-applied';
           sourceId: string;
           targetId: string;
           round: number;
           buffName: string;
+          viaDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -250,11 +259,18 @@ export type CombatEvent =
      *  casting `actor.id` instead. Any actor, not always 'attacker'. `victimId` = the actor
      *  the bomb detonated ON (the bomb's holder) — distinct from `actorId`, which stays the
      *  applier/caster per the above. Added for Wave 5 C2 (Demolisher adjacent-enemy splash
-     *  anchoring, consumed by C3); purely additive, no behaviour change. */
+     *  anchoring, consumed by C3); purely additive, no behaviour change.
+     *  `detonatorId` (Ship-kit W7/Lingshe) = the actor who ACTIVELY caused this burst — the
+     *  caster of the detonating skill (`detonate()`/positional detonate) or the
+     *  `bomb-countdown-reduce` caster (Lingshe's charge). UNDEFINED for a natural countdown-0
+     *  expiry (`processBombs`), which nobody "detonates". Distinct from `actorId` (the applier)
+     *  and `victimId` (the holder); consumed only by the DETONATOR-scoped `on-self-bomb-detonated`
+     *  trigger, so every existing listener that reads actorId/victimId is unaffected. */
     | {
           type: 'bomb-detonated';
           actorId: string;
           victimId: string;
+          detonatorId?: string;
           round: number;
           stacks: number;
           damage: number;

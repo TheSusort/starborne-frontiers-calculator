@@ -1225,14 +1225,15 @@ describe('buildShipAbilities', () => {
             expect(buff.config).toMatchObject({ type: 'buff', duration: 1 });
         });
 
-        it('Lingshe passive buff: on-bomb-detonated', () => {
+        // Ship-kit W7: "this Unit detonates a Bomb" is DETONATOR-scoped → on-self-bomb-detonated.
+        it('Lingshe passive buff: on-self-bomb-detonated', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const buff = namedBuff(passive.abilities, 'Stealth')!;
-            expect(buff.trigger).toBe('on-bomb-detonated');
+            expect(buff.trigger).toBe('on-self-bomb-detonated');
         });
     });
 

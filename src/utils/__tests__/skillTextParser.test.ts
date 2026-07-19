@@ -1880,10 +1880,13 @@ describe('detectReactiveTrigger', () => {
         expect(detectReactiveTrigger(text, 'Speed Up II')).toBe('start-of-round');
     });
 
-    it('classifies a bomb-detonate self-buff as on-bomb-detonated — Lingshe', () => {
+    // Ship-kit W7: "this Unit DETONATES a Bomb" is DETONATOR-scoped → on-self-bomb-detonated
+    // (fires only when Lingshe herself causes the burst), split OUT of the VICTIM-scoped
+    // on-bomb-detonated ("a Bomb explodes on an enemy" — Demolisher/Valkyrie).
+    it('classifies a bomb-detonate self-buff as on-self-bomb-detonated — Lingshe', () => {
         const text =
             'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.';
-        expect(detectReactiveTrigger(text, 'Stealth')).toBe('on-bomb-detonated');
+        expect(detectReactiveTrigger(text, 'Stealth')).toBe('on-self-bomb-detonated');
     });
 
     it('does NOT classify passive-voice "is critically damaged" as on-crit', () => {
