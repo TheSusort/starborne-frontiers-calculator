@@ -357,12 +357,18 @@ describe('parsePreCombatStatGrants', () => {
         ).toEqual([]);
     });
 
-    it('does NOT match Madax P2 ("receives 30% more Repairs" — deliberately out of scope)', () => {
-        expect(
-            parsePreCombatStatGrants(
-                "This Unit <unit-damage>repairs itself for 13%</unit-damage> of its Max HP when an enemy dies.<br /><br />When adjacent to a Supporter, this Unit receives 30% more Repairs and increases that Supporter's Defense by 20% of this Unit's Defense."
-            )
-        ).toEqual([]);
+    it('matches Madax P2 ("increases that Supporter\'s Defense by 20%…") as a donor Defense grant to the adjacent Supporter (ship-kit W8 Task 9)', () => {
+        const grants = parsePreCombatStatGrants(
+            "This Unit <unit-damage>repairs itself for 13%</unit-damage> of its Max HP when an enemy dies.<br /><br />When adjacent to a Supporter, this Unit receives 30% more Repairs and increases that Supporter's Defense by 20% of this Unit's Defense."
+        );
+        expect(grants).toHaveLength(1);
+        expect(grants[0]).toMatchObject({
+            stat: 'defence',
+            value: 20,
+            valueKind: 'percent-of-donor',
+            target: 'adjacent-allies',
+            requiresAdjacentRole: 'SUPPORTER',
+        });
     });
 });
 

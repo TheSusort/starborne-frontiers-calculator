@@ -932,7 +932,7 @@ export type AbilityConfig =
     // at apply time), so `conditions` stays empty.
     | {
           type: 'pre-combat-stat';
-          stat: 'hp' | 'attack' | 'crit' | 'hacking';
+          stat: 'hp' | 'attack' | 'crit' | 'hacking' | 'defence';
           value: number;
           /** 'flat': absolute points. 'percent-of-own': % of the RECIPIENT's pre-fight stat.
            *  'percent-of-donor': % of the GRANTING ship's pre-fight stat (Lionheart). */

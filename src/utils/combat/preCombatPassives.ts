@@ -40,7 +40,7 @@ export interface PreCombatPlanLike {
 export interface AppliedPreCombatGrant {
     ownerId: string;
     recipientId: string;
-    stat: 'hp' | 'attack' | 'crit' | 'hacking';
+    stat: 'hp' | 'attack' | 'crit' | 'hacking' | 'defence';
     amount: number;
 }
 
@@ -96,8 +96,7 @@ export function applyPreCombatShipPassives(plans: PreCombatPlanLike[]): AppliedP
                 }
 
                 const perAllyFactor = config.perAdjacentAlly ? adjacentPlans.length : 1;
-                const recipients =
-                    ability.target === 'adjacent-allies' ? adjacentPlans : [owner];
+                const recipients = ability.target === 'adjacent-allies' ? adjacentPlans : [owner];
 
                 for (const recipient of recipients) {
                     const recipientSnapshot = snapshot.get(recipient.id);

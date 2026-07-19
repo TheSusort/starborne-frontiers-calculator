@@ -3942,6 +3942,17 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // below by HEAL_ADDITIONAL_RE inheriting the primary's target — skip it here so
             // it isn't double-counted (and so it doesn't inherit the wrong target/basis).
             if (kind === 'heal' && /equal\s+to/i.test(m[0])) continue;
+            // Madax (ship-kit W8 Task 9): "…receives 30% more Repairs and increases that
+            // Supporter's Defense by 20% of this Unit's Defense" — HEAL_REPAIR_RE's lazy
+            // `[^%.;]*?` walk matches the NOUN "Repairs" (not the repair verb) and, finding no
+            // period/semicolon before the next '%', walks straight past the intervening
+            // "increases <role>'s <stat> by" clause to that UNRELATED grant's own "20%",
+            // fabricating a phantom self-heal (basis 'defense', pct 20). That clause is a
+            // stat GRANT to the adjacent Supporter ally, not a repair amount — parsed
+            // separately by PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE below. Reject any repair match
+            // whose captured percentage belongs to this "increases <owner>'s <stat> by N%"
+            // shape rather than a genuine repair amount.
+            if (/\bincreases\b[^%.;]*'s\b[^%.;]*\bby\b/i.test(m[0])) continue;
             // Quixilver: "if it has shield equal to 100% of its max HP" is a THRESHOLD
             // CONDITION gating a Barrier grant elsewhere in the sentence, not a shield GRANT
             // itself — every real shield grant in the corpus is phrased "gains/grants Shield
@@ -4564,10 +4575,11 @@ export function detectFullyCharged(texts: (string | undefined)[]): boolean {
  * PR F4: a permanent pre-fight base-stat grant parsed from a ship passive. Consumed by
  * buildShipAbilities into a `pre-combat-stat` ability (trigger 'pre-combat'); the battle
  * sim's pre-fight layer (F5) applies it to plan stats before round 1. Corpus (docs/
- * ship-skills.csv): Lionheart, Centurion, Enforcer, Defiant, Stalwart.
+ * ship-skills.csv): Lionheart, Centurion, Enforcer, Defiant, Stalwart, Madax (Task 9 —
+ * 'defence' donor grant to the adjacent Supporter, see PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE).
  */
 export interface PreCombatStatGrant {
-    stat: 'hp' | 'attack' | 'crit' | 'hacking';
+    stat: 'hp' | 'attack' | 'crit' | 'hacking' | 'defence';
     value: number;
     /** 'flat': absolute points. 'percent-of-own': % of the RECIPIENT's pre-fight stat.
      *  'percent-of-donor': % of the GRANTING ship's pre-fight stat (Lionheart). */
@@ -4596,17 +4608,41 @@ const PRE_COMBAT_PER_ADJACENT_ATTACK_RE =
 //   C1 trailing gate (Enforcer): "… this Unit gains +15% crit rate and +10% hacking if
 //   adjacent to a supporter."
 //   C2 leading gate (Defiant/Stalwart): "When (this Unit is) adjacent to a Supporter, this
-//   Unit gains 20% HP/Attack." — Madax's "receives 30% more Repairs…" has no "gains" and
-//   deliberately stays unparsed (out of scope).
+//   Unit gains 20% HP/Attack." — Madax's "receives 30% more Repairs…" has no "gains" verb, so
+//   it never matches this pattern; its "increases that Supporter's Defense by 20%…" clause is
+//   a DIFFERENT shape (a donor grant to the adjacent ally, not a self-gain) — see Pattern D
+//   below (Task 9).
 const PRE_COMBAT_ROLE_GATE_TRAILING_RE =
     /this unit gains ([^.;]+?)\s+(?:if|when|while)\s+adjacent to an?\s+(supporter|defender|attacker|debuffer)\b/gi;
 const PRE_COMBAT_ROLE_GATE_LEADING_RE =
     /when (?:this unit is )?adjacent to an?\s+(supporter|defender|attacker|debuffer),\s*this unit gains ([^.;]+?)(?=[.;]|$)/gi;
 
+// Pattern D (Madax, Task 9): "When adjacent to a Supporter, this Unit … increases that
+// Supporter's Defense by 20% of this Unit's Defense." — a DONOR-scaled stat grant to the
+// specific adjacent ally of the named role (not a self-gain, so Pattern C's "gains" verb
+// doesn't apply). Reuses the existing 'adjacent-allies' target (Pattern A, Lionheart) plus
+// the existing requiresAdjacentRole gate (Pattern C) rather than introducing a new target —
+// buildShipAbilities/preCombatPassives already thread both through generically. The role
+// backreference (\1) ties "that <role>'s" back to the same role named in the leading gate.
+const PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE =
+    /when (?:this unit is )?adjacent to an?\s+(supporter|defender|attacker|debuffer),[^.;]*\bincreases\s+that\s+\1'?s\s+(defense|attack|hp|max\s*hp)\s+by\s+(\d+(?:\.\d+)?)\s*%\s*of\s+this\s+unit'?s\s+(?:defense|attack|hp|max\s*hp)/gi;
+
 // Stat-list splitter for pattern C: "+15% crit rate and +10% hacking" / "20% HP" / "20% Attack".
 // crit rate is a percentage-only stat, so "+15% crit rate" is a FLAT 15-point grant; hacking/
 // hp/attack scale the recipient's own stat (percent-of-own).
 const PRE_COMBAT_STAT_LIST_RE = /\+?(\d+(?:\.\d+)?)%\s*(crit(?:ical)?\s*rate|hacking|hp|attack)/gi;
+
+// Stat-keyword mapping for pattern D's granted stat ("Defense"/"Attack"/"HP"/"Max HP") to the
+// engine's PreFightStatBlock key. Distinct from preCombatStatFromKeyword (pattern C — self
+// grants only support hp/attack/crit/hacking) because pattern D also supports 'defence',
+// spelled to match PreFightStatBlock/DerivedCombatStats (British spelling), not
+// ParsedHealAbility's American 'defense'.
+function donorRoleGrantStatFromKeyword(keyword: string): 'defence' | 'attack' | 'hp' {
+    const k = keyword.toLowerCase().replace(/\s+/g, '');
+    if (k === 'defense' || k === 'defence') return 'defence';
+    if (k === 'attack') return 'attack';
+    return 'hp';
+}
 
 function preCombatStatFromKeyword(keyword: string): {
     stat: 'hp' | 'attack' | 'crit' | 'hacking';
@@ -4678,6 +4714,22 @@ export function parsePreCombatStatGrants(text: string | null | undefined): PreCo
     PRE_COMBAT_ROLE_GATE_LEADING_RE.lastIndex = 0;
     while ((m = PRE_COMBAT_ROLE_GATE_LEADING_RE.exec(plain)) !== null) {
         emitRoleGated(m[2], m.index + m[0].indexOf(m[2]), m[1]);
+    }
+
+    // Pattern D (Madax, Task 9): donor-scaled stat grant to the adjacent ally of the named
+    // role — target 'adjacent-allies' (Pattern A's shape) combined with requiresAdjacentRole
+    // (Pattern C's gate), valueKind 'percent-of-donor' (this Unit's own stat, not the
+    // recipient's).
+    PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE.lastIndex = 0;
+    while ((m = PRE_COMBAT_ROLE_GATE_DONOR_STAT_RE.exec(plain)) !== null) {
+        results.push({
+            stat: donorRoleGrantStatFromKeyword(m[2]),
+            value: parseFloat(m[3]),
+            valueKind: 'percent-of-donor',
+            target: 'adjacent-allies',
+            requiresAdjacentRole: m[1].toUpperCase() as ShipRoleCategory,
+            pos: m.index,
+        });
     }
 
     return results;
