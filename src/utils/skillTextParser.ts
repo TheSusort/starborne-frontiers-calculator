@@ -1596,6 +1596,14 @@ export function detectPreCombatShieldTrigger(
 // segment on the un-stripped text. Comma/period boundaries never fall inside <unit-skill> tags, so
 // segmentation is identical with or without tags; only the index mapping is fragile.
 const REMOVAL_SEGMENT_BOUNDARY = /[,.;](?=\s|$)|<br\s*\/?>/gi;
+// Ship-kit Wave 8 Task 11 (Wusheng): "If directly damaged while <buff> is active, remove <buff>."
+// Unlike DR_DIRECT_DAMAGE_RE (the general reaction detector, which deliberately excludes "if" —
+// Panon's "If this Unit is directly damaged" is a conditional GRANT, out of scope there), this
+// window-scoped removal detector accepts BOTH "if" and "when": detectRemovalTriggerAt only ever
+// runs on a window already anchored at a removal verb (parseSelfBuffRemovals' scan), so there is
+// no risk of over-matching an unrelated conditional grant sentence — Panon never reaches this
+// function at all (it has no "loses/removes/remove <unit-skill>" clause to scan for).
+const REMOVAL_DIRECT_DAMAGE_RE = /\b(?:if|when)\s+directly\s+damaged\b|\bwhen\s+attacked\b/i;
 function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
     const masked = maskAbbrev(text);
     // Collect segment boundary spans [start,end) keyed by their terminator position so we can find
@@ -1626,12 +1634,23 @@ function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
     if (ENEMY_REPAIRS_RE.test(window)) return 'on-enemy-repaired';
     if (APPLYING_DEBUFF_RE.test(window)) return 'on-debuff-inflicted';
     if (START_OF_ROUND_RE.test(window)) return 'start-of-round';
+    // Wave 8 Task 11: "if/when directly damaged, remove <buff>" (Wusheng) — the self-scoped
+    // direct-damage reaction, mirroring HEAL_DAMAGE_REACTION_RE's "when … directly damaged"
+    // shape but scoped to this removal window only (see REMOVAL_DIRECT_DAMAGE_RE doc above).
+    if (REMOVAL_DIRECT_DAMAGE_RE.test(window)) return 'on-attacked';
     return 'on-cast';
 }
 
 // Active removal: "loses/removes <unit-skill>NAME</unit-skill>" (Mangler/Ravager/Asphyxiator/
-// Butcher-R1/Ruiner). Passive removal: "<unit-skill>NAME</unit-skill> is lost" (Butcher-R2).
-const SELF_BUFF_REMOVAL_ACTIVE_RE = /\b(?:loses|removes)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
+// Butcher-R1/Ruiner), plus the bare imperative "remove <unit-skill>NAME</unit-skill>" (Wusheng
+// Wave 8 Task 11: "…remove Stealth."). Corpus-verified (docs/ship-skills.csv): the ONLY two
+// "remove[s]? <unit-skill>" matches in the whole sheet are Ruiner's "removes Overload" (already
+// covered by the `removes` alternative) and Wusheng's "remove Stealth" — no ship uses the bare
+// imperative to describe removing a buff FROM AN ENEMY, so broadening to `remove` cannot mint a
+// phantom removal anywhere else. Passive removal: "<unit-skill>NAME</unit-skill> is lost"
+// (Butcher-R2).
+const SELF_BUFF_REMOVAL_ACTIVE_RE =
+    /\b(?:loses|removes|remove)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
 const SELF_BUFF_REMOVAL_PASSIVE_RE = /<unit-skill>([^<]+)<\/unit-skill>\s+is\s+lost\b/gi;
 
 /**

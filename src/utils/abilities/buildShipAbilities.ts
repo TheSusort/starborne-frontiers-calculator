@@ -2633,6 +2633,15 @@ function abilitiesFromText(
     // Overload lose-on-kill (and "removes"/"is lost" phrasings): the 5 Marauder ships drop a
     // named self-buff on a reactive trigger. parseSelfBuffRemovals (Task 5) scopes the trigger to
     // the removal clause's position; the buff is cleared from ALL self stores (scope: 'all').
+    //
+    // Wave 8 Task 11 (Wusheng): an `on-attacked` removal ("if directly damaged … remove Stealth")
+    // additionally gates on the named buff still being ACTIVE at drain time — unlike the Marauder
+    // kill/repair/debuff triggers (which fire unconditionally; removeSelfBuffByName is a safe
+    // no-op if the buff was never present, so those never needed a gate), Wusheng's text is
+    // explicitly conditional ("if directly damaged WHILE Stealth is active"). The generic
+    // `self-buff` ConditionSubject (evaluateConditions.ts) already reads a live buff-presence
+    // count off the owner's snapshot, so this reuses existing machinery rather than adding a new
+    // condition kind.
     for (const rem of parseSelfBuffRemovals(text)) {
         const removePos = findBuffNamePos(text, rem.buffName);
         out.push({
@@ -2641,7 +2650,10 @@ function abilitiesFromText(
                 type: 'remove-self-buff',
                 target: 'self',
                 trigger: rem.trigger,
-                conditions: [],
+                conditions:
+                    rem.trigger === 'on-attacked'
+                        ? [{ subject: 'self-buff', buffName: rem.buffName, derivable: true }]
+                        : [],
                 config: { type: 'remove-self-buff', buffName: rem.buffName, scope: 'all' },
                 autoFilled: true,
             },
