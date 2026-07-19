@@ -1938,8 +1938,15 @@ export function detectDebuffInflictedTrigger(
 //   - `parseSkillEffects` — the named-status *application* path that actually applies the debuff.
 // The control ability is purely additive; nothing here suppresses those other paths.
 //
-// Stasis keeps its ORIGINAL loose regex verbatim (byte-identity, zero golden churn). The three
-// enemy-side effects (Provoke / Concentrate Fire / Disable) anchor on an application verb that is
+// Stasis keeps its ORIGINAL loose regex, PLUS (ship-kit W8 Task 7) an untagged fallback for a
+// bare "Stasis for N turn(s)" inflict (Xcellence's active: "Inflicts <Speed Down II> for 2 turns
+// and Stasis for 2 turn." — Stasis itself carries no <unit-skill> wrapper, unlike Speed Down II).
+// The fallback alternative requires the trailing "for N turn(s)" duration text so it stays
+// anchored to a genuine inflict, not any other bare mention of "Stasis" in the same sentence as
+// an inflict/applies verb (e.g. Defiant's "gains Shield ... when applying Stasis" has no trailing
+// duration and uses "applying", which isn't in the verb set anyway — still excluded). Tagged
+// ships are byte-identical: the tagged alternative is tried first and, being present, always wins.
+// The three enemy-side effects (Provoke / Concentrate Fire / Disable) anchor on an application verb that is
 // either immediately tag-adjacent OR governs a coordinated list ("inflicts <Defense Down II> for
 // 2 turns, and <Provoke>" — Kafa): the verb, then zero-or-more "<unit-skill>…</unit-skill> [for N
 // turns]" items joined by commas/"and", then the target tag. This still ignores a control word in
@@ -1957,7 +1964,8 @@ export function detectDebuffInflictedTrigger(
 const CONTROL_LIST_PREFIX =
     '(?:\\s+<unit-skill>[^<]*<\\/unit-skill>(?:\\s+for\\s+\\d+\\s+turns?)?,?\\s+and)*';
 const ENEMY_INFLICT_VERB = '\\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\\b';
-const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
+const STASIS_INFLICT_RE =
+    /\b(?:inflicts?|applies)\b[^.]*?(?:<unit-skill>\s*Stasis\b|Stasis\s+for\s+\d+\s*turns?)/i;
 
 const CONTROL_INFLICTS: {
     effect: ControlEffect;
@@ -2022,8 +2030,15 @@ export function parseControlInflicts(
         // builder sorts emission order by `pos`).
         const match = c.re.exec(text);
         if (!match) continue;
+        // Ship-kit W8 Task 7: the <unit-skill> tag is OPTIONAL here too (mirrors STASIS_INFLICT_RE
+        // above) so a bare, untagged inflict (Xcellence's "and Stasis for 2 turn") still locates a
+        // real position instead of falling back to MAX_POS. Only c.re matching at all determines
+        // whether an untagged mention counts as a genuine inflict (Stasis' fallback alternative
+        // requires trailing "for N turns"); this just finds WHERE within that already-confirmed
+        // match the name sits. No effect on the other (still tag-only) control effects, since their
+        // matched text always contains the tag.
         const tagRe = new RegExp(
-            `<unit-skill>\\s*${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+            `(?:<unit-skill>\\s*)?${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
             'i'
         );
         const tagMatch = tagRe.exec(match[0]);
@@ -5438,6 +5453,30 @@ export function parseSkillEffects(
             // conjoined path consistent so a trailing "and Cheat Death for N turns" can't stamp
             // a finite window either.
             duration: CHEAT_DEATH_BUFFS.has(canonical) ? 'recurring' : parseInt(conjoined[2], 10),
+            source,
+        });
+    }
+
+    // Supplementary pass (ship-kit W8 Task 7): a BARE, untagged "Stasis" conjoined onto a tagged
+    // enemy inflict ("Inflicts <Speed Down II> for 2 turns and Stasis for 2 turn." — Xcellence's
+    // active). The segment loop above only walks tagged <unit-skill> occurrences, so this trailing
+    // enemy-side Stasis has no governing verb/tag of its own and would otherwise be silently
+    // dropped (mirrors CONJOINED_SELF_GRANT_RE's shape, but for the ENEMY side). Scoped narrowly to
+    // Stasis specifically — it is the only untagged inflict found corpus-wide (docs/ship-skills.csv)
+    // — and anchored on "and Stasis for N turn(s)" so it never matches a bare mention of Stasis in
+    // an unrelated clause (e.g. Defiant's "gains Shield ... when applying Stasis" has no trailing
+    // duration and uses "applying", excluded from the verb set below). `turns?` tolerates the CSV's
+    // "for 2 turn" singular typo, same tolerance as DURATION_RE.
+    const BARE_STASIS_INFLICT_RE =
+        /\b(?:inflicts?|applies)\b[^.]*?\band\s+Stasis\s+for\s+(\d+)\s*turns?/i;
+    const bareStasis = BARE_STASIS_INFLICT_RE.exec(rawText);
+    if (bareStasis && !alreadyEmitted.has('Stasis')) {
+        alreadyEmitted.add('Stasis');
+        effects.push({
+            buffName: 'Stasis',
+            target: 'enemy',
+            duration: parseInt(bareStasis[1], 10),
+            application: 'inflict',
             source,
         });
     }
