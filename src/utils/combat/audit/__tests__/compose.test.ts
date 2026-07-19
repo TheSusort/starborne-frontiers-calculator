@@ -59,6 +59,21 @@ describe('composeBattle', () => {
         expect(new Set(result.enemyTeam.map((p) => p.position)).size).toBe(4);
     });
 
+    it(
+        'never places the same ship twice on one side (draws are with-replacement, but an ' +
+            'illegal in-game state would have the same ship in two slots of ONE side)',
+        () => {
+            // Run across a spread of seeds rather than one, since the dedup path is only exercised
+            // when the biased/random draw happens to collide with an already-picked ship on that
+            // side — a single seed could pass by luck even with the dedup logic removed.
+            for (let seed = 1; seed <= 30; seed++) {
+                const result = composeBattle(seed, tagged);
+                expect(new Set(result.playerTeam.map((p) => p.ship.id)).size).toBe(4);
+                expect(new Set(result.enemyTeam.map((p) => p.ship.id)).size).toBe(4);
+            }
+        }
+    );
+
     it('places real ships with baseStats-derived statOverrides', () => {
         const result = composeBattle(11, tagged);
         for (const placement of [...result.playerTeam, ...result.enemyTeam]) {

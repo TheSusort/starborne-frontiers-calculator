@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { runAblation } from '../ablation';
+import { runAblation, computeAblationResult } from '../ablation';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../../scripts/lib/shipSkillCsv';
 import type { Ship } from '../../../../types/ship';
+import type { CombatLogEntryKind } from '../../log/types';
 
 // Real ships resolved from docs/ship-skills.csv via buildTraceShip, same loader convention
 // as classes.test.ts / invariants.test.ts / reproducibility.test.ts.
@@ -66,4 +67,74 @@ describe('runAblation', () => {
         expect(typeof result.detail).toBe('string');
         expect(result.detail.length).toBeGreaterThan(0);
     });
+});
+
+// `computeAblationResult` is the pure divergence logic factored out of `runAblation` (see
+// ablation.ts) — no battles, no RNG, just Set-vs-Set comparison. These directly exercise
+// `diverges`/`detail` (which the real-battle tests above deliberately do NOT hard-assert on,
+// since real crit/RNG-gated divergence is noisy), so an inverted or always-false/always-true
+// `extraKinds`/`computeAblationResult` implementation would be caught here.
+const kinds = (...ks: CombatLogEntryKind[]): Set<CombatLogEntryKind> => new Set(ks);
+
+describe('computeAblationResult (pure divergence logic)', () => {
+    it('diverges when a ship gains a kind only present in composition', () => {
+        const result = computeAblationResult(
+            'ShipA',
+            'ShipB',
+            kinds('attack'), // solo A
+            kinds('attack'), // solo B
+            kinds('attack', 'heal'), // combined A — gained 'heal'
+            kinds('attack') // combined B
+        );
+
+        expect(result.diverges).toBe(true);
+        expect(result.detail).toContain('ShipA');
+        expect(result.detail).toContain('heal');
+    });
+
+    it('diverges when the OTHER ship (B) gains a composition-only kind', () => {
+        const result = computeAblationResult(
+            'ShipA',
+            'ShipB',
+            kinds('attack'),
+            kinds('attack'),
+            kinds('attack'),
+            kinds('attack', 'shield')
+        );
+
+        expect(result.diverges).toBe(true);
+        expect(result.detail).toContain('ShipB');
+        expect(result.detail).toContain('shield');
+    });
+
+    it('does not diverge when both ships produce identical kind-sets solo and combined', () => {
+        const result = computeAblationResult(
+            'ShipA',
+            'ShipB',
+            kinds('attack', 'heal'),
+            kinds('attack'),
+            kinds('attack', 'heal'),
+            kinds('attack')
+        );
+
+        expect(result.diverges).toBe(false);
+        expect(result.detail).toContain('No divergence');
+    });
+
+    it(
+        'does not diverge on a kind LOST in composition (that direction is the differential ' +
+            "oracle's concern, not this one's)",
+        () => {
+            const result = computeAblationResult(
+                'ShipA',
+                'ShipB',
+                kinds('attack', 'heal'),
+                kinds('attack'),
+                kinds('attack'), // combined A lost 'heal' — not an ablation-oracle divergence
+                kinds('attack')
+            );
+
+            expect(result.diverges).toBe(false);
+        }
+    );
 });

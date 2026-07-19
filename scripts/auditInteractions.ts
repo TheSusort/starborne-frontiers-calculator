@@ -4,7 +4,7 @@ import { loadShipSkillRecords, csvAvailable } from './lib/shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from './lib/shipDataSnapshot';
 import { buildTraceShip } from './lib/traceShipFactory';
 import { buildStandardScenario } from './lib/traceScenario';
-import { writeLedger, buildLedgerJson } from './lib/interactionLedger';
+import { writeLedger } from './lib/interactionLedger';
 import { tagShip } from '../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../src/utils/combat/audit/seededBattle';
@@ -53,7 +53,11 @@ function loadTaggedCorpus(): TaggedShip[] {
 // Roster resolution
 // ---------------------------------------------------------------------------
 
-function resolveActorId(result: BattleResult, side: 'player' | 'enemy', position: Position): string {
+function resolveActorId(
+    result: BattleResult,
+    side: 'player' | 'enemy',
+    position: Position
+): string {
     const entry = result.roster.find((r) => r.side === side && r.position === position);
     if (!entry) {
         throw new Error(`could not resolve actorId for ${side}@${position} in the roster`);
@@ -185,7 +189,13 @@ function playerDifferential(
         return { raw: null, restricted: null };
     }
 
-    const raw = runDifferential(soloResult, compResult, placement.ship.name, soloActorId, compActorId);
+    const raw = runDifferential(
+        soloResult,
+        compResult,
+        placement.ship.name,
+        soloActorId,
+        compActorId
+    );
     return { raw, restricted: restrictDiff(raw) };
 }
 
@@ -231,7 +241,9 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
         try {
             const invViolations = checkInvariants(compResult);
             if (invViolations.length > 0) {
-                invariantFailures.push(`seed ${s}: ${invViolations.map((v) => v.detail).join('; ')}`);
+                invariantFailures.push(
+                    `seed ${s}: ${invViolations.map((v) => v.detail).join('; ')}`
+                );
             }
             const repro = checkReproducibility(compInput, s);
             if (repro.length > 0) {
@@ -302,11 +314,7 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
 // Finding construction helpers
 // ---------------------------------------------------------------------------
 
-function invariantFinding(
-    v: InvariantViolation,
-    compResult: BattleResult,
-    seed: number
-): Finding {
+function invariantFinding(v: InvariantViolation, compResult: BattleResult, seed: number): Finding {
     const name = rosterName(compResult, v.actorId);
     const pos = rosterPosition(compResult, v.actorId);
     const ships = name ? [name] : compResult.roster.map((r) => r.name);
@@ -419,7 +427,9 @@ function minimizeInvariant(input: BattleSimulationInput, v: InvariantViolation, 
             const result = safeRun(candidate, seed);
             if (!result) return false;
             return checkInvariants(result).some(
-                (x) => x.invariant === v.invariant && (v.actorId === undefined || x.actorId === v.actorId)
+                (x) =>
+                    x.invariant === v.invariant &&
+                    (v.actorId === undefined || x.actorId === v.actorId)
             );
         } catch {
             return false;
@@ -509,12 +519,19 @@ function main(): void {
         const s = seed + i;
 
         let compInput: BattleSimulationInput;
-        let compResult: BattleResult;
         try {
             compInput = composeBattle(s, tagged);
-            compResult = runSeededBattle(compInput, s);
         } catch (err) {
             findings.push(crashFinding([], [], s, err));
+            compositionsRun++;
+            continue;
+        }
+
+        let compResult: BattleResult;
+        try {
+            compResult = runSeededBattle(compInput, s);
+        } catch (err) {
+            findings.push(crashFinding(allNames(compInput), allPositions(compInput), s, err));
             compositionsRun++;
             continue;
         }
@@ -563,13 +580,14 @@ function main(): void {
                 const finding = ablationFinding(a, b, s);
                 if (finding) findings.push(finding);
             } catch (err) {
-                findings.push(crashFinding([a.ship.name, b.ship.name], [a.position, b.position], s, err));
+                findings.push(
+                    crashFinding([a.ship.name, b.ship.name], [a.position, b.position], s, err)
+                );
             }
         }
     }
 
-    writeLedger(findings, { compositionsRun }, 'docs');
-    const { confirmed, needsTriage } = buildLedgerJson(findings, { compositionsRun });
+    const { confirmed, needsTriage } = writeLedger(findings, { compositionsRun }, 'docs');
     console.log(`compositionsRun: ${compositionsRun}`);
     console.log(`confirmed: ${confirmed.length}`);
     console.log(`needsTriage: ${needsTriage.length}`);

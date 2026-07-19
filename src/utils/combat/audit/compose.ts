@@ -98,6 +98,42 @@ function drawBiasedShip(
     return pickFrom(rng, anyPool);
 }
 
+/** Max number of biased re-draws attempted before falling back to a deterministic scan of
+ *  `anyPool` for ANY not-yet-`exclude`d ship — keeps `pickDistinctShip` from looping forever
+ *  when the biased pools happen to keep colliding with `exclude` (real corpora have hundreds
+ *  of ships, so this should essentially never bite, but the corpus size isn't guaranteed). */
+const MAX_DISTINCT_DRAW_ATTEMPTS = 20;
+
+/** Like `drawBiasedShip`, but redraws (consuming more of the same `rng` stream) until it
+ *  produces a ship whose id is not in `exclude`, so a side's 4 ships are always distinct by
+ *  identity — not just by board position. Falls back to any remaining non-excluded ship in
+ *  `anyPool` after `MAX_DISTINCT_DRAW_ATTEMPTS` biased misses, and — only if `anyPool` itself
+ *  has no non-excluded ship left (corpus smaller than 4) — gives up distinctness and returns
+ *  whatever the last biased draw produced, since composeBattle must still fill all 4 slots.
+ *  Deterministic: consumes a fixed function of the `rng` stream for a given seed + corpus, so
+ *  the same seed always reproduces the same result. */
+function pickDistinctShip(
+    rng: () => number,
+    i: number,
+    primaryPool: TaggedShip[],
+    adjacentPool: TaggedShip[],
+    anyPool: TaggedShip[],
+    exclude: Set<string>
+): TaggedShip {
+    let candidate: TaggedShip = drawBiasedShip(rng, i, primaryPool, adjacentPool, anyPool);
+    for (
+        let attempt = 0;
+        attempt < MAX_DISTINCT_DRAW_ATTEMPTS && exclude.has(candidate.ship.id);
+        attempt++
+    ) {
+        candidate = drawBiasedShip(rng, i, primaryPool, adjacentPool, anyPool);
+    }
+    if (!exclude.has(candidate.ship.id)) return candidate;
+
+    const remaining = anyPool.filter((t) => !exclude.has(t.ship.id));
+    return remaining.length > 0 ? pickFrom(rng, remaining) : candidate;
+}
+
 /** Draws 4 distinct positions (of the 12 board slots) via a partial Fisher-Yates shuffle
  *  driven entirely by `rng`, so it consumes exactly 4 rng() calls per invocation. */
 function drawDistinctPositions(rng: () => number): Position[] {
@@ -120,9 +156,10 @@ function drawDistinctPositions(rng: () => number): Position[] {
  *     (see `ADJACENT_CLASSES` / `drawBiasedShip`), falling back to the whole corpus so all
  *     8 slots always fill even if a class's pool is thin.
  *  4. Split the 8 drawn ships 4/4 into playerTeam/enemyTeam, each placed at 4 DISTINCT
- *     positions drawn from the 12 board slots. Ships MAY repeat across the two sides (the
- *     same ship's Set entries are independent Ship objects/positions) but never within one
- *     side's own 4 positions, since positions are drawn distinct per side.
+ *     positions drawn from the 12 board slots. Each side's 4 ships are also distinct BY
+ *     IDENTITY (no ship appears twice on the same side — that's an illegal in-game state),
+ *     enforced via `pickDistinctShip`'s per-side `exclude` set. Ships MAY still repeat
+ *     ACROSS the two sides (the player and enemy roster are independent).
  *
  *  Pure: all randomness flows through the single `mulberry32(seed)` stream (no Math.random,
  *  no Date.now) — same seed + corpus produces a byte-identical `BattleSimulationInput`. Does
@@ -143,10 +180,20 @@ export function composeBattle(seed: number, tagged: TaggedShip[]): BattleSimulat
     const primaryPool = primary ? poolForClass(tagged, primary) : [];
     const adjacentPool = primary ? poolForClasses(tagged, ADJACENT_CLASSES[primary]) : [];
 
-    const drawn: TaggedShip[] = [];
-    drawn.push(primaryPool.length > 0 ? pickFrom(rng, primaryPool) : pickFrom(rng, tagged));
+    const primaryDrawn =
+        primaryPool.length > 0 ? pickFrom(rng, primaryPool) : pickFrom(rng, tagged);
+    const drawn: TaggedShip[] = [primaryDrawn];
+
+    // drawn[0] (primary) + drawn[1..3] (i=0..2) fill the player side; drawn[4..7] (i=3..6)
+    // fill the enemy side — see the `.slice(0,4)`/`.slice(4,8)` split below. Each side tracks
+    // its own `exclude` set so ship identity is only constrained WITHIN a side.
+    const playerExclude = new Set<string>([primaryDrawn.ship.id]);
+    const enemyExclude = new Set<string>();
     for (let i = 0; i < 7; i++) {
-        drawn.push(drawBiasedShip(rng, i, primaryPool, adjacentPool, tagged));
+        const exclude = i < 3 ? playerExclude : enemyExclude;
+        const picked = pickDistinctShip(rng, i, primaryPool, adjacentPool, tagged, exclude);
+        exclude.add(picked.ship.id);
+        drawn.push(picked);
     }
 
     const playerPositions = drawDistinctPositions(rng);

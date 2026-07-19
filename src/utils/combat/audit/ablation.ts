@@ -63,11 +63,42 @@ function resolveActorId(result: BattleResult, shipName: string, position: Positi
 /** Kinds present in `comp` that never appear in `solo` — i.e. behavior the actor does ONLY
  *  in composition. This is the ablation oracle's divergence signal (the reverse direction,
  *  kinds suppressed in composition, is the differential oracle's concern, not this one's). */
-function extraKinds(
+export function extraKinds(
     solo: Set<CombatLogEntryKind>,
     comp: Set<CombatLogEntryKind>
 ): CombatLogEntryKind[] {
     return [...comp].filter((k) => !solo.has(k));
+}
+
+/** Pure divergence logic, factored out of `runAblation` so it's unit-testable without running
+ *  real battles: given each ship's solo and combined per-actor kind fingerprints, decides
+ *  whether either ship gained a kind only present in composition, and builds the detail
+ *  string. `runAblation` is just this plus the battle-running/fingerprinting I/O around it. */
+export function computeAblationResult(
+    aName: string,
+    bName: string,
+    soloAKinds: Set<CombatLogEntryKind>,
+    soloBKinds: Set<CombatLogEntryKind>,
+    combinedAKinds: Set<CombatLogEntryKind>,
+    combinedBKinds: Set<CombatLogEntryKind>
+): AblationResult {
+    const extraA = extraKinds(soloAKinds, combinedAKinds);
+    const extraB = extraKinds(soloBKinds, combinedBKinds);
+
+    const parts: string[] = [];
+    if (extraA.length > 0) {
+        parts.push(`${aName} gained kinds only present in composition: ${extraA.join(', ')}`);
+    }
+    if (extraB.length > 0) {
+        parts.push(`${bName} gained kinds only present in composition: ${extraB.join(', ')}`);
+    }
+
+    const diverges = parts.length > 0;
+    const detail = diverges
+        ? parts.join('; ')
+        : `No divergence: ${aName} and ${bName} each produced only kinds already seen solo.`;
+
+    return { diverges, detail };
 }
 
 /**
@@ -97,21 +128,12 @@ export function runAblation(a: Ship, b: Ship, seed: number): AblationResult {
     const combinedAKinds = fingerprintActor(combinedResult, combinedAId);
     const combinedBKinds = fingerprintActor(combinedResult, combinedBId);
 
-    const extraA = extraKinds(soloAKinds, combinedAKinds);
-    const extraB = extraKinds(soloBKinds, combinedBKinds);
-
-    const parts: string[] = [];
-    if (extraA.length > 0) {
-        parts.push(`${a.name} gained kinds only present in composition: ${extraA.join(', ')}`);
-    }
-    if (extraB.length > 0) {
-        parts.push(`${b.name} gained kinds only present in composition: ${extraB.join(', ')}`);
-    }
-
-    const diverges = parts.length > 0;
-    const detail = diverges
-        ? parts.join('; ')
-        : `No divergence: ${a.name} and ${b.name} each produced only kinds already seen solo.`;
-
-    return { diverges, detail };
+    return computeAblationResult(
+        a.name,
+        b.name,
+        soloAKinds,
+        soloBKinds,
+        combinedAKinds,
+        combinedBKinds
+    );
 }

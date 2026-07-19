@@ -9,7 +9,12 @@ import { setupKeyedTestRng, resetRateGateRng } from '../../calculators/rateAccum
  *  Production combat draws crit/hit/landing from Math.random via rateAccumulator;
  *  setupKeyedTestRng installs a seeded keyed sub-stream provider for the duration
  *  of this call, and resetRateGateRng restores Math.random afterward. The reset
- *  runs in finally so a throwing battle never leaks the seeded RNG into later runs. */
+ *  runs in finally so a throwing battle never leaks the seeded RNG into later runs.
+ *
+ *  Caveat: the `finally` resets to `Math.random` (the production default), NOT to any
+ *  ambient test seed. So calling raw `simulateBattle` directly after `runSeededBattle` in
+ *  the same test is nondeterministic — always go through `runSeededBattle` (or re-call
+ *  `setupKeyedTestRng` yourself) rather than assuming the seeded stream is still installed. */
 export function runSeededBattle(input: BattleSimulationInput, seed: number): BattleResult {
     setupKeyedTestRng(seed);
     try {
