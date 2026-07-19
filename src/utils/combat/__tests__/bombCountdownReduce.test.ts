@@ -507,6 +507,41 @@ describe('Lingshe forced detonation — REAL engine sink (Critical finding regre
         expect(result.rounds[0].perTargetDamage?.['victim']).toBe(2468);
     });
 
+    it('does NOT crash when a forced detonation kills a victim that still holds other pending bombs (FINDING-002)', () => {
+        // Interaction-audit FINDING-002 (Lingshe + a multi-bomb planter, e.g. Sha Xing/Panguan):
+        // a victim carries TWO bombs, both at countdown 1 so BOTH reach 0 on this cast. The
+        // backward loop detonates the LAST-pushed bomb first; that 5000 burst kills the 2000-HP
+        // victim. The engine's bomb-splash-on-death then REASSIGNS `victim.pendingBombs = []`.
+        // Pre-fix, `reduceBombsOnVictim` re-read the now-empty LIVE field on its next iteration
+        // (`victim.pendingBombs[0]` === undefined) and threw
+        // "Cannot read properties of undefined (reading 'countdown')". The fix binds a stable
+        // array reference at loop start (as the sibling `processBombs` already does), so the loop
+        // finishes over the pre-death snapshot and BOTH bombs detonate — matching the natural
+        // countdown-0 burst on a positioned actor's own turn.
+        let victimRef: CombatActor | undefined;
+        const { events } = runRegression(
+            REGRESSION_BASE({
+                enemyAttackers: [victimAt('victim', 2000)],
+                __testTapActors: (actors) => {
+                    victimRef = actors.find((a) => a.id === 'victim');
+                    victimRef?.pendingBombs.push(bomb(5000, 1, 1, 'ally-applier-a'));
+                    victimRef?.pendingBombs.push(bomb(5000, 1, 1, 'ally-applier-b'));
+                },
+            })
+        );
+
+        expect(victimRef).toBeDefined();
+        expect(victimRef!.destroyedRound).toBe(1);
+        expect(events.some((e) => e.type === 'ship-destroyed' && e.actorId === 'victim')).toBe(
+            true
+        );
+        // Both countdown-0 bombs detonate through the forced path (stable-reference iteration),
+        // exactly as the natural burst would — crediting each ORIGINAL applier.
+        const bombDet = events.filter((e) => e.type === 'bomb-detonated');
+        expect(bombDet).toHaveLength(2);
+        expect(bombDet.map((e) => e.actorId).sort()).toEqual(['ally-applier-a', 'ally-applier-b']);
+    });
+
     it('hacking-gate resisted: when the inflict roll fails, the countdown does NOT reduce (no detonation)', () => {
         // Uses the FIRST describe block's simple hand-built-args harness (runPlayerTurn direct, no
         // full engine) — the gate itself (`landsTimedEnemyApplicationLive`, internal to runPlayerTurn)
