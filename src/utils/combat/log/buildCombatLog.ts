@@ -515,6 +515,22 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    // Log-only reactive cleanse (drain-time; emits no cleanse-performed — chain guard). Rendered
+    // as a `cleanse` entry attributed to the reacting owner, carrying the cleansed ally as a target
+    // so the log reads "AEGIS → Ally: cleansed N". Nests under the trigger turn via currentStamp.
+    'reactive-cleanse-performed': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const total = e.perTarget.reduce((sum, pt) => sum + pt.count, 0);
+        const entry: CombatLogEntry = {
+            kind: 'cleanse',
+            actorId: e.casterId,
+            targets: e.perTarget.map((pt) => ({ targetId: pt.targetId })),
+            reactions: [],
+            note: `cleansed ${total}`,
+        };
+        ctx.attachEntry(entry);
+    },
+
     'debuff-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {

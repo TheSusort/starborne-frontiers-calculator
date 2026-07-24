@@ -759,12 +759,16 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-shield-destroyed':
                     bus.on('shield-destroyed', (e) => {
-                        // Victim-scoped: an ally's shield pool was fully depleted (AEGIS). Mirrors
-                        // on-ally-debuffed's ally scoping (excludes the owner itself — a shield
-                        // destroyed on the OWNER routes nowhere today, no corpus self-reaction
-                        // exists — and every opposing actor). Route the reactive grant/cleanse to
-                        // that ally via damagedAllyId (reused from on-ally-debuffed/on-ally-crit).
-                        if (isSameSideAlly(e.victimId, ownerId))
+                        // Victim-scoped: a same-side unit's shield pool was fully depleted (AEGIS).
+                        // "an ally within the Active pattern" INCLUDES the owner itself — AEGIS's
+                        // support pattern is centered on itself and its active shields itself, so a
+                        // destroyed SELF shield must self-react (grant + cleanse on AEGIS). Hence
+                        // same-side (self OR ally) via !isOpposing, NOT isSameSideAlly (which
+                        // excludes the owner). Opposing victims never route here. The footprint
+                        // filter (footprintFilteredRecipients) keeps it pattern-scoped, and the
+                        // owner sits in its own pattern's origin cell. Route the grant/cleanse to
+                        // that unit via damagedAllyId (reused from on-ally-debuffed/on-ally-crit).
+                        if (!isOpposing(e.victimId))
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, damagedAllyId: e.victimId },
@@ -2037,6 +2041,7 @@ type StampedEventType =
     | 'shield-applied'
     | 'reactive-damage-performed'
     | 'reactive-heal-performed'
+    | 'reactive-cleanse-performed'
     | 'buff-applied'
     | 'buff-expired'
     | 'debuff-applied'
@@ -2076,6 +2081,7 @@ const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<Stamp
     // they nest under the triggering turn. No combat listener subscribes → they never chain.
     'reactive-damage-performed',
     'reactive-heal-performed',
+    'reactive-cleanse-performed',
 ]);
 
 /** Wrap a bus so every reactive-capable event emitted through it is branded with
@@ -3120,9 +3126,27 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const recipients = reactiveRecipients(intent, ctx, ctx.healing.targetId);
         const count = intent.eventCtx?.didCrit && cfg.critCount != null ? cfg.critCount : cfg.count;
         let removed = 0;
-        for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, count);
+        const cleansePerTarget: { targetId: string; count: number }[] = [];
+        for (const rid of recipients) {
+            const n = ctx.statusEngine.cleanse(rid, count);
+            if (n > 0) cleansePerTarget.push({ targetId: rid, count: n });
+            removed += n;
+        }
         // Credit the ACTUAL removed count (was the nominal cfg.count pre-T4).
         ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
+        // #2 log visibility: surface the reaction via the LOG-ONLY reactive-cleanse-performed (NOT
+        // cleanse-performed — that drives on-enemy-cleansed/on-own-cleanse listeners and would
+        // chain). No combat listener subscribes to this type, so it can't chain; buildCombatLog
+        // renders it, stamped duringTurnOf via ctx.bus so it nests under the triggering turn. Only
+        // emitted when a debuff was actually removed (empty perTarget → silent, like the heal twin).
+        if (cleansePerTarget.length > 0 && ctx.bus) {
+            ctx.bus.emit({
+                type: 'reactive-cleanse-performed',
+                casterId: intent.ownerId,
+                round: ctx.round,
+                perTarget: cleansePerTarget,
+            });
+        }
         return;
     }
 
@@ -3260,8 +3284,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const anchorId = intent.eventCtx?.victimId;
             victimIds =
                 anchorId !== undefined ? (ctx.adjacentOpposingIdsFor?.(anchorId) ?? []) : [];
+        } else if (intent.eventCtx?.counterTargetId !== undefined) {
+            // The trigger stamped the retaliation target (reflect/revenge, FrontLine's
+            // on-enemy-charged-cast, Sentinel's on-ally-crit, …) — route there directly.
+            victimIds = [intent.eventCtx.counterTargetId];
         } else {
-            victimIds = [intent.eventCtx?.counterTargetId ?? ctx.enemy.id];
+            // No specific triggering enemy (start/end-of-round, on-deal-damage, on-debuff-
+            // inflicted with plain `target:'enemy'`). In a POSITIONAL battle route to a real
+            // living opposing actor — NEVER the vestigial DPS-dummy sink (ctx.enemy.id), which
+            // stays alive whenever the team fields an ally-targeting ship (healer) and would
+            // otherwise leak a phantom "→ enemy" line into the log (repeated once per fire).
+            // `livingOpposingActorIds` is gated on hasPositionedEnemyRoster (returns [] in pure
+            // DPS-calc mode), so DPS mode still falls back to the dummy sink — its intended role.
+            const opposing = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
+            victimIds = [opposing.length > 0 ? opposing[0] : ctx.enemy.id];
         }
         // Wave 5 hardening: flatBasis (the flat bomb-damage basis) must apply ONLY to the
         // bomb-splash — gate it on the actual trigger, not merely on eventCtx.triggerDamage

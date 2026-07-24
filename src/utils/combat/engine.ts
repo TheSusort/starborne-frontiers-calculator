@@ -5842,19 +5842,31 @@ export function runCombat(input: CombatEngineInput): {
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
                     onVictimResolved(victim, damage, outcome, didCrit);
                     detonationTargets.set(victim.id, victim);
-                    const prev = attackedSignals.get(victim.id) ?? {
-                        damage: 0,
-                        shieldWasHit: false,
-                        hitOutcomes: [],
-                    };
-                    prev.damage += damage;
-                    prev.shieldWasHit =
-                        prev.shieldWasHit ||
-                        (!outcome.barriered &&
-                            outcome.shieldBefore > 0 &&
-                            outcome.hpDamage < damage);
-                    prev.hitOutcomes.push(didCrit);
-                    attackedSignals.set(victim.id, prev);
+                    // A hit whose FULL post-block damage was converted into a DoT (Voron/Orel's
+                    // transform-incoming-to-dot) dealt NO direct damage — it is not a direct hit,
+                    // so it must NOT contribute an `attacked` signal. Otherwise "directly damaged"
+                    // reactions (Cultivator's on-ally-attacked repair, counters, Tenacity) fire off
+                    // a hit that never landed. The transform is all-or-nothing, so transformedToDot
+                    // > 0 ⟺ zero direct damage. When Voron is stasised/disabled the transform never
+                    // runs (transformedToDot stays 0) and the hit signals normally — no special case
+                    // needed here. Detonation / stasis-break bookkeeping above stays unconditional
+                    // (the victim WAS targeted).
+                    const fullyTransformedToDot = (outcome.transformedToDot ?? 0) > 0;
+                    if (!fullyTransformedToDot) {
+                        const prev = attackedSignals.get(victim.id) ?? {
+                            damage: 0,
+                            shieldWasHit: false,
+                            hitOutcomes: [],
+                        };
+                        prev.damage += damage;
+                        prev.shieldWasHit =
+                            prev.shieldWasHit ||
+                            (!outcome.barriered &&
+                                outcome.shieldBefore > 0 &&
+                                outcome.hpDamage < damage);
+                        prev.hitOutcomes.push(didCrit);
+                        attackedSignals.set(victim.id, prev);
+                    }
                     // Record covered (non-anchor) victims stasised at hit time for the post-apply break.
                     if (
                         !actor.doesntBreakStasis &&

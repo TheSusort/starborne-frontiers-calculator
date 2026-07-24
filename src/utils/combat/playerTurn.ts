@@ -2353,10 +2353,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
     // Block Debuff (Task 6): when the turn target is immune, every cast-side DoT is
-    // BLOCKED and recorded as a resist — and ONLY here. Normal DoT landing-roll
-    // failures (the else branch) stay SILENT (no event), so the non-immune path is
-    // byte-for-byte unchanged. `dotsLanded` is set false so the downstream display
-    // surfaces the blocked DoTs as resisted (symmetric with timed/persistent resists).
+    // BLOCKED and recorded as a resist here. Normal DoT landing-roll failures (the else
+    // branch's `else if`) ALSO emit a resist event now (a resisted DoT is a log line,
+    // symmetric with stat-debuff resists) — the two paths differ only in cause (immunity
+    // vs a failed roll). `dotsLanded` is set false so the downstream display surfaces the
+    // blocked DoTs as resisted (symmetric with timed/persistent resists).
     let dotsLanded: boolean;
     if (dotsConfig.length > 0 && targetImmuneToDebuffs) {
         dotsLanded = false;
@@ -2404,6 +2405,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         ...(critHits > 0 ? { viaCrit: true } : {}),
                     }),
             });
+        } else if (dotsConfig.length > 0) {
+            // Landing roll FAILED → the DoT(s) resisted. Emit a resist event per DoT so the
+            // combat log shows "Inferno III resisted" etc., symmetric with the stat-debuff
+            // resist path (emitDebuffResisted) and the Block-Debuff branch above. `primaryDots`
+            // filters out adjacent-only splash DoTs (which land on OTHER victims, not enemy.id) —
+            // corpus has none today, so this equals dotsConfig, but stays victim-correct if one
+            // is ever added.
+            for (const dot of primaryDots) {
+                emitBlockDebuffResist(
+                    bus,
+                    actor.id,
+                    enemy.id,
+                    r,
+                    dotResistLabel(dot.type, dot.tier)
+                );
+            }
         }
 
         // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
@@ -2446,7 +2463,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const rid of adjacentEnemyIdsFor(targetId)) {
             const victim = opposingVictimById?.get(rid);
             if (!victim) continue;
-            if (!landsDebuffOnVictim('inflict', victim)) continue; // per-victim landing gate
+            if (!landsDebuffOnVictim('inflict', victim)) {
+                // Per-neighbour landing gate FAILED → resisted. Emit a resist per splash DoT
+                // against the neighbour id, symmetric with the primary-DoT resist path above
+                // (a resisted DoT is a log line). Live for Asphyxiator's target-and-adjacent-
+                // enemies Inferno (a neighbour that resists now surfaces a resist line);
+                // the neighbours-only 'adjacent-enemies' variant has no corpus yet.
+                for (const dot of splashDots) {
+                    emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid);
+                }
+                continue;
+            }
             applyNewDoTs({
                 dotsConfig: splashDots,
                 effectiveAttack,
