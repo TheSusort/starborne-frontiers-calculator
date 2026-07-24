@@ -1385,6 +1385,13 @@ export interface IntentExecContext {
      *  (see oncePerAttackGuardKey + the heal branch). Absent → no guard (unit ctxs without the
      *  engine keep firing per intent, byte-identical). */
     reactionFiredThisAttack?: Set<string>;
+    /** Per-actor-turn verdict cache for `procScope:'per-attack'` abilities (Insidiousness).
+     *  Keyed `ownerId:abilityId` → the single roll's outcome, cleared at each actor turn-start
+     *  (engine) beside `reactionFiredThisAttack`. Distinct from that Set: this is not a
+     *  suppression guard but a memo, so EVERY qualifying event in the attack still executes
+     *  against its own victim under one shared pass/fail. Absent (unit ctxs) → per-event draws,
+     *  byte-identical. */
+    procDecisionThisAttack?: Map<string, boolean>;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
@@ -1980,6 +1987,15 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     const pc = intent.ability.procChance;
     if (pc === undefined || pc <= 0 || pc >= 1) return true;
     const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+    // procScope:'per-attack' (Insidiousness): one roll for the whole attack. The verdict is
+    // memoized per (owner, ability) and replayed for every later event this attack, so an AoE
+    // debuffer's four debuff applications share ONE 21% roll and all-or-none holds across every
+    // debuffed enemy. Opt-in by design — this gate is shared with the heal/shield/buff/debuff
+    // branches, and memoizing unconditionally would silently convert every other proc ability
+    // (Adaptive Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity) to per-turn.
+    const memo = intent.ability.procScope === 'per-attack' ? ctx.procDecisionThisAttack : undefined;
+    const cached = memo?.get(gateKey);
+    if (cached !== undefined) return cached;
     let gate = ctx.procChanceGates?.get(gateKey);
     if (ctx.procChanceGates && !gate) {
         // Keyed by owner + purpose (SP-0 Task 3), NOT the finer-grained map key — every
@@ -1989,7 +2005,9 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
         gate = makeRateGate(`${intent.ownerId}:proc`);
         ctx.procChanceGates.set(gateKey, gate);
     }
-    return !gate || gate(pc);
+    const verdict = !gate || gate(pc);
+    memo?.set(gateKey, verdict);
+    return verdict;
 }
 
 /** D-PR14 once-per-round gate, shared by the damage/heal/shield executors (the debuff branch
