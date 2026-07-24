@@ -2463,7 +2463,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const rid of adjacentEnemyIdsFor(targetId)) {
             const victim = opposingVictimById?.get(rid);
             if (!victim) continue;
-            if (!landsDebuffOnVictim('inflict', victim)) continue; // per-victim landing gate
+            if (!landsDebuffOnVictim('inflict', victim)) {
+                // Per-neighbour landing gate FAILED → resisted. Emit a resist per splash DoT
+                // against the neighbour id, symmetric with the primary-DoT resist path above
+                // (a resisted DoT is a log line). Live for Asphyxiator's target-and-adjacent-
+                // enemies Inferno (a neighbour that resists now surfaces a resist line);
+                // the neighbours-only 'adjacent-enemies' variant has no corpus yet.
+                for (const dot of splashDots) {
+                    emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid);
+                }
+                continue;
+            }
             applyNewDoTs({
                 dotsConfig: splashDots,
                 effectiveAttack,

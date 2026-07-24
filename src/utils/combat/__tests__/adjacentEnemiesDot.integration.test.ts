@@ -109,6 +109,20 @@ const infernoRecipients = (result: ReturnType<typeof simulateBattle>, actorId: s
         .map((e) => e.targets[0]?.targetId)
         .filter((id): id is string => id !== undefined);
 
+/** Every `kind: 'debuff-resisted'` Inferno entry attributed to `actorId` — the resist log line
+ *  emitted when a splash DoT fails its per-neighbour landing roll (note carries the dotResistLabel
+ *  'Inferno III'). */
+const infernoResisted = (result: ReturnType<typeof simulateBattle>, actorId: string): string[] =>
+    flattenCombatLog(result)
+        .filter(
+            (e) =>
+                e.kind === 'debuff-resisted' &&
+                e.actorId === actorId &&
+                e.note?.startsWith('Inferno')
+        )
+        .map((e) => e.targets[0]?.targetId)
+        .filter((id): id is string => id !== undefined);
+
 describe('Ship-kit W5 Task B2: target-and-adjacent-enemies Inferno DoT fan-out (positional, player caster)', () => {
     const run = (caster: Ship) =>
         simulateBattle({
@@ -177,6 +191,45 @@ describe('Ship-kit W5 Task B2: per-victim independence — a neighbour lands Inf
         expect(recipients).toContain(NBR_A);
         expect(recipients).toContain(NBR_B);
         expect(recipients).not.toContain(FAR);
+    });
+});
+
+/**
+ * Resisted-splash log visibility (code-review follow-up): a splash DoT that FAILS a neighbour's
+ * own landing roll must emit a `debuff-resisted` line for that neighbour, symmetric with the
+ * primary-target resist path. Here nbrA (M3) is given security 300 → hacking 200 vs 300 clamps
+ * its own `landsDebuffOnVictim` roll to 0 (deterministic FAIL), while the primary (tgt) and nbrB
+ * keep default security (100) → LAND. The resisted neighbour must surface a resist event AND must
+ * not accrue Inferno.
+ */
+describe('Ship-kit W5 Task B2: a splash DoT that a neighbour resists emits a per-neighbour resist line', () => {
+    const run = (caster: Ship) =>
+        simulateBattle({
+            playerTeam: [place(caster, 'M4', 1000, 1e9)],
+            enemyTeam: [
+                place(dummy('tgt'), 'M4', 1, 1e9), // primary target: default security → lands
+                place(dummy('nbrA'), 'M3', 1, 1e9, 300), // neighbour: security 300 → its own roll FAILS
+                place(dummy('nbrB'), 'T3', 1, 1e9), // neighbour: default security → lands
+                place(dummy('far'), 'T1', 1, 1e9),
+            ],
+            rounds: 1,
+        });
+
+    const TGT = 'e:tgt:0';
+    const NBR_A = 'e:nbrA:1';
+    const NBR_B = 'e:nbrB:2';
+
+    it('the resisting neighbour gets a debuff-resisted line and no Inferno; the others land', () => {
+        const result = run(splashCaster('atk'));
+        const recipients = infernoRecipients(result, 'attacker');
+        const resisted = infernoResisted(result, 'attacker');
+
+        // The neighbour that resisted surfaces a resist line and does NOT accrue Inferno.
+        expect(resisted).toContain(NBR_A);
+        expect(recipients).not.toContain(NBR_A);
+        // The primary and the other neighbour still land normally.
+        expect(recipients).toContain(TGT);
+        expect(recipients).toContain(NBR_B);
     });
 });
 
