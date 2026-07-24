@@ -214,6 +214,16 @@ export interface Intent {
          *  hitting a PLAYER actor. Absent for the debuff-applied branch of the same trigger
          *  (Oleander's buff grant doesn't need a victim — it routes via damagedAllyId only). */
         victimId?: string;
+        /** The debuffed enemy's actor id (debuff-applied.targetId / dot-applied.targetId),
+         *  stamped by the on-debuff-inflicted listener. Read ONLY by the reactive `damage`
+         *  branch (Insidiousness) so the proc lands on the enemy that was actually debuffed
+         *  instead of falling through to the first living opposing actor. A DEDICATED field
+         *  rather than reusing `victimId`: that one is the `adjacent-enemies` splash anchor
+         *  (on-bomb-detonated), and reusing it would newly re-anchor any adjacent-enemies
+         *  damage ability reached via this trigger. Every OTHER on-debuff-inflicted consumer
+         *  (Warden's debuff, APEX/Butcher/Torcher/Prospect/Yuyan self-riders, Hemlock's
+         *  charge, Pestilence's cleanse) ignores this field → unchanged. */
+        debuffVictimId?: string;
         /** SP-E, Task E4: the DoT type of the ally's application (dot-applied.dotType), captured
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
          *  ally's Inferno (or any other DoT) never converts under a Corrosion-only ability. */
@@ -455,11 +465,22 @@ export function registerReactiveListeners(args: {
                         // Crit Shred feeding an on-debuff-inflicted charge — triggers.test scenario 10)
                         // still chain here as before. Existing consumers (Butcher/Pestilence/APEX)
                         // inflict their gating debuffs from non-on-debuff-inflicted paths, unaffected.
+                        // The debuffed enemy rides along as `debuffVictimId` so the reactive
+                        // damage branch (Insidiousness) hits the enemy this infliction actually
+                        // landed on rather than falling through to the first living opposing
+                        // actor. Every other consumer of this trigger ignores the field.
                         if (e.sourceId === ownerId && !e.viaDebuffInflictedReaction)
-                            enqueue(intent);
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                            });
                     });
                     bus.on('dot-applied', (e) => {
-                        if (e.sourceId === ownerId) enqueue(intent);
+                        if (e.sourceId === ownerId)
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                            });
                     });
                     break;
                 case 'on-ally-debuff-inflicted':
@@ -3288,9 +3309,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // The trigger stamped the retaliation target (reflect/revenge, FrontLine's
             // on-enemy-charged-cast, Sentinel's on-ally-crit, …) — route there directly.
             victimIds = [intent.eventCtx.counterTargetId];
+        } else if (intent.eventCtx?.debuffVictimId !== undefined) {
+            // Insidiousness (on-debuff-inflicted): route to the enemy this infliction actually
+            // landed on. Before this clause the trigger fell through to the fallback below and
+            // always hit opposing[0], so an AoE debuffer dumped every proc onto enemy slot 1.
+            victimIds = [intent.eventCtx.debuffVictimId];
         } else {
-            // No specific triggering enemy (start/end-of-round, on-deal-damage, on-debuff-
-            // inflicted with plain `target:'enemy'`). In a POSITIONAL battle route to a real
+            // No specific triggering enemy (start/end-of-round, on-deal-damage). In a
+            // POSITIONAL battle route to a real
             // living opposing actor — NEVER the vestigial DPS-dummy sink (ctx.enemy.id), which
             // stays alive whenever the team fields an ally-targeting ship (healer) and would
             // otherwise leak a phantom "→ enemy" line into the log (repeated once per fire).

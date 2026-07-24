@@ -4013,3 +4013,75 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
         expect(calls).toHaveLength(2);
     });
 });
+
+// ----------------------------------------------------------------------
+// Insidiousness routing: an on-debuff-inflicted DAMAGE proc must land on the enemy
+// that was actually debuffed (eventCtx.debuffVictimId), not the first living opposing
+// actor. The listener stamps the field; this covers the executor side.
+// ----------------------------------------------------------------------
+describe('on-debuff-inflicted damage branch (debuffVictimId routing)', () => {
+    type Call = { owner: string; victim: string; mult: number };
+
+    const ownerRuntime = (): PlayerActorRuntime =>
+        ({ actor: { id: 'owner' } as CombatActor }) as unknown as PlayerActorRuntime;
+
+    const makeCtx = (over: Partial<IntentExecContext> = {}) => {
+        const calls: Call[] = [];
+        const ctx = {
+            round: 1,
+            enemy: { id: 'dummy' } as CombatActor,
+            enemyId: 'dummy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['owner', ownerRuntime()]]),
+            grantAllyCharges: () => {},
+            removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['owner'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            oncePerRoundConsumed: new Set<string>(),
+            livingOpposingActorIds: () => ['enemy1', 'enemy2'],
+            applyReactiveDamage: (owner: string, victim: string, _id: string, mult: number) =>
+                calls.push({ owner, victim, mult }),
+            ...over,
+        } as unknown as IntentExecContext;
+        return { ctx, calls };
+    };
+
+    const intent = (debuffVictimId?: string): Intent => ({
+        ownerId: 'owner',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'equip-implant-INSIDIOUSNESS',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-debuff-inflicted',
+            conditions: [],
+            config: { type: 'damage', multiplier: 70, hits: 1 },
+        },
+        ...(debuffVictimId ? { eventCtx: { debuffVictimId } } : {}),
+    });
+
+    it('routes to the debuffed enemy, NOT the first living opposing actor', () => {
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy2'), ctx);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ owner: 'owner', victim: 'enemy2', mult: 70 });
+    });
+
+    it('keeps the first-living-opposing fallback when no debuff victim was stamped', () => {
+        // Start/end-of-round damage passives (Judge/Chakara) have no triggering counterparty
+        // and must keep routing to opposing[0] — this guards that fallback.
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent(undefined), ctx);
+        expect(calls).toHaveLength(1);
+        expect(calls[0].victim).toBe('enemy1');
+    });
+});
