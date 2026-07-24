@@ -429,6 +429,23 @@ export type CombatEvent =
               shieldPool: number;
           };
       }
+    /** LOG-ONLY: an end-of-round snapshot of the statuses one actor actually still carries,
+     *  read live from the StatusEngine (`statusNames`). Emitted once per actor at the round
+     *  tail, after every decrement and drain has settled. Carries NO `ReactiveStamp`; NO combat
+     *  listener subscribes to it (same log-only contract as `stats-snapshot`).
+     *
+     *  Exists because the Simulator's per-round buff/debuff chips were assembled by ACCUMULATING
+     *  `buff-applied`/`debuff-applied`/`dot-applied`. That has no removal path, so a cleansed,
+     *  purged, stolen or expired status stayed listed for the rest of the battle. This snapshot is
+     *  authoritative for the actors it names — the assembler prefers it over accumulation — so
+     *  removal is reflected without needing a name-carrying event on every removal seam. */
+    | {
+          type: 'status-snapshot';
+          actorId: string;
+          round: number;
+          buffNames: string[];
+          debuffNames: string[];
+      }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome
      *  (present only when that hit critted). Emitted once PER HIT of the enemy's

@@ -8452,6 +8452,28 @@ export function runCombat(input: CombatEngineInput): {
         drainIntentsFor('player');
         drainIntentsFor('enemy');
 
+        // LOG-ONLY per-actor status snapshot (see the events.ts doc). Emitted at the round TAIL —
+        // after the post-round death drain, round-ended reactives AND their drains — so it reports
+        // the statuses that genuinely survive into the next round. Team-symmetric: one emit per
+        // actor in `allActors`, both sides. The DPS dummy keys its debuffs under the sentinel store
+        // rather than its actor id, so its lists come back empty; harmless, since it is not on the
+        // board and the assembler only reads roster ids.
+        for (const a of allActors) {
+            // Reuses the engine's established three-source name reads (scheduled snapshot +
+            // payload-carrying timed + aura/accum ability statuses) rather than a bespoke store
+            // walk, so the chips agree with every other live name-gate in this file.
+            // `enemyDebuffNamesForTarget` already folds the DoT/bomb families from the actor's own
+            // entry containers using the same synthesized base names the assembler labels with
+            // (Corrosion / Inferno / Bomb / Damage over Time).
+            bus.emit({
+                type: 'status-snapshot',
+                actorId: a.id,
+                round: r,
+                buffNames: selfBuffNamesForOwners(statusEngine, [a.id]),
+                debuffNames: enemyDebuffNamesForTarget(a),
+            });
+        }
+
         // Post-drain re-fold (round-tail ordering fix): end-of-round reactive-damage procs
         // (Rhodium's most-buffed-enemy purge, Incinerator's enemy-debuff AoE) credit into
         // `roundDamage` via `creditDamage` DURING the `round-ended` drain above — AFTER this

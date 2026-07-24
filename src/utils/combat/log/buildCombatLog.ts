@@ -199,8 +199,17 @@ function createBuildContext(
             }
             if (trigger) {
                 trigger.reactions.push(entry);
+            } else if (triggerTurn) {
+                // The stamped turn EXISTS but has produced no non-reactive entry yet, so there is
+                // nothing to nest under. This is the `start-of-turn` grant window (SP-G G2 drains
+                // buff/shield/heal grants BEFORE the acting owner casts — the SHIELD gear set's
+                // 4%-max-HP pool, Fortifying Shroud's Defense Up): the effect genuinely belongs to
+                // THIS actor's turn. Attach it as a top-level entry of that turn rather than
+                // exiling it to endOfRound, where it read as an unexplained shield appearing
+                // detached from the ship that generated it.
+                triggerTurn.entries.push(entry);
             } else if (round) {
-                // No matching turn / no non-reactive trigger — fall back to endOfRound.
+                // No matching turn at all (turn-less drain window) — fall back to endOfRound.
                 round.endOfRound.push(entry);
             }
         },

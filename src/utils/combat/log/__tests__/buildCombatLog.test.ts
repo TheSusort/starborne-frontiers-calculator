@@ -1540,9 +1540,13 @@ describe('buildCombatLog', () => {
         expect(turn.entries[1].reactions[0].note).toBe('Counter');
     });
 
-    it('stamped event whose turn has no non-reactive trigger → endOfRound (no crash)', () => {
-        // A turn opens for A but produces NO non-reactive entry, then a stamped
-        // reaction arrives. With no trigger entry, it falls back to endOfRound.
+    it("stamped event whose OPEN turn has no non-reactive trigger yet → that turn's entries", () => {
+        // A turn opens for A but has produced NO non-reactive entry yet, then a stamped
+        // reaction arrives. There is nothing to nest under, but the turn EXISTS and the
+        // effect belongs to it — this is the `start-of-turn` grant window (SP-G G2 drains
+        // buff/shield/heal grants before the acting owner casts). It becomes a top-level
+        // entry of A's turn. Previously it was exiled to endOfRound, which detached the
+        // SHIELD gear set's per-turn pool from the ship that generated it.
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1557,6 +1561,35 @@ describe('buildCombatLog', () => {
                 triggerActorId: 'A',
             }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
+        const log = buildCombatLog(events, roster, initialCharge);
+        const round = log[0];
+        expect(round.endOfRound).toHaveLength(0);
+        expect(round.turns[0].entries).toHaveLength(1);
+        expect(round.turns[0].entries[0].kind).toBe('buff');
+        expect(round.turns[0].entries[0].note).toBe('Counter');
+    });
+
+    it('stamped event naming a turn that does NOT exist this round → endOfRound (no crash)', () => {
+        // The turn-less drain windows (post-round death drain, round-ended reactives) stamp
+        // `duringTurnOf` with an actor that took no turn this round. There is no turn to attach
+        // to, so endOfRound remains the correct fallback.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({
+                type: 'buff-applied',
+                actorId: 'B',
+                round: 1,
+                buffName: 'Counter',
+                duration: 1,
+                reactive: true,
+                duringTurnOf: 'Z',
+                triggerActorId: 'Z',
+            }),
             ev({ type: 'round-ended', round: 1 }),
         ];
         expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();

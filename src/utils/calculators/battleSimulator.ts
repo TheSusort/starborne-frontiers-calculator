@@ -141,10 +141,14 @@ export interface ShipRoundState {
     alive: boolean;
     activeBuffs: string[];
     /**
-     * Infliction-only: there is no `debuff-expired` event in the stream, so once a debuff is
-     * added it accumulates and persists for the rest of the battle. This is asymmetric with
-     * `activeBuffs`, which DOES expire via `buff-expired`. Consumers should not expect debuffs
-     * to clear over time.
+     * The debuffs (including DoT/bomb families, one chip per family) this actor still carries at
+     * the END of this round, sourced from the engine's authoritative `status-snapshot`. Reflects
+     * removal — cleanse, purge, steal, natural expiry, duration reduction — because the engine
+     * reads its live status stores rather than accumulating infliction events.
+     *
+     * Was infliction-only before: it accumulated `debuff-applied`/`dot-applied` with no removal
+     * path, so a cleansed debuff stayed listed for the whole battle and the Simulator's ship panel
+     * contradicted the combat log. `activeBuffs` comes from the same snapshot.
      */
     activeDebuffs: string[];
 }
@@ -242,11 +246,18 @@ export const LOG_EVENT_TYPES = [
     'cleanse-performed',
     'purge-performed',
     'ship-destroyed',
-    // Log-only reactive procs (drain-time damage/heal that emit no ability-performed/heal-performed).
+    // Log-only reactive procs (drain-time damage/heal/cleanse that emit no
+    // ability-performed/heal-performed/cleanse-performed). Every LOG-ONLY twin MUST be listed
+    // here: `buildCombatLog` has a handler keyed on the type, but the bus only subscribes from
+    // THIS list, so an omission makes that handler dead code and the reaction invisible.
     'reactive-damage-performed',
     'reactive-heal-performed',
+    'reactive-cleanse-performed',
     // Task 6: log-only per-turn acting-actor stat snapshot (no listener subscribes).
     'stats-snapshot',
+    // Log-only per-actor end-of-round status snapshot — authoritative source for the
+    // per-round activeBuffs/activeDebuffs chips (no listener subscribes).
+    'status-snapshot',
 ] as const satisfies readonly CombatEvent['type'][];
 
 // Compile-time proof that LOG_EVENT_TYPES ⊇ ASSEMBLED_EVENT_TYPES (bus subscribes to LOG;
@@ -342,6 +353,11 @@ export function assembleBattleResult(args: {
         const roundEvents = events.filter((e) => 'round' in e && e.round === round);
 
         // Buff/debuff transitions for this round (apply before snapshotting the round).
+        //
+        // This accumulation is the FALLBACK. It has no removal path for debuffs, so it is
+        // overwritten below by the engine's authoritative end-of-round `status-snapshot` for every
+        // actor that emits one. It survives only for hand-authored event streams (unit tests that
+        // emit apply-events without running the engine), which have no snapshot to prefer.
         for (const e of roundEvents) {
             if (e.type === 'buff-applied') {
                 ensure(activeBuffs, e.actorId).add(e.buffName);
@@ -354,6 +370,17 @@ export function assembleBattleResult(args: {
                 // like debuff-applied). Labeled by family so re-applications collapse to one chip.
                 ensure(activeDebuffs, e.targetId).add(DOT_DEBUFF_LABELS[e.dotType]);
             }
+        }
+
+        // Authoritative overwrite: the engine's live end-of-round read per actor (DoT/bomb families
+        // already folded in engine-side). Emitted at the round TAIL, so it already reflects
+        // cleanse/purge/steal/expiry/duration changes the apply-only accumulation above cannot see.
+        // REPLACES (never merges with) the accumulated set for exactly the actors named — merging
+        // would resurrect the very entries this is here to remove.
+        for (const e of roundEvents) {
+            if (e.type !== 'status-snapshot') continue;
+            activeBuffs.set(e.actorId, new Set(e.buffNames));
+            activeDebuffs.set(e.actorId, new Set(e.debuffNames));
         }
 
         // SP-F F1: damage dealt per attacker this round, re-derived from `perRoundPerDealt`
