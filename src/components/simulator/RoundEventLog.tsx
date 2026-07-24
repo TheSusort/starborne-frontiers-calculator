@@ -158,7 +158,9 @@ const formatters: Record<
         return who;
     },
     control: noteLine,
-    cleanse: noteLine,
+    // A reactive cleanse carries the cleansed ally as a target → "AEGIS → Ally: cleansed N";
+    // a cast-time cleanse has no target → collapses to "AEGIS: cleansed N" (unchanged).
+    cleanse: sourceTargetNoteLine,
     purge: noteLine,
     'charge-changed': noteLine,
     'buff-expired': noteLine,

@@ -203,6 +203,20 @@ export type CombatEvent =
           amount: number;
           perTarget: { targetId: string; amount: number }[];
       } & ReactiveStamp)
+    /** LOG-ONLY: a drain-time REACTIVE cleanse resolved (executeIntent cleanse branch — e.g.
+     *  AEGIS's on-ally-shield-destroyed "cleanses all debuffs", Cultivator's on-ally-crit cleanse).
+     *  The reactive cleanse credits `cleanseCount` but emits NO `cleanse-performed` (chain guard —
+     *  that event drives on-enemy-cleansed / on-own-cleanse listeners). This event exists SOLELY so
+     *  buildCombatLog can surface the reaction (previously the reactive cleanse was invisible in the
+     *  log): NO combat listener subscribes to it, so it can never chain. `casterId` = the reacting
+     *  owner; `perTarget` = per-recipient count of debuffs ACTUALLY removed (only recipients with
+     *  >= 1 removal are listed). */
+    | ({
+          type: 'reactive-cleanse-performed';
+          casterId: string;
+          round: number;
+          perTarget: { targetId: string; count: number }[];
+      } & ReactiveStamp)
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the number of
      *  debuffs ACTUALLY removed. Team-symmetric (the enemy-cleanse-lift, #166-era): BOTH the
      *  player path and the enemy (event-only) path perform REAL removal via the side-agnostic
