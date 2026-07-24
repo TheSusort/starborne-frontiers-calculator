@@ -6195,6 +6195,37 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
     const victimsOf = (result: ReturnType<typeof simulateBattle>): string[] =>
         insidiousnessProcs(result).map((r) => r.victim);
 
+    /** EVERY reactive `attack` row attributed to the carrier, whatever its target arity. The
+     *  negative tests assert on this rather than on `insidiousnessProcs`, whose
+     *  `targets.length === 1` discriminator is load-bearing for the positive test: a regression
+     *  that bundled both victims into ONE two-target reactive row would be filtered out and make
+     *  "no reactive damage" pass vacuously. */
+    function reactiveAttackRowCount(result: ReturnType<typeof simulateBattle>): number {
+        const carrierId = result.roster.find((r) => r.side === 'player')!.actorId;
+        let n = 0;
+        for (const round of result.combatLog) {
+            for (const turn of round.turns) {
+                for (const entry of turn.entries) {
+                    for (const re of entry.reactions) {
+                        if (re.kind === 'attack' && re.actorId === carrierId) n++;
+                    }
+                }
+            }
+        }
+        return n;
+    }
+
+    /** The OTHER vacuity path a "zero reactive damage" assertion has: the scenario never ran at
+     *  all (fixture drift stops debuffs landing, or the carrier never takes a turn), which would
+     *  make zero procs trivially true no matter what the implant does. Counts the carrier's landed
+     *  debuff rows so each negative test can prove its own premise. */
+    function landedDebuffCount(result: ReturnType<typeof simulateBattle>): number {
+        const carrierId = result.roster.find((r) => r.side === 'player')!.actorId;
+        return flattenCombatLog(result).filter(
+            (e) => e.kind === 'debuff' && e.actorId === carrierId
+        ).length;
+    }
+
     afterEach(() => resetRateGateRng());
 
     it('proc passes → EVERY debuffed enemy takes exactly one Insidiousness hit per attack', () => {
@@ -6222,7 +6253,12 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
 
     it('proc fails → NO enemy takes Insidiousness damage', () => {
         setKeyedRng(() => 0.99); // 0.99 > 0.21 → the proc fails; landing (clamped to 1) still passes
-        expect(victimsOf(run(true, [0, 0]))).toEqual([]);
+        const result = run(true, [0, 0]);
+        // Premise: the attack ran and its debuffs landed — otherwise "no procs" proves nothing.
+        expect(landedDebuffCount(result)).toBeGreaterThan(0);
+        expect(victimsOf(result)).toEqual([]);
+        // Arity-agnostic: not even a bundled multi-victim reactive row.
+        expect(reactiveAttackRowCount(result)).toBe(0);
     });
 
     it('an enemy that resisted the debuff takes no Insidiousness damage', () => {
@@ -6234,10 +6270,18 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
         const victims = victimsOf(result);
         expect(victims.length).toBeGreaterThan(0);
         expect(victims).not.toContain(foeB);
+        // No bundled multi-victim row could be hiding a hit on foe-b: every reactive row the
+        // carrier emitted is accounted for by the single-target rows inspected above.
+        expect(reactiveAttackRowCount(result)).toBe(victims.length);
     });
 
     it('no implant → no reactive damage at all (control)', () => {
         setKeyedRng(() => 0);
-        expect(victimsOf(run(false, [0, 0]))).toEqual([]);
+        const result = run(false, [0, 0]);
+        // Same premise guard: the carrier still cast and still debuffed both enemies — the ONLY
+        // difference from the passing case is the absent implant.
+        expect(landedDebuffCount(result)).toBeGreaterThan(0);
+        expect(victimsOf(result)).toEqual([]);
+        expect(reactiveAttackRowCount(result)).toBe(0);
     });
 });
