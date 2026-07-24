@@ -3357,6 +3357,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 : undefined;
         for (const victimId of victimIds) {
             if (victimId === undefined) continue;
+            // procScope:'per-attack' (Insidiousness): ONE hit per victim per attack. The trigger
+            // fires once per debuff APPLICATION, so a cast inflicting two debuffs on the same
+            // enemy (Curator's Attack Down III + Crit Power Down III) would otherwise hit that
+            // enemy twice under the single shared verdict — 200% damage for a 100% implant.
+            // Keyed with the victim so a DIFFERENT debuffed enemy still takes its own hit; rides
+            // `reactionFiredThisAttack`, which the engine clears at each actor turn-start beside
+            // the proc verdict cache. Absent set (unit ctxs) → no dedupe, byte-identical.
+            if (intent.ability.procScope === 'per-attack') {
+                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}`;
+                if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
+                ctx.reactionFiredThisAttack?.add(firedKey);
+            }
             const outcome = ctx.applyReactiveDamage?.(
                 intent.ownerId,
                 victimId,

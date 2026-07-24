@@ -4129,6 +4129,7 @@ describe("procScope 'per-attack' verdict cache", () => {
             oncePerRoundConsumed: new Set<string>(),
             procChanceGates: new Map(),
             procDecisionThisAttack: new Map<string, boolean>(),
+            reactionFiredThisAttack: new Set<string>(),
             applyReactiveDamage: (_o: string, victim: string) => calls.push(victim),
             ...over,
         } as unknown as IntentExecContext;
@@ -4171,12 +4172,31 @@ describe("procScope 'per-attack' verdict cache", () => {
         expect(calls).toEqual([]);
     });
 
+    it('hits each victim ONCE per attack even when the cast inflicts two debuffs on it', () => {
+        // Curator applies Attack Down III AND Crit Power Down III to the same enemy → two
+        // debuff-applied events → two intents sharing one verdict. Without the per-victim
+        // dedupe the enemy would take the 100% hit twice (200% for a 100% implant).
+        pinKeyedRng(0.1);
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy1', true), ctx);
+        executeIntent(intent('enemy1', true), ctx);
+        executeIntent(intent('enemy2', true), ctx);
+        executeIntent(intent('enemy2', true), ctx);
+        expect(calls).toEqual(['enemy1', 'enemy2']);
+    });
+
     it('draws again once the cache is cleared (next attack)', () => {
         const rng = pinKeyedRng(0.1);
         const cache = new Map<string, boolean>();
-        const { ctx, calls } = makeCtx({ procDecisionThisAttack: cache });
+        const fired = new Set<string>();
+        const { ctx, calls } = makeCtx({
+            procDecisionThisAttack: cache,
+            reactionFiredThisAttack: fired,
+        });
         executeIntent(intent('enemy1', true), ctx);
-        cache.clear(); // the engine does this at each actor turn-start
+        // The engine clears both at each actor turn-start.
+        cache.clear();
+        fired.clear();
         executeIntent(intent('enemy1', true), ctx);
         expect(rng.draws()).toBe(2);
         expect(calls).toEqual(['enemy1', 'enemy1']);

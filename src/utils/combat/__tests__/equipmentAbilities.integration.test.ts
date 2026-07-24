@@ -6049,3 +6049,195 @@ describe('Tasks 1.5 + 3.3 — Voidfire Catalyst: detonationDamage + bombSplashDa
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// Insidiousness: one roll per attack, applied to every debuffed enemy (all-or-none)
+// ---------------------------------------------------------------------------
+//
+// A Curator-shaped carrier (AoE damage + two inflicted debuffs, `all` / Pattern-All) wearing
+// legendary Insidiousness attacks two enemies. Four debuff applications per turn used to mean
+// four 21% rolls that all landed on enemy slot 1; now it is ONE roll whose hit lands on each
+// enemy the debuff actually reached.
+describe('Insidiousness integration — per-attack roll, all debuffed enemies', () => {
+    const IMPLANT_ID = 'insid-legendary';
+
+    const insidPiece = makePiece({
+        id: IMPLANT_ID,
+        slot: 'implant_major',
+        rarity: 'legendary',
+        setBonus: 'INSIDIOUSNESS',
+    });
+    const getGearPiece = makeGetGearPiece({ [IMPLANT_ID]: insidPiece });
+
+    /** Curator-shaped AoE debuffer. `withImplant` toggles the Insidiousness major implant. */
+    function makeCarrier(withImplant: boolean): Ship {
+        return makeShip({
+            id: 'carrier',
+            name: 'Carrier',
+            type: 'Debuffer',
+            baseStats: {
+                hp: 0,
+                attack: 0,
+                defence: 0,
+                hacking: 200,
+                security: 100,
+                crit: 0,
+                critDamage: 0,
+                speed: 100,
+            } as Ship['baseStats'],
+            equipment: {},
+            implants: withImplant ? { implant_major: IMPLANT_ID } : {},
+            refits: [],
+            affinity: 'antimatter',
+            activeSkillText:
+                'This Unit deals <unit-damage>60% damage</unit-damage> to all enemies, and ' +
+                'inflicts <unit-skill>Attack Down III</unit-skill> and ' +
+                '<unit-skill>Crit Power Down III</unit-skill> for 2 turns.',
+            chargeSkillCharge: 0,
+            activeTarget: 'all',
+            activePattern: 'Pattern-All',
+        } as Partial<Ship>);
+    }
+
+    /** Inert enemy: no active damage, high HP so nothing dies mid-test. `security` decides
+     *  whether the carrier's inflicted debuffs land on it. */
+    function makeEnemy(id: string): Ship {
+        return makeShip({
+            id,
+            name: id,
+            type: 'Attacker',
+            baseStats: {
+                hp: 0,
+                attack: 0,
+                defence: 0,
+                hacking: 0,
+                security: 0,
+                crit: 0,
+                critDamage: 0,
+                speed: 1,
+            } as Ship['baseStats'],
+            equipment: {},
+            implants: {},
+            refits: [],
+            affinity: 'antimatter',
+            activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage> to one enemy.',
+            chargeSkillCharge: 0,
+            activeTarget: 'front',
+            activePattern: 'Pattern-Base',
+        } as Partial<Ship>);
+    }
+
+    const place = (ship: Ship, position: Position, security: number): BattlePlacement => ({
+        ship,
+        position,
+        statOverrides: {
+            attack: 5_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
+            security,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+    });
+
+    /** Run 3 rounds: carrier (M4 player) vs two enemies at M4/M3. */
+    function run(withImplant: boolean, enemySecurity: [number, number]) {
+        return simulateBattle(
+            {
+                playerTeam: [place(makeCarrier(withImplant), 'M4', 100)],
+                enemyTeam: [
+                    place(makeEnemy('foe-a'), 'M4', enemySecurity[0]),
+                    place(makeEnemy('foe-b'), 'M3', enemySecurity[1]),
+                ],
+                rounds: 3,
+            },
+            getGearPiece
+        );
+    }
+
+    /** One row per Insidiousness proc: a reactive `attack` entry attributed to the carrier with a
+     *  single target, paired with the cast damage the SAME attack dealt that victim (so the test
+     *  can prove the row really is the 100%-multiplier implant hit and not a stray cast row). The
+     *  carrier's own AoE cast is a NON-reactive entry carrying both victims, so it never matches. */
+    type ProcRow = { victim: string; amount: number; castAmount: number; turnIndex: number };
+
+    function insidiousnessProcs(result: ReturnType<typeof simulateBattle>): ProcRow[] {
+        const carrierId = result.roster.find((r) => r.side === 'player')!.actorId;
+        const rows: ProcRow[] = [];
+        let turnIndex = 0;
+        for (const round of result.combatLog) {
+            for (const turn of round.turns) {
+                if (turn.actorId !== carrierId) continue;
+                turnIndex++;
+                for (const entry of turn.entries) {
+                    for (const re of entry.reactions) {
+                        if (re.kind !== 'attack' || re.actorId !== carrierId) continue;
+                        if (re.targets.length !== 1) continue;
+                        const amount = re.targets[0].amount ?? 0;
+                        if (amount <= 0) continue;
+                        const victim = re.targets[0].targetId;
+                        const cast = entry.targets.find((t) => t.targetId === victim);
+                        rows.push({
+                            victim,
+                            amount,
+                            castAmount: cast?.amount ?? 0,
+                            turnIndex,
+                        });
+                    }
+                }
+            }
+        }
+        return rows;
+    }
+
+    const victimsOf = (result: ReturnType<typeof simulateBattle>): string[] =>
+        insidiousnessProcs(result).map((r) => r.victim);
+
+    afterEach(() => resetRateGateRng());
+
+    it('proc passes → EVERY debuffed enemy takes exactly one Insidiousness hit per attack', () => {
+        setKeyedRng(() => 0); // every keyed gate fires: debuffs land, the 21% proc passes
+        const procs = insidiousnessProcs(run(true, [0, 0]));
+
+        // 3 rounds → 3 carrier attacks → BOTH enemies hit on each = 6 rows. Before the fix this
+        // was 4 rolls/attack all routed to enemy slot 1, so enemy 2 never appeared here.
+        expect(procs).toHaveLength(6);
+        const perTurn = [1, 2, 3].map((t) => procs.filter((r) => r.turnIndex === t));
+        for (const turnRows of perTurn) {
+            // All-or-none within one attack: two victims, each hit exactly once — never a subset,
+            // and never twice (the two debuffs on one enemy share a single verdict AND a single hit).
+            expect(turnRows).toHaveLength(2);
+            expect(new Set(turnRows.map((r) => r.victim)).size).toBe(2);
+        }
+
+        // Each row really is the 100%-multiplier implant hit: the cast is 60%, so the proc must be
+        // exactly 100/60 of the cast damage on the same victim in the same attack.
+        for (const row of procs) {
+            expect(row.castAmount).toBeGreaterThan(0);
+            expect(row.amount / row.castAmount).toBeCloseTo(100 / 60, 5);
+        }
+    });
+
+    it('proc fails → NO enemy takes Insidiousness damage', () => {
+        setKeyedRng(() => 0.99); // 0.99 > 0.21 → the proc fails; landing (clamped to 1) still passes
+        expect(victimsOf(run(true, [0, 0]))).toEqual([]);
+    });
+
+    it('an enemy that resisted the debuff takes no Insidiousness damage', () => {
+        setKeyedRng(() => 0);
+        // foe-b's security dwarfs the carrier's hacking → 0% landing chance → no debuff-applied
+        // for it → no Insidiousness proc against it, while foe-a is still debuffed and hit.
+        const result = run(true, [0, 1_000_000]);
+        const foeB = result.roster.find((r) => r.side === 'enemy' && r.name === 'foe-b')!.actorId;
+        const victims = victimsOf(result);
+        expect(victims.length).toBeGreaterThan(0);
+        expect(victims).not.toContain(foeB);
+    });
+
+    it('no implant → no reactive damage at all (control)', () => {
+        setKeyedRng(() => 0);
+        expect(victimsOf(run(false, [0, 0]))).toEqual([]);
+    });
+});
