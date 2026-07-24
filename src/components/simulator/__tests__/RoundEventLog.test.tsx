@@ -202,6 +202,96 @@ describe('RoundEventLog', () => {
         expect(screen.getByText('No events this round.')).toBeInTheDocument();
     });
 
+    // Helper: a single-turn round carrying one entry, for the per-kind formatter tests below.
+    const oneEntryRound = (
+        entry: CombatLogRound['turns'][number]['entries'][number]
+    ): CombatLogRound => ({
+        round: 1,
+        startOfRound: [],
+        endOfRound: [],
+        turns: [
+            { actorId: entry.actorId ?? 'nova', chargeBefore: 0, chargeMax: 0, entries: [entry] },
+        ],
+    });
+
+    it('death: resolves the killer id to a ship name', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'death',
+                    actorId: 'graphite',
+                    targets: [{ targetId: 'hexa' }],
+                    reactions: [],
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Graphite: destroyed by Enemy Hexa/)).toBeInTheDocument();
+    });
+
+    it('death: renders plain "destroyed" when there is no killer', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'death',
+                    actorId: 'graphite',
+                    targets: [],
+                    reactions: [],
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Graphite: destroyed$/)).toBeInTheDocument();
+    });
+
+    it('debuff: shows attacker → target when the debuff lands on another ship', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'debuff',
+                    actorId: 'selenite',
+                    targets: [{ targetId: 'nova' }],
+                    reactions: [],
+                    note: 'Concentrate Fire',
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Enemy Selenite → Nova: Concentrate Fire/)).toBeInTheDocument();
+    });
+
+    it('dot-applied: shows attacker → target with the tiered note', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'dot-applied',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'hexa' }],
+                    reactions: [],
+                    note: 'corrosion III ×2',
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Nova → Enemy Hexa: corrosion III ×2/)).toBeInTheDocument();
+    });
+
+    it('debuff: collapses to just the actor when the target is itself (self-debuff)', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'debuff',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'nova' }],
+                    reactions: [],
+                    note: 'Overload',
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/^Nova: Overload$/)).toBeInTheDocument();
+    });
+
     it('shows a collapsed stats summary under a turn and expands to the full block', async () => {
         const round: CombatLogRound = {
             round: 1,

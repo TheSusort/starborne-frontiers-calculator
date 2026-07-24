@@ -2650,11 +2650,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.bus.emit({
                     type: 'debuff-resisted',
                     // sourceId = the inflictor (PR-J) so an on-debuff-resisted reaction (Vindicator)
-                    // can route retaliation back at it; the round display ignores it.
+                    // can route retaliation back at it.
                     sourceId: intent.ownerId,
-                    // debuff-resisted feeds the round display only — no per-target counter
-                    // routing needed (unchanged even for the recipient-targeted fan-out above).
-                    targetId: ctx.enemy.id,
+                    // The RESOLVED target the debuff was aimed at (enemy-highest-attack /
+                    // counter-infliction route), falling back to the default enemy only when no
+                    // specific victim resolved — so the combat log names the ship that resisted
+                    // ("src → <that ship>: X resisted") instead of the dummy sink id.
+                    targetId: debuffTargetId,
                     round: ctx.round,
                     buffName: cfg.buffName,
                 });
@@ -2715,6 +2717,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 round: ctx.round,
                 dotType: cfg.dotType,
                 stacks: cfg.stacks,
+                tier: cfg.tier,
             });
         };
 

@@ -1,5 +1,15 @@
 import { CombatEvent, CombatEventType } from '../events';
+import { dotTierNumeral } from '../debuffImmunity';
+import type { DoTType } from '../../../types/calculator';
 import { CombatLogEntry, CombatLogRound, CombatLogTarget, CombatLogTurn } from './types';
+
+/** Combat-log note for a DoT apply/tick line: "{dotType} {numeral} ×{stacks}" (numeral omitted
+ *  for bomb/generic and non-canonical magnitudes). e.g. ('corrosion', 9, 3) → "corrosion III ×3";
+ *  ('bomb', 200, 1) → "bomb ×1". */
+const dotNote = (dotType: DoTType, tier: number | undefined, stacks: number): string => {
+    const numeral = tier === undefined ? '' : dotTierNumeral(dotType, tier);
+    return `${dotType}${numeral ? ` ${numeral}` : ''} ×${stacks}`;
+};
 
 export interface RosterEntry {
     actorId: string;
@@ -537,7 +547,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             actorId: e.sourceId,
             targets: [{ targetId: e.targetId }],
             reactions: [],
-            note: `${e.dotType} ×${e.stacks}`,
+            note: dotNote(e.dotType, e.tier, e.stacks),
             ...(ctx.consumePendingSkill() ?? {}),
         };
         ctx.attachEntry(entry);
@@ -552,7 +562,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             actorId: e.targetId,
             targets: [{ targetId: e.targetId, amount: e.damage }],
             reactions: [],
-            note: `${e.dotType} ×${e.stacks}`,
+            note: dotNote(e.dotType, e.tier, e.stacks),
         };
         ctx.attachEntry(entry);
     },
@@ -626,13 +636,13 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
 
     'ship-destroyed': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
-        const note = e.killerId ? `destroyed by ${e.killerId}` : undefined;
+        // Carry the killer as a TARGET (not a raw id baked into the note) so the renderer's
+        // `death` formatter resolves it to a ship name via nameOf.
         const entry: CombatLogEntry = {
             kind: 'death',
             actorId: e.actorId,
-            targets: [],
+            targets: e.killerId ? [{ targetId: e.killerId }] : [],
             reactions: [],
-            ...(note !== undefined ? { note } : {}),
         };
         ctx.attachEntry(entry);
     },

@@ -164,4 +164,52 @@ describe('generic DoT', () => {
         // 2 (applier-a) + 1 (applier-b) = 3; the no-ctx entry's 5 stacks are excluded.
         expect(tickedStacks).toBe(3);
     });
+
+    // Combat-log fidelity: distinct tiers of the SAME dotType must NOT be summed into one tick
+    // line — tickDoTs emits one `emitTicked(dotType, damage, stacks, tier)` per (dotType, tier)
+    // group so the log can show "corrosion I ×n" and "corrosion III ×m" separately. Same-tier
+    // entries still coalesce, and the total credited damage is unchanged.
+    it('emits one tick per (dotType, tier) group; same-tier entries coalesce', () => {
+        const ctx = {
+            effectiveAttack: 100,
+            dotMult: 1,
+            affinityMult: 1,
+            effectiveDefence: 0,
+            effectiveMaxHp: 0,
+            outgoingHealPct: 0,
+            incomingHealPct: 0,
+        };
+        const corrosion: ActiveDoTStack[] = [
+            { stacks: 1, tier: 3, remainingRounds: 2, sourceId: 'a' }, // Corrosion I
+            { stacks: 2, tier: 9, remainingRounds: 2, sourceId: 'a' }, // Corrosion III
+            { stacks: 1, tier: 3, remainingRounds: 2, sourceId: 'b' }, // another Corrosion I → coalesces
+        ];
+        const ticks: Array<{ dotType: string; damage: number; stacks: number; tier: number }> = [];
+        let credited = 0;
+        tickDoTs({
+            corrosionEntries: corrosion,
+            infernoEntries: [],
+            genericDoTEntries: [],
+            enemyHp: 1_000, // corrosionBaseHp = 1000 → tier/100 * 1000 = 10 * tier% per stack
+            ctxFor: () => ctx,
+            emitTicked: (dotType, damage, stacks, tier) => {
+                ticks.push({ dotType, damage, stacks, tier });
+            },
+            credit: (_s, dotType, damage) => {
+                if (dotType === 'corrosion') credited += damage;
+            },
+        });
+
+        const corrosionTicks = ticks.filter((t) => t.dotType === 'corrosion');
+        // Two groups: tier 3 (I) and tier 9 (III) — NOT one summed line.
+        expect(corrosionTicks).toHaveLength(2);
+        const t1 = corrosionTicks.find((t) => t.tier === 3);
+        const t3 = corrosionTicks.find((t) => t.tier === 9);
+        // tier 3: two stacks total (a:1 + b:1), damage = 2 * 0.03 * 1000 = 60.
+        expect(t1).toMatchObject({ stacks: 2, damage: 60 });
+        // tier 9: two stacks (a:2), damage = 2 * 0.09 * 1000 = 180.
+        expect(t3).toMatchObject({ stacks: 2, damage: 180 });
+        // Total credited is unchanged by the split.
+        expect(credited).toBe(240);
+    });
 });

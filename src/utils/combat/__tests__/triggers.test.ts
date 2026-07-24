@@ -2818,15 +2818,14 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c Task 6 (incidental cleanup — Task 5 code review):
-//
-// A debuff intent WITH eventCtx.counterTargetId whose owner's
-// landsTimedEnemyApplication returns false must emit `debuff-resisted`
-// with targetId === ctx.enemy.id (locks the deliberate resisted-path
-// asymmetry: the resisted path always uses the default ctx.enemy.id,
-// not counterTargetId).
+// Combat-log fidelity (#1): a RESISTED reactive debuff reports the RESOLVED
+// target it was aimed at (eventCtx.counterTargetId / enemy-highest-attack),
+// falling back to ctx.enemy.id only when no specific victim resolved — so the
+// log names the ship that resisted instead of the dummy sink. (This SUPERSEDES
+// the earlier Task-5 "always ctx.enemy.id" lock: the resisted target is now the
+// same debuffTargetId the applied path uses.)
 // ----------------------------------------------------------------------
-describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 cleanup lock)', () => {
+describe('debuff-resisted reports the resolved counter target (combat-log fidelity)', () => {
     const makeResistableDebuffIntent = (counterTargetId: string): Intent => ({
         ownerId: 'attacker',
         sourceSlot: 'passive',
@@ -2849,7 +2848,7 @@ describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 c
         eventCtx: { counterTargetId },
     });
 
-    it('debuff-resisted emits with targetId === ctx.enemy.id even when counterTargetId is set', () => {
+    it('debuff-resisted emits with targetId === the resolved counterTargetId when set', () => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         se.beginRound(1);
         const emitted: Array<{ type: string; targetId?: string }> = [];
@@ -2889,9 +2888,10 @@ describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 c
 
         executeIntent(makeResistableDebuffIntent('enemy-attacker-99'), ctx);
 
-        // debuff-resisted must point at ctx.enemy.id, not the counterTargetId.
+        // debuff-resisted now points at the RESOLVED counter target (the ship it was aimed at),
+        // so the combat log can name it — not the default ctx.enemy.id dummy sink.
         expect(emitted).toHaveLength(1);
-        expect(emitted[0].targetId).toBe('enemy-default');
+        expect(emitted[0].targetId).toBe('enemy-attacker-99');
     });
 });
 

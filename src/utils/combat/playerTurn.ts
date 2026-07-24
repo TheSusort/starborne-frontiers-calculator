@@ -791,7 +791,7 @@ function applyNewDoTs(args: {
      *  transform (Voron/Orel, E3) can share this one apply entry point. */
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
-    emitDotApplied: (dotType: DoTType, stacks: number) => void;
+    emitDotApplied: (dotType: DoTType, stacks: number, tier: number) => void;
 }): void {
     for (const dot of args.dotsConfig) {
         if (dot.stacks <= 0 || dot.tier <= 0) continue;
@@ -802,7 +802,7 @@ function applyNewDoTs(args: {
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
             });
-            args.emitDotApplied('corrosion', dot.stacks);
+            args.emitDotApplied('corrosion', dot.stacks, dot.tier);
         } else if (dot.type === 'inferno') {
             args.infernoEntries.push({
                 stacks: dot.stacks,
@@ -810,7 +810,7 @@ function applyNewDoTs(args: {
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
             });
-            args.emitDotApplied('inferno', dot.stacks);
+            args.emitDotApplied('inferno', dot.stacks, dot.tier);
         } else if (dot.type === 'bomb') {
             args.pendingBombs.push({
                 countdown: Math.max(1, dot.duration),
@@ -822,7 +822,7 @@ function applyNewDoTs(args: {
                 detonationDamageModifier: args.detonationDamageModifier,
                 splashModifier: args.splashModifier,
             });
-            args.emitDotApplied('bomb', dot.stacks);
+            args.emitDotApplied('bomb', dot.stacks, dot.tier);
         } else if (dot.type === 'generic') {
             args.genericDoTEntries.push({
                 stacks: dot.stacks,
@@ -830,7 +830,7 @@ function applyNewDoTs(args: {
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
             });
-            args.emitDotApplied('generic', dot.stacks);
+            args.emitDotApplied('generic', dot.stacks, dot.tier);
         }
     }
 }
@@ -2392,7 +2392,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 infernoEntries,
                 genericDoTEntries,
                 pendingBombs,
-                emitDotApplied: (dotType, stacks) =>
+                emitDotApplied: (dotType, stacks, tier) =>
                     bus.emit({
                         type: 'dot-applied',
                         sourceId: actor.id,
@@ -2400,6 +2400,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         round: r,
                         dotType,
                         stacks,
+                        tier,
                         ...(critHits > 0 ? { viaCrit: true } : {}),
                     }),
             });
@@ -2457,7 +2458,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 infernoEntries: victim.infernoEntries,
                 genericDoTEntries: victim.genericDoTEntries,
                 pendingBombs: victim.pendingBombs,
-                emitDotApplied: (dotType, stacks) =>
+                emitDotApplied: (dotType, stacks, tier) =>
                     bus.emit({
                         type: 'dot-applied',
                         sourceId: actor.id,
@@ -2465,6 +2466,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         round: r,
                         dotType,
                         stacks,
+                        tier,
                         ...(critHits > 0 ? { viaCrit: true } : {}),
                     }),
             });
