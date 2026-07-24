@@ -20,15 +20,42 @@ export function targetCarriesBlockDebuff(statusEngine: StatusEngine, targetId: s
 }
 
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+
+/** Per-DoT-type magnitude of the tier-I stack — the unit `ActiveDoTStack.tier` (and the parsed
+ *  DoT config `tier`) is measured in. Corrosion I = 3, Inferno I = 15, Bomb I = 100; tier II/III
+ *  are the 2×/3× multiples. `generic` DoTs are absolute-per-tick and carry no tier scale. */
+const DOT_TIER_BASE: Record<DoTType, number> = {
+    corrosion: 3,
+    inferno: 15,
+    bomb: 100,
+    generic: 0,
+};
+
+/**
+ * Map a DoT tier MAGNITUDE (e.g. Corrosion III = 9, Inferno II = 30) to its display numeral
+ * ('I'|'II'|'III'|…). Returns '' when the type is untiered for display (bomb/generic) or when the
+ * magnitude is not an exact multiple of the type's base tier (so arbitrary/synthetic magnitudes
+ * never surface a misleading numeral — only the canonical I/II/III magnitudes do).
+ */
+export function dotTierNumeral(dotType: DoTType, magnitude: number): string {
+    if (dotType === 'bomb' || dotType === 'generic') return '';
+    const base = DOT_TIER_BASE[dotType];
+    if (base <= 0 || magnitude <= 0 || magnitude % base !== 0) return '';
+    const level = magnitude / base;
+    return level < ROMAN.length ? ROMAN[level] : '';
+}
+
 /** Single source of truth for the resisted-debuff label of a blocked DoT, so the emit site and
- *  the test assertion agree. e.g. ('inferno', 3) -> 'Inferno III'; ('bomb', 0) -> 'Bomb'.
- *  SP-E: 'generic' is an absolute per-tick DoT, not tiered, so it always renders as the plain
- *  'Damage over Time' label (no numeral) regardless of tier. */
+ *  the test assertion agree. `tier` is the MAGNITUDE (corrosion 3/6/9, inferno 15/30/45) — the
+ *  same value tickDoTs divides by 100 — NOT a 1/2/3 level. e.g. ('inferno', 45) -> 'Inferno III';
+ *  ('bomb', 100) -> 'Bomb'. SP-E: 'generic' is an absolute per-tick DoT, not tiered, so it always
+ *  renders as the plain 'Damage over Time' label (no numeral) regardless of tier. */
 export function dotResistLabel(dotType: DoTType, tier: number): string {
     if (dotType === 'generic') return 'Damage over Time';
     const kind = dotType.charAt(0).toUpperCase() + dotType.slice(1);
-    const numeral = tier > 0 && tier < ROMAN.length ? ` ${ROMAN[tier]}` : '';
-    return dotType === 'bomb' ? kind : `${kind}${numeral}`;
+    if (dotType === 'bomb') return kind;
+    const numeral = dotTierNumeral(dotType, tier);
+    return numeral ? `${kind} ${numeral}` : kind;
 }
 
 /** Resisted-debuff label for a blocked control infliction, matching the named-debuff buff names

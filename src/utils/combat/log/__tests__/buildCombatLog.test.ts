@@ -1062,7 +1062,7 @@ describe('buildCombatLog', () => {
         expect(entry.note).toBe('Defense Shred');
     });
 
-    it('dot-applied: sourceId → actorId (inflicter), targetId → targets, note has dotType', () => {
+    it('dot-applied: sourceId → actorId (inflicter), targetId → targets, note has dotType + tier', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1073,6 +1073,7 @@ describe('buildCombatLog', () => {
                 round: 1,
                 dotType: 'corrosion',
                 stacks: 2,
+                tier: 6, // Corrosion II magnitude → 'II'
             }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
@@ -1085,7 +1086,28 @@ describe('buildCombatLog', () => {
         expect(entry.actorId).toBe('A'); // sourceId, inflicter
         expect(entry.targets).toHaveLength(1);
         expect(entry.targets[0].targetId).toBe('B');
-        expect(entry.note).toContain('corrosion');
+        expect(entry.note).toBe('corrosion II ×2');
+    });
+
+    it('dot-applied: bomb carries no tier numeral (untiered display)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'dot-applied',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                dotType: 'bomb',
+                stacks: 1,
+                tier: 200,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.note).toBe('bomb ×1');
     });
 
     it('dot-ticked: targetId is both the actorId and target; amount is the damage; note is "{dotType} ×{stacks}"; no skill consumed', () => {
@@ -1107,6 +1129,7 @@ describe('buildCombatLog', () => {
                 dotType: 'corrosion',
                 damage: 1234,
                 stacks: 3,
+                tier: 9, // Corrosion III magnitude → 'III'
             }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
@@ -1121,7 +1144,7 @@ describe('buildCombatLog', () => {
         expect(dotEntry!.targets).toHaveLength(1);
         expect(dotEntry!.targets[0].targetId).toBe('B');
         expect(dotEntry!.targets[0].amount).toBe(1234);
-        expect(dotEntry!.note).toBe('corrosion ×3');
+        expect(dotEntry!.note).toBe('corrosion III ×3');
         // skill-fired must NOT have been consumed by dot-ticked
         expect(dotEntry!.skillName).toBeUndefined();
         expect(dotEntry!.slot).toBeUndefined();
@@ -1237,7 +1260,7 @@ describe('buildCombatLog', () => {
         expect(entry.note).toContain('3');
     });
 
-    it('ship-destroyed: actorId is the destroyed ship, killerId appears in note', () => {
+    it('ship-destroyed: actorId is the destroyed ship, killerId carried as a target (not baked into note)', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1256,8 +1279,10 @@ describe('buildCombatLog', () => {
         const entry = entries[0];
         expect(entry.kind).toBe('death');
         expect(entry.actorId).toBe('B'); // the destroyed ship
-        expect(entry.targets).toEqual([]);
-        expect(entry.note).toContain('A'); // killerId in note
+        // Killer is carried as a target so the RENDERER can resolve it to a ship name via nameOf,
+        // instead of a raw id baked into the note string.
+        expect(entry.targets).toEqual([{ targetId: 'A' }]);
+        expect(entry.note).toBeUndefined();
     });
 
     // ─── Reaction nesting + endOfRound fallback ───────────────────────────────

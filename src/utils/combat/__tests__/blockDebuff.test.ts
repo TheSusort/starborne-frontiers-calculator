@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { dotResistLabel, isBlockDebuff, controlEffectLabel } from '../debuffImmunity';
+import {
+    dotResistLabel,
+    dotTierNumeral,
+    isBlockDebuff,
+    controlEffectLabel,
+} from '../debuffImmunity';
 import { runCombat, CombatEngineInput } from '../engine';
 import { ShipSkills, Ability } from '../../../types/abilities';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
@@ -20,17 +25,51 @@ describe('debuffImmunity helpers', () => {
         });
     });
 
-    describe('dotResistLabel', () => {
-        it('formats inferno with roman numeral tier', () => {
-            expect(dotResistLabel('inferno', 3)).toBe('Inferno III');
+    describe('dotTierNumeral', () => {
+        // `tier` is a MAGNITUDE (corrosion 3/6/9, inferno 15/30/45, bomb 100/200/300) — the same
+        // value tickDoTs divides by 100. dotTierNumeral maps that magnitude to its display level.
+        it('maps corrosion magnitudes to I/II/III (base 3)', () => {
+            expect(dotTierNumeral('corrosion', 3)).toBe('I');
+            expect(dotTierNumeral('corrosion', 6)).toBe('II');
+            expect(dotTierNumeral('corrosion', 9)).toBe('III');
         });
 
-        it('formats corrosion with roman numeral tier', () => {
-            expect(dotResistLabel('corrosion', 2)).toBe('Corrosion II');
+        it('maps inferno magnitudes to I/II/III (base 15)', () => {
+            expect(dotTierNumeral('inferno', 15)).toBe('I');
+            expect(dotTierNumeral('inferno', 30)).toBe('II');
+            expect(dotTierNumeral('inferno', 45)).toBe('III');
+        });
+
+        it('returns "" for bomb and generic (untiered display)', () => {
+            expect(dotTierNumeral('bomb', 100)).toBe('');
+            expect(dotTierNumeral('generic', 5)).toBe('');
+        });
+
+        it('returns "" for a magnitude that is not an exact tier multiple', () => {
+            expect(dotTierNumeral('corrosion', 5)).toBe('');
+            expect(dotTierNumeral('inferno', 8)).toBe('');
+        });
+    });
+
+    describe('dotResistLabel', () => {
+        it('formats inferno from its magnitude (45 → III)', () => {
+            expect(dotResistLabel('inferno', 45)).toBe('Inferno III');
+        });
+
+        it('formats corrosion from its magnitude (6 → II)', () => {
+            expect(dotResistLabel('corrosion', 6)).toBe('Corrosion II');
+        });
+
+        it('formats corrosion tier I from its magnitude (3 → I)', () => {
+            expect(dotResistLabel('corrosion', 3)).toBe('Corrosion I');
         });
 
         it('formats bomb with no tier suffix', () => {
-            expect(dotResistLabel('bomb', 0)).toBe('Bomb');
+            expect(dotResistLabel('bomb', 100)).toBe('Bomb');
+        });
+
+        it('formats generic as the plain untiered label', () => {
+            expect(dotResistLabel('generic', 5)).toBe('Damage over Time');
         });
     });
 
@@ -251,7 +290,9 @@ const infernoIIIEnemy = (): EnemyAttacker =>
                             config: {
                                 type: 'dot',
                                 dotType: 'inferno',
-                                tier: 3,
+                                // Inferno III MAGNITUDE (15/30/45 = I/II/III) — the value the tick
+                                // math and dotResistLabel both consume; 45 → 'Inferno III'.
+                                tier: 45,
                                 stacks: 2,
                                 duration: 3,
                             },
@@ -295,7 +336,7 @@ describe('Block Debuff — cast-side DoT block + resist event (engine)', () => {
         const entry = e1Effects(result);
         expect(entry).toBeDefined();
         expect(entry!.dots).toHaveLength(0);
-        expect(entry!.resistedDots).toEqual([{ type: 'inferno', tier: 3, stacks: 2 }]);
+        expect(entry!.resistedDots).toEqual([{ type: 'inferno', tier: 45, stacks: 2 }]);
     });
 
     it('control: WITHOUT Block Debuff the same DoT lands (dot-applied, NO resist event)', () => {
@@ -488,6 +529,51 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
         expect(events.some((e) => e.type === 'debuff-applied')).toBe(false);
     });
 
+    it('a RESISTED reactive timed debuff reports the RESOLVED target id (not the dummy sink)', () => {
+        // Combat-log fidelity (#1): the reactive resist emit must name the ship the debuff was
+        // aimed at (the counter target), not the fixed `ctx.enemy.id` dummy sink — so the log can
+        // render "src → <that ship>: X resisted" instead of "src → enemy".
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus,
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([
+                [
+                    'attacker',
+                    {
+                        actor: { id: 'attacker' } as CombatActor,
+                        // Never lands → the resist branch fires.
+                        landsTimedEnemyApplication: () => false,
+                        debuffLandingGate: () => true,
+                    } as unknown as PlayerActorRuntime,
+                ],
+            ]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        } as unknown as IntentExecContext;
+
+        executeIntent(makeReactiveDebuffIntent('enemy-1'), ctx);
+
+        const resisted = events.filter((e) => e.type === 'debuff-resisted');
+        expect(resisted).toHaveLength(1);
+        expect(resisted[0].type === 'debuff-resisted' && resisted[0].targetId).toBe('enemy-1');
+    });
+
     it('control: WITHOUT Block Debuff the same reactive TIMED debuff lands (non-vacuity)', () => {
         const { ctx, resisted } = buildCtx(); // no immunity seeded
         const events: CombatEvent[] = [];
@@ -540,7 +626,8 @@ describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
             config: {
                 type: 'dot',
                 dotType: 'inferno',
-                tier: 3,
+                // Inferno III magnitude (see dotTierNumeral: 45 → 'Inferno III').
+                tier: 45,
                 stacks: 2,
                 duration: 3,
             },

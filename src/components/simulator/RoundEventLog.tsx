@@ -110,6 +110,23 @@ const noteLine = (entry: CombatLogEntry, ctx: FormatterCtx): React.ReactNode => 
 };
 
 /**
+ * A note line that surfaces the recipient: "{src} → {tgt}: {note}" when the entry carries a target
+ * distinct from the acting ship (an enemy debuff / applied DoT — so the log shows WHO it landed on),
+ * collapsing to the plain "{src}: {note}" line when there is no target or it is the actor itself
+ * (self-buff/debuff). Used by the `debuff` and `dot-applied` formatters.
+ */
+const sourceTargetNoteLine = (entry: CombatLogEntry, ctx: FormatterCtx): React.ReactNode => {
+    const src = ctx.nameOf(entry.actorId);
+    const targetId = entry.targets[0]?.targetId;
+    const label = entry.note ?? '';
+    if (targetId !== undefined && targetId !== entry.actorId) {
+        const tgt = ctx.nameOf(targetId);
+        return label ? `${src} → ${tgt}: ${label}` : `${src} → ${tgt}`;
+    }
+    return label ? `${src}: ${label}` : src;
+};
+
+/**
  * Per-kind formatter map. Every kind resolves to a renderable node; unmapped/future kinds
  * fall through to the neutral `noteLine` fallback (never throws — forward-compatible).
  */
@@ -126,8 +143,8 @@ const formatters: Record<
     heal: (entry, ctx) => renderTargets(entry, ctx, `${ctx.nameOf(entry.actorId)} heals`),
     shield: (entry, ctx) => renderTargets(entry, ctx, `${ctx.nameOf(entry.actorId)} shields`),
     buff: noteLine,
-    debuff: noteLine,
-    'dot-applied': noteLine,
+    debuff: sourceTargetNoteLine,
+    'dot-applied': sourceTargetNoteLine,
     'dot-ticked': (entry, ctx) => {
         const t = entry.targets[0];
         const who = ctx.nameOf(entry.actorId);
@@ -153,7 +170,15 @@ const formatters: Record<
     },
     'shield-destroyed': (entry, ctx) => `${ctx.nameOf(entry.actorId)}'s shield destroyed`,
     'cheat-death': (entry, ctx) => `${ctx.nameOf(entry.actorId)} cheats death!`,
-    death: noteLine,
+    death: (entry, ctx) => {
+        const actor = ctx.nameOf(entry.actorId);
+        // The killer (when known) is carried as the entry's single target so we resolve it to a
+        // ship name here rather than showing a raw actor id.
+        const killerId = entry.targets[0]?.targetId;
+        return killerId !== undefined
+            ? `${actor}: destroyed by ${ctx.nameOf(killerId)}`
+            : `${actor}: destroyed`;
+    },
     detonation: (entry, ctx) => {
         const amount = entry.targets[0]?.amount;
         const head = noteLine(entry, ctx) as string;

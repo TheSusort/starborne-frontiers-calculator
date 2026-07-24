@@ -126,6 +126,11 @@ export type CombatEvent =
           round: number;
           dotType: DoTType;
           stacks: number;
+          /** Tier MAGNITUDE of the applied DoT (corrosion 3/6/9, inferno 15/30/45, bomb
+           *  100/200/300 — the value tickDoTs divides by 100). Combat-log fidelity: lets the
+           *  applied line show the tier numeral (corrosion/inferno) via dotTierNumeral. Always set
+           *  by the engine; optional so hand-crafted test emits may omit it (→ no numeral shown). */
+          tier?: number;
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;
@@ -241,9 +246,14 @@ export type CombatEvent =
           // this event too. 'bomb' never appears here (bombs burst via 'bomb-detonated').
           dotType: DoTType;
           damage: number;
-          /** Combat-log fidelity: the per-dotType SUMMED TICKING stacks (see `tickDoTs`'s
-           *  `emitTicked` jsdoc) — lets the log line show "{dotType} ×{stacks}". */
+          /** Combat-log fidelity: the per-dotType-and-TIER SUMMED TICKING stacks (see `tickDoTs`'s
+           *  `emitTicked` jsdoc) — lets the log line show "{dotType} {numeral} ×{stacks}". */
           stacks: number;
+          /** Tier MAGNITUDE of this tick group (corrosion 3/6/9, inferno 15/30/45). tickDoTs emits
+           *  one event per (dotType, tier), so this is a single tier, not a mix. Feeds the numeral
+           *  via dotTierNumeral. Always set by the engine; optional so hand-crafted test emits may
+           *  omit it (→ no numeral shown). */
+          tier?: number;
       }
     | { type: 'dot-detonated'; targetId: string; round: number; damage: number }
     /** Emitted on each bomb burst, but the two paths are asymmetric:
