@@ -2665,6 +2665,10 @@ export function runCombat(input: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
     // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
+    // Per-actor-turn verdict cache for procScope:'per-attack' proc abilities (Insidiousness).
+    // Keyed `${ownerId}:${abilityId}`; cleared at each actor turn-start beside
+    // reactionFiredThisAttack so a later attack rolls afresh.
+    const procDecisionThisAttack = new Map<string, boolean>();
     // G PR1: dedicated crit-gate for counterattacks. A NEW map (NOT any existing per-actor
     // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
     // for every existing fixture → byte-identical.
@@ -6192,6 +6196,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Combat-lifetime proc-chance gates (D-PR1): equipment reactive procs
                         // that carry a procChance fire at their stated rate via this accumulator.
                         procChanceGates,
+                        // Per-attack proc verdict cache (Insidiousness): one roll per attack,
+                        // replayed for every debuff event that attack inflicts.
+                        procDecisionThisAttack,
                         // Phase 4c PR 6: live lowest-speed-ally gate. UNCONDITIONAL (unlike the
                         // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
                         // the lone attacker resolves true and DPS gating stays byte-identical.
@@ -6661,6 +6668,9 @@ export function runCombat(input: CombatEngineInput): {
                 // Task 5: reset the self-rider once-per-attack guard beside the counter guard so a
                 // later attack re-applies Hermes's Everliving Regeneration / charge.
                 reactionFiredThisAttack.clear();
+                // Insidiousness: drop the per-attack proc verdicts so this attack draws its own
+                // single roll (and every debuff it inflicts shares that one verdict).
+                procDecisionThisAttack.clear();
 
                 // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff
                 // written during this actor's own turn is flagged appliedThisTurn so it survives

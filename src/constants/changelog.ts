@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat sim: the Insidiousness implant now rolls its damage proc once per attack instead of once per debuff applied, and on a proc it hits every enemy that attack actually debuffed — exactly once each. Previously an area-of-effect debuffer got a separate roll for every debuff on every target (a two-debuff attack on two enemies rolled four times), and all of that damage landed on the first enemy regardless of which one the debuff reached.',
     'Combat log: a resisted damage-over-time effect (e.g. Incinerator inflicting Inferno) now shows a "resisted" line, the same as a resisted stat debuff — previously a resisted DoT produced no log line at all.',
     "Combat sim: a hit that Voron converts into a Damage over Time effect no longer counts as direct damage — so ally reactions that trigger on an ally being directly damaged (e.g. Cultivator's repair) correctly do NOT fire on Voron's converted hits. When Voron is in Stasis or Disabled the conversion doesn't happen, so the hit lands as direct damage and those reactions fire normally.",
     'Combat sim: reactive-damage skills that hit "an enemy" without a specific triggering target (e.g. start/end-of-round procs and some gear-set effects) now strike a real enemy instead of a phantom "enemy" placeholder that could appear when your team included a healer.',

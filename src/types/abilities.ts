@@ -1073,6 +1073,13 @@ export interface Ability {
      *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)
      *  → fires on every qualifying trigger. */
     procChance?: number;
+    /** Proc-roll granularity for a probabilistic reactive ability. `'per-attack'` draws the
+     *  gate ONCE per actor turn and reuses that verdict for every qualifying trigger event in
+     *  the same attack, via IntentExecContext.procDecisionThisAttack — so Insidiousness either
+     *  damages EVERY enemy its attack debuffed or none of them, matching the game. Absent →
+     *  per-event draws, the historical behaviour of every other procChance ability (Adaptive
+     *  Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity, Bulwark). */
+    procScope?: 'per-attack';
     /** Reactive event-frequency gate: fire this ability only every Nth qualifying trigger
      *  event, counted per SOURCE (the triggering actor). N=2 → every second event. Gated
      *  executor-side via IntentExecContext.repairCountBySource, keyed

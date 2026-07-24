@@ -214,6 +214,16 @@ export interface Intent {
          *  hitting a PLAYER actor. Absent for the debuff-applied branch of the same trigger
          *  (Oleander's buff grant doesn't need a victim — it routes via damagedAllyId only). */
         victimId?: string;
+        /** The debuffed enemy's actor id (debuff-applied.targetId / dot-applied.targetId),
+         *  stamped by the on-debuff-inflicted listener. Read ONLY by the reactive `damage`
+         *  branch (Insidiousness) so the proc lands on the enemy that was actually debuffed
+         *  instead of falling through to the first living opposing actor. A DEDICATED field
+         *  rather than reusing `victimId`: that one is the `adjacent-enemies` splash anchor
+         *  (on-bomb-detonated), and reusing it would newly re-anchor any adjacent-enemies
+         *  damage ability reached via this trigger. Every OTHER on-debuff-inflicted consumer
+         *  (Warden's debuff, APEX/Butcher/Torcher/Prospect/Yuyan self-riders, Hemlock's
+         *  charge, Pestilence's cleanse) ignores this field → unchanged. */
+        debuffVictimId?: string;
         /** SP-E, Task E4: the DoT type of the ally's application (dot-applied.dotType), captured
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
          *  ally's Inferno (or any other DoT) never converts under a Corrosion-only ability. */
@@ -455,11 +465,22 @@ export function registerReactiveListeners(args: {
                         // Crit Shred feeding an on-debuff-inflicted charge — triggers.test scenario 10)
                         // still chain here as before. Existing consumers (Butcher/Pestilence/APEX)
                         // inflict their gating debuffs from non-on-debuff-inflicted paths, unaffected.
+                        // The debuffed enemy rides along as `debuffVictimId` so the reactive
+                        // damage branch (Insidiousness) hits the enemy this infliction actually
+                        // landed on rather than falling through to the first living opposing
+                        // actor. Every other consumer of this trigger ignores the field.
                         if (e.sourceId === ownerId && !e.viaDebuffInflictedReaction)
-                            enqueue(intent);
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                            });
                     });
                     bus.on('dot-applied', (e) => {
-                        if (e.sourceId === ownerId) enqueue(intent);
+                        if (e.sourceId === ownerId)
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                            });
                     });
                     break;
                 case 'on-ally-debuff-inflicted':
@@ -1364,6 +1385,13 @@ export interface IntentExecContext {
      *  (see oncePerAttackGuardKey + the heal branch). Absent → no guard (unit ctxs without the
      *  engine keep firing per intent, byte-identical). */
     reactionFiredThisAttack?: Set<string>;
+    /** Per-actor-turn verdict cache for `procScope:'per-attack'` abilities (Insidiousness).
+     *  Keyed `ownerId:abilityId` → the single roll's outcome, cleared at each actor turn-start
+     *  (engine) beside `reactionFiredThisAttack`. Distinct from that Set: this is not a
+     *  suppression guard but a memo, so EVERY qualifying event in the attack still executes
+     *  against its own victim under one shared pass/fail. Absent (unit ctxs) → per-event draws,
+     *  byte-identical. */
+    procDecisionThisAttack?: Map<string, boolean>;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
@@ -1959,6 +1987,15 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     const pc = intent.ability.procChance;
     if (pc === undefined || pc <= 0 || pc >= 1) return true;
     const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+    // procScope:'per-attack' (Insidiousness): one roll for the whole attack. The verdict is
+    // memoized per (owner, ability) and replayed for every later event this attack, so an AoE
+    // debuffer's four debuff applications share ONE 21% roll and all-or-none holds across every
+    // debuffed enemy. Opt-in by design — this gate is shared with the heal/shield/buff/debuff
+    // branches, and memoizing unconditionally would silently convert every other proc ability
+    // (Adaptive Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity) to per-turn.
+    const memo = intent.ability.procScope === 'per-attack' ? ctx.procDecisionThisAttack : undefined;
+    const cached = memo?.get(gateKey);
+    if (cached !== undefined) return cached;
     let gate = ctx.procChanceGates?.get(gateKey);
     if (ctx.procChanceGates && !gate) {
         // Keyed by owner + purpose (SP-0 Task 3), NOT the finer-grained map key — every
@@ -1968,7 +2005,9 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
         gate = makeRateGate(`${intent.ownerId}:proc`);
         ctx.procChanceGates.set(gateKey, gate);
     }
-    return !gate || gate(pc);
+    const verdict = !gate || gate(pc);
+    memo?.set(gateKey, verdict);
+    return verdict;
 }
 
 /** D-PR14 once-per-round gate, shared by the damage/heal/shield executors (the debuff branch
@@ -3288,9 +3327,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // The trigger stamped the retaliation target (reflect/revenge, FrontLine's
             // on-enemy-charged-cast, Sentinel's on-ally-crit, …) — route there directly.
             victimIds = [intent.eventCtx.counterTargetId];
+        } else if (intent.eventCtx?.debuffVictimId !== undefined) {
+            // Insidiousness (on-debuff-inflicted): route to the enemy this infliction actually
+            // landed on. Before this clause the trigger fell through to the fallback below and
+            // always hit opposing[0], so an AoE debuffer dumped every proc onto enemy slot 1.
+            victimIds = [intent.eventCtx.debuffVictimId];
         } else {
-            // No specific triggering enemy (start/end-of-round, on-deal-damage, on-debuff-
-            // inflicted with plain `target:'enemy'`). In a POSITIONAL battle route to a real
+            // No specific triggering enemy (start/end-of-round, on-deal-damage). In a
+            // POSITIONAL battle route to a real
             // living opposing actor — NEVER the vestigial DPS-dummy sink (ctx.enemy.id), which
             // stays alive whenever the team fields an ally-targeting ship (healer) and would
             // otherwise leak a phantom "→ enemy" line into the log (repeated once per fire).
@@ -3313,6 +3357,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 : undefined;
         for (const victimId of victimIds) {
             if (victimId === undefined) continue;
+            // procScope:'per-attack' (Insidiousness): ONE hit per victim per attack. The trigger
+            // fires once per debuff APPLICATION, so a cast inflicting two debuffs on the same
+            // enemy (Curator's Attack Down III + Crit Power Down III) would otherwise hit that
+            // enemy twice under the single shared verdict — 200% damage for a 100% implant.
+            // Keyed with the victim so a DIFFERENT debuffed enemy still takes its own hit; rides
+            // `reactionFiredThisAttack`, which the engine clears at each actor turn-start beside
+            // the proc verdict cache. Absent set (unit ctxs) → no dedupe, byte-identical.
+            if (intent.ability.procScope === 'per-attack') {
+                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}`;
+                if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
+                ctx.reactionFiredThisAttack?.add(firedKey);
+            }
             const outcome = ctx.applyReactiveDamage?.(
                 intent.ownerId,
                 victimId,

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import {
@@ -4011,5 +4012,203 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
         executeIntent(intent('enemy1'), ctx);
         executeIntent(intent('enemy2'), ctx);
         expect(calls).toHaveLength(2);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Insidiousness routing: an on-debuff-inflicted DAMAGE proc must land on the enemy
+// that was actually debuffed (eventCtx.debuffVictimId), not the first living opposing
+// actor. The listener stamps the field; this covers the executor side.
+// ----------------------------------------------------------------------
+describe('on-debuff-inflicted damage branch (debuffVictimId routing)', () => {
+    type Call = { owner: string; victim: string; mult: number };
+
+    const ownerRuntime = (): PlayerActorRuntime =>
+        ({ actor: { id: 'owner' } as CombatActor }) as unknown as PlayerActorRuntime;
+
+    const makeCtx = (over: Partial<IntentExecContext> = {}) => {
+        const calls: Call[] = [];
+        const ctx = {
+            round: 1,
+            enemy: { id: 'dummy' } as CombatActor,
+            enemyId: 'dummy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['owner', ownerRuntime()]]),
+            grantAllyCharges: () => {},
+            removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['owner'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            oncePerRoundConsumed: new Set<string>(),
+            livingOpposingActorIds: () => ['enemy1', 'enemy2'],
+            applyReactiveDamage: (owner: string, victim: string, _id: string, mult: number) =>
+                calls.push({ owner, victim, mult }),
+            ...over,
+        } as unknown as IntentExecContext;
+        return { ctx, calls };
+    };
+
+    const intent = (debuffVictimId?: string): Intent => ({
+        ownerId: 'owner',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'equip-implant-INSIDIOUSNESS',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-debuff-inflicted',
+            conditions: [],
+            config: { type: 'damage', multiplier: 70, hits: 1 },
+        },
+        ...(debuffVictimId ? { eventCtx: { debuffVictimId } } : {}),
+    });
+
+    it('routes to the debuffed enemy, NOT the first living opposing actor', () => {
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy2'), ctx);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ owner: 'owner', victim: 'enemy2', mult: 70 });
+    });
+
+    it('keeps the first-living-opposing fallback when no debuff victim was stamped', () => {
+        // Start/end-of-round damage passives (Judge/Chakara) have no triggering counterparty
+        // and must keep routing to opposing[0] — this guards that fallback.
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent(undefined), ctx);
+        expect(calls).toHaveLength(1);
+        expect(calls[0].victim).toBe('enemy1');
+    });
+});
+
+// ----------------------------------------------------------------------
+// procScope:'per-attack' — Insidiousness rolls ONCE per attack and every debuff event
+// in that attack reuses the verdict (all debuffed enemies take the hit, or none do).
+// ----------------------------------------------------------------------
+describe("procScope 'per-attack' verdict cache", () => {
+    const ownerRuntime = (): PlayerActorRuntime =>
+        ({ actor: { id: 'owner' } as CombatActor }) as unknown as PlayerActorRuntime;
+
+    /** Pin the keyed proc stream and count draws. `value` < procChance → pass. */
+    function pinKeyedRng(value: number): { draws: () => number } {
+        let n = 0;
+        setKeyedRng(() => {
+            n++;
+            return value;
+        });
+        return { draws: () => n };
+    }
+
+    const makeCtx = (over: Partial<IntentExecContext> = {}) => {
+        const calls: string[] = [];
+        const ctx = {
+            round: 1,
+            enemy: { id: 'dummy' } as CombatActor,
+            enemyId: 'dummy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['owner', ownerRuntime()]]),
+            grantAllyCharges: () => {},
+            removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['owner'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            oncePerRoundConsumed: new Set<string>(),
+            procChanceGates: new Map(),
+            procDecisionThisAttack: new Map<string, boolean>(),
+            reactionFiredThisAttack: new Set<string>(),
+            applyReactiveDamage: (_o: string, victim: string) => calls.push(victim),
+            ...over,
+        } as unknown as IntentExecContext;
+        return { ctx, calls };
+    };
+
+    const intent = (victim: string, perAttack: boolean): Intent => ({
+        ownerId: 'owner',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'equip-implant-INSIDIOUSNESS',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-debuff-inflicted',
+            conditions: [],
+            procChance: 0.5,
+            ...(perAttack ? { procScope: 'per-attack' as const } : {}),
+            config: { type: 'damage', multiplier: 70, hits: 1 },
+        },
+        eventCtx: { debuffVictimId: victim },
+    });
+
+    afterEach(() => resetRateGateRng());
+
+    it('draws ONCE for two debuff events and applies to both victims on a pass', () => {
+        const rng = pinKeyedRng(0.1); // 0.1 < 0.5 → pass
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy1', true), ctx);
+        executeIntent(intent('enemy2', true), ctx);
+        expect(rng.draws()).toBe(1);
+        expect(calls).toEqual(['enemy1', 'enemy2']);
+    });
+
+    it('draws ONCE for two debuff events and applies to NEITHER victim on a fail', () => {
+        const rng = pinKeyedRng(0.9); // 0.9 > 0.5 → fail
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy1', true), ctx);
+        executeIntent(intent('enemy2', true), ctx);
+        expect(rng.draws()).toBe(1);
+        expect(calls).toEqual([]);
+    });
+
+    it('hits each victim ONCE per attack even when the cast inflicts two debuffs on it', () => {
+        // Curator applies Attack Down III AND Crit Power Down III to the same enemy → two
+        // debuff-applied events → two intents sharing one verdict. Without the per-victim
+        // dedupe the enemy would take the 100% hit twice (200% for a 100% implant).
+        pinKeyedRng(0.1);
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy1', true), ctx);
+        executeIntent(intent('enemy1', true), ctx);
+        executeIntent(intent('enemy2', true), ctx);
+        executeIntent(intent('enemy2', true), ctx);
+        expect(calls).toEqual(['enemy1', 'enemy2']);
+    });
+
+    it('draws again once the cache is cleared (next attack)', () => {
+        const rng = pinKeyedRng(0.1);
+        const cache = new Map<string, boolean>();
+        const fired = new Set<string>();
+        const { ctx, calls } = makeCtx({
+            procDecisionThisAttack: cache,
+            reactionFiredThisAttack: fired,
+        });
+        executeIntent(intent('enemy1', true), ctx);
+        // The engine clears both at each actor turn-start.
+        cache.clear();
+        fired.clear();
+        executeIntent(intent('enemy1', true), ctx);
+        expect(rng.draws()).toBe(2);
+        expect(calls).toEqual(['enemy1', 'enemy1']);
+    });
+
+    it('without procScope, every event draws its own verdict (regression guard)', () => {
+        // Adaptive Plating / Smokescreen / Bloodthirst et al. must keep per-event rolls.
+        const rng = pinKeyedRng(0.1);
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy1', false), ctx);
+        executeIntent(intent('enemy2', false), ctx);
+        expect(rng.draws()).toBe(2);
+        expect(calls).toEqual(['enemy1', 'enemy2']);
     });
 });

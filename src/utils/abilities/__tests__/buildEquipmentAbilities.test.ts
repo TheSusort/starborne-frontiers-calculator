@@ -447,6 +447,14 @@ describe('Insidiousness implant', () => {
         }
     });
 
+    it("carries procScope 'per-attack' (one roll per attack, all debuffed enemies)", () => {
+        const ab = buildForImplant('INSIDIOUSNESS', 'legendary')[0];
+        expect(ab.procScope).toBe('per-attack');
+        expect(ab.procChance).toBeCloseTo(0.21, 5);
+        expect(ab.trigger).toBe('on-debuff-inflicted');
+        expect(ab.config).toMatchObject({ type: 'damage', multiplier: 100, hits: 1 });
+    });
+
     it('common → multiplier 60, procChance ≈ 0.10', () => {
         const ab = buildForImplant('INSIDIOUSNESS', 'common')[0];
         expect(ab.procChance).toBeCloseTo(0.1);
