@@ -60,9 +60,16 @@ const ALLOWLIST = [
             'RSC Mode CSRF Bypass — requires React Router RSC mode, which this app does not use. ' +
             'It is a client-only Vite SPA: BrowserRouter only, no server request handler, no SSR, ' +
             'and no react-router/rsc, matchRSCServerRequest, unstable_RSC or createStaticHandler ' +
-            'anywhere in src. Range >=7.12.0 <8.3.0 has no 7.x fix and react-router-dom publishes ' +
-            'no 8.x, so clearing it means migrating off react-router-dom to react-router@8. ' +
-            'DROP THIS ENTRY once that migration lands.',
+            'anywhere in src, so the residual risk here is zero. Only 8.3.0 is patched; there is ' +
+            'no 7.x backport and react-router-dom publishes no 8.x. BLOCKED ON REACT 19, not on ' +
+            'the router: react-router@8 declares `react >=19.2.7` and means it — lib/components.js ' +
+            '(where MemoryRouter/Routes/Route live) statically imports `useOptimistic`, so on ' +
+            'React 18 it throws at import time even in declarative mode. It also declares ' +
+            '`engines: node >=22.22.0` (CI and dev are on 20). The import swap itself is free: ' +
+            'react-router-dom@7 is just `export * from "react-router"` plus three DOM names we do ' +
+            'not use, and all nine APIs we import typecheck unchanged against 8.3.0. ' +
+            'DROP THIS ENTRY once the React 18 -> 19 upgrade lands and react-router-dom is ' +
+            'replaced by react-router@^8.3.0.',
     },
 ];
 

@@ -2,6 +2,13 @@
   command = "npx puppeteer browsers install chrome && npm run build"
   publish = "dist"
 
+[build.environment]
+  # vite and its plugins live in devDependencies (they are build tooling, never shipped —
+  # keeping them out of `dependencies` is what scopes `npm run audit` to code users receive).
+  # Netlify installs devDependencies by default, but setting NODE_ENV=production in the UI
+  # would silently skip them and break the build on a missing `vite`. Pin the behaviour here.
+  NPM_FLAGS = "--include=dev"
+
 # Security headers
 [[headers]]
   for = "/*"
