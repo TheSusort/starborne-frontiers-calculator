@@ -1356,6 +1356,13 @@ export interface IntentExecContext {
         // the combat log (reactive-damage-performed); void/0 when the proc was guarded (dead
         // victim, non-positive) or the delegate is absent (unit fixtures).
     ) => { dealt: number; didCrit: boolean } | void;
+    /** Emit the log-only consequence twins that `applyReactiveDamage`/`applyCounterAttack`
+     *  buffered while applying their hit — a Lifeline `shield-applied-log`, a
+     *  `shield-destroyed-log`, a `cheat-death-log`. Called right AFTER the proc's own
+     *  `reactive-damage-performed` row so the consequences nest under the attack that caused them
+     *  instead of printing above it. Absent on unit fixtures (the engine never buffers there), so
+     *  the call is a no-op. */
+    flushConsequenceLogs?: () => void;
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
      *  apply path (no attacked event → no re-counter).
@@ -2167,15 +2174,20 @@ function emitReactiveDamageLog(
     victimId: string,
     outcome: { dealt: number; didCrit: boolean } | void
 ): void {
-    if (!ctx.bus || !outcome || outcome.dealt <= 0) return;
-    ctx.bus.emit({
-        type: 'reactive-damage-performed',
-        sourceId: ownerId,
-        targetId: victimId,
-        round: ctx.round,
-        amount: outcome.dealt,
-        didCrit: outcome.didCrit,
-    });
+    if (ctx.bus && outcome && outcome.dealt > 0) {
+        ctx.bus.emit({
+            type: 'reactive-damage-performed',
+            sourceId: ownerId,
+            targetId: victimId,
+            round: ctx.round,
+            amount: outcome.dealt,
+            didCrit: outcome.didCrit,
+        });
+    }
+    // The attack row now exists (or the proc was guarded and buffered nothing) — release any
+    // consequence twins the application above raised, so they nest UNDER this attack rather than
+    // printing before it. Unconditional: a guarded proc has an empty buffer, making this a no-op.
+    ctx.flushConsequenceLogs?.();
 }
 
 /** Task 5: reactive triggers that fan a single ATTACK into multiple `attacked`/`ability-performed`

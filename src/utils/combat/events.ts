@@ -356,6 +356,25 @@ export type CombatEvent =
      *  `reactive-damage-performed`. Buffered on the positional path (defer-flush) to nest
      *  under the triggering attack. */
     | ({ type: 'shield-destroyed-log'; victimId: string; round: number } & ReactiveStamp)
+    /** LOG-ONLY shield grant with no `shield-applied` counterpart. Emitted for the ONE shield
+     *  source that lands inside `applyVictimDamage` instead of a cast (playerTurn.ts) or the
+     *  reactive executor (triggers.ts) — Lifeline's `incoming-shield-grant`, a mid-hit threshold
+     *  pool. Deliberately NOT the real `shield-applied`: that event carries `on-shield-applied`
+     *  combat listeners (Resonating Fury), and firing them from a threshold grant would change
+     *  combat behaviour rather than just the log. Without this twin the pool grew silently while
+     *  its `shield-destroyed` twin still fired, which reads as "a shield was destroyed that the
+     *  log never showed being granted". Same contract as `shield-destroyed-log`: no combat
+     *  listener subscribes, so it can never chain, and it is buffered on the positional path
+     *  (defer-flush) to nest under the triggering attack. */
+    | ({
+          type: 'shield-applied-log';
+          /** The actor whose pool grew. Also the granter — the threshold shield is always a
+           *  self-grant from the victim's own implant, so the log entry keys on this one id. */
+          victimId: string;
+          /** Post-cap pool growth (the same `granted` delta fed to the shield StatCard). */
+          amount: number;
+          round: number;
+      } & ReactiveStamp)
     /** A target's HP fraction changed. Emitted on TWO distinct paths with intended
      *  granularity asymmetry:
      *   - Tank-side (Phase 4c PR 3, LIVE): once per HP-INTAKE EVENT inside

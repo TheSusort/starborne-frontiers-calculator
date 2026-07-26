@@ -283,33 +283,58 @@ export function selectNextActor(actors: CombatActor[]): CombatActor {
 
 /**
  * Phase 2 turn order: each game round every living actor acts exactly once,
- * sorted by speed DESC. Tiebreak (game rule unknown — documented assumption):
- * player side before enemy, then input order. With the calculator's input order
- * (team 1..4, attacker, enemy) equal speeds yield team → attacker → enemy —
- * buffers act before the attacker. NOTE: within the player side the tiebreak is
- * purely input order — the CALLER must list team actors before the attacker to
- * get the team-before-attacker default. Speed affects ORDER, not frequency
- * (spec: "once per round, speed = order"); extra-turn effects are a later-phase seam.
+ * sorted by speed DESC, then by the game's tiebreak chain — board position, then side
+ * (see `orderByTurnPriority`). Input order is only consulted between two actors equal on all
+ * three, i.e. two position-less actors on the same side (DPS/healing-mode fixtures), where the
+ * caller's canonical order (team 1..4, attacker, enemy) still yields team → attacker → enemy.
+ * Speed affects ORDER, not frequency (spec: "once per round, speed = order"); extra-turn effects
+ * are a later-phase seam.
  */
 export function buildTurnQueue(actors: CombatActor[]): CombatActor[] {
     return orderByTurnPriority(
-        actors.map((a) => ({ actor: a, speed: a.stats.speed, side: a.side }))
+        actors.map((a) => ({ actor: a, speed: a.stats.speed, side: a.side, position: a.position }))
     ).map((w) => w.actor);
 }
 
 /**
- * Turn-order comparator core, shared by the engine (buildTurnQueue) and UI displays.
- * Speed DESC; player side before enemy; then input order (caller lists team actors
- * before the attacker for the team-first default). Returns a new array; does not
- * mutate the input.
+ * Board-position turn priority (LOWER acts first) — the game's speed tiebreak.
+ *
+ * In-game rule: "furthest to the top back wins" — the whole TOP row outranks the whole MID row,
+ * MID outranks BOTTOM, and within one row the lowest column number wins (columns run 1 = back to
+ * 4 = front, so column 1 is the backmost cell). Two actors on the SAME side can never share a
+ * position, so this fully decides every intra-team tie; a cross-team tie (both sides hold the
+ * mirrored cell) falls through to the side rank below.
+ *
+ * A position-less actor (the DPS dummy sink, a bare enemy attacker in DPS/healing mode) ranks
+ * LAST, so it never displaces a positioned actor. When NO actor in a tie group has a position the
+ * ranks are all equal and ordering falls through to side + input order exactly as before.
  */
-export function orderByTurnPriority<T extends { speed: number; side: 'player' | 'enemy' }>(
-    items: T[]
-): T[] {
+export function positionTurnRank(position?: Position): number {
+    if (!position) return Number.POSITIVE_INFINITY;
+    const rowRank = position[0] === 'T' ? 0 : position[0] === 'M' ? 1 : 2;
+    return rowRank * 10 + Number(position.slice(1));
+}
+
+/**
+ * Turn-order comparator core, shared by the engine (buildTurnQueue) and UI displays.
+ *
+ * Speed DESC → board position (`positionTurnRank`) → player side before enemy → input order.
+ * Speed and position are the game's own rules; side is the documented last-resort assumption for
+ * a genuine cross-team position tie, and input order only ever decides between two actors that
+ * are equal on all three (which today means two position-less actors on the same side).
+ *
+ * Returns a new array; does not mutate the input.
+ */
+export function orderByTurnPriority<
+    T extends { speed: number; side: 'player' | 'enemy'; position?: Position },
+>(items: T[]): T[] {
     return [...items]
         .map((item, i) => ({ item, i }))
         .sort((x, y) => {
             if (y.item.speed !== x.item.speed) return y.item.speed - x.item.speed;
+            const px = positionTurnRank(x.item.position);
+            const py = positionTurnRank(y.item.position);
+            if (px !== py) return px - py;
             const sideRank = (s: { side: 'player' | 'enemy' }) => (s.side === 'player' ? 0 : 1);
             if (sideRank(x.item) !== sideRank(y.item)) return sideRank(x.item) - sideRank(y.item);
             return x.i - y.i;
@@ -321,12 +346,12 @@ export function orderByTurnPriority<T extends { speed: number; side: 'player' | 
  * Pick the next actor to act by CURRENT effective speed (dynamic-speed turn order, Task 2).
  *
  * Side-agnostic and pure: among `actors` with `pendingOf(id) > 0`, returns the one with the
- * highest effective speed (per the `effectiveSpeedOf` callback), tiebroken by side (player
- * before enemy) then input order; returns `undefined` when none have pending > 0.
+ * highest effective speed (per the `effectiveSpeedOf` callback), tiebroken by board position then
+ * side then input order (`orderByTurnPriority`); returns `undefined` when none have pending > 0.
  *
  * `actors` MUST be supplied in canonical input order (team 1..4, attacker, enemy) — the
- * input-order tiebreak in `orderByTurnPriority` relies on this. Filtering is stable so input
- * order is preserved into the comparator.
+ * input-order tiebreak in `orderByTurnPriority` relies on this for position-less actors.
+ * Filtering is stable so input order is preserved into the comparator.
  *
  * Effective speed is read live via the callback (NOT `actor.stats.speed`), so a Speed Up/Down
  * applied mid-combat changes the ordering. This helper is UNWIRED in Task 2 — Task 3 calls it.
@@ -339,7 +364,12 @@ export function selectNextBySpeed(
     const ranked = orderByTurnPriority(
         actors
             .filter((a) => pendingOf(a.id) > 0)
-            .map((actor) => ({ actor, speed: effectiveSpeedOf(actor), side: actor.side }))
+            .map((actor) => ({
+                actor,
+                speed: effectiveSpeedOf(actor),
+                side: actor.side,
+                position: actor.position,
+            }))
     );
     return ranked[0]?.actor;
 }

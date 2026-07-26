@@ -3687,6 +3687,21 @@ export function runCombat(input: CombatEngineInput): {
         // (post emitDeferredAbilityPerformed) so buildCombatLog's routeReaction nests them under
         // it instead of a preceding sibling entry in the attacker's turn.
         const pendingConsequenceLogs: CombatEvent[] = [];
+        // Flush the log-only consequence twins buffered by an application. Split out of
+        // flushReflectLogs so the REACTIVE-damage path can flush consequences alone (it buffers no
+        // reflect rows), after its own attack row exists — see `deferConsequenceLogs`.
+        const flushConsequenceLogs = (): void => {
+            for (const ev of pendingConsequenceLogs) bus.emit(ev);
+            pendingConsequenceLogs.length = 0;
+        };
+        // A reactive-damage proc (Insidiousness, counters) applies its hit and only THEN emits its
+        // own `reactive-damage-performed` log row (triggers.ts emitReactiveDamageLog). Consequence
+        // twins raised DURING that application — a Lifeline `shield-applied-log`, a
+        // `shield-destroyed-log` — would therefore print ABOVE the attack that caused them, and
+        // routeReaction would nest them under whatever entry preceded it. While this flag is set
+        // they buffer instead; triggers.ts flushes them via `ctx.flushConsequenceLogs` immediately
+        // after the attack row is emitted, so cause precedes consequence.
+        let deferConsequenceLogs = false;
         const flushReflectLogs = (): void => {
             for (const row of pendingReflectLogs) {
                 bus.emit({
@@ -3701,8 +3716,7 @@ export function runCombat(input: CombatEngineInput): {
                 });
             }
             pendingReflectLogs.length = 0;
-            for (const ev of pendingConsequenceLogs) bus.emit(ev);
-            pendingConsequenceLogs.length = 0;
+            flushConsequenceLogs();
         };
         const applyVictimDamage = (
             rawDamage: number,
@@ -4097,6 +4111,27 @@ export function runCombat(input: CombatEngineInput): {
                         victim.id,
                         (perActorShieldGranted.get(victim.id) ?? 0) + granted
                     );
+                    // LOG-ONLY twin (see the event's doc): this is the only shield source that
+                    // lands here rather than in a cast / the reactive executor, so without it the
+                    // pool grew with NO log line — while the `shield-destroyed` emit just below
+                    // still fired for it, reading as "a shield was destroyed that was never
+                    // granted". NOT the real `shield-applied` (that would fire on-shield-applied
+                    // listeners from a mid-hit grant). Buffered/inline on exactly the same
+                    // condition as `shield-destroyed-log` so it nests under the triggering attack.
+                    if (granted > 0) {
+                        const grantLogEv: CombatEvent = {
+                            type: 'shield-applied-log',
+                            victimId: victim.id,
+                            amount: granted,
+                            round: r,
+                            reactive: true,
+                            duringTurnOf: actingActorId,
+                            triggerActorId: actingActorId,
+                        };
+                        if (deferReflectLogs || deferConsequenceLogs)
+                            pendingConsequenceLogs.push(grantLogEv);
+                        else bus.emit(grantLogEv);
+                    }
                 }
             }
             // SP-F F2 (AEGIS): the pre-absorb pool for the shield-destroyed emit below — read
@@ -4131,7 +4166,7 @@ export function runCombat(input: CombatEngineInput): {
                     duringTurnOf: actingActorId,
                     triggerActorId: actingActorId,
                 };
-                if (deferReflectLogs) pendingConsequenceLogs.push(logEv);
+                if (deferReflectLogs || deferConsequenceLogs) pendingConsequenceLogs.push(logEv);
                 else bus.emit(logEv);
             }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
@@ -4195,7 +4230,8 @@ export function runCombat(input: CombatEngineInput): {
                         duringTurnOf: actingActorId,
                         triggerActorId: actingActorId,
                     };
-                    if (deferReflectLogs) pendingConsequenceLogs.push(cheatDeathLogEv);
+                    if (deferReflectLogs || deferConsequenceLogs)
+                        pendingConsequenceLogs.push(cheatDeathLogEv);
                     else bus.emit(cheatDeathLogEv);
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
@@ -4820,13 +4856,23 @@ export function runCombat(input: CombatEngineInput): {
             // (a proc whose target resolved to ctx.enemy — e.g. an AoE with an empty living roster —
             // stays credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim.
             if (input.positionalTeamBattle && victim.id !== enemy.id) {
-                applyVictimDamage(raw, victim, sink, {
-                    killerId: ownerId,
-                    byDirectDamage: true,
-                    isCounter: true,
-                    shieldPenetrationPct: 0,
-                    bombPortion: 0,
-                });
+                // Buffer this application's log-only consequence twins (Lifeline shield grant,
+                // shield destroyed, cheat death) so they print UNDER this proc's own attack row —
+                // which triggers.ts emits only after this call returns. Restored in a `finally`
+                // so a throw can never leave the flag stuck on for later applications.
+                const wasDeferring = deferConsequenceLogs;
+                deferConsequenceLogs = true;
+                try {
+                    applyVictimDamage(raw, victim, sink, {
+                        killerId: ownerId,
+                        byDirectDamage: true,
+                        isCounter: true,
+                        shieldPenetrationPct: 0,
+                        bombPortion: 0,
+                    });
+                } finally {
+                    deferConsequenceLogs = wasDeferring;
+                }
                 roundPerTargetDamage.set(
                     victim.id,
                     (roundPerTargetDamage.get(victim.id) ?? 0) + raw
@@ -6179,6 +6225,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Rhodium) — full mitigated/crit walk, credited via the single credit
                         // point (creditDamage, inside applyReactiveDamage) so leeches still see it.
                         applyReactiveDamage,
+                        // Releases the consequence twins applyReactiveDamage buffered, called by
+                        // the executor right after the proc's own attack row is emitted.
+                        flushConsequenceLogs,
                         applyCounterAttack,
                         counterFiredThisTurn,
                         reactionFiredThisAttack,
