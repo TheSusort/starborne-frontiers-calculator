@@ -1,20 +1,25 @@
 name: Security
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
 
 jobs:
-  audit:
-    name: npm audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm audit --omit=dev --audit-level=high
+    audit:
+        name: npm audit
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+            - run: npm ci
+            # Equivalent to `npm audit --omit=dev --audit-level=high`, which cannot be used right now:
+            # the registry's bulk-advisory endpoint returns a gzip body with no `content-encoding`
+            # header, so every npm client fails to parse it, falls back to the retired quick endpoint
+            # and dies on a misleading "Invalid package tree" 400. See scripts/audit.mjs for the full
+            # write-up; swap this back for plain `npm audit` once upstream is fixed.
+            - run: npm run audit
