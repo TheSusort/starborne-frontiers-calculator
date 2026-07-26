@@ -147,6 +147,44 @@ const REACTIVE_INPUT = (): CombatEngineInput => ({
     },
 });
 
+/** Counterattack variant: the LIFELINE CARRIER counters, and its counter is what drives the FOCUS
+ *  below 30% — so the deferral has to work on the `applyCounterAttack` path too, not just
+ *  `applyReactiveDamage`. Both paths emit their attack row after the application returns, so both
+ *  need the same buffering (CodeRabbit #277). */
+const counter = (multiplier: number): Ability => ({
+    id: 'stalwart-counter',
+    type: 'counter',
+    target: 'enemy',
+    trigger: 'on-attacked',
+    conditions: [],
+    config: { type: 'counter', multiplier },
+});
+
+const COUNTER_INPUT = (): CombatEngineInput => ({
+    ...INPUT(),
+    positionalTeamBattle: true,
+    // The FOCUS is the Lifeline carrier here: 40_000 max HP, 12_000 threshold. It attacks for
+    // 8_000; the counter comes back for 300% of the counter-owner's 10_000 attack = 30_000, which
+    // crosses the focus below 30% in one blow and arms its Lifeline.
+    hp: 40_000,
+    shipSkills: {
+        slots: [
+            { slot: 'active', abilities: [basicAttack()] },
+            { slot: 'passive', abilities: [lifeline(5_000)] },
+        ],
+    },
+    enemyAttackers: [
+        {
+            id: 'enemy-front',
+            stats: { attack: 10_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4',
+            shipSkills: { slots: [{ slot: 'passive', abilities: [counter(300)] }] } as ShipSkills,
+        } as NonNullable<CombatEngineInput['enemyAttackers']>[number],
+    ],
+});
+
 const run = () => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
@@ -201,6 +239,21 @@ describe('Lifeline threshold shield is visible in the combat log', () => {
         expect(proc).toBeGreaterThanOrEqual(0); // the reactive proc fired
         expect(grant).toBeGreaterThanOrEqual(0); // and drove Lifeline
         expect(proc).toBeLessThan(grant); // cause before consequence
+        const destroyed = seen.indexOf('shield-destroyed-log');
+        if (destroyed >= 0) expect(proc).toBeLessThan(destroyed);
+    });
+
+    it('orders a COUNTERATTACK before the shield grant/destroy it causes', () => {
+        const bus = createEventBus();
+        const seen: CombatEvent['type'][] = [];
+        for (const t of LOG_EVENT_TYPES) bus.on(t, (e) => seen.push((e as CombatEvent).type));
+        runCombat({ ...COUNTER_INPUT(), bus });
+
+        const proc = seen.indexOf('reactive-damage-performed');
+        const grant = seen.indexOf('shield-applied-log');
+        expect(proc).toBeGreaterThanOrEqual(0); // the counter fired
+        expect(grant).toBeGreaterThanOrEqual(0); // and drove Lifeline
+        expect(proc).toBeLessThan(grant);
         const destroyed = seen.indexOf('shield-destroyed-log');
         if (destroyed >= 0) expect(proc).toBeLessThan(destroyed);
     });

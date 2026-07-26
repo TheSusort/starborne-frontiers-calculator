@@ -4664,15 +4664,27 @@ export function runCombat(input: CombatEngineInput): {
 
             // `sink` (outer scope, SP-U U1) accumulates the attacker's incoming regardless of
             // side — ids are globally unique across sides.
-            applyVictimDamage(raw, attacker, sink, {
-                killerId: owner.id,
-                byDirectDamage: true,
-                isCounter: true,
-                // Mirror Reflect (no shield penetration on the reactive hit). EffectiveStats has NO
-                // shieldPenetration field; we deliberately pass 0.
-                shieldPenetrationPct: 0,
-                bombPortion: 0,
-            });
+            //
+            // Buffer this application's log-only consequence twins, exactly as applyReactiveDamage
+            // does: a counter also emits its own `reactive-damage-performed` row only AFTER this
+            // call returns (triggers.ts emitReactiveDamageLog), so a Lifeline grant / shield-
+            // destroyed / cheat-death raised by the counter hit would otherwise print above the
+            // counter that caused it. try/finally so a throw can't strand the flag.
+            const wasDeferring = deferConsequenceLogs;
+            deferConsequenceLogs = true;
+            try {
+                applyVictimDamage(raw, attacker, sink, {
+                    killerId: owner.id,
+                    byDirectDamage: true,
+                    isCounter: true,
+                    // Mirror Reflect (no shield penetration on the reactive hit). EffectiveStats has NO
+                    // shieldPenetration field; we deliberately pass 0.
+                    shieldPenetrationPct: 0,
+                    bombPortion: 0,
+                });
+            } finally {
+                deferConsequenceLogs = wasDeferring;
+            }
             // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect).
             roundPerTargetDamage.set(
                 attacker.id,
