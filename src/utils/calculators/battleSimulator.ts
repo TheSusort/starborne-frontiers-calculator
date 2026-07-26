@@ -232,6 +232,7 @@ export const LOG_EVENT_TYPES = [
     'hp-changed',
     'heal-performed',
     'shield-applied',
+    'shield-applied-log',
     'shield-destroyed-log',
     'cheat-death-log',
     'buff-applied',

@@ -38,17 +38,19 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
           "damageDealt": 5351.035630489023,
-          "damageTaken": 10856.812629593887,
+          "damageTaken": 5456.812629593887,
           "healingDone": 0,
           "healingReceived": 50000,
           "hpPct": 100,
           "incomingBarrierAbsorbed": 0,
-          "incomingDamage": 10856.812629593887,
+          "incomingDamage": 5456.812629593887,
           "incomingShieldAbsorbed": 0,
           "shieldGranted": 0,
           "shieldPct": 0,
@@ -82,7 +84,7 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
           "actorId": "e:t2t2-e-bomber:0",
           "alive": true,
           "currentShieldPool": 0,
-          "damageDealt": 7394.368067668832,
+          "damageDealt": 1994.3680676688318,
           "damageTaken": 5351.035630489023,
           "healingDone": 0,
           "healingReceived": 0,
@@ -127,7 +129,9 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
@@ -216,7 +220,9 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
@@ -305,7 +311,9 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
@@ -394,7 +402,9 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
@@ -483,7 +493,9 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
@@ -572,7 +584,9 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
@@ -661,7 +675,9 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
       "ships": [
         {
           "activeBuffs": [],
-          "activeDebuffs": [],
+          "activeDebuffs": [
+            "Bomb",
+          ],
           "actorId": "attacker",
           "alive": true,
           "currentShieldPool": 0,
@@ -2401,8 +2417,8 @@ exports[`sim goldens (BattleResult snapshots) > f1Reconciliation 1`] = `
       ],
       "turnOrder": [
         "e:f1-e-aoe:0",
-        "p:f1-p2:1",
         "p:f1-p3:2",
+        "p:f1-p2:1",
         "attacker",
       ],
     },
@@ -2488,8 +2504,8 @@ exports[`sim goldens (BattleResult snapshots) > f1Reconciliation 1`] = `
       ],
       "turnOrder": [
         "e:f1-e-aoe:0",
-        "p:f1-p2:1",
         "p:f1-p3:2",
+        "p:f1-p2:1",
         "attacker",
       ],
     },
@@ -2575,8 +2591,8 @@ exports[`sim goldens (BattleResult snapshots) > f1Reconciliation 1`] = `
       ],
       "turnOrder": [
         "e:f1-e-aoe:0",
-        "p:f1-p2:1",
         "p:f1-p3:2",
+        "p:f1-p2:1",
         "attacker",
       ],
     },
@@ -2662,8 +2678,8 @@ exports[`sim goldens (BattleResult snapshots) > f1Reconciliation 1`] = `
       ],
       "turnOrder": [
         "e:f1-e-aoe:0",
-        "p:f1-p2:1",
         "p:f1-p3:2",
+        "p:f1-p2:1",
         "attacker",
       ],
     },
@@ -2749,8 +2765,8 @@ exports[`sim goldens (BattleResult snapshots) > f1Reconciliation 1`] = `
       ],
       "turnOrder": [
         "e:f1-e-aoe:0",
-        "p:f1-p2:1",
         "p:f1-p3:2",
+        "p:f1-p2:1",
         "attacker",
       ],
     },
@@ -2836,8 +2852,8 @@ exports[`sim goldens (BattleResult snapshots) > f1Reconciliation 1`] = `
       ],
       "turnOrder": [
         "e:f1-e-aoe:0",
-        "p:f1-p2:1",
         "p:f1-p3:2",
+        "p:f1-p2:1",
         "attacker",
       ],
     },
@@ -3526,10 +3542,10 @@ exports[`sim goldens (BattleResult snapshots) > healModifierScaling 1`] = `
         },
       ],
       "turnOrder": [
-        "attacker",
         "e:f4-e-healer:0",
-        "p:f4-p-ally:1",
+        "attacker",
         "e:f4-e-ally:1",
+        "p:f4-p-ally:1",
       ],
     },
     {
@@ -3613,10 +3629,10 @@ exports[`sim goldens (BattleResult snapshots) > healModifierScaling 1`] = `
         },
       ],
       "turnOrder": [
-        "attacker",
         "e:f4-e-healer:0",
-        "p:f4-p-ally:1",
+        "attacker",
         "e:f4-e-ally:1",
+        "p:f4-p-ally:1",
       ],
     },
     {
@@ -3700,10 +3716,10 @@ exports[`sim goldens (BattleResult snapshots) > healModifierScaling 1`] = `
         },
       ],
       "turnOrder": [
-        "attacker",
         "e:f4-e-healer:0",
-        "p:f4-p-ally:1",
+        "attacker",
         "e:f4-e-ally:1",
+        "p:f4-p-ally:1",
       ],
     },
     {
@@ -3787,10 +3803,10 @@ exports[`sim goldens (BattleResult snapshots) > healModifierScaling 1`] = `
         },
       ],
       "turnOrder": [
-        "attacker",
         "e:f4-e-healer:0",
-        "p:f4-p-ally:1",
+        "attacker",
         "e:f4-e-ally:1",
+        "p:f4-p-ally:1",
       ],
     },
     {
@@ -3874,10 +3890,10 @@ exports[`sim goldens (BattleResult snapshots) > healModifierScaling 1`] = `
         },
       ],
       "turnOrder": [
-        "attacker",
         "e:f4-e-healer:0",
-        "p:f4-p-ally:1",
+        "attacker",
         "e:f4-e-ally:1",
+        "p:f4-p-ally:1",
       ],
     },
     {
@@ -3961,10 +3977,10 @@ exports[`sim goldens (BattleResult snapshots) > healModifierScaling 1`] = `
         },
       ],
       "turnOrder": [
-        "attacker",
         "e:f4-e-healer:0",
-        "p:f4-p-ally:1",
+        "attacker",
         "e:f4-e-ally:1",
+        "p:f4-p-ally:1",
       ],
     },
   ],

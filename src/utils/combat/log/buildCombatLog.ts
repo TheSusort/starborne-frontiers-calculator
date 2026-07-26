@@ -450,6 +450,20 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    // LOG-ONLY twin for the mid-hit threshold shield (Lifeline). Keyed on the victim, which is
+    // also the granter — a self-grant, so there is no separate caster row and no pending skill to
+    // consume (unlike 'shield-applied', which belongs to a cast).
+    'shield-applied-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'shield',
+            actorId: e.victimId,
+            targets: [{ targetId: e.victimId, amount: e.amount }],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
     'shield-destroyed-log': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {

@@ -3,8 +3,10 @@ import type { ActiveDoTStack, PendingBomb } from './state';
 
 // Pure per-victim detonation math, lifted verbatim from playerTurn.ts detonate().
 // Computes the DETONATION-category payout for each requested det type and CONSUMES the
-// matching container (`.length = 0`) as it resolves, in `dets` order — so a 2nd bomb det
-// sees emptied bombs, mirroring the original loop. No events, no HP application.
+// matching container as it resolves, in `dets` order — so a 2nd bomb det sees emptied bombs,
+// mirroring the original loop. No events, no HP application. `recipe.detonatable`, when
+// present, narrows what a det may consume to the entries that predate the cast (own-stack
+// protection on the deferred positional path — see the field's doc).
 //
 // Precedence is preserved EXACTLY:
 //  - inferno: Σ(stacks · tier/100 · effectiveAttack · remainingRounds) · dotMult · affinityMult · pct · detonationMult
@@ -23,6 +25,23 @@ export interface DetonationRecipe {
     dotMult: number;
     affinityMult: number;
     detonationMult: number;
+    /**
+     * OWN-STACK PROTECTION (positional path only): the exact container entries this cast is
+     * allowed to detonate, captured BEFORE the cast applied its own new DoTs. Entries missing
+     * from the set (i.e. appended by this same cast) are neither paid out nor consumed.
+     *
+     * The non-positional path needs no set — it detonates at Step 2.95, before Step 3 applies
+     * new DoTs, so ordering alone guarantees "a skill that detonates and re-applies the same
+     * type doesn't eat its own new stack". The positional path DEFERS the detonation until
+     * after the whole turn body (the engine's per-victim loop consumes the recipe), so it must
+     * carry the eligibility set to reproduce that guarantee. Identity-based rather than
+     * index/length-based so it stays correct no matter how many victims' containers a single
+     * cast appends to (anchor + splash) or in what order.
+     *
+     * Omitted ⇒ every entry present at detonation time is eligible (the historical behaviour;
+     * all non-positional and hand-authored callers).
+     */
+    detonatable?: ReadonlySet<ActiveDoTStack | PendingBomb>;
 }
 
 export interface DetonationContainers {
@@ -40,6 +59,26 @@ export interface DetonationResult {
     total: number;
 }
 
+/**
+ * Consume a container IN PLACE (same array object — every caller holds the live actor-field
+ * reference, so this must never reassign) and return the entries the recipe actually detonates.
+ * Without a `detonatable` set that is the whole container (`.length = 0`, as before); with one it
+ * is the eligible subset, and the ineligible entries are pushed back in their original order.
+ */
+function consumeDetonatable<T>(container: T[], detonatable: ReadonlySet<unknown> | undefined): T[] {
+    if (!detonatable) {
+        const all = container.slice();
+        container.length = 0;
+        return all;
+    }
+    const consumed: T[] = [];
+    const kept: T[] = [];
+    for (const entry of container) (detonatable.has(entry) ? consumed : kept).push(entry);
+    container.length = 0;
+    container.push(...kept);
+    return consumed;
+}
+
 export function detonateContainers(
     recipe: DetonationRecipe,
     c: DetonationContainers
@@ -53,7 +92,7 @@ export function detonateContainers(
         const pct = det.powerPct / 100;
         if (det.dotType === 'inferno') {
             inferno +=
-                c.infernoEntries.reduce(
+                consumeDetonatable(c.infernoEntries, recipe.detonatable).reduce(
                     (sum, e) =>
                         sum +
                         e.stacks * (e.tier / 100) * recipe.effectiveAttack * e.remainingRounds,
@@ -63,11 +102,10 @@ export function detonateContainers(
                 recipe.affinityMult *
                 pct *
                 recipe.detonationMult;
-            c.infernoEntries.length = 0;
         } else if (det.dotType === 'corrosion') {
             const baseHp = Math.min(c.victimHp, 500_000);
             corrosion +=
-                c.corrosionEntries.reduce(
+                consumeDetonatable(c.corrosionEntries, recipe.detonatable).reduce(
                     (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
                     0
                 ) *
@@ -75,11 +113,11 @@ export function detonateContainers(
                 recipe.affinityMult *
                 pct *
                 recipe.detonationMult;
-            c.corrosionEntries.length = 0;
         } else if (det.dotType === 'bomb') {
-            bombStacks += c.pendingBombs.reduce((sum, b) => sum + b.stacks, 0);
+            const bombs = consumeDetonatable(c.pendingBombs, recipe.detonatable);
+            bombStacks += bombs.reduce((sum, b) => sum + b.stacks, 0);
             bomb +=
-                c.pendingBombs.reduce(
+                bombs.reduce(
                     (sum, b) =>
                         sum +
                         b.stacks *
@@ -88,7 +126,6 @@ export function detonateContainers(
                             (1 + b.detonationDamageModifier / 100),
                     0
                 ) * pct;
-            c.pendingBombs.length = 0;
         }
     }
 

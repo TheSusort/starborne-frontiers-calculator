@@ -2317,12 +2317,35 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (positional) {
         // Positional: DO NOT detonate the anchor (no consume/credit/emit). Expose the recipe so the
         // engine detonates each footprint victim's own containers. detonationDamage stays 0.
+        //
+        // OWN-STACK PROTECTION: the engine consumes this recipe at the END of the positional apply,
+        // i.e. AFTER Step 3 (applyNewDoTs) below has appended this cast's own DoTs — so without a
+        // guard a detonate-and-reinflict skill would eat the very stack it just planted (the exact
+        // hazard Step 2.95's before-Step-3 ordering prevents on the non-positional path: a bomb
+        // planted by such a skill could then NEVER survive to count down and burst). Snapshot the
+        // entries that exist RIGHT NOW — identities, so it holds across every victim this cast may
+        // append to (the anchor's containers plus any splash victim's) regardless of order.
+        const detonatable = new Set<ActiveDoTStack | PendingBomb>();
+        const collectDetonatable = (v: {
+            corrosionEntries: ActiveDoTStack[];
+            infernoEntries: ActiveDoTStack[];
+            pendingBombs: PendingBomb[];
+        }): void => {
+            for (const e of v.corrosionEntries) detonatable.add(e);
+            for (const e of v.infernoEntries) detonatable.add(e);
+            for (const b of v.pendingBombs) detonatable.add(b);
+        };
+        // The anchor's containers arrive as loose params (they may be the dummy sink's), so collect
+        // them directly; the footprint/splash victims come from the opposing roster map.
+        collectDetonatable({ corrosionEntries, infernoEntries, pendingBombs });
+        for (const victim of opposingVictimById?.values() ?? []) collectDetonatable(victim);
         positionalDetonation = {
             dets: detonationsFromSkill(gatedSkill),
             effectiveAttack,
             dotMult,
             affinityMult,
             detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
+            detonatable,
         };
     } else {
         detonationDamage = detonate({

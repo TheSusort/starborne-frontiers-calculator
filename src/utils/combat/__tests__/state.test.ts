@@ -5,12 +5,14 @@ import {
     selectNextBySpeed,
     buildTurnQueue,
     orderByTurnPriority,
+    positionTurnRank,
     advanceChargeCadence,
     ActorStats,
     CombatActor,
     TURN_METER_THRESHOLD,
     MAX_SELECTION_TICKS,
 } from '../state';
+import type { Position } from '../../../types/encounters';
 
 const baseStats: ActorStats = {
     attack: 10000,
@@ -251,9 +253,75 @@ describe('buildTurnQueue', () => {
     });
 
     it('does not mutate the input array', () => {
-        const input = [actor('attacker', 'attacker', 100), actor('t1', 'team', 140)];
+        const input = [actor('attacker', 'attacker', 140), actor('t1', 'team', 100)];
         buildTurnQueue(input);
         expect(input.map((a) => a.id)).toEqual(['attacker', 't1']);
+    });
+
+    // ── Board-position tiebreak (the game's rule: speed → position → team) ──────────────
+    const positioned = (id: string, side: CombatActor['side'], speed: number, position: Position) =>
+        createActor({
+            id,
+            side,
+            kind: side === 'enemy' ? 'enemy' : 'team',
+            position,
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed,
+            },
+        });
+
+    it('positionTurnRank: TOP row outranks MID outranks BOTTOM, lowest column first', () => {
+        // "furthest to the top back wins" — T1 is the single highest-priority cell.
+        const cells: Position[] = ['T1', 'T4', 'M1', 'M4', 'B1', 'B4'];
+        const ranks = cells.map(positionTurnRank);
+        expect(ranks).toEqual([...ranks].sort((a, b) => a - b)); // already in priority order
+        expect(positionTurnRank('T4')).toBeLessThan(positionTurnRank('M1')); // whole row wins
+        expect(positionTurnRank('M4')).toBeLessThan(positionTurnRank('B1'));
+        expect(positionTurnRank(undefined)).toBe(Number.POSITIVE_INFINITY); // ranks last
+    });
+
+    it('breaks an equal-speed tie by POSITION, not roster order — even within one team', () => {
+        // Listed back-to-front on purpose: roster order would give b4 → m2 → t3.
+        const q = buildTurnQueue([
+            positioned('b4', 'player', 100, 'B4'),
+            positioned('m2', 'player', 100, 'M2'),
+            positioned('t3', 'player', 100, 'T3'),
+        ]);
+        expect(q.map((a) => a.id)).toEqual(['t3', 'm2', 'b4']);
+    });
+
+    it('interleaves the two sides per equal-speed group (a tie is not a whole-team win)', () => {
+        // Two speed groups: the 120s tie on position (T2 beats M1), the 100s likewise.
+        const q = buildTurnQueue([
+            positioned('p-slow', 'player', 100, 'M1'),
+            positioned('p-fast', 'player', 120, 'M1'),
+            positioned('e-slow', 'enemy', 100, 'T2'),
+            positioned('e-fast', 'enemy', 120, 'T2'),
+        ]);
+        expect(q.map((a) => a.id)).toEqual(['e-fast', 'p-fast', 'e-slow', 'p-slow']);
+    });
+
+    it('falls through to the side rank only when speed AND position both tie', () => {
+        const q = buildTurnQueue([
+            positioned('enemy-t1', 'enemy', 100, 'T1'),
+            positioned('player-t1', 'player', 100, 'T1'),
+        ]);
+        expect(q.map((a) => a.id)).toEqual(['player-t1', 'enemy-t1']);
+    });
+
+    it('a position-less actor ranks LAST within its speed group', () => {
+        const q = buildTurnQueue([
+            actor('dummy', 'enemy', 100), // no position (DPS sink)
+            positioned('b4', 'player', 100, 'B4'),
+        ]);
+        expect(q.map((a) => a.id)).toEqual(['b4', 'dummy']);
     });
 });
 
