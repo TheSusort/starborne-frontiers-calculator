@@ -193,7 +193,7 @@ Always dispatch `app:migration:end` even on error.
 - **RLS helper:** `public.has_profile_access(user_id uuid)` — use this on all user-data table policies (handles both main accounts and alt accounts).
 - **Import validation:** `validateExportedPlayData()` in `src/schemas/exportedPlayData.ts` — extend this schema if new fields are added to the import format.
 - **Security headers:** Set in `netlify.toml` under `[[headers]]`. CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy are all live. Update the CSP `connect-src` if new external API domains are added.
-- **Dependency hygiene:** `npm audit --omit=dev --audit-level=high` runs on every PR via `.github/workflows/security.yml`. Dependabot opens weekly PRs for outdated packages.
+- **Dependency hygiene:** `npm run audit` (`scripts/audit.mjs`) runs on every PR via `.github/workflows/security.yml` — it is a drop-in equivalent of `npm audit --omit=dev --audit-level=high` (production deps only, fails on high/critical). It exists because `npm audit` itself is broken against the registry: the bulk-advisory endpoint returns a gzip body with no `content-encoding` header, so npm cannot parse it, falls back to the retired quick endpoint, and reports a misleading `400 Invalid package tree`. Revert to plain `npm audit` once upstream is fixed. Accepted-risk advisories go in the script's `ALLOWLIST` (empty by default — each entry is a vulnerability we knowingly ship). Dependabot opens weekly PRs for outdated packages.
 
 ## Common Pitfalls
 
