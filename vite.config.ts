@@ -8,6 +8,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 import PrerenderPlugin from '@prerenderer/rollup-plugin';
 import PuppeteerRenderer from '@prerenderer/renderer-puppeteer';
 
+// Matches Vite's default 'modules' target but raises the Safari floor 14 -> 15.
+// esbuild 0.28+ refuses to emit destructuring for Safari 14 (known browser bug),
+// which breaks both minification (build) and dependency prebundling (dev server).
+// Must be applied to build.target AND optimizeDeps — the latter does not inherit
+// build.target, it always uses Vite's own default list.
+const BROWSER_TARGET = ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari15'];
+
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '/',
@@ -395,11 +402,13 @@ export default defineConfig({
             exclude: [...(configDefaults.coverage.exclude ?? [])],
         },
     },
+    optimizeDeps: {
+        esbuildOptions: {
+            target: BROWSER_TARGET,
+        },
+    },
     build: {
-        // Matches Vite's default 'modules' target but raises the Safari floor 14 -> 15.
-        // esbuild 0.28+ refuses to emit destructuring for Safari 14 (known browser bug),
-        // which breaks minification under the default target.
-        target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari15'],
+        target: BROWSER_TARGET,
         rollupOptions: {
             output: {
                 manualChunks: {
