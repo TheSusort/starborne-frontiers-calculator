@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dedupeShipIds, resolveTeamShips } from '../teamShips';
+import { dedupeShipIds, isSameShipSet, resolveTeamShips } from '../teamShips';
 import { Ship } from '../../../types/ship';
 
 /** Minimal Ship stand-in — resolveTeamShips only ever reads identity. */
@@ -48,5 +48,35 @@ describe('resolveTeamShips', () => {
 
         expect(result.ships).toEqual([]);
         expect(result.missingCount).toBe(2);
+    });
+});
+
+describe('isSameShipSet', () => {
+    it('is true for the same ships in a different order', () => {
+        expect(isSameShipSet(['a', 'b', 'c'], ['c', 'a', 'b'])).toBe(true);
+    });
+
+    it('is false when a ship was added', () => {
+        expect(isSameShipSet(['a', 'b', 'c'], ['a', 'b'])).toBe(false);
+    });
+
+    it('is false when a ship was removed', () => {
+        expect(isSameShipSet(['a', 'b'], ['a', 'b', 'c'])).toBe(false);
+    });
+
+    it('is false when a ship was swapped for a different one', () => {
+        expect(isSameShipSet(['a', 'b'], ['a', 'z'])).toBe(false);
+    });
+
+    it('ignores duplicates on either side', () => {
+        expect(isSameShipSet(['a', 'a', 'b'], ['b', 'a'])).toBe(true);
+    });
+
+    it('is true for two empty lists', () => {
+        expect(isSameShipSet([], [])).toBe(true);
+    });
+
+    it('is false when only one side is empty', () => {
+        expect(isSameShipSet(['a'], [])).toBe(false);
     });
 });

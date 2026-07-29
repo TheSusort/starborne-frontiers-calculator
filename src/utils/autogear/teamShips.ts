@@ -50,3 +50,24 @@ export const resolveTeamShips = (
 
     return { ships, missingCount };
 };
+
+/**
+ * True when both lists contain the same ship ids, ignoring order and duplicates.
+ *
+ * This is what keeps a loaded team's link alive across a reorder: reordering
+ * preserves the set, while adding, removing or swapping a ship changes it. The
+ * caller therefore never has to remember to clear the link — it simply stops
+ * matching.
+ */
+export const isSameShipSet = (a: string[], b: string[]): boolean => {
+    const setA = new Set(a);
+    const setB = new Set(b);
+
+    if (setA.size !== setB.size) return false;
+
+    for (const id of setA) {
+        if (!setB.has(id)) return false;
+    }
+
+    return true;
+};
