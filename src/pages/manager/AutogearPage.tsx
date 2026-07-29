@@ -281,6 +281,31 @@ export const AutogearPage: React.FC = () => {
         }));
     };
 
+    /**
+     * Applies each ship's saved autogear config, if it has one.
+     * `notify` reports a single "Loaded saved configuration" toast when at least
+     * one config was applied — wanted when loading a group, unwanted when the
+     * user picks a single ship by hand.
+     */
+    const applySavedConfigs = (shipsToApply: Ship[], options?: { notify?: boolean }) => {
+        let anyConfig = false;
+
+        for (const ship of shipsToApply) {
+            const savedConfig = getConfig(ship.id);
+            if (savedConfig) {
+                anyConfig = true;
+                updateShipConfig(ship.id, {
+                    ...savedConfig,
+                    fleetBuffs: savedConfig.fleetBuffs ?? [],
+                });
+            }
+        }
+
+        if (anyConfig && options?.notify) {
+            addNotification('success', 'Loaded saved configuration');
+        }
+    };
+
     const handleFindGearUpgrades = (shipId: string) => {
         const ship = getShipById(shipId);
         if (!ship) return;
@@ -318,33 +343,13 @@ export const AutogearPage: React.FC = () => {
                 .filter((s): s is Ship => s !== null && s !== undefined);
             if (resolved.length > 0) {
                 setSelectedShips(resolved);
-                let anyConfig = false;
-                for (const ship of resolved) {
-                    const savedConfig = getConfig(ship.id);
-                    if (savedConfig) {
-                        anyConfig = true;
-                        updateShipConfig(ship.id, {
-                            ...savedConfig,
-                            fleetBuffs: savedConfig.fleetBuffs ?? [],
-                        });
-                    }
-                }
-                if (anyConfig) {
-                    addNotification('success', 'Loaded saved configuration');
-                }
+                applySavedConfigs(resolved, { notify: true });
             }
         } else if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
                 setSelectedShips([ship]);
-                const savedConfig = getConfig(shipId);
-                if (savedConfig) {
-                    updateShipConfig(shipId, {
-                        ...savedConfig,
-                        fleetBuffs: savedConfig.fleetBuffs ?? [],
-                    });
-                    addNotification('success', 'Loaded saved configuration');
-                }
+                applySavedConfigs([ship], { notify: true });
             }
         }
 
@@ -928,36 +933,18 @@ export const AutogearPage: React.FC = () => {
         newShips[index] = ship;
         setSelectedShips(newShips);
 
-        // Load saved config for this ship if it exists
-        const savedConfig = getConfig(ship.id);
-        if (savedConfig) {
-            updateShipConfig(ship.id, {
-                ...savedConfig,
-                fleetBuffs: savedConfig.fleetBuffs ?? [],
-            });
-        }
+        // Load saved config for this ship if it exists. No toast: picking one
+        // ship by hand should not announce itself.
+        applySavedConfigs([ship]);
     };
 
     const handleSelectSuggestionTarget = (ship: Ship) => {
         handleShipSelect(ship, 0);
     };
 
-    const handleSelectAllSuggestionTargets = (ships: Ship[]) => {
-        setSelectedShips(ships);
-        let anyConfig = false;
-        for (const ship of ships) {
-            const savedConfig = getConfig(ship.id);
-            if (savedConfig) {
-                anyConfig = true;
-                updateShipConfig(ship.id, {
-                    ...savedConfig,
-                    fleetBuffs: savedConfig.fleetBuffs ?? [],
-                });
-            }
-        }
-        if (anyConfig) {
-            addNotification('success', 'Loaded saved configuration');
-        }
+    const handleSelectAllSuggestionTargets = (targets: Ship[]) => {
+        setSelectedShips(targets);
+        applySavedConfigs(targets, { notify: true });
     };
 
     const handleAddShip = () => {
