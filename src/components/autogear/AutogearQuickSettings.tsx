@@ -75,17 +75,17 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
             <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold">Autogear</h3>
                 <div className="flex flex-wrap justify-end gap-2">
+                    {canSaveTeam && (
+                        <Button variant="secondary" onClick={onSaveTeam} className="text-sm">
+                            Save Team
+                        </Button>
+                    )}
                     <Button variant="secondary" onClick={onAddTeam} className="text-sm">
                         Add Team
                     </Button>
                     <Button variant="secondary" onClick={handleAddShip} className="text-sm">
                         Add Ship
                     </Button>
-                    {canSaveTeam && (
-                        <Button variant="secondary" onClick={onSaveTeam} className="text-sm">
-                            Save Team
-                        </Button>
-                    )}
                 </div>
             </div>
 
