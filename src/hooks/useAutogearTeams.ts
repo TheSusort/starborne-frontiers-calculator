@@ -196,9 +196,16 @@ export const useAutogearTeams = () => {
             } catch (error) {
                 console.error('Error updating autogear team order:', error);
                 void setTeams((prev) =>
-                    prev.map((candidate) =>
-                        candidate.id === id ? { ...candidate, shipIds: previousShipIds } : candidate
-                    )
+                    prev.map((candidate) => {
+                        if (candidate.id !== id) return candidate;
+                        // Only revert if OUR write is still the one in local
+                        // state: a newer reorder that already landed must not be
+                        // clobbered by this older failure.
+                        const isStillOurs =
+                            candidate.shipIds.length === shipIds.length &&
+                            candidate.shipIds.every((shipId, i) => shipId === shipIds[i]);
+                        return isStillOurs ? { ...candidate, shipIds: previousShipIds } : candidate;
+                    })
                 ); // Targeted revert
                 addNotification('error', 'Failed to save the new order');
             }

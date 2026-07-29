@@ -218,11 +218,21 @@ export const AutogearPage: React.FC = () => {
      * contains that same set (order may differ), and dies as soon as it doesn't.
      */
     const [loadedTeam, setLoadedTeam] = useState<{ id: string; shipIds: string[] } | null>(null);
-    /** Latest reordered ship ids awaiting the debounced write. */
-    const pendingOrderRef = useRef<string[] | null>(null);
+    /**
+     * Latest reordered ship ids awaiting the debounced write, tagged with the
+     * team they were queued for. The tag matters: two teams can hold the same
+     * ships in different orders, so a set match alone would let a reorder queued
+     * for one team land on another that was loaded before the timer fired.
+     */
+    const pendingOrderRef = useRef<{ teamId: string; order: string[] } | null>(null);
     const orderSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadedTeamRef = useRef(loadedTeam);
-    loadedTeamRef.current = loadedTeam;
+
+    // Mirrored in an effect, not during render: React may replay or discard
+    // render work, and this ref is read by a timeout 600ms later.
+    useEffect(() => {
+        loadedTeamRef.current = loadedTeam;
+    }, [loadedTeam]);
 
     // A pending order is deliberately not flushed here: navigating away
     // mid-reorder should not persist a half-finished arrangement.
@@ -1067,6 +1077,20 @@ export const AutogearPage: React.FC = () => {
     };
 
     /**
+     * Deletes a team, and drops the link if it was the one the current selection
+     * came from — otherwise a later reorder would target a row that is gone.
+     */
+    const handleDeleteTeam = async (id: string) => {
+        if (loadedTeam?.id === id) {
+            setLoadedTeam(null);
+            pendingOrderRef.current = null;
+            if (orderSaveTimerRef.current) clearTimeout(orderSaveTimerRef.current);
+            orderSaveTimerRef.current = null;
+        }
+        await deleteTeam(id);
+    };
+
+    /**
      * Moves a selected ship one row up or down. Operates on the raw
      * selectedShips array — placeholder rows included — so what the user sees is
      * what moves.
@@ -1078,9 +1102,21 @@ export const AutogearPage: React.FC = () => {
         const reordered = arrayMove(selectedShips, fromIndex, toIndex);
         setSelectedShips(reordered);
 
-        pendingOrderRef.current = dedupeShipIds(
+        const order = dedupeShipIds(
             reordered.filter((ship): ship is Ship => ship !== null).map((ship) => ship.id)
         );
+        const linkedTeam = loadedTeamRef.current;
+
+        // Nothing to persist without a live link. Drop any queued write too:
+        // whatever it was queued for is no longer what the user is editing.
+        if (!linkedTeam || !isSameShipSet(order, linkedTeam.shipIds)) {
+            pendingOrderRef.current = null;
+            if (orderSaveTimerRef.current) clearTimeout(orderSaveTimerRef.current);
+            orderSaveTimerRef.current = null;
+            return;
+        }
+
+        pendingOrderRef.current = { teamId: linkedTeam.id, order };
 
         if (orderSaveTimerRef.current) clearTimeout(orderSaveTimerRef.current);
         orderSaveTimerRef.current = setTimeout(() => {
@@ -1088,14 +1124,17 @@ export const AutogearPage: React.FC = () => {
 
             // Guard INSIDE the callback, not around the setTimeout: React 18
             // Strict Mode double-invokes effects in development, and the link
-            // can also die between the click and the write (the user removed a
-            // ship, or loaded a different team).
-            const order = pendingOrderRef.current;
+            // can also change between the click and the write — the user may
+            // have removed a ship, or loaded a different team that happens to
+            // hold the same ships.
+            const pending = pendingOrderRef.current;
             const team = loadedTeamRef.current;
-            if (!order || !team) return;
-            if (!isSameShipSet(order, team.shipIds)) return;
+            if (!pending || !team) return;
+            if (team.id !== pending.teamId) return;
+            if (!isSameShipSet(pending.order, team.shipIds)) return;
 
-            void updateTeamOrder(team.id, order);
+            pendingOrderRef.current = null;
+            void updateTeamOrder(team.id, pending.order);
         }, ORDER_SAVE_DEBOUNCE_MS);
     };
 
@@ -1762,7 +1801,7 @@ export const AutogearPage: React.FC = () => {
                         teams={teams}
                         hasExistingSelection={selectedRealShips.length > 0}
                         onLoadTeam={handleLoadTeam}
-                        onDeleteTeam={(id) => void deleteTeam(id)}
+                        onDeleteTeam={(id) => void handleDeleteTeam(id)}
                     />
                 )}
 
