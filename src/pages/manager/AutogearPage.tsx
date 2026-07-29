@@ -991,16 +991,28 @@ export const AutogearPage: React.FC = () => {
 
         setSelectedShips(resolved);
         applySavedConfigs(resolved, { notify: true });
-        setPendingTeamName(suggestedName);
+        // Only seed the save dialog when the suggestion isn't already a saved
+        // team's own name — that's the case when loading a saved team back in,
+        // and pre-filling it would guarantee the dialog's own duplicate check
+        // rejects it. The pre-fill is meant for the encounter-import path only.
+        const collidesWithSavedTeam = teams.some(
+            (team) => team.name.trim().toLowerCase() === suggestedName.trim().toLowerCase()
+        );
+        setPendingTeamName(collidesWithSavedTeam ? null : suggestedName);
         return true;
     };
 
-    const handleSaveTeam = (name: string) => {
+    const handleSaveTeam = async (name: string) => {
         // Dedupe at save time so the stored record is clean — the selector allows
         // the same ship in two rows, and gearing it twice is only wasted work.
-        void saveTeam(name, dedupeShipIds(selectedRealShips.map((ship) => ship.id)));
-        setShowSaveTeamModal(false);
-        setPendingTeamName(null);
+        try {
+            await saveTeam(name, dedupeShipIds(selectedRealShips.map((ship) => ship.id)));
+            setShowSaveTeamModal(false);
+            setPendingTeamName(null);
+        } catch {
+            // saveTeam already showed an error notification and logged the
+            // cause — just keep the dialog open with the user's text intact.
+        }
     };
 
     const handlePrint = () => {
@@ -1675,7 +1687,7 @@ export const AutogearPage: React.FC = () => {
                         ships={selectedRealShips}
                         existingNames={teams.map((team) => team.name)}
                         initialName={pendingTeamName ?? undefined}
-                        onSave={handleSaveTeam}
+                        onSave={(name) => void handleSaveTeam(name)}
                     />
                 )}
             </PageLayout>
