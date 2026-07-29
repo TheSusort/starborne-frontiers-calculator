@@ -80,28 +80,43 @@ export const Modal: React.FC<Props> = ({
     highZIndex = false,
     maxWidth = 'max-w-4xl',
 }) => {
+    // Scroll lock lives in its own effect keyed on `[isOpen]` only — NOT
+    // `onClose` — so a parent re-render that hands down a fresh inline
+    // `onClose` closure can't re-run this effect. If it were combined with
+    // the Escape-key effect below (keyed on `[isOpen, onClose]`), React 18's
+    // "all destroys before all creates" batching would let a commit that
+    // re-runs every open Modal's effect (e.g. a confirm action that both
+    // updates parent state and closes a nested modal) drop the reference
+    // count to 0 mid-flush — clearing the lock and re-stashing `scrollY`
+    // after the fixed-position paint already clamped it to 0.
     useEffect(() => {
-        if (isOpen) {
-            acquireScrollLock();
+        if (!isOpen) return;
 
-            // Add escape key handler
-            const handleEscape = (e: KeyboardEvent) => {
-                if (e.key === 'Escape') onClose();
-            };
-            document.addEventListener('keydown', handleEscape);
+        acquireScrollLock();
 
-            return () => {
-                // This cleanup fires both when `isOpen` flips false and when
-                // the Modal unmounts while still open (e.g. a parent stops
-                // rendering it instead of toggling `isOpen`) — React always
-                // runs the last effect's cleanup on unmount, so every
-                // acquireScrollLock() above is guaranteed exactly one
-                // matching releaseScrollLock() here. That's what keeps the
-                // counter from leaking.
-                releaseScrollLock();
-                document.removeEventListener('keydown', handleEscape);
-            };
-        }
+        return () => {
+            // This cleanup fires both when `isOpen` flips false and when
+            // the Modal unmounts while still open (e.g. a parent stops
+            // rendering it instead of toggling `isOpen`) — React always
+            // runs the last effect's cleanup on unmount, so every
+            // acquireScrollLock() above is guaranteed exactly one
+            // matching releaseScrollLock() here. That's what keeps the
+            // counter from leaking.
+            releaseScrollLock();
+        };
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('keydown', handleEscape);
+        };
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;

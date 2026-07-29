@@ -321,15 +321,21 @@ export const BackupRestoreData: React.FC = () => {
                                     .eq('user_id', activeProfileId);
 
                                 if (Array.isArray(parsedData) && parsedData.length > 0) {
-                                    const teamRecords = parsedData.map((team) => ({
-                                        id: team.id,
-                                        user_id: activeProfileId,
-                                        name: team.name,
-                                        ship_ids: team.shipIds ?? [],
-                                        created_at: new Date(
-                                            (team.createdAt as string | number | Date) || Date.now()
-                                        ).toISOString(),
-                                    }));
+                                    const teamRecords = parsedData.map((team) => {
+                                        const createdAt = new Date(
+                                            team.createdAt as string | number | Date
+                                        );
+                                        return {
+                                            id: team.id,
+                                            user_id: activeProfileId,
+                                            name: team.name,
+                                            ship_ids: team.shipIds ?? [],
+                                            created_at: (Number.isNaN(createdAt.getTime())
+                                                ? new Date()
+                                                : createdAt
+                                            ).toISOString(),
+                                        };
+                                    });
 
                                     await supabase.from('autogear_teams').insert(teamRecords);
                                 }
