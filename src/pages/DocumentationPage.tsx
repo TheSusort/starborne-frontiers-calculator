@@ -1612,6 +1612,39 @@ const DocumentationPage: React.FC = () => {
                                 <br />
                             </p>
                         </div>
+
+                        <div className="card">
+                            <h3 className="text-xl font-semibold mb-2">Teams</h3>
+                            <p className="mb-4">
+                                Autogear processes ships in the order you select them — the first
+                                ship gets first pick of your gear. Once you have selected at least
+                                two ships, use <strong>Save Team</strong> to store that ordered
+                                selection under a name, and <strong>Add Team</strong> to load it
+                                back later. Each ship arrives with whatever role and stat priorities
+                                you already saved for it.
+                            </p>
+                            <ul className="list-disc pl-6 space-y-2">
+                                <li>
+                                    Team names must be unique. To change a team, delete it and save
+                                    again.
+                                </li>
+                                <li>
+                                    Loading a team replaces your current selection, asking first if
+                                    ships are already selected.
+                                </li>
+                                <li>
+                                    Ships that have left your fleet are skipped when a team loads,
+                                    and the team itself is left untouched.
+                                </li>
+                                <li>
+                                    <span className="text-primary">From encounter:</span> the Add
+                                    Team dialog can also load a saved encounter&apos;s ships,
+                                    ordered by the turn order you assigned in the formation. Nothing
+                                    is saved until you use Save Team, so you can adjust the group
+                                    first.
+                                </li>
+                            </ul>
+                        </div>
                     </section>
 
                     {/* Community Recommendations Section */}
