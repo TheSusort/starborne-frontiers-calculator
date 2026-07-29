@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShipSelector } from '../ship/ShipSelector';
 import { Button } from '../ui';
 import { Ship } from '../../types/ship';
-import { CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
+import { ChevronDownIcon, ChevronUpIcon, CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
@@ -19,6 +19,8 @@ interface AutogearQuickSettingsProps {
     /** True when at least two real ships are selected. */
     canSaveTeam: boolean;
     onRemoveShip: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
+    onMoveShipUp: (index: number) => void;
+    onMoveShipDown: (index: number) => void;
     onOpenSettings: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
     onFindOptimalGear: () => void;
     getShipConfig: (shipId: string) => {
@@ -46,6 +48,8 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onSaveTeam,
     canSaveTeam,
     onRemoveShip,
+    onMoveShipUp,
+    onMoveShipDown,
     onOpenSettings,
     onFindOptimalGear,
     getShipConfig,
@@ -92,6 +96,32 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                             className="flex gap-2 items-start"
                             {...(index === 0 ? { 'data-tutorial': 'autogear-ship-selector' } : {})}
                         >
+                            {selectedShips.length > 1 && (
+                                <div className="flex flex-col">
+                                    {index > 0 && (
+                                        <Button
+                                            aria-label="Move ship up"
+                                            variant="secondary"
+                                            size="xs"
+                                            onClick={() => onMoveShipUp(index)}
+                                            className="!p-0.5"
+                                        >
+                                            <ChevronUpIcon className="w-3 h-3" />
+                                        </Button>
+                                    )}
+                                    {index < selectedShips.length - 1 && (
+                                        <Button
+                                            aria-label="Move ship down"
+                                            variant="secondary"
+                                            size="xs"
+                                            onClick={() => onMoveShipDown(index)}
+                                            className="!p-0.5"
+                                        >
+                                            <ChevronDownIcon className="w-3 h-3" />
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
                             <div className="flex-1">
                                 <ShipSelector
                                     selected={ship || null}
