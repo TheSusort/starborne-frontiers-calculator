@@ -994,10 +994,32 @@ export const syncMigratedDataToSupabase = async (
                     created_at: new Date(team.createdAt).toISOString(),
                 }));
 
-                const { error: teamsError } = await supabase
-                    .from('autogear_teams')
-                    .upsert(teamRecords, { onConflict: 'id' });
-                if (teamsError) throw teamsError;
+                // Upsert one team at a time: `(user_id, name)` is a unique constraint
+                // that upsert can't resolve via onConflict: 'id', so a single name
+                // collision would otherwise fail the whole batch statement and take
+                // every other team in it down too.
+                for (const team of teamRecords) {
+                    try {
+                        const { error: teamsError } = await supabase
+                            .from('autogear_teams')
+                            .upsert(team, { onConflict: 'id' });
+
+                        if (teamsError) {
+                            console.error(
+                                'Error upserting individual autogear team during migration:',
+                                teamsError,
+                                team
+                            );
+                            // Continue with the next team instead of failing completely
+                        }
+                    } catch (teamError) {
+                        console.error(
+                            'Exception upserting individual autogear team during migration:',
+                            teamError
+                        );
+                        // Continue with the next team
+                    }
+                }
             }
         } catch (error) {
             // Non-fatal, matching every other step here: a name collision with an

@@ -674,12 +674,20 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
                 created_at: new Date(team.createdAt).toISOString(),
             }));
 
-            for (let i = 0; i < teamRecords.length; i += BATCH_SIZE) {
-                const batch = teamRecords.slice(i, i + BATCH_SIZE);
+            // Upsert one team at a time (no BATCH_SIZE chunking here): a single
+            // name collision would otherwise fail the whole batch statement and
+            // take every other team in it down too.
+            for (const team of teamRecords) {
                 const { error } = await supabase
                     .from('autogear_teams')
-                    .upsert(batch, { onConflict: 'id' });
-                if (error) throw error;
+                    .upsert(team, { onConflict: 'id' });
+                if (error) {
+                    console.error(
+                        'Error upserting individual autogear team during re-upload:',
+                        error,
+                        team.id
+                    );
+                }
             }
         }
     } catch (error) {
