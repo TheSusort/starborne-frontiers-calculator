@@ -16,6 +16,46 @@ const getOrCreatePortalRoot = (highZIndex = false) => {
     return portalRoot;
 };
 
+// Body-scroll lock is reference-counted so nested modals (e.g. a ConfirmModal
+// opened while another Modal is already open) don't fight over `document.body`
+// styles. Only the first acquire stashes the scroll position and applies the
+// lock; only the last release clears it. Module-level scope matches this
+// file's existing portal-root management, and is safe: this is a
+// single-window app.
+let scrollLockCount = 0;
+let stashedScrollY = 0;
+
+const acquireScrollLock = () => {
+    if (scrollLockCount === 0) {
+        stashedScrollY = window.scrollY;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${stashedScrollY}px`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
+    }
+    scrollLockCount++;
+};
+
+const releaseScrollLock = () => {
+    // Guard against a release firing without a matching acquire (shouldn't
+    // happen, but would otherwise drive the counter negative and make every
+    // future modal think a lock is already held).
+    if (scrollLockCount === 0) return;
+
+    scrollLockCount--;
+    if (scrollLockCount === 0) {
+        // Matches the pre-existing single-modal cleanup exactly: clear the
+        // lock styles and nothing else — there was no explicit scroll
+        // restore call before this fix, so none is added now (out of scope:
+        // see the reentrancy fix's report for the verified single-modal
+        // scroll behaviour this preserves).
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+    }
+};
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -42,14 +82,7 @@ export const Modal: React.FC<Props> = ({
 }) => {
     useEffect(() => {
         if (isOpen) {
-            // Save current scroll position
-            const scrollY = window.scrollY;
-
-            // Apply multiple properties to ensure scroll lock
-            document.body.style.position = 'fixed';
-            document.body.style.top = `-${scrollY}px`;
-            document.body.style.width = '100%';
-            document.body.style.overflow = 'hidden';
+            acquireScrollLock();
 
             // Add escape key handler
             const handleEscape = (e: KeyboardEvent) => {
@@ -58,11 +91,14 @@ export const Modal: React.FC<Props> = ({
             document.addEventListener('keydown', handleEscape);
 
             return () => {
-                // Cleanup
-                document.body.style.position = '';
-                document.body.style.top = '';
-                document.body.style.width = '';
-                document.body.style.overflow = '';
+                // This cleanup fires both when `isOpen` flips false and when
+                // the Modal unmounts while still open (e.g. a parent stops
+                // rendering it instead of toggling `isOpen`) — React always
+                // runs the last effect's cleanup on unmount, so every
+                // acquireScrollLock() above is guaranteed exactly one
+                // matching releaseScrollLock() here. That's what keeps the
+                // counter from leaking.
+                releaseScrollLock();
                 document.removeEventListener('keydown', handleEscape);
             };
         }

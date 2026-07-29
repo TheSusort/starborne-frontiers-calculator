@@ -12,7 +12,6 @@ CREATE TABLE autogear_teams (
 
 ALTER TABLE autogear_teams ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX autogear_teams_user_id_idx ON autogear_teams (user_id);
 CREATE UNIQUE INDEX autogear_teams_user_name_idx ON autogear_teams (user_id, name);
 
 CREATE POLICY "Users can manage their own autogear teams"

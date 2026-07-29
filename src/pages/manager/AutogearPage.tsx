@@ -31,7 +31,7 @@ import { AutogearSettingsModal } from '../../components/autogear/AutogearSetting
 import { AutogearTeamsModal } from '../../components/autogear/AutogearTeamsModal';
 import { SaveAutogearTeamModal } from '../../components/autogear/SaveAutogearTeamModal';
 import { useAutogearTeams } from '../../hooks/useAutogearTeams';
-import { dedupeShipIds, resolveTeamShips } from '../../utils/autogear/teamShips';
+import { resolveTeamShips } from '../../utils/autogear/teamShips';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
@@ -970,6 +970,20 @@ export const AutogearPage: React.FC = () => {
     const selectedRealShips = selectedShips.filter((ship): ship is Ship => ship !== null);
 
     /**
+     * The selection with duplicate ships removed, keeping the first occurrence.
+     * The selector allows the same ship in two rows, so this single derivation
+     * feeds every consumer that needs a true count/list — the save gate, the
+     * save dialog's preview, and the saved record itself — to keep them
+     * consistent with one another.
+     */
+    const seenShipIds = new Set<string>();
+    const dedupedSelectedShips = selectedRealShips.filter((ship) => {
+        if (seenShipIds.has(ship.id)) return false;
+        seenShipIds.add(ship.id);
+        return true;
+    });
+
+    /**
      * Loads a saved team or an encounter-derived selection.
      * Returns false when nothing could be resolved, which keeps the teams modal
      * open so the user can pick something else.
@@ -1003,10 +1017,14 @@ export const AutogearPage: React.FC = () => {
     };
 
     const handleSaveTeam = async (name: string) => {
-        // Dedupe at save time so the stored record is clean — the selector allows
-        // the same ship in two rows, and gearing it twice is only wasted work.
+        // Uses the deduped selection so the stored record matches the gate and
+        // the preview the user just approved — the selector allows the same
+        // ship in two rows, and gearing it twice is only wasted work.
         try {
-            await saveTeam(name, dedupeShipIds(selectedRealShips.map((ship) => ship.id)));
+            await saveTeam(
+                name,
+                dedupedSelectedShips.map((ship) => ship.id)
+            );
             setShowSaveTeamModal(false);
             setPendingTeamName(null);
         } catch {
@@ -1048,7 +1066,7 @@ export const AutogearPage: React.FC = () => {
                             onAddShip={handleAddShip}
                             onAddTeam={() => setShowTeamsModal(true)}
                             onSaveTeam={() => setShowSaveTeamModal(true)}
-                            canSaveTeam={selectedRealShips.length >= 2}
+                            canSaveTeam={dedupedSelectedShips.length >= 2}
                             onRemoveShip={handleRemoveShip}
                             onOpenSettings={(
                                 event: React.MouseEvent<HTMLButtonElement>,
@@ -1684,7 +1702,7 @@ export const AutogearPage: React.FC = () => {
                     <SaveAutogearTeamModal
                         isOpen
                         onClose={() => setShowSaveTeamModal(false)}
-                        ships={selectedRealShips}
+                        ships={dedupedSelectedShips}
                         existingNames={teams.map((team) => team.name)}
                         initialName={pendingTeamName ?? undefined}
                         onSave={(name) => void handleSaveTeam(name)}

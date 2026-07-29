@@ -664,21 +664,29 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
     }
 
     // Step 8: Upsert saved autogear teams
-    if (autogearTeams.length > 0) {
-        const teamRecords = autogearTeams.map((team) => ({
-            id: team.id,
-            user_id: userId,
-            name: team.name,
-            ship_ids: team.shipIds,
-            created_at: new Date(team.createdAt).toISOString(),
-        }));
+    try {
+        if (autogearTeams.length > 0) {
+            const teamRecords = autogearTeams.map((team) => ({
+                id: team.id,
+                user_id: userId,
+                name: team.name,
+                ship_ids: team.shipIds,
+                created_at: new Date(team.createdAt).toISOString(),
+            }));
 
-        for (let i = 0; i < teamRecords.length; i += BATCH_SIZE) {
-            const batch = teamRecords.slice(i, i + BATCH_SIZE);
-            const { error } = await supabase
-                .from('autogear_teams')
-                .upsert(batch, { onConflict: 'id' });
-            if (error) throw error;
+            for (let i = 0; i < teamRecords.length; i += BATCH_SIZE) {
+                const batch = teamRecords.slice(i, i + BATCH_SIZE);
+                const { error } = await supabase
+                    .from('autogear_teams')
+                    .upsert(batch, { onConflict: 'id' });
+                if (error) throw error;
+            }
         }
+    } catch (error) {
+        // Non-fatal, unlike every other step above: `(user_id, name)` is a unique
+        // constraint upsert can't resolve via onConflict: 'id', so a name
+        // collision with an existing remote team must not abort steps 1-7,
+        // which already succeeded.
+        console.error('Error re-uploading autogear teams:', error);
     }
 }

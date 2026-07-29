@@ -327,7 +327,7 @@ export const BackupRestoreData: React.FC = () => {
                                         name: team.name,
                                         ship_ids: team.shipIds ?? [],
                                         created_at: new Date(
-                                            team.createdAt as string | number | Date
+                                            (team.createdAt as string | number | Date) || Date.now()
                                         ).toISOString(),
                                     }));
 
