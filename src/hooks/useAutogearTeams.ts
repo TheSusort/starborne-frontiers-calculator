@@ -111,7 +111,6 @@ export const useAutogearTeams = () => {
 
     const saveTeam = useCallback(
         async (name: string, shipIds: string[]) => {
-            const previousTeams = teams;
             const newTeam: AutogearTeam = {
                 id: uuidv4(),
                 name,
@@ -148,12 +147,12 @@ export const useAutogearTeams = () => {
                 addNotification('success', `Team "${name}" saved`);
             } catch (error) {
                 console.error('Error saving autogear team:', error);
-                void setTeams(previousTeams); // Revert optimistic update
+                void setTeams((prev) => prev.filter((team) => team.id !== newTeam.id)); // Revert optimistic update
                 addNotification('error', 'Failed to save team');
                 throw error;
             }
         },
-        [activeProfileId, addNotification, setTeams, teams]
+        [activeProfileId, addNotification, setTeams]
     );
 
     const deleteTeam = useCallback(
