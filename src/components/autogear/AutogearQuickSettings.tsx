@@ -14,6 +14,10 @@ interface AutogearQuickSettingsProps {
     selectedShips: (Ship | null)[];
     onShipSelect: (ship: Ship, index: number) => void;
     onAddShip: () => void;
+    onAddTeam: () => void;
+    onSaveTeam: () => void;
+    /** True when at least two real ships are selected. */
+    canSaveTeam: boolean;
     onRemoveShip: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
     onOpenSettings: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
     onFindOptimalGear: () => void;
@@ -38,6 +42,9 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     selectedShips,
     onShipSelect,
     onAddShip,
+    onAddTeam,
+    onSaveTeam,
+    canSaveTeam,
     onRemoveShip,
     onOpenSettings,
     onFindOptimalGear,
@@ -67,6 +74,14 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                     <Button variant="secondary" onClick={handleAddShip} className="text-sm">
                         Add Ship
                     </Button>
+                    <Button variant="secondary" onClick={onAddTeam} className="text-sm">
+                        Add Team
+                    </Button>
+                    {canSaveTeam && (
+                        <Button variant="secondary" onClick={onSaveTeam} className="text-sm">
+                            Save Team
+                        </Button>
+                    )}
                 </div>
             </div>
 

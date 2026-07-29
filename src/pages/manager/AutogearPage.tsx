@@ -28,6 +28,10 @@ import { GEAR_SETS, SHIP_TYPES, ShipTypeName } from '../../constants';
 import { IMPLANTS } from '../../constants/implants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
+import { AutogearTeamsModal } from '../../components/autogear/AutogearTeamsModal';
+import { SaveAutogearTeamModal } from '../../components/autogear/SaveAutogearTeamModal';
+import { useAutogearTeams } from '../../hooks/useAutogearTeams';
+import { dedupeShipIds, resolveTeamShips } from '../../utils/autogear/teamShips';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
@@ -118,6 +122,7 @@ export const AutogearPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
+    const { teams, saveTeam, deleteTeam } = useAutogearTeams();
     const { activeProfileId } = useActiveProfile();
     const { startGroup, hasCompletedGroup } = useTutorial();
 
@@ -196,6 +201,10 @@ export const AutogearPage: React.FC = () => {
         equippedShipId: string;
     } | null>(null);
     const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+    const [showTeamsModal, setShowTeamsModal] = useState(false);
+    const [showSaveTeamModal, setShowSaveTeamModal] = useState(false);
+    /** Suggested team name, e.g. the encounter a selection was imported from. */
+    const [pendingTeamName, setPendingTeamName] = useState<string | null>(null);
 
     // Compute suggestion targets reactively from the latest ships array.
     // Always shows starred ships with missing gear. After equipping, also shows
@@ -957,6 +966,43 @@ export const AutogearPage: React.FC = () => {
         setSelectedShips(selectedShips.filter((_, i) => i !== index));
     };
 
+    /** The real (non-placeholder) ships currently selected, in gear-pick order. */
+    const selectedRealShips = selectedShips.filter((ship): ship is Ship => ship !== null);
+
+    /**
+     * Loads a saved team or an encounter-derived selection.
+     * Returns false when nothing could be resolved, which keeps the teams modal
+     * open so the user can pick something else.
+     */
+    const handleLoadTeam = (shipIds: string[], suggestedName: string): boolean => {
+        const { ships: resolved, missingCount } = resolveTeamShips(shipIds, getShipById);
+
+        if (resolved.length === 0) {
+            addNotification('error', 'None of those ships are in your fleet anymore');
+            return false;
+        }
+
+        if (missingCount > 0) {
+            addNotification(
+                'warning',
+                `${missingCount} ${missingCount === 1 ? 'ship is' : 'ships are'} no longer in your fleet and ${missingCount === 1 ? 'was' : 'were'} skipped`
+            );
+        }
+
+        setSelectedShips(resolved);
+        applySavedConfigs(resolved, { notify: true });
+        setPendingTeamName(suggestedName);
+        return true;
+    };
+
+    const handleSaveTeam = (name: string) => {
+        // Dedupe at save time so the stored record is clean — the selector allows
+        // the same ship in two rows, and gearing it twice is only wasted work.
+        void saveTeam(name, dedupeShipIds(selectedRealShips.map((ship) => ship.id)));
+        setShowSaveTeamModal(false);
+        setPendingTeamName(null);
+    };
+
     const handlePrint = () => {
         setIsPrinting(true);
         // Use setTimeout to ensure state update before print
@@ -988,6 +1034,9 @@ export const AutogearPage: React.FC = () => {
                             selectedShips={selectedShips}
                             onShipSelect={handleShipSelect}
                             onAddShip={handleAddShip}
+                            onAddTeam={() => setShowTeamsModal(true)}
+                            onSaveTeam={() => setShowSaveTeamModal(true)}
+                            canSaveTeam={selectedRealShips.length >= 2}
                             onRemoveShip={handleRemoveShip}
                             onOpenSettings={(
                                 event: React.MouseEvent<HTMLButtonElement>,
@@ -1607,6 +1656,28 @@ export const AutogearPage: React.FC = () => {
                     onClose={() => setShowMilestoneModal(false)}
                     milestoneCount={milestoneCount}
                 />
+
+                {showTeamsModal && (
+                    <AutogearTeamsModal
+                        isOpen
+                        onClose={() => setShowTeamsModal(false)}
+                        teams={teams}
+                        hasExistingSelection={selectedRealShips.length > 0}
+                        onLoadTeam={handleLoadTeam}
+                        onDeleteTeam={(id) => void deleteTeam(id)}
+                    />
+                )}
+
+                {showSaveTeamModal && (
+                    <SaveAutogearTeamModal
+                        isOpen
+                        onClose={() => setShowSaveTeamModal(false)}
+                        ships={selectedRealShips}
+                        existingNames={teams.map((team) => team.name)}
+                        initialName={pendingTeamName ?? undefined}
+                        onSave={handleSaveTeam}
+                    />
+                )}
             </PageLayout>
         </>
     );
