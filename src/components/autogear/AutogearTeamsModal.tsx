@@ -14,13 +14,15 @@ interface AutogearTeamsModalProps {
     /** True when a real (non-placeholder) ship is already selected. */
     hasExistingSelection: boolean;
     /** Returns false when nothing could be loaded, which keeps this modal open. */
-    onLoadTeam: (shipIds: string[], suggestedName: string) => boolean;
+    onLoadTeam: (shipIds: string[], suggestedName: string, teamId?: string) => boolean;
     onDeleteTeam: (id: string) => void;
 }
 
 interface PendingLoad {
     shipIds: string[];
     name: string;
+    /** Set only when loading a saved team, absent for an encounter import. */
+    teamId?: string;
 }
 
 export const AutogearTeamsModal: React.FC<AutogearTeamsModalProps> = ({
@@ -42,18 +44,18 @@ export const AutogearTeamsModal: React.FC<AutogearTeamsModalProps> = ({
             .filter((name): name is string => !!name)
             .join(', ');
 
-    const load = (shipIds: string[], name: string) => {
-        if (onLoadTeam(shipIds, name)) {
+    const load = (shipIds: string[], name: string, teamId?: string) => {
+        if (onLoadTeam(shipIds, name, teamId)) {
             onClose();
         }
     };
 
-    const requestLoad = (shipIds: string[], name: string) => {
+    const requestLoad = (shipIds: string[], name: string, teamId?: string) => {
         if (hasExistingSelection) {
-            setPendingLoad({ shipIds, name });
+            setPendingLoad({ shipIds, name, teamId });
             return;
         }
-        load(shipIds, name);
+        load(shipIds, name, teamId);
     };
 
     const encounterShipIds = (encounter: LocalEncounterNote): string[] =>
@@ -90,7 +92,9 @@ export const AutogearTeamsModal: React.FC<AutogearTeamsModalProps> = ({
                                             variant="secondary"
                                             size="sm"
                                             aria-label={`Load team ${team.name}`}
-                                            onClick={() => requestLoad(team.shipIds, team.name)}
+                                            onClick={() =>
+                                                requestLoad(team.shipIds, team.name, team.id)
+                                            }
                                         >
                                             Load
                                         </Button>
@@ -154,7 +158,8 @@ export const AutogearTeamsModal: React.FC<AutogearTeamsModalProps> = ({
                 isOpen={!!pendingLoad}
                 onClose={() => setPendingLoad(null)}
                 onConfirm={() => {
-                    if (pendingLoad) load(pendingLoad.shipIds, pendingLoad.name);
+                    if (pendingLoad)
+                        load(pendingLoad.shipIds, pendingLoad.name, pendingLoad.teamId);
                 }}
                 title="Replace current selection?"
                 message="The ships currently selected will be replaced by this team."

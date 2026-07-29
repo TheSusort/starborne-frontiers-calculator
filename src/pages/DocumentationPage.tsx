@@ -1643,6 +1643,16 @@ const DocumentationPage: React.FC = () => {
                                     is saved until you use Save Team, so you can adjust the group
                                     first.
                                 </li>
+                                <li>
+                                    Use the up and down arrows beside each ship to change the order.
+                                    The first ship gets first pick of your gear, so the order is
+                                    worth getting right.
+                                </li>
+                                <li>
+                                    Reordering a team you loaded saves the new order to that team
+                                    automatically. Add, remove or swap a ship and it stops being
+                                    that team, so only the order is ever saved this way.
+                                </li>
                             </ul>
                         </div>
                     </section>

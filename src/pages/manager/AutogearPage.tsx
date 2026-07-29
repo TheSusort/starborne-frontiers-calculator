@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -31,7 +31,7 @@ import { AutogearSettingsModal } from '../../components/autogear/AutogearSetting
 import { AutogearTeamsModal } from '../../components/autogear/AutogearTeamsModal';
 import { SaveAutogearTeamModal } from '../../components/autogear/SaveAutogearTeamModal';
 import { useAutogearTeams } from '../../hooks/useAutogearTeams';
-import { resolveTeamShips } from '../../utils/autogear/teamShips';
+import { dedupeShipIds, isSameShipSet, resolveTeamShips } from '../../utils/autogear/teamShips';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
@@ -65,6 +65,13 @@ interface UnmetPriority {
     target: number;
     type: 'min' | 'max';
 }
+
+/**
+ * How long to wait after the last reorder click before writing the new order to
+ * a loaded team. Moving a ship three positions is three clicks; without this
+ * that would be three Supabase writes and three toasts.
+ */
+const ORDER_SAVE_DEBOUNCE_MS = 600;
 
 function formatImplantType(type: string): string {
     if (type === 'major') return 'Major';
@@ -122,7 +129,7 @@ export const AutogearPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
-    const { teams, saveTeam, deleteTeam } = useAutogearTeams();
+    const { teams, saveTeam, updateTeamOrder, deleteTeam } = useAutogearTeams();
     const { activeProfileId } = useActiveProfile();
     const { startGroup, hasCompletedGroup } = useTutorial();
 
@@ -205,6 +212,26 @@ export const AutogearPage: React.FC = () => {
     const [showSaveTeamModal, setShowSaveTeamModal] = useState(false);
     /** Suggested team name, e.g. the encounter a selection was imported from. */
     const [pendingTeamName, setPendingTeamName] = useState<string | null>(null);
+    /**
+     * The saved team the current selection came from, if any. `shipIds` is the
+     * membership as loaded — the link stays live while the selection still
+     * contains that same set (order may differ), and dies as soon as it doesn't.
+     */
+    const [loadedTeam, setLoadedTeam] = useState<{ id: string; shipIds: string[] } | null>(null);
+    /** Latest reordered ship ids awaiting the debounced write. */
+    const pendingOrderRef = useRef<string[] | null>(null);
+    const orderSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const loadedTeamRef = useRef(loadedTeam);
+    loadedTeamRef.current = loadedTeam;
+
+    // A pending order is deliberately not flushed here: navigating away
+    // mid-reorder should not persist a half-finished arrangement.
+    useEffect(
+        () => () => {
+            if (orderSaveTimerRef.current) clearTimeout(orderSaveTimerRef.current);
+        },
+        []
+    );
 
     // Compute suggestion targets reactively from the latest ships array.
     // Always shows starred ships with missing gear. After equipping, also shows
@@ -988,7 +1015,7 @@ export const AutogearPage: React.FC = () => {
      * Returns false when nothing could be resolved, which keeps the teams modal
      * open so the user can pick something else.
      */
-    const handleLoadTeam = (shipIds: string[], suggestedName: string): boolean => {
+    const handleLoadTeam = (shipIds: string[], suggestedName: string, teamId?: string): boolean => {
         const { ships: resolved, missingCount } = resolveTeamShips(shipIds, getShipById);
 
         if (resolved.length === 0) {
@@ -1005,6 +1032,11 @@ export const AutogearPage: React.FC = () => {
 
         setSelectedShips(resolved);
         applySavedConfigs(resolved, { notify: true });
+        // Link the selection to the team it came from, so a later reorder can be
+        // written back. The resolved ids are what actually loaded — a partially
+        // stale team links against the ships present, not the ids that failed.
+        // An encounter import passes no teamId and so creates no link.
+        setLoadedTeam(teamId ? { id: teamId, shipIds: resolved.map((ship) => ship.id) } : null);
         // Only seed the save dialog when the suggestion isn't already a saved
         // team's own name — that's the case when loading a saved team back in,
         // and pre-filling it would guarantee the dialog's own duplicate check
@@ -1020,17 +1052,51 @@ export const AutogearPage: React.FC = () => {
         // Uses the deduped selection so the stored record matches the gate and
         // the preview the user just approved — the selector allows the same
         // ship in two rows, and gearing it twice is only wasted work.
+        const shipIds = dedupedSelectedShips.map((ship) => ship.id);
+
         try {
-            await saveTeam(
-                name,
-                dedupedSelectedShips.map((ship) => ship.id)
-            );
+            const teamId = await saveTeam(name, shipIds);
+            // Adopt the new team so a follow-up reorder writes back to it.
+            setLoadedTeam({ id: teamId, shipIds });
             setShowSaveTeamModal(false);
             setPendingTeamName(null);
         } catch {
             // saveTeam already showed an error notification and logged the
             // cause — just keep the dialog open with the user's text intact.
         }
+    };
+
+    /**
+     * Moves a selected ship one row up or down. Operates on the raw
+     * selectedShips array — placeholder rows included — so what the user sees is
+     * what moves.
+     *
+     * When the selection is still a loaded team (same ships, any order), the new
+     * order is written back to that team after a short debounce.
+     */
+    const reorderSelectedShips = (fromIndex: number, toIndex: number) => {
+        const reordered = arrayMove(selectedShips, fromIndex, toIndex);
+        setSelectedShips(reordered);
+
+        pendingOrderRef.current = dedupeShipIds(
+            reordered.filter((ship): ship is Ship => ship !== null).map((ship) => ship.id)
+        );
+
+        if (orderSaveTimerRef.current) clearTimeout(orderSaveTimerRef.current);
+        orderSaveTimerRef.current = setTimeout(() => {
+            orderSaveTimerRef.current = null;
+
+            // Guard INSIDE the callback, not around the setTimeout: React 18
+            // Strict Mode double-invokes effects in development, and the link
+            // can also die between the click and the write (the user removed a
+            // ship, or loaded a different team).
+            const order = pendingOrderRef.current;
+            const team = loadedTeamRef.current;
+            if (!order || !team) return;
+            if (!isSameShipSet(order, team.shipIds)) return;
+
+            void updateTeamOrder(team.id, order);
+        }, ORDER_SAVE_DEBOUNCE_MS);
     };
 
     const handlePrint = () => {
@@ -1067,6 +1133,8 @@ export const AutogearPage: React.FC = () => {
                             onAddTeam={() => setShowTeamsModal(true)}
                             onSaveTeam={() => setShowSaveTeamModal(true)}
                             canSaveTeam={dedupedSelectedShips.length >= 2}
+                            onMoveShipUp={(index) => reorderSelectedShips(index, index - 1)}
+                            onMoveShipDown={(index) => reorderSelectedShips(index, index + 1)}
                             onRemoveShip={handleRemoveShip}
                             onOpenSettings={(
                                 event: React.MouseEvent<HTMLButtonElement>,

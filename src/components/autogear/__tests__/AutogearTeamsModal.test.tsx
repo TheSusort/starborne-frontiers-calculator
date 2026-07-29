@@ -71,12 +71,12 @@ describe('AutogearTeamsModal', () => {
         expect(screen.getByText('Lodolite, Zeolite')).toBeInTheDocument();
     });
 
-    it('loads a team and closes', () => {
+    it('loads a team and closes, passing the team id so its order can be saved back', () => {
         const { onLoadTeam, onClose } = renderModal();
 
         fireEvent.click(screen.getByRole('button', { name: 'Load team Arena A' }));
 
-        expect(onLoadTeam).toHaveBeenCalledWith(['1', '2'], 'Arena A');
+        expect(onLoadTeam).toHaveBeenCalledWith(['1', '2'], 'Arena A', 'team-1');
         expect(onClose).toHaveBeenCalled();
     });
 
@@ -95,7 +95,7 @@ describe('AutogearTeamsModal', () => {
         expect(onLoadTeam).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
-        expect(onLoadTeam).toHaveBeenCalledWith(['1', '2'], 'Arena A');
+        expect(onLoadTeam).toHaveBeenCalledWith(['1', '2'], 'Arena A', 'team-1');
     });
 
     it('confirms before deleting a team', () => {
@@ -108,11 +108,13 @@ describe('AutogearTeamsModal', () => {
         expect(onDeleteTeam).toHaveBeenCalledWith('team-1');
     });
 
-    it('loads an encounter formation in derived order with the encounter name', () => {
+    it('loads an encounter formation in derived order, with no team id', () => {
         const { onLoadTeam } = renderModal();
 
         fireEvent.click(screen.getByRole('button', { name: 'Load encounter Wave 3 Farm' }));
 
-        expect(onLoadTeam).toHaveBeenCalledWith(['1', '3'], 'Wave 3 Farm');
+        // No team id: an encounter import must not link the selection to a saved
+        // team, or reordering it would write back to an unrelated team.
+        expect(onLoadTeam).toHaveBeenCalledWith(['1', '3'], 'Wave 3 Farm', undefined);
     });
 });
