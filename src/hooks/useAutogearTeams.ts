@@ -110,7 +110,7 @@ export const useAutogearTeams = () => {
     }, []);
 
     const saveTeam = useCallback(
-        async (name: string, shipIds: string[]) => {
+        async (name: string, shipIds: string[]): Promise<string> => {
             const newTeam: AutogearTeam = {
                 id: uuidv4(),
                 name,
@@ -122,7 +122,7 @@ export const useAutogearTeams = () => {
 
             if (!activeProfileId || !isSupabaseSyncEnabled()) {
                 addNotification('success', `Team "${name}" saved`);
-                return;
+                return newTeam.id;
             }
 
             try {
@@ -138,13 +138,14 @@ export const useAutogearTeams = () => {
 
                 if (error) throw error;
 
-                // Adopt the server-generated id so a later delete targets the right row.
+                // Adopt the server-generated id so a later delete or order
+                // update targets the right row.
+                const savedTeam = transformTeam(data as RawAutogearTeam);
                 void setTeams((prev) =>
-                    prev.map((team) =>
-                        team.id === newTeam.id ? transformTeam(data as RawAutogearTeam) : team
-                    )
+                    prev.map((team) => (team.id === newTeam.id ? savedTeam : team))
                 );
                 addNotification('success', `Team "${name}" saved`);
+                return savedTeam.id;
             } catch (error) {
                 console.error('Error saving autogear team:', error);
                 void setTeams((prev) => prev.filter((team) => team.id !== newTeam.id)); // Revert optimistic update
@@ -153,6 +154,56 @@ export const useAutogearTeams = () => {
             }
         },
         [activeProfileId, addNotification, setTeams]
+    );
+
+    /**
+     * Persists a new ship order for an existing team. Only `ship_ids` is
+     * written, so the `(user_id, lower(name))` unique index cannot be violated.
+     *
+     * Unlike saveTeam this does NOT rethrow: the caller is a debounced
+     * fire-and-forget reorder, so a failure is reported here (toast + log) and
+     * the team's local order is reverted, leaving the user's working selection
+     * untouched.
+     */
+    const updateTeamOrder = useCallback(
+        async (id: string, shipIds: string[]) => {
+            const team = teams.find((candidate) => candidate.id === id);
+            if (!team) return;
+
+            const previousShipIds = team.shipIds;
+
+            void setTeams((prev) =>
+                prev.map((candidate) =>
+                    candidate.id === id ? { ...candidate, shipIds } : candidate
+                )
+            ); // Optimistic update
+
+            if (!activeProfileId || !isSupabaseSyncEnabled()) {
+                addNotification('success', `Saved new order for "${team.name}"`);
+                return;
+            }
+
+            try {
+                const { error } = await supabase
+                    .from('autogear_teams')
+                    .update({ ship_ids: shipIds })
+                    .eq('id', id)
+                    .eq('user_id', activeProfileId);
+
+                if (error) throw error;
+
+                addNotification('success', `Saved new order for "${team.name}"`);
+            } catch (error) {
+                console.error('Error updating autogear team order:', error);
+                void setTeams((prev) =>
+                    prev.map((candidate) =>
+                        candidate.id === id ? { ...candidate, shipIds: previousShipIds } : candidate
+                    )
+                ); // Targeted revert
+                addNotification('error', 'Failed to save the new order');
+            }
+        },
+        [activeProfileId, addNotification, setTeams, teams]
     );
 
     const deleteTeam = useCallback(
@@ -186,5 +237,5 @@ export const useAutogearTeams = () => {
         [activeProfileId, addNotification, setTeams, teams]
     );
 
-    return { teams, loading, saveTeam, deleteTeam };
+    return { teams, loading, saveTeam, updateTeamOrder, deleteTeam };
 };
