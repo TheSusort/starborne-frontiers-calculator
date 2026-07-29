@@ -7,6 +7,7 @@ import { LocalEncounterNote } from '../types/encounters';
 import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
 import { SavedAutogearConfig } from '../types/autogear';
+import { AutogearTeam } from '../types/autogearTeam';
 
 const BATCH_SIZE = 500;
 const CHILD_BATCH_SIZE = 50;
@@ -203,6 +204,11 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
             const { error } = await supabase.from('gear_wishlists').delete().eq('user_id', userId);
             if (error) throw error;
         },
+        // autogear_teams → user_id (no child tables)
+        async () => {
+            const { error } = await supabase.from('autogear_teams').delete().eq('user_id', userId);
+            if (error) throw error;
+        },
     ];
 
     for (const step of steps) {
@@ -240,6 +246,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
         StorageKey.AUTOGEAR_CONFIGS,
         false
     );
+    const autogearTeams = loadLocalData<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
 
     // Inventory is profile-scoped in IndexedDB
     const inventory: GearPiece[] =
@@ -652,6 +659,25 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
             const { error } = await supabase
                 .from('autogear_configs')
                 .upsert(batch, { onConflict: 'user_id, ship_id' });
+            if (error) throw error;
+        }
+    }
+
+    // Step 8: Upsert saved autogear teams
+    if (autogearTeams.length > 0) {
+        const teamRecords = autogearTeams.map((team) => ({
+            id: team.id,
+            user_id: userId,
+            name: team.name,
+            ship_ids: team.shipIds,
+            created_at: new Date(team.createdAt).toISOString(),
+        }));
+
+        for (let i = 0; i < teamRecords.length; i += BATCH_SIZE) {
+            const batch = teamRecords.slice(i, i + BATCH_SIZE);
+            const { error } = await supabase
+                .from('autogear_teams')
+                .upsert(batch, { onConflict: 'id' });
             if (error) throw error;
         }
     }

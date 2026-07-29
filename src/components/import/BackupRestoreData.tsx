@@ -204,6 +204,7 @@ export const BackupRestoreData: React.FC = () => {
                             [StorageKey.ENGINEERING_STATS]: 'engineering_stats',
                             [StorageKey.LOADOUTS]: 'loadouts',
                             [StorageKey.TEAM_LOADOUTS]: 'team_loadouts',
+                            [StorageKey.AUTOGEAR_TEAMS]: 'autogear_teams',
                         };
 
                         // Process each data type for Supabase
@@ -312,6 +313,25 @@ export const BackupRestoreData: React.FC = () => {
                                             .from('team_loadout_equipment')
                                             .insert(equipmentRecords);
                                     }
+                                }
+                            } else if (key === StorageKey.AUTOGEAR_TEAMS) {
+                                await supabase
+                                    .from('autogear_teams')
+                                    .delete()
+                                    .eq('user_id', activeProfileId);
+
+                                if (Array.isArray(parsedData) && parsedData.length > 0) {
+                                    const teamRecords = parsedData.map((team) => ({
+                                        id: team.id,
+                                        user_id: activeProfileId,
+                                        name: team.name,
+                                        ship_ids: team.shipIds ?? [],
+                                        created_at: new Date(
+                                            team.createdAt as string | number | Date
+                                        ).toISOString(),
+                                    }));
+
+                                    await supabase.from('autogear_teams').insert(teamRecords);
                                 }
                             } else if (key === StorageKey.ENGINEERING_STATS) {
                                 // Handle engineering stats specially
