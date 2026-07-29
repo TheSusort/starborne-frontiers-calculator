@@ -16,6 +16,46 @@ const getOrCreatePortalRoot = (highZIndex = false) => {
     return portalRoot;
 };
 
+// Body-scroll lock is reference-counted so nested modals (e.g. a ConfirmModal
+// opened while another Modal is already open) don't fight over `document.body`
+// styles. Only the first acquire stashes the scroll position and applies the
+// lock; only the last release clears it. Module-level scope matches this
+// file's existing portal-root management, and is safe: this is a
+// single-window app.
+let scrollLockCount = 0;
+let stashedScrollY = 0;
+
+const acquireScrollLock = () => {
+    if (scrollLockCount === 0) {
+        stashedScrollY = window.scrollY;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${stashedScrollY}px`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
+    }
+    scrollLockCount++;
+};
+
+const releaseScrollLock = () => {
+    // Guard against a release firing without a matching acquire (shouldn't
+    // happen, but would otherwise drive the counter negative and make every
+    // future modal think a lock is already held).
+    if (scrollLockCount === 0) return;
+
+    scrollLockCount--;
+    if (scrollLockCount === 0) {
+        // Matches the pre-existing single-modal cleanup exactly: clear the
+        // lock styles and nothing else — there was no explicit scroll
+        // restore call before this fix, so none is added now (out of scope:
+        // see the reentrancy fix's report for the verified single-modal
+        // scroll behaviour this preserves).
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+    }
+};
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -40,32 +80,43 @@ export const Modal: React.FC<Props> = ({
     highZIndex = false,
     maxWidth = 'max-w-4xl',
 }) => {
+    // Scroll lock lives in its own effect keyed on `[isOpen]` only — NOT
+    // `onClose` — so a parent re-render that hands down a fresh inline
+    // `onClose` closure can't re-run this effect. If it were combined with
+    // the Escape-key effect below (keyed on `[isOpen, onClose]`), React 18's
+    // "all destroys before all creates" batching would let a commit that
+    // re-runs every open Modal's effect (e.g. a confirm action that both
+    // updates parent state and closes a nested modal) drop the reference
+    // count to 0 mid-flush — clearing the lock and re-stashing `scrollY`
+    // after the fixed-position paint already clamped it to 0.
     useEffect(() => {
-        if (isOpen) {
-            // Save current scroll position
-            const scrollY = window.scrollY;
+        if (!isOpen) return;
 
-            // Apply multiple properties to ensure scroll lock
-            document.body.style.position = 'fixed';
-            document.body.style.top = `-${scrollY}px`;
-            document.body.style.width = '100%';
-            document.body.style.overflow = 'hidden';
+        acquireScrollLock();
 
-            // Add escape key handler
-            const handleEscape = (e: KeyboardEvent) => {
-                if (e.key === 'Escape') onClose();
-            };
-            document.addEventListener('keydown', handleEscape);
+        return () => {
+            // This cleanup fires both when `isOpen` flips false and when
+            // the Modal unmounts while still open (e.g. a parent stops
+            // rendering it instead of toggling `isOpen`) — React always
+            // runs the last effect's cleanup on unmount, so every
+            // acquireScrollLock() above is guaranteed exactly one
+            // matching releaseScrollLock() here. That's what keeps the
+            // counter from leaking.
+            releaseScrollLock();
+        };
+    }, [isOpen]);
 
-            return () => {
-                // Cleanup
-                document.body.style.position = '';
-                document.body.style.top = '';
-                document.body.style.width = '';
-                document.body.style.overflow = '';
-                document.removeEventListener('keydown', handleEscape);
-            };
-        }
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('keydown', handleEscape);
+        };
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;

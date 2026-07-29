@@ -227,6 +227,7 @@ export const ImportButton: React.FC<{
                                 teamLoadouts: [],
                                 engineeringStats: result.data.engineeringStats,
                                 wishlistEntries: [], // don't overwrite cloud wishlist during import sync
+                                autogearTeams: [], // don't overwrite cloud autogear teams during import sync
                             }
                         );
 

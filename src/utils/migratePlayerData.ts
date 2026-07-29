@@ -8,6 +8,7 @@ import { LocalEncounterNote } from '../types/encounters';
 import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
 import { WishlistEntry } from '../types/wishlist';
+import { AutogearTeam } from '../types/autogearTeam';
 
 interface MigrationResult {
     ships: Ship[];
@@ -17,6 +18,7 @@ interface MigrationResult {
     teamLoadouts: TeamLoadout[];
     engineeringStats: EngineeringStats;
     wishlistEntries: WishlistEntry[];
+    autogearTeams: AutogearTeam[];
 }
 
 /**
@@ -70,6 +72,7 @@ export const migratePlayerData = (): MigrationResult => {
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
     const engineeringStats = loadLocalData<EngineeringStats>(StorageKey.ENGINEERING_STATS, false);
     const wishlistEntries = loadLocalData<WishlistEntry[]>(StorageKey.GEAR_WISHLIST);
+    const autogearTeams = loadLocalData<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
 
     // Step 1: Create ID mappings for ships and gear
     // Migrate ships IDs and build mapping
@@ -141,6 +144,13 @@ export const migratePlayerData = (): MigrationResult => {
         };
     });
 
+    // Step 3b: Update ship references in saved autogear teams
+    const updatedAutogearTeams = autogearTeams.map((team) => ({
+        ...team,
+        id: isUuid(team.id) ? team.id : uuidv4(),
+        shipIds: team.shipIds.map((id) => shipIdMap.get(id) ?? id),
+    }));
+
     // Step 4: Update loadouts
     const updatedLoadouts = loadouts.map((loadout) => {
         // Update shipId reference
@@ -205,6 +215,7 @@ export const migratePlayerData = (): MigrationResult => {
     localStorage.setItem(StorageKey.LOADOUTS, JSON.stringify(updatedLoadouts));
     localStorage.setItem(StorageKey.TEAM_LOADOUTS, JSON.stringify(updatedTeamLoadouts));
     localStorage.setItem(StorageKey.ENGINEERING_STATS, JSON.stringify(engineeringStats));
+    localStorage.setItem(StorageKey.AUTOGEAR_TEAMS, JSON.stringify(updatedAutogearTeams));
 
     // Return the migrated data for further processing
     return {
@@ -215,6 +226,7 @@ export const migratePlayerData = (): MigrationResult => {
         teamLoadouts: updatedTeamLoadouts,
         engineeringStats,
         wishlistEntries,
+        autogearTeams: updatedAutogearTeams,
     };
 };
 
@@ -240,6 +252,7 @@ export const syncMigratedDataToSupabase = async (
         teamLoadouts,
         engineeringStats,
         wishlistEntries,
+        autogearTeams,
     } = migrationResult;
 
     const BATCH_SIZE = 500;
@@ -968,6 +981,50 @@ export const syncMigratedDataToSupabase = async (
             }
         } catch (error) {
             console.error('Error migrating gear wishlist:', error);
+        }
+
+        // Step 9: Upload saved autogear teams
+        try {
+            if (autogearTeams.length > 0) {
+                const teamRecords = autogearTeams.map((team) => ({
+                    id: team.id,
+                    user_id: userId,
+                    name: team.name,
+                    ship_ids: team.shipIds,
+                    created_at: new Date(team.createdAt).toISOString(),
+                }));
+
+                // Upsert one team at a time: `(user_id, name)` is a unique constraint
+                // that upsert can't resolve via onConflict: 'id', so a single name
+                // collision would otherwise fail the whole batch statement and take
+                // every other team in it down too.
+                for (const team of teamRecords) {
+                    try {
+                        const { error: teamsError } = await supabase
+                            .from('autogear_teams')
+                            .upsert(team, { onConflict: 'id' });
+
+                        if (teamsError) {
+                            console.error(
+                                'Error upserting individual autogear team during migration:',
+                                teamsError,
+                                team
+                            );
+                            // Continue with the next team instead of failing completely
+                        }
+                    } catch (teamError) {
+                        console.error(
+                            'Exception upserting individual autogear team during migration:',
+                            teamError
+                        );
+                        // Continue with the next team
+                    }
+                }
+            }
+        } catch (error) {
+            // Non-fatal, matching every other step here: a name collision with an
+            // existing remote team must not abort the rest of the migration.
+            console.error('Error migrating autogear teams:', error);
         }
 
         return { success: true };

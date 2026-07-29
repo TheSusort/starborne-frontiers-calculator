@@ -10,6 +10,8 @@ interface ConfirmModalProps {
     message: string | React.ReactNode;
     confirmLabel?: string;
     cancelLabel?: string;
+    /** Render above a regular Modal — needed when confirming from inside one. */
+    highZIndex?: boolean;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -20,6 +22,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     message,
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
+    highZIndex = false,
 }) => {
     const handleConfirm = () => {
         onConfirm();
@@ -27,7 +30,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={title}>
+        <Modal isOpen={isOpen} onClose={onClose} title={title} highZIndex={highZIndex}>
             <div className="space-y-4">
                 {typeof message === 'string' ? <p>{message}</p> : message}
                 <div className="flex justify-end gap-3">
