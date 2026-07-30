@@ -6,18 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A gear and ship calculator for Starborne Frontiers game. Users can import their game data (ships, gear, engineering stats), calculate optimal gear loadouts using autogear algorithms, and manage their fleet.
 
-**Tech Stack:** React 18, TypeScript, Vite, TailwindCSS, Supabase
-
 ## Development Commands
 
 ```bash
-npm start              # Start dev server (Vite)
-npm run lint           # ESLint check (max-warnings: 0)
-npm run lint:fix       # Auto-fix ESLint issues
-npm run format         # Prettier format all files
-npm test               # Run Vitest tests
-npm run fetch-ships    # Update ship data from external source
-npm run fetch-buffs    # Update buff data from external source
+npm run fetch:ship-data    # Update ship data from external source
+npm run fetch:ship-skills  # Update ship skill text from external source
+npm run fetch-buffs        # Update buff data from external source
 npm run admin:import -- --file <path> --email <user@email.com>  # Import game data on behalf of a user (uses SUPABASE_SERVICE_ROLE_KEY)
 ```
 
@@ -69,20 +63,6 @@ Local reference files (not committed — they exist on dev machines). Use them t
 - **`docs/bios.csv`** — ship bios and lore. Columns: `Definition Id, Name, Quote, Author, Bio N Title, Bio N` (up to 6 bios each). Backs the Ship Lore page content.
 
 ## Important Conventions
-
-### File Organization
-
-```text
-src/
-├── components/ui/   # Reusable UI primitives — always prefer these
-├── contexts/        # React contexts for global state
-├── hooks/           # Custom React hooks
-├── pages/           # Route-level page components
-├── services/        # API layer (Supabase, external APIs)
-├── utils/           # Pure utility functions
-├── constants/       # Static data (ship types, factions, gear slots, etc.)
-└── types/           # TypeScript type definitions
-```
 
 ### State Management
 
@@ -193,7 +173,7 @@ Always dispatch `app:migration:end` even on error.
 - **RLS helper:** `public.has_profile_access(user_id uuid)` — use this on all user-data table policies (handles both main accounts and alt accounts).
 - **Import validation:** `validateExportedPlayData()` in `src/schemas/exportedPlayData.ts` — extend this schema if new fields are added to the import format.
 - **Security headers:** Set in `netlify.toml` under `[[headers]]`. CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy are all live. Update the CSP `connect-src` if new external API domains are added.
-- **Dependency hygiene:** `npm run audit` (`scripts/audit.mjs`) runs on every PR via `.github/workflows/security.yml` — it is a drop-in equivalent of `npm audit --omit=dev --audit-level=high` (production deps only, fails on high/critical). It exists because `npm audit` itself is broken against the registry: the bulk-advisory endpoint returns a gzip body with no `content-encoding` header, so npm cannot parse it, falls back to the retired quick endpoint, and reports a misleading `400 Invalid package tree`. Revert to plain `npm audit` once upstream is fixed. Accepted-risk advisories go in the script's `ALLOWLIST` (empty by default — each entry is a vulnerability we knowingly ship). Dependabot opens weekly PRs for outdated packages.
+- **Dependency hygiene:** `npm run audit` (`scripts/audit.mjs`) runs on every PR via `.github/workflows/security.yml` — it is a drop-in equivalent of `npm audit --omit=dev --audit-level=high` (production deps only, fails on high/critical). It exists because `npm audit` itself is broken against the registry: the bulk-advisory endpoint returns a gzip body with no `content-encoding` header, so npm cannot parse it, falls back to the retired quick endpoint, and reports a misleading `400 Invalid package tree`. Revert to plain `npm audit` once upstream is fixed. Accepted-risk advisories go in the script's `ALLOWLIST` — each entry is a vulnerability we knowingly ship (currently one: react-router GHSA-qwww-vcr4-c8h2, unpatchable until React 19). Dependabot opens weekly PRs for outdated packages.
 
 ## Common Pitfalls
 
