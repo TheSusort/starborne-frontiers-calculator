@@ -162,6 +162,13 @@ export interface Intent {
          *  which fans out to EACH of these instead of routing to the repairer. Mirrors
          *  repairedAllyIds/shieldRecipientIds but for the OPPOSING side. */
         repairedEnemyIds?: string[];
+        /** The DISTINCT enemies an ally's crit-ing attack actually critically hit
+         *  (ability-performed.critVictimIds), stamped by the on-ally-crit listener. Read by the
+         *  reactive `damage` branch so a "deals X% damage to that enemy" rider (Sentinel) fans out
+         *  to EVERY enemy the ally crit rather than routing the whole proc onto the cast's
+         *  SELECTED anchor — which, in an AoE, is frequently a victim that never crit. Mirrors
+         *  repairedEnemyIds' fan-out shape. Never empty when present. */
+        critVictimIds?: string[];
         /** The clipped overheal (heal-performed.overheal) carried from an own-repair-to-ally
          *  event, read by an `overheal`-basis reactive shield to scale off the over-repaired
          *  amount rather than the owner's max HP (Abundant Renewal). Aggregate fallback used when
@@ -620,39 +627,43 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-crit':
                     bus.on('ability-performed', (e) => {
-                        // An ALLY's critting hits (mirrors on-crit with ally scoping):
-                        // fires once PER CRITTING HIT, own casts and every opposing actor
-                        // excluded — an opposing crit is NOT an ally crit, even though a
-                        // walked enemy now emits ability-performed.
+                        // An ALLY's critting attack (mirrors on-crit with ally scoping): own casts
+                        // and every opposing actor excluded — an opposing crit is NOT an ally crit,
+                        // even though a walked enemy now emits ability-performed.
                         if (!isSameSideAlly(e.actorId, ownerId)) return;
-                        // Charge gain is once PER ATTACK that crits (Hermes: "gains 1 charge"
-                        // per ally-crit event) — a multi-hit or AoE crit grants a single charge,
-                        // not one per critting (hit, victim) pair. Every other on-ally-crit rider
-                        // (Sentinel's reactive damage/heal, Howler's cleanse/Blast) stays
-                        // per-critting-hit via critHits.
-                        const n =
-                            intent.ability.config.type === 'charge'
-                                ? e.didCrit
-                                    ? 1
-                                    : 0
-                                : (e.critHits ?? (e.didCrit ? 1 : 0));
+                        // ONE enqueue per ATTACK that crit, NOT one per critting (hit, victim)
+                        // pair. The corpus clauses all read "when an ally critically hits an enemy,
+                        // this Unit <does X>" — X is a single reaction to the attack: Hermes gains
+                        // 1 charge, Howler cleanses 1 debuff from the ally, Sentinel repairs the
+                        // ally once. A 3-victim AoE that crits twice is still ONE ally crit.
+                        // (Charge was already collapsed this way by an explicit special-case; the
+                        // per-critHits loop for every other rider was the over-fire bug — Sentinel
+                        // healed Ruiner twice for one AoE.)
+                        if (!e.didCrit && (e.critHits ?? 0) === 0) return;
+                        // The enemies actually crit. `critVictimIds` is present only on the
+                        // POSITIONAL deferred emit; the single-target inline emit omits it, where
+                        // `targetId` IS the sole possible crit victim — hence the fallback.
+                        const critVictimIds =
+                            e.critVictimIds && e.critVictimIds.length > 0
+                                ? e.critVictimIds
+                                : [e.targetId];
                         // Stamp the crit-ing ally via damagedAllyId (Phase 3 PR-G, Howler) so an
                         // 'ally'-target reactive (cleanse/buff/heal — Sentinel's repair) lands on
                         // THAT ally, mirroring the on-ally-debuffed/on-ally-purged siblings. ALSO
-                        // stamp the crit-VICTIM enemy via counterTargetId (#2, Sentinel) so an
-                        // 'enemy'-target reactive damage hits "that enemy" (the one the ally crit)
-                        // rather than the ctx.enemy fallback. Zero-collateral for the pre-existing
-                        // riders (Hermes's charge + Everliving Regeneration buff are 'self'-target;
-                        // Howler's cleanse is 'ally'-target — none read counterTargetId).
-                        for (let i = 0; i < n; i++)
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    damagedAllyId: e.actorId,
-                                    counterTargetId: e.targetId,
-                                },
-                            });
+                        // stamp the crit VICTIMS so an 'enemy'-target reactive damage hits "that
+                        // enemy" — every enemy the ally crit (Sentinel's 60% lands on each), NOT
+                        // the cast's selected anchor, which in an AoE may never have crit at all.
+                        // `counterTargetId` stays stamped (first crit victim) as the single-victim
+                        // channel every other consumer already reads.
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                damagedAllyId: e.actorId,
+                                counterTargetId: critVictimIds[0],
+                                critVictimIds,
+                            },
+                        });
                     });
                     break;
                 case 'start-of-round':
@@ -941,28 +952,50 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     break;
-                case 'on-enemy-repaired':
-                    bus.on('heal-performed', (e) => {
-                        // Opposing-scoped. Capture the repairer id so the charge branch can (a)
-                        // count repairs per source for an everyNthEvent gate and (b) target THAT
-                        // enemy. Harmless for Zosimos's self-gain intent (it ignores repairerId).
-                        // Phase 3 PR-F: ALSO stamp counterTargetId = the repairer (Ruiner's Bomb
-                        // routes here like every other "on that enemy" counter-infliction — the
-                        // debuff branch's existing `counterTargetId ?? ctx.enemy.id` fallback picks
-                        // this up for free) and repairedEnemyIds = e.targets (Amartya's "that
-                        // defender" Defense Shred fans out to every healed enemy instead).
-                        if (isOpposing(e.casterId))
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    repairerId: e.casterId,
-                                    counterTargetId: e.casterId,
-                                    repairedEnemyIds: e.targets,
-                                },
-                            });
-                    });
+                case 'on-enemy-repaired': {
+                    // Opposing-scoped. Capture the repairer id so the charge branch can (a)
+                    // count repairs per source for an everyNthEvent gate and (b) target THAT
+                    // enemy. Harmless for Zosimos's self-gain intent (it ignores repairerId).
+                    // Phase 3 PR-F: ALSO stamp counterTargetId = the repairer (Ruiner's Bomb
+                    // routes here like every other "on that enemy" counter-infliction — the
+                    // debuff branch's existing `counterTargetId ?? ctx.enemy.id` fallback picks
+                    // this up for free) and repairedEnemyIds = the healed set (Amartya's "that
+                    // defender" Defense Shred fans out to every healed enemy instead).
+                    const onEnemyRepair = (casterId: string, targets: string[]) => {
+                        if (!isOpposing(casterId)) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                repairerId: casterId,
+                                counterTargetId: casterId,
+                                repairedEnemyIds: targets,
+                            },
+                        });
+                    };
+                    bus.on('heal-performed', (e) => onEnemyRepair(e.casterId, e.targets));
+                    // A REACTIVE repair is still "an enemy performing a repair" (Ruiner's Bomb).
+                    // Reactive heals deliberately emit NO `heal-performed` (chain guard — it would
+                    // re-trigger the caster's own on-repair listeners and loop), only the log-only
+                    // `reactive-heal-performed`; without this second subscription Ruiner was blind
+                    // to exactly the ships his passive is meant to punish — the reaction-healers
+                    // (Heliodor's on-damaged self-repair, Cultivator's on-ally-damaged repair),
+                    // which repair many times a round and never once via heal-performed.
+                    //
+                    // CHAIN SAFETY: this is a listener on a type documented as having none, so it
+                    // must not reopen the loop the chain guard closed. It cannot: the enqueued
+                    // intents are the on-enemy-repaired riders (Ruiner's Bomb debuff + Overload
+                    // self-buff, Zosimos's charge removal, Amartya's Defense Shred) — none of them
+                    // heal, so none can emit another reactive-heal-performed. The generic
+                    // MAX_INTENT_GENERATIONS backstop covers any future rider that could.
+                    bus.on('reactive-heal-performed', (e) =>
+                        onEnemyRepair(
+                            e.casterId,
+                            e.perTarget.map((pt) => pt.targetId)
+                        )
+                    );
                     break;
+                }
                 case 'on-enemy-dot-damage':
                     bus.on('dot-ticked', (e) => {
                         // Ship-kit W3 (Task 6, Anemone): opposing-scoped reaction to an ENEMY-side
@@ -2124,7 +2157,10 @@ const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<Stamp
     // #2 log visibility: drain-time reactive damage/heal procs emit these LOG-ONLY events so the
     // combat log can surface them (they deliberately emit no ability-performed/heal-performed —
     // chain guard). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf so
-    // they nest under the triggering turn. No combat listener subscribes → they never chain.
+    // they nest under the triggering turn. `-damage`/`-cleanse` have no combat subscriber at all;
+    // `-heal` has exactly one (on-enemy-repaired — a reactive repair is still an enemy repairing),
+    // which cannot chain because no on-enemy-repaired rider heals. See the events.ts note before
+    // adding another subscriber to any of the three.
     'reactive-damage-performed',
     'reactive-heal-performed',
     'reactive-cleanse-performed',
@@ -3038,7 +3074,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         let shieldGrantedSum = 0;
         const shieldPerTarget: { targetId: string; amount: number }[] = [];
         // #2 log visibility: accumulate the reactive HEAL's per-recipient raw repair so we can emit
-        // ONE log-only reactive-heal-performed after the loop (the executor emits no heal-performed).
+        // ONE reactive-heal-performed after the loop (the executor emits no heal-performed).
         const healPerTarget: { targetId: string; amount: number }[] = [];
         let healSum = 0;
         for (const rid of recipients) {
@@ -3119,9 +3155,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 perTarget: shieldPerTarget,
             });
         }
-        // #2 log visibility: a reactive HEAL emits the LOG-ONLY reactive-heal-performed (NOT
-        // heal-performed — that would re-trigger on-repair listeners). No combat listener
-        // subscribes to this type, so it can't chain; buildCombatLog surfaces it, stamped
+        // #2 log visibility: a reactive HEAL emits reactive-heal-performed (NOT heal-performed —
+        // that would re-trigger the REPAIRER'S OWN on-repair listeners and loop). Its only combat
+        // subscriber is on-enemy-repaired, whose riders never heal → still no chain. Stamped
         // duringTurnOf via ctx.bus so it nests under the triggering turn.
         if (cfg.type === 'heal' && healPerTarget.length > 0 && ctx.bus) {
             ctx.bus.emit({
@@ -3155,8 +3191,30 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ? ctx.statusEngine.reduceAllDebuffsDuration
                     : ctx.statusEngine.reduceNewestDebuffDuration;
             let affected = 0;
-            for (const rid of recipients) affected += reduceOne(rid, cfg.durationTurns ?? 1);
+            const reducePerTarget: { targetId: string; count: number }[] = [];
+            const durationTurns = cfg.durationTurns ?? 1;
+            for (const rid of recipients) {
+                const n = reduceOne(rid, durationTurns);
+                if (n > 0) reducePerTarget.push({ targetId: rid, count: n });
+                affected += n;
+            }
             ctx.healing?.credit(intent.ownerId, 'cleanseCount', affected);
+            // Log visibility: this branch previously emitted NOTHING, so Heliodor's "reduces the
+            // duration of all active Debuffs … by 1 turn" was invisible in the combat log even
+            // when it fired — indistinguishable from not being wired at all. Reuses the LOG-ONLY
+            // reactive-cleanse-performed (no combat listener subscribes → cannot chain), flagged
+            // `mode: 'reduce-duration'` so the renderer says "-N turn" rather than "cleansed N".
+            // Silent when nothing was shrunk (no debuffs present), matching the remove twin.
+            if (reducePerTarget.length > 0 && ctx.bus) {
+                ctx.bus.emit({
+                    type: 'reactive-cleanse-performed',
+                    casterId: intent.ownerId,
+                    round: ctx.round,
+                    perTarget: reducePerTarget,
+                    mode: 'reduce-duration',
+                    durationTurns,
+                });
+            }
             return;
         }
         // remove mode — keep the !ctx.healing return BEFORE the proc gate (gate-desync rule;
@@ -3335,9 +3393,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const anchorId = intent.eventCtx?.victimId;
             victimIds =
                 anchorId !== undefined ? (ctx.adjacentOpposingIdsFor?.(anchorId) ?? []) : [];
+        } else if (intent.eventCtx?.critVictimIds !== undefined) {
+            // Sentinel's on-ally-crit "deals 60% damage to that enemy": "that enemy" is EVERY
+            // enemy the ally critically hit, so fan out over the crit-victim set rather than
+            // taking the single counterTargetId below (which is only the FIRST of them). Checked
+            // before counterTargetId because the on-ally-crit listener stamps both — this clause
+            // is the more specific of the two and only that listener ever sets it.
+            victimIds = intent.eventCtx.critVictimIds;
         } else if (intent.eventCtx?.counterTargetId !== undefined) {
             // The trigger stamped the retaliation target (reflect/revenge, FrontLine's
-            // on-enemy-charged-cast, Sentinel's on-ally-crit, …) — route there directly.
+            // on-enemy-charged-cast, …) — route there directly.
             victimIds = [intent.eventCtx.counterTargetId];
         } else if (intent.eventCtx?.debuffVictimId !== undefined) {
             // Insidiousness (on-debuff-inflicted): route to the enemy this infliction actually

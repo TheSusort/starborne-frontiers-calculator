@@ -100,7 +100,11 @@ export function footprintVictims(
  * Task 8); this file imports no engine state.
  *
  * @returns `anyCrit` — true if at least one (hit, victim) pair critted this call;
- *          `critPairs` — the count of critting (hit, victim) pairs.
+ *          `critPairs` — the count of critting (hit, victim) pairs;
+ *          `critVictimIds` — the DISTINCT victims that took at least one critting hit, in
+ *          first-crit order. Carries the per-victim crit IDENTITY that `critPairs` (a bare
+ *          count) throws away, so an `on-ally-crit` reactive can route "that enemy" to the
+ *          enemies actually crit rather than the cast's selected anchor.
  */
 export function applyPositionalDamage(args: {
     hitCrits: boolean[];
@@ -156,7 +160,7 @@ export function applyPositionalDamage(args: {
      * Unsupplied → every victim uses hitCrits[h] → byte-identical.
      */
     rollVictimCrit?: (victim: CombatActor) => boolean;
-}): { anyCrit: boolean; critPairs: number } {
+}): { anyCrit: boolean; critPairs: number; critVictimIds: string[] } {
     const {
         hitCrits,
         scalars,
@@ -177,6 +181,9 @@ export function applyPositionalDamage(args: {
 
     let anyCrit = false;
     let critPairs = 0;
+    // Insertion-ordered DISTINCT crit victims. A multi-hit cast that crits the same victim twice
+    // lists it once — "deals X to that enemy" is per ENEMY, not per critting (hit, victim) pair.
+    const critVictims = new Set<string>();
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
     // truth that victimHitDamage also reads), avoiding silent under/over-application from a
@@ -209,6 +216,7 @@ export function applyPositionalDamage(args: {
             if (didCrit) {
                 anyCrit = true;
                 critPairs += 1;
+                critVictims.add(victim.id);
             }
             const equipReductionPct = incomingReductionFor?.(victim, didCrit) ?? 0;
             const dmgBase = victimHitDamage(
@@ -227,5 +235,5 @@ export function applyPositionalDamage(args: {
             onVictimResolved?.(victim, dmg, outcome, didCrit);
         }
     }
-    return { anyCrit, critPairs };
+    return { anyCrit, critPairs, critVictimIds: [...critVictims] };
 }

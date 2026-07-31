@@ -1,7 +1,13 @@
 import { CombatEvent, CombatEventType } from '../events';
 import { dotTierNumeral } from '../debuffImmunity';
 import type { DoTType } from '../../../types/calculator';
-import { CombatLogEntry, CombatLogRound, CombatLogTarget, CombatLogTurn } from './types';
+import {
+    CombatLogEntry,
+    CombatLogEntryKind,
+    CombatLogRound,
+    CombatLogTarget,
+    CombatLogTurn,
+} from './types';
 
 /** Combat-log note for a DoT apply/tick line: "{dotType} {numeral} ×{stacks}" (numeral omitted
  *  for bomb/generic and non-canonical magnitudes). e.g. ('corrosion', 9, 3) → "corrosion III ×3";
@@ -9,6 +15,58 @@ import { CombatLogEntry, CombatLogRound, CombatLogTarget, CombatLogTurn } from '
 const dotNote = (dotType: DoTType, tier: number | undefined, stacks: number): string => {
     const numeral = tier === undefined ? '' : dotTierNumeral(dotType, tier);
     return `${dotType}${numeral ? ` ${numeral}` : ''} ×${stacks}`;
+};
+
+/**
+ * Display rank for a turn's top-level entries — what the SKILL did, then the charge bookkeeping,
+ * then everything that FOLLOWED from the skill.
+ *
+ * Why a display sort rather than reordering the engine's emissions: the log renders events in
+ * emission order, and for a POSITIONAL cast the engine deliberately defers its one aggregate
+ * `ability-performed` until AFTER the per-victim apply (engine.ts `emitDeferredAbilityPerformed`),
+ * so it can report the TRUE per-victim crit outcome instead of the anchor-only guess. That is why
+ * the attack line landed last, under its own consequences:
+ *
+ *     Butcher: charge 0→1
+ *     Butcher → Enemy Heliodor: Inferno II resisted
+ *     Enemy Heliodor: destroyed by Butcher          <- killed by an attack not yet printed
+ *     Butcher [active] → Enemy Heliodor: 64,450     <- the attack
+ *
+ * The emission order is load-bearing (reaction nesting keys off the most-recent non-reactive entry,
+ * and the reflect-log flush is sequenced against the attack entry), so it stays as-is and the
+ * ordering is corrected at the presentation layer instead.
+ *
+ * Sorting top-level entries is safe AFTER the fold: reactions already live inside their trigger's
+ * `.reactions[]` (they move with it) and `setHp` has already stamped its targets.
+ */
+const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
+    // 0 — what the skill did.
+    attack: 0,
+    heal: 0,
+    shield: 0,
+    buff: 0,
+    debuff: 0,
+    'dot-applied': 0,
+    control: 0,
+    cleanse: 0,
+    purge: 0,
+    bomb: 0,
+    // 1 — charge bookkeeping for the turn.
+    'charge-changed': 1,
+    // 2 — consequences: what the skill (or the round) caused.
+    'debuff-resisted': 2,
+    detonation: 2,
+    'dot-ticked': 2,
+    death: 2,
+    'shield-destroyed': 2,
+    'cheat-death': 2,
+    'buff-expired': 2,
+};
+
+/** Stable rank sort of one turn's top-level entries. Stable, so entries sharing a rank keep their
+ *  emission order (an unknown kind ranks 0 and stays where it was relative to other skill rows). */
+const sortTurnEntries = (entries: CombatLogEntry[]): void => {
+    entries.sort((a, b) => (ENTRY_DISPLAY_RANK[a.kind] ?? 0) - (ENTRY_DISPLAY_RANK[b.kind] ?? 0));
 };
 
 export interface RosterEntry {
@@ -549,7 +607,12 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             actorId: e.casterId,
             targets: e.perTarget.map((pt) => ({ targetId: pt.targetId })),
             reactions: [],
-            note: `cleansed ${total}`,
+            // A duration SHRINK is not a removal — say so, or the reader counts debuffs that are
+            // still on the ship as gone. `count` means "debuffs shrunk" in that mode.
+            note:
+                e.mode === 'reduce-duration'
+                    ? `-${e.durationTurns ?? 1} turn on ${total} debuff${total === 1 ? '' : 's'}`
+                    : `cleansed ${total}`,
         };
         ctx.attachEntry(entry);
     },
@@ -721,6 +784,14 @@ export function buildCombatLog(
 
         // Clear the stamp so it never bleeds into the next event.
         ctx.currentStamp = undefined;
+    }
+
+    // Presentation pass — see ENTRY_DISPLAY_RANK. Runs once at the END rather than at each
+    // turn boundary because a reaction stamped `duringTurnOf` can still be appended to an
+    // already-closed turn (routeReaction's no-trigger fallback), so a turn is only truly
+    // complete when the whole stream has been folded.
+    for (const round of ctx.rounds) {
+        for (const turn of round.turns) sortTurnEntries(turn.entries);
     }
 
     return ctx.rounds;

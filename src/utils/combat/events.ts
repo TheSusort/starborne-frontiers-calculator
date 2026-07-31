@@ -79,6 +79,14 @@ export type CombatEvent =
           /** Number of individual hits that crit this cast (per-hit crit checks).
            *  Present only when > 0; `didCrit` stays the any-hit binary. */
           critHits?: number;
+          /** The DISTINCT victims this cast critically hit, in first-crit order. Present only on
+           *  the POSITIONAL deferred emit (where the per-victim apply resolves crits per victim)
+           *  and only when non-empty; absent on the single-target inline emit, where `targetId`
+           *  IS the only possible crit victim. Consumers must fall back to `targetId` when it is
+           *  absent. Exists because `critHits` is a bare COUNT: for an AoE that crit two covered
+           *  victims but not the selected anchor, `targetId` names a victim that never crit, so a
+           *  "deals X to that enemy" reactive routed off `targetId` hits the wrong ship. */
+          critVictimIds?: string[];
           didHit?: boolean;
       } & ReactiveStamp)
     | ({
@@ -192,10 +200,16 @@ export type CombatEvent =
           amount: number;
           didCrit?: boolean;
       } & ReactiveStamp)
-    /** LOG-ONLY: a drain-time REACTIVE heal resolved (executeIntent heal branch). A reactive heal
-     *  credits `directHeal` but emits NO `heal-performed` (chain guard — it must not re-trigger
-     *  on-repair listeners). This event exists SOLELY for buildCombatLog: NO combat listener
-     *  subscribes to it. `casterId` = the reacting owner; `perTarget` = per-recipient raw repair. */
+    /** A drain-time REACTIVE heal resolved (executeIntent heal branch). A reactive heal credits
+     *  `directHeal` but emits NO `heal-performed` (chain guard — it must not re-trigger the
+     *  REPAIRER'S OWN on-repair listeners, which would loop). `casterId` = the reacting owner;
+     *  `perTarget` = per-recipient raw repair.
+     *
+     *  Primarily for buildCombatLog, but NOT log-only: `on-enemy-repaired` also subscribes, because
+     *  a reactive repair is still "an enemy performing a repair" (Ruiner's Bomb) and reaction-healers
+     *  repair almost exclusively through this event. That subscription is safe specifically because
+     *  no on-enemy-repaired rider heals, so it cannot re-enter this emit — any NEW subscriber must
+     *  re-establish that argument for itself rather than assume this event is inert. */
     | ({
           type: 'reactive-heal-performed';
           casterId: string;
@@ -216,6 +230,13 @@ export type CombatEvent =
           casterId: string;
           round: number;
           perTarget: { targetId: string; count: number }[];
+          /** Present ONLY for a duration-SHRINK reaction (Heliodor/Pestilence/Warpstrike's
+           *  "reduces the duration of all active Debuffs … by 1 turn"). Absent → the default
+           *  `remove` mode, where `count` is debuffs actually removed. When present, `count` is
+           *  instead the number of debuffs whose duration was SHRUNK, and `durationTurns` is by
+           *  how much — the log renders the two differently ("cleansed 2" vs "-1 turn on 2"). */
+          mode?: 'reduce-duration';
+          durationTurns?: number;
       } & ReactiveStamp)
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the number of
      *  debuffs ACTUALLY removed. Team-symmetric (the enemy-cleanse-lift, #166-era): BOTH the
