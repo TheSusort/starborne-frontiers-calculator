@@ -18,6 +18,7 @@ import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuf
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
+import { computeAffinityModifiers } from '../calculators/affinityUtils';
 import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './buffTotals';
 // Call-time-safe cycle: debuffImmunity imports selfBuffNamesForOwners from this module and we
 // import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
@@ -1444,6 +1445,13 @@ export interface IntentExecContext {
      *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
      *  flag, byte-identical for single-opponent fixtures). */
     affinityOf?: (actorId: string) => AffinityName | undefined;
+    /** Any actor's CURRENT effective attack (base folded with its live buffs), for a reactive
+     *  that must snapshot the owner's attack before the owner has taken a turn this run and so has
+     *  no `lastTurnCtxByActor` entry. The reactive bomb applier is the only consumer: a faster
+     *  enemy healing in round 1 wakes Ruiner's Bomb before Ruiner's first cast, and the bomb bakes
+     *  its `damagePerStack` at application. Absent (unit-test ctxs) → that pre-first-turn bomb is
+     *  skipped, the pre-2026-07-31 behaviour. */
+    effectiveAttackFor?: (actorId: string) => number | undefined;
     /** SP-E, Task E4: resolve ANY actor (either side, from the combat-wide actor map) by id.
      *  Used by the convert-dot executor to locate the ACTUAL victim of an ally's DoT infliction
      *  (eventCtx.victimId) so it retags the right entries — team-symmetric (works whether the
@@ -2815,18 +2823,38 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     sourceId: intent.ownerId,
                 });
             } else if (cfg.dotType === 'bomb') {
-                // Bomb damagePerStack needs the OWNER's effective attack. Before the owner's first
-                // turn this run (faster enemy, round 1) there is no ctx — skip (same guard as today,
-                // now per owner). Affinity comes from the owner's last-turn ctx too.
+                // A bomb SNAPSHOTS the owner's effective attack + affinity at application (unlike
+                // corrosion/inferno, which resolve the applier's ctx at each tick), so it needs
+                // both up front. The owner's last-turn ctx is the preferred source — it carries
+                // the real per-cast affinity resolution, including forced-affinity overrides.
+                //
+                // Before the owner's FIRST turn of the run there is no such ctx (a faster enemy
+                // healing in round 1 — the common case for enemy healers). This used to `return`,
+                // dropping the bomb entirely: no entry, no dot-applied, no log line. Fall back to
+                // the owner's LIVE effective attack plus the raw affinity matchup against this
+                // victim. Documented approximation, same class as the `detonationDamageModifier`
+                // note below: the matchup omits gear/buff affinity modifiers and any forced-
+                // affinity override, both of which only a resolved cast can supply. A bomb at the
+                // plain matchup beats no bomb at all.
                 const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-                if (ownerCtx === undefined) return;
+                const effectiveAttack =
+                    ownerCtx?.effectiveAttack ?? ctx.effectiveAttackFor?.(intent.ownerId);
+                if (effectiveAttack === undefined) return;
+                const affinityMult =
+                    ownerCtx?.affinityMult ??
+                    1 +
+                        computeAffinityModifiers(
+                            ctx.actorById?.(intent.ownerId)?.affinity,
+                            victim?.affinity ?? ctx.affinityOf?.(victimId)
+                        ).damageModifier /
+                            100;
                 (victim?.pendingBombs ?? ctx.pendingBombs).push({
                     countdown: Math.max(1, cfg.duration),
-                    damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
+                    damagePerStack: effectiveAttack * (cfg.tier / 100),
                     stacks: cfg.stacks,
                     tier: cfg.tier,
                     sourceId: intent.ownerId,
-                    affinityMult: ownerCtx.affinityMult,
+                    affinityMult,
                     // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
                     // does not carry the owner's live detonation modifier; documented approximation —
                     // no shipped reactive bomb applier also wears Voidfire.

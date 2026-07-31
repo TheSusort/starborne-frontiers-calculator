@@ -220,10 +220,10 @@ describe('Ruiner (player-side) — Bomb routes to the REPAIRER, capped once per 
         affinityCritPenalty: 0,
         defence: 0,
         hp: 1_000_000_000,
-        // Ruiner must act BEFORE the repairs it reacts to: a bomb DoT snapshots the applier's
-        // effective attack/affinity from its last-turn ctx, and an owner that has not yet acted
-        // this run has none (triggers.ts's `dot` branch skips — the faster-enemy round-1 case).
-        speed: 2000,
+        // Ruiner is the SLOWEST actor here, so both enemies repair before it has ever acted —
+        // which is exactly the case the bomb applier's live-effective-attack fallback covers
+        // (no last-turn ctx to snapshot). Keep it that way: it is the harder path.
+        speed: 1,
         healTargetId: 'attacker',
         enemyAttackers: [enemyX(), enemyY()],
     });
@@ -244,8 +244,7 @@ describe('Ruiner (enemy-side) — team symmetry: an enemy Ruiner reacts to a PLA
     it('Bomb lands on the repairing PLAYER actor (attacker), not a default target', () => {
         const enemyRuiner: EnemyAttacker = {
             id: 'enemy-ruiner',
-            // Acts before the player's repair — see the speed note on the player-side BASE above.
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 300 },
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 10 },
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'passive', abilities: [ruinerBombAbility()] }] },

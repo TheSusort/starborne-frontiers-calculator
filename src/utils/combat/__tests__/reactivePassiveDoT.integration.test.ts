@@ -99,7 +99,7 @@ const selfHeal = (): Ability => ({
     config: { type: 'heal', pct: 5, basis: 'target-hp' },
 });
 
-function ruinerVsRepairingEnemy(numRounds: number) {
+function ruinerVsRepairingEnemy(numRounds: number, ruinerSpeed = 500) {
     const bus = createEventBus();
     const dotApplied: Extract<CombatEvent, { type: 'dot-applied' }>[] = [];
     const detonated: Extract<CombatEvent, { type: 'bomb-detonated' }>[] = [];
@@ -134,8 +134,9 @@ function ruinerVsRepairingEnemy(numRounds: number) {
         affinityCritPenalty: 0,
         defence: 0,
         hp: 1_000_000,
-        // Ruiner acts FIRST so the Bomb is planted before the enemy's own turn in round 1.
-        speed: 500,
+        // Default 500: Ruiner acts FIRST, so the Bomb is planted after it already has a
+        // last-turn ctx. Pass a lower speed to exercise the faster-healer round-1 case.
+        speed: ruinerSpeed,
         hacking: 100_000, // land the DoT deterministically
         healTargetId: 'attacker',
         positionalTeamBattle: true,
@@ -184,6 +185,23 @@ describe('Ruiner Bomb II from a repair reaction — lands on the repairer and de
         expect(detonated.length).toBeGreaterThan(0);
         expect(detonated[0].victimId).toBe('healer');
         expect(detonated[0].actorId).toBe('attacker');
+        expect(detonated[0].damage).toBeGreaterThan(0);
+    });
+
+    // A bomb snapshots the applier's effective attack at APPLICATION (unlike corrosion/inferno,
+    // which resolve the applier's ctx at each tick). The snapshot used to come only from the
+    // applier's last-turn ctx, so a reaction that fired before the applier's first turn of the
+    // run — a faster enemy healing in round 1, which is the common case for enemy healers — was
+    // dropped outright: no bomb, no log line, nothing. It now falls back to the applier's LIVE
+    // effective attack.
+    it('a repair BEFORE the applier’s first turn still plants a bomb (faster healer, round 1)', () => {
+        const { dotApplied, detonated } = ruinerVsRepairingEnemy(4, 1);
+        const bombs = dotApplied.filter((e) => e.dotType === 'bomb');
+        expect(bombs.length).toBeGreaterThan(0);
+        expect(bombs[0].targetId).toBe('healer');
+        expect(bombs[0].round).toBe(1);
+        // And it is a REAL bomb, not a zero-damage placeholder.
+        expect(detonated.length).toBeGreaterThan(0);
         expect(detonated[0].damage).toBeGreaterThan(0);
     });
 });
