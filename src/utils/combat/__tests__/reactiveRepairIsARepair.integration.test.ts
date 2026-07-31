@@ -59,9 +59,9 @@ const passiveAbilitiesOf = (text: string): Ability[] =>
     )?.abilities ?? [];
 
 describe('extracted shapes (mutation guard)', () => {
-    it('Ruiner R2 inflicts a Bomb on on-enemy-repaired', () => {
+    it('Ruiner R2 inflicts a real Bomb DoT on on-enemy-repaired', () => {
         const bomb = passiveAbilitiesOf(RUINER_R2).find(
-            (a) => a.config.type === 'debuff' && /Bomb/.test(a.config.buffName)
+            (a) => a.config.type === 'dot' && a.config.dotType === 'bomb'
         );
         if (!bomb) throw new Error('mutation guard: Ruiner Bomb rider not found');
         expect(bomb.trigger).toBe('on-enemy-repaired');
@@ -165,7 +165,8 @@ function runRuinerVsHeliodor() {
 
     const bus = createEventBus();
     const events: CombatEvent[] = [];
-    bus.on('debuff-applied', (e) => events.push(e));
+    bus.on('dot-applied', (e) => events.push(e));
+    bus.on('bomb-detonated', (e) => events.push(e));
     bus.on('reactive-heal-performed', (e) => events.push(e));
     bus.on('reactive-cleanse-performed', (e) => events.push(e));
     runCombat({ ...input, bus });
@@ -182,10 +183,10 @@ describe('on-enemy-repaired sees REACTIVE repairs', () => {
         expect(heals.every((e) => e.casterId === 'heliodor')).toBe(true);
 
         // Pre-fix: zero Bombs — the repair arrived only as reactive-heal-performed, which
-        // on-enemy-repaired did not listen to.
+        // on-enemy-repaired did not listen to. The Bomb is a real DoT since 2026-07-31, so the
+        // discrete infliction event is `dot-applied`, not `debuff-applied`.
         const bombs = events.filter(
-            (e) =>
-                e.type === 'debuff-applied' && /Bomb/.test(e.buffName) && e.targetId === 'heliodor'
+            (e) => e.type === 'dot-applied' && e.dotType === 'bomb' && e.targetId === 'heliodor'
         );
         expect(bombs.length).toBeGreaterThan(0);
         // `oncePerRoundPerEnemy` holds: at most one Bomb per round across 2 rounds, even though
@@ -208,5 +209,26 @@ describe('on-enemy-repaired sees REACTIVE repairs', () => {
             durationTurns: 1,
         });
         expect(shrinks[0].perTarget.map((pt) => pt.targetId)).toEqual(['heliodor']);
+    });
+
+    // THIRD FINDING (same user log, 2026-07-31): the Bomb Ruiner plants never went off. Two
+    // reasons, both fixed — it was an inert name-only status rather than a real bomb (see the
+    // mutation guard above), and the shrink that should have detonated it only ever walked the
+    // StatusEngine debuff maps, never `PendingBomb.countdown`. A Bomb IS a Debuff: shrinking it to
+    // 0 turns explodes it.
+    it("Heliodor's shrink drives Ruiner's Bomb to 0 turns and detonates it", () => {
+        const events = runRuinerVsHeliodor();
+        const bursts = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'bomb-detonated' }> =>
+                e.type === 'bomb-detonated'
+        );
+        expect(bursts.length).toBeGreaterThan(0);
+        const burst = bursts[0];
+        // Damage is credited to the bomb's ORIGINAL applier (Ruiner), not to the shrinker…
+        expect(burst.actorId).toBe('attacker');
+        expect(burst.victimId).toBe('heliodor');
+        expect(burst.damage).toBeGreaterThan(0);
+        // …while Heliodor, whose shrink forced the burst, is the detonator.
+        expect(burst.detonatorId).toBe('heliodor');
     });
 });

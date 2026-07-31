@@ -18,6 +18,7 @@ import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuf
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
+import { computeAffinityModifiers } from '../calculators/affinityUtils';
 import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './buffTotals';
 // Call-time-safe cycle: debuffImmunity imports selfBuffNamesForOwners from this module and we
 // import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
@@ -27,6 +28,7 @@ import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from 
 // eslint-disable-next-line import/no-cycle
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
+import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -1443,6 +1445,13 @@ export interface IntentExecContext {
      *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
      *  flag, byte-identical for single-opponent fixtures). */
     affinityOf?: (actorId: string) => AffinityName | undefined;
+    /** Any actor's CURRENT effective attack (base folded with its live buffs), for a reactive
+     *  that must snapshot the owner's attack before the owner has taken a turn this run and so has
+     *  no `lastTurnCtxByActor` entry. The reactive bomb applier is the only consumer: a faster
+     *  enemy healing in round 1 wakes Ruiner's Bomb before Ruiner's first cast, and the bomb bakes
+     *  its `damagePerStack` at application. Absent (unit-test ctxs) → that pre-first-turn bomb is
+     *  skipped, the pre-2026-07-31 behaviour. */
+    effectiveAttackFor?: (actorId: string) => number | undefined;
     /** SP-E, Task E4: resolve ANY actor (either side, from the combat-wide actor map) by id.
      *  Used by the convert-dot executor to locate the ACTUAL victim of an ally's DoT infliction
      *  (eventCtx.victimId) so it retags the right entries — team-symmetric (works whether the
@@ -1450,6 +1459,14 @@ export interface IntentExecContext {
      *  ally). Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
      *  that don't exercise convert-dot. */
     actorById?: (actorId: string) => CombatActor | undefined;
+    /** Apply a forced bomb burst against `victim` through the engine's per-victim
+     *  `applyVictimDamage` sink — the same funnel a natural countdown-0 detonation uses, so
+     *  Barrier immunity, the Cheat-Death intercept, `recordDestroyed`/`ship-destroyed` and
+     *  incoming-block/Lifeline all apply. `sourceId` is the bomb's ORIGINAL applier (attribution),
+     *  never the actor that forced the burst. Consumed by the `reduce-duration` branch, which
+     *  shrinks `PendingBomb.countdown` alongside the statusEngine debuffs (a Bomb is a Debuff).
+     *  Absent (unit-test ctxs) → `reduceBombsOnVictim` falls back to a bare shield-then-HP debit. */
+    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
     /** Ship-kit W8 Task 12: resolve ANY actor's ship role (Ship.type) by id, either side — the
      *  SAME `roleByActorId` map (side-agnostic by key) Meatshield's defense-substitution and
      *  Graphite's `roleFilter` reaction-time check already consume. Used by the reactive `purge`
@@ -2000,12 +2017,26 @@ export function reactiveRecipients(
     return footprintFilteredRecipients(intent, ctx, base);
 }
 
-/** Intersect reactive support recipients with the owner's active support footprint. */
+/**
+ * Intersect reactive support recipients with the owner's active support footprint.
+ *
+ * A reactive ability is passive-sourced, and a ship's targeting pattern governs its CAST, not its
+ * passives (user-verified 2026-07-31 via Volk — see `Ability.patternScoped`). So the footprint
+ * applies only to the abilities whose own clause names the pattern: Graphite's "adds N charges to
+ * the charged skill of all allies within the active pattern", AEGIS's and Cultivator's ally-scoped
+ * triggers. Everything else reaches any same-side ally.
+ *
+ * AEGIS/Cultivator caveat: in their wording the pattern scopes the TRIGGER ("when an ally within
+ * the active pattern is …"), not the recipient. Filtering their recipients is an approximation —
+ * but it is exactly the behaviour that shipped before this rule, so flagging them is status-quo,
+ * not a new claim.
+ */
 export function footprintFilteredRecipients(
     intent: Intent,
     ctx: IntentExecContext,
     baseRecipients: string[]
 ): string[] {
+    if (intent.ability.patternScoped !== true) return baseRecipients;
     const footprint = ctx.footprintAllyIdsFor?.(intent.ownerId);
     if (footprint === undefined) return baseRecipients;
     return resolveSupportRecipients({
@@ -2760,6 +2791,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
+        // "once per round per enemy" (Ruiner's Bomb-on-repair) — the same dedicated cap the
+        // sibling `debuff` branch enforces, keyed identically on (owner, ability, repairerId) so
+        // a DIFFERENT repairing enemy still procs. Needed here since 2026-07-31: Ruiner's Bomb
+        // builds as a real dot now, and would otherwise re-plant on every repair the same enemy
+        // performs in a round. No shipped reactive dot sets `oncePerRound`/`procChance`, so only
+        // this flag is consulted (mirror the debuff branch's ordering if that changes).
+        if (intent.ability.oncePerRoundPerEnemy) {
+            const key = `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.repairerId ?? ''}`;
+            if (ctx.oncePerRoundConsumed?.has(key)) return;
+            ctx.oncePerRoundConsumed?.add(key);
+        }
         // Push the DoT stack onto ONE resolved victim's containers + emit the discrete
         // dot-applied. Owner-routed (Task 6): entries are stamped with the firing owner's id so
         // the per-entry tick attributes to (and scales with) the applier; bombs snapshot the
@@ -2781,18 +2823,38 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     sourceId: intent.ownerId,
                 });
             } else if (cfg.dotType === 'bomb') {
-                // Bomb damagePerStack needs the OWNER's effective attack. Before the owner's first
-                // turn this run (faster enemy, round 1) there is no ctx — skip (same guard as today,
-                // now per owner). Affinity comes from the owner's last-turn ctx too.
+                // A bomb SNAPSHOTS the owner's effective attack + affinity at application (unlike
+                // corrosion/inferno, which resolve the applier's ctx at each tick), so it needs
+                // both up front. The owner's last-turn ctx is the preferred source — it carries
+                // the real per-cast affinity resolution, including forced-affinity overrides.
+                //
+                // Before the owner's FIRST turn of the run there is no such ctx (a faster enemy
+                // healing in round 1 — the common case for enemy healers). This used to `return`,
+                // dropping the bomb entirely: no entry, no dot-applied, no log line. Fall back to
+                // the owner's LIVE effective attack plus the raw affinity matchup against this
+                // victim. Documented approximation, same class as the `detonationDamageModifier`
+                // note below: the matchup omits gear/buff affinity modifiers and any forced-
+                // affinity override, both of which only a resolved cast can supply. A bomb at the
+                // plain matchup beats no bomb at all.
                 const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-                if (ownerCtx === undefined) return;
+                const effectiveAttack =
+                    ownerCtx?.effectiveAttack ?? ctx.effectiveAttackFor?.(intent.ownerId);
+                if (effectiveAttack === undefined) return;
+                const affinityMult =
+                    ownerCtx?.affinityMult ??
+                    1 +
+                        computeAffinityModifiers(
+                            ctx.actorById?.(intent.ownerId)?.affinity,
+                            victim?.affinity ?? ctx.affinityOf?.(victimId)
+                        ).damageModifier /
+                            100;
                 (victim?.pendingBombs ?? ctx.pendingBombs).push({
                     countdown: Math.max(1, cfg.duration),
-                    damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
+                    damagePerStack: effectiveAttack * (cfg.tier / 100),
                     stacks: cfg.stacks,
                     tier: cfg.tier,
                     sourceId: intent.ownerId,
-                    affinityMult: ownerCtx.affinityMult,
+                    affinityMult,
                     // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
                     // does not carry the owner's live detonation modifier; documented approximation —
                     // no shipped reactive bomb applier also wears Voidfire.
@@ -2853,9 +2915,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // reactive (Burner on-deal-damage: no victimId → the dummy IS the owner's target), or a
         // unit-test ctx without `actorById` — fall through to the ctx-level containers / ctx.enemy.id
         // exactly as before (byte-identical). Only a resolved victim swaps to its OWN containers.
-        const victim = intent.eventCtx?.victimId
-            ? ctx.actorById?.(intent.eventCtx.victimId)
-            : undefined;
+        //
+        // `counterTargetId` is the second half of that seam: the COUNTER-INFLICTION route ("on
+        // that enemy" / "on its attacker" / "on any enemy performing a repair") that on-attacked
+        // and on-enemy-repaired stamp instead of victimId — the same field the sibling `debuff`
+        // branch already falls back to. Without it Warden/Shepherd's Corrosion and Ruiner's Bomb
+        // land in the vestigial dummy's containers and never tick or burst on the real enemy.
+        const routedVictimId = intent.eventCtx?.victimId ?? intent.eventCtx?.counterTargetId;
+        const victim = routedVictimId ? ctx.actorById?.(routedVictimId) : undefined;
         const victimId = victim?.id ?? ctx.enemy.id;
         // Block Debuff (D-PR15 Task 7): an immune target auto-resists this reactive DoT — block
         // it AND emit a resist event (block path ONLY; a normal landing failure below stays
@@ -3194,7 +3261,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const reducePerTarget: { targetId: string; count: number }[] = [];
             const durationTurns = cfg.durationTurns ?? 1;
             for (const rid of recipients) {
-                const n = reduceOne(rid, durationTurns);
+                let n = reduceOne(rid, durationTurns);
+                // A Bomb IS a Debuff, so a duration shrink reaches it too — and a bomb driven to
+                // 0 turns EXPLODES (user-verified 2026-07-31: Heliodor's "-1 turn on all Debuffs"
+                // detonating the Bomb II Ruiner planted on it). PendingBomb.countdown lives in its
+                // own per-actor container, not the StatusEngine maps `reduceOne` walks, so it must
+                // be shrunk separately — via the SAME reduce-and-detonate helper Lingshe's
+                // bomb-countdown-reduce uses, so the burst credits the bomb's original applier and
+                // routes through the per-victim damage sink. `count:'all'` only: a newest-debuff-
+                // only shrink (Warpstrike) picks one status and must not also eat a bomb.
+                const bombVictim = cfg.count === 'all' ? ctx.actorById?.(rid) : undefined;
+                if (bombVictim) {
+                    n += reduceBombsOnVictim(
+                        bombVictim,
+                        durationTurns,
+                        ctx.round,
+                        ctx.bus,
+                        intent.ownerId,
+                        ctx.forceDetonateBomb
+                    );
+                }
                 if (n > 0) reducePerTarget.push({ targetId: rid, count: n });
                 affected += n;
             }

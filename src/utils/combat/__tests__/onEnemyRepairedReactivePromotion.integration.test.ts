@@ -50,14 +50,33 @@ const noopActiveSlot = (): ShipSkills['slots'][number] => ({
     ],
 });
 
-/** Collect every `debuff-applied` event from a run — the discrete infliction event, one per
- *  landed application, carrying the exact `targetId` the executor routed to. */
+/** Collect every `debuff-applied` AND `dot-applied` event from a run — the discrete infliction
+ *  events, one per landed application, carrying the exact `targetId` the executor routed to.
+ *  Ruiner's Bomb rides `dot-applied` (it is a real bomb DoT since 2026-07-31); Amartya's Defense
+ *  Shred rides `debuff-applied`. Both are normalised to `{buffName, targetId}` so the routing
+ *  assertions below read the same for either. */
 function runAndCollectDebuffs(input: CombatEngineInput) {
     const bus = createEventBus();
-    const debuffsApplied: Extract<CombatEvent, { type: 'debuff-applied' }>[] = [];
-    bus.on('debuff-applied', (e) => debuffsApplied.push(e));
+    const debuffsApplied: { buffName: string; targetId: string }[] = [];
+    bus.on('debuff-applied', (e) =>
+        debuffsApplied.push({ buffName: e.buffName, targetId: e.targetId })
+    );
+    bus.on('dot-applied', (e: Extract<CombatEvent, { type: 'dot-applied' }>) =>
+        debuffsApplied.push({ buffName: dotDisplayName(e), targetId: e.targetId })
+    );
     runCombat({ ...input, bus });
     return { debuffsApplied };
+}
+
+/** "bomb"/tier 200 → "Bomb II" — the name the old `debuff-applied` event carried, so the
+ *  assertions below stay written in the skill text's own vocabulary. */
+function dotDisplayName(e: Extract<CombatEvent, { type: 'dot-applied' }>): string {
+    const family = e.dotType.charAt(0).toUpperCase() + e.dotType.slice(1);
+    const perTier: Record<string, number> = { bomb: 100, inferno: 15, corrosion: 3 };
+    const step = perTier[e.dotType];
+    if (step === undefined || e.tier === undefined) return family;
+    const numeral = ['', 'I', 'II', 'III'][Math.round(e.tier / step)] ?? '';
+    return numeral ? `${family} ${numeral}` : family;
 }
 
 // A plain self-heal (10% of own max HP, unconditional — heals even at full HP since the engine
@@ -123,16 +142,16 @@ const extraAction = (id: string): Ability => ({
 const RUINER_P2 =
     'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.';
 
-/** Extracts Ruiner's Bomb-on-enemy-repair debuff through the REAL parser/builder. */
+/** Extracts Ruiner's Bomb-on-enemy-repair DoT through the REAL parser/builder. */
 function ruinerBombAbility(): Ability {
     const abilities =
         buildShipAbilities(ship({ firstPassiveSkillText: RUINER_P2 })).slots.find(
             (s) => s.slot === 'passive'
         )?.abilities ?? [];
     const bomb = abilities.find(
-        (a) => a.type === 'debuff' && a.config.type === 'debuff' && a.config.buffName === 'Bomb II'
+        (a) => a.type === 'dot' && a.config.type === 'dot' && a.config.dotType === 'bomb'
     );
-    if (!bomb) throw new Error('mutation guard: Ruiner Bomb-on-enemy-repair debuff not found');
+    if (!bomb) throw new Error('mutation guard: Ruiner Bomb-on-enemy-repair dot not found');
     return bomb;
 }
 
@@ -201,6 +220,9 @@ describe('Ruiner (player-side) — Bomb routes to the REPAIRER, capped once per 
         affinityCritPenalty: 0,
         defence: 0,
         hp: 1_000_000_000,
+        // Ruiner is the SLOWEST actor here, so both enemies repair before it has ever acted —
+        // which is exactly the case the bomb applier's live-effective-attack fallback covers
+        // (no last-turn ctx to snapshot). Keep it that way: it is the harder path.
         speed: 1,
         healTargetId: 'attacker',
         enemyAttackers: [enemyX(), enemyY()],

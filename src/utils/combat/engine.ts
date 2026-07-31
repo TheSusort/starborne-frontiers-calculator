@@ -6289,6 +6289,19 @@ export function runCombat(input: CombatEngineInput): {
                         // corrosionEntries closures above (side-biased to the player's single
                         // opposing focus). Combat-wide map — no per-side sideCtx field needed.
                         actorById: (id) => allActorsById.get(id),
+                        // Live effective attack, for a reactive bomb applied before its owner's
+                        // first turn of the run (no lastTurnCtx to snapshot). Same fold
+                        // `effectiveSpeedOf` uses, reading `.attack` instead.
+                        effectiveAttackFor: (id) => {
+                            const a = allActorsById.get(id);
+                            return a
+                                ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack
+                                : undefined;
+                        },
+                        // Same shared sink (SP-U U1) the cast-path forced detonation uses — a
+                        // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
+                        forceDetonateBomb: (victim, sourceId, damage) =>
+                            forceDetonateBombOnVictim(victim, sink, sourceId, damage),
                         // Ship-kit W8 Task 12: side-agnostic ship-role lookup (the SAME
                         // roleByActorId map Meatshield's defense-substitution and Graphite's
                         // roleFilter already consume) — feeds the reactive `purge` branch's

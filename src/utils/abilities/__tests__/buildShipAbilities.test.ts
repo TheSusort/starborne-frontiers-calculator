@@ -2133,31 +2133,35 @@ describe('buildShipAbilities', () => {
         const passiveOf = (s: Ship): Skill | undefined =>
             buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
 
-        it('Warden passive: Corrosion I is a name-only on-attacked DEBUFF, not a dot', () => {
+        // 2026-07-31: this was a name-only DEBUFF under Phase 4c PR 1 §3.5 (counter-DoT ticks
+        // against an enemy attacker were unsimulated when only the focus dummy carried DoT
+        // containers). Positioned enemies now carry their own containers and tick/burst on their
+        // own turns, so the reaction builds a REAL dot — see the builder block's comment.
+        it('Warden passive: Corrosion I is a real on-attacked DOT (no name-only debuff twin)', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
             });
             const passive = passiveOf(s);
-            const debuff = passive?.abilities.find((a) => a.type === 'debuff');
-            expect(debuff).toMatchObject({
-                type: 'debuff',
+            const dot = passive?.abilities.find((a) => a.type === 'dot');
+            expect(dot).toMatchObject({
+                type: 'dot',
                 target: 'enemy',
                 trigger: 'on-attacked',
                 conditions: [],
                 config: {
-                    type: 'debuff',
-                    buffName: 'Corrosion I',
-                    parsedEffects: {},
+                    type: 'dot',
+                    dotType: 'corrosion',
+                    tier: 3,
+                    stacks: 1,
                     duration: 2,
-                    application: 'inflict',
                 },
             });
-            expect(debuff!.triggerCritFilter).toBeUndefined();
-            // NO dot ability anywhere (the counter-DoT tick is unsimulated), and the
-            // repair still rides on-attacked (Task 7) — no on-cast/recurring phantom.
+            expect(dot!.triggerCritFilter).toBeUndefined();
+            // No inert debuff twin, and the repair still rides on-attacked (Task 7) — no
+            // on-cast/recurring phantom.
             const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
-            expect(all.filter((a) => a.type === 'dot')).toHaveLength(0);
+            expect(all.filter((a) => a.type === 'debuff')).toHaveLength(0);
             expect(all.filter((a) => a.trigger === 'on-cast')).toHaveLength(0);
             expect(passive?.abilities.find((a) => a.type === 'heal')).toMatchObject({
                 trigger: 'on-attacked',
@@ -2232,22 +2236,22 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Shepherd passive: Corrosion I name-only debuff AND Attack Down I both ride on-attacked', () => {
+        // The DoT-named half is now a real dot (see the Warden case above); the plain named
+        // status half stays a debuff. Both must still ride on-attacked.
+        it('Shepherd passive: Corrosion I DOT and Attack Down I debuff both ride on-attacked', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> and <unit-skill>Attack Down I</unit-skill> on its attacker for 1 turn.',
             });
             const passive = passiveOf(s);
+            expect(passive?.abilities.find((a) => a.type === 'dot')).toMatchObject({
+                trigger: 'on-attacked',
+                config: { type: 'dot', dotType: 'corrosion', tier: 3, duration: 1 },
+            });
             const debuffs = passive?.abilities.filter((a) => a.type === 'debuff') ?? [];
             expect(
                 debuffs.map((a) => [(a.config as { buffName: string }).buffName, a.trigger])
-            ).toEqual(
-                expect.arrayContaining([
-                    ['Corrosion I', 'on-attacked'],
-                    ['Attack Down I', 'on-attacked'],
-                ])
-            );
-            expect(passive?.abilities.find((a) => a.type === 'dot')).toBeUndefined();
+            ).toEqual([['Attack Down I', 'on-attacked']]);
         });
 
         it('Opal second passive: counter-debuff AND self-buff in the reaction sentence both flip', () => {
@@ -2355,9 +2359,9 @@ describe('buildShipAbilities', () => {
                 firstPassiveSkillText:
                     'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
             });
-            const debuff = passiveOf(s)?.abilities.find((a) => a.type === 'debuff');
-            expect(debuff?.trigger).toBe('on-attacked');
-            expect(debuff?.conditions).toEqual([]);
+            const dot = passiveOf(s)?.abilities.find((a) => a.type === 'dot');
+            expect(dot?.trigger).toBe('on-attacked');
+            expect(dot?.conditions).toEqual([]);
         });
 
         it('Provider (negative): ally-inflicts sentence with "cannont critically hit" is unchanged', () => {

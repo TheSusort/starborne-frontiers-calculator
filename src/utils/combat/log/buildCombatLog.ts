@@ -688,9 +688,12 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const entry: CombatLogEntry = {
             kind: 'bomb',
             actorId: e.actorId,
-            // Aggregate burst — no per-victim breakdown on the event; carry the total
-            // payout on a single self-keyed target so the renderer can format it.
-            targets: [{ targetId: e.actorId, amount: e.damage }],
+            // The burst is a single aggregate payout, carried on the HOLDER the bomb went off on
+            // (`victimId`) — `actorId` stays the applier who gets credited. This used to key the
+            // target as `actorId` too, on a stale "no per-victim breakdown on the event" comment
+            // (victimId has been required since Wave 5 C2), so a bomb Ruiner planted on Heliodor
+            // rendered as "Ruiner → Ruiner".
+            targets: [{ targetId: e.victimId, amount: e.damage }],
             reactions: [],
             note: `bombs detonated ×${e.stacks}`,
         };

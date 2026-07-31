@@ -10,6 +10,10 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: passives that punish an enemy for repairing (Ruiner's Bomb) now also see repairs that come from the enemy's own reactions, such as a healer repairing itself when damaged.",
     'Combat simulator: the combat log now lists each turn as skill effects first, then charge, then the consequences (resists, deaths, expiries) — previously the attack line could appear after the kill it caused.',
     'Combat simulator: debuff-duration reductions (Heliodor, Pestilence) are now shown in the combat log instead of happening silently.',
+    'Combat simulator: a ship\'s targeting pattern now only limits its active and charged skills. Passive support reaches any ally — Volk\'s passive repair goes to the ally with the most missing health wherever that ally stands, while its buffs stay inside the pattern. Passives that spell out "within the active pattern" (AEGIS, Cultivator, Graphite) are unchanged.',
+    "Combat simulator: DoTs inflicted by a reaction are now real DoTs. Ruiner's Bomb, and Warden's and Shepherd's Corrosion, used to land as a name-only status on the wrong unit — they never ticked, never counted down and never exploded. They now land on the enemy that triggered them, tick and burst for real damage, and Ruiner's Bomb still respects its once-per-round-per-enemy cap. A Bomb triggered before its owner's first turn of the fight — an enemy healer faster than Ruiner repairing in round 1 — is now planted too, instead of being skipped.",
+    'Combat simulator: reducing a Bomb\'s duration to 0 now detonates it, so Heliodor\'s "-1 turn on all Debuffs" can set off a Bomb it is carrying. The damage is credited to the ship that planted the Bomb.',
+    'Combat simulator: a Bomb detonation in the combat log now names the ship it went off on instead of the ship that planted it.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
