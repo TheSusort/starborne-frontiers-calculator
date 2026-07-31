@@ -27,6 +27,7 @@ import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from 
 // eslint-disable-next-line import/no-cycle
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
+import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -1450,6 +1451,14 @@ export interface IntentExecContext {
      *  ally). Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
      *  that don't exercise convert-dot. */
     actorById?: (actorId: string) => CombatActor | undefined;
+    /** Apply a forced bomb burst against `victim` through the engine's per-victim
+     *  `applyVictimDamage` sink — the same funnel a natural countdown-0 detonation uses, so
+     *  Barrier immunity, the Cheat-Death intercept, `recordDestroyed`/`ship-destroyed` and
+     *  incoming-block/Lifeline all apply. `sourceId` is the bomb's ORIGINAL applier (attribution),
+     *  never the actor that forced the burst. Consumed by the `reduce-duration` branch, which
+     *  shrinks `PendingBomb.countdown` alongside the statusEngine debuffs (a Bomb is a Debuff).
+     *  Absent (unit-test ctxs) → `reduceBombsOnVictim` falls back to a bare shield-then-HP debit. */
+    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
     /** Ship-kit W8 Task 12: resolve ANY actor's ship role (Ship.type) by id, either side — the
      *  SAME `roleByActorId` map (side-agnostic by key) Meatshield's defense-substitution and
      *  Graphite's `roleFilter` reaction-time check already consume. Used by the reactive `purge`
@@ -2000,12 +2009,26 @@ export function reactiveRecipients(
     return footprintFilteredRecipients(intent, ctx, base);
 }
 
-/** Intersect reactive support recipients with the owner's active support footprint. */
+/**
+ * Intersect reactive support recipients with the owner's active support footprint.
+ *
+ * A reactive ability is passive-sourced, and a ship's targeting pattern governs its CAST, not its
+ * passives (user-verified 2026-07-31 via Volk — see `Ability.patternScoped`). So the footprint
+ * applies only to the abilities whose own clause names the pattern: Graphite's "adds N charges to
+ * the charged skill of all allies within the active pattern", AEGIS's and Cultivator's ally-scoped
+ * triggers. Everything else reaches any same-side ally.
+ *
+ * AEGIS/Cultivator caveat: in their wording the pattern scopes the TRIGGER ("when an ally within
+ * the active pattern is …"), not the recipient. Filtering their recipients is an approximation —
+ * but it is exactly the behaviour that shipped before this rule, so flagging them is status-quo,
+ * not a new claim.
+ */
 export function footprintFilteredRecipients(
     intent: Intent,
     ctx: IntentExecContext,
     baseRecipients: string[]
 ): string[] {
+    if (intent.ability.patternScoped !== true) return baseRecipients;
     const footprint = ctx.footprintAllyIdsFor?.(intent.ownerId);
     if (footprint === undefined) return baseRecipients;
     return resolveSupportRecipients({
@@ -2760,6 +2783,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
+        // "once per round per enemy" (Ruiner's Bomb-on-repair) — the same dedicated cap the
+        // sibling `debuff` branch enforces, keyed identically on (owner, ability, repairerId) so
+        // a DIFFERENT repairing enemy still procs. Needed here since 2026-07-31: Ruiner's Bomb
+        // builds as a real dot now, and would otherwise re-plant on every repair the same enemy
+        // performs in a round. No shipped reactive dot sets `oncePerRound`/`procChance`, so only
+        // this flag is consulted (mirror the debuff branch's ordering if that changes).
+        if (intent.ability.oncePerRoundPerEnemy) {
+            const key = `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.repairerId ?? ''}`;
+            if (ctx.oncePerRoundConsumed?.has(key)) return;
+            ctx.oncePerRoundConsumed?.add(key);
+        }
         // Push the DoT stack onto ONE resolved victim's containers + emit the discrete
         // dot-applied. Owner-routed (Task 6): entries are stamped with the firing owner's id so
         // the per-entry tick attributes to (and scales with) the applier; bombs snapshot the
@@ -2853,9 +2887,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // reactive (Burner on-deal-damage: no victimId → the dummy IS the owner's target), or a
         // unit-test ctx without `actorById` — fall through to the ctx-level containers / ctx.enemy.id
         // exactly as before (byte-identical). Only a resolved victim swaps to its OWN containers.
-        const victim = intent.eventCtx?.victimId
-            ? ctx.actorById?.(intent.eventCtx.victimId)
-            : undefined;
+        //
+        // `counterTargetId` is the second half of that seam: the COUNTER-INFLICTION route ("on
+        // that enemy" / "on its attacker" / "on any enemy performing a repair") that on-attacked
+        // and on-enemy-repaired stamp instead of victimId — the same field the sibling `debuff`
+        // branch already falls back to. Without it Warden/Shepherd's Corrosion and Ruiner's Bomb
+        // land in the vestigial dummy's containers and never tick or burst on the real enemy.
+        const routedVictimId = intent.eventCtx?.victimId ?? intent.eventCtx?.counterTargetId;
+        const victim = routedVictimId ? ctx.actorById?.(routedVictimId) : undefined;
         const victimId = victim?.id ?? ctx.enemy.id;
         // Block Debuff (D-PR15 Task 7): an immune target auto-resists this reactive DoT — block
         // it AND emit a resist event (block path ONLY; a normal landing failure below stays
@@ -3194,7 +3233,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const reducePerTarget: { targetId: string; count: number }[] = [];
             const durationTurns = cfg.durationTurns ?? 1;
             for (const rid of recipients) {
-                const n = reduceOne(rid, durationTurns);
+                let n = reduceOne(rid, durationTurns);
+                // A Bomb IS a Debuff, so a duration shrink reaches it too — and a bomb driven to
+                // 0 turns EXPLODES (user-verified 2026-07-31: Heliodor's "-1 turn on all Debuffs"
+                // detonating the Bomb II Ruiner planted on it). PendingBomb.countdown lives in its
+                // own per-actor container, not the StatusEngine maps `reduceOne` walks, so it must
+                // be shrunk separately — via the SAME reduce-and-detonate helper Lingshe's
+                // bomb-countdown-reduce uses, so the burst credits the bomb's original applier and
+                // routes through the per-victim damage sink. `count:'all'` only: a newest-debuff-
+                // only shrink (Warpstrike) picks one status and must not also eat a bomb.
+                const bombVictim = cfg.count === 'all' ? ctx.actorById?.(rid) : undefined;
+                if (bombVictim) {
+                    n += reduceBombsOnVictim(
+                        bombVictim,
+                        durationTurns,
+                        ctx.round,
+                        ctx.bus,
+                        intent.ownerId,
+                        ctx.forceDetonateBomb
+                    );
+                }
                 if (n > 0) reducePerTarget.push({ targetId: rid, count: n });
                 affected += n;
             }

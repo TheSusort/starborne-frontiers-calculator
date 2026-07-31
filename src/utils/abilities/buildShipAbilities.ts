@@ -940,6 +940,38 @@ function pushToSlot(
 }
 
 /**
+ * Length-preserving tag mask: every `<unit-…>` / `<br …>` tag becomes an equal run of spaces, so
+ * raw-text offsets (every `pos` anchor in this file is a raw-text index) still address the same
+ * characters in the masked string. `stripTags` cannot be used for this — it shortens the text and
+ * therefore shifts every anchor.
+ */
+function maskTagsPreservingLength(text: string): string {
+    return text.replace(/<[^>]*>/g, (tag) => ' '.repeat(tag.length));
+}
+
+/**
+ * Marks every ability whose own sentence says its allies are scoped to the caster's targeting
+ * pattern — the literal "within the active pattern". See `Ability.patternScoped`: passive-slot
+ * support is otherwise NOT narrowed to the firing skill's support footprint, and this is the
+ * opt-back-in for the four corpus ships that name the pattern (AEGIS, Cultivator, Graphite).
+ *
+ * Skips anchorless abilities (`pos === MAX_POS`, or any out-of-range index) rather than letting
+ * `sentenceContaining` fall through to the row's LAST sentence and mis-flag them.
+ */
+const WITHIN_ACTIVE_PATTERN_RE = /within the active pattern/i;
+function markPatternScoped(positioned: PositionedAbility[], text: string): PositionedAbility[] {
+    if (!WITHIN_ACTIVE_PATTERN_RE.test(text)) return positioned;
+    const masked = maskTagsPreservingLength(text);
+    for (const p of positioned) {
+        if (p.pos < 0 || p.pos >= masked.length) continue;
+        if (WITHIN_ACTIVE_PATTERN_RE.test(sentenceContaining(masked, p.pos))) {
+            p.ability.patternScoped = true;
+        }
+    }
+    return positioned;
+}
+
+/**
  * Maps an existing-detector ConditionalCondition into a model Condition. The
  * subject strings are identical between the two unions, so this is mostly a
  * passthrough carrying derivable / manualCount / requiredEnemyType. Neither
@@ -3445,16 +3477,24 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         mergeBuff(buff, enemyTarget);
     }
 
-    // Phase 4c PR 1 (Task 8): damage-reaction DoT inflictions on the PASSIVE row (Warden
-    // "When directly damaged, this Unit inflicts Corrosion I … on that enemy", Shepherd) are
-    // NOT DoTs. Spec decision (§3.5): counter-DoT tick damage against an enemy ATTACKER is
-    // deliberately unsimulated — only the focus enemy's incoming DoTs tick, so emitting a dot
-    // here would phantom-credit tick damage the sim never resolves. The named status still
-    // matters (visible in the editor, condition-relevant for enemy-debuff gates), so emit a
-    // name-only DEBUFF (empty parsedEffects → no payload) riding the live on-attacked trigger;
-    // the executor lands it on the attacking enemy via eventCtx.counterTargetId. DoT-named
-    // effects are excluded from BOTH buff auto-fill (isDoTBuffName) and the active/charge DoT
-    // merge above (passive sources skipped), so without this pass they emit nothing.
+    // Reaction-inflicted DoTs on the PASSIVE row: Warden/Shepherd's "When directly damaged, this
+    // Unit inflicts Corrosion I … on that enemy" (on-attacked) and Ruiner's "inflicts Bomb II for
+    // 2 turns on any enemy performing a repair" (on-enemy-repaired). DoT-named effects are
+    // excluded from BOTH buff auto-fill (isDoTBuffName) and the active/charge DoT merge above
+    // (which skips passive sources), so without this pass they emit nothing at all.
+    //
+    // These build as REAL `dot` abilities. They used to be name-only `debuff` statuses (empty
+    // parsedEffects) under a Phase 4c PR 1 §3.5 decision: back then only the singular focus-dummy
+    // enemy carried DoT containers, so a dot here would have phantom-credited ticks against an
+    // enemy ATTACKER the sim never resolved. That premise is gone — enemies are positioned actors
+    // with their own corrosion/inferno/bomb containers which tick and burst on their own turns
+    // (engine.ts `applyPositionedTimedBurst` / `tickDoTs`). Keeping them as statuses meant a
+    // reaction-applied Bomb that never counted down, never exploded and never dealt damage
+    // (user-reported 2026-07-31: Ruiner planting Bomb II on a self-repairing Heliodor).
+    //
+    // Routing: the reactive `dot` executor resolves its victim from `eventCtx.victimId`, falling
+    // back to `counterTargetId` — which is what BOTH of these triggers stamp (the attacker /
+    // the repairer). See triggers.ts's `dot` branch.
     const passiveRowText = getSkillRowForSlot(ship, 'passive')?.text ?? '';
     if (passiveRowText) {
         // Source tag is irrelevant here (it only drives stackTrigger classification, which a
@@ -3484,9 +3524,10 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                           },
                       ]
                     : [];
+            const dotInfo = DOT_TIER_MAP[eff.buffName];
             const ability: Ability = {
                 id: nextId(),
-                type: 'debuff',
+                type: 'dot',
                 target: 'enemy',
                 trigger: reaction?.trigger ?? enemyRepairedReaction!.trigger,
                 ...(reaction?.critFilter ? { triggerCritFilter: reaction.critFilter } : {}),
@@ -3499,13 +3540,13 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                     : {}),
                 conditions: dotReactionConditions,
                 config: {
-                    type: 'debuff',
-                    buffName: eff.buffName,
-                    parsedEffects: {},
+                    type: 'dot',
+                    dotType: dotInfo.type,
+                    tier: dotInfo.tier,
                     stacks: eff.stacks ?? 1,
-                    isStackable: false,
+                    // Same 2-turn default the other reactive-DoT builder blocks use (Crocus
+                    // on-ally-crit-dot, Pestilence on-enemy-cleansed) when the clause omits one.
                     duration: typeof eff.duration === 'number' ? eff.duration : 2,
-                    application: eff.application ?? 'inflict',
                 },
                 autoFilled: true,
             };
@@ -3567,6 +3608,10 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     const slots: Skill[] = [];
     for (const [slot, positioned] of bySlot) {
         if (!positioned.length) continue;
+        // Runs over EVERY producer's output (abilitiesFromText, the DoT/buff auto-fill merges,
+        // the passive damage-reaction pass) while the `pos` anchors are still available — each
+        // slot's anchors index that slot's own row text.
+        markPatternScoped(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }

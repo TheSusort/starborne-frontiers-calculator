@@ -1059,6 +1059,18 @@ export interface Ability {
      *  multi-recipient heal fans the debuff out to EVERY repaired recipient. Absent → the
      *  normal single-target route. */
     repairedRecipientTargeted?: boolean;
+    /** The ability's own clause says its allies are scoped to the caster's targeting pattern —
+     *  the literal words "within the active pattern" (Graphite R2/R4's ally charge grant, AEGIS's
+     *  and Cultivator's ally-scoped triggers; the only corpus wording, see docs/ship-skills.csv).
+     *
+     *  A ship's targeting pattern belongs to its CAST, so PASSIVE-slot support (heals, shields,
+     *  buffs, charge) is NOT narrowed to the firing skill's support footprint — user-verified
+     *  2026-07-31 via Volk, whose active buffs land inside
+     *  `Pattern-Line-Support-from-centre-Range-1` while its passive "repairs … the ally with the
+     *  most missing health" reaches any ally. This flag is the opt-BACK-IN for the handful of
+     *  passives that name the pattern themselves; cast-slot support is footprint-scoped
+     *  regardless of the flag. Set by buildShipAbilities from the ability's own sentence. */
+    patternScoped?: boolean;
     /** D-PR14 Bulwark: an on-ally-attacked reactive fires only when the DAMAGED ally is
      *  adjacent to this owner (board neighbours; non-positional → any living same-side ally).
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →

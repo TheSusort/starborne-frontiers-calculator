@@ -49,6 +49,7 @@ import {
     selfBuffNamesForOwners,
     type ReactiveAbility,
 } from './triggers';
+import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
@@ -884,71 +885,6 @@ function stripShieldPct(
 }
 
 /**
- * SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s), Bombs
- * reduced to 0 turns by this skill will detonate." Decrements EVERY pending bomb on `victim` by
- * `turns`; any bomb reaching <= 0 detonates IMMEDIATELY using the EXACT `processBombs` burst
- * formula (engine.ts) — stacks * damagePerStack * affinityMult * (1 + detonationDamageModifier
- * / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`, NOT this ability's caster) via
- * a `bomb-detonated` bus emission (one event per detonating entry, mirroring the enemy-turn
- * `processBombs` shape) and, when `forceDetonateBomb` is supplied, the SAME per-victim
- * `applyVictimDamage` sink a natural detonation uses — so Barrier, Cheat-Death, `destroyedRound`/
- * `ship-destroyed`, and incoming-block/Lifeline all apply exactly as they would to a natural
- * countdown-0 burst (see `PlayerTurnArgs.forceDetonateBomb`'s doc comment). Absent (no engine
- * scope — standalone/unit-test callers), falls back to a bare shield-then-HP debit with none of
- * that. Deliberately NOT detonateContainers/detonate() — those credit the CASTER unconditionally
- * and consume the WHOLE container regardless of countdown.
- */
-function reduceBombsOnVictim(
-    victim: CombatActor,
-    turns: number,
-    round: number,
-    bus: CombatEventBus,
-    // Ship-kit W7: the actor whose bomb-countdown-reduce cast is forcing this detonation (Lingshe).
-    // Distinct from `bomb.sourceId` (the ORIGINAL applier, kept as `actorId` for attribution) — it
-    // becomes the event's `detonatorId` so Lingshe's on-self-bomb-detonated Stealth grant fires
-    // for a burst SHE caused even on bombs another ship applied.
-    detonatorId: string,
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
-): void {
-    // Bind the array reference ONCE, exactly as the sibling `processBombs` does with its
-    // `args.pendingBombs` param. A forced detonation can kill the victim, and the engine's
-    // bomb-splash-on-death then REASSIGNS `victim.pendingBombs = []` (not an in-place mutation).
-    // Re-reading the live field mid-loop would strand this index into that emptied array and throw
-    // (interaction-audit FINDING-002: Lingshe + a multi-bomb planter). Holding the pre-death
-    // snapshot lets every countdown-0 bomb detonate, matching the natural burst on an actor's own
-    // turn. `.splice` on this reference stays correct in the survive case (same object as the live
-    // field) and is a harmless no-op on the detached snapshot in the death case.
-    const bombs = victim.pendingBombs;
-    for (let i = bombs.length - 1; i >= 0; i--) {
-        const bomb = bombs[i];
-        bomb.countdown -= turns;
-        if (bomb.countdown > 0) continue;
-        const burst =
-            bomb.stacks *
-            bomb.damagePerStack *
-            bomb.affinityMult *
-            (1 + bomb.detonationDamageModifier / 100);
-        bus.emit({
-            type: 'bomb-detonated',
-            actorId: bomb.sourceId,
-            victimId: victim.id,
-            detonatorId,
-            round,
-            stacks: bomb.stacks,
-            damage: burst,
-        });
-        if (forceDetonateBomb) {
-            forceDetonateBomb(victim, bomb.sourceId, burst);
-        } else {
-            const shieldDrain = Math.min(victim.shieldPool, burst);
-            victim.shieldPool -= shieldDrain;
-            victim.currentHp = Math.max(0, victim.currentHp - (burst - shieldDrain));
-        }
-        bombs.splice(i, 1);
-    }
-}
-
-/**
  * SP-F F3: fans `reduceBombsOnVictim` over the firing skill's `bomb-countdown-reduce`
  * ability/abilities (all-enemies), across the AoE footprint (`aoeVictimIds` when present, else
  * the single anchor). Hacking-gated: reuses the SAME single-draw landing infra as every other
@@ -1100,12 +1036,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         anchor: actor.position,
         sameSideLiving: sameSideLiving ?? [],
     });
-    const supportRecipients = (target: Ability['target'], base: string[]): string[] =>
+    // The firing skill's support footprint narrows the CAST's ally recipients. A PASSIVE-slot
+    // support ability is not part of the cast, so the pattern does not govern it (user-verified
+    // 2026-07-31 via Volk: its active buffs stay on-pattern, its passive repair reaches the ally
+    // with the most missing health wherever that ally stands). The exception is a passive whose
+    // own clause names the pattern — `Ability.patternScoped`, see the flag's doc comment.
+    const scopedByFootprint = (ability: Ability | undefined, fromPassive: boolean): boolean =>
+        !fromPassive || ability?.patternScoped === true;
+    const supportRecipients = (
+        target: Ability['target'],
+        base: string[],
+        // Omitted ⇒ cast-slot (always footprint-scoped), matching every pre-existing caller.
+        source?: { ability: Ability; fromPassive: boolean }
+    ): string[] =>
         resolveSupportRecipients({
             target,
             casterId: actor.id,
             baseRecipients: base,
-            footprintAllyIds,
+            footprintAllyIds:
+                source === undefined || scopedByFootprint(source.ability, source.fromPassive)
+                    ? footprintAllyIds
+                    : undefined,
         });
 
     // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
@@ -2168,6 +2119,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     ? args.healing.enemyIds
                     : args.healing.playerIds
                 : (sameSideLiving ?? []).map((a) => a.id);
+            // Stays unconditionally footprint-scoped even though `allyCharges` folds the passive
+            // slot in: chargeGainFromSkill returns a scalar, so there is no per-ability slot to
+            // consult here (unlike the heal/extend loops). Unobservable today — every corpus
+            // passive ally-charge grant is REACTIVE (Graphite start-of-round, Liberator
+            // on-enemy-destroyed, …) and therefore routes through triggers.ts's
+            // `reactiveRecipients`, which does honour the passive rule. Split this if a
+            // non-reactive passive ally-charge aura ever ships.
             const chargeRecipients = supportRecipients('all-allies', allyRoster);
             grantAllyCharges(
                 allyCharges,
@@ -2680,7 +2638,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
     // so both branches no-op harmlessly when the relevant roster is empty.
-    for (const ab of [...(gatedSkill?.abilities ?? []), ...(gatedPassive?.abilities ?? [])]) {
+    for (const { ability: ab, fromPassive } of [
+        ...(gatedSkill?.abilities ?? []).map((ability) => ({ ability, fromPassive: false })),
+        ...(gatedPassive?.abilities ?? []).map((ability) => ({ ability, fromPassive: true })),
+    ]) {
         if (
             ab.config.type !== 'extend-status' ||
             ab.trigger !== 'on-cast' ||
@@ -2712,7 +2673,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     ? args.healing.enemyIds
                     : args.healing.playerIds
                 : (sameSideLiving ?? []).map((a) => a.id);
-            for (const rid of supportRecipients(ab.target, allyRoster)) {
+            for (const rid of supportRecipients(ab.target, allyRoster, {
+                ability: ab,
+                fromPassive,
+            })) {
                 statusEngine.extendAllBuffsDuration(rid, turns);
             }
         }
@@ -2787,7 +2751,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
             return best ?? actor.id;
         };
-        const recipientsFor = (target: Ability['target']): string[] => {
+        const recipientsFor = (ability: Ability, fromPassive: boolean): string[] => {
+            const target = ability.target;
             let base: string[];
             if (target === 'self') base = [actor.id];
             else if (target === 'all-allies')
@@ -2799,7 +2764,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // healing calculator (teamBattle absent) keeps routing to its chosen heal target.
             else if (healing.teamBattle) base = [lowestHpAllyId(healing.playerIds)];
             else base = [healing.targetId];
-            return supportRecipients(target, base);
+            return supportRecipients(target, base, { ability, fromPassive });
         };
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (
@@ -2944,15 +2909,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // cast. `pre-combat` is not a live trigger, so the reactive partition leaves them in
         // castSkills — this is the single cast-path exclusion point.
         const notPreCombat = (a: Ability): boolean => a.trigger !== 'pre-combat';
-        const healAbilities = healEventOnly
-            ? (gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false) && notPreCombat(a))
+        // Each entry carries the slot it came from: `recipientsFor` needs it to decide whether
+        // the firing skill's support footprint applies (cast: always; passive: only when the
+        // ability is `patternScoped`). See `scopedByFootprint`.
+        const healAbilities: { ability: Ability; fromPassive: boolean }[] = healEventOnly
+            ? (gatedSkill?.abilities ?? [])
+                  .filter((a) => !isHookOwned(a, false) && notPreCombat(a))
+                  .map((ability) => ({ ability, fromPassive: false }))
             : [
-                  ...(gatedSkill?.abilities ?? []).filter(
-                      (a) => !isHookOwned(a, false) && notPreCombat(a)
-                  ),
-                  ...(gatedPassive?.abilities ?? []).filter(
-                      (a) => !isHookOwned(a, true) && notPreCombat(a)
-                  ),
+                  ...(gatedSkill?.abilities ?? [])
+                      .filter((a) => !isHookOwned(a, false) && notPreCombat(a))
+                      .map((ability) => ({ ability, fromPassive: false })),
+                  ...(gatedPassive?.abilities ?? [])
+                      .filter((a) => !isHookOwned(a, true) && notPreCombat(a))
+                      .map((ability) => ({ ability, fromPassive: true })),
               ];
         const healTargets: string[] = [];
         let healCritCount = 0;
@@ -2975,10 +2945,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             didCrit?: boolean;
         }[] = [];
 
-        for (const ability of healAbilities) {
+        for (const { ability, fromPassive } of healAbilities) {
             const cfg = ability.config;
             if (cfg.type === 'heal') {
-                const recipients = recipientsFor(ability.target);
+                const recipients = recipientsFor(ability, fromPassive);
                 if (healEventOnly) {
                     // E5 §4.1: enemy heals restore each recipient's OWN currentHp (via the
                     // per-victim pool), fire repairedThisRound, and emit heal-performed — but
@@ -3076,7 +3046,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // the E5 enemy-heal lift above. Routing/cap/absorb are already side-agnostic
                     // (recipientsFor, grantShieldToTarget caps at recipientMaxHp, the absorb path).
                     // No crit / no modifiers (shields aren't repairs), matching the player branch.
-                    const recipients = recipientsFor(ability.target);
+                    const recipients = recipientsFor(ability, fromPassive);
                     const shieldRecipientIds: string[] = [];
                     let shieldGrantedSum = 0;
                     const shieldPerTarget: { targetId: string; amount: number }[] = [];
@@ -3106,7 +3076,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }
                 // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
                 // outgoingHeal/incomingHeal channels — raw = basis × pct.
-                const recipients = recipientsFor(ability.target);
+                const recipients = recipientsFor(ability, fromPassive);
                 // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied
                 // per cast (NOT per recipient) carrying only recipients that actually gained pool.
                 const shieldRecipientIds: string[] = [];
@@ -3156,7 +3126,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // the #166 shield lift. The ONLY side-difference is the player-facing cleanseCount
                 // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
                 let removed = 0;
-                for (const rid of recipientsFor(ability.target)) {
+                for (const rid of recipientsFor(ability, fromPassive)) {
                     const removedForRid = statusEngine.cleanse(rid, cfg.count);
                     removed += removedForRid;
                     // Phase 3 PR-H: only recipients with a REAL removal are on-own-cleanse's

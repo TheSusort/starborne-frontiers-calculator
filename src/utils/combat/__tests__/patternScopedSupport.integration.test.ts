@@ -338,7 +338,12 @@ describe('pattern-scoped support (on-cast buffs)', () => {
         expect(recipients).not.toContain('attacker');
     });
 
-    it('start-of-round ally charge grant only bumps allies in the support footprint', () => {
+    // Models Graphite R2/R4: "At the start of the round … adds N charges to the charged skill of
+    // all allies WITHIN THE ACTIVE PATTERN." That wording is what keeps the grant footprint-scoped
+    // — a passive with no such clause reaches any ally (see
+    // passiveSupportPatternScope.integration.test.ts and `Ability.patternScoped`). The fixture
+    // therefore carries the flag the parser sets for Graphite's real text.
+    it('start-of-round ally charge grant marked `patternScoped` only bumps allies in the support footprint', () => {
         const events: CombatEvent[] = [];
         const bus = createEventBus();
         bus.on('charge-changed', (e) => events.push(e));
@@ -348,6 +353,7 @@ describe('pattern-scoped support (on-cast buffs)', () => {
             type: 'charge',
             target: 'all-allies',
             trigger: 'start-of-round',
+            patternScoped: true,
             conditions: [],
             config: { type: 'charge', amount: 1 },
         });

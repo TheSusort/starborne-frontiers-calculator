@@ -116,11 +116,13 @@ describe('cluster 1 — on-attacked', () => {
     const WARDEN_PASSIVE =
         'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.';
 
-    it('Warden: debuff + self-heal on direct-damage already ride on-attacked (FP regression lock)', () => {
+    // The Corrosion half builds as a real `dot` since 2026-07-31 (it used to be a name-only
+    // debuff); this lock is about the TRIGGER, which is unchanged.
+    it('Warden: counter-DoT + self-heal on direct-damage already ride on-attacked (FP regression lock)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: WARDEN_PASSIVE }, 'passive');
-        const debuff = abilities.find((a) => a.type === 'debuff');
+        const dot = abilities.find((a) => a.type === 'dot');
         const heal = abilities.find((a) => a.type === 'heal');
-        expect(debuff?.trigger).toBe('on-attacked');
+        expect(dot?.trigger).toBe('on-attacked');
         expect(heal?.trigger).toBe('on-attacked');
     });
 
@@ -160,9 +162,11 @@ describe('cluster 2 — on-enemy-repaired', () => {
     const RUINER_P2 =
         'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.';
 
-    it('Ruiner: Bomb-on-enemy-repair debuff rides on-enemy-repaired', () => {
+    it('Ruiner: Bomb-on-enemy-repair rides on-enemy-repaired', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: RUINER_P2 }, 'passive');
-        expect(ab.some((a) => a.type === 'debuff' && a.trigger === 'on-enemy-repaired')).toBe(true);
+        // Builds as a real bomb `dot` since 2026-07-31 (was a name-only debuff that never
+        // counted down or exploded); the trigger this cluster tracks is unchanged.
+        expect(ab.some((a) => a.type === 'dot' && a.trigger === 'on-enemy-repaired')).toBe(true);
         // GAP: needs-capture (detector-recognition) — the passive emits NO ability at all; the
         // "on any enemy performing a repair" phrasing is unrecognized. Trigger on-enemy-repaired
         // + eventCtx.repairerId already exist (Zosimos), so the fix is parser recognition +
