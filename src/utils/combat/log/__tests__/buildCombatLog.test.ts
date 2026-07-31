@@ -2129,3 +2129,129 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         expect(all.some((e) => e.kind === 'cheat-death')).toBe(false);
     });
 });
+
+/**
+ * Turn-entry display order — USER-REPORTED: the attack line printed LAST, under its own
+ * consequences, because a positional cast's `ability-performed` is deliberately deferred until
+ * after the per-victim apply (so it can report the true per-victim crit outcome):
+ *
+ *     Butcher: charge 0→1
+ *     Butcher → Enemy Heliodor: Inferno II resisted
+ *     Enemy Heliodor: destroyed by Butcher          <- killed by an attack not yet printed
+ *     Butcher [active] → Enemy Heliodor: 64,450 (crit)
+ *     Butcher: Attack Up III expired
+ *
+ * The builder does no sorting of its own — entry order WAS emission order — so this is corrected
+ * at the presentation layer: what the skill did, then charge, then consequences. The engine's
+ * emission order is untouched (reaction nesting and the reflect-log flush depend on it).
+ */
+describe('buildCombatLog — turn entry display order', () => {
+    it('orders a turn skill-effects -> charge -> consequences, whatever the emission order', () => {
+        // Emitted in the exact order the engine produces for a positional killing blow.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 0,
+                newCharge: 1,
+                reason: 'gen',
+            }),
+            ev({
+                type: 'debuff-resisted',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                buffName: 'Inferno II',
+            }),
+            ev({ type: 'ship-destroyed', actorId: 'B', round: 1, killerId: 'A' }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 64450,
+                didCrit: true,
+                critHits: 1,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 64450,
+                didCrit: true,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'buff-expired', actorId: 'A', round: 1, buffName: 'Attack Up III' }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+
+        const turn = buildCombatLog(events, roster, initialCharge)[0].turns[0];
+        expect(turn.entries.map((e) => e.kind)).toEqual([
+            'attack', // what the skill did
+            'charge-changed', // charge bookkeeping
+            'debuff-resisted', // consequences, in emission order among themselves
+            'death',
+            'buff-expired',
+        ]);
+    });
+
+    it('keeps reactions nested under their trigger when that trigger is reordered', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 0,
+                newCharge: 1,
+                reason: 'gen',
+            }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didCrit: true,
+                critHits: 1,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                didCrit: true,
+                isPrimaryTarget: true,
+            }),
+            // A reaction to that attack, stamped into A's turn.
+            ev({
+                type: 'reactive-damage-performed',
+                sourceId: 'B',
+                targetId: 'A',
+                round: 1,
+                amount: 620,
+                reactive: true,
+                duringTurnOf: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+
+        const turn = buildCombatLog(events, roster, initialCharge)[0].turns[0];
+        // The attack hoists above the charge row, carrying its reaction with it — the reaction is
+        // never promoted to a top-level entry by the sort.
+        expect(turn.entries.map((e) => e.kind)).toEqual(['attack', 'charge-changed']);
+        expect(turn.entries[0].reactions.map((r) => r.actorId)).toEqual(['B']);
+    });
+});

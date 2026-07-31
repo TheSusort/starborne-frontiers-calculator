@@ -1523,10 +1523,14 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         expect(enqueued).toHaveLength(1);
     });
 
-    it('on-ally-crit (non-charge rider): an ally crit enqueues once per critting hit; own/enemy/no-crit do not', () => {
+    it('on-ally-crit (non-charge rider): an ally crit enqueues once PER ATTACK; own/enemy/no-crit do not', () => {
         const handBus = makeHandBus();
         const enqueued: Intent[] = [];
-        // A NON-charge rider (Sentinel-style reactive damage) — these fire once per critting hit.
+        // A NON-charge rider (Sentinel-style reactive damage). Every on-ally-crit rider — not just
+        // the charge special-case — now enqueues once per critting ATTACK: the corpus clauses read
+        // "when an ally critically hits an enemy, this Unit <does X>", one reaction per attack.
+        // A multi-crit AoE fans out over the crit VICTIMS inside the executor (critVictimIds),
+        // not by re-enqueuing the intent once per critting hit.
         const ability: Ability = {
             id: 'ally-crit-damage',
             type: 'damage',
@@ -1549,25 +1553,69 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             abilityType: 'damage' as const,
         };
 
-        // Another player's cast with 2 critting hits → 2 enqueues.
+        // Another player's cast with 2 critting hits → ONE enqueue (per attack, not per hit).
         handBus.emit({ type: 'ability-performed', actorId: 'other', critHits: 2, ...base });
-        expect(enqueued).toHaveLength(2);
+        expect(enqueued).toHaveLength(1);
 
         // Own cast → excluded → 0 additional.
         handBus.emit({ type: 'ability-performed', actorId: 'attacker', critHits: 2, ...base });
-        expect(enqueued).toHaveLength(2);
+        expect(enqueued).toHaveLength(1);
 
         // Enemy cast → excluded → 0 additional.
         handBus.emit({ type: 'ability-performed', actorId: 'enemy', critHits: 2, ...base });
-        expect(enqueued).toHaveLength(2);
+        expect(enqueued).toHaveLength(1);
 
         // Another player's cast with NO crit (no critHits, didCrit false) → 0 additional.
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: false });
-        expect(enqueued).toHaveLength(2);
+        expect(enqueued).toHaveLength(1);
 
         // Another player's cast with didCrit binary only (no critHits field) → 1 enqueue.
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: true });
-        expect(enqueued).toHaveLength(3);
+        expect(enqueued).toHaveLength(2);
+
+        // Routing: with no critVictimIds on the event (single-target inline emit), the rider falls
+        // back to the cast's targetId — the only possible crit victim there.
+        expect(enqueued[1].eventCtx?.critVictimIds).toEqual(['enemy']);
+        expect(enqueued[1].eventCtx?.counterTargetId).toBe('enemy');
+    });
+
+    it('on-ally-crit: critVictimIds routes "that enemy" to the victims that CRIT, not the anchor', () => {
+        const handBus = makeHandBus();
+        const enqueued: Intent[] = [];
+        const ability: Ability = {
+            id: 'ally-crit-damage',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-ally-crit',
+            conditions: [],
+            config: { type: 'damage', multiplier: 60, noCrit: true },
+        };
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [
+                { ownerId: 'attacker', reactiveAbilities: [{ ability, sourceSlot: 'passive' }] },
+            ],
+            enqueue: (intent) => enqueued.push(intent),
+            isOpposing: (id) => id.startsWith('enemy'),
+        });
+
+        // The AoE's SELECTED target ('enemy-anchor') did not crit; two covered victims did.
+        handBus.emit({
+            type: 'ability-performed',
+            actorId: 'other',
+            targetId: 'enemy-anchor',
+            round: 1,
+            abilityType: 'damage',
+            didCrit: true,
+            critHits: 2,
+            critVictimIds: ['enemy-b', 'enemy-c'],
+        });
+
+        // ONE enqueue for the attack, carrying BOTH crit victims for the executor to fan over —
+        // the anchor (which never crit) must not appear anywhere in the routing.
+        expect(enqueued).toHaveLength(1);
+        expect(enqueued[0].eventCtx?.critVictimIds).toEqual(['enemy-b', 'enemy-c']);
+        expect(enqueued[0].eventCtx?.counterTargetId).toBe('enemy-b');
     });
 
     it('on-ally-crit (charge rider): charge gain is once PER ATTACK that crits, not per critting hit', () => {

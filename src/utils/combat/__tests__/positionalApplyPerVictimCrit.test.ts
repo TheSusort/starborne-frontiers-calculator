@@ -146,9 +146,11 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
 
     /**
      * Return value: anchor no-crit, covered crits via rollVictimCrit.
-     * anyCrit must be true; critPairs must be 1.
+     * anyCrit must be true; critPairs must be 1; critVictimIds names ONLY the covered victim
+     * (the crit IDENTITY the on-ally-crit reactive routes "that enemy" off — the anchor did
+     * NOT crit, so routing off the cast's selected target would hit the wrong ship).
      */
-    it('returns { anyCrit: true, critPairs: 1 } when only the covered victim crits', () => {
+    it('returns { anyCrit: true, critPairs: 1, critVictimIds: [covered] } when only the covered victim crits', () => {
         const pattern = parsePattern('Pattern-Line-Range-1');
         const target = parseTarget('front');
         const anchorActor = actor('origin', 'M4');
@@ -170,7 +172,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
             rollVictimCrit: (v) => v.id === 'covered', // only covered crits
         });
 
-        expect(result).toEqual({ anyCrit: true, critPairs: 1 });
+        expect(result).toEqual({ anyCrit: true, critPairs: 1, critVictimIds: ['covered'] });
     });
 
     /**
@@ -199,7 +201,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
             // No rollVictimCrit → fallback to hitCrits[h]=false → nobody crits
         });
 
-        expect(result).toEqual({ anyCrit: false, critPairs: 0 });
+        expect(result).toEqual({ anyCrit: false, critPairs: 0, critVictimIds: [] });
     });
 
     /**
@@ -275,7 +277,13 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
             rollVictimCrit: (_v) => true, // covered crits on both hits too
         });
 
-        // 2 hits × 2 victims, all crit → 4 critting pairs.
-        expect(result).toEqual({ anyCrit: true, critPairs: 4 });
+        // 2 hits × 2 victims, all crit → 4 critting pairs, but only 2 DISTINCT crit victims:
+        // critVictimIds de-duplicates across hits ("deals X to that enemy" is per enemy, not per
+        // critting (hit, victim) pair), and lists them in first-crit order.
+        expect(result).toEqual({
+            anyCrit: true,
+            critPairs: 4,
+            critVictimIds: ['origin', 'covered'],
+        });
     });
 });

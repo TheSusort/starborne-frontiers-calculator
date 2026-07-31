@@ -5116,7 +5116,7 @@ export function runCombat(input: CombatEngineInput): {
             // keyed by victim id. Required for a non-zero delta — see the causality note above
             // perVictimOutgoingDeltaPct. Unsupplied → delta stays 0 for every victim.
             preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
-        }): { anyCrit: boolean; critPairs: number } => {
+        }): { anyCrit: boolean; critPairs: number; critVictimIds: string[] } => {
             // Task 3: this is the ONE deferred (positional) apply path — reflects fired here must
             // buffer their log row until emitDeferredAbilityPerformed creates the attack entry
             // (see the deferReflectLogs doc above applyVictimDamage). try/finally so the flag
@@ -5264,7 +5264,12 @@ export function runCombat(input: CombatEngineInput): {
         const emitDeferredAbilityPerformed = (
             dap: NonNullable<PlayerTurnResult['deferredAbilityPerformed']>,
             didCrit: boolean,
-            critHits: number
+            critHits: number,
+            // The DISTINCT enemies this cast critically hit (positionalApply's per-victim crit
+            // identity). Carried on the event so an `on-ally-crit` reactive can route "that enemy"
+            // to the enemies actually crit rather than the cast's SELECTED anchor (which may not
+            // have crit at all in an AoE). Empty on the 0-damage fallback path (no apply ran).
+            critVictimIds: string[]
         ) => {
             bus.emit({
                 type: 'ability-performed',
@@ -5275,6 +5280,7 @@ export function runCombat(input: CombatEngineInput): {
                 damage: dap.damage,
                 didCrit,
                 ...(critHits > 0 ? { critHits } : {}),
+                ...(critVictimIds.length > 0 ? { critVictimIds } : {}),
                 didHit: true,
             });
             // Task 3: the attack entry now exists — drain any reflect rows buffered during this
@@ -5865,7 +5871,7 @@ export function runCombat(input: CombatEngineInput): {
             ) => void,
             emitAttacked: (attackedSignals: PositionalAttackedSignals) => void
         ): {
-            critAgg: { anyCrit: boolean; critPairs: number };
+            critAgg: { anyCrit: boolean; critPairs: number; critVictimIds: string[] };
             attackedSignals: PositionalAttackedSignals;
         } => {
             // Aggregate EACH footprint victim's per-attack damage + OR its shield-hit flag across the
@@ -5946,7 +5952,8 @@ export function runCombat(input: CombatEngineInput): {
                 emitDeferredAbilityPerformed(
                     sel.deferredAbilityPerformed,
                     critAgg.anyCrit,
-                    critAgg.critPairs
+                    critAgg.critPairs,
+                    critAgg.critVictimIds
                 );
             }
             // Set the DEFERRED Stasis break for every covered victim (unconditional — covered victims
@@ -7759,7 +7766,9 @@ export function runCombat(input: CombatEngineInput): {
                             // actually ran; when the enemy turn is positional but deals 0 damage (apply
                             // skipped), the deferred emit below falls back to the anchor-based crit values
                             // (byte-identical to the pre-Task-5 inline emit for that 0-damage edge case).
-                            let enemyCritAgg: { anyCrit: boolean; critPairs: number } | undefined;
+                            let enemyCritAgg:
+                                | { anyCrit: boolean; critPairs: number; critVictimIds: string[] }
+                                | undefined;
                             // Task 5: predict enemy positional apply (mirror of focus/team) so runPlayerTurn
                             // defers its inline ability-performed emit. The opposing roster from the enemy's
                             // view is the PLAYER team (allPlayerActors).
@@ -8251,7 +8260,12 @@ export function runCombat(input: CombatEngineInput): {
                             // enemy is positional (deferred payload present) AND the apply was skipped.
                             if (enemyDeferredAbilityPerformed && !enemyCritAgg) {
                                 const dap = enemyDeferredAbilityPerformed;
-                                emitDeferredAbilityPerformed(dap, dap.didCrit, dap.critHits ?? 0);
+                                emitDeferredAbilityPerformed(
+                                    dap,
+                                    dap.didCrit,
+                                    dap.critHits ?? 0,
+                                    []
+                                );
                             }
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } else {

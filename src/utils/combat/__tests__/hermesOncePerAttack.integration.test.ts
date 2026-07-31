@@ -234,12 +234,23 @@ describe('Hermes Everliving Regeneration — once per attack, not per hit/victim
 });
 
 /**
- * Regression lock — the guard is NARROW: it collapses ONLY self-target riders. An ally-target
- * reactive buff on the SAME on-ally-crit trigger (the shape of Howler's Blast grant / Sentinel's
- * ally repair) MUST still fire once per critting hit, routed to the crediting ally per victim.
- * A hand-built ally-target buff is used here purely to exercise the `target !== 'self'` branch of
- * the guard in isolation (real Cultivator/Graphite/Sentinel/Howler ally goldens across the suite
- * are the broader lock).
+ * Regression lock — an ALLY-target rider on on-ally-crit (the shape of Howler's Blast grant /
+ * Sentinel's ally repair) also fires exactly ONCE per critting attack.
+ *
+ * This used to fire 3× for a 3-hit crit: the once-per-attack collapse lived in the executor and
+ * was deliberately narrowed to `target: 'self'`, so ally-routed riders kept re-applying per
+ * critting hit. That produced the user-reported "Sentinel heals → Ruiner: 1,152" twice for ONE
+ * Ruiner AoE. The collapse now lives in the LISTENER and covers the whole on-ally-crit trigger:
+ * "when an ally critically hits an enemy, this Unit <does X>" is one reaction per attack, whatever
+ * X targets. Per-ENEMY fan-out for "…to that enemy" riders happens inside the damage executor via
+ * eventCtx.critVictimIds, not by re-enqueuing.
+ *
+ * The executor's self-target guard is untouched and still load-bearing for the other per-hit
+ * triggers (on-attacked / on-ally-attacked), which genuinely fan one attack into many events.
+ *
+ * A hand-built ally-target buff is used here purely to exercise the `target !== 'self'` branch in
+ * isolation (real Cultivator/Graphite/Sentinel/Howler ally goldens across the suite are the
+ * broader lock).
  */
 function runAllyTargetRider() {
     const allyBuff: Ability = {
@@ -318,9 +329,9 @@ function runAllyTargetRider() {
     return blasts.length;
 }
 
-describe('ally-target on-ally-crit rider — still per critting hit (narrowness lock)', () => {
-    it('an ally-target buff fires once per critting hit, NOT collapsed to one', () => {
-        // The crediting ally landed 3 critting hits → the ally-routed buff applies 3×.
-        expect(runAllyTargetRider()).toBe(3);
+describe('ally-target on-ally-crit rider — once per attack', () => {
+    it('an ally-target buff fires once for a 3-hit critting attack, not three times', () => {
+        // The crediting ally landed 3 critting hits in ONE attack → one ally-routed grant.
+        expect(runAllyTargetRider()).toBe(1);
     });
 });

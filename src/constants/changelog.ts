@@ -5,7 +5,12 @@ export const CURRENT_VERSION = '1.65.0';
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: reactions to an ally\'s critical hit (Sentinel, Howler, Hermes) now fire once per attack instead of once per critting hit, and "deals damage to that enemy" riders land on the enemies that were actually crit rather than on the attack\'s main target.',
+    "Combat simulator: passives that punish an enemy for repairing (Ruiner's Bomb) now also see repairs that come from the enemy's own reactions, such as a healer repairing itself when damaged.",
+    'Combat simulator: the combat log now lists each turn as skill effects first, then charge, then the consequences (resists, deaths, expiries) — previously the attack line could appear after the kill it caused.',
+    'Combat simulator: debuff-duration reductions (Heliodor, Pestilence) are now shown in the combat log instead of happening silently.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
