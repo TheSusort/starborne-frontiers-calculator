@@ -105,6 +105,7 @@ import {
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { consumeExposed, exposedIncomingPct } from './exposedStatus';
+import { holdsRoguesLiberty } from './rogueLiberty';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -476,7 +477,9 @@ export interface EnemyActorInput {
     affinityCritPenalty?: number;
     /** Board position of this enemy (positional plumbing — set but not yet consumed). */
     position?: Position;
-    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
     ignoresForcedTargeting?: boolean;
     /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
@@ -1023,7 +1026,9 @@ export type TeamActorEngineInput = TeamActorInput & {
     };
     /** Board position of this team actor (positional plumbing — set but not yet consumed). */
     position?: Position;
-    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
     ignoresForcedTargeting?: boolean;
     /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
@@ -1162,7 +1167,9 @@ export interface CombatEngineInput {
         affinityCritPenalty?: number;
         /** Board position of this enemy attacker (positional plumbing — set but not yet consumed). */
         position?: Position;
-        /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+        /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+         *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+         *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
         ignoresForcedTargeting?: boolean;
         /** W6: ship-wide stealth-targeting bypass. */
         ignoresStealth?: boolean;
@@ -1201,7 +1208,9 @@ export interface CombatEngineInput {
     bus?: CombatEventBus;
     /** Board position of the focus attacker (positional plumbing — set but not yet consumed). */
     position?: Position;
-    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
     ignoresForcedTargeting?: boolean;
     /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
@@ -5670,7 +5679,14 @@ export function runCombat(input: CombatEngineInput): {
                           tb.opposingRoster,
                           statusLookupFor(tb.opposingRoster),
                           {
-                              ignoresForcedTargeting: a.ignoresForcedTargeting,
+                              // The static per-ship flag OR the timed, ally-granted `Rogue's
+                              // Liberty` — read live here (not baked into the actor at
+                              // construction) precisely because the buff can come and go
+                              // mid-battle. Same treatment at the positional-apply site below,
+                              // which re-resolves the anchor per hit.
+                              ignoresForcedTargeting:
+                                  a.ignoresForcedTargeting ||
+                                  holdsRoguesLiberty(statusEngine, a.id),
                               ignoresStealth: a.ignoresStealth,
                               provokedBy: provokerOf(statusEngine, a.id),
                           }
@@ -5963,7 +5979,12 @@ export function runCombat(input: CombatEngineInput): {
                 pattern: sel.pattern,
                 target: sel.target,
                 actingPosition: actor.position!,
-                ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                // Static per-ship flag OR the timed `Rogue's Liberty` (see selectTurnTarget).
+                // Both reads are needed: selectTurnTarget picks the cast's `tgt`, while this loop
+                // re-resolves the anchor for every hit — a buff read at only one of them would let
+                // the two disagree about which victim the cast is actually pointed at.
+                ignoresForcedTargeting:
+                    actor.ignoresForcedTargeting || holdsRoguesLiberty(statusEngine, actor.id),
                 ignoresStealth: actor.ignoresStealth,
                 actingId: actor.id,
                 opposingLiving: tb.opposingRoster,
