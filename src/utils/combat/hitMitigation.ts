@@ -12,8 +12,10 @@ import { selfBuffNamesForOwners } from './triggers';
  * DPS-mode aggregate scalars, the buff-display UI).
  *
  * Consumption follows the Exposed invariant — consume only on a hit that actually READ the
- * block. A Barrier-nullified hit and a hit already converted by the ability-based
- * `transform-incoming-to-dot` step (Voron/Orel) must both leave the status intact.
+ * block. A Barrier-nullified hit, a bomb/detonation portion (which the funnel does not count as a
+ * direct hit: `byDirectDamage === true && bombPortion === 0` is the engine's own `isDirect`), and a
+ * hit already converted by the ability-based `transform-incoming-to-dot` step (Voron/Orel) must all
+ * leave the status intact.
  */
 export const HIT_MITIGATION = 'Hit Mitigation';
 

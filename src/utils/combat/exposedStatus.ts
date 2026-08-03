@@ -50,6 +50,18 @@ export function exposedIncomingPct(victimDebuffs: SelectedGameBuff[]): number {
  * corpus appliers land in — mirroring the §4.5 direct-damage Stasis break's use of the same
  * targeted API. A no-op when the victim carries no Exposed, so it is safe to call on every hit.
  *
+ * The governing rule is "consume on a hit that actually READ the amplification", which splits the
+ * two damage-cancelling mechanics apart:
+ *  - a TRANSFORM (Voron/Orel's `transform-incoming-to-dot`, or the `Hit Mitigation` one-shot) only
+ *    DEFERS the hit. The engine amplifies UPSTREAM of the damage funnel, so the amount converted
+ *    into the DoT already carries the +100% — it lands, just over time. Exposed IS consumed.
+ *  - `Barrier` ANNIHILATES the hit. Nothing lands at all, so the amplification is never cashed and
+ *    Exposed survives for the next hit.
+ * Not consumed either, for the same reason as Barrier: a hit whose whole amount an incoming-block
+ * channel erased, and the three secondary hit types (reflect / counter / Protection-transfer),
+ * none of which folds the per-victim incoming channel Exposed rides. See the guard in
+ * `applyVictimDamage` for the full exclusion list.
+ *
  * NOT consumed: an Exposed arriving through the SCHEDULED channel (a manually selected DPS-mode
  * debuff, keyed to the global `__enemy__` store). That channel models standing, always-on debuffs
  * and has no per-victim entry to delete — a pre-existing limitation of the manual-debuff model,

@@ -1459,6 +1459,44 @@ interface DamageAccountingSink {
     addBarrierAbsorbed: (amount: number, victimId: string) => void;
 }
 /**
+ * Replaces a direct hit the victim just took with a generic self-DoT spread over `rounds` rounds,
+ * returning the amount converted (for the caller's `transformedToDot`).
+ *
+ * The single home of the DEFERRAL accounting both transform steps in {@link applyVictimDamage}
+ * share — the ability-based Voron/Orel `transform-incoming-to-dot` and the name-keyed
+ * `Hit Mitigation` one-shot. The two steps differ only in where `rounds` comes from (the ability's
+ * `turns` vs the status's fixed spread), and the accounting MUST NOT diverge between them:
+ *  - the DoT is credited to the victim itself (`sourceId: victim.id`), so the existing generic-DoT
+ *    tick sites pick it up with no extra wiring, and its damage is never attributed to the attacker;
+ *  - reversing the `.incoming` the funnel already recorded is what makes the battle sim's HP
+ *    derivation (incoming − shield − barrier) net to zero real HP loss for this hit — the damage
+ *    instead lands over time, each tick recording its own `.incoming`;
+ *  - the returned amount is what the caller reports as `transformedToDot`, and that is what drops
+ *    the hit from the per-victim damage-taken credit AND suppresses its `attacked` signal.
+ * Unlike the Barrier path this hit is DEFERRED, not nullified, so it is deliberately NOT booked as
+ * barrier- or shield-absorbed: nothing absorbed it.
+ *
+ * Module-local rather than its own module: it is a private detail of the one funnel, and speaking
+ * `DamageAccountingSink` (an engine-internal accounting seam) from outside would mean exporting
+ * that interface purely to relocate these three statements.
+ */
+function convertHitToSelfDot(
+    victim: CombatActor,
+    sink: DamageAccountingSink,
+    damage: number,
+    rounds: number
+): number {
+    victim.genericDoTEntries.push({
+        stacks: 1,
+        tier: 0,
+        remainingRounds: rounds,
+        sourceId: victim.id,
+        perTickAmount: damage / rounds,
+    });
+    sink.addIncoming(-damage, victim.id);
+    return damage;
+}
+/**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
  * CURRENT effective speed (selectNextBySpeed) until the pool drains — every actor takes one
@@ -4027,23 +4065,15 @@ export function runCombat(input: CombatEngineInput): {
                             conditionMet(a.config.condition, hitCtx)
                     );
                     if (transform && transform.config.type === 'transform-incoming-to-dot') {
-                        const turns = transform.config.turns;
-                        victim.genericDoTEntries.push({
-                            stacks: 1,
-                            tier: 0,
-                            remainingRounds: turns,
-                            sourceId: victim.id,
-                            perTickAmount: damage / turns,
-                        });
                         // The direct hit is REPLACED by the DoT — no shield/HP drain this turn.
-                        // Reverse the `.incoming` recorded above AND report the converted amount so
-                        // the caller drops it from the per-victim damage-taken credit; together
-                        // these make the battle sim's HP derivation net to zero real HP loss for
-                        // this hit (the converted damage instead lands over time via the generic-DoT
-                        // ticks, each recording its own `.incoming`). Unlike the Barrier path this
-                        // hit is DEFERRED, not blocked, so it is NOT booked as barrier/shield absorbed.
-                        sink.addIncoming(-damage, victim.id);
-                        transformedToDot = damage;
+                        // convertHitToSelfDot owns the deferral accounting the Hit Mitigation step
+                        // below shares; keeping it in one place is what stops the two from drifting.
+                        transformedToDot = convertHitToSelfDot(
+                            victim,
+                            sink,
+                            damage,
+                            transform.config.turns
+                        );
                         damage = 0;
                     }
                 }
@@ -4060,33 +4090,34 @@ export function runCombat(input: CombatEngineInput): {
             //    mechanism — a nullified hit deals no real damage, so there is nothing to block and
             //    spending the status on it would waste it.
             //  - `damage > 0`: nothing to convert, so nothing to consume.
-            // Plus one of its own, `transformedToDot === 0`: if the Voron/Orel transform already
-            // fired it consumed this hit, and a hit can only be blocked once — the status must
-            // survive for a later hit. All four together enforce the Exposed invariant: consume
-            // ONLY on a hit that actually READ the block.
+            // Plus two of its own, both there because the status is a CONSUMABLE and the sibling
+            // step is a free standing passive:
+            //  - `bombPortion === 0`: "direct hit" means what the rest of this funnel means by it —
+            //    `byDirectDamage === true && bombPortion === 0` (the threshold-shield check's
+            //    `isDirect`, and Exposed's own consumption guard). A pure detonation reaches here
+            //    stamped `byDirectDamage: true` with the whole amount in `bombPortion`, and burning
+            //    a one-shot block on a bomb burst would leave the next real hit unblocked.
+            //  - `transformedToDot === 0`: if the Voron/Orel transform already fired it consumed
+            //    this hit, and a hit can only be blocked once — the status must survive for a later
+            //    one.
+            // All five together enforce the Exposed invariant: consume ONLY on a hit that actually
+            // READ the block.
             if (
                 cause?.byDirectDamage &&
+                (cause?.bombPortion ?? 0) === 0 &&
                 !carriesBarrier &&
                 damage > 0 &&
                 transformedToDot === 0 &&
                 holdsHitMitigation(statusEngine, victim.id)
             ) {
-                victim.genericDoTEntries.push({
-                    stacks: 1,
-                    tier: 0,
-                    remainingRounds: HIT_MITIGATION_DOT_ROUNDS,
-                    sourceId: victim.id,
-                    perTickAmount: damage / HIT_MITIGATION_DOT_ROUNDS,
-                });
-                // Same accounting as the ability transform: the hit is DEFERRED, not nullified, so
-                // reverse the `.incoming` recorded above (making the battle sim's HP derivation net
-                // to zero real HP loss this turn) and report the converted amount in the returned
-                // outcome. Reporting it is what makes the caller drop this hit from the per-victim
-                // damage-taken credit AND suppress its `attacked` signal — a fully converted hit
-                // dealt no direct damage, so "directly damaged" reactions must not fire off it.
-                // NOT booked as barrier/shield absorbed: nothing absorbed it; it lands over time.
-                sink.addIncoming(-damage, victim.id);
-                transformedToDot = damage;
+                // Identical deferral accounting to the ability transform above, by construction —
+                // see convertHitToSelfDot.
+                transformedToDot = convertHitToSelfDot(
+                    victim,
+                    sink,
+                    damage,
+                    HIT_MITIGATION_DOT_ROUNDS
+                );
                 damage = 0;
                 consumeHitMitigation(statusEngine, victim.id);
             }
@@ -4586,9 +4617,18 @@ export function runCombat(input: CombatEngineInput): {
             //      · counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
             //      · transfer — the redirected chunk comes off the ORIGINAL victim's cascade.
             //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.
-            //  - the Barrier branch already returned without reaching here (a nullified hit deals no
-            //    damage), and a hit whose whole post-block amount became a DoT (Voron/Orel) dealt no
-            //    direct damage — the `immediateDamage - transformedToDot` test the `attacked` signal uses.
+            //  - the Barrier branch already returned without reaching here.
+            //
+            // TRANSFORM vs BARRIER is the distinction the final term encodes. Barrier ANNIHILATES
+            // the hit — nothing lands, ever, so the amplification was never cashed and Exposed must
+            // survive (that path returns above, so it never reaches this guard). A transform
+            // (Voron/Orel, or Hit Mitigation) only DEFERS it: the already-amplified amount still
+            // lands, spread over the DoT's rounds, so the amplification WAS read and the status is
+            // spent. Hence `immediateDamage + transformedToDot` — the amount this hit carried,
+            // whether it landed instantly or was converted — rather than the instant remainder
+            // alone. (Exactly one term is non-zero: a transform zeroes `damage` before
+            // `immediateDamage` is captured.) A hit whose whole amount an incoming-BLOCK erased is
+            // still excluded, correctly: both terms are 0 and nothing was amplified.
             //
             // If a secondary path ever starts folding the per-victim incoming channel, drop its flag
             // from this guard in the same commit — amplify and consume must stay in lockstep.
@@ -4598,7 +4638,7 @@ export function runCombat(input: CombatEngineInput): {
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
                 !cause.isCounter &&
-                immediateDamage - transformedToDot > 0
+                immediateDamage + transformedToDot > 0
             ) {
                 consumeExposed(statusEngine, victim.id);
             }
