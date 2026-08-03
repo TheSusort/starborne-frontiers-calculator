@@ -17,6 +17,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Exposed now does something. It used to be a name in the debuff list with no effect at all — it now increases the next direct hit on that ship by 100% per stack (so Amartya's 2 stacks mean +200%) and is used up by that hit. Applies to both sides, so an enemy Exposed makes your ship take the extra damage too.",
     'Combat simulator: Warden\'s "when this Unit inflicts a Debuff" reaction now applies Out. Damage Down to the enemy it just debuffed. It was landing on nothing.',
     'Combat simulator: a skill\'s clauses now resolve in the order they are written. A skill that "deals damage and inflicts Defense Down" no longer gets to benefit from its own Defense Down — the hit lands first, then the debuff. Written the other way round ("inflicts Defense Down and deals damage") it still applies first and does help that hit. This lowers the reported damage of Amartya, Bizon, Kafa, Kinetik, Larkspur, Nayra, Prospect, Valkyrie, Yuyan and Zosimos on the cast that applies the debuff; every following hit is unchanged.',
+    'Out. Detonation Damage Up now actually increases detonation damage. Chimei grants this buff to allies, but it previously had no effect.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
