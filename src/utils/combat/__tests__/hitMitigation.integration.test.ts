@@ -13,14 +13,17 @@
  *
  * The status is self-cast from the victim's ACTIVE slot, not its passive slot: a passive-slot
  * `on-cast` self-buff does not reliably apply in this engine, whereas the active-slot pattern is
- * verified working by transformIncomingToDot.test.ts's `tauntSelfBuff`. The one exception is the
- * detonation fixture at the bottom, which takes the grant from a faster ALLY (Oleander's real
- * shape) because the block has to be armed before the holder's own turn begins — see its comment.
+ * verified working by transformIncomingToDot.test.ts's `tauntSelfBuff`. Three fixtures need a
+ * different grant and say why in their own comments: the detonation and DoT-tick cases take it from
+ * a faster ALLY (Oleander's real shape), because the block has to be armed before the holder's own
+ * turn begins; the Barrier case takes it from the holder's own CHARGED slot, because that is the
+ * only way to grant something ONCE — an active-slot cast re-arms every round, and there the point is
+ * that a co-granted 1-turn Barrier must be allowed to lapse.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
-import type { Ability } from '../../../types/abilities';
+import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor, PendingBomb } from '../state';
@@ -45,6 +48,25 @@ const hitMitigationSelfBuff = (): Ability => ({
         stacks: 1,
         isStackable: false,
         duration: 99, // long enough that expiry never confounds one-shot consumption
+    },
+});
+
+/** The same shape as {@link hitMitigationSelfBuff} for the other named statuses these fixtures
+ *  need — `Barrier` (full damage immunity while up, never consumed on hit: barrierBuffs.ts) and
+ *  `Taunt` (what gates Orel's conditional transform below). */
+const namedSelfBuff = (buffName: string, duration: number): Ability => ({
+    id: `self-${buffName}`,
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName,
+        parsedEffects: {},
+        stacks: 1,
+        isStackable: false,
+        duration,
     },
 });
 
@@ -97,22 +119,30 @@ const castStatus = (buffName: string): Ability => ({
 
 /** The Hit Mitigation holder: fast (acts first, so the buff is up), never deals real damage.
  *  `abilities` defaults to self-casting the status; pass a list without it when the grant must come
- *  from elsewhere. */
+ *  from elsewhere. `extraSlots` adds passive reactives or a one-shot `charged` grant — with a charged
+ *  slot present, `charge` wires the cadence (`{ chargeCount: 99, startCharged: true }` fires it in
+ *  round 1 and never again, since 99 more turns of cadence never accrue). Both default to the
+ *  original single-active-slot shape, so every fixture written before they existed is unchanged. */
 const holderTeamActor = (
     id: string,
     position: Position,
-    abilities: Ability[] = [hitMitigationSelfBuff(), noopDamage()]
+    abilities: Ability[] = [hitMitigationSelfBuff(), noopDamage()],
+    extraSlots: ShipSkills['slots'] = [],
+    charge: { chargeCount: number; startCharged: boolean } = {
+        chargeCount: 0,
+        startCharged: false,
+    }
 ): TeamActor =>
     ({
         id,
         speed: 1000,
-        chargeCount: 0,
-        startCharged: false,
+        chargeCount: charge.chargeCount,
+        startCharged: charge.startCharged,
         selfBuffs: [],
         enemyDebuffs: [],
         position,
         walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities }] },
+            shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
             stats: {
                 attack: 0,
                 crit: 0,
@@ -127,7 +157,7 @@ const holderTeamActor = (
             affinityDamageModifier: 0,
             affinityCritCap: 100,
             affinityCritPenalty: 0,
-            hasChargedSkill: false,
+            hasChargedSkill: extraSlots.some((s) => s.slot === 'charged'),
         },
     }) as TeamActor;
 
@@ -199,6 +229,17 @@ function simHpLossFor(
     const taken = entry.perTargetDamage?.[targetId] ?? 0;
     const inc = entry.perActorIncoming?.[targetId];
     return inc ? Math.max(0, inc.incoming - inc.shieldAbsorbed - inc.barrierAbsorbed) : taken;
+}
+
+/** The round's Barrier-nullified total for one target — the channel that proves a hit was stopped
+ *  by Barrier rather than converted (a conversion nets `incoming` back to 0 and leaves this at 0). */
+function barrierAbsorbedFor(
+    result: ReturnType<typeof runCombat>,
+    round: number,
+    targetId: string
+): number {
+    const entry = result.rounds.find((r) => r.round === round)!;
+    return entry.perActorIncoming?.[targetId]?.barrierAbsorbed ?? 0;
 }
 
 describe('Hit Mitigation blocks the next direct hit and spreads it as a self-DoT', () => {
@@ -475,5 +516,195 @@ describe('Exposed survives the hit Hit Mitigation converts', () => {
         // control's landed amount. This is the assertion that pins the ruling — if the guard were
         // flipped to consume on a transformed hit, hit 2 would land at the control's amount instead.
         expect(exposed.round1HpLoss).toBeCloseTo(2 * control.round1HpLoss, 6);
+    });
+});
+
+// =============================================================================
+// The one-shot must SURVIVE hits it never actually blocked. Regression locks, not red tests: the
+// guard already encodes all three rules, and each case below was verified non-vacuous by breaking
+// the clause (or, once, the clause PAIR) it covers and watching it fail — see the per-case notes.
+//
+// The three not-consumed cases the guard's five clauses spell out, and where each is pinned:
+//   `!carriesBarrier`                        → 'survives a Barrier-nullified hit', below.
+//   `damage > 0` + `transformedToDot === 0`  → 'survives a hit the ability transform already
+//                                              converted', below (jointly — see its closing note).
+//   `byDirectDamage`                         → 'is not consumed by a DoT tick', below.
+//   `bombPortion === 0`                      → 'a detonation neither converts nor consumes Hit
+//                                              Mitigation', above.
+// The remaining not-consumed rule — a hit fully converted BY Hit Mitigation itself does not spend
+// the victim's Exposed — is the owner-ruling block above.
+// =============================================================================
+
+describe('Hit Mitigation is not spent by hits it never blocked', () => {
+    it('survives a Barrier-nullified hit and blocks a later one instead', () => {
+        // Barrier grants full damage immunity while it is up and is NOT consumed by the hit it
+        // stops (barrierBuffs.ts), so a Barrier-nullified hit reaches the funnel with nothing left
+        // to block — spending the one-shot on it would waste it.
+        //
+        // Getting Barrier to LAPSE is what this fixture is built around: a status re-cast from the
+        // active slot every round can never expire, so the grant comes from the holder's CHARGED
+        // slot with `startCharged` + `chargeCount: 99` — it fires once, in round 1, and the 99
+        // turns of cadence needed to recharge never accrue. One cast arms both the 99-turn Hit
+        // Mitigation and a 1-turn Barrier. Duration 1 is enough to cover round 1 because a buff
+        // applied on the holder's OWN turn gets the own-turn reprieve (it survives until that
+        // actor's next turn), and the sole enemy is far slower, so its round-1 attack still lands
+        // inside the reprieve; by its round-2 attack the Barrier has lapsed.
+        //
+        // So: round 1's hit is Barrier-nullified, round 2's hit is the one the surviving block
+        // converts, and that single 3-round DoT ticks at the holder's turn start in rounds 3-5.
+        const input = BASE_PLAYER_SIDE({
+            numRounds: 5,
+            teamActors: [
+                holderTeamActor(
+                    'holder',
+                    'M4',
+                    [noopDamage()],
+                    [
+                        {
+                            slot: 'charged',
+                            abilities: [
+                                hitMitigationSelfBuff(),
+                                namedSelfBuff('Barrier', 1),
+                                noopDamage(),
+                            ],
+                        },
+                    ],
+                    { chargeCount: 99, startCharged: true }
+                ),
+            ],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
+        });
+        const { genericTicks, result } = collectFor(input, 'holder');
+
+        // Round 1's hit was ABSORBED, not converted: a conversion nets `incoming` back to 0 and
+        // never touches barrierAbsorbed, so a non-zero barrierAbsorbed is the discriminator.
+        expect(barrierAbsorbedFor(result, 1, 'holder')).toBeCloseTo(DIRECT_HIT, 6);
+
+        // The tick ROUNDS are what pin non-consumption. The block survived round 1 and was spent on
+        // round 2's hit, so its 3-round DoT ticks in 3, 4, 5. Break `!carriesBarrier` out of the
+        // guard and round 1's hit converts instead: barrierAbsorbed drops to 0 and the ticks move
+        // to 2, 3, 4 — both assertions fail.
+        expect(genericTicks.map((t) => t.round)).toEqual([3, 4, 5]);
+        // Exactly ONE stack all three rounds — one conversion total, from one unblocked hit.
+        genericTicks.forEach((t) => expect(t.damage).toBeCloseTo(DIRECT_HIT / ROUNDS, 6));
+    });
+
+    it('survives a hit the ability transform already converted', () => {
+        // Orel's `transform-incoming-to-dot` runs one step earlier in the funnel and zeroes the hit
+        // when it fires, so there is nothing left for Hit Mitigation to block — and the block must
+        // stay armed for a hit the transform does NOT eat. Orel's condition
+        // ('attacker-taunted-or-provoke') is what makes both outcomes observable in a single round:
+        // the taunted enemy's hit is transformed, the plain enemy's hit is not.
+        //
+        // Round 1: the holder (speed 1000) arms the status, then both enemies (speed 1) hit it. One
+        // hit is transformed, the other is blocked → TWO conversions, so nothing lands and round 2
+        // ticks at two stacks. If the transformed hit had spent the block, the plain enemy's hit
+        // would land in full and round 2 would tick at one — which is exactly the control run's
+        // signature, so the control is not just a sanity check but the precise failure shape.
+        const orelTransform = (): Ability => ({
+            id: 'orel-transform',
+            type: 'transform-incoming-to-dot',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'transform-incoming-to-dot',
+                turns: ROUNDS,
+                condition: 'attacker-taunted-or-provoke',
+            },
+        });
+        /** `taunted` decides whether the first enemy self-applies the Taunt that opens the
+         *  transform's gate — the ONLY difference between the two runs. */
+        const runWith = (taunted: boolean) => {
+            const first = taunted ? [namedSelfBuff('Taunt', 99), basicAttack()] : [basicAttack()];
+            const input = BASE_PLAYER_SIDE({
+                numRounds: 2,
+                teamActors: [
+                    holderTeamActor(
+                        'holder',
+                        'M4',
+                        [hitMitigationSelfBuff(), noopDamage()],
+                        [{ slot: 'passive', abilities: [orelTransform()] }]
+                    ),
+                ],
+                enemyAttackers: [
+                    offensiveEnemy('taunter', 'M1', first),
+                    offensiveEnemy('plain', 'M2', [basicAttack()]),
+                ],
+            });
+            const { genericTicks, result } = collectFor(input, 'holder');
+            return { genericTicks, round1HpLoss: simHpLossFor(result, 1, 'holder') };
+        };
+
+        // Control — the transform's gate stays shut, so this is the plain one-shot case: one of the
+        // two hits is blocked, the other lands, and round 2 ticks at a single stack.
+        const control = runWith(false);
+        expect(control.round1HpLoss).toBeCloseTo(DIRECT_HIT, 6);
+        expect(control.genericTicks.map((t) => t.round)).toEqual([2]);
+        expect(control.genericTicks[0].damage).toBeCloseTo(DIRECT_HIT / ROUNDS, 6);
+
+        const withTransform = runWith(true);
+        // Both hits were converted, so NOTHING landed in round 1 — the transform ate one and the
+        // still-armed block ate the other.
+        expect(withTransform.round1HpLoss).toBe(0);
+        // Two stacks ticking together: 2 x DIRECT_HIT / ROUNDS, twice the control's tick.
+        expect(withTransform.genericTicks.map((t) => t.round)).toEqual([2]);
+        expect(withTransform.genericTicks[0].damage).toBeCloseTo((2 * DIRECT_HIT) / ROUNDS, 6);
+
+        // NOTE on which clauses this locks. `damage > 0` and `transformedToDot === 0` are JOINTLY
+        // load-bearing and individually redundant: the transform zeroes `damage` on the very path
+        // that sets `transformedToDot`, so either clause alone already rejects the hit. Verified —
+        // removing `transformedToDot === 0` alone changes nothing, loosening `damage > 0` to
+        // `damage >= 0` alone changes nothing, and doing BOTH makes this case fail with round 1's
+        // loss reading DIRECT_HIT instead of 0 (the transformed hit converts 0, spends the block,
+        // and the plain enemy's hit lands) — i.e. it collapses exactly onto the control's values.
+        // The redundancy is deliberate defence, not the thing under test.
+    });
+
+    it('is not consumed by a DoT tick — a later direct hit is still blocked', () => {
+        // The block is DIRECT-intake only. A DoT-tick batch reaches the same funnel, but as
+        // `{ byDirectDamage: false }` (an aggregate of appliers with no single killer), and a tick
+        // must never be re-transformed into another DoT — nor spend a block meant for a real hit.
+        //
+        // Fixture: a corrosion stack is seeded straight onto the holder, and the FOCUS actor is the
+        // applier — corrosion only ticks for an applier that has already taken a turn this run, and
+        // the focus (speed 3000) acts before the holder (speed 1000), so the tick lands from round 1
+        // onward. The focus is also the granter, Oleander-style, so each round runs the full
+        // sequence: arm the block, tick the corrosion (must not spend it), then take the slow
+        // enemy's hit (must be blocked). Corrosion ticks for 3% of the holder's HP capped at the
+        // 500k corrosion base = 15000, deliberately unlike DIRECT_HIT so the two are never
+        // confusable.
+        const CORROSION_TICK = 0.03 * 500_000;
+        const input = BASE_PLAYER_SIDE({
+            numRounds: 2,
+            speed: 3000,
+            position: 'M2',
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [allAlliesHitMitigation(), noopDamage()] }],
+            },
+            teamActors: [holderTeamActor('holder', 'M4', [noopDamage()])],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
+            __testTapActors: (actors: CombatActor[]) => {
+                actors
+                    .find((a) => a.id === 'holder')
+                    ?.corrosionEntries.push({
+                        stacks: 1,
+                        tier: 3,
+                        remainingRounds: 9, // outlives the run — only consumption can end anything here
+                        sourceId: 'attacker', // the focus: has acted by the holder's turn, so it ticks
+                    });
+            },
+        });
+        const { genericTicks, result } = collectFor(input, 'holder');
+
+        // The tick landed in FULL — it was not converted away. (A conversion would net the round's
+        // incoming to 0 and let the enemy's DIRECT_HIT through instead, reading 5000 here.)
+        expect(simHpLossFor(result, 1, 'holder')).toBeCloseTo(CORROSION_TICK, 6);
+        // And the block was still there for the enemy's hit: the ONE generic DoT in the run ticks at
+        // DIRECT_HIT / ROUNDS, so it came from the attack. Drop `byDirectDamage === true` from the
+        // guard and the round-1 tick converts and consumes instead: this reads CORROSION_TICK /
+        // ROUNDS and the assertion above reads DIRECT_HIT — both fail.
+        expect(genericTicks.map((t) => t.round)).toEqual([2]);
+        expect(genericTicks[0].damage).toBeCloseTo(DIRECT_HIT / ROUNDS, 6);
     });
 });
