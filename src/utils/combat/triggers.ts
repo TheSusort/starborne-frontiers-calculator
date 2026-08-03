@@ -2691,10 +2691,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // store. Default (no eventCtx) → the singular default enemy store, byte-identical.
         // D-PR14: target resolution — enemy-highest-attack global selector (Doomsayer) else the
         // counter-infliction route (Bulwark/Warden). Existing appliers use counterTargetId → identical.
+        //
+        // `debuffVictimId` is the second half of that seam: `on-debuff-inflicted` stamps the enemy
+        // the triggering infliction landed on under THAT field and never stamps counterTargetId, so
+        // Warden's "when this Unit inflicts a Debuff, it inflicts Out. Damage Down II" used to fall
+        // through to `ctx.enemy.id` — the vestigial DPS sink — and never reached the real enemy.
+        // Same priority order the reactive `damage` branch already uses (counterTargetId first,
+        // debuffVictimId second): every pre-existing applier stamps counterTargetId, so they are
+        // byte-identical, and only an intent carrying debuffVictimId ALONE changes behaviour.
         const counterTargetId =
             intent.ability.target === 'enemy-highest-attack'
                 ? ctx.enemyWithHighestAttack?.(intent.ownerId)
-                : intent.eventCtx?.counterTargetId;
+                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.debuffVictimId);
         // No living highest-attack enemy → no-op (don't fall back to the default enemy).
         if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined)
             return;

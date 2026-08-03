@@ -104,6 +104,7 @@ import {
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
+import { consumeExposed, exposedIncomingPct } from './exposedStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -204,8 +205,19 @@ function registerActorAbilityStatuses(
     const timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
     const timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
     for (const slot of castSkills.slots) {
+        // Intra-cast clause order: within ONE firing slot, a clause resolves after the clauses
+        // before it, so a debuff whose clause follows a damage-dealing clause is not yet in the
+        // store while that cast's damage resolves ("deals X% damage AND inflicts Defense Down").
+        // `slot.abilities` IS clause order — buildShipAbilities sorts each slot by text position.
+        // Only the two FIRING slots cast; a passive row has no damage clause to order against
+        // (its statuses are seeded, not cast), so the tracker stays false there.
+        const isFiringSlot = slot.slot === 'active' || slot.slot === 'charged';
+        let sawDamageClause = false;
         for (const ability of slot.abilities) {
             const cfg = ability.config;
+            // A real damage-dealing clause. A 0-multiplier entry is a structural no-op (the
+            // fixtures' "took a turn" placeholder) and orders nothing.
+            if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             // Ship-kit W5 Task A3: the two enemy-adjacency scopes (Vindicator Provoke/Out. Damage
             // Down I → 'adjacent-enemies'; Asphyxiator Stasis → 'target-and-adjacent-enemies')
@@ -299,6 +311,10 @@ function registerActorAbilityStatuses(
                     ...base,
                     kind: 'timed',
                     duration: castPathCheatDeath ? Infinity : (cfg.duration as number),
+                    // Clause-order stamp (enemy side only — a self-buff never modifies the
+                    // victim's incoming damage, so deferring one would change nothing but its
+                    // event order). Consumed by playerTurn's timed-enemy application loop.
+                    ...(side === 'enemy' && sawDamageClause ? { afterDamageClause: true } : {}),
                 };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }
@@ -4508,6 +4524,37 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
+            // 'Exposed' is consumed by the hit it amplified ("removed after taking direct damage").
+            // Placed at the funnel's landing exit so BOTH directions consume identically — and AFTER
+            // the caller computed this hit's damage off the amplified modifier, so the hit that pays
+            // for the status is the one that benefits from it.
+            //
+            // The governing rule: consume ONLY on a hit that actually read the amplification. So the
+            // exclusions mirror exactly what the incoming-damage channel itself excludes:
+            //  - DoT-tick batches and bomb/detonation portions (`byDirectDamage: false` / a non-zero
+            //    `bombPortion`) never read `incomingDamageModifierPct`;
+            //  - the three SECONDARY hit types compute their damage without that channel too, so
+            //    they would spend the status for nothing (found in review, PR #289):
+            //      · reflect  — `reflectedDamageForHit` folds only the attacker's incoming-REDUCTION,
+            //      · counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
+            //      · transfer — the redirected chunk comes off the ORIGINAL victim's cascade.
+            //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.
+            //  - the Barrier branch already returned without reaching here (a nullified hit deals no
+            //    damage), and a hit whose whole post-block amount became a DoT (Voron/Orel) dealt no
+            //    direct damage — the `immediateDamage - transformedToDot` test the `attacked` signal uses.
+            //
+            // If a secondary path ever starts folding the per-victim incoming channel, drop its flag
+            // from this guard in the same commit — amplify and consume must stay in lockstep.
+            if (
+                cause?.byDirectDamage === true &&
+                (cause.bombPortion ?? 0) === 0 &&
+                !cause.isProtectionTransfer &&
+                !cause.isReflected &&
+                !cause.isCounter &&
+                immediateDamage - transformedToDot > 0
+            ) {
+                consumeExposed(statusEngine, victim.id);
+            }
             return { shieldBefore, hpDamage, barriered: false, transformedToDot, immediateDamage };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
@@ -4930,9 +4977,16 @@ export function runCombat(input: CombatEngineInput): {
         const victimIncomingModifiers = (
             victimId: string
         ): { enemyDefenseModifier: number; incomingDamageModifier: number } => {
-            const enemy = toEnemyModifiers(
-                victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup)
-            );
+            const victimDebuffs = victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup);
+            const enemy = toEnemyModifiers(victimDebuffs);
+            // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — it arms only the
+            // NEXT direct hit and is consumed by it (see exposedStatus.ts for why it cannot ride
+            // parsedEffects.incomingDamage). Folded into the same percentage channel as Inc. Damage
+            // Up, off the SAME debuff list `toEnemyModifiers` just read. Direct damage only, like
+            // every other term here — DoT ticks and bombs never read this channel. `defenseProfileOf`
+            // calls this per HIT, so the consumption below (applyVictimDamage) makes hit 2 of a
+            // multi-hit cast read a store with the status already gone.
+            const exposed = exposedIncomingPct(victimDebuffs);
             // D-PR12: friendly-side incoming-DIRECT-damage buffs on the victim's OWN 'self' store
             // (Inc. Damage Down/Up — Makoli/Salvation/Shelter/Refine/Battlecry). Summed into the SAME
             // per-victim incomingDamageModifier as enemy debuffs. Team-agnostic for the TIMED + AURA
@@ -4959,7 +5013,7 @@ export function runCombat(input: CombatEngineInput): {
             return {
                 enemyDefenseModifier: enemy.enemyDefenseModifier,
                 incomingDamageModifier:
-                    enemy.incomingDamageModifier + selfIncoming + preFightIncoming,
+                    enemy.incomingDamageModifier + selfIncoming + preFightIncoming + exposed,
             };
         };
         // TEST-ONLY: expose victimIncomingModifiers (enemy-debuff + friendly self-buff term,
@@ -5843,6 +5897,24 @@ export function runCombat(input: CombatEngineInput): {
         // 0-damage deferred-emit fallback) and run its deferred per-victim attacked emit. sel carries
         // the pre-call head-locals the block reads (esp. preTurnVictimStatus, which MUST be the
         // pre-runPlayerTurn snapshot — never recomputed post-hoc).
+        /**
+         * Intra-cast clause order: apply the landings this cast held back because their clause
+         * follows its damage clause (playerTurn's `deferredEnemyApplications`). Called at each of
+         * the three turn sites once that turn's damage has landed — and unconditionally, so a cast
+         * that resolved non-positionally, whiffed, or killed its target still applies its debuff
+         * rather than dropping it. Runs BEFORE the actor's Post-Turn decrement, so the status keeps
+         * its normal window; and before the turn's intent drain, so reactions to the
+         * `debuff-applied` still resolve within this turn (just after the damage, as the rule says).
+         *
+         * Empties the list, making a second call a no-op — the sites are allowed to overlap.
+         * Team-symmetric: one helper, all three sites (focus / walked team / enemy).
+         */
+        const flushDeferredEnemyApplications = (
+            deferred: PlayerTurnResult['deferredEnemyApplications']
+        ): void => {
+            if (deferred.length === 0) return;
+            for (const apply of deferred.splice(0, deferred.length)) apply();
+        };
         interface PositionalTurnSel {
             tgt: CombatActor;
             pattern: ParsedPattern;
@@ -6058,6 +6130,8 @@ export function runCombat(input: CombatEngineInput): {
                 landedEnemyDebuffs: [],
                 inflictedEnemyDebuffs: [],
                 resistedEnemyDebuffs: [],
+                // A skipped turn casts nothing, so it holds back nothing (clause order).
+                deferredEnemyApplications: [],
                 directDamage: 0,
                 secondaryDamage: 0,
                 conditionalDamage: 0,
@@ -7233,6 +7307,9 @@ export function runCombat(input: CombatEngineInput): {
                                     }
                                 );
                             }
+                            // Clause order: this turn's damage has landed (or the cast had none) —
+                            // now apply the debuff clauses that followed it.
+                            flushDeferredEnemyApplications(turn.deferredEnemyApplications);
 
                             // Fold the focus turn's numeric damage into the round accumulator.
                             // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
@@ -7456,6 +7533,8 @@ export function runCombat(input: CombatEngineInput): {
                                     }
                                 );
                             }
+                            // Clause order — mirror of the focus site (see flushDeferredEnemyApplications).
+                            flushDeferredEnemyApplications(teamTurn.deferredEnemyApplications);
 
                             // Fold the team turn's damage into ITS OWN map entry (post-round assembly
                             // sums all non-focus entries into teamDamage). secondary/conditional are
@@ -7774,6 +7853,12 @@ export function runCombat(input: CombatEngineInput): {
                             // enemy drivePositionalApply site can emit it post-apply with the true per-victim
                             // crit signal. Present ⟺ enemyPositional true (same suppression condition).
                             let enemyDeferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
+                            // Intra-cast clause order: the enemy cast's held-back enemy-debuff
+                            // landings, hoisted for the same reason as the payload above (enemyTurn is
+                            // scoped inside the else block) so the flush can run after this turn's
+                            // damage — positional or not. Empty for a dead-target/flat-card turn.
+                            let enemyDeferredApplications: PlayerTurnResult['deferredEnemyApplications'] =
+                                [];
                             // Task 5: the per-victim crit aggregate from the enemy positional apply, hoisted
                             // out of the `if (damage > 0)` block. Present only when the positional apply
                             // actually ran; when the enemy turn is positional but deals 0 damage (apply
@@ -7928,6 +8013,8 @@ export function runCombat(input: CombatEngineInput): {
                                 // Task 5: capture the deferred ability-performed payload (present ⟺ the
                                 // enemy inline emit was suppressed, i.e. enemyPositional true).
                                 enemyDeferredAbilityPerformed = enemyTurn.deferredAbilityPerformed;
+                                // Clause order: capture the held-back landings for the post-damage flush.
+                                enemyDeferredApplications = enemyTurn.deferredEnemyApplications;
                                 // PR3: capture the per-victim detonation recipe (returned whenever
                                 // `positional: true` was set for this enemy turn — see the positional
                                 // hint gate). Consumed by the enemy-site per-victim detonation loop below.
@@ -8264,6 +8351,11 @@ export function runCombat(input: CombatEngineInput): {
                                     });
                                 }
                             }
+                            // Clause order — mirror of the two player-side sites. Placed OUTSIDE the
+                            // `damage > 0 && tgt !== undefined` block above: a cast that inflicts a
+                            // debuff but deals no damage (a pure Stasis bot) still has to apply it,
+                            // and inside that guard the landings were silently dropped.
+                            flushDeferredEnemyApplications(enemyDeferredApplications);
                             // Task 5 (per-victim crit signal): a positional enemy turn that dealt 0
                             // damage skips the `if (damage > 0)` apply block entirely — so no per-victim
                             // apply ran (enemyCritAgg undefined) and the deferred ability-performed was
