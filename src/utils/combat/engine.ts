@@ -1476,6 +1476,12 @@ interface DamageAccountingSink {
  * Unlike the Barrier path this hit is DEFERRED, not nullified, so it is deliberately NOT booked as
  * barrier- or shield-absorbed: nothing absorbed it.
  *
+ * CALLER CONTRACT — this helper cannot reach the caller's `damage` local, so every call site MUST
+ * follow it with `damage = 0` of its own (both do). Omitting that does not merely mis-report: the
+ * `immediateDamage` capture a few lines below the call sites reads `damage`, so a non-zero leftover
+ * would drain the victim's shield/HP for the full amount as well as spreading it over the DoT —
+ * the hit landing twice. Neither existing call site would change, so no test would catch it.
+ *
  * Module-local rather than its own module: it is a private detail of the one funnel, and speaking
  * `DamageAccountingSink` (an engine-internal accounting seam) from outside would mean exporting
  * that interface purely to relocate these three statements.
@@ -4103,7 +4109,7 @@ export function runCombat(input: CombatEngineInput): {
             // All five together enforce the Exposed invariant: consume ONLY on a hit that actually
             // READ the block.
             if (
-                cause?.byDirectDamage &&
+                cause?.byDirectDamage === true &&
                 (cause?.bombPortion ?? 0) === 0 &&
                 !carriesBarrier &&
                 damage > 0 &&
@@ -5069,11 +5075,13 @@ export function runCombat(input: CombatEngineInput): {
             // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — it arms only the
             // NEXT direct hit and is consumed by it (see exposedStatus.ts for why it cannot ride
             // parsedEffects.incomingDamage). Folded into the same percentage channel as Inc. Damage
-            // Up, off the SAME debuff list `toEnemyModifiers` just read. Direct damage only, like
-            // every other term here — DoT ticks and bombs never read this channel. `defenseProfileOf`
-            // calls this per HIT, so the consumption below (applyVictimDamage) makes hit 2 of a
-            // multi-hit cast read a store with the status already gone.
-            const exposed = exposedIncomingPct(victimDebuffs);
+            // Up. Direct damage only, like every other term here — DoT ticks and bombs never read
+            // this channel. `defenseProfileOf` calls this per HIT, so the consumption below
+            // (applyVictimDamage) makes hit 2 of a multi-hit cast read a store with the status
+            // already gone. It re-reads the status engine rather than folding off `victimDebuffs`
+            // above: a one-shot must be read from exactly the channel its removal can spend, which
+            // is narrower than the three-channel list `toEnemyModifiers` needs.
+            const exposed = exposedIncomingPct(statusEngine, victimId);
             // D-PR12: friendly-side incoming-DIRECT-damage buffs on the victim's OWN 'self' store
             // (Inc. Damage Down/Up — Makoli/Salvation/Shelter/Refine/Battlecry). Summed into the SAME
             // per-victim incomingDamageModifier as enemy debuffs. Team-agnostic for the TIMED + AURA
@@ -8682,7 +8690,22 @@ export function runCombat(input: CombatEngineInput): {
         for (const holder of allActors) {
             if (holder.id === enemy.id) continue; // vestigial DPS dummy — never a real holder
             if (holder.destroyedRound !== undefined) continue;
-            if (!ownerDebuffNames(holder.id).includes(TOXIC_OVERFLOW)) continue;
+            // TIMED per-victim channel only — deliberately not `ownerDebuffNames`, the broad
+            // three-channel name union. Toxic Overflow is a CONSUMABLE ("...and remove Toxic
+            // Overflow"), and the `removeTimedEnemyStatus` call below reaches only this channel, so
+            // reading any wider set would spread every round forever instead of once: the status is
+            // selectable in the calculator's debuff picker, which emits no turn count, and an
+            // always-active scheduled debuff is injected into EVERY target's snapshot with no
+            // per-victim entry to delete. Inert is the faithful rendering of a one-shot the manual
+            // model cannot spend (same narrowing as hitMitigation.ts / exposedStatus.ts). Hemlock's
+            // real charged application lands here, non-expiring, by construction — see
+            // constants/toxicOverflow.ts.
+            if (
+                !statusEngine
+                    .timedAbilityStatuses('enemy', undefined, holder.id)
+                    .some((s) => s.active.buffName === TOXIC_OVERFLOW)
+            )
+                continue;
             if (totalStacks(holder.corrosionEntries) < 1) continue;
             toxicSpreaders.push(holder);
         }

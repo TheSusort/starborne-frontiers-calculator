@@ -294,6 +294,51 @@ describe('Hit Mitigation blocks the next direct hit and spreads it as a self-DoT
 });
 
 // =============================================================================
+// A manually SELECTED Hit Mitigation is INERT — it must not block anything.
+//
+// The calculator's buff picker offers every entry in constants/buffs.ts, `Hit Mitigation` included,
+// and emits a SelectedGameBuff with no skillSource and no skillDuration — which the status engine
+// classifies as ALWAYS-ACTIVE and re-injects into every `snapshot('attacker')` as
+// `turnsRemaining: 'recurring'`. Nothing owns that entry in a per-actor map, so
+// `removeSelfBuffByName` can never delete it: a read that saw the scheduled channel made the block
+// permanent, converting every direct hit for the whole battle and — since each conversion reports
+// `transformedToDot > 0` — suppressing the holder's `attacked` signal along with it, silently
+// disabling its on-attacked reactives.
+//
+// A one-shot has no honest always-active rendering, so the read is narrowed to the channel the
+// removal can spend and the manual selection goes quiet instead. Fixture: the FOCUS actor (ownerId
+// 'attacker' — the only owner the always-active list is injected for) carries the picker's exact
+// shape and is attacked once.
+// =============================================================================
+
+const manualSelection = (buffName: string) => ({
+    id: buffName,
+    buffName,
+    stacks: 1,
+    parsedEffects: {},
+    isStackable: false,
+});
+
+describe('a scheduled always-active Hit Mitigation is inert', () => {
+    it('the hit lands in full and no self-DoT is created', () => {
+        const input = BASE_PLAYER_SIDE({
+            numRounds: 2,
+            speed: 1000, // the focus acts first, exactly as the holder does in the cases above
+            position: 'M4',
+            selfBuffs: [manualSelection('Hit Mitigation')],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
+        });
+        const { genericTicks, result } = collectFor(input, 'attacker');
+
+        // Pre-fix: 0 — the unspendable block converted the hit away.
+        expect(simHpLossFor(result, 1, 'attacker')).toBeCloseTo(DIRECT_HIT, 6);
+        // Round 2's hit is blocked just as little as round 1's, so no generic DoT ever exists.
+        expect(simHpLossFor(result, 2, 'attacker')).toBeCloseTo(DIRECT_HIT, 6);
+        expect(genericTicks).toEqual([]);
+    });
+});
+
+// =============================================================================
 // A bomb burst is NOT a direct hit, so it neither converts nor spends the block.
 //
 // The funnel's own definition of a direct hit is `byDirectDamage === true && bombPortion === 0` —

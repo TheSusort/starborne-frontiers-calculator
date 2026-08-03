@@ -1,4 +1,3 @@
-import type { SelectedGameBuff } from '../../types/calculator';
 import type { StatusEngine } from './statusEngine';
 
 /**
@@ -33,14 +32,32 @@ export const EXPOSED_INCOMING_PCT = 100;
  * damage" — not "removes one stack" — is what tips this to all-at-once; revisit if in-game
  * observation says otherwise.
  *
- * Takes the victim's already-assembled debuff list (all three channels) rather than reading the
- * status engine itself, so the caller's single fold serves both this and `toEnemyModifiers`.
+ * Reads the victim's TIMED per-victim enemy store directly rather than the caller's assembled
+ * three-channel debuff list, because that is exactly the channel {@link consumeExposed} can delete
+ * — amplify and consume must see the same set or the status stops being one-shot. The dropped
+ * channels are the SCHEDULED store (keyed to the global `__enemy__` sentinel, so a per-victim
+ * removal can never reach it) and the aura/accumulating ability channel (`recurring`, living in
+ * maps `removeTimedEnemyStatus` never visits). A manually selected DPS-mode `Exposed` arrives
+ * always-active on the scheduled channel and used to amplify EVERY direct hit of the battle by
+ * +100%, which contradicts the status's own text; it is now INERT instead — the faithful rendering,
+ * since "the next direct hit" has no standing value to model, the same reason the status is
+ * name-keyed rather than a `parsedEffects` entry. Both corpus appliers (Amartya's reaction,
+ * Nayra's cast) land on the timed channel via `applyTimedAbilityStatus`, so nothing real is lost.
+ *
+ * (`timedAbilityStatuses` also surfaces the persistent-stacking store, which the removal likewise
+ * cannot reach — unreachable for Exposed, which is not a `PERSISTENT_STACKING_BUFFS` member and so
+ * is never routed there.)
  */
-export function exposedIncomingPct(victimDebuffs: SelectedGameBuff[]): number {
-    return victimDebuffs.reduce(
-        (sum, b) => (b.buffName === EXPOSED ? sum + EXPOSED_INCOMING_PCT * (b.stacks ?? 1) : sum),
-        0
-    );
+export function exposedIncomingPct(statusEngine: StatusEngine, victimId: string): number {
+    return statusEngine
+        .timedAbilityStatuses('enemy', undefined, victimId)
+        .reduce(
+            (sum, s) =>
+                s.active.buffName === EXPOSED
+                    ? sum + EXPOSED_INCOMING_PCT * (s.payload.stacks ?? 1)
+                    : sum,
+            0
+        );
 }
 
 /**
@@ -62,10 +79,9 @@ export function exposedIncomingPct(victimDebuffs: SelectedGameBuff[]): number {
  * none of which folds the per-victim incoming channel Exposed rides. See the guard in
  * `applyVictimDamage` for the full exclusion list.
  *
- * NOT consumed: an Exposed arriving through the SCHEDULED channel (a manually selected DPS-mode
- * debuff, keyed to the global `__enemy__` store). That channel models standing, always-on debuffs
- * and has no per-victim entry to delete — a pre-existing limitation of the manual-debuff model,
- * not specific to Exposed.
+ * The SCHEDULED channel (a manually selected DPS-mode debuff, keyed to the global `__enemy__`
+ * store) has no per-victim entry to delete, so this can never reach it. Rather than leave that as a
+ * silent asymmetry, {@link exposedIncomingPct} does not READ that channel either — see its doc.
  */
 export function consumeExposed(statusEngine: StatusEngine, victimId: string): void {
     statusEngine.removeTimedEnemyStatus(victimId, EXPOSED);

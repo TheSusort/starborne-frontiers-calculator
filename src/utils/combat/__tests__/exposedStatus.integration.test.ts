@@ -105,17 +105,19 @@ const stats = (attack: number, speed: number) => ({
 function playerHitsExposedEnemy(
     statusName: string,
     stacks = 1,
-    applier: 'reactive' | 'cast' = 'reactive'
+    applier: 'reactive' | 'cast' | 'scheduled' = 'reactive'
 ): number {
     const focusSkills: ShipSkills =
         applier === 'cast'
             ? { slots: [{ slot: 'active', abilities: [castStatus(statusName), twoHitAttack()] }] }
-            : {
-                  slots: [
-                      { slot: 'active', abilities: [twoHitAttack()] },
-                      { slot: 'passive', abilities: [reactiveStatus(statusName, stacks)] },
-                  ],
-              };
+            : applier === 'scheduled'
+              ? { slots: [{ slot: 'active', abilities: [twoHitAttack()] }] }
+              : {
+                    slots: [
+                        { slot: 'active', abilities: [twoHitAttack()] },
+                        { slot: 'passive', abilities: [reactiveStatus(statusName, stacks)] },
+                    ],
+                };
 
     const input: CombatEngineInput = {
         attack: 10_000,
@@ -128,7 +130,20 @@ function playerHitsExposedEnemy(
         enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
-        enemyDebuffs: [],
+        // `applier: 'scheduled'` is the calculator buff-picker's exact output shape: no skillSource
+        // and no skillDuration, which the status engine classifies as ALWAYS-ACTIVE.
+        enemyDebuffs:
+            applier === 'scheduled'
+                ? [
+                      {
+                          id: statusName,
+                          buffName: statusName,
+                          stacks,
+                          parsedEffects: {},
+                          isStackable: false,
+                      },
+                  ]
+                : [],
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,
@@ -273,6 +288,31 @@ describe('Exposed — +100% on the next direct hit, then consumed', () => {
 
         expect(control).toBeGreaterThan(0);
         expect(exposed / control).toBeCloseTo(1.5, 5);
+    });
+});
+
+// A MANUALLY SELECTED Exposed is INERT — it must amplify nothing.
+//
+// The DPS calculator's debuff picker offers every entry in constants/buffs.ts and emits a
+// SelectedGameBuff with no skillSource and no skillDuration, which the status engine treats as
+// ALWAYS-ACTIVE: the entry is injected into every target's snapshot as `turnsRemaining: 'recurring'`
+// and is keyed to the global `__enemy__` store, so the per-victim `removeTimedEnemyStatus` this
+// status consumes through can never delete it. Reading that channel therefore did not model
+// "Exposed" at all — it amplified EVERY direct hit of the battle by +100%, flatly contradicting the
+// status's own "the next direct hit ... removed after taking direct damage".
+//
+// A one-shot has no honest standing rendering (the same reason it is name-keyed rather than a
+// `parsedEffects.incomingDamage` entry), so the read now spans only the channel the removal can
+// spend and a manual selection goes quiet. Both corpus appliers land on that channel, and the four
+// cases above are what keep this from being a licence to ignore the status.
+describe('a scheduled always-active Exposed is inert', () => {
+    it('amplifies neither hit — identical damage to the same fixture with no debuff selected', () => {
+        const control = playerHitsExposedEnemy(CONTROL, 1, 'scheduled');
+        const exposed = playerHitsExposedEnemy('Exposed', 1, 'scheduled');
+
+        expect(control).toBeGreaterThan(0);
+        // Pre-fix: 2.0 — both hits carried the +100%, every round, for the whole battle.
+        expect(exposed / control).toBeCloseTo(1, 5);
     });
 });
 
