@@ -121,8 +121,10 @@ const castStatus = (buffName: string): Ability => ({
  *  `abilities` defaults to self-casting the status; pass a list without it when the grant must come
  *  from elsewhere. `extraSlots` adds passive reactives or a one-shot `charged` grant — with a charged
  *  slot present, `charge` wires the cadence (`{ chargeCount: 99, startCharged: true }` fires it in
- *  round 1 and never again, since 99 more turns of cadence never accrue). Both default to the
- *  original single-active-slot shape, so every fixture written before they existed is unchanged. */
+ *  round 1 and never again, since 99 more turns of cadence never accrue). `attack` stays 0 for every
+ *  fixture except the counterattack one, whose counter damage is a percentage OF the owner's attack
+ *  (a 0-attack counter computes 0 and never fires). All three default to the original
+ *  single-active-slot, zero-attack shape, so every fixture written before they existed is unchanged. */
 const holderTeamActor = (
     id: string,
     position: Position,
@@ -131,7 +133,8 @@ const holderTeamActor = (
     charge: { chargeCount: number; startCharged: boolean } = {
         chargeCount: 0,
         startCharged: false,
-    }
+    },
+    attack = 0
 ): TeamActor =>
     ({
         id,
@@ -144,7 +147,7 @@ const holderTeamActor = (
         walk: {
             shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
             stats: {
-                attack: 0,
+                attack,
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
@@ -161,14 +164,18 @@ const holderTeamActor = (
         },
     }) as TeamActor;
 
+/** `speed` stays 1 (slower than every holder above, so its hit lands after the block is armed) for
+ *  every fixture except the bounce-back ones, where the holder IS this attacker and has to act
+ *  BEFORE the player attacker that tests the spent block. */
 const offensiveEnemy = (
     id: string,
     position: Position,
-    abilities: Ability[] = [basicAttack()]
+    abilities: Ability[] = [basicAttack()],
+    speed = 1
 ): EnemyAttacker =>
     ({
         id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
+        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
         chargeCount: 0,
         startCharged: false,
         position,
@@ -647,7 +654,7 @@ describe('Hit Mitigation is not spent by hits it never blocked', () => {
         // Both hits were converted, so NOTHING landed in round 1 — the transform ate one and the
         // still-armed block ate the other.
         expect(withTransform.round1HpLoss).toBe(0);
-        // Two stacks ticking together: 2 x DIRECT_HIT / ROUNDS, twice the control's tick.
+        // Two stacks ticking together: 2 × DIRECT_HIT / ROUNDS, twice the control's tick.
         expect(withTransform.genericTicks.map((t) => t.round)).toEqual([2]);
         expect(withTransform.genericTicks[0].damage).toBeCloseTo((2 * DIRECT_HIT) / ROUNDS, 6);
 
@@ -706,5 +713,260 @@ describe('Hit Mitigation is not spent by hits it never blocked', () => {
         // ROUNDS and the assertion above reads DIRECT_HIT — both fail.
         expect(genericTicks.map((t) => t.round)).toEqual([2]);
         expect(genericTicks[0].damage).toBeCloseTo(DIRECT_HIT / ROUNDS, 6);
+    });
+});
+
+// =============================================================================
+// A Protection-REDIRECTED chunk DOES read the block: it converts, and it SPENDS.
+//
+// This is the deliberate divergence from `Exposed`'s consumption guard, which excludes reflected,
+// countered and Protection-transferred hits explicitly. All three of those reach the Hit Mitigation
+// guard stamped `byDirectDamage: true, bombPortion: 0`, so the guard's silence about them is a
+// RULE, not an oversight: they are real incoming direct damage on this victim and the text is
+// "blocks the next direct hit". Exposed excludes them because none of the three folds the
+// per-victim incoming-AMPLIFICATION channel it rides — a reason with no analogue for a block.
+//
+// Without a fixture the rule lives only in a comment, and the obvious next move for a future author
+// is to make the two guards match — adding `!cause.isProtectionTransfer` (and its two siblings)
+// breaks nothing else in the suite. This case, and the two bounce-back cases below it, are what
+// break: one leg per excluded flag.
+//
+// The Protection leg is the one worth pinning: Oleander grants Hit Mitigation to ALL allies, so its
+// own protectors hold the block, and a redirected chunk landing on one of them is the everyday
+// case. It also exercises the transfer block's `instantTotal` accounting note: a converted sub-hit
+// contributes 0 instant damage, so the protector is credited nothing and NO
+// `reactive-damage-performed` is emitted for it that round — asserted below rather than assumed.
+//
+// Fixture: a victim and a protector, both player team actors. The protector holds one Protection
+// stack (10%/stack) granted the production way — an AURA ability status, which is what a real
+// Meatshield's start-of-combat grant parses to — plus ONE Hit Mitigation, armed from its CHARGED
+// slot (`startCharged` + `chargeCount: 99`, the same one-shot trick the Barrier case uses; an
+// active-slot re-cast every round would re-arm the block and hide the consumption). The single slow
+// enemy hits the victim once per round, so round 1's chunk is converted and round 2's chunk — same
+// hit, same redirect — must land in full.
+// =============================================================================
+
+/** One Protection stack on the holder, granted the PRODUCTION way: an aura ability status (a buff
+ *  config with NO duration + isStackable), the classification a real Meatshield's start-of-combat
+ *  "gains N stacks of Protection" passive parses to. `protectorsFor` aggregates it via
+ *  `selfBuffStacksForOwner`, which reads the aura channel `snapshot().activeSelfBuffs` misses. */
+const protectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'protection-aura',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Protection',
+                parsedEffects: {},
+                stacks,
+                isStackable: true,
+            },
+        },
+    ],
+});
+
+/** Rounds in which a `reactive-damage-performed` — the transfer block's instant-damage emission —
+ *  named `targetId` as the recipient; one entry per emission. */
+function redirectEmissionRoundsFor(input: CombatEngineInput, targetId: string): number[] {
+    const bus = createEventBus();
+    const rounds: number[] = [];
+    bus.on(
+        'reactive-damage-performed',
+        (e: Extract<CombatEvent, { type: 'reactive-damage-performed' }>) => {
+            if (e.targetId === targetId) rounds.push(e.round);
+        }
+    );
+    runCombat({ ...input, bus });
+    return rounds;
+}
+
+describe('a Protection-redirected chunk is blocked by the protector’s Hit Mitigation', () => {
+    const PROT_STACKS = 1;
+    const CHUNK = 0.1 * PROT_STACKS * DIRECT_HIT; // 10%/stack, defence 0 both sides → mit 1.
+
+    const protectionFixture = (): CombatEngineInput =>
+        BASE_PLAYER_SIDE({
+            // 4 rounds: the round-1 conversion's 3-round DoT ticks in 2, 3, 4.
+            numRounds: 4,
+            teamActors: [
+                // The victim of the enemy's hit — no Hit Mitigation of its own, front-most so the
+                // enemy's 'front' selection binds to it and not to the protector.
+                holderTeamActor('victim', 'M4', [noopDamage()]),
+                holderTeamActor(
+                    'protector',
+                    'M1',
+                    [noopDamage()],
+                    [
+                        protectionAuraPassive(PROT_STACKS),
+                        { slot: 'charged', abilities: [hitMitigationSelfBuff(), noopDamage()] },
+                    ],
+                    { chargeCount: 99, startCharged: true }
+                ),
+            ],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
+        });
+
+    it('converts the chunk, then is gone for the next round’s chunk', () => {
+        const input = protectionFixture();
+        const { genericTicks, result } = collectFor(input, 'protector');
+
+        // The redirect happened at all: the victim keeps only the non-transferred remainder.
+        expect(simHpLossFor(result, 1, 'victim')).toBeCloseTo(DIRECT_HIT - CHUNK, 6);
+
+        // The protector's chunk drained nothing that round — it was converted. THIS is the
+        // assertion that fails the moment `!cause.isProtectionTransfer` joins the guard: the chunk
+        // would land instead and read CHUNK here.
+        expect(simHpLossFor(result, 1, 'protector')).toBe(0);
+
+        // One conversion, spread over exactly ROUNDS rounds at chunk/ROUNDS. The FLAT profile is
+        // what pins consumption: rounds 2, 3 and 4 each deliver one stack's worth, so the round-2
+        // chunk produced no second stack. Had the redirect left the block armed, every round's
+        // chunk would convert and the amount would climb 1, 2, 3 stacks instead.
+        expect(genericTicks.map((t) => t.round)).toEqual([2, 3, 4]);
+        genericTicks.forEach((t) => expect(t.damage).toBeCloseTo(CHUNK / ROUNDS, 6));
+
+        // And the same redirect one round later lands in full, on top of that round's single tick:
+        // the block is spent, so nothing stops it.
+        expect(simHpLossFor(result, 2, 'protector')).toBeCloseTo(CHUNK + CHUNK / ROUNDS, 6);
+    });
+
+    it('credits the protector no instant damage for the converted chunk', () => {
+        // The transfer block sums `immediateDamage` per protector sub-hit and suppresses the
+        // emission below 1e-9 — exactly so a sub-hit the protector's own block converted is not
+        // booked as instant damage. A fully-converted round therefore emits NOTHING for the
+        // protector, and the rounds that follow — chunks landing with the block spent — each emit
+        // once. (An emission in round 1 would mean the converted chunk was double-counted: deferred
+        // into the DoT and credited as instant.)
+        expect(redirectEmissionRoundsFor(protectionFixture(), 'protector')).toEqual([2, 3, 4]);
+    });
+});
+
+// =============================================================================
+// The other two legs of the same rule: a REFLECTED and a COUNTERED hit read the block too.
+//
+// Both bounce back onto the ORIGINAL ATTACKER, so the HOLDER here is the ENEMY attacker: it arms Hit
+// Mitigation on itself and then attacks the reactive's owner (clauses resolve in written order, so
+// the self-buff is up before its own hit lands). The bounce comes straight back at it, inside its
+// own turn — and a SLOW player focus then attacks it later in the same round, which is what makes
+// consumption observable: with the block spent on the bounce, the focus's hit must land in full.
+//
+// Two amounts, deliberately unequal, split the two questions:
+//   the DoT ticks at BOUNCE / ROUNDS  → the bounce is what got CONVERTED;
+//   the round-1 intake reads FOCUS_HIT → the follow-up hit was NOT blocked, so the bounce SPENT it.
+// Add `!cause.isReflected` / `!cause.isCounter` to the guard and the two swap places: the bounce
+// lands (intake reads BOUNCE) and the focus's hit is converted instead (ticks at FOCUS_HIT / ROUNDS)
+// — both assertions fail, in both legs.
+//
+// Why the follow-up hit rather than a second bounce in the same turn: a counterattack fires at most
+// once per attacking turn (`counterFiredThisTurn`), so a two-hit attack draws only one counter. A
+// reflect does bounce per hit, but pinning both legs the same way keeps them comparable.
+//
+// Do NOT reach for `perTargetDamage` here (what `simHpLossFor` falls back to when a round has no
+// `perActorIncoming` bucket for the actor): both reactive paths book the bounce into
+// `roundPerTargetDamage` unconditionally, converted or not, so that channel reads the bounce even
+// when nothing landed. `perActorIncoming` is the honest one — the conversion nets it back out.
+// =============================================================================
+
+/** The Reflect gear set's shape (mirrored from protectionTransfer.integration.test.ts): the engine
+ *  keys on `config.type: 'damage-reflection'`, not on the placeholder top-level type. */
+const reflectPassive = (pct: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'reflect-thorns',
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage-reflection', pct },
+        },
+    ],
+});
+
+/** A Stalwart-shaped counterattack, minus its `requirePrimaryTarget` gate (nothing here is a
+ *  splash victim). Counter damage is `multiplier`% of the OWNER's effective attack. */
+const counterPassive = (multiplier: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'counter',
+            type: 'counter',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: { type: 'counter', multiplier },
+        },
+    ],
+});
+
+describe('a bounced-back hit is blocked by the attacker’s own Hit Mitigation', () => {
+    const FOCUS_HIT = 7000; // the follow-up hit — ≠ DIRECT_HIT and ≠ either bounce below.
+
+    /** The holder is the ENEMY attacker: fast (speed 1000, so it acts before the focus), it arms the
+     *  block on itself and then hits `reactive`'s owner once. `reactive` is the passive that bounces
+     *  damage back at it; `reactiveOwnerAttack` feeds a counter's percentage-of-attack basis. */
+    const bounceFixture = (
+        reactive: ShipSkills['slots'][number],
+        reactiveOwnerAttack = 0
+    ): CombatEngineInput =>
+        BASE_PLAYER_SIDE({
+            numRounds: 2,
+            // The player focus is the FOLLOW-UP attacker, and deliberately the slowest actor on the
+            // board so its hit lands after the bounce has already spent the block.
+            attack: FOCUS_HIT,
+            shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
+            speed: 1,
+            position: 'M2',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [
+                // M4 is front-most, so the holder's 'front' selection binds to the reactive's owner
+                // rather than to the focus at M2.
+                holderTeamActor(
+                    'reactor',
+                    'M4',
+                    [noopDamage()],
+                    [reactive],
+                    { chargeCount: 0, startCharged: false },
+                    reactiveOwnerAttack
+                ),
+            ],
+            enemyAttackers: [
+                offensiveEnemy('holder', 'M1', [hitMitigationSelfBuff(), basicAttack()], 1000),
+            ],
+        });
+
+    /** The bounce was converted (the DoT ticks at BOUNCE / ROUNDS) and the block was gone by the
+     *  time the focus's follow-up hit arrived (round 1's intake is the whole FOCUS_HIT). */
+    const expectBounceConvertedAndSpent = (input: CombatEngineInput, bounce: number) => {
+        const { genericTicks, result } = collectFor(input, 'holder');
+        expect(simHpLossFor(result, 1, 'holder')).toBeCloseTo(FOCUS_HIT, 6);
+        expect(genericTicks.map((t) => t.round)).toEqual([2]);
+        expect(genericTicks[0].damage).toBeCloseTo(bounce / ROUNDS, 6);
+    };
+
+    it('a REFLECTED hit converts and spends it', () => {
+        const REFLECT_PCT = 40;
+        // reflectedDamageForHit: pct% × netHpDamage — and with the holder's defence 0, neutral
+        // affinity on both sides and no incoming-reduction ability, no other factor applies.
+        expectBounceConvertedAndSpent(
+            bounceFixture(reflectPassive(REFLECT_PCT)),
+            (REFLECT_PCT / 100) * DIRECT_HIT
+        );
+    });
+
+    it('a COUNTERED hit converts and spends it', () => {
+        const COUNTER_ATTACK = 3000;
+        // multiplier 100% of the OWNER's attack, mitigated by the holder's defence (0), crit 0 on
+        // both sides → the counter is worth exactly the owner's attack.
+        expectBounceConvertedAndSpent(
+            bounceFixture(counterPassive(100), COUNTER_ATTACK),
+            COUNTER_ATTACK
+        );
     });
 });

@@ -29,10 +29,10 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * True when the actor carries a Hit Mitigation that {@link consumeHitMitigation} can actually
  * SPEND.
  *
- * Deliberately NOT `selfBuffNamesForOwners`, the broad three-channel name union every standing
- * name-keyed buff (Barrier, Stealth, the Affinity Overrides) reads. That union also surfaces
- * SCHEDULED self-buffs — and `removeSelfBuffByName` cannot reach the always-active ones: they live
- * in the status engine's `alwaysSelf` list and are re-injected into every `snapshot('attacker')` as
+ * Deliberately NOT `selfBuffNamesForOwners`, the broad three-channel name union the other
+ * name-keyed statuses read. That union also surfaces SCHEDULED self-buffs — and
+ * `removeSelfBuffByName` cannot reach the always-active ones: they live in the status engine's
+ * `alwaysSelf` list and are re-injected into every `snapshot('attacker')` as
  * `turnsRemaining: 'recurring'`, not stored in a per-actor map there is anything to delete from.
  * Since `Hit Mitigation` is selectable in the calculator's buff picker (which emits no turn count),
  * reading that channel made a manual selection an UNSPENDABLE block: every direct hit converted
@@ -44,6 +44,14 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * exact match (see below) — and a manual selection becomes INERT instead. Inert is the faithful
  * rendering: there is no standing value for "blocks the next hit", which is the same reason the
  * status is name-keyed rather than a `parsedEffects` entry.
+ *
+ * The statuses that DO read the broad union split into two categories, and only one of them is a
+ * precedent worth copying. Barrier and Stealth are genuinely STANDING, so the broad read is correct
+ * for them. The Affinity Overrides are not: they are ONE-SHOT by game text ("removed after
+ * attacking" / "removed after being attacked") yet have NO `removeSelfBuffByName` call anywhere in
+ * `src` — the same defect this module fixes, still open, backlogged pending a game-rule decision
+ * on what "removed after attacking" should mean for a manually selected one. So cite
+ * Barrier/Stealth as the pattern; the Overrides are an instance of the bug, not of the design.
  *
  * The one sub-channel deliberately dropped in the TIGHTENING direction: a SCHEDULED self-buff that
  * DOES carry a turn count is written into the same `selfMaps` this read walks, but with no

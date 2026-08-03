@@ -4110,6 +4110,13 @@ export function runCombat(input: CombatEngineInput): {
             // All five together enforce the Exposed invariant: consume ONLY on a hit that actually
             // READ the block.
             //
+            // The `bombPortion === 0` clause is why the two steps now DISAGREE about a bomb burst:
+            // the sibling above still converts one. That asymmetry is not an oversight in either
+            // step — for a free standing passive there is no consumable to waste, so whether a burst
+            // should convert is a pure damage-magnitude question about that passive's own text, and
+            // it is on the backlog. Answering it there must not drag this clause with it: a burst
+            // must never SPEND the one-shot regardless of how that question lands.
+            //
             // Deliberately NOT excluded, unlike Exposed's consumption guard further down this
             // funnel, which drops reflected / countered / Protection-transferred hits explicitly:
             // those three genuinely DO read this block. They are real incoming direct damage on this
