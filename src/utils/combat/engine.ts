@@ -105,6 +105,11 @@ import {
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { consumeExposed, exposedIncomingPct } from './exposedStatus';
+import {
+    HIT_MITIGATION_DOT_ROUNDS,
+    consumeHitMitigation,
+    holdsHitMitigation,
+} from './hitMitigation';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -4042,6 +4047,48 @@ export function runCombat(input: CombatEngineInput): {
                         damage = 0;
                     }
                 }
+            }
+            // Hit Mitigation ("Blocks the next direct hit, transforming the damage receieved into
+            // dot dealt over 3 rounds.", Oleander → all allies) — a NAME-KEYED one-shot sibling of
+            // the ability-based transform above. Name-keyed rather than a `parsedEffects` channel
+            // because a one-shot block has no honest standing value; see hitMitigation.ts.
+            //
+            // It repeats the transform step's own three guards for the same reasons:
+            //  - `byDirectDamage`: the text says "direct hit", and a DoT tick must never be
+            //    re-converted into another DoT (no recursive conversion).
+            //  - `!carriesBarrier`: Barrier sits strictly in front of every other incoming-effect
+            //    mechanism — a nullified hit deals no real damage, so there is nothing to block and
+            //    spending the status on it would waste it.
+            //  - `damage > 0`: nothing to convert, so nothing to consume.
+            // Plus one of its own, `transformedToDot === 0`: if the Voron/Orel transform already
+            // fired it consumed this hit, and a hit can only be blocked once — the status must
+            // survive for a later hit. All four together enforce the Exposed invariant: consume
+            // ONLY on a hit that actually READ the block.
+            if (
+                cause?.byDirectDamage &&
+                !carriesBarrier &&
+                damage > 0 &&
+                transformedToDot === 0 &&
+                holdsHitMitigation(statusEngine, victim.id)
+            ) {
+                victim.genericDoTEntries.push({
+                    stacks: 1,
+                    tier: 0,
+                    remainingRounds: HIT_MITIGATION_DOT_ROUNDS,
+                    sourceId: victim.id,
+                    perTickAmount: damage / HIT_MITIGATION_DOT_ROUNDS,
+                });
+                // Same accounting as the ability transform: the hit is DEFERRED, not nullified, so
+                // reverse the `.incoming` recorded above (making the battle sim's HP derivation net
+                // to zero real HP loss this turn) and report the converted amount in the returned
+                // outcome. Reporting it is what makes the caller drop this hit from the per-victim
+                // damage-taken credit AND suppress its `attacked` signal — a fully converted hit
+                // dealt no direct damage, so "directly damaged" reactions must not fire off it.
+                // NOT booked as barrier/shield absorbed: nothing absorbed it; it lands over time.
+                sink.addIncoming(-damage, victim.id);
+                transformedToDot = damage;
+                damage = 0;
+                consumeHitMitigation(statusEngine, victim.id);
             }
             // The post-block, non-transformed instant portion of this hit — captured HERE, right
             // after the transform step resolves (transform zeroes `damage` on a match) and BEFORE
