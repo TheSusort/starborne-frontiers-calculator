@@ -95,6 +95,16 @@ export type RegisteredAbilityStatus =
            *  own-death reaction (a debuff born of the applier's death, landing on the killer during
            *  the killer's own turn). Absent/false → unchanged (every other enemy debuff). */
           reprieveOnRecipientTurn?: boolean;
+          /** Intra-cast clause order (user-confirmed game rule, 2026-08-03): true when THIS
+           *  status's clause sits AFTER a damage-dealing clause in the same firing slot — "deals
+           *  X% damage and inflicts Defense Down" resolves the damage first, so the debuff must
+           *  not be in the store while that cast's damage resolves. playerTurn defers the
+           *  application (and its `debuff-applied` emission) of a flagged status to the engine's
+           *  post-apply flush; the landing ROLL still happens at the original point, so the RNG
+           *  draw order is unchanged. Set by the engine's status-collection walk, which sees the
+           *  clause order directly (`buildShipAbilities` sorts each slot by text position).
+           *  Enemy-side firing-slot statuses only; absent → applies inline exactly as before. */
+          afterDamageClause?: boolean;
       })
     | (AbilityStatusBase & { kind: 'aura' })
     | (AbilityStatusBase & {

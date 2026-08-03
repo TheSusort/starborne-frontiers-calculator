@@ -178,6 +178,18 @@ export interface PlayerTurnResult {
      *  overview to attribute each debuff to the enemy that applied it (Task 10a). */
     inflictedEnemyDebuffs: ActiveBuff[];
     resistedEnemyDebuffs: ActiveBuff[];
+    /**
+     * Enemy-debuff landings this cast decided but held back, because their clause follows a damage
+     * clause in the same firing slot (user-confirmed game rule: "deals X% damage and inflicts
+     * Defense Down" resolves the damage first). Each thunk performs the deferred
+     * `applyTimedAbilityStatus` + its discrete `debuff-applied`; the landing roll already happened.
+     *
+     * The ENGINE must flush these once this turn's damage has landed (`flushDeferredEnemyApplications`),
+     * before the actor's Post-Turn decrement so the status still runs its normal window. Empty for
+     * every cast whose debuff clauses all precede its damage — i.e. for almost the whole corpus,
+     * which keeps those byte-identical.
+     */
+    deferredEnemyApplications: (() => void)[];
     directDamage: number;
     secondaryDamage: number;
     conditionalDamage: number;
@@ -1460,6 +1472,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (Finding 1). A control with NO paired named status leaves this set empty for that name, so it
     // still emits (only Block-Debuff immunity gates a standalone control — preserved separately).
     const resistedTimedEnemyNames: string[] = [];
+    // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
+    // Returned on the turn result; the engine flushes them once this turn's damage has landed.
+    const deferredEnemyApplications: (() => void)[] = [];
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
@@ -1516,8 +1531,48 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 : landsTimedEnemyApplicationLive(status.payload.application);
 
             if (lands) {
-                statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
-                emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
+                // Intra-cast clause order: a clause that follows a damage clause in this same slot
+                // must not be in the store while the cast's damage resolves. Deferred to the
+                // engine's post-apply flush: the state write and its discrete `debuff-applied`.
+                // NOT deferred:
+                //  - the LANDING decision (already drawn above) — so the RNG draw order and the
+                //    resist bookkeeping below, which gates this turn's control-applied emission,
+                //    are untouched;
+                //  - `inflictedEnemyDebuffs`, a record of what THIS cast inflicted rather than of
+                //    store state. The §4.5 Stasis-break re-inflict check reads it back before the
+                //    flush runs (engine, `reInflictedStasis`); deferring the row let that check
+                //    conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
+                const applyLanding = (): void => {
+                    statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                    emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
+                };
+                if (status.afterDamageClause === true) {
+                    deferredEnemyApplications.push(() => {
+                        applyLanding();
+                        // DISPLAY ONLY: the round's reported enemy-debuff window
+                        // (RoundData.activeEnemyDebuffs, sourced from `landedEnemyDebuffs`) is
+                        // assembled below, BEFORE this deferred write runs — so re-read this status
+                        // and add/refresh its row. Without it a debuff the cast really did apply is
+                        // missing from the round it landed in, and a persistent-stacking family
+                        // reports one stack short every round. Touches ONLY the display list: the
+                        // modifier fold (`roundEnemyDebuffs`) and every gate ctx are already
+                        // computed, which is exactly the rule — this cast's own damage and its later
+                        // clauses must not see the status. Referencing a `const` declared further
+                        // down is safe HERE and only here: this thunk runs after runPlayerTurn has
+                        // returned (the inline branch below would hit its TDZ), and the returned
+                        // result holds this very array.
+                        const live = statusEngine
+                            .timedAbilityStatuses('enemy', actor.id, vid ?? targetId)
+                            .find((s) => s.payload.buffName === status.payload.buffName);
+                        if (live) {
+                            const at = landedEnemyDebuffs.findIndex(
+                                (b) => b.buffName === live.active.buffName
+                            );
+                            if (at >= 0) landedEnemyDebuffs[at] = live.active;
+                            else landedEnemyDebuffs.push(live.active);
+                        }
+                    });
+                } else applyLanding();
                 if (!anyLanded) {
                     inflictedEnemyDebuffs.push({
                         buffName: status.payload.buffName,
@@ -3246,6 +3301,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         landedEnemyDebuffs,
         inflictedEnemyDebuffs,
         resistedEnemyDebuffs,
+        deferredEnemyApplications,
         directDamage,
         secondaryDamage,
         conditionalDamage,

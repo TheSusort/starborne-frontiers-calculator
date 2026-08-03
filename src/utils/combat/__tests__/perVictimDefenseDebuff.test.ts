@@ -84,12 +84,17 @@ const lineRange3Pattern = (): ParsedPattern => ({
     modifiers: {},
 });
 
-// Active slot: damage + Defense Down + Incoming Damage Up, all on the targeted enemy.
+// Active slot: Defense Down + Incoming Damage Up + damage, all on the targeted enemy.
 // application='apply' → always lands (no affinity disadvantage gate).
+//
+// CLAUSE ORDER MATTERS: the debuff clauses come BEFORE the damage clause, so they are in the store
+// when this cast's own damage resolves — which is what this test is about (the per-victim modifier
+// plumbing in the positional apply). With the damage clause first, intra-cast clause order defers
+// both debuffs past it and round 1 lands unmodified, exercising nothing. See
+// intraCastClauseOrder.integration.test.ts for the ordering rule itself.
 const damageWithTwoDebuffsSlot = (): ShipSkills['slots'][number] => ({
     slot: 'active',
     abilities: [
-        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
         ab({
             type: 'debuff',
             target: 'enemy',
@@ -116,6 +121,7 @@ const damageWithTwoDebuffsSlot = (): ShipSkills['slots'][number] => ({
                 duration: 3,
             },
         }),
+        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
     ],
 });
 

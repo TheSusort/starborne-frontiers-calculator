@@ -6171,6 +6171,21 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
             for (const turn of round.turns) {
                 if (turn.actorId !== carrierId) continue;
                 turnIndex++;
+                // The cast's own damage row for a victim, looked up across the WHOLE turn rather
+                // than on the entry the reaction hangs off. Insidiousness reacts to
+                // `debuff-inflicted`, and since intra-cast clause order landed (2026-08-03) a
+                // debuff clause that follows the damage clause resolves — and therefore emits —
+                // after it, so the reaction now nests under the DEBUFF entry (no damage of its own)
+                // instead of the attack entry. The ratio check below still wants the cast damage on
+                // that victim in that attack, which is what this finds.
+                const castAmountFor = (victim: string): number => {
+                    for (const e of turn.entries) {
+                        if (e.kind !== 'attack') continue;
+                        const hit = e.targets.find((t) => t.targetId === victim);
+                        if ((hit?.amount ?? 0) > 0) return hit!.amount!;
+                    }
+                    return 0;
+                };
                 for (const entry of turn.entries) {
                     for (const re of entry.reactions) {
                         if (re.kind !== 'attack' || re.actorId !== carrierId) continue;
@@ -6178,11 +6193,10 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
                         const amount = re.targets[0].amount ?? 0;
                         if (amount <= 0) continue;
                         const victim = re.targets[0].targetId;
-                        const cast = entry.targets.find((t) => t.targetId === victim);
                         rows.push({
                             victim,
                             amount,
-                            castAmount: cast?.amount ?? 0,
+                            castAmount: castAmountFor(victim),
                             turnIndex,
                         });
                     }
