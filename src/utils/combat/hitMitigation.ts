@@ -40,10 +40,23 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * signal was suppressed for the whole battle, silently disabling its on-attacked reactives.
  *
  * A standing buff can honestly be always-active; a ONE-SHOT cannot. So the read is narrowed to the
- * timed + persistent ability-status channel, which is exactly what `removeSelfBuffByName` clears,
- * and a manual selection becomes INERT instead. Inert is the faithful rendering: there is no
- * standing value for "blocks the next hit", which is the same reason the status is name-keyed
- * rather than a `parsedEffects` entry.
+ * timed + persistent ability-status channel — a SUBSET of what `removeSelfBuffByName` clears, not an
+ * exact match (see below) — and a manual selection becomes INERT instead. Inert is the faithful
+ * rendering: there is no standing value for "blocks the next hit", which is the same reason the
+ * status is name-keyed rather than a `parsedEffects` entry.
+ *
+ * The one sub-channel deliberately dropped in the TIGHTENING direction: a SCHEDULED self-buff that
+ * DOES carry a turn count is written into the same `selfMaps` this read walks, but with no
+ * `payload` (statusEngine's scheduled `upsertBuff`), and `timedAbilityStatuses` skips payload-less
+ * entries — whereas `removeSelfBuffByName` deletes by family key regardless of payload and so could
+ * have spent it. A scheduled TIMED Hit Mitigation is therefore inert today although it was
+ * previously consumed correctly. Accepted, because no production path reaches it: `battleSimulator`
+ * passes `selfBuffs: []` on both runs that supply `enemyAttackers`, and the only caller pairing a
+ * non-empty `selfBuffs` with `enemyAttackers` is the healing calculator's engine adapter, whose
+ * picker emits no `skillSource`/`skillDuration` — i.e. the always-active case above, not this one.
+ * If a path ever does reach it, the fix is to surface payload-less TIMED `selfMaps` entries here,
+ * NOT to fall back to `selfBuffNamesForOwners`: that would drag the unspendable always-active
+ * channel back in, which is the defect this narrowing exists to remove.
  *
  * Excluded for the same reason: the aura/accumulating channel (`activeAbilityStatuses`). An aura
  * is `recurring` and lives in `auraSelfMaps`, which `removeSelfBuffByName` never visits; an
@@ -60,9 +73,11 @@ export function holdsHitMitigation(statusEngine: StatusEngine, actorId: string):
 }
 
 /**
- * Consume the holder's Hit Mitigation after it blocks a direct hit. Clears all three of the
- * actor's own self stores (timed / accumulating / persistent), so it is the exact counterpart of
- * {@link holdsHitMitigation}'s narrowed read — every channel that read can see, this can spend.
+ * Consume the holder's Hit Mitigation after it blocks a direct hit. Clears all three of the actor's
+ * own self stores (timed / accumulating / persistent), which STRICTLY CONTAINS what
+ * {@link holdsHitMitigation} reads — every channel that read can see, this can spend, which is the
+ * invariant that makes the status a genuine one-shot. (The containment is deliberately not an
+ * equality; see that function's doc for the one sub-channel this can spend but the read ignores.)
  * A no-op when the actor carries none, so it is safe to call on any hit.
  */
 export function consumeHitMitigation(statusEngine: StatusEngine, actorId: string): void {

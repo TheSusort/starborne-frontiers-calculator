@@ -261,9 +261,12 @@ describe('Hit Mitigation blocks the next direct hit and spreads it as a self-DoT
         expect(totalHpLost - totalTicks).toBeCloseTo(DIRECT_HIT, 4);
     });
 
-    it('is team-symmetric — an enemy holder blocks a player hit identically', () => {
-        // Holder on the ENEMY side, hit by the player focus attacker. Same invariant as case 1;
-        // amounts are NOT compared across sides (RNG is keyed by ownerId).
+    it('is team-symmetric — an enemy holder blocks a player hit and spreads it identically', () => {
+        // Holder on the ENEMY side, hit by the player focus attacker. Both halves of the player-side
+        // behaviour are pinned here — the zero immediate loss (case 1) AND the resulting self-DoT
+        // (case 2) — because an enemy-side block that converted nothing would satisfy the first half
+        // on its own. No amount is compared ACROSS sides (RNG is keyed by ownerId): each side is
+        // checked against its own expected value, DIRECT_HIT / ROUNDS, derived from its own attacker.
         const enemyHolder = (): EnemyAttacker =>
             ({
                 id: 'holder',
@@ -279,7 +282,10 @@ describe('Hit Mitigation blocks the next direct hit and spreads it as a self-DoT
             }) as EnemyAttacker;
 
         const input = BASE_PLAYER_SIDE({
-            numRounds: 1,
+            // Two rounds so the round-1 conversion has a turn-start tick step to land on: the holder
+            // (speed 1000) ticks before the slow focus (speed 1) attacks, so round 1 shows no tick
+            // and round 2 shows exactly the round-1 stack.
+            numRounds: 2,
             attack: DIRECT_HIT, // the player focus now deals the hit
             shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
             speed: 1,
@@ -288,8 +294,10 @@ describe('Hit Mitigation blocks the next direct hit and spreads it as a self-DoT
             pattern: basePattern(),
             enemyAttackers: [enemyHolder()],
         });
-        const { result } = collectFor(input, 'holder');
+        const { genericTicks, result } = collectFor(input, 'holder');
         expect(simHpLossFor(result, 1, 'holder')).toBe(0);
+        expect(genericTicks.map((t) => t.round)).toEqual([2]);
+        expect(genericTicks[0].damage).toBeCloseTo(DIRECT_HIT / ROUNDS, 6);
     });
 });
 
@@ -415,23 +423,27 @@ describe('a detonation neither converts nor consumes Hit Mitigation', () => {
 });
 
 // =============================================================================
-// A hit a transform converts still SPENDS the victim's `Exposed`.
+// A hit a transform converts leaves the victim's `Exposed` ARMED.
 //
-// Exposed ("+100% incoming damage on the next direct hit, removed after taking direct damage") is
-// amplified UPSTREAM of the damage funnel, so the amount a transform converts ALREADY carries the
-// +100%. The governing distinction: a transform (Hit Mitigation, or the ability-based Voron/Orel
-// step) merely DEFERS the hit — it still lands, spread over the DoT's rounds, carrying the
-// amplification — whereas Barrier ANNIHILATES it. So a converted hit must consume Exposed, while a
-// Barrier-nullified one must leave it armed. Leaving it armed here would bank the same +100% twice:
-// once inside the DoT, again on the following hit.
+// OWNER RULING (2026-08-03). One premise governs the whole funnel: a hit whose full amount became a
+// DoT landed NOTHING AT THAT INSTANT. That is already why the engine suppresses such a hit's
+// `attacked` signal (`fullyTransformedToDot`), and Exposed's consumption reads the same value the
+// same way — "removed after taking direct damage" is not satisfied by a hit that took none. So a
+// transform (Hit Mitigation, or the ability-based Voron/Orel step) leaves Exposed armed for the next
+// real hit, exactly as a Barrier-nullified hit does.
+//
+// ACCEPTED CONSEQUENCE, pinned by both assertions below rather than hidden: the amplification is
+// folded in UPSTREAM of the damage funnel, so the converted DoT carries the +100% AND Exposed
+// survives — the +100% is banked twice. The owner accepted this deliberately; making it once-only
+// would mean converting the unamplified amount, which contradicts what a deferral is.
 //
 // Fixture: one enemy that casts `statusName` on the holder and then attacks it TWICE in the same
 // cast. Hit 1 is amplified and blocked, so the resulting DoT ticks at double; hit 2 must then land
-// unamplified. A control run plants an unmodelled status name down the identical path, so every
+// STILL amplified. A control run plants an unmodelled status name down the identical path, so every
 // comparison isolates the 'Exposed' name and nothing else about the fixture.
 // =============================================================================
 
-describe('Exposed is spent by the hit Hit Mitigation converts', () => {
+describe('Exposed survives the hit Hit Mitigation converts', () => {
     function runWith(statusName: string) {
         const input = BASE_PLAYER_SIDE({
             numRounds: 2,
@@ -449,7 +461,7 @@ describe('Exposed is spent by the hit Hit Mitigation converts', () => {
         };
     }
 
-    it('the DoT carries the amplification, and the attack’s second hit is no longer amplified', () => {
+    it('the converted DoT carries the amplification, and the attack’s second hit is still amplified', () => {
         // Premise: the control run is the plain one-shot case — hit 1 blocked into a DIRECT_HIT/3
         // tick, hit 2 landing in full.
         const control = runWith('Inert Marker');
@@ -459,8 +471,9 @@ describe('Exposed is spent by the hit Hit Mitigation converts', () => {
         const exposed = runWith('Exposed');
         // The amount converted was the AMPLIFIED one — twice the control's per-tick damage.
         expect(exposed.firstTick).toBeCloseTo((2 * DIRECT_HIT) / ROUNDS, 6);
-        // And it was PAID for: hit 2 lands at the control's amount. Pre-fix: 2 × DIRECT_HIT, the
-        // amplification banked a second time because a fully converted hit did not consume Exposed.
-        expect(exposed.round1HpLoss).toBeCloseTo(control.round1HpLoss, 6);
+        // And the status was NOT spent by that converted hit, so hit 2 is amplified too: twice the
+        // control's landed amount. This is the assertion that pins the ruling — if the guard were
+        // flipped to consume on a transformed hit, hit 2 would land at the control's amount instead.
+        expect(exposed.round1HpLoss).toBeCloseTo(2 * control.round1HpLoss, 6);
     });
 });

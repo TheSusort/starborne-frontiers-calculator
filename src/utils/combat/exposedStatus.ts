@@ -67,17 +67,30 @@ export function exposedIncomingPct(statusEngine: StatusEngine, victimId: string)
  * corpus appliers land in — mirroring the §4.5 direct-damage Stasis break's use of the same
  * targeted API. A no-op when the victim carries no Exposed, so it is safe to call on every hit.
  *
- * The governing rule is "consume on a hit that actually READ the amplification", which splits the
- * two damage-cancelling mechanics apart:
- *  - a TRANSFORM (Voron/Orel's `transform-incoming-to-dot`, or the `Hit Mitigation` one-shot) only
- *    DEFERS the hit. The engine amplifies UPSTREAM of the damage funnel, so the amount converted
- *    into the DoT already carries the +100% — it lands, just over time. Exposed IS consumed.
+ * The governing rule is a single premise — NOTHING LANDED AT THAT INSTANT — and it covers both of
+ * the funnel's damage-cancelling mechanics identically (owner ruling, 2026-08-03):
  *  - `Barrier` ANNIHILATES the hit. Nothing lands at all, so the amplification is never cashed and
  *    Exposed survives for the next hit.
- * Not consumed either, for the same reason as Barrier: a hit whose whole amount an incoming-block
- * channel erased, and the three secondary hit types (reflect / counter / Protection-transfer),
- * none of which folds the per-victim incoming channel Exposed rides. See the guard in
- * `applyVictimDamage` for the full exclusion list.
+ *  - a TRANSFORM (Voron/Orel's `transform-incoming-to-dot`, or the `Hit Mitigation` one-shot)
+ *    replaces the hit with a DoT, so nothing lands at that instant either — Exposed likewise
+ *    survives, and a following real hit is still amplified.
+ * The transform half is the same reading of the same value as the engine's `attacked` SUPPRESSION
+ * for a fully converted hit (`fullyTransformedToDot`, in the per-victim `onVictimResolved` hook):
+ * that hit is not a direct hit, so it neither raises the "directly damaged" signal nor spends a
+ * status the game text ties to "taking direct damage". One premise, both consequences — the cross
+ * reference exists because an earlier round briefly asserted the opposite premise here (a transform
+ * only DEFERS, so the amplification was read) while the suppression kept this one, leaving the two
+ * contradicting each other. If either is ever revisited, revisit both in the same commit.
+ * Not consumed either, for the same reason: a hit whose whole amount an incoming-block channel
+ * erased, and the three secondary hit types (reflect / counter / Protection-transfer), none of which
+ * folds the per-victim incoming channel Exposed rides. See the guard in `applyVictimDamage` for the
+ * full exclusion list.
+ *
+ * ACCEPTED CONSEQUENCE of the ruling: {@link exposedIncomingPct} is folded in UPSTREAM of the damage
+ * funnel, so a transform converts the ALREADY-AMPLIFIED amount into its DoT while Exposed also
+ * survives for a later hit — the +100% is effectively banked twice. Deliberate and accepted, not an
+ * oversight: the only way to make it once-only would be to convert the UNAMPLIFIED amount, which
+ * contradicts what a deferral is. Do not "fix" it.
  *
  * The SCHEDULED channel (a manually selected DPS-mode debuff, keyed to the global `__enemy__`
  * store) has no per-victim entry to delete, so this can never reach it. Rather than leave that as a

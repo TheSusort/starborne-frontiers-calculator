@@ -110,6 +110,7 @@ import {
     consumeHitMitigation,
     holdsHitMitigation,
 } from './hitMitigation';
+import { holdsToxicOverflow } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -4108,9 +4109,19 @@ export function runCombat(input: CombatEngineInput): {
             //    one.
             // All five together enforce the Exposed invariant: consume ONLY on a hit that actually
             // READ the block.
+            //
+            // Deliberately NOT excluded, unlike Exposed's consumption guard further down this
+            // funnel, which drops reflected / countered / Protection-transferred hits explicitly:
+            // those three genuinely DO read this block. They are real incoming direct damage on this
+            // victim and the text is "blocks the next direct hit", so a reflect bouncing back onto
+            // the wearer, a counterattack, or a redirected Protection chunk all deserve to be
+            // blocked. Exposed excludes them for a reason that does not apply here — none of the
+            // three folds the per-victim INCOMING-AMPLIFICATION channel Exposed rides, so spending
+            // Exposed on one would charge for an amplification it never received. The difference
+            // between the two guards is therefore intentional, not an omission.
             if (
                 cause?.byDirectDamage === true &&
-                (cause?.bombPortion ?? 0) === 0 &&
+                (cause.bombPortion ?? 0) === 0 &&
                 !carriesBarrier &&
                 damage > 0 &&
                 transformedToDot === 0 &&
@@ -4625,16 +4636,26 @@ export function runCombat(input: CombatEngineInput): {
             //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.
             //  - the Barrier branch already returned without reaching here.
             //
-            // TRANSFORM vs BARRIER is the distinction the final term encodes. Barrier ANNIHILATES
-            // the hit — nothing lands, ever, so the amplification was never cashed and Exposed must
-            // survive (that path returns above, so it never reaches this guard). A transform
-            // (Voron/Orel, or Hit Mitigation) only DEFERS it: the already-amplified amount still
-            // lands, spread over the DoT's rounds, so the amplification WAS read and the status is
-            // spent. Hence `immediateDamage + transformedToDot` — the amount this hit carried,
-            // whether it landed instantly or was converted — rather than the instant remainder
-            // alone. (Exactly one term is non-zero: a transform zeroes `damage` before
-            // `immediateDamage` is captured.) A hit whose whole amount an incoming-BLOCK erased is
-            // still excluded, correctly: both terms are 0 and nothing was amplified.
+            // NOTHING LANDED AT THAT INSTANT is the single premise the final term encodes, and it
+            // covers both ways this funnel can cancel a hit (owner ruling, 2026-08-03):
+            //  - Barrier ANNIHILATES the hit — nothing lands, ever, so the amplification was never
+            //    cashed (that path returns above and never reaches this guard);
+            //  - a TRANSFORM (Voron/Orel's `transform-incoming-to-dot`, or the `Hit Mitigation`
+            //    one-shot) replaces the hit with a DoT, so nothing lands at THIS instant either.
+            //    `immediateDamage - transformedToDot` is therefore <= 0 and Exposed stays ARMED.
+            // That is deliberately the SAME reading of `transformedToDot` as the `attacked`
+            // suppression in the per-victim `onVictimResolved` hook (`fullyTransformedToDot`): a
+            // fully converted hit is not a direct hit, so it neither signals "directly damaged" to
+            // on-attacked reactives nor spends a status whose game text is "removed after taking
+            // direct damage". The two readings must stay in step — revisit them in the same commit
+            // or the tree ends up asserting both premises at once (it briefly did). A hit whose
+            // whole amount an incoming-BLOCK erased is excluded by the same term: both parts are 0.
+            //
+            // ACCEPTED CONSEQUENCE of that ruling: amplification is folded UPSTREAM of this funnel
+            // (`victimIncomingModifiers`), so the amount a transform converts already carries the
+            // +100% while Exposed also survives for a later hit — banked twice. Deliberate and
+            // accepted, not an oversight: making it once-only would mean converting the UNAMPLIFIED
+            // amount, which contradicts what a deferral is. Do not "fix" it in this guard.
             //
             // If a secondary path ever starts folding the per-victim incoming channel, drop its flag
             // from this guard in the same commit — amplify and consume must stay in lockstep.
@@ -4644,7 +4665,7 @@ export function runCombat(input: CombatEngineInput): {
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
                 !cause.isCounter &&
-                immediateDamage + transformedToDot > 0
+                immediateDamage - transformedToDot > 0
             ) {
                 consumeExposed(statusEngine, victim.id);
             }
@@ -8674,10 +8695,11 @@ export function runCombat(input: CombatEngineInput): {
         // Toxic Overflow." Runs BEFORE the round-ended emit/drain below so each `corrosion-spread`
         // event's enqueued reactions (Hemlock's self-heal, on-corrosion-spread) are flushed by the
         // same drainIntentsFor calls. Team-symmetric: iterates every living real actor (the DPS
-        // dummy `enemy` is skipped — it holds no per-victim debuffs). The holder's Toxic Overflow
-        // lives in the per-victim TIMED enemy-debuff store (ownerDebuffNames reads it); Corrosion
-        // lives on the actor's corrosionEntries. adjacentAllyIdsFor resolves the holder's SAME-SIDE
-        // adjacent allies (board-neighbours positionally, all same-side allies otherwise).
+        // dummy `enemy` is skipped — it holds no per-victim debuffs). The holder's Toxic Overflow is
+        // read out of the per-victim TIMED enemy-debuff store ONLY, via `holdsToxicOverflow` — see
+        // the guard below for why that channel and not the broad name union; Corrosion lives on the
+        // actor's corrosionEntries. adjacentAllyIdsFor resolves the holder's SAME-SIDE adjacent
+        // allies (board-neighbours positionally, all same-side allies otherwise).
         // Snapshot the qualifying spreaders BEFORE applying any spread. Applying spreads inline
         // while iterating would let an EARLIER holder's spread deposit a Corrosion stack on a
         // LATER holder, which — read live via totalStacks below — would then chain-spread that same
@@ -8690,22 +8712,21 @@ export function runCombat(input: CombatEngineInput): {
         for (const holder of allActors) {
             if (holder.id === enemy.id) continue; // vestigial DPS dummy — never a real holder
             if (holder.destroyedRound !== undefined) continue;
-            // TIMED per-victim channel only — deliberately not `ownerDebuffNames`, the broad
+            // TIMED per-victim channel only — deliberately NOT `ownerDebuffNames`, the broad
             // three-channel name union. Toxic Overflow is a CONSUMABLE ("...and remove Toxic
             // Overflow"), and the `removeTimedEnemyStatus` call below reaches only this channel, so
             // reading any wider set would spread every round forever instead of once: the status is
             // selectable in the calculator's debuff picker, which emits no turn count, and an
             // always-active scheduled debuff is injected into EVERY target's snapshot with no
             // per-victim entry to delete. Inert is the faithful rendering of a one-shot the manual
-            // model cannot spend (same narrowing as hitMitigation.ts / exposedStatus.ts). Hemlock's
-            // real charged application lands here, non-expiring, by construction — see
-            // constants/toxicOverflow.ts.
-            if (
-                !statusEngine
-                    .timedAbilityStatuses('enemy', undefined, holder.id)
-                    .some((s) => s.active.buffName === TOXIC_OVERFLOW)
-            )
-                continue;
+            // model cannot spend (same narrowing as hitMitigation.ts / exposedStatus.ts).
+            // `holdsToxicOverflow` also surfaces the ability-sourced PERSISTENT-stacking store, which
+            // the removal cannot reach either — unreachable for this status, since that routing is
+            // gated solely on `PERSISTENT_STACKING_BUFFS.has(name)` and Toxic Overflow is not a
+            // member (constants/persistentStackingBuffs.ts), so it is harmless rather than a second
+            // unspendable door. Hemlock's real charged application lands in the timed store,
+            // non-expiring, by construction — see constants/toxicOverflow.ts.
+            if (!holdsToxicOverflow(statusEngine, holder.id)) continue;
             if (totalStacks(holder.corrosionEntries) < 1) continue;
             toxicSpreaders.push(holder);
         }
