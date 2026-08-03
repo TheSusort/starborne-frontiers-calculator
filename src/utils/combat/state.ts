@@ -152,7 +152,9 @@ export interface CombatActor {
     /** Board position of this actor (positional plumbing — set at construction, not yet consumed). */
     position?: Position;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
-     *  plumbing — set at construction, consumed by resolvePositionalTarget. */
+     *  plumbing — set at construction, consumed by resolvePositionalTarget. ORed at the
+     *  engine.ts read sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts) — this
+     *  field alone is no longer the resolver's effective input. */
     ignoresForcedTargeting?: boolean;
     /** Attacker ignores the Stealth targeting filter on ALL its casts (Lodolite's "ignores
      *  Stealth effects" passive). Positional plumbing — set at construction, consumed by

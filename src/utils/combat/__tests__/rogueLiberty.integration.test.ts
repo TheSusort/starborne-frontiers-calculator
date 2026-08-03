@@ -70,9 +70,12 @@ const noopDamage = (): Ability => ({
     config: { type: 'damage', multiplier: 0 },
 });
 
-let basicAttackCounter = 0;
+/** A real damaging active. Fixed id is safe here: every engine map keyed by ability id is
+ *  namespaced `${ownerId}:${abilityId}` (see triggers.ts's proc/once-per-attack gates), so a
+ *  literal id shared across different actors never collides — and no test in this file ever
+ *  puts two of these on the SAME actor's ability list. Ids are never asserted in this file. */
 const basicAttack = (): Ability => ({
-    id: `basic-${++basicAttackCounter}`,
+    id: 'basic-atk',
     type: 'damage',
     target: 'enemy',
     trigger: 'on-cast',
