@@ -101,7 +101,7 @@ export function toSelfIncomingDamageModifier(selected: SelectedGameBuff[]): numb
 export function toDotAndPenModifiers(
     attacker: SelectedGameBuff[],
     enemy: SelectedGameBuff[]
-): { defensePenetrationBuff: number; dotDamageModifier: number } {
+): { defensePenetrationBuff: number; dotDamageModifier: number; detonationDamageModifier: number } {
     return {
         defensePenetrationBuff: attacker.reduce(
             (sum, s) => sum + (s.parsedEffects.defensePenetration ?? 0) * s.stacks,
@@ -110,6 +110,12 @@ export function toDotAndPenModifiers(
         dotDamageModifier:
             attacker.reduce((sum, s) => sum + (s.parsedEffects.dotDamage ?? 0) * s.stacks, 0) +
             enemy.reduce((sum, s) => sum + (s.parsedEffects.incomingDotDamage ?? 0) * s.stacks, 0),
+        // Outgoing-only: there is no incoming-detonation buff in the corpus, so the enemy list
+        // contributes nothing here (unlike dotDamageModifier above).
+        detonationDamageModifier: attacker.reduce(
+            (sum, s) => sum + (s.parsedEffects.detonationDamage ?? 0) * s.stacks,
+            0
+        ),
     };
 }
 

@@ -119,6 +119,11 @@ export interface ParsedBuffEffects {
     critDamage?: number; // additive on crit damage
     outgoingDamage?: number; // multiplicative on direct damage
     defensePenetration?: number; // additive with per-ship defPen value
+    /** From "Out. Detonation Damage Up" buffs; multiplicative on detonation bursts (bombs +
+     *  corrosion/inferno detonations). Percentage points. Folds through toDotAndPenModifiers
+     *  into EffectiveDamageStats.detonationDamageModifier, which feeds BOTH the applier's
+     *  PendingBomb snapshot and the detonating actor's live detonationMult. */
+    detonationDamage?: number;
     dotDamage?: number; // from Out. DoT buffs; multiplicative on corrosion+inferno
     outgoingHeal?: number; // multiplicative on outgoing healing (like outgoingDamage for DPS)
     hp?: number; // multiplicative on max HP (for secondary HP-based damage); future-proofing
