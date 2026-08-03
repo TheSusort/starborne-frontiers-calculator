@@ -275,3 +275,109 @@ describe('Exposed — +100% on the next direct hit, then consumed', () => {
         expect(exposed / control).toBeCloseTo(1.5, 5);
     });
 });
+
+// =============================================================================
+// Secondary hit types must not SPEND Exposed (CodeRabbit, PR #289).
+//
+// `applyVictimDamage` is the shared funnel, so the consumption sits where reflect, counter and
+// Protection-transfer sub-hits also pass through with `byDirectDamage: true`. None of those three
+// reads the per-victim incoming-damage channel Exposed rides:
+//   - reflect  — `reflectedDamageForHit` folds the attacker's incoming-REDUCTION only,
+//   - counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
+//   - transfer — the chunk is computed off the ORIGINAL victim's cascade, then redirected.
+// Consuming there would cost the holder the status for a hit that was never amplified. The engine
+// already carried a guard of exactly this shape for Protection-transfer eligibility.
+//
+// Driven through the counter leg (the cheapest of the three to fixture end-to-end): Exposed sits on
+// the ENEMY, and the PLAYER's on-attacked counter is what lands on it. The foe's attack is what
+// triggers that counter, so the counter necessarily precedes the player's own next cast — the hit
+// that must still be amplified.
+// =============================================================================
+
+const counterAbility = (): Ability => ({
+    id: 'counter',
+    type: 'counter',
+    target: 'enemy',
+    trigger: 'on-attacked',
+    conditions: [],
+    config: { type: 'counter', multiplier: 100, hits: 1 },
+});
+
+/**
+ * Per-round damage dealt to the foe over two rounds. The player casts damage-then-Exposed (that
+ * order, so the cast never self-amplifies the status it applies), and is SLOWER than the foe, so
+ * each round runs: foe attacks → player's counter lands on the foe → player casts.
+ *
+ * Round 1's cast is unamplified (no Exposed yet). Round 2's rides the Exposed applied in round 1 —
+ * unless a hit in between wrongly spent it. Counter damage is a per-round constant, so comparing
+ * the round2−round1 DELTA against the counter-free run cancels it out exactly.
+ */
+function foeDamagePerRound(withCounter: boolean): { r1: number; r2: number } {
+    const focusSlots: ShipSkills['slots'] = [
+        { slot: 'active', abilities: [twoHitAttack(), castStatus('Exposed')] },
+    ];
+    if (withCounter) focusSlots.push({ slot: 'passive', abilities: [counterAbility()] });
+
+    const input: CombatEngineInput = {
+        attack: 10_000,
+        crit: 0,
+        critDamage: 150,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: focusSlots },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 2,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 100, // slower than the foe → the foe attacks first, waking the counter
+        hacking: 100_000,
+        healTargetId: 'attacker',
+        positionalTeamBattle: true,
+        position: 'M1',
+        target: parseTarget('front'),
+        pattern: parsePattern('Pattern-Base'),
+        enemyAttackers: [
+            {
+                id: 'foe',
+                stats: stats(1_000, 900),
+                chargeCount: 0,
+                startCharged: false,
+                position: 'M1',
+                target: parseTarget('front'),
+                pattern: parsePattern('Pattern-Base'),
+                shipSkills: { slots: [{ slot: 'active', abilities: [twoHitAttack()] }] },
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any,
+        ],
+    };
+
+    const result = runCombat(input);
+    return {
+        r1: result.rounds[0]?.perTargetDamage?.['foe'] ?? 0,
+        r2: result.rounds[1]?.perTargetDamage?.['foe'] ?? 0,
+    };
+}
+
+describe('Exposed is not spent by hit types that never amplified it', () => {
+    it("a counterattack leaves the victim's Exposed intact for the next real cast", () => {
+        const plain = foeDamagePerRound(false);
+        expect(plain.r1).toBeGreaterThan(0);
+        // Premise: round 2 IS amplified by round 1's Exposed (first hit doubled, second plain).
+        expect(plain.r2 / plain.r1).toBeCloseTo(1.5, 5);
+
+        // With the counter in play the round-over-round GAIN must be identical: the counter lands on
+        // the Exposed holder first, but it is not an amplified hit, so it must not consume it.
+        const countered = foeDamagePerRound(true);
+        expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
+    });
+});

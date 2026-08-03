@@ -4525,21 +4525,32 @@ export function runCombat(input: CombatEngineInput): {
                 }
             }
             // 'Exposed' is consumed by the hit it amplified ("removed after taking direct damage").
-            // Placed at the funnel's landing exit so BOTH directions and every direct-damage path
-            // (positional cast, counter, reflect, splash) consume identically — and AFTER the
-            // caller already computed this hit's damage off the amplified modifier, so the hit that
-            // pays for the status is the one that benefits from it.
+            // Placed at the funnel's landing exit so BOTH directions consume identically — and AFTER
+            // the caller computed this hit's damage off the amplified modifier, so the hit that pays
+            // for the status is the one that benefits from it.
             //
-            // Excluded, matching exactly what the incoming-damage channel itself excludes (see
-            // victimIncomingModifiers): DoT-tick batches and bomb/detonation portions
-            // (`byDirectDamage: false` / a non-zero `bombPortion`) never read the amplification, so
-            // they must not spend it either. The Barrier branch returned above without reaching
-            // here — a nullified hit deals no damage, so it does not consume. A hit whose whole
-            // post-block amount was converted to a DoT (Voron/Orel) likewise dealt no direct
-            // damage: the same `immediateDamage - transformedToDot` test the `attacked` signal uses.
+            // The governing rule: consume ONLY on a hit that actually read the amplification. So the
+            // exclusions mirror exactly what the incoming-damage channel itself excludes:
+            //  - DoT-tick batches and bomb/detonation portions (`byDirectDamage: false` / a non-zero
+            //    `bombPortion`) never read `incomingDamageModifierPct`;
+            //  - the three SECONDARY hit types compute their damage without that channel too, so
+            //    they would spend the status for nothing (found in review, PR #289):
+            //      · reflect  — `reflectedDamageForHit` folds only the attacker's incoming-REDUCTION,
+            //      · counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
+            //      · transfer — the redirected chunk comes off the ORIGINAL victim's cascade.
+            //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.
+            //  - the Barrier branch already returned without reaching here (a nullified hit deals no
+            //    damage), and a hit whose whole post-block amount became a DoT (Voron/Orel) dealt no
+            //    direct damage — the `immediateDamage - transformedToDot` test the `attacked` signal uses.
+            //
+            // If a secondary path ever starts folding the per-victim incoming channel, drop its flag
+            // from this guard in the same commit — amplify and consume must stay in lockstep.
             if (
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&
+                !cause.isProtectionTransfer &&
+                !cause.isReflected &&
+                !cause.isCounter &&
                 immediateDamage - transformedToDot > 0
             ) {
                 consumeExposed(statusEngine, victim.id);
