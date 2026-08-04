@@ -2,6 +2,7 @@ import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/c
 import { Condition, SkillSlot } from '../../types/abilities';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
+import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
 import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
 
@@ -607,7 +608,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             side === 'self'
                 ? getPersistentSelf(ownerOrTargetId)
                 : getPersistentEnemy(ownerOrTargetId);
-        const maxStacks = PERSISTENT_STACKING_BUFFS.get(buffName);
+        const maxStacks = persistentCapFor(buffName);
         const existing = map.get(buffName);
         if (existing) {
             existing.stacks =
@@ -736,7 +737,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // application landed (the landing hook already ran at the call site), so add a stack
         // (capped) to the persistent map. The text skillDuration is intentionally ignored — the
         // buff-name rule overrides it (game-verified 2026-06-05).
-        if (PERSISTENT_STACKING_BUFFS.has(buff.buffName)) {
+        if (isPersistentByName(buff.buffName)) {
             addPersistentStack(side, buff.buffName, buff.stacks || 1);
             return;
         }
@@ -1405,7 +1406,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // application landed (the landing roll/hook already ran at the caller's site), so add a
         // stack (capped) and keep the payload for folding. The status.duration (text value) is
         // intentionally ignored — the buff-name rule overrides it (game-verified 2026-06-05).
-        if (PERSISTENT_STACKING_BUFFS.has(status.payload.buffName)) {
+        if (isPersistentByName(status.payload.buffName)) {
             addPersistentStack(
                 status.side,
                 status.payload.buffName,
