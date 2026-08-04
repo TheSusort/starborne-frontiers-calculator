@@ -1456,6 +1456,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // land regardless of the caster's real shieldPool, which is just as wrong as the
         // original unconditional-inflict bug this task fixes.
         selfShielded: actor.shieldPool > 0,
+        // Approximates max HP with the static base stat (`actor.stats.hp`), NOT the live
+        // buff-inclusive value drain-time reads (engine.ts's isSelfShieldFull via
+        // recipientMaxHp). This ctx is built before `dmgStats`/`effectiveHp` exist in the turn
+        // (they're computed further down, :1878/:1987) and cannot be reordered here without
+        // reordering the whole turn, which is out of scope. Consequence: an actor under an
+        // active max-HP buff can read "full" here slightly EARLY (base HP is smaller than the
+        // buffed HP, so the shieldPool>=threshold trips sooner). Inert today regardless — the
+        // only shipped consumer of `self-shield-full` is the reactive end-of-turn drain path,
+        // which reads the live value and is unaffected by this approximation. Left in place
+        // (not deleted): dropping the field would make a future on-cast gate on this subject
+        // silently never fire, which is worse than the approximation.
         selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
     });
 
@@ -1800,6 +1811,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
+        // Approximates max HP with the static base stat, same limitation as preDebuffGateCtx
+        // above (:1470) — but here it is a hard dependency ordering, not just "not yet
+        // computed": this ctx is threaded into effectiveDamageStatsOf as `modifierCtx`, which
+        // gates `modifierAbilities` and folds the result into `mod.hp` → `dmgStats.hp` →
+        // `effectiveHp` (:1878/:1987 below). Reading `effectiveHp` here would be circular —
+        // exactly the self-referential-gate class the PRE-modifier `critBuffForGates` estimate
+        // above (layers 1+2+3, see the comment two above this ctx) exists to avoid for crit.
+        // Consequence: an actor under an active max-HP buff can read "full" here slightly
+        // EARLY. Inert today regardless — the only shipped consumer of `self-shield-full` is
+        // the reactive end-of-turn drain path (engine.ts's isSelfShieldFull), which reads the
+        // live recipientMaxHp value and never sees this ctx. Left in place (not deleted):
+        // dropping the field would make a future on-cast modifier gate on this subject
+        // silently never fire, which is worse than the approximation.
         selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
         turnsTaken: actor.turnsTaken,
         // Sub-project I, PR I5: only the modifier ctx needs this — it feeds
@@ -2052,7 +2076,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // suppressed regardless of the caster's real shieldPool (control-applied never fires,
         // the combat log's kind:'control' Disable entry never appears — even with a shield).
         selfShielded: actor.shieldPool > 0,
-        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Reconciled with drain-time (engine.ts's isSelfShieldFull, which reads
+        // recipientMaxHp → lastTurnCtxByActor.get(id)?.effectiveMaxHp): `effectiveHp` (:1987,
+        // above this ctx) is exactly that same live, buff-inclusive max HP (it IS the value
+        // stored into effectiveMaxHp at turnCtx below, :3289) — so this reads byte-identically
+        // to the drain-time gate instead of the static base stat, which would disagree under an
+        // active max-HP buff.
+        selfShieldFull: effectiveHp > 0 && actor.shieldPool >= effectiveHp,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
