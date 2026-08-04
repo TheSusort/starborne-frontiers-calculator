@@ -318,6 +318,57 @@ describe('Toxic Overflow end-of-round mechanic (player-side holder → enemy-sid
     });
 });
 
+describe('a scheduled always-active Toxic Overflow is inert', () => {
+    it('never spreads, however many rounds run', () => {
+        // Toxic Overflow is one of the entries the calculator's debuff picker offers, and the picker
+        // emits a SelectedGameBuff with no skillSource and no skillDuration — ALWAYS-ACTIVE, injected
+        // into EVERY target's snapshot with no per-victim entry for the `removeTimedEnemyStatus` on
+        // spread to delete. The game rule ends "...and remove Toxic Overflow", so a read spanning
+        // that channel made a one-shot spread fire every single round instead of once. The
+        // end-of-round gate now reads only the timed per-victim channel the removal can spend, so a
+        // manual selection is inert — see the comment on the gate in engine.ts.
+        //
+        // Fixture: Hemlock lands NO Toxic Overflow of her own (a plain no-op active); the status
+        // arrives only as the manual selection, and enemy-A carries the Corrosion stack that would
+        // otherwise qualify it.
+        const input: CombatEngineInput = {
+            ...playerHemlock(
+                [
+                    enemyAt('enemy-A', 'M4', 1_000_000_000, 1),
+                    enemyAt('enemy-B', 'M3', 1_000_000_000, 1),
+                ],
+                (actors) => {
+                    actors
+                        .find((a) => a.id === 'enemy-A')
+                        ?.corrosionEntries.push({
+                            stacks: 1,
+                            tier: 6,
+                            remainingRounds: 9,
+                            sourceId: 'attacker',
+                        });
+                }
+            ),
+            shipSkills: { slots: [{ slot: 'active', abilities: [noopAttack()] }] },
+            numRounds: 4,
+            enemyDebuffs: [
+                {
+                    id: TOXIC_OVERFLOW,
+                    buffName: TOXIC_OVERFLOW,
+                    stacks: 1,
+                    parsedEffects: {},
+                    isStackable: false,
+                },
+            ],
+        };
+        const { spreads } = run(input);
+
+        // Pre-fix: SEVEN spreads over the four rounds — worse than one per round, because a spread
+        // hands its neighbour the Corrosion stack that makes IT a qualifying spreader too, and the
+        // never-removable status keeps both of them eligible forever.
+        expect(spreads).toHaveLength(0);
+    });
+});
+
 describe('Team symmetry — an ENEMY-side Hemlock reacts to a PLAYER-side spread', () => {
     it('a player holder with Toxic Overflow + Corrosion spreads to its player allies and heals the enemy Hemlock 5% × affected', () => {
         // Enemy Hemlock (M4) casts a single-target 'front' attack landing Toxic Overflow on the

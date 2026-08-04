@@ -105,7 +105,13 @@ import {
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { consumeExposed, exposedIncomingPct } from './exposedStatus';
+import {
+    HIT_MITIGATION_DOT_ROUNDS,
+    consumeHitMitigation,
+    holdsHitMitigation,
+} from './hitMitigation';
 import { holdsRoguesLiberty } from './rogueLiberty';
+import { holdsToxicOverflow } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -1480,6 +1486,62 @@ interface DamageAccountingSink {
     addShieldAbsorbed: (amount: number, victimId: string) => void;
     /** today: intakeFor(victimId).barrierAbsorbed += amount */
     addBarrierAbsorbed: (amount: number, victimId: string) => void;
+}
+/**
+ * Replaces a direct hit the victim just took with a generic self-DoT spread over `rounds` rounds,
+ * returning the amount converted (for the caller's `transformedToDot`).
+ *
+ * The single home of the DEFERRAL accounting both transform steps in {@link applyVictimDamage}
+ * share — the ability-based Voron/Orel `transform-incoming-to-dot` and the name-keyed
+ * `Hit Mitigation` one-shot. The two steps differ only in where `rounds` comes from (the ability's
+ * `turns` vs the status's fixed spread), and the accounting MUST NOT diverge between them:
+ *  - the DoT is credited to the victim itself (`sourceId: victim.id`), so the existing generic-DoT
+ *    tick sites pick it up with no extra wiring, and its damage is never attributed to the attacker;
+ *  - reversing the `.incoming` the funnel already recorded is what makes the battle sim's HP
+ *    derivation (incoming − shield − barrier) net to zero real HP loss for this hit — the damage
+ *    instead lands over time, each tick recording its own `.incoming`;
+ *  - the returned amount is what the caller reports as `transformedToDot`, and that is what drops
+ *    the hit from the per-victim damage-taken credit AND suppresses its `attacked` signal.
+ * Unlike the Barrier path this hit is DEFERRED, not nullified, so it is deliberately NOT booked as
+ * barrier- or shield-absorbed: nothing absorbed it.
+ *
+ * CALLER CONTRACT — this helper cannot reach the caller's `damage` local, so every call site MUST
+ * follow it with `damage = 0` of its own WHEN THE RETURN VALUE IS NON-ZERO (both do — the guard
+ * below is the one case the return can be 0). Omitting that on a real conversion does not merely
+ * mis-report: the `immediateDamage` capture a few lines below the call sites reads `damage`, so a
+ * non-zero leftover would drain the victim's shield/HP for the full amount as well as spreading it
+ * over the DoT — the hit landing twice. Neither existing call site's real-conversion path would
+ * change, so no test would catch a regression there.
+ *
+ * Module-local rather than its own module: it is a private detail of the one funnel, and speaking
+ * `DamageAccountingSink` (an engine-internal accounting seam) from outside would mean exporting
+ * that interface purely to relocate these three statements.
+ *
+ * GUARD: `rounds` traces back to a parsed skill row (the ability's `turns`) or a hand-coded
+ * constant (Hit Mitigation's fixed 3) — the former is untrusted input. `detectTransformToDot`
+ * already rejects a non-positive parse at the source, but this is the single shared choke point
+ * for both call sites, so it defends independently: a non-positive `rounds` here would push
+ * `perTickAmount: damage / rounds` = `Infinity` (or a poisoned negative) into `genericDoTEntries`,
+ * silently corrupting every downstream tick and HP derivation that reads it. Treat it as a no-op
+ * instead — convert nothing, leave the hit to resolve normally — rather than throwing: a
+ * malformed skill row must not crash a simulation.
+ */
+function convertHitToSelfDot(
+    victim: CombatActor,
+    sink: DamageAccountingSink,
+    damage: number,
+    rounds: number
+): number {
+    if (rounds <= 0) return 0;
+    victim.genericDoTEntries.push({
+        stacks: 1,
+        tier: 0,
+        remainingRounds: rounds,
+        sourceId: victim.id,
+        perTickAmount: damage / rounds,
+    });
+    sink.addIncoming(-damage, victim.id);
+    return damage;
 }
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
@@ -4050,26 +4112,97 @@ export function runCombat(input: CombatEngineInput): {
                             conditionMet(a.config.condition, hitCtx)
                     );
                     if (transform && transform.config.type === 'transform-incoming-to-dot') {
-                        const turns = transform.config.turns;
-                        victim.genericDoTEntries.push({
-                            stacks: 1,
-                            tier: 0,
-                            remainingRounds: turns,
-                            sourceId: victim.id,
-                            perTickAmount: damage / turns,
-                        });
                         // The direct hit is REPLACED by the DoT — no shield/HP drain this turn.
-                        // Reverse the `.incoming` recorded above AND report the converted amount so
-                        // the caller drops it from the per-victim damage-taken credit; together
-                        // these make the battle sim's HP derivation net to zero real HP loss for
-                        // this hit (the converted damage instead lands over time via the generic-DoT
-                        // ticks, each recording its own `.incoming`). Unlike the Barrier path this
-                        // hit is DEFERRED, not blocked, so it is NOT booked as barrier/shield absorbed.
-                        sink.addIncoming(-damage, victim.id);
-                        transformedToDot = damage;
-                        damage = 0;
+                        // convertHitToSelfDot owns the deferral accounting the Hit Mitigation step
+                        // below shares; keeping it in one place is what stops the two from drifting.
+                        transformedToDot = convertHitToSelfDot(
+                            victim,
+                            sink,
+                            damage,
+                            transform.config.turns
+                        );
+                        // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
+                        // CALLER CONTRACT). `turns` is parser-derived; `detectTransformToDot`
+                        // already rejects a non-positive parse so no real ability reaches here
+                        // with turns <= 0, but if one ever did, the helper's own guard returns 0
+                        // and the hit must fall through to resolve normally rather than vanish.
+                        if (transformedToDot > 0) {
+                            damage = 0;
+                        }
                     }
                 }
+            }
+            // Hit Mitigation ("Blocks the next direct hit, transforming the damage receieved into
+            // dot dealt over 3 rounds.", Oleander → all allies) — a NAME-KEYED one-shot sibling of
+            // the ability-based transform above. Name-keyed rather than a `parsedEffects` channel
+            // because a one-shot block has no honest standing value; see hitMitigation.ts.
+            //
+            // It repeats the transform step's own three guards for the same reasons:
+            //  - `byDirectDamage`: the text says "direct hit", and a DoT tick must never be
+            //    re-converted into another DoT (no recursive conversion).
+            //  - `!carriesBarrier`: Barrier sits strictly in front of every other incoming-effect
+            //    mechanism — a nullified hit deals no real damage, so there is nothing to block and
+            //    spending the status on it would waste it.
+            //  - `damage > 0`: nothing to convert, so nothing to consume.
+            // Plus two of its own, both there because the status is a CONSUMABLE and the sibling
+            // step is a free standing passive:
+            //  - `bombPortion === 0`: "direct hit" means what the rest of this funnel means by it —
+            //    `byDirectDamage === true && bombPortion === 0` (the threshold-shield check's
+            //    `isDirect`, and Exposed's own consumption guard). A pure detonation reaches here
+            //    stamped `byDirectDamage: true` with the whole amount in `bombPortion`, and burning
+            //    a one-shot block on a bomb burst would leave the next real hit unblocked.
+            //  - `transformedToDot === 0`: if the Voron/Orel transform already fired it consumed
+            //    this hit, and a hit can only be blocked once — the status must survive for a later
+            //    one.
+            // All five together enforce the Exposed invariant: consume ONLY on a hit that actually
+            // READ the block.
+            //
+            // The `bombPortion === 0` clause is why the two steps now DISAGREE about a bomb burst:
+            // the sibling above still converts one. That asymmetry is not an oversight in either
+            // step — for a free standing passive there is no consumable to waste, so whether a burst
+            // should convert is a pure damage-magnitude question about that passive's own text, and
+            // it is on the backlog. Answering it there must not drag this clause with it: a burst
+            // must never SPEND the one-shot regardless of how that question lands.
+            //
+            // MIXED DIRECT + BOMB HIT: a single apply can carry `byDirectDamage: true` with
+            // `0 < bombPortion < damage` — a cast that both lands a direct hit and detonates a bomb
+            // in the same apply (see the MIXED DIRECT + DETONATE HIT note on the reflect guard
+            // below, and the enemy non-positional apply site's `bombPortion: enemyDetonationDamage`).
+            // `bombPortion === 0` is false for this case, so this guard skips entirely: the block is
+            // NOT consumed (correct — reading `damage` here would spend it on a hit this funnel does
+            // not treat as purely direct) but it also does NOT blunt the direct slice — the full
+            // mixed `damage` (direct + bomb) lands for real. This is a deliberate, conservative
+            // consequence of reusing the funnel's own `isDirect` definition rather than attempting to
+            // block just the direct fraction of a mixed hit, and it is consistent with the
+            // "consume only on a hit that actually READ the block" invariant above.
+            //
+            // Deliberately NOT excluded, unlike Exposed's consumption guard further down this
+            // funnel, which drops reflected / countered / Protection-transferred hits explicitly:
+            // those three genuinely DO read this block. They are real incoming direct damage on this
+            // victim and the text is "blocks the next direct hit", so a reflect bouncing back onto
+            // the wearer, a counterattack, or a redirected Protection chunk all deserve to be
+            // blocked. Exposed excludes them for a reason that does not apply here — none of the
+            // three folds the per-victim INCOMING-AMPLIFICATION channel Exposed rides, so spending
+            // Exposed on one would charge for an amplification it never received. The difference
+            // between the two guards is therefore intentional, not an omission.
+            if (
+                cause?.byDirectDamage === true &&
+                (cause.bombPortion ?? 0) === 0 &&
+                !carriesBarrier &&
+                damage > 0 &&
+                transformedToDot === 0 &&
+                holdsHitMitigation(statusEngine, victim.id)
+            ) {
+                // Identical deferral accounting to the ability transform above, by construction —
+                // see convertHitToSelfDot.
+                transformedToDot = convertHitToSelfDot(
+                    victim,
+                    sink,
+                    damage,
+                    HIT_MITIGATION_DOT_ROUNDS
+                );
+                damage = 0;
+                consumeHitMitigation(statusEngine, victim.id);
             }
             // The post-block, non-transformed instant portion of this hit — captured HERE, right
             // after the transform step resolves (transform zeroes `damage` on a match) and BEFORE
@@ -4567,9 +4700,28 @@ export function runCombat(input: CombatEngineInput): {
             //      · counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
             //      · transfer — the redirected chunk comes off the ORIGINAL victim's cascade.
             //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.
-            //  - the Barrier branch already returned without reaching here (a nullified hit deals no
-            //    damage), and a hit whose whole post-block amount became a DoT (Voron/Orel) dealt no
-            //    direct damage — the `immediateDamage - transformedToDot` test the `attacked` signal uses.
+            //  - the Barrier branch already returned without reaching here.
+            //
+            // NOTHING LANDED AT THAT INSTANT is the single premise the final term encodes, and it
+            // covers both ways this funnel can cancel a hit (owner ruling, 2026-08-03):
+            //  - Barrier ANNIHILATES the hit — nothing lands, ever, so the amplification was never
+            //    cashed (that path returns above and never reaches this guard);
+            //  - a TRANSFORM (Voron/Orel's `transform-incoming-to-dot`, or the `Hit Mitigation`
+            //    one-shot) replaces the hit with a DoT, so nothing lands at THIS instant either.
+            //    `immediateDamage - transformedToDot` is therefore <= 0 and Exposed stays ARMED.
+            // That is deliberately the SAME reading of `transformedToDot` as the `attacked`
+            // suppression in the per-victim `onVictimResolved` hook (`fullyTransformedToDot`): a
+            // fully converted hit is not a direct hit, so it neither signals "directly damaged" to
+            // on-attacked reactives nor spends a status whose game text is "removed after taking
+            // direct damage". The two readings must stay in step — revisit them in the same commit
+            // or the tree ends up asserting both premises at once (it briefly did). A hit whose
+            // whole amount an incoming-BLOCK erased is excluded by the same term: both parts are 0.
+            //
+            // ACCEPTED CONSEQUENCE of that ruling: amplification is folded UPSTREAM of this funnel
+            // (`victimIncomingModifiers`), so the amount a transform converts already carries the
+            // +100% while Exposed also survives for a later hit — banked twice. Deliberate and
+            // accepted, not an oversight: making it once-only would mean converting the UNAMPLIFIED
+            // amount, which contradicts what a deferral is. Do not "fix" it in this guard.
             //
             // If a secondary path ever starts folding the per-victim incoming channel, drop its flag
             // from this guard in the same commit — amplify and consume must stay in lockstep.
@@ -5010,11 +5162,13 @@ export function runCombat(input: CombatEngineInput): {
             // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — it arms only the
             // NEXT direct hit and is consumed by it (see exposedStatus.ts for why it cannot ride
             // parsedEffects.incomingDamage). Folded into the same percentage channel as Inc. Damage
-            // Up, off the SAME debuff list `toEnemyModifiers` just read. Direct damage only, like
-            // every other term here — DoT ticks and bombs never read this channel. `defenseProfileOf`
-            // calls this per HIT, so the consumption below (applyVictimDamage) makes hit 2 of a
-            // multi-hit cast read a store with the status already gone.
-            const exposed = exposedIncomingPct(victimDebuffs);
+            // Up. Direct damage only, like every other term here — DoT ticks and bombs never read
+            // this channel. `defenseProfileOf` calls this per HIT, so the consumption below
+            // (applyVictimDamage) makes hit 2 of a multi-hit cast read a store with the status
+            // already gone. It re-reads the status engine rather than folding off `victimDebuffs`
+            // above: a one-shot must be read from exactly the channel its removal can spend, which
+            // is narrower than the three-channel list `toEnemyModifiers` needs.
+            const exposed = exposedIncomingPct(statusEngine, victimId);
             // D-PR12: friendly-side incoming-DIRECT-damage buffs on the victim's OWN 'self' store
             // (Inc. Damage Down/Up — Makoli/Salvation/Shelter/Refine/Battlecry). Summed into the SAME
             // per-victim incomingDamageModifier as enemy debuffs. Team-agnostic for the TIMED + AURA
@@ -8619,10 +8773,11 @@ export function runCombat(input: CombatEngineInput): {
         // Toxic Overflow." Runs BEFORE the round-ended emit/drain below so each `corrosion-spread`
         // event's enqueued reactions (Hemlock's self-heal, on-corrosion-spread) are flushed by the
         // same drainIntentsFor calls. Team-symmetric: iterates every living real actor (the DPS
-        // dummy `enemy` is skipped — it holds no per-victim debuffs). The holder's Toxic Overflow
-        // lives in the per-victim TIMED enemy-debuff store (ownerDebuffNames reads it); Corrosion
-        // lives on the actor's corrosionEntries. adjacentAllyIdsFor resolves the holder's SAME-SIDE
-        // adjacent allies (board-neighbours positionally, all same-side allies otherwise).
+        // dummy `enemy` is skipped — it holds no per-victim debuffs). The holder's Toxic Overflow is
+        // read out of the per-victim TIMED enemy-debuff store ONLY, via `holdsToxicOverflow` — see
+        // the guard below for why that channel and not the broad name union; Corrosion lives on the
+        // actor's corrosionEntries. adjacentAllyIdsFor resolves the holder's SAME-SIDE adjacent
+        // allies (board-neighbours positionally, all same-side allies otherwise).
         // Snapshot the qualifying spreaders BEFORE applying any spread. Applying spreads inline
         // while iterating would let an EARLIER holder's spread deposit a Corrosion stack on a
         // LATER holder, which — read live via totalStacks below — would then chain-spread that same
@@ -8635,7 +8790,21 @@ export function runCombat(input: CombatEngineInput): {
         for (const holder of allActors) {
             if (holder.id === enemy.id) continue; // vestigial DPS dummy — never a real holder
             if (holder.destroyedRound !== undefined) continue;
-            if (!ownerDebuffNames(holder.id).includes(TOXIC_OVERFLOW)) continue;
+            // TIMED per-victim channel only — deliberately NOT `ownerDebuffNames`, the broad
+            // three-channel name union. Toxic Overflow is a CONSUMABLE ("...and remove Toxic
+            // Overflow"), and the `removeTimedEnemyStatus` call below reaches only this channel, so
+            // reading any wider set would spread every round forever instead of once: the status is
+            // selectable in the calculator's debuff picker, which emits no turn count, and an
+            // always-active scheduled debuff is injected into EVERY target's snapshot with no
+            // per-victim entry to delete. Inert is the faithful rendering of a one-shot the manual
+            // model cannot spend (same narrowing as hitMitigation.ts / exposedStatus.ts).
+            // `holdsToxicOverflow` also surfaces the ability-sourced PERSISTENT-stacking store, which
+            // the removal cannot reach either — unreachable for this status, since that routing is
+            // gated solely on `PERSISTENT_STACKING_BUFFS.has(name)` and Toxic Overflow is not a
+            // member (constants/persistentStackingBuffs.ts), so it is harmless rather than a second
+            // unspendable door. Hemlock's real charged application lands in the timed store,
+            // non-expiring, by construction — see constants/toxicOverflow.ts.
+            if (!holdsToxicOverflow(statusEngine, holder.id)) continue;
             if (totalStacks(holder.corrosionEntries) < 1) continue;
             toxicSpreaders.push(holder);
         }
