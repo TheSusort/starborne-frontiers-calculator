@@ -31,9 +31,7 @@ describe('statusEngine.purge (newest-first self-buff removal)', () => {
         expect(removed).toBe(2);
 
         // The two NEWEST (Defense Up, Speed Up) are gone; the oldest (Attack Up) remains.
-        const names = eng
-            .timedAbilityStatuses('self', 'e1')
-            .map((s) => s.payload.buffName);
+        const names = eng.timedAbilityStatuses('self', 'e1').map((s) => s.payload.buffName);
         expect(names).toEqual(['Attack Up']);
     });
 
@@ -47,9 +45,7 @@ describe('statusEngine.purge (newest-first self-buff removal)', () => {
         const removed = eng.purge('e1', 'all');
         expect(removed).toBe(3);
 
-        const names = eng
-            .timedAbilityStatuses('self', 'e1')
-            .map((s) => s.payload.buffName);
+        const names = eng.timedAbilityStatuses('self', 'e1').map((s) => s.payload.buffName);
         expect(names).toHaveLength(0);
     });
 
@@ -64,9 +60,7 @@ describe('statusEngine.purge (newest-first self-buff removal)', () => {
         // Only Attack Up is removable.
         expect(removed).toBe(1);
 
-        const names = eng
-            .timedAbilityStatuses('self', 'e1')
-            .map((s) => s.payload.buffName);
+        const names = eng.timedAbilityStatuses('self', 'e1').map((s) => s.payload.buffName);
         expect(names).toContain('Protection');
         expect(names).toContain('Magnetized Shielding');
         expect(names).not.toContain('Attack Up');
@@ -77,5 +71,23 @@ describe('statusEngine.purge (newest-first self-buff removal)', () => {
         eng.beginRound(1);
         expect(() => eng.purge('nobody', 3)).not.toThrow();
         expect(eng.purge('nobody', 3)).toBe(0);
+    });
+
+    // Barrier Recharging is typed `debuff` in the buff data but lands on FRIENDLY units
+    // (FRIENDLY_SIDE_STATUSES), so in production it sits in the SELF store — the one purge
+    // sweeps, not the enemy store cleanseRemoval.test.ts covers it in. `isUnremovable` is
+    // buffName-keyed and side-agnostic, so the lockout survives from either direction; this pins
+    // the side that actually occurs.
+    it('(e) Barrier Recharging survives purge(all) from the self store it lands in', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, mkTimedBuff('Barrier Recharging'), 'e1');
+        eng.applyTimedAbilityStatus(1, mkTimedBuff('Attack Up'), 'e1');
+
+        // Only Attack Up is removable.
+        expect(eng.purge('e1', 'all')).toBe(1);
+
+        const names = eng.timedAbilityStatuses('self', 'e1').map((s) => s.payload.buffName);
+        expect(names).toEqual(['Barrier Recharging']);
     });
 });

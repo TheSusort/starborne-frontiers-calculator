@@ -1,4 +1,5 @@
 import { BUFFS } from '../constants/buffs';
+import { isFriendlySideStatus } from '../constants/friendlySideStatuses';
 import { Ship } from '../types/ship';
 import {
     SecondaryDamage,
@@ -100,6 +101,10 @@ const DOT_DEBUFF_PREFIXES = new Set(['corrosion', 'inferno', 'bomb', 'acidic']);
  * gates reference a debuff the unit applies (Stealth is the notable buff exception, found in BUFFS).
  */
 export function classifyEnemyEffect(name: string): 'buff' | 'debuff' {
+    // Side override ahead of the DoT-prefix and BUFFS lookups: a friendly-side negative status is
+    // held in the carrier's BUFF-name store, so a gate reading it off an enemy must build an
+    // 'enemy-buff' condition. See FRIENDLY_SIDE_STATUSES for why valence and side differ.
+    if (isFriendlySideStatus(name)) return 'buff';
     if (DOT_DEBUFF_PREFIXES.has(name.toLowerCase().split(' ')[0])) return 'debuff';
     const found = BUFFS.find((b) => b.name.toLowerCase() === name.toLowerCase());
     return found?.type === 'buff' ? 'buff' : 'debuff';
@@ -5279,6 +5284,11 @@ function verbToTarget(
     if (SELF_VERBS.has(verb)) return 'self';
     if (ENEMY_VERBS.has(verb)) return 'enemy';
     if (/\bitself\b/i.test(followingText)) return 'self';
+    // A friendly-side negative status is player-side whatever its BUFFS type says, so a
+    // receiver-less "applies <status>" inherits the clause's ally receiver instead of falling
+    // through to 'enemy' (Quixilver's Barrier Recharging). Panon's "to itself" is already handled
+    // above, so this only ever widens the receiver-LESS phrasing.
+    if (isFriendlySideStatus(buffName)) return 'self';
     // apply forms: use BUFFS type to disambiguate
     const found = BUFFS.find((b) => b.name === buffName);
     return found?.type === 'buff' ? 'self' : 'enemy';
