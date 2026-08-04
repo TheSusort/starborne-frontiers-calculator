@@ -514,9 +514,10 @@ export type CombatEvent =
           isPrimaryTarget?: boolean;
           /** G PR2: true when this hit actually reduced the victim's shield pool
            *  (absorbed > 0). Sourced from the shield-first drain at the emit
-           *  (shieldBefore > 0 && hpDamage < damage && !barriered). Nyxen's counter
+           *  (shieldBefore > 0 && hpDamage < damage && !barriered && !converted). Nyxen's counter
            *  gates on this. False/absent when no shield was present, the hit fully
-           *  penetrated to HP, or a Barrier blocked it (shield untouched). */
+           *  penetrated to HP, a Barrier blocked it (shield untouched), or Shield Converter
+           *  converted the hit (shield gained, not drained). */
           shieldWasHit?: boolean;
       };
 

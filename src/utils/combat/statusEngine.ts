@@ -1,7 +1,7 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
 import { Condition, SkillSlot } from '../../types/abilities';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
-import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
+import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
 import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
 
@@ -607,7 +607,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             side === 'self'
                 ? getPersistentSelf(ownerOrTargetId)
                 : getPersistentEnemy(ownerOrTargetId);
-        const maxStacks = PERSISTENT_STACKING_BUFFS.get(buffName);
+        const maxStacks = persistentCapFor(buffName);
         const existing = map.get(buffName);
         if (existing) {
             existing.stacks =
@@ -736,7 +736,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // application landed (the landing hook already ran at the call site), so add a stack
         // (capped) to the persistent map. The text skillDuration is intentionally ignored — the
         // buff-name rule overrides it (game-verified 2026-06-05).
-        if (PERSISTENT_STACKING_BUFFS.has(buff.buffName)) {
+        if (isPersistentByName(buff.buffName)) {
             addPersistentStack(side, buff.buffName, buff.stacks || 1);
             return;
         }
@@ -826,7 +826,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const appliedEnemy: string[] = [];
         for (const buff of sets.timedEnemy) {
             if (buff.skillSource !== slot) continue;
-            const isPersistent = PERSISTENT_STACKING_BUFFS.has(buff.buffName);
+            // Union helper (not the raw PERSISTENT_STACKING_BUFFS set) so this gate can never
+            // disagree with `upsertBuff`'s own routing just below, which already calls
+            // `isPersistentByName`. Strictly wider than the set alone — inert for today's two
+            // one-shot names (both are self-granted buffs and can never reach this enemy-debuff
+            // path) — but keeps this site aligned with upsertBuff for any future enemy-side
+            // one-shot.
+            const isPersistent = isPersistentByName(buff.buffName);
             // Persistent statuses ignore skillDuration; non-persistent timed entries require a
             // numeric duration to upsert a finite window.
             if (!isPersistent && typeof buff.skillDuration !== 'number') continue;
@@ -1405,7 +1411,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // application landed (the landing roll/hook already ran at the caller's site), so add a
         // stack (capped) and keep the payload for folding. The status.duration (text value) is
         // intentionally ignored — the buff-name rule overrides it (game-verified 2026-06-05).
-        if (PERSISTENT_STACKING_BUFFS.has(status.payload.buffName)) {
+        if (isPersistentByName(status.payload.buffName)) {
             addPersistentStack(
                 status.side,
                 status.payload.buffName,

@@ -840,6 +840,38 @@ describe('assembleBattleResult — per-victim incoming fields (PR7 Task 7)', () 
         expect(ship.incomingBarrierAbsorbed).toBe(0);
     });
 
+    it('yields incomingDamage 0 for a hit Shield Converter nullified into shield (convertedToShield)', () => {
+        // Regression: a converted hit used to contribute its FULL amount to incomingDamage (and
+        // therefore to the cumulative HP loss driving hpPct) because the derived formula did not
+        // subtract convertedToShield — the engine never applied this HP damage (Shield Converter
+        // nullified the hit entirely), so the Battle Simulator was showing a falling HP bar for
+        // damage that never happened. This exercises the DERIVED formula directly (assembleBattleResult
+        // fed a hand-built perRoundPerIncoming), not the ground-truth hp-changed event path, which
+        // already accounted for convertedToShield and would pass here even with the bug present.
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            perRoundPerIncoming: {
+                1: {
+                    attacker: {
+                        incoming: 5000,
+                        shieldAbsorbed: 0,
+                        barrierAbsorbed: 0,
+                        convertedToShield: 5000,
+                    },
+                },
+            },
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        const ship = find(result, 1, 'attacker');
+        // Fully converted: no net HP damage landed.
+        expect(ship.incomingDamage).toBe(0);
+        // maxHp 10000, no HP lost → hpPct stays at 100, not 50.
+        expect(ship.hpPct).toBe(100);
+    });
+
     it('defaults all incoming fields to 0 when perRoundPerIncoming is absent', () => {
         const result = assembleBattleResult({
             events: [],
