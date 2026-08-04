@@ -152,7 +152,9 @@ export interface EffectiveDamageStats {
     effectivePen: number;
     /** toDotAndPenModifiers(abilitySelfEffects, []).dotDamageModifier — self Out. DoT, for dotMult. */
     selfDotDamageModifier: number;
-    /** mod.detonationDamage — outgoing detonation-burst multiplier delta (percentage points). */
+    /** mod.detonationDamage (stat-modifier abilities) + dotPen.detonationDamageModifier
+     *  ("Out. Detonation Damage Up" buffs) — outgoing detonation-burst multiplier delta
+     *  (percentage points). */
     detonationDamageModifier: number;
     /** mod.bombSplashDamage — outgoing bomb-splash multiplier delta (percentage points). */
     bombSplashModifier: number;
@@ -216,7 +218,7 @@ export function effectiveDamageStatsOf(args: {
             mod.defensePenetration +
             dotPen.defensePenetrationBuff,
         selfDotDamageModifier: dotPen.dotDamageModifier + mod.dotDamage,
-        detonationDamageModifier: mod.detonationDamage,
+        detonationDamageModifier: mod.detonationDamage + dotPen.detonationDamageModifier,
         bombSplashModifier: mod.bombSplashDamage,
         totals,
     };

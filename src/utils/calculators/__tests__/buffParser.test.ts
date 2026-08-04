@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseBuffEffects, isStackable, hasDpsEffect } from '../buffParser';
+import { BUFFS } from '../../../constants/buffs';
 
 describe('parseBuffEffects', () => {
     describe('attack', () => {
@@ -305,5 +306,26 @@ describe('parseBuffEffects — flat-attack caster snapshot (D-PR10)', () => {
         const e = parseBuffEffects('Atlas Coordination II', '+20% Attack');
         expect(e.attackFlatPctOfCaster).toBeUndefined();
         expect(e.attack).toBe(20);
+    });
+});
+
+describe('Out. Detonation Damage Up — outgoing detonation channel', () => {
+    it('parses the real BUFFS entry into detonationDamage', () => {
+        const buff = BUFFS.find((b) => b.name === 'Out. Detonation Damage Up III')!;
+        const effects = parseBuffEffects(buff.name, buff.description);
+        expect(effects.detonationDamage).toBe(45);
+    });
+
+    it('does not leak into the direct outgoingDamage channel', () => {
+        const buff = BUFFS.find((b) => b.name === 'Out. Detonation Damage Up III')!;
+        const effects = parseBuffEffects(buff.name, buff.description);
+        expect(effects.outgoingDamage).toBeUndefined();
+    });
+
+    it('leaves "Out. Damage Up III" on the direct channel only', () => {
+        const buff = BUFFS.find((b) => b.name === 'Out. Damage Up III')!;
+        const effects = parseBuffEffects(buff.name, buff.description);
+        expect(effects.detonationDamage).toBeUndefined();
+        expect(effects.outgoingDamage).toBeDefined();
     });
 });

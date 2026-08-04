@@ -90,6 +90,7 @@ describe('toDotAndPenModifiers', () => {
         expect(toDotAndPenModifiers([], [])).toEqual({
             defensePenetrationBuff: 0,
             dotDamageModifier: 0,
+            detonationDamageModifier: 0,
         });
     });
 
@@ -228,5 +229,27 @@ describe('calculateBuffTotals — hacking/security channels (A2)', () => {
         ]);
         expect(result.hackingBuff).toBe(40);
         expect(result.securityBuff).toBe(20);
+    });
+});
+
+describe('toDotAndPenModifiers — detonation channel', () => {
+    const buff = (detonationDamage: number, stacks = 1): SelectedGameBuff => ({
+        id: `det-${detonationDamage}-${stacks}`,
+        buffName: 'Out. Detonation Damage Up III',
+        stacks,
+        parsedEffects: { detonationDamage },
+        isStackable: false,
+    });
+
+    it('sums attacker-side detonationDamage', () => {
+        expect(toDotAndPenModifiers([buff(45)], []).detonationDamageModifier).toBe(45);
+    });
+
+    it('scales by stacks', () => {
+        expect(toDotAndPenModifiers([buff(45, 2)], []).detonationDamageModifier).toBe(90);
+    });
+
+    it('is 0 when no buff carries the channel', () => {
+        expect(toDotAndPenModifiers([], []).detonationDamageModifier).toBe(0);
     });
 });

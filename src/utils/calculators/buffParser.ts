@@ -26,6 +26,12 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const defPen = extract(/([+-]\d+)%\s*Defense\s*Penetration/);
     if (defPen !== undefined) effects.defensePenetration = defPen;
 
+    // Outgoing DETONATION damage — distinct from `outgoingDamage`, whose pattern requires the
+    // literal "Direct". The corpus has no incoming-detonation buff, so requiring "Outgoing"
+    // here removes any need for the Out./Inc. name-prefix split that DoT damage needs below.
+    const detonationDamage = extract(/([+-]\d+)%\s*Outgoing\s*Detonation\s*Damage/);
+    if (detonationDamage !== undefined) effects.detonationDamage = detonationDamage;
+
     // DoT: use buff name prefix to distinguish Out. vs Inc.
     const dotValue = extract(/([+-]\d+)%\s*DoT\s*Damage/);
     if (dotValue !== undefined) {
