@@ -1478,14 +1478,25 @@ interface DamageAccountingSink {
  * barrier- or shield-absorbed: nothing absorbed it.
  *
  * CALLER CONTRACT — this helper cannot reach the caller's `damage` local, so every call site MUST
- * follow it with `damage = 0` of its own (both do). Omitting that does not merely mis-report: the
- * `immediateDamage` capture a few lines below the call sites reads `damage`, so a non-zero leftover
- * would drain the victim's shield/HP for the full amount as well as spreading it over the DoT —
- * the hit landing twice. Neither existing call site would change, so no test would catch it.
+ * follow it with `damage = 0` of its own WHEN THE RETURN VALUE IS NON-ZERO (both do — the guard
+ * below is the one case the return can be 0). Omitting that on a real conversion does not merely
+ * mis-report: the `immediateDamage` capture a few lines below the call sites reads `damage`, so a
+ * non-zero leftover would drain the victim's shield/HP for the full amount as well as spreading it
+ * over the DoT — the hit landing twice. Neither existing call site's real-conversion path would
+ * change, so no test would catch a regression there.
  *
  * Module-local rather than its own module: it is a private detail of the one funnel, and speaking
  * `DamageAccountingSink` (an engine-internal accounting seam) from outside would mean exporting
  * that interface purely to relocate these three statements.
+ *
+ * GUARD: `rounds` traces back to a parsed skill row (the ability's `turns`) or a hand-coded
+ * constant (Hit Mitigation's fixed 3) — the former is untrusted input. `detectTransformToDot`
+ * already rejects a non-positive parse at the source, but this is the single shared choke point
+ * for both call sites, so it defends independently: a non-positive `rounds` here would push
+ * `perTickAmount: damage / rounds` = `Infinity` (or a poisoned negative) into `genericDoTEntries`,
+ * silently corrupting every downstream tick and HP derivation that reads it. Treat it as a no-op
+ * instead — convert nothing, leave the hit to resolve normally — rather than throwing: a
+ * malformed skill row must not crash a simulation.
  */
 function convertHitToSelfDot(
     victim: CombatActor,
@@ -1493,6 +1504,7 @@ function convertHitToSelfDot(
     damage: number,
     rounds: number
 ): number {
+    if (rounds <= 0) return 0;
     victim.genericDoTEntries.push({
         stacks: 1,
         tier: 0,
@@ -4081,7 +4093,14 @@ export function runCombat(input: CombatEngineInput): {
                             damage,
                             transform.config.turns
                         );
-                        damage = 0;
+                        // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
+                        // CALLER CONTRACT). `turns` is parser-derived; `detectTransformToDot`
+                        // already rejects a non-positive parse so no real ability reaches here
+                        // with turns <= 0, but if one ever did, the helper's own guard returns 0
+                        // and the hit must fall through to resolve normally rather than vanish.
+                        if (transformedToDot > 0) {
+                            damage = 0;
+                        }
                     }
                 }
             }
@@ -4116,6 +4135,18 @@ export function runCombat(input: CombatEngineInput): {
             // should convert is a pure damage-magnitude question about that passive's own text, and
             // it is on the backlog. Answering it there must not drag this clause with it: a burst
             // must never SPEND the one-shot regardless of how that question lands.
+            //
+            // MIXED DIRECT + BOMB HIT: a single apply can carry `byDirectDamage: true` with
+            // `0 < bombPortion < damage` — a cast that both lands a direct hit and detonates a bomb
+            // in the same apply (see the MIXED DIRECT + DETONATE HIT note on the reflect guard
+            // below, and the enemy non-positional apply site's `bombPortion: enemyDetonationDamage`).
+            // `bombPortion === 0` is false for this case, so this guard skips entirely: the block is
+            // NOT consumed (correct — reading `damage` here would spend it on a hit this funnel does
+            // not treat as purely direct) but it also does NOT blunt the direct slice — the full
+            // mixed `damage` (direct + bomb) lands for real. This is a deliberate, conservative
+            // consequence of reusing the funnel's own `isDirect` definition rather than attempting to
+            // block just the direct fraction of a mixed hit, and it is consistent with the
+            // "consume only on a hit that actually READ the block" invariant above.
             //
             // Deliberately NOT excluded, unlike Exposed's consumption guard further down this
             // funnel, which drops reflected / countered / Protection-transferred hits explicitly:

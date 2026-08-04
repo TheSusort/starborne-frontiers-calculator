@@ -2826,6 +2826,11 @@ export function detectTransformToDot(
     const m = TRANSFORM_TO_DOT_RE.exec(plain);
     if (!m) return undefined;
     const turns = parseInt(m[1], 10);
+    // `\d+` also matches "0" — a malformed "for 0 turns" row would otherwise reach
+    // convertHitToSelfDot as a live ability with rounds:0 (perTickAmount: damage/0 = Infinity).
+    // Reject it at the source instead: no corpus row parses this way today (Voron/Orel are both
+    // 2-3 turns), so this cannot change the result for anything that parses now.
+    if (turns <= 0) return undefined;
     const condition = ATTACKER_TAUNT_PROVOKE_RE.test(plain)
         ? 'attacker-taunted-or-provoke'
         : 'always';
