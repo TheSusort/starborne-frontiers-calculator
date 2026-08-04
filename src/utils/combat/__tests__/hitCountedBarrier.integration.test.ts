@@ -16,15 +16,17 @@
  * Harness (helpers, `collectFor`, `simHpLossFor`, `barrierAbsorbedFor`, `timedBomb`) is modelled on
  * hitMitigation.integration.test.ts, the sibling one-shot with the same absorb-site guard.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
 import { createStatusEngine } from '../statusEngine';
 import type { RegisteredAbilityStatus } from '../statusEngine';
+import { executeIntent, type Intent, type IntentExecContext } from '../triggers';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor, PendingBomb } from '../state';
+import type { PlayerActorRuntime } from '../playerTurn';
 
 // =============================================================================
 // Status layer — consumeStatusHit itself.
@@ -131,6 +133,140 @@ describe('hit-counted Barrier vs the buff-family rule (known Infinity-encoding c
         // is only true if the 5-turn grant never landed.
         expect(eng.consumeStatusHit('a3', 'Barrier')).toBe(true);
         expect(barrierNames(eng, 'a3')).not.toContain('Barrier');
+    });
+});
+
+// =============================================================================
+// The REACTIVE path — triggers.ts executeIntent's `cfg.type === 'buff'` branch.
+//
+// A grant reaches the status store by one of two routes: the CAST path
+// (registerActorAbilityStatuses in engine.ts, exercised end-to-end by every test above and
+// below) and this REACTIVE path (executeIntent, used by any ability carrying a LIVE trigger —
+// `end-of-turn` is the one a later task's Quixilver R2 passive actually takes). The two routes
+// thread `hits` through SEPARATE code — triggers.ts's duration ternary and the hoisted status
+// literal's `hits` spread — so a cast-path-only suite would miss a divergence between them
+// entirely, which is the whole reason this finding exists.
+//
+// Unit-level on executeIntent directly (the ctx-construction pattern triggers.test.ts's
+// damagedAllyId suite already uses for this same buff branch), NOT a multi-round runCombat
+// fixture: the duration bookkeeping under test (Infinity vs a real turn count) only diverges
+// observably several ROUNDS apart — engine.ts runs a carrier's own Post Turn decrement BEFORE
+// its turn-ended emission, so a same-round grant is immune to its own decrement either way, cast
+// path or reactive — and keeping an incoming attack from accidentally spending the SAME grant's
+// hit charge before the duration difference ever gets a chance to show up is exactly the kind of
+// fixture that goes vacuous by accident. Spying on the real `applyTimedAbilityStatus` call instead
+// reads the two lines' actual output directly and non-vacuously.
+// =============================================================================
+
+describe('hit-counted Barrier — reactive path (triggers.ts executeIntent, cfg.type === "buff")', () => {
+    const makeHolderRuntime = (id: string): PlayerActorRuntime =>
+        ({
+            actor: { id } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    /** A self-target Barrier grant on a LIVE trigger — the shape a reactive ship passive (an
+     *  end-of-turn Barrier, e.g.) actually carries into executeIntent's buff branch. */
+    const reactiveBarrierIntent = (opts: { hits?: number; duration?: number }): Intent => ({
+        ownerId: 'holder',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'reactive-barrier',
+            type: 'buff',
+            target: 'self',
+            trigger: 'end-of-turn',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Barrier',
+                stacks: 1,
+                parsedEffects: {},
+                isStackable: false,
+                ...(opts.duration !== undefined ? { duration: opts.duration } : {}),
+                ...(opts.hits !== undefined ? { hits: opts.hits } : {}),
+            },
+        },
+    });
+
+    /** Minimal IntentExecContext for a self-buff intent — lifted from triggers.test.ts's
+     *  damagedAllyId suite (same cfg.type === 'buff' branch), re-keyed to a single 'holder'. */
+    const buildCtx = (): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        return {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['holder', makeHolderRuntime('holder')]]),
+            grantAllyCharges: () => {},
+            removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['holder'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+    };
+
+    it('a. duration-less + hits-carrying: stored hit-counted, spent by one direct hit — same as the cast path', () => {
+        const ctx = buildCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+
+        executeIntent(reactiveBarrierIntent({ hits: 1 }), ctx);
+
+        // The stored status itself: duration Infinity (no turn window — the hit count is the
+        // only thing that can expire it) AND hits threaded onto it. A single-call unit test
+        // never decrements, so `duration`'s actual value is otherwise unobservable here — this
+        // direct read is what makes the assertion below non-vacuous.
+        expect(applySpy).toHaveBeenCalledTimes(1);
+        const status = applySpy.mock.calls[0][1];
+        expect(status.duration).toBe(Infinity);
+        expect(status.hits).toBe(1);
+
+        expect(barrierNames(ctx.statusEngine, 'holder')).toContain('Barrier');
+        // The absorb site's exact API: one direct hit fully spends a 1-charge grant, exactly
+        // like the status-layer test at the top of this file pins for the cast path.
+        expect(ctx.statusEngine.consumeStatusHit('holder', 'Barrier')).toBe(true);
+        expect(barrierNames(ctx.statusEngine, 'holder')).not.toContain('Barrier');
+    });
+
+    it('b. duration-less, hits ABSENT: keeps the pre-existing 1-turn window, not Infinity', () => {
+        const ctx = buildCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+
+        executeIntent(reactiveBarrierIntent({}), ctx);
+
+        // arg[1] is the status object applyTimedAbilityStatus actually received — the
+        // byte-identical-when-absent guarantee, read directly off the real call.
+        expect(applySpy).toHaveBeenCalledTimes(1);
+        const status = applySpy.mock.calls[0][1];
+        expect(status.duration).toBe(1);
+        expect(status.hits).toBeUndefined();
+        // Confirmed NOT hit-counted: a direct hit does nothing to a turn-window Barrier.
+        expect(ctx.statusEngine.consumeStatusHit('holder', 'Barrier')).toBe(false);
+        expect(barrierNames(ctx.statusEngine, 'holder')).toContain('Barrier');
+    });
+
+    it("c. explicit numeric duration AND hits: the ternary's first arm still wins", () => {
+        const ctx = buildCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+
+        executeIntent(reactiveBarrierIntent({ duration: 2, hits: 3 }), ctx);
+
+        expect(applySpy).toHaveBeenCalledTimes(1);
+        const status = applySpy.mock.calls[0][1];
+        expect(status.duration).toBe(2); // NOT Infinity — hits does not override a stated duration.
+        expect(status.hits).toBe(3); // ...but hits is still threaded onto the same status.
     });
 });
 

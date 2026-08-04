@@ -1458,14 +1458,16 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             // buff name with no per-entry lifecycle, and `consumeStatusHit` only spends from the
             // timed selfMaps — so `status.hits` would be dropped here and the status would be
             // permanent and unspendable (the one-shot-in-an-unreachable-channel defect class).
-            // Unreachable today by construction: PERSISTENT_STACKING_BUFFS is a closed set
-            // (Defense Shred / Blast / Overload / Titanite) and none of them parse a hit count.
-            // Throwing rather than silently dropping so a future parser change fails LOUDLY.
+            // Unreachable today by construction: `isPersistentByName` is the UNION of two closed
+            // sets — PERSISTENT_STACKING_BUFFS (Defense Shred / Blast / Overload / Titanite) and
+            // ONE_SHOT_PERSISTENT_BUFFS (Shield Converter / Charged Overdrive II) — and none of
+            // the six parse a hit count. Throwing rather than silently dropping so a future
+            // parser change fails LOUDLY.
             if (status.hits !== undefined) {
                 throw new Error(
                     `StatusEngine.applyTimedAbilityStatus: hit-counted status '${status.payload.buffName}' ` +
-                        `is a persistent-stacking name — the persistent store cannot carry a hit count. ` +
-                        `Route it through the timed path or extend the persistent store first.`
+                        `is a persistent-stacking or one-shot-persistent name — the persistent store cannot ` +
+                        `carry a hit count. Route it through the timed path or extend the persistent store first.`
                 );
             }
             addPersistentStack(
