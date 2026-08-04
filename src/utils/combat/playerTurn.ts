@@ -64,6 +64,11 @@ import {
 } from './debuffImmunity';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { healAmplificationForCast } from './healAmplification';
+import {
+    holdsChargedOverdriveII,
+    consumeChargedOverdriveII,
+    CHARGED_OVERDRIVE_II_PEN,
+} from './chargedOverdrive';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
 // historical public API (engine.ts + tests import these from playerTurn). Keeping the
 // definitions in the leaf module breaks the playerTurn ⇄ effectiveStats import cycle.
@@ -1844,8 +1849,32 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
     // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
     // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
+    // `Charged Overdrive II` — one-shot +20 points of Defense Penetration on the next CHARGED
+    // activation. Read and consumed here, at the single per-turn point where `action` is known and
+    // `dmgStats` has not yet been built.
+    //
+    // Folded into base.defensePenetrationBuff rather than into effectiveStats.ts: `dmgStats` is a
+    // turn-local rebuilt every turn, so the bonus cannot outlive this cast. Pushing it into the
+    // standing stat instead would leak +20% pen into every later hit AND into the DPS-mode
+    // aggregate scalars and the buff-display UI, which is exactly what name-keying exists to avoid.
+    //
+    // Consumed UNCONDITIONALLY on a charged activation - the game text has no damage qualifier, so
+    // a pure-buff charged skill (Sentinel's own) still spends it.
+    const chargedOverdrivePen =
+        action === 'charged' && holdsChargedOverdriveII(statusEngine, actor.id)
+            ? CHARGED_OVERDRIVE_II_PEN
+            : 0;
+    if (chargedOverdrivePen > 0) consumeChargedOverdriveII(statusEngine, actor.id);
     const dmgStats = effectiveDamageStatsOf({
-        base: { attack, defence, crit, critDamage, hp, defensePenetration, defensePenetrationBuff },
+        base: {
+            attack,
+            defence,
+            crit,
+            critDamage,
+            hp,
+            defensePenetration,
+            defensePenetrationBuff: defensePenetrationBuff + chargedOverdrivePen,
+        },
         scheduledTotals,
         abilitySelfEffects,
         modifierAbilities: dotDamageUnconditional,
