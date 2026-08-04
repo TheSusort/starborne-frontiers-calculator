@@ -149,10 +149,13 @@ export interface CombatActor {
     pendingAccumulators: PendingAccumulator[];
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
     destroyedRound?: number;
-    /** Board position of this actor (positional plumbing — set at construction, not yet consumed). */
+    /** Board position of this actor — set at construction and consumed by the positional path:
+     *  `isPositional` gates on it and `resolvePositionalTarget` reads it as the acting anchor. */
     position?: Position;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
-     *  plumbing — set at construction, consumed by resolvePositionalTarget. */
+     *  plumbing — set at construction, consumed by resolvePositionalTarget. ORed at the
+     *  engine.ts read sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts) — this
+     *  field alone is no longer the resolver's effective input. */
     ignoresForcedTargeting?: boolean;
     /** Attacker ignores the Stealth targeting filter on ALL its casts (Lodolite's "ignores
      *  Stealth effects" passive). Positional plumbing — set at construction, consumed by
