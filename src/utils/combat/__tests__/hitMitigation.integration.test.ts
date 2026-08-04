@@ -733,7 +733,7 @@ describe('Hit Mitigation is not spent by hits it never blocked', () => {
 //
 // The Protection leg is the one worth pinning: Oleander grants Hit Mitigation to ALL allies, so its
 // own protectors hold the block, and a redirected chunk landing on one of them is the everyday
-// case. It also exercises the transfer block's `instantTotal` accounting note: a converted sub-hit
+// case. It also exercises the transfer block's `intakeTotal` accounting note: a converted sub-hit
 // contributes 0 instant damage, so the protector is credited nothing and NO
 // `reactive-damage-performed` is emitted for it that round — asserted below rather than assumed.
 //
@@ -836,9 +836,9 @@ describe('a Protection-redirected chunk is blocked by the protector’s Hit Miti
     });
 
     it('credits the protector no instant damage for the converted chunk', () => {
-        // The transfer block sums `immediateDamage` per protector sub-hit and suppresses the
+        // The transfer block sums `incomingBooked` per protector sub-hit and suppresses the
         // emission below 1e-9 — exactly so a sub-hit the protector's own block converted is not
-        // booked as instant damage. A fully-converted round therefore emits NOTHING for the
+        // booked as damage taken (the conversion reverses the intake it recorded). A fully-converted round therefore emits NOTHING for the
         // protector, and the rounds that follow — chunks landing with the block spent — each emit
         // once. (An emission in round 1 would mean the converted chunk was double-counted: deferred
         // into the DoT and credited as instant.)
@@ -868,9 +868,9 @@ describe('a Protection-redirected chunk is blocked by the protector’s Hit Miti
 //
 // `perActorIncoming` is the primary channel here (the conversion nets it back out) — but
 // `perTargetDamage`, which `simHpLossFor` falls back to when a round leaves no `perActorIncoming`
-// bucket for the actor, now agrees: both reactive paths subtract the converted portion before
-// booking, so neither display channel reads a bounce that never landed. The two `does not book a
-// converted …` cases at the bottom of this block are what pin that.
+// bucket for the actor, now agrees: both reactive paths book the intake the funnel RECORDED
+// (`incomingBooked`), so neither display channel reads a bounce that never landed. The two `does
+// not book a converted …` cases at the bottom of this block are what pin that.
 // =============================================================================
 
 /** The Reflect gear set's shape (mirrored from protectionTransfer.integration.test.ts): the engine

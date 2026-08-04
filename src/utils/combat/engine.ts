@@ -58,6 +58,7 @@ import {
     applyPositionalDamage,
     footprintVictims,
     type VictimDamageOutcome,
+    type AppliedVictimDamage,
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { victimHitDamage } from './victimDamage';
@@ -3855,7 +3856,9 @@ export function runCombat(input: CombatEngineInput): {
                  *  a covered/splash footprint victim. */
                 isPrimaryTarget?: boolean;
             }
-        ): VictimDamageOutcome => {
+            // AppliedVictimDamage, not VictimDamageOutcome: this funnel always sets
+            // `incomingBooked`, so the booking sites below read it without a fallback.
+        ): AppliedVictimDamage => {
             // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
             // becomes mutable so the block step can shave it; everything downstream (addIncoming,
             // shield drain, hp damage) operates on the post-block value.
@@ -3992,7 +3995,7 @@ export function runCombat(input: CombatEngineInput): {
                         // sets up the deferred DoT-transform, which acts per redirected chunk).
                         // SP-U U1: `sink` serves both sides (ids are globally unique), so no
                         // per-side selection is needed here.
-                        let instantTotal = 0;
+                        let intakeTotal = 0;
                         for (let s = 0; s < chunk.stacks; s++) {
                             const outcome = applyVictimDamage(chunk.perStack, p.actor, sink, {
                                 killerId: cause.killerId,
@@ -4001,27 +4004,35 @@ export function runCombat(input: CombatEngineInput): {
                                 shieldPenetrationPct: 0,
                                 bombPortion: 0,
                             });
-                            instantTotal += outcome.immediateDamage ?? 0;
+                            intakeTotal += outcome.incomingBooked;
                         }
-                        // We sum the post-block, non-transformed INSTANT amount per sub-hit
-                        // (`immediateDamage`, captured inside applyVictimDamage right after its
-                        // transform step resolves) rather than `chunk.total − transformedToDot` —
-                        // that subtraction wrongly counts a portion blocked by the protector's own
-                        // incoming-block ability as instant damage, when in fact it was neither
-                        // taken nor transformed. Meatshield's DoT-transform passive DEFERS the
-                        // transformed portion to a self-DoT ticked over the next N rounds (the
-                        // generic-DoT path books its own roundPerTargetDamage + .incoming per tick);
-                        // only the INSTANT remainder is credited/logged this round. For a protector
-                        // without a block/transform ability, `immediateDamage === chunk.perStack` for
-                        // every sub-hit, so `instantTotal === chunk.total` — byte-identical to the
-                        // pre-change path. In the fully-transformed case a sub-epsilon float sliver
-                        // can leave `instantTotal` at ±~1e-10; the 1e-9 threshold suppresses that
-                        // phantom near-zero emission (a real chunk is always >> 1e-9, so this never
-                        // affects a genuine instant remainder).
-                        if (instantTotal > 1e-9) {
+                        // We sum the intake the funnel RECORDED per sub-hit (`incomingBooked`) rather
+                        // than `chunk.total − transformedToDot` — that subtraction wrongly counts a
+                        // portion blocked by the protector's own incoming-block ability as damage
+                        // taken, when in fact it was neither taken nor transformed. Meatshield's
+                        // DoT-transform passive DEFERS the transformed portion to a self-DoT ticked
+                        // over the next N rounds (the generic-DoT path books its own
+                        // roundPerTargetDamage + .incoming per tick); only the remainder is
+                        // credited/logged this round. For a protector without a block/transform
+                        // ability, `incomingBooked === chunk.perStack` for every sub-hit, so
+                        // `intakeTotal === chunk.total`.
+                        //
+                        // Was `immediateDamage`, which agrees on both of those but ALSO zeroes a
+                        // Barrier-nullified chunk — dropping it from both display channels while the
+                        // protector's `barrierAbsorbed` card still showed it, and suppressing the
+                        // emission below so nothing in the log explained where that absorption came
+                        // from. `.incoming` keeps a barriered amount (netted out downstream against
+                        // `barrierAbsorbed`), which is what a DIRECTLY barriered hit books, so this
+                        // now matches it.
+                        //
+                        // In the fully-transformed case a sub-epsilon float sliver can leave
+                        // `intakeTotal` at ±~1e-10; the 1e-9 threshold suppresses that phantom
+                        // near-zero emission (a real chunk is always >> 1e-9, so this never affects a
+                        // genuine remainder).
+                        if (intakeTotal > 1e-9) {
                             roundPerTargetDamage.set(
                                 p.actor.id,
-                                (roundPerTargetDamage.get(p.actor.id) ?? 0) + instantTotal
+                                (roundPerTargetDamage.get(p.actor.id) ?? 0) + intakeTotal
                             );
                             // SP-F F1: this redirected chunk's real source-attacker is the
                             // ORIGINAL hit's killer (cause.killerId), not the protector — the log
@@ -4031,14 +4042,14 @@ export function runCombat(input: CombatEngineInput): {
                             // single attacker) — nothing to attribute there, so skip silently
                             // (the victim-keyed roundPerTargetDamage write above is unaffected).
                             if (cause.killerId) {
-                                creditDealt(cause.killerId, p.actor.id, instantTotal);
+                                creditDealt(cause.killerId, p.actor.id, intakeTotal);
                             }
                             bus.emit({
                                 type: 'reactive-damage-performed',
                                 sourceId: victim.id,
                                 targetId: p.actor.id,
                                 round: r,
-                                amount: instantTotal,
+                                amount: intakeTotal,
                                 reactive: true,
                                 duringTurnOf: actingActorId,
                                 triggerActorId: actingActorId,
@@ -4067,6 +4078,14 @@ export function runCombat(input: CombatEngineInput): {
                 }
             }
             sink.addIncoming(damage, victim.id);
+            // The intake just recorded — post incoming-block, post Protection redirect. Returned as
+            // `incomingBooked` (minus any transform reversal below) so every caller that books a
+            // per-victim display amount can book the number the funnel actually recorded instead of
+            // re-deriving it from the hit it passed in. Captured HERE rather than read back off the
+            // sink because the sink is write-only from this side and a nested apply (a redirected
+            // Protection chunk, whose recipient is a DIFFERENT actor) may have written to it
+            // already.
+            const incomingRecorded = damage;
             // SP-E: amount of THIS hit converted into a DoT (Voron/Orel). Reported in the returned
             // outcome so the caller excludes it from the per-victim damage-taken credit.
             let transformedToDot = 0;
@@ -4239,7 +4258,11 @@ export function runCombat(input: CombatEngineInput): {
                     shieldBefore: victim.shieldPool,
                     hpDamage: 0,
                     barriered: true,
-                    immediateDamage: 0,
+                    // Barrier nullifies the hit's EFFECT but does not un-record it: `.incoming` holds
+                    // the amount and an equal `.barrierAbsorbed` nets it back out downstream. So the
+                    // display channels book it, exactly as they do for any other barriered hit —
+                    // unlike `immediateDamage`, which is 0 here (nothing landed).
+                    incomingBooked: incomingRecorded,
                 };
             }
             const shieldBefore = victim.shieldPool;
@@ -4445,23 +4468,31 @@ export function runCombat(input: CombatEngineInput): {
                             for (const bomb of bombs) {
                                 const splash = splashDamageForBomb(bomb, bomb.splashModifier);
                                 if (splash <= 0) continue;
-                                applyVictimDamage(splash, ally, sink, {
+                                const splashOutcome = applyVictimDamage(splash, ally, sink, {
                                     killerId: bomb.sourceId,
                                     byDirectDamage: true,
                                     bombPortion: splash, // full bomb → full shield drain, no penetration
                                     shieldPenetrationPct: 0,
                                 });
+                                // perActorSplash stays the FULL splash — it reports what the dying
+                                // bomb threw out, the splash counterpart of perActorReflected.
                                 perActorSplash.set(
                                     ally.id,
                                     (perActorSplash.get(ally.id) ?? 0) + splash
                                 );
-                                roundPerTargetDamage.set(
-                                    ally.id,
-                                    (roundPerTargetDamage.get(ally.id) ?? 0) + splash
-                                );
-                                // SP-F F1: the bomb's original applier (sourceId), not the dying
-                                // bombed ship that splashed.
-                                creditDealt(bomb.sourceId, ally.id, splash);
+                                // The display channels book the intake the funnel RECORDED, so a
+                                // splash an ally's incoming-block shaved (or a Protection cascade
+                                // diverted onward) is not counted where it never landed.
+                                const splashBooked = splashOutcome.incomingBooked;
+                                if (splashBooked > 1e-9) {
+                                    roundPerTargetDamage.set(
+                                        ally.id,
+                                        (roundPerTargetDamage.get(ally.id) ?? 0) + splashBooked
+                                    );
+                                    // SP-F F1: the bomb's original applier (sourceId), not the dying
+                                    // bombed ship that splashed.
+                                    creditDealt(bomb.sourceId, ally.id, splashBooked);
+                                }
                             }
                         }
                     }
@@ -4648,22 +4679,17 @@ export function runCombat(input: CombatEngineInput): {
                             // this, reflected damage would mutate the attacker's live HP but never
                             // appear on the reconstructed HP curve.
                             //
-                            // MINUS the portion the recipient's own incoming-block converted into a
-                            // self-DoT (its Hit Mitigation one-shot or a Voron/Orel transform — a
-                            // bounce-back DOES read both; see the Hit Mitigation guard's note). The
-                            // converted amount lands LATER as generic DoT ticks, and each tick books
-                            // its own increment into these two maps, so booking it here as well would
-                            // count the bounce twice on both display channels (damageTaken, and the
-                            // HP curve for any round that leaves no `perActorIncoming` bucket for
-                            // this actor to prefer). `convertHitToSelfDot` already reverses the
-                            // `.incoming` this funnel recorded for exactly the same reason. This is
-                            // `emitHit`'s subtraction verbatim (positionalApply.ts) — deliberately
-                            // NOT the Protection block's `immediateDamage`, which also excludes a
-                            // Barrier-nullified amount: a barriered bounce stays booked here, as a
-                            // barriered direct hit is on the main path, and nets out downstream
-                            // against `barrierAbsorbed`.
-                            const reflectBooked =
-                                reflected - (reflectOutcome.transformedToDot ?? 0);
+                            // Booked as the intake the funnel RECORDED (`incomingBooked`), not the
+                            // bounce we computed. The recipient's own incoming-block can convert a
+                            // bounce into a self-DoT (its Hit Mitigation one-shot or a Voron/Orel
+                            // transform — a bounce-back DOES read both; see the Hit Mitigation
+                            // guard's note), and that converted amount lands LATER as generic DoT
+                            // ticks, each booking its own increment into these two maps. Booking the
+                            // full bounce here as well would count it twice on both display channels
+                            // (damageTaken, and the HP curve for any round that leaves no
+                            // `perActorIncoming` bucket for this actor to prefer). A barriered bounce
+                            // IS booked, exactly as a barriered direct hit is on the main path.
+                            const reflectBooked = reflectOutcome.incomingBooked;
                             if (reflectBooked > 1e-9) {
                                 roundPerTargetDamage.set(
                                     attacker.id,
@@ -4760,7 +4786,16 @@ export function runCombat(input: CombatEngineInput): {
             ) {
                 consumeExposed(statusEngine, victim.id);
             }
-            return { shieldBefore, hpDamage, barriered: false, transformedToDot, immediateDamage };
+            return {
+                shieldBefore,
+                hpDamage,
+                barriered: false,
+                transformedToDot,
+                // A transform REVERSED the `.incoming` recorded above (convertHitToSelfDot), so the
+                // net intake this application booked excludes it — the deferred amount is booked
+                // later, per tick, by the DoT path.
+                incomingBooked: incomingRecorded - transformedToDot,
+            };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
         // accumulates the victim's incoming / shield-absorbed / barrier-absorbed into its per-actor
@@ -4941,11 +4976,11 @@ export function runCombat(input: CombatEngineInput): {
             } finally {
                 deferConsequenceLogs = wasDeferring;
             }
-            // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect),
-            // MINUS any portion the attacker's own incoming-block converted into a self-DoT — see
-            // the Reflect site's note for why both display channels must exclude it and why the
-            // subtraction is `emitHit`'s rather than the Protection block's `immediateDamage`.
-            const counterBooked = raw - (counterOutcome?.transformedToDot ?? 0);
+            // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect):
+            // the intake the funnel RECORDED, so a portion the attacker's own incoming-block
+            // converted into a self-DoT is booked by its ticks rather than twice. See the Reflect
+            // site's note.
+            const counterBooked = counterOutcome?.incomingBooked ?? 0;
             if (counterBooked > 1e-9) {
                 roundPerTargetDamage.set(
                     attacker.id,
@@ -5155,13 +5190,13 @@ export function runCombat(input: CombatEngineInput): {
                 } finally {
                     deferConsequenceLogs = wasDeferring;
                 }
-                // Excludes a portion the victim's own incoming-block converted into a self-DoT,
-                // mirroring applyCounterAttack (this site is documented as its exact mirror, so
-                // leaving it out would re-create the double-count for the eight reactive-damage
-                // ships). No fixture reaches this branch — it needs `positionalTeamBattle` plus a
-                // reactive `damage` proc onto a block-holding victim — so it is kept correct by
-                // construction with its sibling rather than pinned.
-                const procBooked = raw - (procOutcome?.transformedToDot ?? 0);
+                // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
+                // documented as its exact mirror, so booking `raw` here would re-create the
+                // double-count for the eight reactive-damage ships). No fixture reaches this branch
+                // — it needs `positionalTeamBattle` plus a reactive `damage` proc onto a
+                // block-holding victim — so it is kept correct by construction with its sibling
+                // rather than pinned.
+                const procBooked = procOutcome?.incomingBooked ?? 0;
                 if (procBooked > 1e-9) {
                     roundPerTargetDamage.set(
                         victim.id,

@@ -32,17 +32,39 @@ export interface VictimDamageOutcome {
     hpDamage: number;
     barriered: boolean;
     /** SP-E Voron/Orel: the portion of this hit that was CONVERTED into a Damage-over-Time
-     *  effect instead of landing as damage this turn. The caller subtracts it from the
-     *  per-victim damage-taken credit so a transformed hit reads as 0 damage taken this round
-     *  (the converted amount arrives over time via DoT ticks). Absent/0 for every normal hit. */
+     *  effect instead of landing as damage this turn (the converted amount arrives over time via
+     *  DoT ticks, which book their own per-victim increments). Absent/0 for every normal hit.
+     *
+     *  Already netted out of {@link incomingBooked}, so a caller booking a damage-taken credit does
+     *  NOT subtract this itself — read it only to ASK whether a hit was converted (the `attacked`
+     *  suppression in `onVictimResolved` does exactly that). */
     transformedToDot?: number;
-    /** The post-block, non-transformed portion of this hit that landed as INSTANT damage this
-     *  turn (0 for a Barrier-nullified or fully DoT-transformed hit). The Protection transfer
-     *  block sums this across a protector's redirected sub-hits to credit only what actually hit
-     *  instantly — excluding a blocked portion, which `chunk.total − transformedToDot` would
-     *  wrongly count. Absent on outcomes from callers that don't set it. */
-    immediateDamage?: number;
+    /** THE per-victim damage-taken credit: the exact net amount this application recorded into the
+     *  victim's `.incoming` bucket (`perActorIncoming[victim].incoming`).
+     *
+     *  Every caller that books a per-victim display amount — `emitHit` here, and the engine's
+     *  Protection-transfer / reflect / counter / reactive-damage / bomb-splash sites — books THIS,
+     *  which makes the reconciliation identity hold by construction:
+     *
+     *      Σ perTargetDealt[attacker] == Σ perTargetDamage == Σ perActorIncoming[].incoming
+     *
+     *  It is the funnel's own number, so it already accounts for everything the funnel does to a
+     *  hit before recording it, in one value instead of one subtraction per mechanism at every
+     *  call site: an incoming-block proc shaving it, a Protection cascade diverting a chunk to an
+     *  ally, and a transform deferring it into a self-DoT (which reverses the `.incoming` it just
+     *  recorded — the deferred amount is booked later, per tick, by the DoT path). A
+     *  Barrier-nullified hit IS booked here, matching `.incoming`.
+     *
+     *  Absent only on outcomes from callers that don't set it (test stubs of `applyToVictim`);
+     *  `applyVictimDamage` always sets it — see {@link AppliedVictimDamage}. */
+    incomingBooked?: number;
 }
+
+/** {@link VictimDamageOutcome} as returned by the engine's real apply funnel, where
+ *  {@link VictimDamageOutcome.incomingBooked} is guaranteed. Lets the engine-internal booking
+ *  sites read it without a fallback while the injected-callback interface above stays satisfiable
+ *  by a minimal stub. */
+export type AppliedVictimDamage = VictimDamageOutcome & { incomingBooked: number };
 
 /** Per-cell damage scale keyed off the resolved CellRole. */
 const roleScaleFor = (role: CellRole): number => (role === 'origin' ? 1.0 : 0.5);
@@ -229,9 +251,21 @@ export function applyPositionalDamage(args: {
             const ampPct = outgoingAmplificationFor?.(victim, didCrit) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
             const outcome = applyToVictim(victim, dmg, isAnchor);
-            // A hit converted into a DoT (Voron/Orel) counts as 0 damage taken this round — the
-            // converted amount lands over time via DoT ticks — so exclude it from the credit.
-            emitHit?.(victim, dmg - (outcome.transformedToDot ?? 0), didCrit);
+            // Credit the victim the intake the funnel actually RECORDED for it, not the hit we
+            // computed. The two differ whenever the funnel altered the hit before recording it: a
+            // Protection cascade diverted a chunk to an ally (booked on that ally's own row by the
+            // transfer site — crediting it here too would count it twice and inflate the attacker's
+            // damage-dealt past the hit it landed), an incoming-block proc shaved it, or a
+            // transform (Voron/Orel, Hit Mitigation) deferred it into a DoT that books its own
+            // increment per tick. See `incomingBooked`'s doc for the identity this preserves.
+            //
+            // Fallback keeps the previous shape for a caller that supplies no `incomingBooked` —
+            // only test stubs of `applyToVictim`; the engine's own funnel always sets it.
+            emitHit?.(
+                victim,
+                outcome.incomingBooked ?? dmg - (outcome.transformedToDot ?? 0),
+                didCrit
+            );
             onVictimResolved?.(victim, dmg, outcome, didCrit);
         }
     }
