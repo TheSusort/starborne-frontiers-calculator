@@ -413,7 +413,7 @@ describe('Protection damage transfer (integration)', () => {
         expect(round1.perActorIncoming?.['ally-1']?.barrierAbsorbed).toBeCloseTo(ENEMY_ATTACK, 6);
     });
 
-    it('a PROTECTOR that also carries a full incoming-block ability credits ZERO instant damage for the blocked redirected chunk (CodeRabbit: immediateDamage, not chunk.total − transformedToDot)', () => {
+    it('a PROTECTOR that also carries a full incoming-block ability credits ZERO damage taken for the blocked redirected chunk (the funnel\u2019s recorded intake, not chunk.total \u2212 transformedToDot)', () => {
         // Same aura-protector harness as the "PRODUCTION PATH" test above ('prot-1' grants ITSELF
         // 3 Protection stacks via an aura passive; 'ally-1' is the direct-hit victim) — but the
         // PROTECTOR additionally carries an always-active, 100%-chance, 100%-block
@@ -426,10 +426,10 @@ describe('Protection damage transfer (integration)', () => {
         // exactly like the PRODUCTION PATH test. But the protector's OWN incoming-block ability
         // then fully blocks its post-redirect sub-hit: the protector takes ZERO real damage and
         // transforms nothing into a DoT. The buggy accounting (`chunk.total − transformedToDot`)
-        // would still credit the FULL chunk as "instant" damage taken by the protector, because
+        // would still credit the FULL chunk as damage taken by the protector, because
         // transformedToDot stays 0 for a pure block (no transform ability involved) — the fixed
-        // accounting (summed `immediateDamage`, captured post-block/post-transform inside
-        // applyVictimDamage) must read 0 instead.
+        // accounting (summed `incomingBooked`, the intake applyVictimDamage recorded after its own
+        // block and transform steps) must read 0 instead.
         const blockAuraPassive = (): ShipSkills['slots'][number] => {
             const ability: Ability = {
                 id: 'full-block-self-aura',
@@ -478,8 +478,11 @@ describe('Protection damage transfer (integration)', () => {
         // the fixed accounting must leave this key ABSENT entirely.
         expect(round1.perTargetDamage?.['prot-1']).toBeUndefined();
         // No reactive-damage-performed event should have fired for the protector either — the
-        // `instantTotal > 1e-9` guard must suppress emission for a fully-blocked chunk exactly
-        // like it already does for a fully Barrier-suppressed or fully DoT-transformed one.
+        // `intakeTotal > 1e-9` guard must suppress emission for a fully-blocked chunk exactly like
+        // it does for a fully DoT-transformed one. (NOT for a Barrier-nullified chunk: Barrier
+        // leaves the intake recorded and nets it out via `barrierAbsorbed`, so that one is booked
+        // and logged like any other barriered hit — pinned in the accounting block at the bottom
+        // of this file.)
         expect(reactiveHitsOnProtector).toBe(0);
     });
 
@@ -993,5 +996,211 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
         const tickSum = genericDotSum(input, 'enemy-protector');
         const expectedChunk = 0.3 * FOCUS_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
         expect(tickSum).toBeCloseTo(expectedChunk, 4);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// Per-victim damage ACCOUNTING under a redirect — the display channels, not the HP.
+//
+// `RoundData.perTargetDamage` (→ each ship's `Damage taken` card) and `perTargetDealt` (→ its
+// `Damage dealt`) are booked by the CALLERS of applyVictimDamage, while `.incoming` is booked by
+// the funnel itself. Everything the funnel does to a hit BEFORE recording it — an incoming-block
+// proc shaving it, a Protection cascade diverting a chunk, a transform deferring it into a DoT —
+// therefore has to be mirrored by every caller or the two channels disagree.
+//
+// The victim's own booking is the one that had drifted: the positional hit path booked the hit it
+// COMPUTED, so a redirect left the victim credited with damage the protector took. That inflates
+// the victim's `damageTaken` AND the attacker's `damageDealt` (the chunk is counted on both rows),
+// which is why the fix is pinned as a reconciliation identity rather than two magic numbers:
+//
+//     Σ perTargetDealt[attacker]  ==  Σ perTargetDamage  ==  Σ perActorIncoming[].incoming
+//
+// A redirect is invisible to that identity — it MOVES intake between two rows, it does not create
+// any. Live HP was never affected: `hpPct` reads `.incoming`, which was always post-redirect.
+//
+// Positional (not the file's default non-positional shape) because `emitHit` — the site that books
+// the victim's own row — exists only on the positional path. In non-positional mode the victim gets
+// no `perTargetDamage` entry at all, which is a separate pre-existing gap that never reaches the
+// battle simulator (`simulateBattle` always sets `positionalTeamBattle`).
+// ───────────────────────────────────────────────────────────────────────────────────────
+
+/** A positioned enemy that fires one real 100% hit at the FRONT-most player (M4 in this harness's
+ *  column order), so the attack resolves through the positional apply path and `emitHit` runs. */
+const positionedEnemy = (id: string, attack: number): EnemyAttacker =>
+    ({
+        ...manualEnemy(id, attack),
+        position: 'M1',
+        target: { raw: 'front', side: 'enemy', selection: 'front' } as ParsedTarget,
+        pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} } as ParsedPattern,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'positioned-hit',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 100 },
+                        } as Ability,
+                    ],
+                },
+            ],
+        },
+    }) as unknown as EnemyAttacker;
+
+/** A self-cast named status from the ACTIVE slot, paired with a 0-damage ability so the actor still
+ *  takes a normal cast turn. The active slot (not passive) because a passive-slot `on-cast` self
+ *  buff does not reliably apply in this engine. */
+const activeSelfBuffSlot = (buffName: string): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        {
+            id: `self-${buffName}`,
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName,
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                duration: 99, // never lapses inside the run
+            },
+        } as Ability,
+        {
+            id: `noop-${buffName}`,
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 0 },
+        } as Ability,
+    ],
+});
+
+/** A self-aura incoming-block that ALWAYS procs and blocks 100% — the same shape the
+ *  fully-blocked-chunk case above builds locally. Blocks the protector's own redirected sub-hit
+ *  before the funnel records any intake for it. */
+const fullBlockAuraPassive = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'full-block-self-aura',
+            type: 'incoming-block',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'incoming-block',
+                condition: 'always',
+                procChance: 1,
+                blockPct: 1.0,
+                oncePerRound: false,
+            },
+        } as Ability,
+    ],
+});
+
+describe('per-victim damage accounting under a Protection redirect (positional)', () => {
+    const PROT_STACKS = 3;
+
+    /** Victim at M4 (front-most → the enemy's 'front' selection binds to it), protector at M1.
+     *  `protectorSlots` adds whatever else the protector should carry (e.g. a Barrier grant). */
+    const fixture = (protectorSlots: ShipSkills['slots'] = []): CombatEngineInput =>
+        BASE_INPUT({
+            selfBuffs: [], // the focus is inert here — the protector is a team actor
+            defence: 0,
+            positionalTeamBattle: true,
+            teamActors: [
+                { ...teamActor('ally-1', 0), position: 'M4' },
+                {
+                    ...teamActor('prot-1', PROTECTOR_DEFENCE, [
+                        protectionAuraPassive(PROT_STACKS),
+                        ...protectorSlots,
+                    ]),
+                    position: 'M1',
+                },
+            ],
+            enemyAttackers: [positionedEnemy('enemy-1', ENEMY_ATTACK)],
+        });
+
+    /** The three channels for round 1, plus the identity that must hold across them. */
+    const channels = (input: CombatEngineInput) => {
+        const r1 = runCombat(input).rounds[0];
+        const taken = r1.perTargetDamage ?? {};
+        const dealt = r1.perTargetDealt?.['enemy-1'] ?? {};
+        const incoming = r1.perActorIncoming ?? {};
+        const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
+        return {
+            taken,
+            dealt,
+            incoming,
+            takenSum: sum(taken),
+            dealtSum: sum(dealt),
+            incomingSum: sum(
+                Object.fromEntries(Object.entries(incoming).map(([k, v]) => [k, v.incoming]))
+            ),
+        };
+    };
+
+    it('books the victim only what survived the redirect, so dealt/taken/incoming reconcile', () => {
+        const c = channels(fixture());
+        const chunk = 0.1 * PROT_STACKS * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+
+        // The protector's row is unchanged by this fix — it was already booked from the funnel.
+        expect(c.taken['prot-1']).toBeCloseTo(chunk, 6);
+        // The victim keeps 70%: the redirected chunk is the PROTECTOR's intake, not the victim's.
+        // Pre-fix this read the whole ENEMY_ATTACK — the hit as computed, before the cascade.
+        expect(c.taken['ally-1']).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
+        // Each row agrees with what the funnel actually recorded for that actor.
+        expect(c.taken['ally-1']).toBeCloseTo(c.incoming['ally-1'].incoming, 6);
+        expect(c.taken['prot-1']).toBeCloseTo(c.incoming['prot-1'].incoming, 6);
+        // And the attacker is credited exactly the intake it caused — no phantom. Pre-fix this
+        // summed to ENEMY_ATTACK + chunk (~1277 for a 1000 hit): the chunk on both rows.
+        expect(c.dealtSum).toBeCloseTo(c.incomingSum, 6);
+        expect(c.dealtSum).toBeCloseTo(c.takenSum, 6);
+    });
+
+    it('books a Barrier-nullified redirected chunk like any other barriered hit', () => {
+        // Barrier on the PROTECTOR. Barrier nullifies the chunk's effect but does NOT un-record it:
+        // the funnel books `.incoming` and the equal `barrierAbsorbed` that nets it back out, so the
+        // protector's row must read the chunk with 0 HP lost — exactly what a DIRECTLY barriered hit
+        // reads. Pre-fix the chunk was dropped from both display channels entirely (the protector
+        // showed 0 taken while its barrier-absorbed card showed the chunk, and the attacker was
+        // credited nothing for it), because that path booked `immediateDamage`, which Barrier zeroes.
+        const c = channels(fixture([activeSelfBuffSlot('Barrier')]));
+        const chunk = 0.1 * PROT_STACKS * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+
+        expect(c.incoming['prot-1'].barrierAbsorbed).toBeCloseTo(chunk, 6);
+        expect(c.taken['prot-1']).toBeCloseTo(chunk, 6);
+        expect(c.dealt['prot-1']).toBeCloseTo(chunk, 6);
+        // Nullified, so no HP moved — the battle simulator's own derivation.
+        expect(
+            c.incoming['prot-1'].incoming -
+                c.incoming['prot-1'].shieldAbsorbed -
+                c.incoming['prot-1'].barrierAbsorbed
+        ).toBeCloseTo(0, 6);
+        // The redirect is no longer silent in the log either: the row that explains where the
+        // protector's barrier absorption came from now fires.
+        expect(reactiveEventsTargeting(fixture([activeSelfBuffSlot('Barrier')]), 'prot-1')).toBe(1);
+    });
+
+    it('still books nothing for a chunk the protector’s own block ability fully absorbed', () => {
+        // The counterpart the fix must NOT break (pinned non-positionally above too): a fully
+        // proc-blocked chunk never became intake at all — `.incoming` is 0 — so both display
+        // channels must stay silent for it. This is what makes `immediateDamage`'s replacement
+        // safe: the funnel's recorded intake already excludes a blocked portion.
+        const c = channels(fixture([fullBlockAuraPassive()]));
+
+        expect(c.incoming['prot-1']?.incoming ?? 0).toBe(0);
+        expect(c.taken['prot-1']).toBeUndefined();
+        expect(c.dealt['prot-1']).toBeUndefined();
+        // The victim's row is untouched by the protector's block — it still keeps only 70%.
+        expect(c.taken['ally-1']).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
     });
 });

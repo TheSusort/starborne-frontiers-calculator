@@ -733,7 +733,7 @@ describe('Hit Mitigation is not spent by hits it never blocked', () => {
 //
 // The Protection leg is the one worth pinning: Oleander grants Hit Mitigation to ALL allies, so its
 // own protectors hold the block, and a redirected chunk landing on one of them is the everyday
-// case. It also exercises the transfer block's `instantTotal` accounting note: a converted sub-hit
+// case. It also exercises the transfer block's `intakeTotal` accounting note: a converted sub-hit
 // contributes 0 instant damage, so the protector is credited nothing and NO
 // `reactive-damage-performed` is emitted for it that round — asserted below rather than assumed.
 //
@@ -836,9 +836,9 @@ describe('a Protection-redirected chunk is blocked by the protector’s Hit Miti
     });
 
     it('credits the protector no instant damage for the converted chunk', () => {
-        // The transfer block sums `immediateDamage` per protector sub-hit and suppresses the
+        // The transfer block sums `incomingBooked` per protector sub-hit and suppresses the
         // emission below 1e-9 — exactly so a sub-hit the protector's own block converted is not
-        // booked as instant damage. A fully-converted round therefore emits NOTHING for the
+        // booked as damage taken (the conversion reverses the intake it recorded). A fully-converted round therefore emits NOTHING for the
         // protector, and the rounds that follow — chunks landing with the block spent — each emit
         // once. (An emission in round 1 would mean the converted chunk was double-counted: deferred
         // into the DoT and credited as instant.)
@@ -866,10 +866,11 @@ describe('a Protection-redirected chunk is blocked by the protector’s Hit Miti
 // once per attacking turn (`counterFiredThisTurn`), so a two-hit attack draws only one counter. A
 // reflect does bounce per hit, but pinning both legs the same way keeps them comparable.
 //
-// Do NOT reach for `perTargetDamage` here (what `simHpLossFor` falls back to when a round has no
-// `perActorIncoming` bucket for the actor): both reactive paths book the bounce into
-// `roundPerTargetDamage` unconditionally, converted or not, so that channel reads the bounce even
-// when nothing landed. `perActorIncoming` is the honest one — the conversion nets it back out.
+// `perActorIncoming` is the primary channel here (the conversion nets it back out) — but
+// `perTargetDamage`, which `simHpLossFor` falls back to when a round leaves no `perActorIncoming`
+// bucket for the actor, now agrees: both reactive paths book the intake the funnel RECORDED
+// (`incomingBooked`), so neither display channel reads a bounce that never landed. The two `does
+// not book a converted …` cases at the bottom of this block are what pin that.
 // =============================================================================
 
 /** The Reflect gear set's shape (mirrored from protectionTransfer.integration.test.ts): the engine
@@ -950,6 +951,24 @@ describe('a bounced-back hit is blocked by the attacker’s own Hit Mitigation',
         expect(genericTicks[0].damage).toBeCloseTo(bounce / ROUNDS, 6);
     };
 
+    /** The DISPLAY-channel half of the same rule: a converted bounce is booked into NEITHER
+     *  accounting channel this round. Both are per-round maps the battle simulator reads directly —
+     *  `perTargetDamage` → the victim's `damageTaken` (and its HP curve, whenever the round leaves no
+     *  `perActorIncoming` bucket for that actor to prefer), `perTargetDealt` → the bouncer's
+     *  `damageDealt` — and the converted amount arrives LATER as DoT ticks, each booking its own
+     *  increment into both. Booking the bounce here as well would count it twice.
+     *
+     *  Round 1's only honest entry for the holder is therefore the focus's follow-up hit, which
+     *  landed in full; the bouncer dealt nothing (the DoT is credited to the holder itself, per
+     *  `convertHitToSelfDot`'s `sourceId: victim.id`). Asserted on the exact round-1 numbers rather
+     *  than "less than" so an over-correction that drops the follow-up hit fails too. */
+    const expectBounceNotBooked = (input: CombatEngineInput) => {
+        const { result } = collectFor(input, 'holder');
+        const r1 = result.rounds.find((r) => r.round === 1)!;
+        expect(r1.perTargetDamage?.['holder'] ?? 0).toBeCloseTo(FOCUS_HIT, 6);
+        expect(r1.perTargetDealt?.['reactor']?.['holder'] ?? 0).toBeCloseTo(0, 6);
+    };
+
     it('a REFLECTED hit converts and spends it', () => {
         const REFLECT_PCT = 40;
         // reflectedDamageForHit: pct% × netHpDamage — and with the holder's defence 0, neutral
@@ -968,5 +987,13 @@ describe('a bounced-back hit is blocked by the attacker’s own Hit Mitigation',
             bounceFixture(counterPassive(100), COUNTER_ATTACK),
             COUNTER_ATTACK
         );
+    });
+
+    it('does not book a converted REFLECT into damage-taken / damage-dealt', () => {
+        expectBounceNotBooked(bounceFixture(reflectPassive(40)));
+    });
+
+    it('does not book a converted COUNTER into damage-taken / damage-dealt', () => {
+        expectBounceNotBooked(bounceFixture(counterPassive(100), 3000));
     });
 });

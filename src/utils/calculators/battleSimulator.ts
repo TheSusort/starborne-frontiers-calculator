@@ -92,14 +92,15 @@ export interface ShipRoundState {
      * field over all attackers who hit a given victim equals that victim's `damageTaken`.
      * Per-ROUND, not per-turn: a DoT applier can show nonzero `damageDealt` in a round where it
      * took no turn at all, because an earlier-applied DoT stack ticked on a victim THIS round
-     * (mirrors `damageTaken`'s existing DoT-tick-lands-in-the-tick-round behaviour). CAVEAT: an
-     * active Protection redirect inherits a pre-existing double-count (the protector's credited
-     * chunk is a diverted PORTION of the original hit, not independent new damage like Reflect/
-     * a counter) — under Protection this field is inflated relative to the single real hit the
-     * attacker landed; reconciliation with `damageTaken` holds for direct attacks, but NOT when
-     * the redirected damage is a DoT-tick-batch (which has no single source attacker → not
-     * mirrored into `perTargetDealt`), leaving that round's `Σ damageDealt` short by the
-     * redirected DoT amount.
+     * (mirrors `damageTaken`'s existing DoT-tick-lands-in-the-tick-round behaviour).
+     *
+     * A Protection redirect no longer inflates this: every booking site credits the intake the
+     * engine's damage funnel actually RECORDED for that victim (`VictimDamageOutcome.incomingBooked`),
+     * so a diverted chunk is credited on the protector's row INSTEAD of the victim's rather than in
+     * addition to it — a redirect moves intake between rows without creating any. CAVEAT that
+     * remains: when the redirected damage is a DoT-tick-batch (no single source attacker → not
+     * mirrored into `perTargetDealt`), that round's `Σ damageDealt` is short by the redirected DoT
+     * amount.
      */
     damageDealt: number;
     /**
