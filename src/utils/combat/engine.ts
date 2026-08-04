@@ -105,6 +105,7 @@ import {
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { consumeExposed, exposedIncomingPct } from './exposedStatus';
+import { holdsRoguesLiberty } from './rogueLiberty';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -474,9 +475,12 @@ export interface EnemyActorInput {
     affinityCritCap?: number;
     /** Pre-resolved crit penalty (from computeAffinityModifiers). Default 0 (neutral). */
     affinityCritPenalty?: number;
-    /** Board position of this enemy (positional plumbing — set but not yet consumed). */
+    /** Board position of this enemy. Consumed by isPositional/resolvePositionalTarget at the
+     *  enemy-turn positional target-selection and footprint-apply sites. */
     position?: Position;
-    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
     ignoresForcedTargeting?: boolean;
     /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
@@ -486,9 +490,12 @@ export interface EnemyActorInput {
     /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
      *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
     chargeLossImmune?: boolean;
-    /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
+    /** Pre-parsed targeting preference for this enemy. Consumed by the enemy-turn positional
+     *  target selection AND the positional apply at the enemy damage site (threaded via
+     *  enemyTargetById). */
     target?: ParsedTarget;
-    /** Pre-parsed positional pattern for this enemy (positional plumbing — set but not yet consumed by apply). */
+    /** Pre-parsed positional pattern for this enemy. Consumed by the positional apply at the
+     *  enemy damage site (origin/covered footprint expansion; threaded via enemyPatternById). */
     pattern?: ParsedPattern;
     /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
     chargedPattern?: ParsedPattern;
@@ -497,9 +504,11 @@ export interface EnemyActorInput {
      *  charge-firing turn (mirrors `chargedPattern`'s contract). */
     chargedTarget?: ParsedTarget;
     /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
-     *  computeAffinityModifiers to produce `affinityDamageModifier` above (positional plumbing —
-     *  set but not yet consumed by apply). Threaded onto the runtime's attackerAffinity + the
-     *  CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
+     *  computeAffinityModifiers to produce `affinityDamageModifier` above. Threaded onto the
+     *  runtime's attackerAffinity (consumed by the positional apply path via
+     *  positionalScalars.attackerAffinity → victimHitDamage's per-victim matchup recompute) +
+     *  the CombatActor.affinity (consumed wherever a victim's own affinity is read). Absent →
+     *  neutral default ('antimatter') downstream. */
     affinity?: AffinityName;
     /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
      *  channels for this enemy attacker. Absent → all folds inert (byte-identical). */
@@ -1016,14 +1025,19 @@ export type TeamActorEngineInput = TeamActorInput & {
         healModifier?: number;
         /** RAW affinity of this team actor — the SAME affinity (TeamActorInput.affinity) the
          *  adapter fed to computeAffinityModifiers to produce `affinityDamageModifier` in this
-         *  bundle, so the two never disagree. Positional plumbing — set but not yet consumed by
-         *  apply (threaded onto the runtime's attackerAffinity + the CombatActor.affinity).
-         *  Absent → neutral default ('antimatter') downstream. */
+         *  bundle, so the two never disagree. Threaded onto the runtime's attackerAffinity
+         *  (consumed by the positional apply path via positionalScalars.attackerAffinity →
+         *  victimHitDamage's per-victim matchup recompute) + the CombatActor.affinity (consumed
+         *  wherever a victim's own affinity is read). Absent → neutral default ('antimatter')
+         *  downstream. */
         affinity?: AffinityName;
     };
-    /** Board position of this team actor (positional plumbing — set but not yet consumed). */
+    /** Board position of this team actor. Consumed by isPositional/resolvePositionalTarget at
+     *  the walked-team positional target-selection and footprint-apply sites. */
     position?: Position;
-    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
     ignoresForcedTargeting?: boolean;
     /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
@@ -1160,9 +1174,12 @@ export interface CombatEngineInput {
         affinityCritCap?: number;
         /** Pre-resolved crit penalty vs the heal target. Default 0 (neutral). */
         affinityCritPenalty?: number;
-        /** Board position of this enemy attacker (positional plumbing — set but not yet consumed). */
+        /** Board position of this enemy attacker. Consumed by isPositional/resolvePositionalTarget
+         *  at the enemy-turn positional target-selection and footprint-apply sites. */
         position?: Position;
-        /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+        /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+         *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+         *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
         ignoresForcedTargeting?: boolean;
         /** W6: ship-wide stealth-targeting bypass. */
         ignoresStealth?: boolean;
@@ -1172,9 +1189,13 @@ export interface CombatEngineInput {
         /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
          *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
         chargeLossImmune?: boolean;
-        /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
+        /** Pre-parsed targeting preference for this enemy attacker. Consumed by the enemy-turn
+         *  positional target selection AND the positional apply at the enemy damage site
+         *  (threaded via enemyTargetById). */
         target?: ParsedTarget;
-        /** Pre-parsed positional pattern for this enemy attacker (positional plumbing — set but not yet consumed by apply). */
+        /** Pre-parsed positional pattern for this enemy attacker. Consumed by the positional
+         *  apply at the enemy damage site (origin/covered footprint expansion; threaded via
+         *  enemyPatternById). */
         pattern?: ParsedPattern;
         /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
         chargedPattern?: ParsedPattern;
@@ -1183,8 +1204,10 @@ export interface CombatEngineInput {
          *  charge-firing turn (mirrors `chargedPattern`'s contract). */
         chargedTarget?: ParsedTarget;
         /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
-         *  computeAffinityModifiers for `affinityDamageModifier` above (positional plumbing —
-         *  set but not yet consumed by apply). Absent → neutral default ('antimatter') downstream. */
+         *  computeAffinityModifiers for `affinityDamageModifier` above. Threaded onto the
+         *  runtime's attackerAffinity, consumed by the positional apply path via
+         *  positionalScalars.attackerAffinity → victimHitDamage's per-victim matchup recompute.
+         *  Absent → neutral default ('antimatter') downstream. */
         affinity?: AffinityName;
         /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
          *  channels for this enemy attacker. Absent → all folds inert (byte-identical). */
@@ -1199,9 +1222,12 @@ export interface CombatEngineInput {
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
-    /** Board position of the focus attacker (positional plumbing — set but not yet consumed). */
+    /** Board position of the focus attacker. Consumed by isPositional/resolvePositionalTarget at
+     *  the focus positional target-selection and footprint-apply sites. */
     position?: Position;
-    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
+     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
+     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
     ignoresForcedTargeting?: boolean;
     /** W6: ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
@@ -1224,9 +1250,11 @@ export interface CombatEngineInput {
      *  charge-firing turn (mirrors `chargedPattern`'s contract). */
     chargedTarget?: ParsedTarget;
     /** RAW affinity of the focus attacker — the SAME affinity matchup the page resolved into the
-     *  pre-resolved `affinityDamageModifier` above, so the two never disagree (positional plumbing
-     *  — set but not yet consumed by apply). Threaded onto the attacker runtime's attackerAffinity
-     *  + the CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
+     *  pre-resolved `affinityDamageModifier` above, so the two never disagree. Threaded onto the
+     *  attacker runtime's attackerAffinity (consumed by the positional apply path via
+     *  positionalScalars.attackerAffinity → victimHitDamage's per-victim matchup recompute) + the
+     *  CombatActor.affinity (consumed wherever a victim's own affinity is read). Absent → neutral
+     *  default ('antimatter') downstream. */
     affinity?: AffinityName;
     /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
      *  channels for the focus attacker. Absent → all folds inert (byte-identical). */
@@ -5670,7 +5698,14 @@ export function runCombat(input: CombatEngineInput): {
                           tb.opposingRoster,
                           statusLookupFor(tb.opposingRoster),
                           {
-                              ignoresForcedTargeting: a.ignoresForcedTargeting,
+                              // The static per-ship flag OR the timed, ally-granted `Rogue's
+                              // Liberty` — read live here (not baked into the actor at
+                              // construction) precisely because the buff can come and go
+                              // mid-battle. Same treatment at the positional-apply site below,
+                              // which re-resolves the anchor per hit.
+                              ignoresForcedTargeting:
+                                  a.ignoresForcedTargeting ||
+                                  holdsRoguesLiberty(statusEngine, a.id),
                               ignoresStealth: a.ignoresStealth,
                               provokedBy: provokerOf(statusEngine, a.id),
                           }
@@ -5963,7 +5998,12 @@ export function runCombat(input: CombatEngineInput): {
                 pattern: sel.pattern,
                 target: sel.target,
                 actingPosition: actor.position!,
-                ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                // Static per-ship flag OR the timed `Rogue's Liberty` (see selectTurnTarget).
+                // Both reads are needed: selectTurnTarget picks the cast's `tgt`, while this loop
+                // re-resolves the anchor for every hit — a buff read at only one of them would let
+                // the two disagree about which victim the cast is actually pointed at.
+                ignoresForcedTargeting:
+                    actor.ignoresForcedTargeting || holdsRoguesLiberty(statusEngine, actor.id),
                 ignoresStealth: actor.ignoresStealth,
                 actingId: actor.id,
                 opposingLiving: tb.opposingRoster,
