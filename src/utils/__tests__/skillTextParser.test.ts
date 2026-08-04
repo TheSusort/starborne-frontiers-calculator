@@ -4951,6 +4951,23 @@ describe('parseOnResistHpDamage (Vindicator p2 reactive)', () => {
     });
 });
 
+describe('detectTransformToDot', () => {
+    it('parses turns from the Voron/Orel "transforms the damage into a DoT" clause', () => {
+        const voron =
+            'When directly damaged, this Unit transforms the damage into a Damage over Time effect lasting for 3 turns.';
+        expect(detectTransformToDot(voron)).toEqual({ turns: 3, condition: 'always' });
+    });
+
+    it('treats a non-positive "for 0 turns" parse as no match (malformed row) rather than an ability with rounds:0', () => {
+        // `\d+` matches "0" — without this guard a row reading "for 0 turns" would build a live
+        // transform-incoming-to-dot ability whose rounds:0 poisons convertHitToSelfDot
+        // (damage / 0 = Infinity). No corpus row parses this way today.
+        const malformed =
+            'When directly damaged, this Unit transforms the damage into a Damage over Time effect lasting for 0 turns.';
+        expect(detectTransformToDot(malformed)).toBeUndefined();
+    });
+});
+
 describe('detectProtectionTransformToDot', () => {
     const meatshield =
         'Any damage this Unit takes from <unit-skill>Protection</unit-skill> is transformed into a <unit-aid>Damage over Time effect</unit-aid> for 2 turns.';

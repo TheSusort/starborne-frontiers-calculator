@@ -420,6 +420,75 @@ const tauntedEnemy = (
         shipSkills: { slots: [{ slot: 'active', abilities: [tauntSelfBuff, basicAttack()] }] },
     }) as EnemyAttacker;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GUARD: a malformed ability config (turns:0) — never produced by the parser today
+// (detectTransformToDot rejects a non-positive "for 0 turns" parse at the source), but
+// convertHitToSelfDot is the shared choke point for both this ability and Hit Mitigation, so it
+// defends independently. Constructed directly (parser bypassed) to reach the helper's guard.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const voronTransformZeroTurns: Ability = {
+    id: 'voron-transform-zero',
+    type: 'transform-incoming-to-dot',
+    target: 'self',
+    trigger: 'on-attacked',
+    conditions: [],
+    config: { type: 'transform-incoming-to-dot', turns: 0, condition: 'always' },
+};
+const voronPassiveZeroTurns: ShipSkills['slots'][number] = {
+    slot: 'passive',
+    abilities: [voronTransformZeroTurns],
+};
+
+const playerVoronZeroTurns = (id: string, position: Position): TeamActor =>
+    ({
+        id,
+        speed: 1000,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        walk: {
+            shipSkills: { slots: [voronPassiveZeroTurns] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    }) as TeamActorEngineInput;
+
+describe('convertHitToSelfDot guard: a non-positive rounds (malformed turns:0 config) is a no-op', () => {
+    it('creates no generic DoT entry and lets the hit land as a normal direct hit instead of vanishing', () => {
+        const input = BASE_PLAYER_SIDE({
+            numRounds: 1,
+            teamActors: [playerVoronZeroTurns('voron', 'M4')],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1', 'front')],
+        });
+        const { hpChanges, genericTicks } = collectFor(input, 'voron');
+        // No self-DoT was ever created — the guard fired instead of pushing a poisoned
+        // (perTickAmount: Infinity) entry.
+        expect(genericTicks.length).toBe(0);
+        // The hit resolved as a normal direct hit (full DIRECT_HIT lands on HP) — the guard's
+        // return of 0 means the call site must NOT zero `damage`, or the hit would vanish
+        // entirely (neither converted to a DoT nor landing for real).
+        expect(hpChanges.length).toBeGreaterThanOrEqual(1);
+        const totalDrop = hpChanges.reduce((sum, c) => sum + (c.oldPct - c.newPct), 0);
+        expect((totalDrop / 100) * HP).toBeCloseTo(DIRECT_HIT, 6);
+    });
+});
+
 describe('Orel: transform gated on the attacker being Taunted or Provoked', () => {
     it('does NOT transform when the attacker carries neither Taunt nor Provoke — the hit lands normally', () => {
         const input = BASE_PLAYER_SIDE({
