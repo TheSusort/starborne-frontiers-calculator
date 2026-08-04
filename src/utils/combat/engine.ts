@@ -239,7 +239,19 @@ function registerActorAbilityStatuses(
                 ability.target === 'target-and-adjacent-enemies'
                     ? 'enemy'
                     : 'self';
-            const accumulating = !!cfg.stackTrigger && cfg.isStackable;
+            // Hit count ("Barrier for 1 hit"), captured as the VALUE rather than a flag so the
+            // timed literal below can thread it without re-narrowing `cfg` back to the buff arm.
+            // Only a buff config carries it — `hits` does not exist on the debuff arm.
+            const hitCount = cfg.type === 'buff' ? cfg.hits : undefined;
+            const hitCounted = hitCount !== undefined;
+            // A hit-counted grant is never accumulating and never an aura — BOTH stores are
+            // unreachable by `consumeStatusHit`, which only spends from the per-actor TIMED map.
+            // Landing a hit-counted grant in either one would make it permanent and unspendable
+            // (the known one-shot-in-an-unreachable-channel defect class). No corpus config
+            // combines `hits` with `stackTrigger + isStackable` today; if one ever does, the hit
+            // lifecycle wins and the stack accrual is what gets dropped, loudly here rather than
+            // silently at the spend site.
+            const accumulating = !hitCounted && !!cfg.stackTrigger && cfg.isStackable;
             // Cheat-Death-family grants from a FIRING slot (Hermes/Hayyan charged skills) are
             // cast-path persistent grants, NOT always-on auras: they apply when the slot fires
             // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time) and never
@@ -267,8 +279,8 @@ function registerActorAbilityStatuses(
                         : [ownerId];
             // A hit-counted grant is never an aura: an aura is re-evaluated per round against
             // its gate and has no consumable charge, so a durationless "Barrier for 1 hit" would
-            // otherwise be permanent for as long as its gate held.
-            const hitCounted = cfg.type === 'buff' && cfg.hits !== undefined;
+            // otherwise be permanent for as long as its gate held. (`hitCounted` is computed with
+            // `accumulating` above — the other classification it has to lose to.)
             const isAura =
                 !accumulating &&
                 !castPathCheatDeath &&
@@ -332,9 +344,7 @@ function registerActorAbilityStatuses(
                             // TOXIC_OVERFLOW_DURATION.
                             Infinity
                           : (cfg.duration as number),
-                    ...(hitCounted && cfg.type === 'buff' && cfg.hits !== undefined
-                        ? { hits: cfg.hits }
-                        : {}),
+                    ...(hitCount !== undefined ? { hits: hitCount } : {}),
                     // Clause-order stamp (enemy side only — a self-buff never modifies the
                     // victim's incoming damage, so deferring one would change nothing but its
                     // event order). Consumed by playerTurn's timed-enemy application loop.
@@ -3910,10 +3920,12 @@ export function runCombat(input: CombatEngineInput): {
             // blocked: direct attacks, DoT ticks, AND bomb detonations (all three funnel here).
             // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death —
             // so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers the
-            // Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on first
-            // hit. The damage still "arrives" (the victim's bucket .incoming increments below) but
-            // its effect is nullified; the blocked amount is tracked SEPARATELY as the bucket's
-            // .barrierAbsorbed (NOT .shieldAbsorbed — Barrier never touches the shield).
+            // Cheat-Death intercept below. Lifecycle is EITHER duration-based (the normal timed
+            // lifecycle) OR hit-counted (the grant's `hits`, spent on a direct hit at the absorb
+            // site below) — see barrierBuffs.ts. The damage still "arrives" (the victim's bucket
+            // .incoming increments below) but its effect is nullified; the blocked amount is
+            // tracked SEPARATELY as the bucket's .barrierAbsorbed (NOT .shieldAbsorbed — Barrier
+            // never touches the shield).
             // Detection mirrors the Cheat-Death check (selfBuffNamesForOwners aggregates snapshot +
             // timed + active ability self statuses).
             const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
@@ -4367,14 +4379,39 @@ export function runCombat(input: CombatEngineInput): {
             // .shieldAbsorbed — Barrier never touches the shield).
             if (carriesBarrier) {
                 sink.addBarrierAbsorbed(damage, victim.id);
-                // Hit-counted Barrier: this absorb spends one charge. Gated on byDirectDamage —
-                // "for 1 hit" means an attack, the same definition of a hit Hit Mitigation and
-                // Shield Converter use. DoT ticks and bomb detonations are still fully blocked,
-                // they just do not consume the charge. No-op (returns false) for a turn-duration
-                // Barrier, so every existing fixture is byte-identical.
-                if (cause?.byDirectDamage === true) {
-                    for (const name of BARRIER_BUFFS)
-                        statusEngine.consumeStatusHit(victim.id, name);
+                // Hit-counted Barrier: this absorb spends one charge. "for 1 hit" means a DIRECT
+                // hit, and the guard spells that out exactly as the funnel's other two consumables
+                // do (Hit Mitigation :4271-4272, Shield Converter :4289-4290):
+                //  - `byDirectDamage`: a DoT tick is not a hit.
+                //  - `bombPortion === 0`: a pure detonation arrives stamped `byDirectDamage: true`
+                //    with the whole amount in `bombPortion`, and bomb-death-splash loops once PER
+                //    BOMB — burning charges on a burst would leave the next real hit unblocked.
+                //    A MIXED direct+bomb apply (0 < bombPortion < damage) also skips: it is not a
+                //    hit by this funnel's own definition, so it must not spend either.
+                //  - `damage > 0`: a zero-amount intake read nothing, so there is nothing to spend
+                //    the charge on.
+                // Every case still gets FULL immunity — the guard only decides whether the charge
+                // is spent. No-op (returns false) for a turn-duration Barrier, so every existing
+                // fixture is byte-identical.
+                if (
+                    cause?.byDirectDamage === true &&
+                    (cause.bombPortion ?? 0) === 0 &&
+                    damage > 0
+                ) {
+                    for (const name of BARRIER_BUFFS) {
+                        // True ONLY when the last charge went and the status was removed — the
+                        // turn-expiry path (decrementPlayer/decrementEnemy, :8886/:8898) emits the
+                        // same event with the same fields, so a hit-consumed Barrier disappears
+                        // from the combat log and the round status panel the same way a
+                        // turn-expired one does instead of vanishing silently.
+                        if (statusEngine.consumeStatusHit(victim.id, name))
+                            bus.emit({
+                                type: 'buff-expired',
+                                actorId: victim.id,
+                                round: r,
+                                buffName: name,
+                            });
+                    }
                 }
                 if (victim.currentHp > 0 && maxHp > 0) {
                     bus.emit({

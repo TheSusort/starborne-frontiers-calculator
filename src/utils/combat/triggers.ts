@@ -2623,6 +2623,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // NOTE: extras use their raw parsedEffects and do NOT receive the `attackFlatPctOfCaster`
         // pin applied to the primary above — fine for the current attack-less control buffs
         // (Barrier/Block Debuff); a future attack-scaled co-buff would need pin handling here.
+        //
+        // INVARIANT — a co-granted buff CANNOT be hit-counted. The `additionalBuffs` element type
+        // (types/abilities.ts) has no `hits` field, so there is nothing to thread and `extraStatus`
+        // below is complete as written. If `hits` is ever added to that element type, it MUST be
+        // threaded here in the same `...(x !== undefined ? { hits: x } : {})` shape the primary
+        // status uses above — and `duration` must become Infinity when it is present, exactly as
+        // the primary's does. Omitting either would put a one-shot into the timed store with no
+        // charge (permanent, since a durationless co-grant defaults to a real turn window) or with
+        // a charge the turn window silently outraces. Barrier is a live co-grant (Last Stand), so
+        // this is the first place a "for N hits" Barrier would try to land.
         for (const extra of cfg.additionalBuffs ?? []) {
             const extraStatus: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
                 payload: payloadFromConfig({
