@@ -4631,7 +4631,7 @@ export function runCombat(input: CombatEngineInput): {
                             // `sink` accumulates the attacker's incoming into the unified
                             // perActorIncoming/intakeFor map under its own id (ids are globally
                             // unique across sides — no per-side selection needed, SP-U U1).
-                            applyVictimDamage(reflected, attacker, sink, {
+                            const reflectOutcome = applyVictimDamage(reflected, attacker, sink, {
                                 killerId: victim.id,
                                 byDirectDamage: true,
                                 isReflected: true,
@@ -4647,14 +4647,39 @@ export function runCombat(input: CombatEngineInput): {
                             // hpPct (mirrors how a normal direct hit's emitHit accumulates). Without
                             // this, reflected damage would mutate the attacker's live HP but never
                             // appear on the reconstructed HP curve.
-                            roundPerTargetDamage.set(
-                                attacker.id,
-                                (roundPerTargetDamage.get(attacker.id) ?? 0) + reflected
-                            );
-                            // SP-F F1: the reflecting WEARER (victim.id) is the source-attacker of
-                            // this bounce-back hit; `attacker` (the original attacker, now the
-                            // recipient) is the victim key — direction-inverted vs the outer names.
-                            creditDealt(victim.id, attacker.id, reflected);
+                            //
+                            // MINUS the portion the recipient's own incoming-block converted into a
+                            // self-DoT (its Hit Mitigation one-shot or a Voron/Orel transform — a
+                            // bounce-back DOES read both; see the Hit Mitigation guard's note). The
+                            // converted amount lands LATER as generic DoT ticks, and each tick books
+                            // its own increment into these two maps, so booking it here as well would
+                            // count the bounce twice on both display channels (damageTaken, and the
+                            // HP curve for any round that leaves no `perActorIncoming` bucket for
+                            // this actor to prefer). `convertHitToSelfDot` already reverses the
+                            // `.incoming` this funnel recorded for exactly the same reason. This is
+                            // `emitHit`'s subtraction verbatim (positionalApply.ts) — deliberately
+                            // NOT the Protection block's `immediateDamage`, which also excludes a
+                            // Barrier-nullified amount: a barriered bounce stays booked here, as a
+                            // barriered direct hit is on the main path, and nets out downstream
+                            // against `barrierAbsorbed`.
+                            const reflectBooked =
+                                reflected - (reflectOutcome.transformedToDot ?? 0);
+                            if (reflectBooked > 1e-9) {
+                                roundPerTargetDamage.set(
+                                    attacker.id,
+                                    (roundPerTargetDamage.get(attacker.id) ?? 0) + reflectBooked
+                                );
+                                // SP-F F1: the reflecting WEARER (victim.id) is the source-attacker
+                                // of this bounce-back hit; `attacker` (the original attacker, now
+                                // the recipient) is the victim key — direction-inverted vs the outer
+                                // names. Must move in LOCKSTEP with the write above: `perTargetDealt`
+                                // is documented as a per-attacker mirror of EVERY
+                                // roundPerTargetDamage increment, and `damageDealt`/`damageTaken`
+                                // reconcile by construction. (A converted bounce is credited to the
+                                // recipient itself — `convertHitToSelfDot` stamps the self-DoT
+                                // `sourceId: victim.id` — so the reflector rightly loses the credit.)
+                                creditDealt(victim.id, attacker.id, reflectBooked);
+                            }
                             // Log-only reflect surface (see the deferReflectLogs doc above
                             // applyVictimDamage). On the deferred (positional) path we BUFFER the
                             // row and flush it after emitDeferredAbilityPerformed creates the
@@ -4899,8 +4924,12 @@ export function runCombat(input: CombatEngineInput): {
             // counter that caused it. try/finally so a throw can't strand the flag.
             const wasDeferring = deferConsequenceLogs;
             deferConsequenceLogs = true;
+            // Annotated (not an inferred `let`): the assignment sits inside the try, so an untyped
+            // declaration would evolve to `any` and stop type-checking the `.transformedToDot` read
+            // below — a silent typo there would restore the double-count.
+            let counterOutcome: VictimDamageOutcome | undefined;
             try {
-                applyVictimDamage(raw, attacker, sink, {
+                counterOutcome = applyVictimDamage(raw, attacker, sink, {
                     killerId: owner.id,
                     byDirectDamage: true,
                     isCounter: true,
@@ -4912,13 +4941,25 @@ export function runCombat(input: CombatEngineInput): {
             } finally {
                 deferConsequenceLogs = wasDeferring;
             }
-            // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect).
-            roundPerTargetDamage.set(
-                attacker.id,
-                (roundPerTargetDamage.get(attacker.id) ?? 0) + raw
-            );
-            // SP-F F1: the counter-OWNER is the source-attacker of this counter hit.
-            creditDealt(owner.id, attacker.id, raw);
+            // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect),
+            // MINUS any portion the attacker's own incoming-block converted into a self-DoT — see
+            // the Reflect site's note for why both display channels must exclude it and why the
+            // subtraction is `emitHit`'s rather than the Protection block's `immediateDamage`.
+            const counterBooked = raw - (counterOutcome?.transformedToDot ?? 0);
+            if (counterBooked > 1e-9) {
+                roundPerTargetDamage.set(
+                    attacker.id,
+                    (roundPerTargetDamage.get(attacker.id) ?? 0) + counterBooked
+                );
+                // SP-F F1: the counter-OWNER is the source-attacker of this counter hit. Moves in
+                // lockstep with the write above (perTargetDealt mirrors every increment).
+                creditDealt(owner.id, attacker.id, counterBooked);
+            }
+            // `dealt` stays the FULL counter, converted or not: it feeds only the log row
+            // (triggers.ts emitReactiveDamageLog) and the reactive dealt-amount slot, and the main
+            // cast path likewise logs its computed `directDamage` when a victim converts the hit
+            // (playerTurn's deferredAbilityPerformed). Suppressing it would erase the counter from
+            // the play-by-play entirely — a conversion emits no event of its own.
             return { dealt: raw, didCrit };
         };
 
@@ -5101,8 +5142,10 @@ export function runCombat(input: CombatEngineInput): {
                 // so a throw can never leave the flag stuck on for later applications.
                 const wasDeferring = deferConsequenceLogs;
                 deferConsequenceLogs = true;
+                // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
+                let procOutcome: VictimDamageOutcome | undefined;
                 try {
-                    applyVictimDamage(raw, victim, sink, {
+                    procOutcome = applyVictimDamage(raw, victim, sink, {
                         killerId: ownerId,
                         byDirectDamage: true,
                         isCounter: true,
@@ -5112,11 +5155,21 @@ export function runCombat(input: CombatEngineInput): {
                 } finally {
                     deferConsequenceLogs = wasDeferring;
                 }
-                roundPerTargetDamage.set(
-                    victim.id,
-                    (roundPerTargetDamage.get(victim.id) ?? 0) + raw
-                );
-                creditDealt(ownerId, victim.id, raw);
+                // Excludes a portion the victim's own incoming-block converted into a self-DoT,
+                // mirroring applyCounterAttack (this site is documented as its exact mirror, so
+                // leaving it out would re-create the double-count for the eight reactive-damage
+                // ships). No fixture reaches this branch — it needs `positionalTeamBattle` plus a
+                // reactive `damage` proc onto a block-holding victim — so it is kept correct by
+                // construction with its sibling rather than pinned.
+                const procBooked = raw - (procOutcome?.transformedToDot ?? 0);
+                if (procBooked > 1e-9) {
+                    roundPerTargetDamage.set(
+                        victim.id,
+                        (roundPerTargetDamage.get(victim.id) ?? 0) + procBooked
+                    );
+                    creditDealt(ownerId, victim.id, procBooked);
+                }
+                // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
                 return { dealt: raw, didCrit };
             }
             // DPS / healing mode (byte-identical): credit-only.
