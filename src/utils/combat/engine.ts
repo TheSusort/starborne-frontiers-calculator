@@ -4960,9 +4960,12 @@ export function runCombat(input: CombatEngineInput): {
             const wasDeferring = deferConsequenceLogs;
             deferConsequenceLogs = true;
             // Annotated (not an inferred `let`): the assignment sits inside the try, so an untyped
-            // declaration would evolve to `any` and stop type-checking the `.transformedToDot` read
-            // below — a silent typo there would restore the double-count.
-            let counterOutcome: VictimDamageOutcome | undefined;
+            // declaration would evolve to `any` and stop type-checking the `.incomingBooked` read
+            // below — a silent typo there would book `raw` and restore the double-count.
+            // `AppliedVictimDamage` rather than `VictimDamageOutcome` so `incomingBooked` is
+            // non-optional: the `?? 0` below then covers only the (unreachable) case of the throw
+            // that skips the assignment, not a silently absent field.
+            let counterOutcome: AppliedVictimDamage | undefined;
             try {
                 counterOutcome = applyVictimDamage(raw, attacker, sink, {
                     killerId: owner.id,
@@ -5178,7 +5181,7 @@ export function runCombat(input: CombatEngineInput): {
                 const wasDeferring = deferConsequenceLogs;
                 deferConsequenceLogs = true;
                 // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
-                let procOutcome: VictimDamageOutcome | undefined;
+                let procOutcome: AppliedVictimDamage | undefined;
                 try {
                     procOutcome = applyVictimDamage(raw, victim, sink, {
                         killerId: ownerId,
