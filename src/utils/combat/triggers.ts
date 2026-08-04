@@ -1323,6 +1323,10 @@ export interface IntentExecContext {
      *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
      *  keeping all existing drain gating byte-identical. */
     selfHpPctFor?: (ownerId: string) => number;
+    /** Quixilver R2: owner's shield pool is at or above max HP. Optional — absent (every test
+     *  fixture, DPS mode) → buildDrainContext leaves selfShieldFull false, so a drain gate on
+     *  this subject is simply not met. Byte-identical for every ability that omits the subject. */
+    selfShieldFullFor?: (ownerId: string) => boolean;
     /** Whether `ownerId` has the lowest Speed among the player team (ties → all qualify),
      *  feeding the `lowest-speed-ally` gate at drain time. Computed once by the engine (Speed
      *  is static turn-order in this sim). Absent → buildDrainContext defaults the gate to true
@@ -1572,6 +1576,9 @@ export function buildActorConditionContext(
         /** Owner has the lowest Speed among its player team. Default true (lone-actor /
          *  DPS assumption). Populated by buildDrainContext (Phase 4c PR 6). */
         isLowestSpeedAlly?: boolean;
+        /** Quixilver R2: owner's shield pool is at or above max HP. Default false (DPS mode /
+         *  no shield). Populated by buildDrainContext from the engine's selfShieldFullFor delegate. */
+        selfShieldFull?: boolean;
         /** Owner was hit by a direct attack this round. Default false. Populated by
          *  buildDrainContext (D-PR8). */
         wasHitThisRound?: boolean;
@@ -1629,6 +1636,7 @@ export function buildActorConditionContext(
         enemyBuffNames: shared.enemyBuffNames,
         selfDebuffNames: shared.selfDebuffNames,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
+        selfShieldFull: shared.selfShieldFull,
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,
@@ -1684,6 +1692,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // Phase 4c PR 6: live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
         // paths keep the lone-actor assumption and stay byte-identical.
         isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true,
+        selfShieldFull: ctx.selfShieldFullFor?.(ownerId) ?? false,
         // D-PR8: live not-hit-this-round gate (Alacrity). Default false → DPS / no-delegate
         // paths read "not hit" ⇒ met and stay byte-identical.
         wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false,

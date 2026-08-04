@@ -2352,6 +2352,15 @@ export function runCombat(input: CombatEngineInput): {
         enemyAttackerActorIds.filter((id) => allActorsById.get(id)?.destroyedRound === undefined);
     const isActorAlive = (actorId: string): boolean =>
         allActorsById.get(actorId)?.destroyedRound === undefined;
+    // Quixilver R2: shield pool at or above max HP. Reads `allActorsById` (both sides) and the
+    // shared max-HP lookup, so it is team-symmetric by construction. Guards maxHp > 0 so a
+    // fixture actor with no HP stat cannot report a "full" shield of zero.
+    const isSelfShieldFull = (actorId: string): boolean => {
+        const a = allActorsById.get(actorId);
+        if (a === undefined) return false;
+        const maxHp = recipientMaxHp(actorId);
+        return maxHp > 0 && a.shieldPool >= maxHp;
+    };
     const playerEnemyBuffNames = (): string[] =>
         selfBuffNamesForOwners(statusEngine, livingEnemyAttackerIds());
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
@@ -6682,6 +6691,7 @@ export function runCombat(input: CombatEngineInput): {
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
                         enemyAttackerIds: enemyAttackerActorIds,
                         isActorAlive,
+                        selfShieldFullFor: isSelfShieldFull,
                         // SP-F F4: name map for the live `ally-on-team` roster check. Empty in DPS
                         // (no ship names supplied) → buildDrainContext leaves allyTeamNames
                         // undefined → assume-met fallback (byte-identical).

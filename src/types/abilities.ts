@@ -374,6 +374,12 @@ export type ConditionSubject =
     // Live-derived (ConditionContext.selfShielded); defaults false (no shield / DPS mode).
     // Dormant until sub-project H grants shields in the sim. Used by the Arcane Siege implant.
     | 'self-shield'
+    // Binary gate: the condition owner's shield pool is at or above its max HP (a FULL
+    // shield), not merely non-zero. Strictly narrower than `self-shield` above — keep both;
+    // Quixilver's R2 passive ("if it has shield equal to 100% of its max HP") is the only
+    // consumer. Live-derived (ConditionContext.selfShieldFull); defaults false (DPS mode has
+    // no shield pool), so every ability that does not name this subject is unaffected.
+    | 'self-shield-full'
     // Binary gate: the condition owner received ZERO direct hits this round (a "hit" =
     // a direct attack that landed damage on shield or HP; DoT ticks and fully-Barrier-blocked
     // attacks do not count). Live-derived (ConditionContext.wasHitThisRound); defaults false

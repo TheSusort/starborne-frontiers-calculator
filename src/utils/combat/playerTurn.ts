@@ -1456,6 +1456,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // land regardless of the caster's real shieldPool, which is just as wrong as the
         // original unconditional-inflict bug this task fixes.
         selfShielded: actor.shieldPool > 0,
+        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
@@ -1799,6 +1800,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
+        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
         turnsTaken: actor.turnsTaken,
         // Sub-project I, PR I5: only the modifier ctx needs this — it feeds
         // modifierAbilities/modifierTotalsFromAbilities (Selenite's count-scaling passive).
@@ -2050,6 +2052,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // suppressed regardless of the caster's real shieldPool (control-applied never fires,
         // the combat log's kind:'control' Disable entry never appears — even with a shield).
         selfShielded: actor.shieldPool > 0,
+        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
