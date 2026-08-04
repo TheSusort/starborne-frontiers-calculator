@@ -111,6 +111,7 @@ import {
     consumeHitMitigation,
     holdsHitMitigation,
 } from './hitMitigation';
+import { holdsShieldConverter, consumeShieldConverter } from './shieldConverter';
 import { holdsRoguesLiberty } from './rogueLiberty';
 import { holdsToxicOverflow } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
@@ -1442,6 +1443,13 @@ interface ActorIntake {
     incoming: number;
     shieldAbsorbed: number;
     barrierAbsorbed: number;
+    /** Direct-hit damage nullified by `Shield Converter` and turned into Shield. Netted against
+     *  `.incoming` for display the same way `barrierAbsorbed` is: the hit still ARRIVED (so the
+     *  attacker keeps its damage-dealt credit and the #293 identity holds), but its effect was
+     *  converted rather than applied. Records the FULL nullified amount even when the resulting
+     *  shield gain was clamped at max HP — this figure explains the missing HP damage, not the
+     *  shield delta. */
+    convertedToShield: number;
 }
 
 export interface HealingRoundEngine {
@@ -1487,6 +1495,8 @@ interface DamageAccountingSink {
     addShieldAbsorbed: (amount: number, victimId: string) => void;
     /** today: intakeFor(victimId).barrierAbsorbed += amount */
     addBarrierAbsorbed: (amount: number, victimId: string) => void;
+    /** today: intakeFor(victimId).convertedToShield += amount */
+    addConvertedToShield: (amount: number, victimId: string) => void;
 }
 /**
  * Replaces a direct hit the victim just took with a generic self-DoT spread over `rounds` rounds,
@@ -3709,7 +3719,12 @@ export function runCombat(input: CombatEngineInput): {
         const intakeFor = (id: string): ActorIntake => {
             let entry = perActorIncoming.get(id);
             if (!entry) {
-                entry = { incoming: 0, shieldAbsorbed: 0, barrierAbsorbed: 0 };
+                entry = {
+                    incoming: 0,
+                    shieldAbsorbed: 0,
+                    barrierAbsorbed: 0,
+                    convertedToShield: 0,
+                };
                 perActorIncoming.set(id, entry);
             }
             return entry;
@@ -4222,6 +4237,34 @@ export function runCombat(input: CombatEngineInput): {
                 );
                 damage = 0;
                 consumeHitMitigation(statusEngine, victim.id);
+            } else if (
+                cause?.byDirectDamage === true &&
+                (cause.bombPortion ?? 0) === 0 &&
+                !carriesBarrier &&
+                damage > 0 &&
+                transformedToDot === 0 &&
+                holdsShieldConverter(statusEngine, victim.id)
+            ) {
+                // `Shield Converter` — nullify this direct hit and turn it into Shield.
+                //
+                // Chained as `else if` onto the Hit Mitigation step above, which is what makes the
+                // ordering rule true: ONE HIT SPENDS EXACTLY ONE BLOCK. A victim holding both keeps
+                // this one armed for the next hit. The guard is otherwise IDENTICAL to that step's,
+                // deliberately - same definition of a direct hit (`byDirectDamage && bombPortion
+                // === 0`), same Barrier exclusion, same already-transformed exclusion.
+                //
+                // ACCOUNTING: `.incoming` is NOT reversed. Hit Mitigation reverses via
+                // addIncoming(-damage) only because its damage is DEFERRED and re-books on each DoT
+                // tick; a converted hit re-books nowhere, so reversing here would erase the
+                // attacker's damage-dealt credit for a hit that genuinely landed. This follows
+                // Barrier instead (#293: "Barrier changes the EFFECT, not the accounting"), which
+                // keeps the #293 identity holding by construction.
+                const nullified = damage;
+                const shieldCap = recipientMaxHp(victim.id);
+                victim.shieldPool = Math.min(victim.shieldPool + nullified, shieldCap);
+                sink.addConvertedToShield(nullified, victim.id);
+                damage = 0;
+                consumeShieldConverter(statusEngine, victim.id);
             }
             // The post-block, non-transformed instant portion of this hit — captured HERE, right
             // after the transform step resolves (transform zeroes `damage` on a match) and BEFORE
@@ -4816,6 +4859,9 @@ export function runCombat(input: CombatEngineInput): {
             },
             addBarrierAbsorbed: (amount, victimId) => {
                 intakeFor(victimId).barrierAbsorbed += amount;
+            },
+            addConvertedToShield: (amount, victimId) => {
+                intakeFor(victimId).convertedToShield += amount;
             },
         };
         // H1 T4: the effective shield penetration % of an attacker, resolved from its static
@@ -9110,15 +9156,26 @@ export function runCombat(input: CombatEngineInput): {
             ...(() => {
                 const out: Record<
                     string,
-                    { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }
+                    {
+                        incoming: number;
+                        shieldAbsorbed: number;
+                        barrierAbsorbed: number;
+                        convertedToShield: number;
+                    }
                 > = {};
                 for (const [id, v] of perActorIncoming) {
-                    if (v.incoming === 0 && v.shieldAbsorbed === 0 && v.barrierAbsorbed === 0)
+                    if (
+                        v.incoming === 0 &&
+                        v.shieldAbsorbed === 0 &&
+                        v.barrierAbsorbed === 0 &&
+                        v.convertedToShield === 0
+                    )
                         continue;
                     out[id] = {
                         incoming: v.incoming,
                         shieldAbsorbed: v.shieldAbsorbed,
                         barrierAbsorbed: v.barrierAbsorbed,
+                        convertedToShield: v.convertedToShield,
                     };
                 }
                 return Object.keys(out).length > 0 ? { perActorIncoming: out } : {};
