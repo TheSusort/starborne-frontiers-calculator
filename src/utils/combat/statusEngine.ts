@@ -1,7 +1,6 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
 import { Condition, SkillSlot } from '../../types/abilities';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
-import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
 import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
@@ -827,7 +826,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const appliedEnemy: string[] = [];
         for (const buff of sets.timedEnemy) {
             if (buff.skillSource !== slot) continue;
-            const isPersistent = PERSISTENT_STACKING_BUFFS.has(buff.buffName);
+            // Union helper (not the raw PERSISTENT_STACKING_BUFFS set) so this gate can never
+            // disagree with `upsertBuff`'s own routing just below, which already calls
+            // `isPersistentByName`. Strictly wider than the set alone — inert for today's two
+            // one-shot names (both are self-granted buffs and can never reach this enemy-debuff
+            // path) — but keeps this site aligned with upsertBuff for any future enemy-side
+            // one-shot.
+            const isPersistent = isPersistentByName(buff.buffName);
             // Persistent statuses ignore skillDuration; non-persistent timed entries require a
             // numeric duration to upsert a finite window.
             if (!isPersistent && typeof buff.skillDuration !== 'number') continue;

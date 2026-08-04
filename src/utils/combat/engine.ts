@@ -4226,7 +4226,7 @@ export function runCombat(input: CombatEngineInput): {
             // earliest point in the funnel where it is needed.
             const maxHp = recipientMaxHp(victim.id);
             // Set only when the Shield Converter branch below actually fires — the PRE-deposit
-            // pool, so the returned `shieldBefore` (shieldWasHit detection at :6402-6405/:8586-8589) reflects
+            // pool, so the returned `shieldBefore` (shieldWasHit detection at :6406-6411/:8592-8597) reflects
             // the state this hit FOUND, not what its own nullify-and-deposit just grew (IMPORTANT 1
             // of the Shield Converter review). `undefined` for every other hit, meaning "no override
             // — use the real `shieldBefore` captured below".
@@ -4898,7 +4898,7 @@ export function runCombat(input: CombatEngineInput): {
                 // IMPORTANT 1 (Shield Converter review): report the PRE-deposit pool for a
                 // converted hit, not the post-deposit `shieldBefore` captured above (which, for
                 // this one hit, already includes the deposit) — otherwise shieldWasHit detection
-                // at :6402-6405/:8586-8589 reads a nullify-and-grow as "the shield absorbed part of this hit".
+                // at :6406-6411/:8592-8597 reads a nullify-and-grow as "the shield absorbed part of this hit".
                 shieldBefore: shieldPoolBeforeConversion ?? shieldBefore,
                 hpDamage,
                 barriered: false,

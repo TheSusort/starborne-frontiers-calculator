@@ -1045,6 +1045,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     }
     advanceChargeCadence(actor, hasChargedSkill, bus, r);
 
+    // `Charged Overdrive II` — one-shot +20 points of Defense Penetration on the next CHARGED
+    // activation. Read and consumed HERE, immediately after `action` is decided and before this
+    // turn's own slot-matched ability statuses are applied to the status store below (the
+    // timedSelfBySlot loop, ~:1719, which includes an `all-allies` self-grant reaching this same
+    // actor). Reading any later would let a self-granting charged cast consume the copy it just
+    // granted itself, boosting the very cast that grants it — the game text ("the next Charged
+    // Skill activation") requires the grant to only ever affect a LATER cast. An ally's grant is
+    // unaffected by this ordering: it landed during the ally's own earlier turn, so it is already
+    // in the store before this actor's turn begins either way.
+    //
+    // Consumed UNCONDITIONALLY on a charged activation - the game text has no damage qualifier, so
+    // a pure-buff charged skill (Sentinel's own) still spends it.
+    const chargedOverdrivePen =
+        action === 'charged' && holdsChargedOverdriveII(statusEngine, actor.id)
+            ? CHARGED_OVERDRIVE_II_PEN
+            : 0;
+    if (chargedOverdrivePen > 0) consumeChargedOverdriveII(statusEngine, actor.id);
+
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
     const firingPattern = action === 'charged' ? (chargedPattern ?? activePattern) : activePattern;
@@ -1849,22 +1867,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
     // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
     // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
-    // `Charged Overdrive II` — one-shot +20 points of Defense Penetration on the next CHARGED
-    // activation. Read and consumed here, at the single per-turn point where `action` is known and
-    // `dmgStats` has not yet been built.
-    //
-    // Folded into base.defensePenetrationBuff rather than into effectiveStats.ts: `dmgStats` is a
-    // turn-local rebuilt every turn, so the bonus cannot outlive this cast. Pushing it into the
-    // standing stat instead would leak +20% pen into every later hit AND into the DPS-mode
-    // aggregate scalars and the buff-display UI, which is exactly what name-keying exists to avoid.
-    //
-    // Consumed UNCONDITIONALLY on a charged activation - the game text has no damage qualifier, so
-    // a pure-buff charged skill (Sentinel's own) still spends it.
-    const chargedOverdrivePen =
-        action === 'charged' && holdsChargedOverdriveII(statusEngine, actor.id)
-            ? CHARGED_OVERDRIVE_II_PEN
-            : 0;
-    if (chargedOverdrivePen > 0) consumeChargedOverdriveII(statusEngine, actor.id);
+    // `Charged Overdrive II`'s `chargedOverdrivePen` was read/consumed above (~:1046), before the
+    // self-status-apply loop; folded here into base.defensePenetrationBuff rather than into
+    // effectiveStats.ts: `dmgStats` is turn-local, rebuilt every turn, so the bonus cannot outlive
+    // this cast. Pushing it into the standing stat instead would leak +20% pen into every later hit
+    // AND into the DPS-mode aggregate scalars and the buff-display UI, which is exactly what
+    // name-keying exists to avoid.
     const dmgStats = effectiveDamageStatsOf({
         base: {
             attack,

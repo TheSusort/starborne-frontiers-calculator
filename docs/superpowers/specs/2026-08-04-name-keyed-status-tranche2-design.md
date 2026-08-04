@@ -132,7 +132,7 @@ untouched. The parser bug is logged in §7.
 A new `else if` branch immediately after the Hit Mitigation block at `engine.ts:4207`, under the
 **identical** guard:
 
-```
+```text
 cause?.byDirectDamage === true && (cause.bombPortion ?? 0) === 0
   && !carriesBarrier && damage > 0 && transformedToDot === 0
 ```
@@ -141,7 +141,7 @@ cause?.byDirectDamage === true && (cause.bombPortion ?? 0) === 0
 both keeps Shield Converter for the next hit. This preserves the existing step byte-for-byte and
 makes the new one a pure fallback.
 
-```
+```text
 nullified = damage
 granted   = min(shieldPool + nullified, maxHp) - shieldPool
 sink.addConvertedToShield(nullified, victim.id)
@@ -165,7 +165,7 @@ equivalent question for Barrier: *"Barrier now changes the EFFECT, not the accou
 
 So `incomingBooked` stays at the full amount and the invariant holds by construction:
 
-```
+```text
 Σ perTargetDealt == Σ perTargetDamage == Σ perActorIncoming[].incoming
 ```
 

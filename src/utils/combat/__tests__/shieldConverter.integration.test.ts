@@ -216,8 +216,9 @@ function shieldWasHitInRound(
 }
 
 /** Net HP lost by `targetId` in one round, derived from the ground-truth `hp-changed` events
- *  (not the display-formula derivation `battleSimulator` uses, which does not yet know about
- *  `convertedToShield` and would misreport a converted hit). Zero-delta crossings (the funnel
+ *  (not the display-formula derivation `battleSimulator` uses — it also subtracts
+ *  `convertedToShield` as of f7cc926b, but this helper stays on the ground-truth events rather
+ *  than re-deriving from the display formula). Zero-delta crossings (the funnel
  *  emits one even for a fully-nullified hit) contribute 0, so summing is safe.
  *
  *  `maxHp` is a REQUIRED param, not the module-level `HP` constant baked in — the `oldPct`/

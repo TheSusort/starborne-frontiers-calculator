@@ -241,4 +241,36 @@ describe('Charged Overdrive II adds Defense Penetration to the next charged cast
         // The direct proof: gone after the no-damage charged cast consumed it.
         expect(holdsChargedOverdriveII(engine!, 'attacker')).toBe(false);
     });
+
+    it('does not boost the cast that grants it; boosts the next charged cast instead', () => {
+        // The focus is its OWN granter this time — its charged skill BOTH grants CO2 to
+        // all-allies (which includes itself; there is no other player actor) AND deals damage.
+        // Sentinel's real kit doesn't have this shape (her charged skill deals no damage), but
+        // proving the self-grant-this-turn bug requires a granting cast that also damages, so
+        // the wiring's timing is observable via directDamage. chargeCount 1 + startCharged
+        // false gives the active/charged/active/charged ladder (see the "does not persist"
+        // test above): round 2 is the first (granting) charged cast, round 4 is the next one.
+        const result = runCombat(
+            BASE({
+                numRounds: 4,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [dmg(100)] },
+                        { slot: 'charged', abilities: [grantCO2ToAllAllies(), dmg(100)] },
+                    ],
+                },
+            })
+        );
+
+        expect(result.rounds.map((r) => r.action)).toEqual([
+            'active',
+            'charged',
+            'active',
+            'charged',
+        ]);
+        // The GRANTING cast must NOT be boosted by the grant it itself just issued.
+        expect(result.rounds[1].directDamage).toBe(expectedDirectDamage(0));
+        // The actor's NEXT charged cast must read/consume the round-2 grant and be boosted.
+        expect(result.rounds[3].directDamage).toBe(expectedDirectDamage(20));
+    });
 });
