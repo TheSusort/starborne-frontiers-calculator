@@ -2536,8 +2536,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Task 5: consume the once-per-attack slot now that the self-buff WILL apply.
         if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
-        // duration decides; a duration-less buff defaults to a 1-turn window.
-        const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;
+        // duration decides; a duration-less buff defaults to a 1-turn window. A HIT-COUNTED
+        // duration-less buff instead takes Infinity: its hit count, not a turn window, is what
+        // expires it (a 1-turn default would silently cap a multi-hit Barrier at one turn).
+        const duration =
+            typeof cfg.duration === 'number' ? cfg.duration : cfg.hits !== undefined ? Infinity : 1;
         // Recipients: an ally-damage reaction grant ('ally' target + eventCtx naming the
         // damaged ally — Graphite's "grants the ally Repair Over Time III") lands on EXACTLY
         // that ally; granting all playerIds would put the HoT on the whole team and inflate
@@ -2601,6 +2604,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             recipients,
             kind: 'timed',
             duration,
+            ...(cfg.hits !== undefined ? { hits: cfg.hits } : {}),
         };
         for (const rid of recipients) {
             if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip

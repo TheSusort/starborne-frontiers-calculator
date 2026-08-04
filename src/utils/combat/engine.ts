@@ -265,9 +265,14 @@ function registerActorAbilityStatuses(
                       : ability.target === 'ally' || ability.target === 'all-allies'
                         ? playerIds
                         : [ownerId];
+            // A hit-counted grant is never an aura: an aura is re-evaluated per round against
+            // its gate and has no consumable charge, so a durationless "Barrier for 1 hit" would
+            // otherwise be permanent for as long as its gate held.
+            const hitCounted = cfg.type === 'buff' && cfg.hits !== undefined;
             const isAura =
                 !accumulating &&
                 !castPathCheatDeath &&
+                !hitCounted &&
                 (cfg.duration === 'recurring' || cfg.duration === undefined);
             const payload: AbilityStatusPayload = {
                 buffName: cfg.buffName,
@@ -319,7 +324,17 @@ function registerActorAbilityStatuses(
                 status = {
                     ...base,
                     kind: 'timed',
-                    duration: castPathCheatDeath ? Infinity : (cfg.duration as number),
+                    duration: castPathCheatDeath
+                        ? Infinity
+                        : hitCounted && typeof cfg.duration !== 'number'
+                          ? // Hit-counted with no stated turn window: never tick out, expire on
+                            // the hit count alone. Same non-expiring-but-removable shape as
+                            // TOXIC_OVERFLOW_DURATION.
+                            Infinity
+                          : (cfg.duration as number),
+                    ...(hitCounted && cfg.type === 'buff' && cfg.hits !== undefined
+                        ? { hits: cfg.hits }
+                        : {}),
                     // Clause-order stamp (enemy side only — a self-buff never modifies the
                     // victim's incoming damage, so deferring one would change nothing but its
                     // event order). Consumed by playerTurn's timed-enemy application loop.
@@ -4352,6 +4367,15 @@ export function runCombat(input: CombatEngineInput): {
             // .shieldAbsorbed — Barrier never touches the shield).
             if (carriesBarrier) {
                 sink.addBarrierAbsorbed(damage, victim.id);
+                // Hit-counted Barrier: this absorb spends one charge. Gated on byDirectDamage —
+                // "for 1 hit" means an attack, the same definition of a hit Hit Mitigation and
+                // Shield Converter use. DoT ticks and bomb detonations are still fully blocked,
+                // they just do not consume the charge. No-op (returns false) for a turn-duration
+                // Barrier, so every existing fixture is byte-identical.
+                if (cause?.byDirectDamage === true) {
+                    for (const name of BARRIER_BUFFS)
+                        statusEngine.consumeStatusHit(victim.id, name);
+                }
                 if (victim.currentHp > 0 && maxHp > 0) {
                     bus.emit({
                         type: 'hp-changed',

@@ -705,6 +705,11 @@ export type AbilityConfig =
            *  per-hit consume). Absent → no clear-on-redirect behavior. */
           clearAllOnRedirect?: boolean;
           duration?: number | 'recurring';
+          /** "for N hit(s)" (Malvex / Panon / Quixilver / Sansi Barrier). Threaded onto the
+           *  registered timed status as `hits`; a config carrying it is never classified as an
+           *  aura, and with no turn duration it is applied with duration Infinity so only the
+           *  hit count expires it. Absent → unchanged. */
+          hits?: number;
           /** "Once per battle" reactive buff grant (Tycho/Shelter/Los on-hp-threshold-crossed
            *  crossing grants): the executor fires AT MOST ONCE per combat, tracked by a
            *  combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
