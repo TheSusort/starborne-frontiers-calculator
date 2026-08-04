@@ -1147,6 +1147,16 @@ export function detectGrantConditions(
         return [{ subject: 'target-repaired-this-round', derivable: true }];
     }
 
+    // Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full. Requires
+    // the explicit 100%-of-max-HP wording — a bare "When Shielded" (Malvex) is the narrower
+    // existing `self-shielded` INCOMING-hit condition (evaluateConditions.ts's victim-side
+    // shieldPool > 0 check, a different mechanism entirely) and must not match here.
+    // derivable:true — a derivable:false condition is treated as always met
+    // (evaluateConditions.ts:30), which would defeat the gate entirely.
+    if (SHIELD_FULL_RE.test(low)) {
+        return [{ subject: 'self-shield-full', derivable: true }];
+    }
+
     // 0. Recurring grant: "gains X each/every turn|round" stacks unconditionally — a one-time gate
     // in the same sentence (e.g. Shashou's "Stealth after damaging a Debuffer … and gains Blast
     // each turn") applies to the other buff, not this one. Scope to this buff's own segment.
@@ -1394,6 +1404,12 @@ const KILL_TRIGGER_RE =
 // other kill clause shares. Verified corpus-unique to Meiying (docs/ship-skills.csv, grep "with a
 // Debuff").
 const KILL_WITH_DEBUFF_RE = /\bkilling\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
+// Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full (the caster's
+// OWN shield pool, cast-time). Requires the explicit 100%-of-max-HP wording so a bare "When
+// Shielded" (Malvex's reactive `self-shielded` INCOMING-hit condition — shieldPool > 0, a
+// different mechanism) cannot co-match. Corpus-verified (docs/ship-skills.csv, grep "equal to
+// 100%.*max"): Quixilver's third-passive Barrier grant is the only row with this phrasing.
+const SHIELD_FULL_RE = /\bshield\s+equal\s+to\s+100%\s+of\s+(?:its|their)\s+max(?:imum)?\s*hp\b/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 // Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted
