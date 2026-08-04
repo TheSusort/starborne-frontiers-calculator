@@ -4219,6 +4219,18 @@ export function runCombat(input: CombatEngineInput): {
             // three folds the per-victim INCOMING-AMPLIFICATION channel Exposed rides, so spending
             // Exposed on one would charge for an amplification it never received. The difference
             // between the two guards is therefore intentional, not an omission.
+            //
+            // Hoisted here (single call, shared with the Barrier/Lifeline code below — MINOR 3 of
+            // the Shield Converter review): both the Shield Converter branch's cap and the
+            // post-transform `maxHp` used further down need the SAME value, and this is the
+            // earliest point in the funnel where it is needed.
+            const maxHp = recipientMaxHp(victim.id);
+            // Set only when the Shield Converter branch below actually fires — the PRE-deposit
+            // pool, so the returned `shieldBefore` (shieldWasHit detection at :6402-6405/:8586-8589) reflects
+            // the state this hit FOUND, not what its own nullify-and-deposit just grew (IMPORTANT 1
+            // of the Shield Converter review). `undefined` for every other hit, meaning "no override
+            // — use the real `shieldBefore` captured below".
+            let shieldPoolBeforeConversion: number | undefined;
             if (
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&
@@ -4260,11 +4272,53 @@ export function runCombat(input: CombatEngineInput): {
                 // Barrier instead (#293: "Barrier changes the EFFECT, not the accounting"), which
                 // keeps the #293 identity holding by construction.
                 const nullified = damage;
-                const shieldCap = recipientMaxHp(victim.id);
-                victim.shieldPool = Math.min(victim.shieldPool + nullified, shieldCap);
+                const poolBeforeConversion = victim.shieldPool;
+                shieldPoolBeforeConversion = poolBeforeConversion;
+                // Never SHRINK the pool (MINOR 4 of the review): if a max-HP buff lapsed after an
+                // earlier grant, `victim.shieldPool` can already sit above `maxHp` — the same
+                // reachable state `grantShieldToTarget` (:2918-2921) documents. `Math.min(pool +
+                // nullified, cap)` alone would clamp DOWN to `cap` in that state, destroying shield
+                // the victim already held while still crediting the attacker in full via
+                // `addConvertedToShield` below. `Math.max(before, …)` floors the result at the
+                // pre-deposit pool so a converted hit can only grow the pool, matching Lifeline's
+                // own guard at :4346-4348.
+                victim.shieldPool = Math.max(
+                    poolBeforeConversion,
+                    Math.min(poolBeforeConversion + nullified, maxHp)
+                );
+                // Book the FULL nullified amount regardless of clamping — this channel explains the
+                // missing HP damage, not the shield delta (constraint carried over from #293).
                 sink.addConvertedToShield(nullified, victim.id);
                 damage = 0;
                 consumeShieldConverter(statusEngine, victim.id);
+                // Third shield source (IMPORTANT 2 of the review, a recurrence of the #277 defect
+                // class): credit the REAL post-cap pool growth to the granted accumulator and emit
+                // the LOG-ONLY twin, exactly like Lifeline's mid-hit grant below — otherwise
+                // `RoundData.perActorShield[id].granted` under-reports, the log shows an unexplained
+                // pool jump, and a later hit draining this pool fires `shield-destroyed`/
+                // `shield-destroyed-log` reading as "a shield was destroyed that was never granted".
+                // Attributed to the VICTIM ITSELF: the attacker did not grant this shield, the
+                // victim's own status did — the same self-attribution `convertHitToSelfDot` uses for
+                // its converted DoT (`sourceId: victim.id`).
+                const grantedFromConversion = victim.shieldPool - poolBeforeConversion;
+                if (grantedFromConversion > 0) {
+                    perActorShieldGranted.set(
+                        victim.id,
+                        (perActorShieldGranted.get(victim.id) ?? 0) + grantedFromConversion
+                    );
+                    const shieldConverterGrantLogEv: CombatEvent = {
+                        type: 'shield-applied-log',
+                        victimId: victim.id,
+                        amount: grantedFromConversion,
+                        round: r,
+                        reactive: true,
+                        duringTurnOf: actingActorId,
+                        triggerActorId: actingActorId,
+                    };
+                    if (deferReflectLogs || deferConsequenceLogs)
+                        pendingConsequenceLogs.push(shieldConverterGrantLogEv);
+                    else bus.emit(shieldConverterGrantLogEv);
+                }
             }
             // The post-block, non-transformed instant portion of this hit — captured HERE, right
             // after the transform step resolves (transform zeroes `damage` on a match) and BEFORE
@@ -4280,7 +4334,8 @@ export function runCombat(input: CombatEngineInput): {
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
             // the pre-hit value (not 1).
             const hpBefore = victim.currentHp;
-            const maxHp = recipientMaxHp(victim.id);
+            // `maxHp` is hoisted above the Hit Mitigation / Shield Converter chain (MINOR 3 of the
+            // Shield Converter review) — no re-fetch needed here.
             // Barrier branch (carriesBarrier computed above the block step). HP does not move → the
             // emit below is a no-op crossing (oldPct === newPct), still fired once for emission
             // consistency. The damage still "arrives" (the victim's .incoming already incremented)
@@ -4354,13 +4409,15 @@ export function runCombat(input: CombatEngineInput): {
                         victim.id,
                         (perActorShieldGranted.get(victim.id) ?? 0) + granted
                     );
-                    // LOG-ONLY twin (see the event's doc): this is the only shield source that
-                    // lands here rather than in a cast / the reactive executor, so without it the
-                    // pool grew with NO log line — while the `shield-destroyed` emit just below
-                    // still fired for it, reading as "a shield was destroyed that was never
-                    // granted". NOT the real `shield-applied` (that would fire on-shield-applied
-                    // listeners from a mid-hit grant). Buffered/inline on exactly the same
-                    // condition as `shield-destroyed-log` so it nests under the triggering attack.
+                    // LOG-ONLY twin (see the event's doc): this used to be the only shield source
+                    // that lands here rather than in a cast / the reactive executor — Shield
+                    // Converter above is the second, self-granting the same way for the same
+                    // reason — so without it the pool grew with NO log line — while the
+                    // `shield-destroyed` emit just below still fired for it, reading as "a shield
+                    // was destroyed that was never granted". NOT the real `shield-applied` (that
+                    // would fire on-shield-applied listeners from a mid-hit grant).
+                    // Buffered/inline on exactly the same condition as `shield-destroyed-log` so it
+                    // nests under the triggering attack.
                     if (granted > 0) {
                         const grantLogEv: CombatEvent = {
                             type: 'shield-applied-log',
@@ -4797,12 +4854,19 @@ export function runCombat(input: CombatEngineInput): {
             //  - the Barrier branch already returned without reaching here.
             //
             // NOTHING LANDED AT THAT INSTANT is the single premise the final term encodes, and it
-            // covers both ways this funnel can cancel a hit (owner ruling, 2026-08-03):
+            // covers all three ways this funnel can cancel a hit (owner ruling, 2026-08-03; extended
+            // to a third path in the Shield Converter review):
             //  - Barrier ANNIHILATES the hit — nothing lands, ever, so the amplification was never
             //    cashed (that path returns above and never reaches this guard);
             //  - a TRANSFORM (Voron/Orel's `transform-incoming-to-dot`, or the `Hit Mitigation`
             //    one-shot) replaces the hit with a DoT, so nothing lands at THIS instant either.
             //    `immediateDamage - transformedToDot` is therefore <= 0 and Exposed stays ARMED.
+            //  - `Shield Converter` NULLIFIES the hit into a shield deposit — no DoT, no HP/shield
+            //    drain, `damage` is zeroed before `immediateDamage` is captured, so
+            //    `immediateDamage - transformedToDot` is 0 here too (`transformedToDot` itself stays
+            //    0 — this path doesn't touch it). It follows the BARRIER reading, not the transform
+            //    one: like Barrier, the amount never re-books anywhere later (no deferred DoT tick),
+            //    so Exposed staying armed costs nothing and matches Barrier's "nothing lands, ever".
             // That is deliberately the SAME reading of `transformedToDot` as the `attacked`
             // suppression in the per-victim `onVictimResolved` hook (`fullyTransformedToDot`): a
             // fully converted hit is not a direct hit, so it neither signals "directly damaged" to
@@ -4830,7 +4894,11 @@ export function runCombat(input: CombatEngineInput): {
                 consumeExposed(statusEngine, victim.id);
             }
             return {
-                shieldBefore,
+                // IMPORTANT 1 (Shield Converter review): report the PRE-deposit pool for a
+                // converted hit, not the post-deposit `shieldBefore` captured above (which, for
+                // this one hit, already includes the deposit) — otherwise shieldWasHit detection
+                // at :6402-6405/:8586-8589 reads a nullify-and-grow as "the shield absorbed part of this hit".
+                shieldBefore: shieldPoolBeforeConversion ?? shieldBefore,
                 hpDamage,
                 barriered: false,
                 transformedToDot,

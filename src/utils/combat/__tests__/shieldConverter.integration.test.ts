@@ -177,11 +177,16 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     ...overrides,
 });
 
-/** Collects hp-changed and generic dot-ticked events for one target, plus the raw result. */
+/** Collects hp-changed, generic dot-ticked, `attacked`, and `shield-applied-log` events for one
+ *  target, plus the raw result. The last two back the IMPORTANT 1 / IMPORTANT 2 regression checks
+ *  below: `attacked.shieldWasHit` for the shieldBefore-pollution bug, `shield-applied-log` for the
+ *  silent-grant bug (Shield Converter's third-shield-source recurrence of the #277 defect class). */
 function collectFor(input: CombatEngineInput, targetId: string) {
     const bus = createEventBus();
     const hpChanges: { round: number; oldPct: number; newPct: number }[] = [];
     const genericTicks: { round: number; damage: number }[] = [];
+    const attackedEvents: { round: number; shieldWasHit: boolean }[] = [];
+    const shieldAppliedLogs: { round: number; victimId: string; amount: number }[] = [];
     bus.on('hp-changed', (e: Extract<CombatEvent, { type: 'hp-changed' }>) => {
         if (e.targetId === targetId)
             hpChanges.push({ round: e.round, oldPct: e.oldPct, newPct: e.newPct });
@@ -190,21 +195,44 @@ function collectFor(input: CombatEngineInput, targetId: string) {
         if (e.targetId === targetId && e.dotType === 'generic')
             genericTicks.push({ round: e.round, damage: e.damage });
     });
+    bus.on('attacked', (e: Extract<CombatEvent, { type: 'attacked' }>) => {
+        if (e.targetId === targetId)
+            attackedEvents.push({ round: e.round, shieldWasHit: e.shieldWasHit === true });
+    });
+    bus.on('shield-applied-log', (e: Extract<CombatEvent, { type: 'shield-applied-log' }>) => {
+        shieldAppliedLogs.push({ round: e.round, victimId: e.victimId, amount: e.amount });
+    });
     const result = runCombat({ ...input, bus });
-    return { hpChanges, genericTicks, result };
+    return { hpChanges, genericTicks, attackedEvents, shieldAppliedLogs, result };
+}
+
+/** OR-accumulated `shieldWasHit` across every `attacked` event this target received in `round`
+ *  (mirrors buildCombatLog's own per-target OR-accumulation for multi-hit attacks). */
+function shieldWasHitInRound(
+    attackedEvents: { round: number; shieldWasHit: boolean }[],
+    round: number
+): boolean {
+    return attackedEvents.filter((e) => e.round === round).some((e) => e.shieldWasHit);
 }
 
 /** Net HP lost by `targetId` in one round, derived from the ground-truth `hp-changed` events
  *  (not the display-formula derivation `battleSimulator` uses, which does not yet know about
  *  `convertedToShield` and would misreport a converted hit). Zero-delta crossings (the funnel
- *  emits one even for a fully-nullified hit) contribute 0, so summing is safe. */
+ *  emits one even for a fully-nullified hit) contribute 0, so summing is safe.
+ *
+ *  `maxHp` is a REQUIRED param, not the module-level `HP` constant baked in — the `oldPct`/
+ *  `newPct` events are percentages of the holder's OWN effective max HP, which the clamp fixture
+ *  below overrides to `SMALL_HP` (2000). Hardcoding `HP` (10,000,000) there would be off by
+ *  5000x; it was only ever benign because that fixture's own assertion is a 0 delta (0 * anything
+ *  is still 0) — MINOR 5 of the Shield Converter review. */
 function hpLossForRound(
     hpChanges: { round: number; oldPct: number; newPct: number }[],
-    round: number
+    round: number,
+    maxHp: number
 ): number {
     return hpChanges
         .filter((c) => c.round === round)
-        .reduce((sum, c) => sum + ((c.oldPct - c.newPct) / 100) * HP, 0);
+        .reduce((sum, c) => sum + ((c.oldPct - c.newPct) / 100) * maxHp, 0);
 }
 
 describe('Shield Converter nullifies the next direct hit and turns it into Shield', () => {
@@ -214,16 +242,33 @@ describe('Shield Converter nullifies the next direct hit and turns it into Shiel
             teamActors: [holderTeamActor('holder', 'M4')],
             enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
         });
-        const { hpChanges, result } = collectFor(input, 'holder');
+        const { hpChanges, attackedEvents, shieldAppliedLogs, result } = collectFor(
+            input,
+            'holder'
+        );
         const r1 = result.rounds[0];
 
         // No HP moved — the hit was fully nullified.
-        expect(hpLossForRound(hpChanges, 1)).toBeCloseTo(0, 6);
+        expect(hpLossForRound(hpChanges, 1, HP)).toBeCloseTo(0, 6);
         // The hit still ARRIVED (booked into .incoming) and was fully converted.
         expect(r1.perActorIncoming?.['holder']?.incoming).toBeCloseTo(DIRECT_HIT, 6);
         expect(r1.perActorIncoming?.['holder']?.convertedToShield).toBeCloseTo(DIRECT_HIT, 6);
         // The nullified amount landed in the shield pool.
         expect(r1.perActorShield?.['holder']?.pool).toBeCloseTo(DIRECT_HIT, 6);
+
+        // IMPORTANT 1 (review): the pool grew from 0 to DIRECT_HIT, but nothing DRAINED it — the
+        // hit was nullified, not shield-absorbed. `shieldWasHit` on the resulting `attacked` event
+        // must stay false; the deposit must not read as "the shield absorbed part of this hit".
+        expect(shieldWasHitInRound(attackedEvents, 1)).toBe(false);
+
+        // IMPORTANT 2 (review): the deposit is a real shield grant — the third source alongside
+        // `grantShieldToTarget` and Lifeline's mid-hit grant — so it must credit the SAME
+        // `granted` accumulator (`RoundData.perActorShield[id].granted`) they do, and emit the
+        // same LOG-ONLY `shield-applied-log` twin Lifeline emits, self-attributed to the victim
+        // (mirrors `convertHitToSelfDot`'s `sourceId: victim.id`). Without this, `granted`
+        // under-reports and the log shows an unexplained pool jump.
+        expect(r1.perActorShield?.['holder']?.granted).toBeCloseTo(DIRECT_HIT, 6);
+        expect(shieldAppliedLogs).toEqual([{ round: 1, victimId: 'holder', amount: DIRECT_HIT }]);
     });
 
     it('is spent - the SECOND direct hit lands normally', () => {
@@ -252,15 +297,17 @@ describe('Shield Converter nullifies the next direct hit and turns it into Shiel
             ],
             enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
         });
-        const { hpChanges, result } = collectFor(input, 'holder');
+        const { hpChanges, attackedEvents, result } = collectFor(input, 'holder');
 
         // Hit 1: nullified, converted to Shield.
-        expect(hpLossForRound(hpChanges, 1)).toBeCloseTo(0, 6);
+        expect(hpLossForRound(hpChanges, 1, HP)).toBeCloseTo(0, 6);
         expect(result.rounds[0].perActorIncoming?.['holder']?.convertedToShield).toBeCloseTo(
             DIRECT_HIT,
             6
         );
         expect(result.rounds[0].perActorShield?.['holder']?.pool).toBeCloseTo(DIRECT_HIT, 6);
+        // IMPORTANT 1 (review), reconfirmed: a nullify-and-deposit is not a shield hit.
+        expect(shieldWasHitInRound(attackedEvents, 1)).toBe(false);
 
         // Hit 2: the status was already spent by hit 1, so this hit is NOT converted — it goes
         // through the normal shield-drain path instead and is absorbed by hit 1's leftover pool.
@@ -270,12 +317,16 @@ describe('Shield Converter nullifies the next direct hit and turns it into Shiel
             6
         );
         expect(result.rounds[1].perActorShield?.['holder']?.pool ?? 0).toBe(0);
-        expect(hpLossForRound(hpChanges, 2)).toBeCloseTo(0, 6);
+        expect(hpLossForRound(hpChanges, 2, HP)).toBeCloseTo(0, 6);
+        // Differential proof the harness can actually detect a TRUE `shieldWasHit`: hit 2 is a
+        // GENUINE drain of hit 1's leftover pool (not a conversion), so this — unlike hit 1 above
+        // — must read true. Without this the false assertions above would be unfalsifiable.
+        expect(shieldWasHitInRound(attackedEvents, 2)).toBe(true);
 
         // Hit 3: with the leftover shield drained and the status still gone, this hit lands at
         // full strength on raw HP — the clean "second-hit-onward lands normally" signature.
         expect(result.rounds[2].perActorIncoming?.['holder']?.convertedToShield ?? 0).toBe(0);
-        expect(hpLossForRound(hpChanges, 3)).toBeCloseTo(DIRECT_HIT, 6);
+        expect(hpLossForRound(hpChanges, 3, HP)).toBeCloseTo(DIRECT_HIT, 6);
     });
 
     it('clamps the shield gain at max HP but still nullifies the hit in full', () => {
@@ -304,8 +355,10 @@ describe('Shield Converter nullifies the next direct hit and turns it into Shiel
         const r1 = result.rounds[0];
 
         // The hit was nullified IN FULL — HP does not move even though the shield could not
-        // absorb the whole amount.
-        expect(hpLossForRound(hpChanges, 1)).toBeCloseTo(0, 6);
+        // absorb the whole amount. `SMALL_HP`, not the module-level `HP` — this fixture's
+        // holder has an actual max HP of 2000, and `hp-changed`'s oldPct/newPct are percentages
+        // of THAT (MINOR 5 of the Shield Converter review).
+        expect(hpLossForRound(hpChanges, 1, SMALL_HP)).toBeCloseTo(0, 6);
         // Shield gain clamps at max HP: min(1000 + 5000, 2000) = 2000, not 6000.
         expect(r1.perActorShield?.['holder']?.pool).toBeCloseTo(SMALL_HP, 6);
         // But the accounting channel records the FULL nullified amount, not the clamped delta
@@ -455,7 +508,7 @@ describe('Shield Converter survives hits it never actually converted', () => {
         // The burst landed IN FULL — round 1's total HP loss is exactly BURST, not 0 (had the
         // burst itself been converted) and not BURST + DIRECT_HIT (had the enemy's hit landed
         // too, i.e. the status never got consumed at all).
-        expect(hpLossForRound(hpChanges, 1)).toBeCloseTo(BURST, 6);
+        expect(hpLossForRound(hpChanges, 1, HP)).toBeCloseTo(BURST, 6);
         // The status survived the burst and was spent by the enemy's real hit instead: the shield
         // pool reads exactly DIRECT_HIT, not BURST + DIRECT_HIT (which it would if the burst had
         // ALSO been converted).
@@ -511,7 +564,7 @@ describe('Shield Converter survives hits it never actually converted', () => {
         // The DoT landed IN FULL — round 1's total HP loss is exactly CORROSION_TICK, not 0 (had
         // the tick itself been converted) and not CORROSION_TICK + DIRECT_HIT (had the enemy's
         // hit landed too, i.e. the status never got consumed at all).
-        expect(hpLossForRound(hpChanges, 1)).toBeCloseTo(CORROSION_TICK, 6);
+        expect(hpLossForRound(hpChanges, 1, HP)).toBeCloseTo(CORROSION_TICK, 6);
         // The status survived the tick and was spent by the enemy's real hit instead: the shield
         // pool reads exactly DIRECT_HIT, not CORROSION_TICK + DIRECT_HIT (which it would if the
         // tick had ALSO been converted).
