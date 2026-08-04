@@ -1318,6 +1318,13 @@ function matchesActiveSelfCrit(text: string): boolean {
 }
 const START_OF_ROUND_RE =
     /at the start of (?:the|each|every) round|starts? (?:the|each|every) round/i;
+// Ship-kit W9, Task 5: "at the end of THIS UNIT'S turn" → end-of-turn (Quixilver R2's Barrier
+// grant). Requires the possessive "this unit's turn" — the bare "end of the round" phrasing
+// (END_OF_ROUND_RE, checked in detectReactiveTrigger below) is a DIFFERENT trigger, and matching
+// "end of … turn" loosely would steal Rhodium's end-of-round grant. Apostrophe class accepts both
+// the ASCII ' and the curly ’ the CSV uses inconsistently across rows (see maskAbbrev's sibling
+// convention). Reference data: docs/ship-skills.csv (Quixilver's third-passive clause).
+const END_OF_OWN_TURN_RE = /\bat\s+the\s+end\s+of\s+this\s+unit['’]s\s+turn\b/i;
 // "every turn" / "each turn" — a per-own-turn recurring self-grant. Distinct from
 // START_OF_TURN_CHARGE_RE ("at the start of the turn"): the trailing-phrase form Kinetik's
 // per-turn shield and Cinya's per-turn heal use (docs/ship-skills.csv). SP-G G1a.
@@ -1479,6 +1486,15 @@ export function detectReactiveTrigger(
     // separate clause keyed on the same buff name but matched first by resolveBuffClause, so it
     // never reaches here) — this ordering just mirrors the existing rule for readability.
     if (END_OF_ROUND_RE.test(clause)) return 'end-of-round';
+    // Ship-kit W9, Task 5: "at the end of this Unit's turn" → end-of-turn (Quixilver R2's
+    // Barrier grant). Checked AFTER end-of-round for the same reason START_OF_ROUND_RE is
+    // checked first above — the two phrasings never co-occur in one clause, but this mirrors
+    // the existing ordering for readability. Routing this OFF on-cast matters beyond the trigger
+    // label: the ability is granted from a PASSIVE slot, and a passive-slot on-cast buff is only
+    // ever seeded once at combat start (engine.ts's seedPassiveTimedStatuses, gated `r === 1`).
+    // end-of-turn is a LIVE trigger (triggers.ts), so partitionReactiveAbilities routes it onto
+    // the reactive path instead — it re-fires every one of the owner's turns, not just round 1.
+    if (END_OF_OWN_TURN_RE.test(clause)) return 'end-of-turn';
     // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
     // shares its governing trailing phrase with its sibling charge ability (already
     // start-of-turn via START_OF_TURN_CHARGE_RE in the charge-specific parser); this was the
