@@ -3189,6 +3189,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // "for N hit(s)" — a hit-counted lifecycle (see the buff config's `hits`). Position-
         // scoped on this buff's own name so a sibling clause's turn duration is unaffected, and
         // vice versa: Sansi's charge grants Taunt for 1 turn AND Barrier for 1 hit in one sentence.
+        // Anchor imprecision: findBuffNamePos returns the FIRST word-boundary match of the name,
+        // so a lookup for "Barrier" can land inside a later-appearing "Barrier Recharging" if that
+        // longer name is MENTIONED before this buff is GRANTED (Panon: "does not have Barrier
+        // Recharging, it gains Barrier for 1 turn…"). Harmless today — every such window (Panon's
+        // included) contains no duration phrase before its own sentence boundary — but it is a
+        // silent false-negative mechanism: a future row phrased that way with a real "for N hits"
+        // grant would be denied its hit count. Not fixed here; the anchor itself would need to
+        // change.
         if (ability.config.type === 'buff' && rowText && pos >= 0) {
             const hits = detectHitCount(rowText, pos);
             if (hits !== undefined) ability.config.hits = hits;
