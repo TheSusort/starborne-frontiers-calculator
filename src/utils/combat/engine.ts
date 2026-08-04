@@ -70,6 +70,7 @@ import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
+import { holdsBarrierRecharging } from './barrierRecharging';
 import { shieldAbsorb } from './shieldAbsorb';
 import { thresholdShieldForHit } from './thresholdShield';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -3387,10 +3388,10 @@ export function runCombat(input: CombatEngineInput): {
     };
     // Epic PR12 (C): does the given actor currently carry its own "Barrier Recharging"
     // self-status? (Panon — "reduces all incoming damage by 20% when affected by Barrier
-    // Recharging.") Sibling to isStealthed — same selfBuffNamesForOwners lookup, different
-    // literal name.
+    // Recharging.") Local alias kept so this call site's name stays unchanged; the actual
+    // lookup now lives in barrierRecharging.ts (shared with triggers.ts's Barrier-grant gate).
     const hasBarrierRecharging = (actorId: string): boolean =>
-        selfBuffNamesForOwners(statusEngine, [actorId]).includes('Barrier Recharging');
+        holdsBarrierRecharging(statusEngine, actorId);
     // Model-completeness epic (SP-A): does the given actor currently hold an active shield
     // pool? (Malvex — "When Shielded, this Ship takes 10% less damage.") Reads the live
     // absorption pool directly off the CombatActor, mirroring hasBarrierRecharging.

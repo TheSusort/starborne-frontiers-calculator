@@ -27,6 +27,12 @@ import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './bu
 import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
 // eslint-disable-next-line import/no-cycle
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
+// Call-time-safe cycle (same shape as blockBuffBuffs.ts above): barrierRecharging imports
+// selfBuffNamesForOwners from this module and we import holdsBarrierRecharging back. Both are
+// used only inside function bodies, so there is no initialization-order hazard.
+// eslint-disable-next-line import/no-cycle
+import { holdsBarrierRecharging } from './barrierRecharging';
+import { BARRIER_BUFFS } from './barrierBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
@@ -2608,6 +2614,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         };
         for (const rid of recipients) {
             if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
+            // Barrier Recharging: "Cannot be granted Barrier". Scoped to BARRIER_BUFFS names —
+            // the status blocks Barrier specifically, not buffs in general (that is Block Buff's
+            // job, handled above). A recipient under the lockout is silently skipped, which is
+            // what turns Quixilver's every-turn re-fire into a 3-turn cooldown.
+            if (BARRIER_BUFFS.has(cfg.buffName) && holdsBarrierRecharging(ctx.statusEngine, rid)) {
+                continue;
+            }
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
             ctx.bus.emit({
                 type: 'buff-applied',
