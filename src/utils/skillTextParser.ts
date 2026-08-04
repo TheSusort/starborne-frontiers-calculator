@@ -3051,6 +3051,42 @@ export function detectTargetHpGate(text: string, pos: number): { hpBelowPct: num
     return m ? { hpBelowPct: parseFloat(m[1]) } : undefined;
 }
 
+// "for N hit(s)" grant window. Chars after the buff-name anchor that may still belong to that
+// grant's own duration phrase — the longest corpus lead-in is "Barrier</unit-skill> for 1 hit"
+// (30), so 60 leaves headroom for a longer name without reaching a later clause.
+const HIT_COUNT_WINDOW = 60;
+// The FIRST duration phrase after the anchor wins, whichever unit it names. Scanning for "hits"
+// alone would let Sansi's Taunt — "grants Taunt for 1 turn and Barrier for 1 hit", one sentence —
+// skip over its own "for 1 turn" and steal Barrier's hit count; requiring the first match to BE
+// the hit form keeps every grant on the phrase that immediately follows it.
+const GRANT_DURATION_RE = /\bfor\s+(\d+)\s+(hits?|turns?)\b/i;
+
+/**
+ * "… <unit-skill>Barrier</unit-skill> for 1 hit" → 1: a hit-counted lifecycle (the buff config's
+ * `hits`) instead of, or alongside, a turn duration. Returns undefined when the grant states turns
+ * or no duration at all, leaving the turn lifecycle in charge.
+ *
+ * INDEX BASIS: `pos` is the buff name's index in the RAW (tagged) row text, as produced by
+ * findBuffNamePos at the buff-merge site. The window is therefore cut from a length-PRESERVING
+ * maskAbbrev of that same text — the convention rawSentenceAround and detectRemovalTriggerAt use.
+ * stripUnitTags would delete characters and shift every offset (the raw-pos/stripped-text trap).
+ * The window is also clipped at the first sentence boundary so a following sentence's phrase
+ * cannot be read as this grant's.
+ *
+ * Corpus sites (docs/ship-skills.csv), all "for 1 hit": Malvex (charge), Panon (charge),
+ * Quixilver (passive), Sansi (charge). Distinct from buildShipAbilities' parseHitCount, which
+ * counts a multi-hit ATTACK ("attacks three times").
+ */
+export function detectHitCount(text: string, pos: number): number | undefined {
+    if (pos < 0) return undefined;
+    const window = maskAbbrev(text).slice(pos, pos + HIT_COUNT_WINDOW);
+    const boundary = window.search(/[.;](?=\s|$)|<br\s*\/?>/i);
+    const m = GRANT_DURATION_RE.exec(boundary >= 0 ? window.slice(0, boundary) : window);
+    if (!m || !/^hits?$/i.test(m[2])) return undefined;
+    const n = parseInt(m[1], 10);
+    return n > 0 ? n : undefined;
+}
+
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
 // consume active DoTs of that type and deal their damage at once, scaled by N% (Incinerator,
 // Crocus, Demolisher). Lingshe's countdown-reduction / crit-scaling detonation is not this form.
