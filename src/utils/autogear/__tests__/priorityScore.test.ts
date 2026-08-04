@@ -6,6 +6,7 @@ import {
     calculateEffectiveHP,
 } from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
+import { STAT_NORMALIZERS, STATS, DERIVED_STAT_LABELS } from '../../../constants/stats';
 import { SetPriority, StatPriority } from '../../../types/autogear';
 
 const stats: BaseStats = {
@@ -158,5 +159,28 @@ describe('effectiveHp as a limit', () => {
         const scoreUnmet = calculatePriorityScore(stats, unmet, 'DEFENDER');
         const scoreMet = calculatePriorityScore(stats, met, 'DEFENDER');
         expect(scoreUnmet).toBeLessThan(scoreMet);
+    });
+});
+
+describe('STAT_NORMALIZERS keys match real stat names', () => {
+    it('has no entry keyed by a name the type system never produces', () => {
+        const validKeys = new Set([...Object.keys(STATS), ...Object.keys(DERIVED_STAT_LABELS)]);
+        const strays = Object.keys(STAT_NORMALIZERS).filter((key) => !validKeys.has(key));
+        expect(strays).toEqual([]);
+    });
+
+    it('normalizes a defence priority against defence scale, not raw value', () => {
+        // defence and attack share a 5000 normalizer, so a single-priority score
+        // over the same raw value must match across the two stats.
+        const sameValue: BaseStats = { ...stats, attack: 8000, defence: 8000 };
+        const defScore = calculatePriorityScore(sameValue, [{ stat: 'defence', weight: 1 }]);
+        const atkScore = calculatePriorityScore(sameValue, [{ stat: 'attack', weight: 1 }]);
+        expect(defScore).toBeCloseTo(atkScore, 10);
+        expect(defScore).toBeCloseTo(8000 / 5000, 10);
+    });
+
+    it('normalizes a crit priority against the crit scale', () => {
+        const critScore = calculatePriorityScore(stats, [{ stat: 'crit', weight: 1 }]);
+        expect(critScore).toBeCloseTo(50 / 25, 10);
     });
 });

@@ -125,13 +125,15 @@ export const SLOT_MAIN_STATS: Record<GearSlotName, StatName[]> = {
 
 export const ALL_STAT_NAMES = Object.keys(STATS) as StatName[];
 
-export const STAT_NORMALIZERS: Record<string, number> = {
+// Keyed by LimitableStat, not string: a stray key (e.g. "defense" for "defence") silently
+// falls back to a normalizer of 1 at every call site, so let the compiler reject it instead.
+export const STAT_NORMALIZERS: Partial<Record<LimitableStat, number>> = {
     hp: 10000, // Normalize around 10k
     attack: 5000, // Normalize around 5k
-    defense: 5000, // Normalize around 5k
+    defence: 5000, // Normalize around 5k (StatName is "defence", not "defense")
     hacking: 100, // Normalize around 100
     security: 100, // Normalize around 100
-    critChance: 25, // Normalize around 25%
+    crit: 25, // Normalize around 25% (StatName is "crit", not "critChance")
     critDamage: 50, // Normalize around 50%
     speed: 100, // Normalize around 100
     effectiveHp: 30000, // effectiveHP runs ~1.3-5x raw hp; normalize above hp's 10k
