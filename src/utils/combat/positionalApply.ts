@@ -31,6 +31,15 @@ export interface VictimDamageOutcome {
     shieldBefore: number;
     hpDamage: number;
     barriered: boolean;
+    /** `Shield Converter` nullified this hit and deposited it into the victim's shield pool instead
+     *  of letting it land. Structurally excludes a converted hit from `shieldWasHit` detection at
+     *  every consumer site, the same way `barriered` excludes a Barrier-nullified hit and
+     *  `transformedToDot` excludes a Hit-Mitigation-transformed one: a converted hit's `shieldBefore`
+     *  is deliberately reported as the PRE-deposit pool (see `shieldPoolBeforeConversion` in
+     *  `applyVictimDamage`), so without this flag `shieldBefore > 0 && hpDamage < damage` still reads
+     *  TRUE whenever the victim already held ANY shield before the conversion — its normal state for
+     *  a unit that grants itself shield every turn (e.g. Quixilver). Absent/false for every other hit. */
+    converted?: boolean;
     /** SP-E Voron/Orel: the portion of this hit that was CONVERTED into a Damage-over-Time
      *  effect instead of landing as damage this turn (the converted amount arrives over time via
      *  DoT ticks, which book their own per-victim increments). Absent/0 for every normal hit.

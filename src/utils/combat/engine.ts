@@ -4356,6 +4356,7 @@ export function runCombat(input: CombatEngineInput): {
                     shieldBefore: victim.shieldPool,
                     hpDamage: 0,
                     barriered: true,
+                    converted: false,
                     // Barrier nullifies the hit's EFFECT but does not un-record it: `.incoming` holds
                     // the amount and an equal `.barrierAbsorbed` nets it back out downstream. So the
                     // display channels book it, exactly as they do for any other barriered hit —
@@ -4901,6 +4902,10 @@ export function runCombat(input: CombatEngineInput): {
                 shieldBefore: shieldPoolBeforeConversion ?? shieldBefore,
                 hpDamage,
                 barriered: false,
+                // Structurally excludes a converted hit from `shieldWasHit` detection at every
+                // consumer site (see the field doc on VictimDamageOutcome.converted) — set whenever
+                // the Shield Converter branch above actually fired this hit.
+                converted: shieldPoolBeforeConversion !== undefined,
                 transformedToDot,
                 // A transform REVERSED the `.incoming` recorded above (convertHitToSelfDot), so the
                 // net intake this application booked excludes it — the deferred amount is booked
@@ -6401,6 +6406,7 @@ export function runCombat(input: CombatEngineInput): {
                         prev.shieldWasHit =
                             prev.shieldWasHit ||
                             (!outcome.barriered &&
+                                !outcome.converted &&
                                 outcome.shieldBefore > 0 &&
                                 outcome.hpDamage < damage);
                         prev.hitOutcomes.push(didCrit);
@@ -8525,6 +8531,7 @@ export function runCombat(input: CombatEngineInput): {
                                 let shieldBefore = 0;
                                 let hpDamage = 0;
                                 let barriered = false;
+                                let converted = false;
                                 // Symmetric shieldWasHit: capture the FOCUS player victim's shield
                                 // outcome on the positional path (the non-positional `else` branch binds
                                 // shieldBefore/hpDamage/barriered directly; positional leaves them 0).
@@ -8585,6 +8592,7 @@ export function runCombat(input: CombatEngineInput): {
                                                 positionalShieldWasHit =
                                                     positionalShieldWasHit ||
                                                     (!outcome.barriered &&
+                                                        !outcome.converted &&
                                                         outcome.shieldBefore > 0 &&
                                                         outcome.hpDamage < dmg);
                                             }
@@ -8600,18 +8608,19 @@ export function runCombat(input: CombatEngineInput): {
                                     // single legacy `attacked` emit below) is a different model from the
                                     // player→enemy outgoing credit — it is NOT extracted here; its unification
                                     // is deferred to U5 (real DPS enemy keystone), when the scalar sink dies.
-                                    ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
-                                        damage,
-                                        tgt,
-                                        {
-                                            // H1 T4: `damage` = directDamage + detonationDamage (above).
-                                            // The detonation slice drains the shield in FULL (no pen);
-                                            // only the direct slice respects the attacker's penetration.
-                                            killerId: actingActorId,
-                                            byDirectDamage: true,
-                                            bombPortion: enemyDetonationDamage,
-                                        }
-                                    ));
+                                    ({
+                                        shieldBefore,
+                                        hpDamage,
+                                        barriered,
+                                        converted = false,
+                                    } = applyIncomingToTarget(damage, tgt, {
+                                        // H1 T4: `damage` = directDamage + detonationDamage (above).
+                                        // The detonation slice drains the shield in FULL (no pen);
+                                        // only the direct slice respects the attacker's penetration.
+                                        killerId: actingActorId,
+                                        byDirectDamage: true,
+                                        bombPortion: enemyDetonationDamage,
+                                    }));
                                     // §4.5: the non-positional firing hit is DIRECT-channel. The Stasis
                                     // break already fired via onHitBreakStasis inside runPlayerTurn
                                     // (before the ability debuffs), so no additional break call needed here.
@@ -8737,7 +8746,10 @@ export function runCombat(input: CombatEngineInput): {
                                     // LEGACY non-positional single emit — byte-identical to pre-Task-4.
                                     const shieldWasHit = positionalShieldCaptured
                                         ? positionalShieldWasHit
-                                        : !barriered && shieldBefore > 0 && hpDamage < damage;
+                                        : !barriered &&
+                                          !converted &&
+                                          shieldBefore > 0 &&
+                                          hpDamage < damage;
                                     emitAttacked({
                                         bus,
                                         round: r,

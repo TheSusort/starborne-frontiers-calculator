@@ -284,7 +284,15 @@ export function assembleBattleResult(args: {
     >;
     perRoundPerIncoming?: Record<
         number,
-        Record<string, { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }>
+        Record<
+            string,
+            {
+                incoming: number;
+                shieldAbsorbed: number;
+                barrierAbsorbed: number;
+                convertedToShield?: number;
+            }
+        >
     >;
     /**
      * SP-F F1: attacker id -> victim id -> dealt THIS round, keyed by round (parallel to
@@ -442,7 +450,10 @@ export function assembleBattleResult(args: {
             const incomingHpThisRound = incoming
                 ? Math.max(
                       0,
-                      incoming.incoming - incoming.shieldAbsorbed - incoming.barrierAbsorbed
+                      incoming.incoming -
+                          incoming.shieldAbsorbed -
+                          incoming.barrierAbsorbed -
+                          (incoming.convertedToShield ?? 0)
                   )
                 : taken;
             const hpLost = (cumulativeHpLost.get(entry.actorId) ?? 0) + incomingHpThisRound;
@@ -1081,10 +1092,19 @@ export function simulateBattle(
 
     // Per-round per-victim incoming damage-taken (PR7 Task 7): parallel to perRoundPerShield,
     // built from rd.perActorIncoming (set only when non-empty — absent rounds map to {}). Surfaces
-    // each covered victim's own damage-taken bucket {incoming, shieldAbsorbed, barrierAbsorbed}.
+    // each covered victim's own damage-taken bucket {incoming, shieldAbsorbed, barrierAbsorbed,
+    // convertedToShield}.
     const perRoundPerIncoming: Record<
         number,
-        Record<string, { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }>
+        Record<
+            string,
+            {
+                incoming: number;
+                shieldAbsorbed: number;
+                barrierAbsorbed: number;
+                convertedToShield?: number;
+            }
+        >
     > = {};
     for (const rd of engineRounds) {
         perRoundPerIncoming[rd.round] = rd.perActorIncoming ?? {};

@@ -351,7 +351,7 @@ describe('Shield Converter nullifies the next direct hit and turns it into Shiel
                 if (holder) holder.shieldPool = PARTIAL_POOL;
             },
         });
-        const { hpChanges, result } = collectFor(input, 'holder');
+        const { hpChanges, attackedEvents, result } = collectFor(input, 'holder');
         const r1 = result.rounds[0];
 
         // The hit was nullified IN FULL — HP does not move even though the shield could not
@@ -364,6 +364,17 @@ describe('Shield Converter nullifies the next direct hit and turns it into Shiel
         // But the accounting channel records the FULL nullified amount, not the clamped delta
         // (2000 - 1000 = 1000) — it explains the missing HP damage, not the shield delta.
         expect(r1.perActorIncoming?.['holder']?.convertedToShield).toBeCloseTo(DIRECT_HIT, 6);
+
+        // Vacuity guard: an assertion on `shieldWasHitInRound` is meaningless unless this round
+        // actually produced an `attacked` event for the holder — `shieldWasHitInRound` returns
+        // false for an empty list too.
+        expect(attackedEvents.filter((e) => e.round === 1).length).toBeGreaterThan(0);
+        // Second review finding: the victim held a NON-EMPTY pool (PARTIAL_POOL = 1000) before
+        // this conversion, so the naive `shieldBefore > 0 && hpDamage < damage` reading — with no
+        // structural exclusion for a converted hit — would misreport this as a shield hit. It
+        // isn't: nothing drained, the pool only grew. This is Shield Converter's NORMAL operating
+        // state (Quixilver grants itself shield every turn), not a corner case.
+        expect(shieldWasHitInRound(attackedEvents, 1)).toBe(false);
     });
 });
 
