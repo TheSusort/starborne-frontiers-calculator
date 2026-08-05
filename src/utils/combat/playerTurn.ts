@@ -1743,13 +1743,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
-        // Malvex charged Barrier: the TARGET's shield-presence gate. THIS ctx is the one that
-        // matters — the per-slot timed-SELF-buff loop just below gates on it, and Malvex's
-        // "If the target has a Shield, it gains Barrier for 1 hit" is exactly that shape (a
-        // charge-slot timed self buff). Note the `selfShielded`/`selfShieldFull` siblings are
-        // absent from THIS ctx (they are populated in the other three) because their only
-        // consumers gate enemy debuffs / modifiers / payload abilities instead; a target-side
-        // gate on a self-buff grant lands here and nowhere else.
+        // Approximates max HP with the static base stat (`actor.stats.hp`), same limitation and
+        // same reasoning as preDebuffGateCtx above (:1461) — this ctx is also built before
+        // `dmgStats`/`effectiveHp` exist in the turn (computed further down, :2055/:2056) and
+        // cannot be reordered here without reordering the whole turn, which is out of scope.
+        // THIS is the ctx that matters for the subject: the per-slot timed-SELF-buff loop just
+        // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions, postDebuffGateCtx)`
+        // at :1763) is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's
+        // shape, e.g. a charge/active-slot "if this Unit has Shield equal to 100% of its max HP"
+        // grant). Without this field, selfShieldFull defaults false here (buildRoundContext's
+        // DPS-safe default) and such a cast-path grant would be permanently suppressed regardless
+        // of the caster's real shieldPool — the same silent-failure class the sibling fields in
+        // the other three contexts already guard against.
+        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate. Note `selfShielded` is still
+        // absent from THIS ctx (its only consumers gate enemy debuffs / modifiers / payload
+        // abilities instead) — but `selfShieldFull` above IS populated here, unlike the other two
+        // absent-sibling notes elsewhere in this function: this is the one ctx a firing-slot
+        // timed self-buff actually gates on.
         enemyShielded: enemy.shieldPool > 0,
     });
     for (const status of timedSelfBySlot) {
