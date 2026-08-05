@@ -11,7 +11,7 @@ import {
     SCENARIOS,
 } from '../kitFingerprintScenarios';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
-import { csvAvailable } from '../../../../../scripts/lib/shipSkillCsv';
+import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import type { Ship } from '../../../../types/ship';
 
@@ -99,4 +99,34 @@ describe('buildScenarioBattle', () => {
         expect(FILLER_NAMES).toHaveLength(7);
         for (const name of FILLER_NAMES) expect(buildTraceShip(name)).not.toBeNull();
     });
+});
+
+describe('filler inertness guard', () => {
+    // Every one of the 147 fingerprint snapshots assumes the filler ships contribute NOTHING. If a
+    // data refresh gives one a passive or a charge skill, that assumption breaks and every snapshot
+    // moves at once. This test makes that a single, named, explained failure instead.
+    const BARE_DAMAGE = /^This Unit deals <unit-damage>\d+% damage<\/unit-damage>\.?$/;
+
+    beforeAll(requireReferenceData);
+
+    it.each(FILLER_NAMES.map((n) => [n] as const))(
+        '%s is still inert: no passives, no charge skill, bare damage active',
+        (name) => {
+            const row = loadShipSkillRecords().find(
+                (r) => r.name.toUpperCase() === name.toUpperCase()
+            );
+            expect(row, `filler ship "${name}" is no longer in the corpus`).toBeDefined();
+            expect(
+                row!.passives.filter((p) => p && p.trim() !== ''),
+                `filler ship "${name}" gained a passive — it can no longer be inert scaffolding. ` +
+                    'Swap it for another inert ship (Trydent, Umayl, Xiaodao are spare) and expect ' +
+                    'the fingerprint snapshots to move.'
+            ).toEqual([]);
+            expect(
+                row!.charge.trim(),
+                `filler ship "${name}" gained a charge skill — same remedy as a new passive.`
+            ).toBe('');
+            expect(row!.active.trim()).toMatch(BARE_DAMAGE);
+        }
+    );
 });
