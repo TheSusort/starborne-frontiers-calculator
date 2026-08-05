@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
     buildScenarioBattle,
+    corpusNames,
     FILLER_NAMES,
     FOCUS_ACTOR_ID,
     FOCUS_POSITION,
@@ -18,6 +19,8 @@ import { runSeededBattle } from '../seededBattle';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
+import { parseShipTargeting } from '../../../targetingParser';
+import { resolveCells } from '../../../targeting/resolvePattern';
 import type { Ship } from '../../../../types/ship';
 import type { CombatActor } from '../../state';
 
@@ -240,4 +243,77 @@ describe('filler inertness guard', () => {
             ).toMatch(BARE_DAMAGE);
         }
     );
+});
+
+describe('active pattern reachability from FOCUS_POSITION', () => {
+    // FOCUS_POSITION ('M4') is the FRONT column of its row (see that constant's docstring for the
+    // whole board rationale), and Line-Support patterns extend FORWARD from the caster. A caster
+    // anchored at the front has no cells ahead of it, so those patterns resolve to zero cells —
+    // their active skill can never fire from here. This is a FIXTURE limitation (one anchor cell
+    // cannot reach every pattern geometry), not an engine bug: measured precisely, it affects
+    // exactly these 3 of 147 corpus ships, all Line-Support at different ranges, and all 3 would
+    // resolve fine from M2 (one column back). Moving FOCUS_POSITION was considered and rejected
+    // (see FOCUS_POSITION's docstring) — it would regenerate all 147 snapshots a third time,
+    // risking the hard-won on-damaged tuning (145/147 fixtures), to reach 3 ships.
+    const KNOWN_UNREACHABLE: readonly string[] = ['Faust', 'Mender', 'Refine'];
+
+    beforeAll(requireReferenceData);
+
+    /** Occupied cells DERIVED from the real scenario board (not hard-coded), so this guard follows
+     *  the layout automatically if it ever changes. Positions don't depend on which ship is the
+     *  focus, so any resolvable corpus ship works to build the board. */
+    function occupiedCells(): Set<string> {
+        const focus = buildTraceShip('Malvex');
+        if (!focus) throw new Error('Malvex did not resolve from the corpus');
+        const battle = buildScenarioBattle(focus, 'plain');
+        return new Set([...battle.playerTeam, ...battle.enemyTeam].map((p) => p.position));
+    }
+
+    /** Names of every corpus ship whose ACTIVE targeting pattern, anchored at FOCUS_POSITION,
+     *  resolves to zero cells that are actually occupied on the scenario board. Ships whose
+     *  targeting can't be parsed/resolved at all (parseShipTargeting/resolveCells can throw for
+     *  unrecognized text) are skipped rather than counted either way — this guard is about
+     *  geometry reachability, not targeting-text coverage. */
+    function unreachableShips(): string[] {
+        const occupied = occupiedCells();
+        const out: string[] = [];
+        for (const name of corpusNames()) {
+            const ship = buildTraceShip(name);
+            if (!ship) continue;
+            let pattern;
+            try {
+                pattern = parseShipTargeting(ship)?.active?.pattern;
+                if (!pattern) continue;
+                const cells = resolveCells(pattern, FOCUS_POSITION);
+                if (!cells.some((c) => occupied.has(c.position))) out.push(name);
+            } catch {
+                continue;
+            }
+        }
+        return out;
+    }
+
+    it('no ship outside the allow-list resolves its active pattern to zero occupied cells', () => {
+        const unexpected = unreachableShips().filter((n) => !KNOWN_UNREACHABLE.includes(n));
+        expect(
+            unexpected,
+            `ship(s) whose active pattern resolves to ZERO occupied cells from FOCUS_POSITION and ` +
+                `are not on the allow-list: ${unexpected.join(', ')} — either a board change made ` +
+                'a previously-reachable ship go dark, or a new/changed corpus ship has an ' +
+                'unreachable pattern. If genuinely unreachable given the front-column geometry, ' +
+                'add it to KNOWN_UNREACHABLE with the same reasoning as Faust/Mender/Refine.'
+        ).toEqual([]);
+    });
+
+    it('every allow-listed ship is STILL unreachable (a board fix must shrink this list, not leave a stale exemption)', () => {
+        const unreachable = new Set(unreachableShips());
+        const stale = KNOWN_UNREACHABLE.filter((n) => !unreachable.has(n));
+        expect(
+            stale,
+            `allow-listed ship(s) that now resolve to a NON-empty set of occupied cells: ` +
+                `${stale.join(', ')} — the board (or this ship's pattern) changed and they are ` +
+                'reachable again. Remove them from KNOWN_UNREACHABLE rather than leaving a stale ' +
+                'exemption.'
+        ).toEqual([]);
+    });
 });

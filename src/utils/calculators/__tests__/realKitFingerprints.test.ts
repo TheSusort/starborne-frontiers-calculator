@@ -20,8 +20,14 @@ import {
     SCENARIOS,
     fingerprintShip,
     corpusNames,
+    buildScenarioBattle,
+    FOCUS_ACTOR_ID,
+    ROUNDS,
+    SEED,
     type ScenarioName,
 } from '../../combat/audit/kitFingerprintScenarios';
+import { runSeededBattle } from '../../combat/audit/seededBattle';
+import { fingerprintActorTokens } from '../../combat/audit/fingerprint';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -41,14 +47,43 @@ function requireReferenceData(): void {
  *  vitest runs describes in declaration order. */
 const observed = new Map<string, Record<ScenarioName, string[]>>();
 
+/** The two LIVE invariants every fingerprint rests on (see `kitFingerprintScenarios.test.ts`'s
+ *  "live battle invariants" describe, which spot-checks only Xiaodao/Malvex): the focus must take
+ *  real incoming damage, or all on-damaged kit is silent; and it must survive to round `ROUNDS`,
+ *  or its fingerprint is truncated at an arbitrary round. Captured here, corpus-wide, from the SAME
+ *  441 battle results the snapshot pass below already runs — reading a couple more fields off a
+ *  result that's already sitting in memory, not an extra battle run. Consumed by `suite health`. */
+interface LiveInvariant {
+    taken: number;
+    alive: boolean;
+    lastRound: number;
+}
+const observedInvariants = new Map<string, Record<ScenarioName, LiveInvariant>>();
+
 describe('kit fingerprints', () => {
     beforeAll(requireReferenceData);
 
     it.each(corpusNames().map((n) => [n] as const))('%s', (name) => {
         const ship = buildTraceShip(name);
         expect(ship, `${name} did not resolve from the corpus`).not.toBeNull();
-        const fp = fingerprintShip(ship!);
+        // Inlines fingerprintShip's own loop (rather than calling it) so the invariant fields can
+        // be read off the same BattleResult instead of running each of the 441 battles twice.
+        const fp = {} as Record<ScenarioName, string[]>;
+        const invariants = {} as Record<ScenarioName, LiveInvariant>;
+        for (const scenario of SCENARIOS) {
+            const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
+            fp[scenario] = fingerprintActorTokens(result, FOCUS_ACTOR_ID);
+            const rows = result.rounds
+                .flatMap((r) => r.ships)
+                .filter((s) => s.actorId === FOCUS_ACTOR_ID);
+            invariants[scenario] = {
+                taken: rows.reduce((sum, s) => sum + s.damageTaken, 0),
+                alive: rows.every((s) => s.alive),
+                lastRound: result.outcome.lastRound,
+            };
+        }
         observed.set(name, fp);
+        observedInvariants.set(name, invariants);
         expect(fp).toMatchSnapshot();
     });
 });
@@ -98,6 +133,53 @@ describe('suite health', () => {
                     `${corpusNames().length} ships — run the whole file (no -t filter).`
             );
         }
+        if (observedInvariants.size !== corpusNames().length) {
+            throw new Error(
+                `suite health consumes the snapshot pass, which recorded live invariants for ` +
+                    `${observedInvariants.size} of ${corpusNames().length} ships — run the whole ` +
+                    'file (no -t filter).'
+            );
+        }
+    });
+
+    // Two corpus ships are documented, kit-explained exceptions to "the focus takes real incoming
+    // damage" — not a fixture failure (see final-fix-report.md's "before → after measurements"):
+    // Meiying gains Stealth "at the start of combat and every turn", so it is permanently
+    // untargetable; Voron "transforms the damage into a Damage over Time effect", so its intake
+    // books 0 at the instant of the hit even though it demonstrably IS being hit (it carries a
+    // `dot-ticked` token it would not otherwise have).
+    const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Voron'];
+
+    it('every corpus ship takes real incoming damage and survives all 20 rounds, in every scenario', () => {
+        // The corpus-wide version of the two-ship spot-check in kitFingerprintScenarios.test.ts's
+        // "live battle invariants" (Xiaodao/Malvex) — cheap here because observedInvariants was
+        // collected as a side effect of the snapshot pass's own 441 battles, not by re-running them.
+        const noDamage: string[] = [];
+        const died: string[] = [];
+        const truncated: string[] = [];
+        for (const [name, byScenario] of observedInvariants) {
+            for (const scenario of SCENARIOS) {
+                const inv = byScenario[scenario];
+                if (inv.taken <= 0 && !KNOWN_ZERO_DAMAGE.includes(name)) {
+                    noDamage.push(`${name}/${scenario}`);
+                }
+                if (!inv.alive) died.push(`${name}/${scenario}`);
+                if (inv.lastRound !== ROUNDS) truncated.push(`${name}/${scenario}`);
+            }
+        }
+        expect(
+            noDamage,
+            'ship/scenario pairs where the focus took NO damage — the enemies are not resolving ' +
+                'onto it, so every on-damaged clause is silent there'
+        ).toEqual([]);
+        expect(
+            died,
+            'ship/scenario pairs where the focus died — its fingerprint is truncated at the round ' +
+                'it fell, so kill timing leaks into the snapshot'
+        ).toEqual([]);
+        expect(truncated, `ship/scenario pairs whose battle ended before round ${ROUNDS}`).toEqual(
+            []
+        );
     });
 
     /** The coverage LEDGER. Every kind listed here is produced by at least one corpus ship today;

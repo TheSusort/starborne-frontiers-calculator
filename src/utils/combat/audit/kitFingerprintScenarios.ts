@@ -106,7 +106,12 @@ const INCOMING_FRACTION = 0.2;
  *
  *  An ESTIMATE, not a guarantee: the focus's own defence buffs/debuffs, incoming-damage modifiers,
  *  shields, dodges and self-heals all move the realised total. It only has to land in the band
- *  "clearly nonzero, comfortably survivable", which the scenario tests assert directly. */
+ *  "clearly nonzero, comfortably survivable", which the scenario tests assert directly.
+ *
+ *  Because this inverts the engine's OWN `calculateDamageReduction`, a change to the mitigation
+ *  formula is COMPENSATED here rather than surfaced — this suite is deliberately blind to
+ *  mitigation-formula changes, consistent with it being a structural (does-this-clause-fire) suite,
+ *  not a numeric one (that's dpsGoldenParity / healingGoldenParity's job). */
 function fillerAttackFor(focus: Ship): number {
     const defence = focus.baseStats.defence;
     const mitigation = defence > 0 ? calculateDamageReduction(defence) : 0;
