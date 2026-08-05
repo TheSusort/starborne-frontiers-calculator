@@ -55,6 +55,38 @@ export function diffFingerprints(
  * divergence, not real interference. Diagnostic's `actorId` is the composition-side id, since
  * that's where a reported ship must be located to reproduce/inspect the finding.
  */
+/** Recurse into an entry list AND every entry's nested `reactions`, collecting the `kind[:slot]`
+ *  token of every entry whose `actorId` matches. The slot half is what distinguishes a
+ *  CAST-sourced effect from a passive/reactive one: `buildCombatLog` spreads
+ *  `ctx.consumePendingSkill()` (which carries `{skillName, slot}`) onto cast entries only, so a
+ *  passive entry has no `slot`. Without that split, a ship with two sources for the same kind
+ *  (Malvex: an active-slot shield grant AND a passive on-damaged shield grant) fingerprints
+ *  identically whether or not the active one is correctly gated. `skillName` is deliberately NOT
+ *  part of the token — it is the ship's own skill name, so it carries nothing the ship key doesn't,
+ *  and including it would churn snapshots on a cosmetic rename. */
+function walkEntryTokens(entries: CombatLogEntry[], actorId: string, acc: Set<string>): void {
+    for (const e of entries) {
+        if (e.actorId === actorId) acc.add(e.slot ? `${e.kind}:${e.slot}` : e.kind);
+        if (e.reactions?.length) walkEntryTokens(e.reactions, actorId, acc);
+    }
+}
+
+/** The behaviour fingerprint of one actor across a whole battle, as a SORTED array of
+ *  `kind[:slot]` tokens. Sorted so entry order can never churn a snapshot; de-duplicated because
+ *  it is a set of behaviours, not a count. Pure over an already-run `BattleResult`.
+ *
+ *  A REFINEMENT of `fingerprintActor`, not a replacement — that function is consumed by
+ *  `ablation.ts`'s differential oracle, which compares bare kind-sets, so it stays as-is. */
+export function fingerprintActorTokens(result: BattleResult, actorId: string): string[] {
+    const acc = new Set<string>();
+    for (const round of result.combatLog) {
+        walkEntryTokens(round.startOfRound, actorId, acc);
+        for (const turn of round.turns) walkEntryTokens(turn.entries, actorId, acc);
+        walkEntryTokens(round.endOfRound, actorId, acc);
+    }
+    return [...acc].sort();
+}
+
 export function runDifferential(
     soloResult: BattleResult,
     compResult: BattleResult,

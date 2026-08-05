@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { fingerprintActor, diffFingerprints, runDifferential } from '../fingerprint';
+import {
+    fingerprintActor,
+    diffFingerprints,
+    runDifferential,
+    fingerprintActorTokens,
+} from '../fingerprint';
 import type { BattleResult } from '../../../calculators/battleSimulator';
+import type { CombatLogEntry } from '../../log/types';
 
 const fakeResult = (kindsByActor: Record<string, string[]>): BattleResult =>
     ({
@@ -69,5 +75,87 @@ describe('runDifferential', () => {
         expect(
             runDifferential(soloResult, compResult, 'ShipA', 'p1_ship', 'comp_actor_3')
         ).toBeNull();
+    });
+});
+
+/** Minimal BattleResult carrying only the combatLog shape fingerprinting walks. */
+const resultWith = (entries: CombatLogEntry[]): BattleResult =>
+    ({
+        combatLog: [{ round: 1, startOfRound: [], turns: [{ entries }], endOfRound: [] }],
+    }) as unknown as BattleResult;
+
+const entry = (over: Partial<CombatLogEntry>): CombatLogEntry => ({
+    kind: 'attack',
+    actorId: 'a',
+    targets: [],
+    reactions: [],
+    ...over,
+});
+
+describe('fingerprintActorTokens', () => {
+    it('suffixes a cast-sourced entry with its slot and leaves a passive entry bare', () => {
+        // The Malvex case: an active-slot shield grant and a passive on-damaged shield grant are
+        // the SAME kind. Bare-kind fingerprinting cannot tell them apart, so a bug that ungates
+        // the active one is invisible. The slot suffix is what separates them.
+        const tokens = fingerprintActorTokens(
+            resultWith([
+                entry({ kind: 'shield', slot: 'active', skillName: 'Shield Surge' }),
+                entry({ kind: 'shield' }),
+            ]),
+            'a'
+        );
+        expect(tokens).toEqual(['shield', 'shield:active']);
+    });
+
+    it('is sorted and de-duplicated so entry order can never churn a snapshot', () => {
+        const tokens = fingerprintActorTokens(
+            resultWith([
+                entry({ kind: 'heal', slot: 'charged' }),
+                entry({ kind: 'attack', slot: 'active' }),
+                entry({ kind: 'attack', slot: 'active' }),
+            ]),
+            'a'
+        );
+        expect(tokens).toEqual(['attack:active', 'heal:charged']);
+    });
+
+    it('walks nested reactions and ignores other actors', () => {
+        const tokens = fingerprintActorTokens(
+            resultWith([
+                entry({
+                    kind: 'attack',
+                    actorId: 'other',
+                    reactions: [entry({ kind: 'heal', actorId: 'a' })],
+                }),
+            ]),
+            'a'
+        );
+        expect(tokens).toEqual(['heal']);
+    });
+
+    it('excludes skillName from the token (a rename must not move a snapshot)', () => {
+        const a = fingerprintActorTokens(
+            resultWith([entry({ kind: 'attack', slot: 'active', skillName: 'Old Name' })]),
+            'a'
+        );
+        const b = fingerprintActorTokens(
+            resultWith([entry({ kind: 'attack', slot: 'active', skillName: 'New Name' })]),
+            'a'
+        );
+        expect(a).toEqual(b);
+    });
+
+    it('walks startOfRound and endOfRound, not just turn entries', () => {
+        const result = {
+            combatLog: [
+                {
+                    round: 1,
+                    startOfRound: [entry({ kind: 'dot-ticked' })],
+                    turns: [],
+                    endOfRound: [entry({ kind: 'buff-expired' })],
+                },
+            ],
+        } as unknown as BattleResult;
+        expect(fingerprintActorTokens(result, 'a')).toEqual(['buff-expired', 'dot-ticked']);
     });
 });
