@@ -63,6 +63,14 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // neutralize the condition to 'always' and the debuff would inflict unconditionally, exactly
     // the bug this task fixes.
     'self-shield',
+    // Quixilver R2: the caster's shield pool being AT max HP is live-derivable on both paths —
+    // the reactive drain reads engine.ts's `isSelfShieldFull` (live `shieldPool` vs
+    // `recipientMaxHp`) via buildDrainContext, and the cast path reads playerTurn.ts's
+    // base-HP approximation in preDebuffGateCtx/modifierCtx. Without this entry the whole gate
+    // is neutralized to 'always' and Quixilver's end-of-turn passive grants a team-wide Barrier
+    // on EVERY turn regardless of its shield — the `self-shield` sibling directly above exists
+    // for the same reason (APEX), and this is the strictly narrower version of it.
+    'self-shield-full',
     // Ship-kit W8 Task 13: whether the enemy an on-enemy-destroyed reaction just killed carried a
     // debuff is live-derivable — the executor folds ConditionContext.killedEnemyHadDebuff in as a
     // targeted override (keyed to the specific victim, eventCtx.victimId) right before this gate
