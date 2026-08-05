@@ -2659,8 +2659,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // status uses above — and `duration` must become Infinity when it is present, exactly as
         // the primary's does. Omitting either would put a one-shot into the timed store with no
         // charge (permanent, since a durationless co-grant defaults to a real turn window) or with
-        // a charge the turn window silently outraces. Barrier is a live co-grant (Last Stand), so
-        // this is the first place a "for N hits" Barrier would try to land.
+        // a charge the turn window silently outraces. Last Stand grants Barrier as its PRIMARY
+        // (cfg.buffName, handled above) with Block Debuff as the co-grant
+        // (alsoGrantBuffNames: ['Block Debuff']) — so today NO corpus co-grant is Barrier. This
+        // invariant guards the day one is: Barrier is the one buff name a co-grant could plausibly
+        // want hit-counted, so it is the first place a "for N hits" Barrier would try to land.
         for (const extra of cfg.additionalBuffs ?? []) {
             const extraStatus: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
                 payload: payloadFromConfig({

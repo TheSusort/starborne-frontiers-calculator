@@ -1153,9 +1153,10 @@ export function detectGrantConditions(
     }
 
     // Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full. Requires
-    // the explicit 100%-of-max-HP wording — a bare "When Shielded" (Malvex) is the narrower
+    // the explicit 100%-of-max-HP wording — a bare "When Shielded" (Malvex) is the BROADER
     // existing `self-shielded` INCOMING-hit condition (evaluateConditions.ts's victim-side
     // shieldPool > 0 check, a different mechanism entirely) and must not match here.
+    // `self-shield-full` is the narrower of the two (exactly 100%, not merely > 0).
     // derivable:true — a derivable:false condition is treated as always met
     // (evaluateConditions.ts:30), which would defeat the gate entirely.
     if (SHIELD_FULL_RE.test(low)) {

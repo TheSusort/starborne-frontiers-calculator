@@ -58,9 +58,14 @@ describe('"at the end of this Unit\'s turn" trigger', () => {
     //      `turn-ended` for round 1 AND round 2 and getting two separate enqueues.
     describe('passive-slot routing consequence (round-1 seeding vs. reactive re-fire)', () => {
         // Refits >= 4 unlock the R4 passive row (thirdPassiveSkillText) — see
-        // src/utils/ship/skillRows.ts's getShipSkillRows. Quixilver's real Barrier grant lives in
-        // that column (docs/ship-skills.csv), so this exercises the actual passive-slot path
-        // rather than the simpler `active` fixture used by the tests above.
+        // src/utils/ship/skillRows.ts's getShipSkillRows. This is a SYNTHETIC fixture exercising
+        // the R4-row-resolution path itself, not Quixilver's real kit: Quixilver's actual Barrier
+        // grant lives in second_passive_skill_text (the R2 passive, docs/ship-skills.csv) — its
+        // third_passive_skill_text is the literal string "null". The passive-slot routing being
+        // tested here (castSkills exclusion + reactive re-fire) is identical regardless of which
+        // refit tier the text lands in, so putting it at R4 here just proves the fix isn't
+        // R2-specific. barrierRechargingTarget.test.ts's `r2PassiveAbilities` exercises the real
+        // R2 column against the actual CSV text.
         const quixilverShipSkills = () =>
             buildShipAbilities({
                 refits: [1, 2, 3, 4],

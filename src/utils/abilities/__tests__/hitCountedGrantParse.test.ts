@@ -36,9 +36,11 @@ function buff(abilities: Ability[], buffName: string): Ability | undefined {
         (a) => a.config.type === 'buff' && (a.config as { buffName?: string }).buffName === buffName
     );
 }
-// Barrier Recharging is registered debuff-typed even when self-applied (Finding B3, see
-// skillTextParser.ts), so it never reaches the buff() helper above — look it up by name
-// regardless of buff/debuff typing.
+// Barrier Recharging is registered buff-typed even when self-applied (see
+// barrierRechargingTarget.test.ts, which asserts config.type === 'buff' for both Panon's
+// self-application and Quixilver's all-allies grant). Looked up by name regardless of
+// buff/debuff typing anyway, since buff() above is keyed on `config.type === 'buff'` and this
+// helper is meant to be robust to either.
 function namedAbility(abilities: Ability[], buffName: string): Ability | undefined {
     return abilities.find((a) => (a.config as { buffName?: string }).buffName === buffName);
 }
