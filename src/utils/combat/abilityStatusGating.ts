@@ -71,6 +71,15 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // on EVERY turn regardless of its shield — the `self-shield` sibling directly above exists
     // for the same reason (APEX), and this is the strictly narrower version of it.
     'self-shield-full',
+    // Malvex charged Barrier: the TARGET's shield-presence gate is live-derivable — every cast-time
+    // round context in playerTurn.ts populates `enemyShielded` from the resolved victim's LIVE
+    // shieldPool (`enemy.shieldPool > 0`). Needed here because Malvex's "If the target has a
+    // Shield, it gains Barrier for 1 hit" is a charge-slot TIMED SELF BUFF, gated by
+    // postDebuffGateCtx through this very rewrite — without this entry liveGateConditions
+    // neutralizes the condition to 'always' and Malvex gains full damage immunity on EVERY charged
+    // cast, shielded target or not. Same lever as the `self-shield` (APEX) sibling above, target
+    // side instead of owner side.
+    'enemy-shield',
     // Ship-kit W8 Task 13: whether the enemy an on-enemy-destroyed reaction just killed carried a
     // debuff is live-derivable — the executor folds ConditionContext.killedEnemyHadDebuff in as a
     // targeted override (keyed to the specific victim, eventCtx.victimId) right before this gate

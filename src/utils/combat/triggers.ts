@@ -1585,6 +1585,13 @@ export function buildActorConditionContext(
         /** Quixilver R2: owner's shield pool is at or above max HP. Default false (DPS mode /
          *  no shield). Populated by buildDrainContext from the engine's selfShieldFullFor delegate. */
         selfShieldFull?: boolean;
+        /** Malvex charged Barrier: the owner's TARGET has a shield. Default false. NOT populated
+         *  by buildDrainContext — a reaction has no "the cast's primary target" (ctx.enemy is the
+         *  legacy/dummy victim sink on the player side), and the only corpus consumer of
+         *  `enemy-shield` is an on-cast charged-slot grant that never reaches executeIntent. The
+         *  field is threaded here so a future reactive consumer only needs an IntentExecContext
+         *  delegate, not another hand-enumerated layer. */
+        enemyShielded?: boolean;
         /** Owner was hit by a direct attack this round. Default false. Populated by
          *  buildDrainContext (D-PR8). */
         wasHitThisRound?: boolean;
@@ -1643,6 +1650,7 @@ export function buildActorConditionContext(
         selfDebuffNames: shared.selfDebuffNames,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
         selfShieldFull: shared.selfShieldFull,
+        enemyShielded: shared.enemyShielded,
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,

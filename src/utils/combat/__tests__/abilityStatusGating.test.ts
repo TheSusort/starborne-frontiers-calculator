@@ -106,6 +106,18 @@ describe('liveGateConditions — self-shield-full (Quixilver R2)', () => {
     });
 });
 
+describe('liveGateConditions — enemy-shield (Malvex charged Barrier)', () => {
+    // Guards the LIVE_SUBJECTS membership. Malvex's "If the target has a Shield, it gains Barrier
+    // for 1 hit" is a charge-slot TIMED SELF BUFF, so it is gated through this very rewrite: drop
+    // the entry and the condition neutralizes to 'always', handing Malvex full damage immunity on
+    // every charged cast whether the target had a shield or not — the bug the gate exists to fix.
+    // A unit test on conditionsMet cannot see this; it runs downstream of the rewrite.
+    it('keeps a derivable enemy-shield condition (does NOT neutralize to always)', () => {
+        const out = liveGateConditions([{ subject: 'enemy-shield', derivable: true }]);
+        expect(out).toEqual([{ subject: 'enemy-shield', derivable: true }]);
+    });
+});
+
 describe('liveGateConditions — enemy-dot-count (SP-D)', () => {
     // Guards the LIVE_SUBJECTS membership: if this subject is ever dropped from LIVE_SUBJECTS,
     // Anemone's Taunt (a timed self-buff) and Belladonna's Stasis (a timed enemy debuff) would

@@ -44,6 +44,11 @@ export interface ConditionContext {
     /** True when the condition owner's shield pool is at or above its max HP. Live-derived by
      *  the engine; defaults false (DPS mode / no shield). Narrower than `selfShielded`. */
     selfShieldFull?: boolean;
+    /** True when the condition owner's TARGET currently has a shield (the resolved victim's
+     *  shieldPool > 0) — the target-side mirror of `selfShielded`. Live-derived by the engine;
+     *  defaults false (DPS mode's dummy victim carries no shield pool). Used by Malvex's charged
+     *  "If the target has a Shield, it gains Barrier for 1 hit". */
+    enemyShielded?: boolean;
     /** True when the condition owner was hit by a direct attack this round (damage landed
      *  on shield or HP). Live-derived by the engine; defaults false (DPS / not-yet-hit). */
     wasHitThisRound?: boolean;
@@ -212,6 +217,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.selfShielded ? 1 : 0;
         case 'self-shield-full':
             return ctx.selfShieldFull ? 1 : 0;
+        case 'enemy-shield':
+            return ctx.enemyShielded ? 1 : 0;
         case 'not-hit-this-round':
             return ctx.wasHitThisRound ? 0 : 1;
         case 'first-activator':

@@ -1146,6 +1146,16 @@ export function detectGrantConditions(
         return [{ subject: 'self-shield', derivable: true }];
     }
 
+    // Malvex: "If the target has a Shield, it gains Barrier for 1 hit" — the TARGET-side mirror of
+    // the self-shield rule directly above, live-derived from the resolved victim's shieldPool at
+    // cast time. Sits next to its sibling (both before rule 0) so the shield family reads in one
+    // place; neither phrasing overlaps the other or any rule below.
+    // derivable:true — a derivable:false condition is treated as always met
+    // (evaluateConditions.ts:132), which would leave the Barrier ungated, i.e. the bug itself.
+    if (TARGET_HAS_SHIELD_RE.test(low)) {
+        return [{ subject: 'enemy-shield', derivable: true }];
+    }
+
     // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
     // derivable:false condition would always be met — evaluateConditions.ts:30).
     if (REPAIRED_THIS_ROUND_RE.test(low)) {
@@ -1416,6 +1426,15 @@ const KILL_WITH_DEBUFF_RE = /\bkilling\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
 // different mechanism) cannot co-match. Corpus-verified (docs/ship-skills.csv, grep "equal to
 // 100%.*max"): Quixilver's third-passive Barrier grant is the only row with this phrasing.
 const SHIELD_FULL_RE = /\bshield\s+equal\s+to\s+100%\s+of\s+(?:its|their)\s+max(?:imum)?\s*hp\b/i;
+// Malvex charged Barrier: "If the target has a Shield" → enemy-shield (the TARGET's shield pool,
+// cast-time). Subject-anchored on "the target|enemy" so it can never co-match the owner-side
+// `if this unit has shield` rule (APEX) handled just above it in detectGrantConditions. The
+// trailing `\b` after "shield" keeps the phrase from being swallowed by a longer noun — and the
+// "a" is optional because the same ship writes it both with and without a comma before the
+// consequent. Corpus-verified (docs/ship-skills.csv, grep "target has a Shield"): Malvex's active
+// and charged rows are the only two occurrences in the game, and only the charged one grants a
+// named buff (the active one grants a nameless self-shield, which never reaches this detector).
+const TARGET_HAS_SHIELD_RE = /\bif\s+the\s+(?:target|enemy)\s+has\s+(?:a\s+)?shield\b/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 // Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted

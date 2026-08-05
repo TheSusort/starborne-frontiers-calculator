@@ -1470,6 +1470,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (not deleted): dropping the field would make a future on-cast gate on this subject
         // silently never fire, which is worse than the approximation.
         selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate, live-derived from the resolved
+        // victim's shieldPool. Read PRE-strip: a `type:'shield-strip'` clause in the same cast
+        // (Malvex's own "removes 30% of the enemy's Shield") only runs further down this turn
+        // (:2745), so this reads the pool as it stood before the cast. Harmless for the boolean —
+        // removing 30% of a positive pool leaves 70% of it, still positive — so pre- and post-strip
+        // agree; see the shield-strip site for the ordering.
+        enemyShielded: enemy.shieldPool > 0,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
@@ -1736,6 +1743,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
+        // Malvex charged Barrier: the TARGET's shield-presence gate. THIS ctx is the one that
+        // matters — the per-slot timed-SELF-buff loop just below gates on it, and Malvex's
+        // "If the target has a Shield, it gains Barrier for 1 hit" is exactly that shape (a
+        // charge-slot timed self buff). Note the `selfShielded`/`selfShieldFull` siblings are
+        // absent from THIS ctx (they are populated in the other three) because their only
+        // consumers gate enemy debuffs / modifiers / payload abilities instead; a target-side
+        // gate on a self-buff grant lands here and nowhere else.
+        enemyShielded: enemy.shieldPool > 0,
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
@@ -1838,6 +1853,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // dropping the field would make a future on-cast modifier gate on this subject
         // silently never fire, which is worse than the approximation.
         selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate. Same derivation and same
+        // PRE-strip reading as preDebuffGateCtx above. No corpus MODIFIER ability gates on this
+        // subject today; populated for the same reason its `selfShielded` neighbour is — an absent
+        // field makes a future gate on this ctx silently never fire, which is worse than a field
+        // nothing reads yet.
+        enemyShielded: enemy.shieldPool > 0,
         turnsTaken: actor.turnsTaken,
         // Sub-project I, PR I5: only the modifier ctx needs this — it feeds
         // modifierAbilities/modifierTotalsFromAbilities (Selenite's count-scaling passive).
@@ -2096,6 +2117,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // to the drain-time gate instead of the static base stat, which would disagree under an
         // active max-HP buff.
         selfShieldFull: effectiveHp > 0 && actor.shieldPool >= effectiveHp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate, for the payload abilities
+        // gateFiringAbilities gates just below. Still PRE-strip — the `type:'shield-strip'`
+        // clause runs later in this turn (:2745+), after this ctx is built. No corpus payload
+        // ability gates on this subject today (Malvex's own charge-slot Barrier is a timed self
+        // buff, gated by postDebuffGateCtx); populated for the same silently-never-fires reason
+        // as its `selfShielded` neighbour.
+        enemyShielded: enemy.shieldPool > 0,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
