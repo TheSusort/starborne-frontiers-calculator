@@ -245,6 +245,23 @@ function registerActorAbilityStatuses(
             // Only a buff config carries it — `hits` does not exist on the debuff arm.
             const hitCount = cfg.type === 'buff' ? cfg.hits : undefined;
             const hitCounted = hitCount !== undefined;
+            // A hit-counted grant must never resolve to the ENEMY side either — `consumeStatusHit`
+            // (statusEngine.ts) only spends from the per-actor SELF timed map (getSelfMap); the
+            // enemy timed map is a completely separate store it never reads. `side` above is
+            // 'enemy' only for the two enemy-adjacency DEBUFF scopes (Vindicator/Asphyxiator) —
+            // no corpus BUFF-typed config targets them combined with `hits` today, so this is
+            // corpus-unreachable, same footing as the accumulating/aura guards just below and the
+            // persistent store's throw in statusEngine.ts's applyTimedAbilityStatus. Thrown loudly
+            // here rather than left to silently land a permanent, unspendable grant on the enemy
+            // side if a future parser change ever produces one.
+            if (hitCounted && side === 'enemy') {
+                throw new Error(
+                    `registerActorAbilityStatuses: hit-counted buff '${cfg.buffName}' resolved to ` +
+                        `the ENEMY side (ability.target '${ability.target}') — the enemy timed map ` +
+                        `is unreachable by consumeStatusHit. Route it through the self side or extend ` +
+                        `consumeStatusHit first.`
+                );
+            }
             // A hit-counted grant is never accumulating and never an aura — BOTH stores are
             // unreachable by `consumeStatusHit`, which only spends from the per-actor TIMED map.
             // Landing a hit-counted grant in either one would make it permanent and unspendable

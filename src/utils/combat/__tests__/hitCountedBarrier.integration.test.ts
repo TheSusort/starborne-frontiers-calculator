@@ -6,9 +6,12 @@
  * engine's Barrier absorb site via `StatusEngine.consumeStatusHit`. A grant with a hit count and
  * no turn window is stored with duration Infinity, so only the count can expire it.
  *
- * NOTHING CARRIES `hits` FROM REAL SKILL TEXT YET (the parser lands in a later task), so every
- * fixture here builds a SYNTHETIC `hits`-carrying buff config. That is the point: this file is the
- * only thing exercising the lifecycle end-to-end until the corpus catches up.
+ * The parser now lands "for N hits" as a hit-counted grant (four corpus ships — Malvex, Panon,
+ * Quixilver, Sansi — say "Barrier for 1 hit"), but every fixture here still builds a SYNTHETIC
+ * `hits`-carrying buff config rather than driving the real skill text: this file exercises the
+ * ENGINE lifecycle end-to-end (status layer, both grant paths, the absorb-site guard) in
+ * isolation from the parser, which has its own coverage (skillTextParser.test.ts,
+ * hitCountedGrantParse.test.ts).
  *
  * The engine-level fixtures are POSITIONAL (teamActors + positions + a targeted enemy). The legacy
  * non-positional path folds a multi-hit attack into a single damage multiplier, so "hit 1 blocked,
@@ -25,7 +28,7 @@ import { executeIntent, type Intent, type IntentExecContext } from '../triggers'
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
-import type { CombatActor, PendingBomb } from '../state';
+import type { CombatActor, PendingBomb, ActiveDoTStack } from '../state';
 import type { PlayerActorRuntime } from '../playerTurn';
 
 // =============================================================================
@@ -412,6 +415,22 @@ const timedBomb = (damagePerStack: number, countdown: number): PendingBomb => ({
     splashModifier: 0,
 });
 
+/** A pre-seeded corrosion stack, ticking at the carrier's OWN turn-start (per-victim DoT tick —
+ *  see perVictimDotTick.integration.test.ts). tick = stacks × (tier/100) × min(carrierMaxHp,
+ *  500_000); with tier 100 / stacks 1 and this file's HP (10_000_000), tick = 500_000.
+ *  `sourceId: 'attacker'` — the tick needs the APPLIER's ctx (`lastTurnCtxByActor`), which only
+ *  exists once that applier has acted THIS round (perVictimDotTick's "no ctx → skip" rule); the
+ *  fast focus ('attacker', speed 2000) always acts before the holder (speed 1000), so its ctx is
+ *  already there when the holder's own-turn tick runs. A sourceId with no matching actor at all
+ *  (e.g. the bomb helper's synthetic 'enemy-applier') never resolves a ctx and the tick silently
+ *  never fires — the trap this comment exists to name. */
+const corrosion = (): ActiveDoTStack => ({
+    tier: 100,
+    stacks: 1,
+    remainingRounds: 5,
+    sourceId: 'attacker',
+});
+
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     attack: 0,
     crit: 0,
@@ -646,5 +665,89 @@ describe('a bomb detonation does not spend a Barrier charge', () => {
         expect(simHpLossFor(result, 1, 'holder')).toBe(0);
         // And the charge was spent by the ATTACK, not the burst — one expiry, after both landed.
         expect(expired).toEqual([{ round: 1, buffName: 'Barrier' }]);
+    });
+});
+
+// =============================================================================
+// REGRESSION for the absorb-site guard: a DoT TICK must NOT spend a charge either.
+//
+// The `byDirectDamage` arm of the guard (engine.ts ~4411) is the one this file's other two
+// regressions (the bomb burst above, and the accumulating-vs-hit-counted classification case in
+// the engine-level suite) don't exercise directly — a DoT tick arrives `byDirectDamage: false`,
+// never `true` with a non-zero bombPortion. "for 1 hit" means a DIRECT hit; a lingering
+// Corrosion/Inferno stack ticking on the holder's own turn is not one, even though Barrier's full
+// immunity (locked game rule) still nullifies its damage same as everything else that funnels
+// through the absorb site.
+//
+// Fixture: same shape as the bomb regression above (fast focus grants Barrier to all allies
+// first, holder does not self-cast) — a pre-seeded corrosion stack ticks at the holder's own
+// turn-start, BEFORE the slower enemy's direct hit lands later the same round.
+// =============================================================================
+
+describe('a DoT tick does not spend a Barrier charge', () => {
+    it('the tick is blocked for free and the charge survives for the real hit that follows', () => {
+        const TICK = 500_000; // 1 stack × (tier 100 / 100) × min(HP, 500_000) — see corrosion().
+        const input = BASE_PLAYER_SIDE({
+            numRounds: 1,
+            speed: 2000, // the granting focus acts first, so the Barrier is up before the tick
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [allAlliesBarrier(1), noopDamage()] }],
+            },
+            teamActors: [holderTeamActor('holder', 'M4', [noopDamage()])],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
+            __testTapActors: (actors: CombatActor[]) => {
+                // Ticks at the START of the holder's round-1 turn (per-victim DoT tick), after
+                // the focus has already granted the Barrier and before the enemy's attack lands.
+                actors.find((a) => a.id === 'holder')?.corrosionEntries.push(corrosion());
+            },
+        });
+        const { expired, result } = collectFor(input, 'holder');
+
+        // BOTH the tick and the enemy's direct hit were nullified — the charge survived the tick
+        // and was still there for the real hit. Pre-fix (guard missing the byDirectDamage clause
+        // entirely): the tick itself would have consumed the charge and the direct hit would have
+        // landed for real.
+        expect(barrierAbsorbedFor(result, 1, 'holder')).toBeCloseTo(TICK + DIRECT_HIT, 6);
+        expect(simHpLossFor(result, 1, 'holder')).toBe(0);
+        // And the charge was spent by the ATTACK, not the tick — one expiry, after both landed.
+        expect(expired).toEqual([{ round: 1, buffName: 'Barrier' }]);
+    });
+});
+
+// =============================================================================
+// A hit-counted grant that resolves to the ENEMY side is a fifth unreachable channel — same
+// defect class as the accumulating/aura guards above and the persistent store's throw
+// (statusEngine.ts's applyTimedAbilityStatus). `consumeStatusHit` only reads the SELF timed map;
+// `side` in engine.ts's registerActorAbilityStatuses resolves to 'enemy' for the two
+// enemy-adjacency scopes ('adjacent-enemies'/'target-and-adjacent-enemies', normally debuff-only
+// in the corpus). No real ship pairs a BUFF-typed config with one of those targets AND `hits`
+// today — this drives that (synthetic, corpus-unreachable) combination straight at
+// registerActorAbilityStatuses to pin the loud failure instead of a silent permanent Barrier.
+// =============================================================================
+
+describe('a hit-counted grant that resolves to the enemy side throws loudly', () => {
+    it('rather than landing in the unreachable enemy timed map', () => {
+        const enemyTargetedHitCountedBuff: Ability = {
+            id: 'barrier-misrouted',
+            type: 'buff',
+            target: 'adjacent-enemies',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Barrier',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                hits: 1,
+            },
+        };
+        const input = BASE_PLAYER_SIDE({
+            numRounds: 1,
+            teamActors: [holderTeamActor('holder', 'M4', [enemyTargetedHitCountedBuff])],
+            enemyAttackers: [offensiveEnemy('enemy-1', 'M1')],
+        });
+
+        expect(() => runCombat(input)).toThrow(/hit-counted buff 'Barrier' resolved to/);
     });
 });
