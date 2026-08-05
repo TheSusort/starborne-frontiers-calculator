@@ -71,3 +71,26 @@ describe('kit fingerprints', () => {
         expect(fingerprintShip(ship!)).toMatchSnapshot();
     });
 });
+
+describe('pinned regression: Malvex target-shield gates (#296, #297)', () => {
+    beforeAll(requireReferenceData);
+
+    it('gates BOTH the active self-shield and the charged Barrier on a shielded target', () => {
+        // The case the whole suite exists for. Pre-#297 the active self-shield fired on every cast
+        // regardless of target, and pre-#296 the charged Barrier did too — so both tokens sat in
+        // all three scenarios. They must now appear ONLY where the target actually carries a
+        // Shield. Note bare `shield` (Malvex's passive on-damaged grant) is expected EVERYWHERE and
+        // is exactly why a bare-`kind` fingerprint could not have caught this.
+        const malvex = buildTraceShip('Malvex');
+        expect(malvex).not.toBeNull();
+        const fp = fingerprintShip(malvex!);
+
+        expect(fp.richEnemy).toContain('shield:active');
+        expect(fp.plain).not.toContain('shield:active');
+        expect(fp.hurtAllies).not.toContain('shield:active');
+
+        expect(fp.richEnemy).toContain('buff:charged');
+        expect(fp.plain).not.toContain('buff:charged');
+        expect(fp.hurtAllies).not.toContain('buff:charged');
+    });
+});
