@@ -70,7 +70,7 @@ import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
-import { holdsBarrierRecharging } from './barrierRecharging';
+import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
 import { shieldAbsorb } from './shieldAbsorb';
 import { thresholdShieldForHit } from './thresholdShield';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -409,6 +409,19 @@ function seedPassiveTimedStatuses(
             // recipients is populated by registerActorAbilityStatuses for every timed-by-slot
             // status; the [rt.actor.id] fallback only guards test fixtures that omit it.
             for (const rid of status.recipients ?? [rt.actor.id]) {
+                // Barrier Recharging: same gate as the cast-path loop (playerTurn.ts) and the
+                // reactive path (triggers.ts), for symmetry. Corpus-unreachable today — no
+                // passive-slot grant currently applies Barrier Recharging before this seed runs
+                // (Panon/Quixilver/Last Stand all grant it reactively, never as a round-1
+                // passive seed) — but a future passive-slot Barrier/Barrier-Recharging grant
+                // must not become the fifth silently-bypassed lockout channel.
+                if (
+                    (BARRIER_BUFFS.has(status.payload.buffName) ||
+                        status.payload.buffName === BARRIER_RECHARGING) &&
+                    holdsBarrierRecharging(statusEngine, rid)
+                ) {
+                    continue;
+                }
                 statusEngine.applyTimedAbilityStatus(round, status, rid);
                 bus.emit({
                     type: 'buff-applied',

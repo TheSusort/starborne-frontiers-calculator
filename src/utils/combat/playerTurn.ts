@@ -51,6 +51,8 @@ import {
 } from './triggers';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
+import { BARRIER_BUFFS } from './barrierBuffs';
+import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
 import { resolveSupportRecipients } from './supportRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
@@ -1751,6 +1753,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // single-ally grants, and all-allies grants (each recipient guarded independently);
             // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
             if (recipientCarriesBlockBuff(statusEngine, rid)) continue;
+            // Barrier Recharging: mirrors triggers.ts's reactive-path gate (same two arms — see
+            // that comment for why both exist). Malvex/Sansi/Panon's charge-slot "Barrier for 1
+            // hit" grants ride THIS loop (sourceSlot 'charge' is `action` here), so without this
+            // gate a live lockout was only ever enforced on the reactive path, not the cast path.
+            if (
+                (BARRIER_BUFFS.has(status.payload.buffName) ||
+                    status.payload.buffName === BARRIER_RECHARGING) &&
+                holdsBarrierRecharging(statusEngine, rid)
+            ) {
+                continue;
+            }
             statusEngine.applyTimedAbilityStatus(r, status, rid);
             bus.emit({
                 type: 'buff-applied',
