@@ -374,6 +374,22 @@ export type ConditionSubject =
     // Live-derived (ConditionContext.selfShielded); defaults false (no shield / DPS mode).
     // Dormant until sub-project H grants shields in the sim. Used by the Arcane Siege implant.
     | 'self-shield'
+    // Binary gate: the condition owner's shield pool is at or above its max HP (a FULL
+    // shield), not merely non-zero. Strictly narrower than `self-shield` above — keep both;
+    // Quixilver's R2 passive ("if it has shield equal to 100% of its max HP") is the only
+    // consumer. Live-derived (ConditionContext.selfShieldFull); defaults false (DPS mode has
+    // no shield pool), so every ability that does not name this subject is unaffected.
+    | 'self-shield-full'
+    // Binary gate: the condition owner's TARGET currently has a shield (the resolved victim's
+    // CombatActor.shieldPool > 0). The TARGET-side mirror of `self-shield` above — named
+    // `enemy-*` like every other subject that reads the opposing primary target
+    // (`enemy-buff`/`enemy-debuff`/`enemy-hp-pct`). Malvex's charged "If the target has a
+    // Shield, it gains Barrier for 1 hit" is the only consumer. Live-derived
+    // (ConditionContext.enemyShielded); defaults false (DPS mode's dummy victim never holds a
+    // shield pool), so every ability that does not name this subject is unaffected.
+    // derivable:true — a derivable:false condition would always be met
+    // (evaluateConditions.ts:132), defeating the gate.
+    | 'enemy-shield'
     // Binary gate: the condition owner received ZERO direct hits this round (a "hit" =
     // a direct attack that landed damage on shield or HP; DoT ticks and fully-Barrier-blocked
     // attacks do not count). Live-derived (ConditionContext.wasHitThisRound); defaults false
@@ -699,6 +715,11 @@ export type AbilityConfig =
            *  per-hit consume). Absent → no clear-on-redirect behavior. */
           clearAllOnRedirect?: boolean;
           duration?: number | 'recurring';
+          /** "for N hit(s)" (Malvex / Panon / Quixilver / Sansi Barrier). Threaded onto the
+           *  registered timed status as `hits`; a config carrying it is never classified as an
+           *  aura, and with no turn duration it is applied with duration Infinity so only the
+           *  hit count expires it. Absent → unchanged. */
+          hits?: number;
           /** "Once per battle" reactive buff grant (Tycho/Shelter/Los on-hp-threshold-crossed
            *  crossing grants): the executor fires AT MOST ONCE per combat, tracked by a
            *  combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.

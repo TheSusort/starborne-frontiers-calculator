@@ -105,6 +105,13 @@ export type RegisteredAbilityStatus =
            *  clause order directly (`buildShipAbilities` sorts each slot by text position).
            *  Enemy-side firing-slot statuses only; absent → applies inline exactly as before. */
           afterDamageClause?: boolean;
+          /** Hit-counted lifecycle (Quixilver R2 / "Barrier for 1 hit"). When set, the status
+           *  additionally expires after this many qualifying hits, spent via consumeStatusHit.
+           *  Orthogonal to `duration`: a status with both expires on whichever comes first. A
+           *  hit-counted status with no turn duration is applied with duration Infinity (never
+           *  ticks out, still removable) — see the TOXIC_OVERFLOW_DURATION precedent. Absent →
+           *  the turn lifecycle alone governs, byte-identical. */
+          hits?: number;
       })
     | (AbilityStatusBase & { kind: 'aura' })
     | (AbilityStatusBase & {
@@ -203,6 +210,15 @@ export interface StatusEngine {
      *  accumulating accumSelfMaps, persistent persistentSelfMaps). Lazy-empty / unknown id /
      *  unknown name → safe no-op. */
     removeSelfBuffByName(actorId: string, buffName: string): void;
+    /** Spend one hit charge of a hit-counted self-side status. Safe to invoke unconditionally at
+     *  an absorb site: it changes nothing when the actor holds no such status or the entry is
+     *  turn-duration-governed (hitsRemaining undefined).
+     *
+     *  RETURNS true ONLY when this call spent the LAST charge and REMOVED the status — i.e. it
+     *  answers "did the status just expire?", not "was a charge spent?". That is what the caller
+     *  needs to emit `buff-expired` exactly once, on the same edge the turn-expiry path emits it.
+     *  A partial spend (2 charges → 1) returns false: the status is still up, nothing expired. */
+    consumeStatusHit(actorId: string, buffName: string): boolean;
     /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
      *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
      *  the number actually removed. Unknown id → no-op (returns 0). */
@@ -365,6 +381,9 @@ interface BuffState {
      *     (`reprieveOnRecipientTurn`, #6b — legendary Martyrdom Disable). Every other off-turn
      *     and enemy-side write leaves it falsy. */
     appliedThisTurn?: boolean;
+    /** Remaining hit charges for a hit-counted status (see RegisteredAbilityStatus.hits).
+     *  Undefined = turn-duration-governed; consumeStatusHit is a no-op on such an entry. */
+    hitsRemaining?: number;
 }
 
 interface AccumulatingState {
@@ -1111,6 +1130,29 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         persistentSelfMaps.get(actorId)?.delete(buffName);
     };
 
+    /** Spend one hit charge of a hit-counted self-side status. See the interface doc: the return
+     *  is "the status was REMOVED by this call", not "a charge was spent", so the absorb site can
+     *  emit `buff-expired` on exactly the same edge the turn-expiry path does.
+     *
+     *  `selfMaps.get(...)` rather than `getSelfMap(...)`, matching the sibling
+     *  `removeSelfBuffByName` above: this runs on EVERY barriered hit, and the lazy-creating
+     *  accessor would allocate an empty map for every actor that never holds one. */
+    const consumeStatusHit = (actorId: string, buffName: string): boolean => {
+        const map = selfMaps.get(actorId);
+        if (!map) return false;
+        for (const [key, state] of map) {
+            if (state.buffName !== buffName || state.hitsRemaining === undefined) continue;
+            const left = state.hitsRemaining - 1;
+            if (left <= 0) {
+                map.delete(key);
+                return true;
+            }
+            map.set(key, { ...state, hitsRemaining: left });
+            return false;
+        }
+        return false;
+    };
+
     /** Remove up to `count` removable statuses for `actorId` on the chosen side, NEWEST-APPLIED
      *  FIRST (highest `appliedSeq` removed first).
      *
@@ -1310,6 +1352,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 turnsRemaining: s.turnsRemaining,
                 payload: s.payload,
                 casterId: s.casterId,
+                // Hit-counted lifecycle travels with the theft (see the recipientMap.set below):
+                // a stolen hit-counted status is durationless (turnsRemaining: Infinity) and
+                // would otherwise become permanent, unspendable damage immunity in the thief's
+                // hands — consumeStatusHit can only spend an entry that actually carries this.
+                hitsRemaining: s.hitsRemaining,
             };
         });
         for (const recipientId of recipientIds) {
@@ -1324,6 +1371,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     tier,
                     payload: st.payload,
                     casterId: st.casterId,
+                    // REMAINING hit count travels intact, mirroring the REMAINING turnsRemaining
+                    // rule documented above — otherwise a stolen hit-counted Barrier arrives with
+                    // hitsRemaining undefined, which consumeStatusHit treats as turn-duration-
+                    // governed (a no-op), leaving the thief permanently immune until it expires
+                    // (never, since it also carries turnsRemaining: Infinity).
+                    hitsRemaining: st.hitsRemaining,
                     appliedSeq: nextAppliedSeq(),
                     // Own-turn reprieve (Finding 2): a buff granted to the actor whose turn is
                     // executing is protected from that same turn's Post-Turn decrement — its
@@ -1412,6 +1465,22 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // stack (capped) and keep the payload for folding. The status.duration (text value) is
         // intentionally ignored — the buff-name rule overrides it (game-verified 2026-06-05).
         if (isPersistentByName(status.payload.buffName)) {
+            // A hit-counted grant cannot take this door: the persistent store is keyed by raw
+            // buff name with no per-entry lifecycle, and `consumeStatusHit` only spends from the
+            // timed selfMaps — so `status.hits` would be dropped here and the status would be
+            // permanent and unspendable (the one-shot-in-an-unreachable-channel defect class).
+            // Unreachable today by construction: `isPersistentByName` is the UNION of two closed
+            // sets — PERSISTENT_STACKING_BUFFS (Defense Shred / Blast / Overload / Titanite) and
+            // ONE_SHOT_PERSISTENT_BUFFS (Shield Converter / Charged Overdrive II) — and none of
+            // the six parse a hit count. Throwing rather than silently dropping so a future
+            // parser change fails LOUDLY.
+            if (status.hits !== undefined) {
+                throw new Error(
+                    `StatusEngine.applyTimedAbilityStatus: hit-counted status '${status.payload.buffName}' ` +
+                        `is a persistent-stacking or one-shot-persistent name — the persistent store cannot ` +
+                        `carry a hit count. Route it through the timed path or extend the persistent store first.`
+                );
+            }
             addPersistentStack(
                 status.side,
                 status.payload.buffName,
@@ -1455,6 +1524,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     ? selfEffectiveId === currentTurnActorId
                     : status.reprieveOnRecipientTurn === true &&
                       enemyEffectiveId === currentTurnActorId,
+            // Hit-counted lifecycle. Stamped only when the registered status asks for it, so
+            // every existing timed write leaves the field undefined and behaves as before.
+            ...(status.hits !== undefined ? { hitsRemaining: status.hits } : {}),
         });
     };
 
@@ -1583,6 +1655,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         removeTimedEnemyStatus,
         reduceTimedEnemyStatus,
         removeSelfBuffByName,
+        consumeStatusHit,
         cleanse,
         reduceNewestDebuffDuration,
         reduceAllDebuffsDuration,

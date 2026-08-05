@@ -95,6 +95,29 @@ describe('liveGateConditions — not-hit-this-round (D-PR8)', () => {
     });
 });
 
+describe('liveGateConditions — self-shield-full (Quixilver R2)', () => {
+    // Guards the LIVE_SUBJECTS membership. This one shipped MISSING: the subject, the parser
+    // rule and both context fields were all in place, but without the LIVE_SUBJECTS entry the
+    // condition neutralized to 'always' and Quixilver's end-of-turn passive granted the whole
+    // team a Barrier every single turn, at any shield level (including none at all).
+    it('keeps a derivable self-shield-full condition (does NOT neutralize to always)', () => {
+        const out = liveGateConditions([{ subject: 'self-shield-full', derivable: true }]);
+        expect(out).toEqual([{ subject: 'self-shield-full', derivable: true }]);
+    });
+});
+
+describe('liveGateConditions — enemy-shield (Malvex charged Barrier)', () => {
+    // Guards the LIVE_SUBJECTS membership. Malvex's "If the target has a Shield, it gains Barrier
+    // for 1 hit" is a charge-slot TIMED SELF BUFF, so it is gated through this very rewrite: drop
+    // the entry and the condition neutralizes to 'always', handing Malvex full damage immunity on
+    // every charged cast whether the target had a shield or not — the bug the gate exists to fix.
+    // A unit test on conditionsMet cannot see this; it runs downstream of the rewrite.
+    it('keeps a derivable enemy-shield condition (does NOT neutralize to always)', () => {
+        const out = liveGateConditions([{ subject: 'enemy-shield', derivable: true }]);
+        expect(out).toEqual([{ subject: 'enemy-shield', derivable: true }]);
+    });
+});
+
 describe('liveGateConditions — enemy-dot-count (SP-D)', () => {
     // Guards the LIVE_SUBJECTS membership: if this subject is ever dropped from LIVE_SUBJECTS,
     // Anemone's Taunt (a timed self-buff) and Belladonna's Stasis (a timed enemy debuff) would

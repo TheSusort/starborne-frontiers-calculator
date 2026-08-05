@@ -27,6 +27,12 @@ import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './bu
 import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
 // eslint-disable-next-line import/no-cycle
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
+// Call-time-safe cycle (same shape as blockBuffBuffs.ts above): barrierRecharging imports
+// selfBuffNamesForOwners from this module and we import holdsBarrierRecharging back. Both are
+// used only inside function bodies, so there is no initialization-order hazard.
+// eslint-disable-next-line import/no-cycle
+import { holdsBarrierRecharging, BARRIER_RECHARGING } from './barrierRecharging';
+import { BARRIER_BUFFS } from './barrierBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
@@ -1323,6 +1329,10 @@ export interface IntentExecContext {
      *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
      *  keeping all existing drain gating byte-identical. */
     selfHpPctFor?: (ownerId: string) => number;
+    /** Quixilver R2: owner's shield pool is at or above max HP. Optional — absent (every test
+     *  fixture, DPS mode) → buildDrainContext leaves selfShieldFull false, so a drain gate on
+     *  this subject is simply not met. Byte-identical for every ability that omits the subject. */
+    selfShieldFullFor?: (ownerId: string) => boolean;
     /** Whether `ownerId` has the lowest Speed among the player team (ties → all qualify),
      *  feeding the `lowest-speed-ally` gate at drain time. Computed once by the engine (Speed
      *  is static turn-order in this sim). Absent → buildDrainContext defaults the gate to true
@@ -1572,6 +1582,16 @@ export function buildActorConditionContext(
         /** Owner has the lowest Speed among its player team. Default true (lone-actor /
          *  DPS assumption). Populated by buildDrainContext (Phase 4c PR 6). */
         isLowestSpeedAlly?: boolean;
+        /** Quixilver R2: owner's shield pool is at or above max HP. Default false (DPS mode /
+         *  no shield). Populated by buildDrainContext from the engine's selfShieldFullFor delegate. */
+        selfShieldFull?: boolean;
+        /** Malvex charged Barrier: the owner's TARGET has a shield. Default false. NOT populated
+         *  by buildDrainContext — a reaction has no "the cast's primary target" (ctx.enemy is the
+         *  legacy/dummy victim sink on the player side), and the only corpus consumer of
+         *  `enemy-shield` is an on-cast charged-slot grant that never reaches executeIntent. The
+         *  field is threaded here so a future reactive consumer only needs an IntentExecContext
+         *  delegate, not another hand-enumerated layer. */
+        enemyShielded?: boolean;
         /** Owner was hit by a direct attack this round. Default false. Populated by
          *  buildDrainContext (D-PR8). */
         wasHitThisRound?: boolean;
@@ -1629,6 +1649,8 @@ export function buildActorConditionContext(
         enemyBuffNames: shared.enemyBuffNames,
         selfDebuffNames: shared.selfDebuffNames,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
+        selfShieldFull: shared.selfShieldFull,
+        enemyShielded: shared.enemyShielded,
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,
@@ -1684,6 +1706,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // Phase 4c PR 6: live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
         // paths keep the lone-actor assumption and stay byte-identical.
         isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true,
+        selfShieldFull: ctx.selfShieldFullFor?.(ownerId) ?? false,
         // D-PR8: live not-hit-this-round gate (Alacrity). Default false → DPS / no-delegate
         // paths read "not hit" ⇒ met and stay byte-identical.
         wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false,
@@ -2527,8 +2550,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Task 5: consume the once-per-attack slot now that the self-buff WILL apply.
         if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
-        // duration decides; a duration-less buff defaults to a 1-turn window.
-        const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;
+        // duration decides; a duration-less buff defaults to a 1-turn window. A HIT-COUNTED
+        // duration-less buff instead takes Infinity: its hit count, not a turn window, is what
+        // expires it (a 1-turn default would silently cap a multi-hit Barrier at one turn).
+        const duration =
+            typeof cfg.duration === 'number' ? cfg.duration : cfg.hits !== undefined ? Infinity : 1;
         // Recipients: an ally-damage reaction grant ('ally' target + eventCtx naming the
         // damaged ally — Graphite's "grants the ally Repair Over Time III") lands on EXACTLY
         // that ally; granting all playerIds would put the HoT on the whole team and inflate
@@ -2592,9 +2618,32 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             recipients,
             kind: 'timed',
             duration,
+            ...(cfg.hits !== undefined ? { hits: cfg.hits } : {}),
         };
         for (const rid of recipients) {
             if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
+            // Barrier Recharging gates TWO different grants for a recipient already under the
+            // lockout, for two different reasons:
+            //   - BARRIER_BUFFS arm: the status's own literal text, "Cannot be granted Barrier".
+            //     Scoped to BARRIER_BUFFS names — it blocks Barrier specifically, not buffs in
+            //     general (that is Block Buff's job, handled above).
+            //   - BARRIER_RECHARGING arm: re-application of the lockout itself. This is NOT
+            //     stated by the game text — "Cannot be reduced. Unremovable" says nothing about
+            //     a fresh grant — but it is required to make the text's "Cannot be reduced" mean
+            //     anything at all. Without this arm, Quixilver's every-turn re-fire would beat
+            //     `familyApplicationWins` (a fresh duration of 3 always beats a decayed
+            //     turnsRemaining of 1 or 2) and refresh the lockout back to 3 forever, so allies
+            //     would receive exactly ONE Barrier for the whole shield-full streak instead of
+            //     one every 3 turns. Owner-approved reading (2026-08-05): "cannot be reduced" ==
+            //     "cannot be re-armed while still held" — a real 3-turn cooldown that decays to
+            //     zero and then allows a fresh grant, not a permanent one-shot lock.
+            // Either way the recipient is silently skipped — no status, no event, no log.
+            if (
+                (BARRIER_BUFFS.has(cfg.buffName) || cfg.buffName === BARRIER_RECHARGING) &&
+                holdsBarrierRecharging(ctx.statusEngine, rid)
+            ) {
+                continue;
+            }
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
             ctx.bus.emit({
                 type: 'buff-applied',
@@ -2610,6 +2659,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // NOTE: extras use their raw parsedEffects and do NOT receive the `attackFlatPctOfCaster`
         // pin applied to the primary above — fine for the current attack-less control buffs
         // (Barrier/Block Debuff); a future attack-scaled co-buff would need pin handling here.
+        //
+        // INVARIANT — a co-granted buff CANNOT be hit-counted. The `additionalBuffs` element type
+        // (types/abilities.ts) has no `hits` field, so there is nothing to thread and `extraStatus`
+        // below is complete as written. If `hits` is ever added to that element type, it MUST be
+        // threaded here in the same `...(x !== undefined ? { hits: x } : {})` shape the primary
+        // status uses above — and `duration` must become Infinity when it is present, exactly as
+        // the primary's does. Omitting either would put a one-shot into the timed store with no
+        // charge (permanent, since a durationless co-grant defaults to a real turn window) or with
+        // a charge the turn window silently outraces. Last Stand grants Barrier as its PRIMARY
+        // (cfg.buffName, handled above) with Block Debuff as the co-grant
+        // (alsoGrantBuffNames: ['Block Debuff']) — so today NO corpus co-grant is Barrier. This
+        // invariant guards the day one is: Barrier is the one buff name a co-grant could plausibly
+        // want hit-counted, so it is the first place a "for N hits" Barrier would try to land.
         for (const extra of cfg.additionalBuffs ?? []) {
             const extraStatus: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
                 payload: payloadFromConfig({

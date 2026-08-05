@@ -1,4 +1,5 @@
 import { BUFFS } from '../constants/buffs';
+import { isFriendlySideStatus } from '../constants/friendlySideStatuses';
 import { Ship } from '../types/ship';
 import {
     SecondaryDamage,
@@ -100,6 +101,10 @@ const DOT_DEBUFF_PREFIXES = new Set(['corrosion', 'inferno', 'bomb', 'acidic']);
  * gates reference a debuff the unit applies (Stealth is the notable buff exception, found in BUFFS).
  */
 export function classifyEnemyEffect(name: string): 'buff' | 'debuff' {
+    // Side override ahead of the DoT-prefix and BUFFS lookups: a friendly-side negative status is
+    // held in the carrier's BUFF-name store, so a gate reading it off an enemy must build an
+    // 'enemy-buff' condition. See FRIENDLY_SIDE_STATUSES for why valence and side differ.
+    if (isFriendlySideStatus(name)) return 'buff';
     if (DOT_DEBUFF_PREFIXES.has(name.toLowerCase().split(' ')[0])) return 'debuff';
     const found = BUFFS.find((b) => b.name.toLowerCase() === name.toLowerCase());
     return found?.type === 'buff' ? 'buff' : 'debuff';
@@ -1141,10 +1146,31 @@ export function detectGrantConditions(
         return [{ subject: 'self-shield', derivable: true }];
     }
 
+    // Malvex: "If the target has a Shield, it gains Barrier for 1 hit" — the TARGET-side mirror of
+    // the self-shield rule directly above, live-derived from the resolved victim's shieldPool at
+    // cast time. Sits next to its sibling (both before rule 0) so the shield family reads in one
+    // place; neither phrasing overlaps the other or any rule below.
+    // derivable:true — a derivable:false condition is treated as always met
+    // (evaluateConditions.ts:132), which would leave the Barrier ungated, i.e. the bug itself.
+    if (TARGET_HAS_SHIELD_RE.test(low)) {
+        return [{ subject: 'enemy-shield', derivable: true }];
+    }
+
     // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
     // derivable:false condition would always be met — evaluateConditions.ts:30).
     if (REPAIRED_THIS_ROUND_RE.test(low)) {
         return [{ subject: 'target-repaired-this-round', derivable: true }];
+    }
+
+    // Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full. Requires
+    // the explicit 100%-of-max-HP wording — a bare "When Shielded" (Malvex) is the BROADER
+    // existing `self-shielded` INCOMING-hit condition (evaluateConditions.ts's victim-side
+    // shieldPool > 0 check, a different mechanism entirely) and must not match here.
+    // `self-shield-full` is the narrower of the two (exactly 100%, not merely > 0).
+    // derivable:true — a derivable:false condition is treated as always met
+    // (evaluateConditions.ts:30), which would defeat the gate entirely.
+    if (SHIELD_FULL_RE.test(low)) {
+        return [{ subject: 'self-shield-full', derivable: true }];
     }
 
     // 0. Recurring grant: "gains X each/every turn|round" stacks unconditionally — a one-time gate
@@ -1318,6 +1344,13 @@ function matchesActiveSelfCrit(text: string): boolean {
 }
 const START_OF_ROUND_RE =
     /at the start of (?:the|each|every) round|starts? (?:the|each|every) round/i;
+// Ship-kit W9, Task 5: "at the end of THIS UNIT'S turn" → end-of-turn (Quixilver R2's Barrier
+// grant). Requires the possessive "this unit's turn" — the bare "end of the round" phrasing
+// (END_OF_ROUND_RE, checked in detectReactiveTrigger below) is a DIFFERENT trigger, and matching
+// "end of … turn" loosely would steal Rhodium's end-of-round grant. Apostrophe class accepts both
+// the ASCII ' and the curly ’ the CSV uses inconsistently across rows (see maskAbbrev's sibling
+// convention). Reference data: docs/ship-skills.csv (Quixilver's third-passive clause).
+const END_OF_OWN_TURN_RE = /\bat\s+the\s+end\s+of\s+this\s+unit['’]s\s+turn\b/i;
 // "every turn" / "each turn" — a per-own-turn recurring self-grant. Distinct from
 // START_OF_TURN_CHARGE_RE ("at the start of the turn"): the trailing-phrase form Kinetik's
 // per-turn shield and Cinya's per-turn heal use (docs/ship-skills.csv). SP-G G1a.
@@ -1387,6 +1420,21 @@ const KILL_TRIGGER_RE =
 // other kill clause shares. Verified corpus-unique to Meiying (docs/ship-skills.csv, grep "with a
 // Debuff").
 const KILL_WITH_DEBUFF_RE = /\bkilling\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
+// Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full (the caster's
+// OWN shield pool, cast-time). Requires the explicit 100%-of-max-HP wording so a bare "When
+// Shielded" (Malvex's reactive `self-shielded` INCOMING-hit condition — shieldPool > 0, a
+// different mechanism) cannot co-match. Corpus-verified (docs/ship-skills.csv, grep "equal to
+// 100%.*max"): Quixilver's third-passive Barrier grant is the only row with this phrasing.
+const SHIELD_FULL_RE = /\bshield\s+equal\s+to\s+100%\s+of\s+(?:its|their)\s+max(?:imum)?\s*hp\b/i;
+// Malvex charged Barrier: "If the target has a Shield" → enemy-shield (the TARGET's shield pool,
+// cast-time). Subject-anchored on "the target|enemy" so it can never co-match the owner-side
+// `if this unit has shield` rule (APEX) handled just above it in detectGrantConditions. The
+// trailing `\b` after "shield" keeps the phrase from being swallowed by a longer noun — and the
+// "a" is optional because the same ship writes it both with and without a comma before the
+// consequent. Corpus-verified (docs/ship-skills.csv, grep "target has a Shield"): Malvex's active
+// and charged rows are the only two occurrences in the game, and only the charged one grants a
+// named buff (the active one grants a nameless self-shield, which never reaches this detector).
+const TARGET_HAS_SHIELD_RE = /\bif\s+the\s+(?:target|enemy)\s+has\s+(?:a\s+)?shield\b/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 // Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted
@@ -1479,6 +1527,15 @@ export function detectReactiveTrigger(
     // separate clause keyed on the same buff name but matched first by resolveBuffClause, so it
     // never reaches here) — this ordering just mirrors the existing rule for readability.
     if (END_OF_ROUND_RE.test(clause)) return 'end-of-round';
+    // Ship-kit W9, Task 5: "at the end of this Unit's turn" → end-of-turn (Quixilver R2's
+    // Barrier grant). Checked AFTER end-of-round for the same reason START_OF_ROUND_RE is
+    // checked first above — the two phrasings never co-occur in one clause, but this mirrors
+    // the existing ordering for readability. Routing this OFF on-cast matters beyond the trigger
+    // label: the ability is granted from a PASSIVE slot, and a passive-slot on-cast buff is only
+    // ever seeded once at combat start (engine.ts's seedPassiveTimedStatuses, gated `r === 1`).
+    // end-of-turn is a LIVE trigger (triggers.ts), so partitionReactiveAbilities routes it onto
+    // the reactive path instead — it re-fires every one of the owner's turns, not just round 1.
+    if (END_OF_OWN_TURN_RE.test(clause)) return 'end-of-turn';
     // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
     // shares its governing trailing phrase with its sibling charge ability (already
     // start-of-turn via START_OF_TURN_CHARGE_RE in the charge-specific parser); this was the
@@ -3049,6 +3106,42 @@ export function detectTargetHpGate(text: string, pos: number): { hpBelowPct: num
     if (sentence === undefined) return undefined;
     const m = TARGET_HP_GATE_RE.exec(sentence);
     return m ? { hpBelowPct: parseFloat(m[1]) } : undefined;
+}
+
+// "for N hit(s)" grant window. Chars after the buff-name anchor that may still belong to that
+// grant's own duration phrase — the longest corpus lead-in is "Barrier</unit-skill> for 1 hit"
+// (30), so 60 leaves headroom for a longer name without reaching a later clause.
+const HIT_COUNT_WINDOW = 60;
+// The FIRST duration phrase after the anchor wins, whichever unit it names. Scanning for "hits"
+// alone would let Sansi's Taunt — "grants Taunt for 1 turn and Barrier for 1 hit", one sentence —
+// skip over its own "for 1 turn" and steal Barrier's hit count; requiring the first match to BE
+// the hit form keeps every grant on the phrase that immediately follows it.
+const GRANT_DURATION_RE = /\bfor\s+(\d+)\s+(hits?|turns?)\b/i;
+
+/**
+ * "… <unit-skill>Barrier</unit-skill> for 1 hit" → 1: a hit-counted lifecycle (the buff config's
+ * `hits`) instead of, or alongside, a turn duration. Returns undefined when the grant states turns
+ * or no duration at all, leaving the turn lifecycle in charge.
+ *
+ * INDEX BASIS: `pos` is the buff name's index in the RAW (tagged) row text, as produced by
+ * findBuffNamePos at the buff-merge site. The window is therefore cut from a length-PRESERVING
+ * maskAbbrev of that same text — the convention rawSentenceAround and detectRemovalTriggerAt use.
+ * stripUnitTags would delete characters and shift every offset (the raw-pos/stripped-text trap).
+ * The window is also clipped at the first sentence boundary so a following sentence's phrase
+ * cannot be read as this grant's.
+ *
+ * Corpus sites (docs/ship-skills.csv), all "for 1 hit": Malvex (charge), Panon (charge),
+ * Quixilver (passive), Sansi (charge). Distinct from buildShipAbilities' parseHitCount, which
+ * counts a multi-hit ATTACK ("attacks three times").
+ */
+export function detectHitCount(text: string, pos: number): number | undefined {
+    if (pos < 0) return undefined;
+    const window = maskAbbrev(text).slice(pos, pos + HIT_COUNT_WINDOW);
+    const boundary = window.search(/[.;](?=\s|$)|<br\s*\/?>/i);
+    const m = GRANT_DURATION_RE.exec(boundary >= 0 ? window.slice(0, boundary) : window);
+    if (!m || !/^hits?$/i.test(m[2])) return undefined;
+    const n = parseInt(m[1], 10);
+    return n > 0 ? n : undefined;
 }
 
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
@@ -5211,6 +5304,11 @@ function verbToTarget(
     if (SELF_VERBS.has(verb)) return 'self';
     if (ENEMY_VERBS.has(verb)) return 'enemy';
     if (/\bitself\b/i.test(followingText)) return 'self';
+    // A friendly-side negative status is player-side whatever its BUFFS type says, so a
+    // receiver-less "applies <status>" inherits the clause's ally receiver instead of falling
+    // through to 'enemy' (Quixilver's Barrier Recharging). Panon's "to itself" is already handled
+    // above, so this only ever widens the receiver-LESS phrasing.
+    if (isFriendlySideStatus(buffName)) return 'self';
     // apply forms: use BUFFS type to disambiguate
     const found = BUFFS.find((b) => b.name === buffName);
     return found?.type === 'buff' ? 'self' : 'enemy';

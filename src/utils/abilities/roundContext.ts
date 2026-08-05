@@ -65,6 +65,13 @@ export function buildRoundContext(state: {
     targetRepairedThisRound?: boolean;
     /** True when the acting unit has a shield (shieldPool > 0). Default false. */
     selfShielded?: boolean;
+    /** True when the acting unit's shield pool is at or above its max HP. Default false.
+     *  Narrower than `selfShielded`. Used by Quixilver's R2 passive gate. */
+    selfShieldFull?: boolean;
+    /** True when the acting unit's resolved TARGET has a shield (victim shieldPool > 0). Default
+     *  false (DPS-assumption: the dummy victim carries no shield pool). Used by Malvex's charged
+     *  Barrier gate. */
+    enemyShielded?: boolean;
     /** True when the acting unit was hit by a direct attack this round. Default false. */
     wasHitThisRound?: boolean;
     /** True when the acting unit took the round's first real turn. Default false. */
@@ -137,6 +144,8 @@ export function buildRoundContext(state: {
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
         targetRepairedThisRound: state.targetRepairedThisRound ?? false,
         selfShielded: state.selfShielded ?? false,
+        selfShieldFull: state.selfShieldFull ?? false,
+        enemyShielded: state.enemyShielded ?? false,
         wasHitThisRound: state.wasHitThisRound ?? false,
         firstActivator: state.firstActivator ?? false,
         isLastStanding: state.lastStanding ?? false,

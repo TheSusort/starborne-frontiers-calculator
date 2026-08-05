@@ -70,6 +70,7 @@ import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
+import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
 import { shieldAbsorb } from './shieldAbsorb';
 import { thresholdShieldForHit } from './thresholdShield';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -239,7 +240,36 @@ function registerActorAbilityStatuses(
                 ability.target === 'target-and-adjacent-enemies'
                     ? 'enemy'
                     : 'self';
-            const accumulating = !!cfg.stackTrigger && cfg.isStackable;
+            // Hit count ("Barrier for 1 hit"), captured as the VALUE rather than a flag so the
+            // timed literal below can thread it without re-narrowing `cfg` back to the buff arm.
+            // Only a buff config carries it — `hits` does not exist on the debuff arm.
+            const hitCount = cfg.type === 'buff' ? cfg.hits : undefined;
+            const hitCounted = hitCount !== undefined;
+            // A hit-counted grant must never resolve to the ENEMY side either — `consumeStatusHit`
+            // (statusEngine.ts) only spends from the per-actor SELF timed map (getSelfMap); the
+            // enemy timed map is a completely separate store it never reads. `side` above is
+            // 'enemy' only for the two enemy-adjacency DEBUFF scopes (Vindicator/Asphyxiator) —
+            // no corpus BUFF-typed config targets them combined with `hits` today, so this is
+            // corpus-unreachable, same footing as the accumulating/aura guards just below and the
+            // persistent store's throw in statusEngine.ts's applyTimedAbilityStatus. Thrown loudly
+            // here rather than left to silently land a permanent, unspendable grant on the enemy
+            // side if a future parser change ever produces one.
+            if (hitCounted && side === 'enemy') {
+                throw new Error(
+                    `registerActorAbilityStatuses: hit-counted buff '${cfg.buffName}' resolved to ` +
+                        `the ENEMY side (ability.target '${ability.target}') — the enemy timed map ` +
+                        `is unreachable by consumeStatusHit. Route it through the self side or extend ` +
+                        `consumeStatusHit first.`
+                );
+            }
+            // A hit-counted grant is never accumulating and never an aura — BOTH stores are
+            // unreachable by `consumeStatusHit`, which only spends from the per-actor TIMED map.
+            // Landing a hit-counted grant in either one would make it permanent and unspendable
+            // (the known one-shot-in-an-unreachable-channel defect class). No corpus config
+            // combines `hits` with `stackTrigger + isStackable` today; if one ever does, the hit
+            // lifecycle wins and the stack accrual is what gets dropped, loudly here rather than
+            // silently at the spend site.
+            const accumulating = !hitCounted && !!cfg.stackTrigger && cfg.isStackable;
             // Cheat-Death-family grants from a FIRING slot (Hermes/Hayyan charged skills) are
             // cast-path persistent grants, NOT always-on auras: they apply when the slot fires
             // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time) and never
@@ -265,9 +295,14 @@ function registerActorAbilityStatuses(
                       : ability.target === 'ally' || ability.target === 'all-allies'
                         ? playerIds
                         : [ownerId];
+            // A hit-counted grant is never an aura: an aura is re-evaluated per round against
+            // its gate and has no consumable charge, so a durationless "Barrier for 1 hit" would
+            // otherwise be permanent for as long as its gate held. (`hitCounted` is computed with
+            // `accumulating` above — the other classification it has to lose to.)
             const isAura =
                 !accumulating &&
                 !castPathCheatDeath &&
+                !hitCounted &&
                 (cfg.duration === 'recurring' || cfg.duration === undefined);
             const payload: AbilityStatusPayload = {
                 buffName: cfg.buffName,
@@ -319,7 +354,15 @@ function registerActorAbilityStatuses(
                 status = {
                     ...base,
                     kind: 'timed',
-                    duration: castPathCheatDeath ? Infinity : (cfg.duration as number),
+                    duration: castPathCheatDeath
+                        ? Infinity
+                        : hitCounted && typeof cfg.duration !== 'number'
+                          ? // Hit-counted with no stated turn window: never tick out, expire on
+                            // the hit count alone. Same non-expiring-but-removable shape as
+                            // TOXIC_OVERFLOW_DURATION.
+                            Infinity
+                          : (cfg.duration as number),
+                    ...(hitCount !== undefined ? { hits: hitCount } : {}),
                     // Clause-order stamp (enemy side only — a self-buff never modifies the
                     // victim's incoming damage, so deferring one would change nothing but its
                     // event order). Consumed by playerTurn's timed-enemy application loop.
@@ -383,6 +426,19 @@ function seedPassiveTimedStatuses(
             // recipients is populated by registerActorAbilityStatuses for every timed-by-slot
             // status; the [rt.actor.id] fallback only guards test fixtures that omit it.
             for (const rid of status.recipients ?? [rt.actor.id]) {
+                // Barrier Recharging: same gate as the cast-path loop (playerTurn.ts) and the
+                // reactive path (triggers.ts), for symmetry. Corpus-unreachable today — no
+                // passive-slot grant currently applies Barrier Recharging before this seed runs
+                // (Panon/Quixilver/Last Stand all grant it reactively, never as a round-1
+                // passive seed) — but a future passive-slot Barrier/Barrier-Recharging grant
+                // must not become the fifth silently-bypassed lockout channel.
+                if (
+                    (BARRIER_BUFFS.has(status.payload.buffName) ||
+                        status.payload.buffName === BARRIER_RECHARGING) &&
+                    holdsBarrierRecharging(statusEngine, rid)
+                ) {
+                    continue;
+                }
                 statusEngine.applyTimedAbilityStatus(round, status, rid);
                 bus.emit({
                     type: 'buff-applied',
@@ -2352,6 +2408,15 @@ export function runCombat(input: CombatEngineInput): {
         enemyAttackerActorIds.filter((id) => allActorsById.get(id)?.destroyedRound === undefined);
     const isActorAlive = (actorId: string): boolean =>
         allActorsById.get(actorId)?.destroyedRound === undefined;
+    // Quixilver R2: shield pool at or above max HP. Reads `allActorsById` (both sides) and the
+    // shared max-HP lookup, so it is team-symmetric by construction. Guards maxHp > 0 so a
+    // fixture actor with no HP stat cannot report a "full" shield of zero.
+    const isSelfShieldFull = (actorId: string): boolean => {
+        const a = allActorsById.get(actorId);
+        if (a === undefined) return false;
+        const maxHp = recipientMaxHp(actorId);
+        return maxHp > 0 && a.shieldPool >= maxHp;
+    };
     const playerEnemyBuffNames = (): string[] =>
         selfBuffNamesForOwners(statusEngine, livingEnemyAttackerIds());
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
@@ -3353,10 +3418,10 @@ export function runCombat(input: CombatEngineInput): {
     };
     // Epic PR12 (C): does the given actor currently carry its own "Barrier Recharging"
     // self-status? (Panon — "reduces all incoming damage by 20% when affected by Barrier
-    // Recharging.") Sibling to isStealthed — same selfBuffNamesForOwners lookup, different
-    // literal name.
+    // Recharging.") Local alias kept so this call site's name stays unchanged; the actual
+    // lookup now lives in barrierRecharging.ts (shared with triggers.ts's Barrier-grant gate).
     const hasBarrierRecharging = (actorId: string): boolean =>
-        selfBuffNamesForOwners(statusEngine, [actorId]).includes('Barrier Recharging');
+        holdsBarrierRecharging(statusEngine, actorId);
     // Model-completeness epic (SP-A): does the given actor currently hold an active shield
     // pool? (Malvex — "When Shielded, this Ship takes 10% less damage.") Reads the live
     // absorption pool directly off the CombatActor, mirroring hasBarrierRecharging.
@@ -3886,10 +3951,12 @@ export function runCombat(input: CombatEngineInput): {
             // blocked: direct attacks, DoT ticks, AND bomb detonations (all three funnel here).
             // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death —
             // so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers the
-            // Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on first
-            // hit. The damage still "arrives" (the victim's bucket .incoming increments below) but
-            // its effect is nullified; the blocked amount is tracked SEPARATELY as the bucket's
-            // .barrierAbsorbed (NOT .shieldAbsorbed — Barrier never touches the shield).
+            // Cheat-Death intercept below. Lifecycle is EITHER duration-based (the normal timed
+            // lifecycle) OR hit-counted (the grant's `hits`, spent on a direct hit at the absorb
+            // site below) — see barrierBuffs.ts. The damage still "arrives" (the victim's bucket
+            // .incoming increments below) but its effect is nullified; the blocked amount is
+            // tracked SEPARATELY as the bucket's .barrierAbsorbed (NOT .shieldAbsorbed — Barrier
+            // never touches the shield).
             // Detection mirrors the Cheat-Death check (selfBuffNamesForOwners aggregates snapshot +
             // timed + active ability self statuses).
             const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
@@ -4343,6 +4410,40 @@ export function runCombat(input: CombatEngineInput): {
             // .shieldAbsorbed — Barrier never touches the shield).
             if (carriesBarrier) {
                 sink.addBarrierAbsorbed(damage, victim.id);
+                // Hit-counted Barrier: this absorb spends one charge. "for 1 hit" means a DIRECT
+                // hit, and the guard spells that out exactly as the funnel's other two consumables
+                // do (Hit Mitigation :4271-4272, Shield Converter :4289-4290):
+                //  - `byDirectDamage`: a DoT tick is not a hit.
+                //  - `bombPortion === 0`: a pure detonation arrives stamped `byDirectDamage: true`
+                //    with the whole amount in `bombPortion`, and bomb-death-splash loops once PER
+                //    BOMB — burning charges on a burst would leave the next real hit unblocked.
+                //    A MIXED direct+bomb apply (0 < bombPortion < damage) also skips: it is not a
+                //    hit by this funnel's own definition, so it must not spend either.
+                //  - `damage > 0`: a zero-amount intake read nothing, so there is nothing to spend
+                //    the charge on.
+                // Every case still gets FULL immunity — the guard only decides whether the charge
+                // is spent. No-op (returns false) for a turn-duration Barrier, so every existing
+                // fixture is byte-identical.
+                if (
+                    cause?.byDirectDamage === true &&
+                    (cause.bombPortion ?? 0) === 0 &&
+                    damage > 0
+                ) {
+                    for (const name of BARRIER_BUFFS) {
+                        // True ONLY when the last charge went and the status was removed — the
+                        // turn-expiry path (decrementPlayer/decrementEnemy, :8886/:8898) emits the
+                        // same event with the same fields, so a hit-consumed Barrier disappears
+                        // from the combat log and the round status panel the same way a
+                        // turn-expired one does instead of vanishing silently.
+                        if (statusEngine.consumeStatusHit(victim.id, name))
+                            bus.emit({
+                                type: 'buff-expired',
+                                actorId: victim.id,
+                                round: r,
+                                buffName: name,
+                            });
+                    }
+                }
                 if (victim.currentHp > 0 && maxHp > 0) {
                     bus.emit({
                         type: 'hp-changed',
@@ -6682,6 +6783,7 @@ export function runCombat(input: CombatEngineInput): {
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
                         enemyAttackerIds: enemyAttackerActorIds,
                         isActorAlive,
+                        selfShieldFullFor: isSelfShieldFull,
                         // SP-F F4: name map for the live `ally-on-team` roster check. Empty in DPS
                         // (no ship names supplied) → buildDrainContext leaves allyTeamNames
                         // undefined → assume-met fallback (byte-identical).

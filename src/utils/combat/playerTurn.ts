@@ -51,6 +51,8 @@ import {
 } from './triggers';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
+import { BARRIER_BUFFS } from './barrierBuffs';
+import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
 import { resolveSupportRecipients } from './supportRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
@@ -1456,6 +1458,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // land regardless of the caster's real shieldPool, which is just as wrong as the
         // original unconditional-inflict bug this task fixes.
         selfShielded: actor.shieldPool > 0,
+        // Approximates max HP with the static base stat (`actor.stats.hp`), NOT the live
+        // buff-inclusive value drain-time reads (engine.ts's isSelfShieldFull via
+        // recipientMaxHp). This ctx is built before `dmgStats`/`effectiveHp` exist in the turn
+        // (they're computed further down, :1878/:1987) and cannot be reordered here without
+        // reordering the whole turn, which is out of scope. Consequence: an actor under an
+        // active max-HP buff can read "full" here slightly EARLY (base HP is smaller than the
+        // buffed HP, so the shieldPool>=threshold trips sooner). Inert today regardless — the
+        // only shipped consumer of `self-shield-full` is the reactive end-of-turn drain path,
+        // which reads the live value and is unaffected by this approximation. Left in place
+        // (not deleted): dropping the field would make a future on-cast gate on this subject
+        // silently never fire, which is worse than the approximation.
+        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate, live-derived from the resolved
+        // victim's shieldPool. Read PRE-strip: a `type:'shield-strip'` clause in the same cast
+        // (Malvex's own "removes 30% of the enemy's Shield") only runs further down this turn
+        // (:2745), so this reads the pool as it stood before the cast. Harmless for the boolean —
+        // removing 30% of a positive pool leaves 70% of it, still positive — so pre- and post-strip
+        // agree; see the shield-strip site for the ordering.
+        enemyShielded: enemy.shieldPool > 0,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
@@ -1722,6 +1743,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
+        // Approximates max HP with the static base stat (`actor.stats.hp`), same limitation and
+        // same reasoning as preDebuffGateCtx above (:1461) — this ctx is also built before
+        // `dmgStats`/`effectiveHp` exist in the turn (computed further down, :2055/:2056) and
+        // cannot be reordered here without reordering the whole turn, which is out of scope.
+        // THIS is the ctx that matters for the subject: the per-slot timed-SELF-buff loop just
+        // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions, postDebuffGateCtx)`
+        // at :1763) is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's
+        // shape, e.g. a charge/active-slot "if this Unit has Shield equal to 100% of its max HP"
+        // grant). Without this field, selfShieldFull defaults false here (buildRoundContext's
+        // DPS-safe default) and such a cast-path grant would be permanently suppressed regardless
+        // of the caster's real shieldPool — the same silent-failure class the sibling fields in
+        // the other three contexts already guard against.
+        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate. Note `selfShielded` is still
+        // absent from THIS ctx (its only consumers gate enemy debuffs / modifiers / payload
+        // abilities instead) — but `selfShieldFull` above IS populated here, unlike the other two
+        // absent-sibling notes elsewhere in this function: this is the one ctx a firing-slot
+        // timed self-buff actually gates on.
+        enemyShielded: enemy.shieldPool > 0,
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
@@ -1739,6 +1779,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // single-ally grants, and all-allies grants (each recipient guarded independently);
             // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
             if (recipientCarriesBlockBuff(statusEngine, rid)) continue;
+            // Barrier Recharging: mirrors triggers.ts's reactive-path gate (same two arms — see
+            // that comment for why both exist). Malvex/Sansi/Panon's charge-slot "Barrier for 1
+            // hit" grants ride THIS loop (sourceSlot 'charge' is `action` here), so without this
+            // gate a live lockout was only ever enforced on the reactive path, not the cast path.
+            if (
+                (BARRIER_BUFFS.has(status.payload.buffName) ||
+                    status.payload.buffName === BARRIER_RECHARGING) &&
+                holdsBarrierRecharging(statusEngine, rid)
+            ) {
+                continue;
+            }
             statusEngine.applyTimedAbilityStatus(r, status, rid);
             bus.emit({
                 type: 'buff-applied',
@@ -1799,6 +1850,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
+        // Approximates max HP with the static base stat, same limitation as preDebuffGateCtx
+        // above (:1470) — but here it is a hard dependency ordering, not just "not yet
+        // computed": this ctx is threaded into effectiveDamageStatsOf as `modifierCtx`, which
+        // gates `modifierAbilities` and folds the result into `mod.hp` → `dmgStats.hp` →
+        // `effectiveHp` (:1878/:1987 below). Reading `effectiveHp` here would be circular —
+        // exactly the self-referential-gate class the PRE-modifier `critBuffForGates` estimate
+        // above (layers 1+2+3, see the comment two above this ctx) exists to avoid for crit.
+        // Consequence: an actor under an active max-HP buff can read "full" here slightly
+        // EARLY. Inert today regardless — the only shipped consumer of `self-shield-full` is
+        // the reactive end-of-turn drain path (engine.ts's isSelfShieldFull), which reads the
+        // live recipientMaxHp value and never sees this ctx. Left in place (not deleted):
+        // dropping the field would make a future on-cast modifier gate on this subject
+        // silently never fire, which is worse than the approximation.
+        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate. Same derivation and same
+        // PRE-strip reading as preDebuffGateCtx above. No corpus MODIFIER ability gates on this
+        // subject today; populated for the same reason its `selfShielded` neighbour is — an absent
+        // field makes a future gate on this ctx silently never fire, which is worse than a field
+        // nothing reads yet.
+        enemyShielded: enemy.shieldPool > 0,
         turnsTaken: actor.turnsTaken,
         // Sub-project I, PR I5: only the modifier ctx needs this — it feeds
         // modifierAbilities/modifierTotalsFromAbilities (Selenite's count-scaling passive).
@@ -2050,6 +2121,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // suppressed regardless of the caster's real shieldPool (control-applied never fires,
         // the combat log's kind:'control' Disable entry never appears — even with a shield).
         selfShielded: actor.shieldPool > 0,
+        // Reconciled with drain-time (engine.ts's isSelfShieldFull, which reads
+        // recipientMaxHp → lastTurnCtxByActor.get(id)?.effectiveMaxHp): `effectiveHp` (:1987,
+        // above this ctx) is exactly that same live, buff-inclusive max HP (it IS the value
+        // stored into effectiveMaxHp at turnCtx below, :3289) — so this reads byte-identically
+        // to the drain-time gate instead of the static base stat, which would disagree under an
+        // active max-HP buff.
+        selfShieldFull: effectiveHp > 0 && actor.shieldPool >= effectiveHp,
+        // Malvex charged Barrier: the TARGET's shield-presence gate, for the payload abilities
+        // gateFiringAbilities gates just below. Still PRE-strip — the `type:'shield-strip'`
+        // clause runs later in this turn (:2745+), after this ctx is built. No corpus payload
+        // ability gates on this subject today (Malvex's own charge-slot Barrier is a timed self
+        // buff, gated by postDebuffGateCtx); populated for the same silently-never-fires reason
+        // as its `selfShielded` neighbour.
+        enemyShielded: enemy.shieldPool > 0,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
