@@ -126,7 +126,12 @@ describe('filler inertness guard', () => {
                 row!.charge.trim(),
                 `filler ship "${name}" gained a charge skill — same remedy as a new passive.`
             ).toBe('');
-            expect(row!.active.trim()).toMatch(BARE_DAMAGE);
+            expect(
+                row!.active.trim(),
+                `filler ship "${name}" gained a non-bare active skill — it can no longer be inert ` +
+                    'scaffolding. Swap it for another inert ship (Trydent, Umayl, Xiaodao are spare) ' +
+                    'and expect the fingerprint snapshots to move.'
+            ).toMatch(BARE_DAMAGE);
         }
     );
 });
