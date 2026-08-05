@@ -83,6 +83,7 @@ import {
     detectEnemyDotDamageTrigger,
     detectCorrosionSpreadTrigger,
     detectShieldStrippedTrigger,
+    detectTargetShieldGate,
     ONCE_PER_ROUND_PER_ENEMY_RE,
     PURGE_MORE_RE,
     parseControlInflicts,
@@ -2247,6 +2248,29 @@ function abilitiesFromText(
         // after any damage-reaction conditions and referenced by an Ability-level scaling rule
         // (mirrors the damage-scaling convention). Model fidelity — no DPS/sim consumer today.
         const healConditions: Condition[] = [...damageReactionConditions];
+        // Malvex active: "If the target has a Shield this Unit gains Shield equal to 15% of its Max
+        // HP" — the NAMELESS-grant twin of the charged-slot Barrier gate. detectGrantConditions
+        // resolves its clause off a buff name, so it can only ever gate a NAMED grant; a heal/shield
+        // has no name, which is why this loop dropped the gate entirely and Malvex banked 15% of its
+        // max HP on every active cast regardless of the target. Scoped to `healSentence` (this
+        // grant's OWN sentence) so a co-cast repair/shield in another sentence never inherits it —
+        // the positional equivalent of resolveBuffClause on the named path.
+        //
+        // The gate is honoured with NO executor change: gateFiringAbilities (applyAbilities.ts)
+        // already hard-gates every firing-slot ability through conditionsMet, and the cast-time ctx
+        // it gates against populates `enemyShielded` from the resolved victim's live shieldPool
+        // (playerTurn.ts) — the same lever the charged Barrier's postDebuffGateCtx pulls. Read is
+        // PRE-damage/PRE-strip, matching the game's cast-time reading of the clause.
+        //
+        // Kind-agnostic (heal or shield) because the clause means the same thing for either, and no
+        // corpus heal carries it today. CAVEAT: healSentence is located by the grant's PCT, so two
+        // same-pct grants in one row can resolve to each other's sentence (the pre-existing anchor
+        // caveat at the top of this loop) — which now moves a real GATE, not just editor order.
+        // Malvex's row has no such collision (100/5/15, one grant); a future one would need a
+        // clause-index anchor instead.
+        if (detectTargetShieldGate(healSentence)) {
+            healConditions.push({ subject: 'enemy-shield', derivable: true });
+        }
         let healScaling: ScalingRule | undefined;
         if (h.scaling?.countSource) {
             // ship-kit W3 (Sansi): reactive event-count scaling — the count comes from the

@@ -1433,8 +1433,24 @@ const SHIELD_FULL_RE = /\bshield\s+equal\s+to\s+100%\s+of\s+(?:its|their)\s+max(
 // "a" is optional because the same ship writes it both with and without a comma before the
 // consequent. Corpus-verified (docs/ship-skills.csv, grep "target has a Shield"): Malvex's active
 // and charged rows are the only two occurrences in the game, and only the charged one grants a
-// named buff (the active one grants a nameless self-shield, which never reaches this detector).
+// named buff — so only the charged one reaches detectGrantConditions. The active row's grant is a
+// NAMELESS self-shield, gated through `detectTargetShieldGate` below (the heal/shield builder's
+// entry point to this same rule); keep both consumers in step when editing the pattern.
 const TARGET_HAS_SHIELD_RE = /\bif\s+the\s+(?:target|enemy)\s+has\s+(?:a\s+)?shield\b/i;
+
+/**
+ * Whether an ALREADY-SCOPED clause carries the "If the target has a Shield" gate — the
+ * heal/shield-builder entry point to the same rule `detectGrantConditions` applies to named buffs
+ * (which resolves its own clause off the buff name; a nameless shield grant has no name to resolve
+ * on, so the CALLER must pass a sentence-scoped string, not the whole skill row).
+ *
+ * Corpus (docs/ship-skills.csv, grep "target has a Shield"): Malvex's active and charged rows are
+ * the only two occurrences in the game. The charged one grants a named Barrier and goes through
+ * detectGrantConditions; the active one grants a nameless self-shield and comes through here.
+ */
+export function detectTargetShieldGate(clause: string | null | undefined): boolean {
+    return !!clause && TARGET_HAS_SHIELD_RE.test(clause);
+}
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 // Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted

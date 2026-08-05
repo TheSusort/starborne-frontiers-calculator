@@ -19,9 +19,11 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import type { Ship } from '../../../types/ship';
 import type { CombatActor } from '../state';
 
 const DIRECT_HIT = 5000; // attack 5000 × 100% × 1 hit vs defence 0.
@@ -185,6 +187,59 @@ describe('enemy-shield gate — player-side holder (Malvex shape)', () => {
         expect(applied).toContainEqual({ actorId: 'attacker', buffName: 'Barrier' });
         expect(barrierAbsorbedFor(result, 1, 'attacker')).toBeCloseTo(DIRECT_HIT, 6);
         expect(simHpLossFor(result, 1, 'attacker')).toBe(0);
+    });
+});
+
+describe('enemy-shield gate — Malvex ACTIVE self-shield, built from the real skill row', () => {
+    // The charged-slot cases above drive a HAND-BUILT ability, so they prove the engine honours an
+    // `enemy-shield` condition but say nothing about whether the parser attaches one. These two
+    // drive the verbatim docs/ship-skills.csv active row through buildShipAbilities into the engine
+    // — the only shape that fails when the heal/shield builder drops the gate on the floor.
+    const MALVEX_ACTIVE =
+        'This Unit deals <unit-damage>100% damage</unit-damage> with an additional damage equal to ' +
+        '<unit-damage>5%</unit-damage> of its current Shield. If the target has a Shield this Unit ' +
+        'gains <unit-damage>Shield equal to 15%</unit-damage> of its Max HP.';
+
+    const MALVEX_SKILLS: ShipSkills = buildShipAbilities({
+        refits: [],
+        activeSkillText: MALVEX_ACTIVE,
+    } as unknown as Ship);
+
+    /** Total pool granted to `actorId` across the run, from the engine's own shield-applied event. */
+    function shieldGrantedTo(input: CombatEngineInput, actorId: string): number {
+        const bus = createEventBus();
+        let granted = 0;
+        bus.on('shield-applied', (e) => {
+            if (e.recipientIds.includes(actorId)) granted += e.amount;
+        });
+        runCombat({ ...input, bus });
+        return granted;
+    }
+
+    // 15% of the caster's max HP. HP is the engine input `hp`, so keep it small enough to read.
+    const MALVEX_HP = 100_000;
+    const EXPECTED_POOL = MALVEX_HP * 0.15;
+
+    const malvexInput = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
+        BASE_PLAYER_SIDE({
+            attack: 1000,
+            hp: MALVEX_HP,
+            shipSkills: MALVEX_SKILLS,
+            enemyHp: HP,
+            enemyAttackers: [enemyActor('enemy-1', 'M1', [], 1, 0)],
+            ...overrides,
+        });
+
+    it('banks NO shield when the target it hits has no shield', () => {
+        expect(shieldGrantedTo(malvexInput({}), 'attacker')).toBe(0);
+    });
+
+    it('banks 15% of its max HP when the target it hits has a shield', () => {
+        const granted = shieldGrantedTo(
+            malvexInput({ __testTapActors: seedShield('enemy-1', TARGET_SHIELD) }),
+            'attacker'
+        );
+        expect(granted).toBeCloseTo(EXPECTED_POOL, 6);
     });
 });
 
