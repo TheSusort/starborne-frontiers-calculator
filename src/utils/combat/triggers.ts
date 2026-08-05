@@ -31,7 +31,7 @@ import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 // selfBuffNamesForOwners from this module and we import holdsBarrierRecharging back. Both are
 // used only inside function bodies, so there is no initialization-order hazard.
 // eslint-disable-next-line import/no-cycle
-import { holdsBarrierRecharging } from './barrierRecharging';
+import { holdsBarrierRecharging, BARRIER_RECHARGING } from './barrierRecharging';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
 import { reduceBombsOnVictim } from './bombCountdown';
@@ -2614,11 +2614,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         };
         for (const rid of recipients) {
             if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
-            // Barrier Recharging: "Cannot be granted Barrier". Scoped to BARRIER_BUFFS names —
-            // the status blocks Barrier specifically, not buffs in general (that is Block Buff's
-            // job, handled above). A recipient under the lockout is silently skipped, which is
-            // what turns Quixilver's every-turn re-fire into a 3-turn cooldown.
-            if (BARRIER_BUFFS.has(cfg.buffName) && holdsBarrierRecharging(ctx.statusEngine, rid)) {
+            // Barrier Recharging gates TWO different grants for a recipient already under the
+            // lockout, for two different reasons:
+            //   - BARRIER_BUFFS arm: the status's own literal text, "Cannot be granted Barrier".
+            //     Scoped to BARRIER_BUFFS names — it blocks Barrier specifically, not buffs in
+            //     general (that is Block Buff's job, handled above).
+            //   - BARRIER_RECHARGING arm: re-application of the lockout itself. This is NOT
+            //     stated by the game text — "Cannot be reduced. Unremovable" says nothing about
+            //     a fresh grant — but it is required to make the text's "Cannot be reduced" mean
+            //     anything at all. Without this arm, Quixilver's every-turn re-fire would beat
+            //     `familyApplicationWins` (a fresh duration of 3 always beats a decayed
+            //     turnsRemaining of 1 or 2) and refresh the lockout back to 3 forever, so allies
+            //     would receive exactly ONE Barrier for the whole shield-full streak instead of
+            //     one every 3 turns. Owner-approved reading (2026-08-05): "cannot be reduced" ==
+            //     "cannot be re-armed while still held" — a real 3-turn cooldown that decays to
+            //     zero and then allows a fresh grant, not a permanent one-shot lock.
+            // Either way the recipient is silently skipped — no status, no event, no log.
+            if (
+                (BARRIER_BUFFS.has(cfg.buffName) || cfg.buffName === BARRIER_RECHARGING) &&
+                holdsBarrierRecharging(ctx.statusEngine, rid)
+            ) {
                 continue;
             }
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
