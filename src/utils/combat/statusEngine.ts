@@ -1352,6 +1352,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 turnsRemaining: s.turnsRemaining,
                 payload: s.payload,
                 casterId: s.casterId,
+                // Hit-counted lifecycle travels with the theft (see the recipientMap.set below):
+                // a stolen hit-counted status is durationless (turnsRemaining: Infinity) and
+                // would otherwise become permanent, unspendable damage immunity in the thief's
+                // hands — consumeStatusHit can only spend an entry that actually carries this.
+                hitsRemaining: s.hitsRemaining,
             };
         });
         for (const recipientId of recipientIds) {
@@ -1366,6 +1371,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     tier,
                     payload: st.payload,
                     casterId: st.casterId,
+                    // REMAINING hit count travels intact, mirroring the REMAINING turnsRemaining
+                    // rule documented above — otherwise a stolen hit-counted Barrier arrives with
+                    // hitsRemaining undefined, which consumeStatusHit treats as turn-duration-
+                    // governed (a no-op), leaving the thief permanently immune until it expires
+                    // (never, since it also carries turnsRemaining: Infinity).
+                    hitsRemaining: st.hitsRemaining,
                     appliedSeq: nextAppliedSeq(),
                     // Own-turn reprieve (Finding 2): a buff granted to the actor whose turn is
                     // executing is protected from that same turn's Post-Turn decrement — its

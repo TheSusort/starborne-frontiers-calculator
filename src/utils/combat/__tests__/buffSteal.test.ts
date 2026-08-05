@@ -7,7 +7,8 @@ import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 // timedAbilityStatuses).
 const mkTimedBuff = (
     buffName: string,
-    duration = 3
+    duration = 3,
+    hits?: number
 ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
     kind: 'timed',
     side: 'self',
@@ -15,6 +16,7 @@ const mkTimedBuff = (
     conditions: [],
     duration,
     payload: { buffName, stacks: 1, parsedEffects: { attack: 30 } },
+    ...(hits !== undefined ? { hits } : {}),
 });
 
 describe('statusEngine.steal (PR10 — buff steal)', () => {
@@ -155,5 +157,37 @@ describe('statusEngine.steal (PR10 — buff steal)', () => {
 
         const [entry] = eng.timedAbilityStatuses('self', 'ally1');
         expect(entry.active.turnsRemaining).toBe(1);
+    });
+
+    // Finding 1 (critical): a hit-counted status (Barrier for N hits) carries `hitsRemaining`
+    // alongside `turnsRemaining`. Both the `stolen` projection and the recipient's BuffState
+    // literal used to hand-enumerate their fields and silently drop it — the thief received a
+    // BuffState with hitsRemaining undefined (turn-duration-governed, i.e. permanent, since a
+    // hit-counted grant is stored with turnsRemaining: Infinity) and consumeStatusHit could never
+    // spend it: unspendable, permanent damage immunity. This pins that the charge count travels
+    // with the theft, exactly like the REMAINING turnsRemaining does.
+    it('(k) a stolen hit-counted Barrier carries its hitsRemaining to the thief — still spendable, still expires', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(
+            1,
+            mkTimedBuff('Barrier', Number.POSITIVE_INFINITY, 2),
+            'victim'
+        );
+
+        eng.steal('victim', ['thief'], 1);
+
+        // Still hit-counted on the thief's side: the first hit only partially spends it...
+        expect(eng.consumeStatusHit('thief', 'Barrier')).toBe(false);
+        expect(eng.timedAbilityStatuses('self', 'thief').map((s) => s.active.buffName)).toContain(
+            'Barrier'
+        );
+        // ...and the second hit fully spends it — a permanent/unspendable grant would never
+        // reach false→true here; it would stay present forever (turnsRemaining: Infinity, no
+        // hitsRemaining to decrement).
+        expect(eng.consumeStatusHit('thief', 'Barrier')).toBe(true);
+        expect(
+            eng.timedAbilityStatuses('self', 'thief').map((s) => s.active.buffName)
+        ).not.toContain('Barrier');
     });
 });
