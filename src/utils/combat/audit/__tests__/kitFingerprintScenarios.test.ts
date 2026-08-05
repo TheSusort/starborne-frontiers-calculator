@@ -1,19 +1,25 @@
 /**
  * The three real-kit fingerprint scenarios. These tests pin the SHAPE of each battle (roster,
- * positions, seeded state) — the fingerprint snapshots themselves live in
- * src/utils/calculators/__tests__/realKitFingerprints.test.ts.
+ * positions, seeded state) AND the two live invariants the fingerprints depend on — the focus ship
+ * is the one being attacked, and it survives all 20 rounds. The fingerprint snapshots themselves
+ * live in src/utils/calculators/__tests__/realKitFingerprints.test.ts.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
     buildScenarioBattle,
     FILLER_NAMES,
+    FOCUS_ACTOR_ID,
     FOCUS_POSITION,
+    ROUNDS,
     SCENARIOS,
+    SEED,
 } from '../kitFingerprintScenarios';
+import { runSeededBattle } from '../seededBattle';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import type { Ship } from '../../../../types/ship';
+import type { CombatActor } from '../../state';
 
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -23,6 +29,16 @@ function requireReferenceData(): void {
         );
     }
 }
+
+/** A stand-in roster for the seeding taps: two max-HP sizes per side so a FRACTION-of-max-HP
+ *  seed and an ABSOLUTE seed can be told apart. */
+const fakeRoster = () =>
+    [
+        { id: FOCUS_ACTOR_ID, side: 'player', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
+        { id: 'p:ally', side: 'player', shieldPool: 0, currentHp: 4000, stats: { hp: 4000 } },
+        { id: 'e:small', side: 'enemy', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
+        { id: 'e:big', side: 'enemy', shieldPool: 0, currentHp: 4000, stats: { hp: 4000 } },
+    ] as unknown as CombatActor[];
 
 describe('buildScenarioBattle', () => {
     let focus: Ship;
@@ -35,7 +51,7 @@ describe('buildScenarioBattle', () => {
     });
 
     it('exposes exactly three scenarios', () => {
-        expect([...SCENARIOS]).toEqual(['plain', 'richEnemy', 'hurtAllies']);
+        expect([...SCENARIOS]).toEqual(['plain', 'richEnemy', 'wounded']);
     });
 
     it('puts the focus ship first on the player side at the focus position', () => {
@@ -59,33 +75,68 @@ describe('buildScenarioBattle', () => {
         expect(new Set(positions).size).toBe(positions.length);
     });
 
+    it('puts three enemies in the focus row, behind the focus (the targeting contract)', () => {
+        // The whole layout rationale (see FOCUS_POSITION's docstring): selectTargets scans from the
+        // caster's own row and takes the front-most column, so enemies sharing the focus's row and
+        // sitting behind it resolve onto the FOCUS. Break this and the focus stops taking damage —
+        // which is exactly the hole this suite was found to have.
+        const battle = buildScenarioBattle(focus, 'plain');
+        const row = (p: string) => p[0];
+        const col = (p: string) => Number(p.slice(1));
+        const focusRow = row(FOCUS_POSITION);
+        const sameRow = battle.enemyTeam.filter((p) => row(p.position) === focusRow);
+        expect(sameRow).toHaveLength(3);
+        for (const p of sameRow) expect(col(p.position)).toBeLessThan(col(FOCUS_POSITION));
+        // ...and the odd enemy out shares a row with an ALLY, so an ally can be attacked (and the
+        // fragile one killed) without stealing the focus's incoming damage.
+        const offRow = battle.enemyTeam.filter((p) => row(p.position) !== focusRow);
+        expect(offRow).toHaveLength(1);
+        const allyRows = battle.playerTeam.slice(1).map((p) => row(p.position));
+        expect(allyRows).toContain(row(offRow[0].position));
+    });
+
+    it('scales filler attack to the focus ship rather than using one constant', () => {
+        // A fixed attack value either leaves 4047-defence tanks untouched or kills 7.3k-HP
+        // attackers; the derivation is what lets every fingerprint be taken at equal pressure.
+        const squishy = buildTraceShip('Xiaodao');
+        const tank = buildTraceShip('Lionheart');
+        expect(squishy).not.toBeNull();
+        expect(tank).not.toBeNull();
+        const attackOf = (s: Ship) =>
+            buildScenarioBattle(s, 'plain').enemyTeam[0].statOverrides!.attack!;
+        expect(attackOf(tank!)).toBeGreaterThan(attackOf(squishy!));
+    });
+
     it('plain seeds nothing at all (no tap — the baseline scenario)', () => {
         // plain must leave initial state untouched: it is the scenario where a wrongly-ungated
         // clause shows up, so any seeding here would mask exactly what it exists to reveal.
         expect(buildScenarioBattle(focus, 'plain').__testTapActors).toBeUndefined();
     });
 
-    it('richEnemy seeds a positive shield pool on enemy actors only', () => {
-        const battle = buildScenarioBattle(focus, 'richEnemy');
-        const actors = [
-            { id: 'e', side: 'enemy', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
-            { id: 'p', side: 'player', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
-        ];
-        battle.__testTapActors?.(actors as never);
-        expect(actors[0].shieldPool).toBeGreaterThan(0);
-        expect(actors[1].shieldPool).toBe(0);
+    it('richEnemy seeds an ABSOLUTE, depletable shield pool on enemy actors only', () => {
+        const actors = fakeRoster();
+        buildScenarioBattle(focus, 'richEnemy').__testTapActors?.(actors);
+        const [, ally, small, big] = actors;
+        expect(small.shieldPool).toBeGreaterThan(0);
+        expect(actors[0].shieldPool).toBe(0);
+        expect(ally.shieldPool).toBe(0);
+        // Absolute, not a fraction of max HP: the fraction version was 100M against ~1.2k hits and
+        // never depleted, so no shield-gated clause ever saw the pool run out.
+        expect(big.shieldPool).toBe(small.shieldPool);
+        // Small enough to be spent by the focus's own casts (a few hits' worth of its attack).
+        expect(small.shieldPool).toBeLessThan(10 * focus.baseStats.attack);
     });
 
-    it('hurtAllies damages player actors and leaves enemies at full HP', () => {
-        const battle = buildScenarioBattle(focus, 'hurtAllies');
-        const actors = [
-            { id: 'p', side: 'player', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
-            { id: 'e', side: 'enemy', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
-        ];
-        battle.__testTapActors?.(actors as never);
-        expect(actors[0].currentHp).toBeLessThan(1000);
-        expect(actors[0].currentHp).toBeGreaterThan(0);
-        expect(actors[1].currentHp).toBe(1000);
+    it('wounded hurts both sides, and hurts the focus least (it is the one under fire)', () => {
+        const actors = fakeRoster();
+        buildScenarioBattle(focus, 'wounded').__testTapActors?.(actors);
+        for (const a of actors) {
+            const pct = (100 * a.currentHp) / a.stats.hp;
+            expect(pct).toBeGreaterThan(30);
+            expect(pct).toBeLessThan(70);
+        }
+        const pctOf = (a: CombatActor) => (100 * a.currentHp) / a.stats.hp;
+        expect(pctOf(actors[0])).toBeGreaterThan(pctOf(actors[1]));
     });
 
     it('gives filler enough HP to survive, so kill timing cannot churn fingerprints', () => {
@@ -98,6 +149,61 @@ describe('buildScenarioBattle', () => {
     it('names 7 filler ships, all resolvable from the corpus', () => {
         expect(FILLER_NAMES).toHaveLength(7);
         for (const name of FILLER_NAMES) expect(buildTraceShip(name)).not.toBeNull();
+    });
+});
+
+describe('live battle invariants', () => {
+    // These run real battles, because the two properties every fingerprint rests on are dynamic:
+    // the focus must be HIT (or all on-damaged kit is silent) and must SURVIVE (or its fingerprint
+    // is truncated at an arbitrary round). Two focus ships: the corpus's thinnest-HP/lowest-defence
+    // ship, which is the survival edge case, and a mid-weight one.
+    beforeAll(requireReferenceData);
+
+    it.each(['Xiaodao', 'Malvex'])(
+        '%s takes real incoming damage and survives all 20 rounds in every scenario',
+        (name) => {
+            const ship = buildTraceShip(name);
+            expect(ship).not.toBeNull();
+            for (const scenario of SCENARIOS) {
+                const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
+                const rows = result.rounds
+                    .flatMap((r) => r.ships)
+                    .filter((s) => s.actorId === FOCUS_ACTOR_ID);
+                const taken = rows.reduce((sum, s) => sum + s.damageTaken, 0);
+                expect(
+                    taken,
+                    `${name}/${scenario}: focus took no damage — the enemies are not resolving ` +
+                        'onto it, so every on-damaged clause in the corpus is silent'
+                ).toBeGreaterThan(0);
+                expect(
+                    rows.every((s) => s.alive),
+                    `${name}/${scenario}: focus died — its fingerprint is truncated at the round ` +
+                        'it fell, so kill timing now leaks into the snapshot'
+                ).toBe(true);
+                expect(result.outcome.lastRound).toBe(ROUNDS);
+            }
+        }
+    );
+
+    it('kills the fragile ally in wounded, and nothing else, in any scenario', () => {
+        const ship = buildTraceShip('Malvex');
+        expect(ship).not.toBeNull();
+        for (const scenario of SCENARIOS) {
+            const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
+            const last = result.rounds[result.rounds.length - 1];
+            const dead = last.ships.filter((s) => !s.alive).map((s) => s.actorId);
+            if (scenario === 'wounded') {
+                // Exactly one death, and it is the T4 ally (the first filler ally placement).
+                expect(dead).toHaveLength(1);
+                expect(dead[0]).not.toBe(FOCUS_ACTOR_ID);
+                expect(
+                    result.roster.find((r) => r.actorId === dead[0])?.position,
+                    'the fragile ally must be the one that dies'
+                ).toBe('T4');
+            } else {
+                expect(dead, `${scenario}: nothing may die outside wounded`).toEqual([]);
+            }
+        }
     });
 });
 

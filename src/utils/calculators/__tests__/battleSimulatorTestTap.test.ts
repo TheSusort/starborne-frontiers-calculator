@@ -4,7 +4,8 @@
  * Forwarded verbatim to the engine's own tap; consumed by the real-kit fingerprint scenarios.
  */
 import { describe, it, expect } from 'vitest';
-import { simulateBattle, type BattlePlacement } from '../battleSimulator';
+import { simulateBattle, type BattlePlacement, type BattleResult } from '../battleSimulator';
+import { runSeededBattle } from '../../combat/audit/seededBattle';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../../combat/state';
@@ -46,10 +47,10 @@ const placement = (s: Ship, position: Position): BattlePlacement => ({
     },
 });
 
-const input = (tap?: (actors: CombatActor[]) => void) => ({
+const input = (tap?: (actors: CombatActor[]) => void, rounds = 1) => ({
     playerTeam: [placement(ship('p1'), 'M4' as Position)],
     enemyTeam: [placement(ship('e1'), 'M1' as Position)],
-    rounds: 1,
+    rounds,
     ...(tap ? { __testTapActors: tap } : {}),
 });
 
@@ -88,7 +89,43 @@ describe('simulateBattle __testTapActors forwarding', () => {
         expect(absorbed).toBeGreaterThan(0);
     });
 
-    it('is inert when absent (production callers pass nothing)', () => {
-        expect(() => simulateBattle(input())).not.toThrow();
+    it('seeds currentHp that the battle then honours (proves the OTHER seeded field is live)', () => {
+        // `shieldPool` seeding is proven above; the fingerprint scenarios also seed `currentHp`,
+        // and nothing proved THAT reaches live combat — a tap that set a field the engine
+        // recomputed at first use would leave the `wounded` scenario silently identical to `plain`.
+        // Proof by lethality: the same 3-round battle the enemy comfortably survives at full HP
+        // ends with it dead when the tap starts it at 1% HP.
+        const control = runSeededBattle(input(undefined, 3), 4242);
+        const seeded = runSeededBattle(
+            input((actors) => {
+                for (const a of actors) if (a.side === 'enemy') a.currentHp = a.stats.hp * 0.01;
+            }, 3),
+            4242
+        );
+        const enemyAlive = (r: BattleResult): boolean => {
+            const last = r.rounds[r.rounds.length - 1];
+            return last.ships.filter((s) => s.side === 'enemy').every((s) => s.alive);
+        };
+        expect(enemyAlive(control)).toBe(true);
+        expect(enemyAlive(seeded)).toBe(false);
+        expect(seeded.outcome.winner).toBe('player');
+        // ...and the kill is EARLIER than the round cap, i.e. the seed shortened the fight rather
+        // than the enemy dying anyway on the last round.
+        expect(seeded.outcome.lastRound).toBeLessThan(control.outcome.lastRound);
+    });
+
+    it('is inert when absent: a no-op tap produces a byte-identical battle', () => {
+        // `not.toThrow()` was near-tautological. The real claim is that the seam has no effect of
+        // its own — every production caller omits it, so the tapped and untapped engines must agree
+        // exactly. Both runs go through runSeededBattle under one seed so any difference is the
+        // tap's, not the RNG's.
+        const withoutTap = runSeededBattle(input(undefined, 3), 99);
+        const withNoopTap = runSeededBattle(
+            input(() => {
+                /* no-op: read nothing, mutate nothing */
+            }, 3),
+            99
+        );
+        expect(withNoopTap).toEqual(withoutTap);
     });
 });

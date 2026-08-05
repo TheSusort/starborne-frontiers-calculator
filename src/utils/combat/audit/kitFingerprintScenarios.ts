@@ -4,14 +4,15 @@ import type { CombatActor } from '../state';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
+import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { canonicalPlacement } from './fixtures';
 import { runSeededBattle } from './seededBattle';
 import { fingerprintActorTokens } from './fingerprint';
 
-export type ScenarioName = 'plain' | 'richEnemy' | 'hurtAllies';
+export type ScenarioName = 'plain' | 'richEnemy' | 'wounded';
 
 /** Fixed scenario order — also the snapshot key order. */
-export const SCENARIOS: readonly ScenarioName[] = ['plain', 'richEnemy', 'hurtAllies'] as const;
+export const SCENARIOS: readonly ScenarioName[] = ['plain', 'richEnemy', 'wounded'] as const;
 
 /** Pinned RNG seed for every scenario battle. One seed for all of them: the scenarios are meant
  *  to differ by initial STATE, not by RNG stream. */
@@ -21,12 +22,42 @@ export const SEED = 20260805;
  *  tick more than once, and cooldown-gated grants to re-arm. */
 export const ROUNDS = 20;
 
-/** Column 4 is the FRONT of the board (columns run 1 = back → 4 = front). The focus ship takes a
- *  front-row slot so it is reachable by enemy targeting and resolves enemies itself. */
+/**
+ * BOARD LAYOUT — the single most load-bearing choice in this fixture, because it decides whether
+ * the focus ship is ever ATTACKED. `selectTargets` scans rows starting at the CASTER's own row
+ * (`rowScanOrder`: caster row → next → wrap) and takes the front-most occupied column (col 4 =
+ * front) of the first row that holds a target. Consequences that drive the numbers below:
+ *
+ *  - Three enemies share the focus's OWN row (M3/M2/M1 against the focus at M4). Their scan starts
+ *    at row M, finds exactly one player there — the focus, front-most at col 4 — so all three
+ *    single-target attacks land on the focus, every round. That is what makes on-damaged kit
+ *    (counterattack, reflect, revenge, on-damaged grants, Barrier hit-counting) observable at all:
+ *    the previous layout parked the focus behind an ally in another row and it took ZERO incoming
+ *    damage in 136 of 147 fingerprints.
+ *  - Sharing the row also keeps the focus's OWN offence multi-target: scanning from M it finds
+ *    M3/M2/M1 front-to-back, so front/back/skip/adjacent patterns still differentiate, and `all`
+ *    still reaches four enemies (row M, then T3).
+ *  - The fourth enemy sits at T3, whose scan starts at row T where the front-most player is the
+ *    ALLY at T4 — the slot the fragile ally occupies in `wounded`. That is the only way an ally
+ *    can be attacked (and so die) while the focus is itself front-most in its own row.
+ *  - The third ally at T2 backs up T4: when the fragile ally dies, the T3 enemy retargets to T2
+ *    rather than joining the three already hitting the focus, so the focus's incoming-damage
+ *    budget is the same in all three scenarios.
+ *  - Allies at T4/B4 flank the focus's column-4 cell, so column/adjacency support footprints
+ *    reach real allies.
+ *
+ * All eight cells are distinct: an ally and an enemy on the same cell would be
+ * indistinguishable in position-keyed engine state.
+ */
 export const FOCUS_POSITION: Position = 'M4';
 
-const ALLY_POSITIONS: Position[] = ['T4', 'T3', 'M3'];
-const ENEMY_POSITIONS: Position[] = ['B4', 'B3', 'B2', 'B1'];
+const ALLY_POSITIONS: Position[] = ['T4', 'T2', 'B4'];
+const ENEMY_POSITIONS: Position[] = ['M3', 'M2', 'M1', 'T3'];
+
+/** How many enemies resolve onto the focus each round under the layout above (M3/M2/M1). Drives
+ *  the incoming-damage budget in `fillerAttackFor`; verified by the "focus is the one being
+ *  attacked" scenario test. */
+const ATTACKERS_ON_FOCUS = 3;
 
 /** Seven corpus ships verified inert: no passives, no charge skill, and a bare
  *  "This Unit deals 90% damage" active (see the inertness guard test, which fails loudly if a data
@@ -47,16 +78,52 @@ export const FILLER_NAMES: readonly string[] = [
 ] as const;
 
 /** Filler survive the whole window: without this, a damage-formula change shifts kill timing,
- *  which shifts which clauses get to fire — numeric sensitivity leaking into a structural suite. */
+ *  which shifts which clauses get to fire — numeric sensitivity leaking into a structural suite.
+ *  Deliberately absurd rather than merely large: the corpus's per-battle damage output spans more
+ *  than an order of magnitude, so no single finite HP value both keeps the hardest hitter from
+ *  killing and lets the softest one dent anything. HP% STATE is therefore seeded directly (see
+ *  HURT_FRACTION) instead of being produced by damage — that decouples "which hp-threshold gates
+ *  can read true" from "how hard this particular focus ship hits". */
 const FILLER_HP = 500_000_000;
-/** ...and hit softly enough that the focus ship also survives all 20 rounds. */
-const FILLER_ATTACK = 500;
+
+/** Share of the focus ship's MAX HP that the whole 20-round battle should take off it.
+ *
+ *  Absolute filler attack cannot work here: the corpus spans 7.3k–23.9k HP and 972–4047 defence
+ *  (22%–53% mitigation), so one attack value either leaves the tanks untouched or kills the
+ *  squishies. `fillerAttackFor` inverts the damage formula per focus ship instead, so every
+ *  fingerprint is taken at the same RELATIVE pressure.
+ *
+ *  0.2 is chosen against the `wounded` scenario, the binding constraint: the focus starts there at
+ *  FOCUS_HURT_FRACTION (45%) and must still be alive at round 20, since its death would truncate
+ *  its own fingerprint. Measured worst case across the corpus is a 22.4% HP decline (Isha), so the
+ *  thinnest survivor still ends around 23% — real, sustained incoming damage with a genuine margin,
+ *  and enough of a decline to cross 40%-HP self-gates part-way through the battle. */
+const INCOMING_FRACTION = 0.2;
+
+/** The filler active is a bare single-hit "deals 90% damage", so one filler attack point yields
+ *  `0.9 × (1 − mitigation)` damage per hit against this focus ship. Invert that over the whole
+ *  battle's hit count to hit INCOMING_FRACTION of its max HP.
+ *
+ *  An ESTIMATE, not a guarantee: the focus's own defence buffs/debuffs, incoming-damage modifiers,
+ *  shields, dodges and self-heals all move the realised total. It only has to land in the band
+ *  "clearly nonzero, comfortably survivable", which the scenario tests assert directly. */
+function fillerAttackFor(focus: Ship): number {
+    const defence = focus.baseStats.defence;
+    const mitigation = defence > 0 ? calculateDamageReduction(defence) : 0;
+    const perHitPerAttackPoint = 0.9 * (1 - mitigation / 100);
+    const hits = ROUNDS * ATTACKERS_ON_FOCUS;
+    return Math.max(
+        1,
+        Math.round((INCOMING_FRACTION * focus.baseStats.hp) / (perHitPerAttackPoint * hits))
+    );
+}
 
 /** The fragile ally: dies early and deterministically so on-ally-destroyed / revive / cheat-death
  *  clauses fire. The ONE intentional exception to filler survival. Verified (traceShipFactory +
  *  battleSimulator.resolveStats pass overrides straight through with no scaling) that hp: 1
  *  resolves to stats.hp = 1 and currentHp = 1 at actor construction — the ally starts ALIVE, then
- *  dies to the very first hit it takes (filler attack is 500). No need to raise it. */
+ *  dies to the very first hit it takes. It sits at T4, the only ally cell an enemy resolves onto,
+ *  and 1 HP makes the kill timing immune to any damage-formula change: ANY hit is lethal. */
 const FRAGILE_ALLY_HP = 1;
 
 let cache: Map<string, Ship> | null = null;
@@ -77,36 +144,67 @@ function fillerShip(name: string): Ship {
     return ship;
 }
 
-/** A filler placement: canonical base stats, then HP and attack overridden for survivability. */
-function fillerPlacement(name: string, position: Position, hp = FILLER_HP): BattlePlacement {
+/** A filler placement: canonical base stats, then HP and attack overridden. Attack is per-battle
+ *  (derived from the focus ship), not a constant — see `fillerAttackFor`. */
+function fillerPlacement(
+    name: string,
+    position: Position,
+    attack: number,
+    hp = FILLER_HP
+): BattlePlacement {
     const base = canonicalPlacement(fillerShip(name), position);
-    return { ...base, statOverrides: { ...base.statOverrides, hp, attack: FILLER_ATTACK } };
+    return { ...base, statOverrides: { ...base.statOverrides, hp, attack } };
 }
 
-/** 20% of max HP as a starting shield pool — any positive pool satisfies `enemy-shield`, which is
- *  a boolean gate, and 20% is small enough that it drains during the battle so shield-destroyed
- *  and punch-through clauses also get to fire. */
-const SHIELD_FRACTION = 0.2;
-/** Allies start at 50% HP: below every corpus hp-threshold gate worth exercising, and low enough
- *  that heals have real headroom to land rather than clipping entirely to overheal. */
-const HURT_FRACTION = 0.5;
+/** `richEnemy`'s seeded enemy shield, as a multiple of the focus ship's base attack — an ABSOLUTE
+ *  pool, not a fraction of the filler's (absurd) max HP. A fraction was the original choice and it
+ *  was inert: 20% of 500M is 100M against ~1.2k hits, so `enemy-shield` gates read true for the
+ *  entire battle and nothing ever punched through. Three attack points' worth survives the first
+ *  cast or two — long enough for a shield-gated clause to fire at least once — then depletes, so
+ *  shield-removal and punch-through clauses see the other side of the gate too. */
+const SHIELD_POOL_HITS = 3;
+
+/** `wounded` seeds every filler on BOTH sides to 35% HP: under the corpus's 40%- and 50%-HP gates
+ *  (ally-repair triggers, execute/threshold damage, Stealth-below-40 grants) while still inside the
+ *  30–70% band, i.e. hurt enough to read as hurt and far enough from 0 that nothing dies to a
+ *  rounding-level change. Seeding the ENEMY side too moved zero fingerprints on today's corpus
+ *  (measured) — it is kept because the scenario's whole purpose is to put the board in the state
+ *  its name claims, and the next kit with an enemy-HP gate is then covered for free. */
+const HURT_FRACTION = 0.35;
+
+/** ...but the FOCUS starts higher than its allies, because it is the only actor under sustained
+ *  attack: 45% leaves INCOMING_FRACTION's worth of decline plus margin, and it means the focus
+ *  CROSSES the 40% line mid-battle rather than starting below it — a transition that "when HP
+ *  drops below 40%" clauses (Tycho) require and a static low start would never produce. */
+const FOCUS_HURT_FRACTION = 0.45;
+
+/** The focus ship is always the first player placement, and simulateBattle mints the first player
+ *  actor with the reserved id 'attacker' (battleSimulator's minting scheme; the rest are
+ *  `p:<shipId>:<idx>`). So the focus actor id is fixed. */
+export const FOCUS_ACTOR_ID = 'attacker';
 
 const maxHpOf = (a: CombatActor): number => a.stats.hp;
 
-function seedFor(scenario: ScenarioName): ((actors: CombatActor[]) => void) | undefined {
+function seedFor(
+    focus: Ship,
+    scenario: ScenarioName
+): ((actors: CombatActor[]) => void) | undefined {
     switch (scenario) {
         case 'plain':
             return undefined;
-        case 'richEnemy':
+        case 'richEnemy': {
+            const pool = SHIELD_POOL_HITS * focus.baseStats.attack;
             return (actors) => {
                 for (const a of actors) {
-                    if (a.side === 'enemy') a.shieldPool = maxHpOf(a) * SHIELD_FRACTION;
+                    if (a.side === 'enemy') a.shieldPool = pool;
                 }
             };
-        case 'hurtAllies':
+        }
+        case 'wounded':
             return (actors) => {
                 for (const a of actors) {
-                    if (a.side === 'player') a.currentHp = maxHpOf(a) * HURT_FRACTION;
+                    const fraction = a.id === FOCUS_ACTOR_ID ? FOCUS_HURT_FRACTION : HURT_FRACTION;
+                    a.currentHp = maxHpOf(a) * fraction;
                 }
             };
     }
@@ -114,14 +212,17 @@ function seedFor(scenario: ScenarioName): ((actors: CombatActor[]) => void) | un
 
 /**
  * The scenario battle for one focus ship: the focus at FOCUS_POSITION on the player side with 3
- * inert filler allies, against 4 inert filler enemies. Only the seeded initial state varies by
- * scenario. The focus ship keeps `canonicalPlacement`'s un-modified level-60 base stats — no gear,
- * no refits, no engineering — so its fingerprint reflects its kit, not a gearing choice.
+ * inert filler allies, against 4 inert filler enemies (see FOCUS_POSITION for why those cells).
+ * Only the seeded initial state varies by scenario. The focus ship keeps `canonicalPlacement`'s
+ * un-modified level-60 base stats — no gear, no refits, no engineering — so its fingerprint
+ * reflects its kit, not a gearing choice. The FILLER stats, by contrast, are tuned (HP, attack)
+ * and are the only lever this fixture pulls on how hard the battle presses.
  */
 export function buildScenarioBattle(focus: Ship, scenario: ScenarioName): BattleSimulationInput {
     const enemyNames = FILLER_NAMES.slice(0, 4);
     const allyNames = FILLER_NAMES.slice(4, 7);
-    const tap = seedFor(scenario);
+    const tap = seedFor(focus, scenario);
+    const attack = fillerAttackFor(focus);
     return {
         playerTeam: [
             canonicalPlacement(focus, FOCUS_POSITION),
@@ -129,20 +230,16 @@ export function buildScenarioBattle(focus: Ship, scenario: ScenarioName): Battle
                 fillerPlacement(
                     name,
                     ALLY_POSITIONS[i],
-                    scenario === 'hurtAllies' && i === 0 ? FRAGILE_ALLY_HP : FILLER_HP
+                    attack,
+                    scenario === 'wounded' && i === 0 ? FRAGILE_ALLY_HP : FILLER_HP
                 )
             ),
         ],
-        enemyTeam: enemyNames.map((name, i) => fillerPlacement(name, ENEMY_POSITIONS[i])),
+        enemyTeam: enemyNames.map((name, i) => fillerPlacement(name, ENEMY_POSITIONS[i], attack)),
         rounds: ROUNDS,
         ...(tap ? { __testTapActors: tap } : {}),
     };
 }
-
-/** The focus ship is always the first player placement, and simulateBattle mints the first player
- *  actor with the reserved id 'attacker' (battleSimulator's minting scheme; the rest are
- *  `p:<shipId>:<idx>`). So the focus actor id is fixed. */
-const FOCUS_ACTOR_ID = 'attacker';
 
 /** Fingerprint one ship across all three scenarios. Every battle goes through runSeededBattle —
  *  its `finally` restores Math.random rather than any ambient seed, so a raw simulateBattle call

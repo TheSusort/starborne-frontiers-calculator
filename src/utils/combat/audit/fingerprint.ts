@@ -57,17 +57,22 @@ export function diffFingerprints(
  *  therefore be a genuine cast entry that simply lost the race, not a passive/reactive one.
  *  Concretely, Malvex's charged cast grants Barrier via a named buff routed through the
  *  `timedSelfBySlot` loop, which runs BEFORE the attack's `ability-performed` emission — so
- *  `buff-applied` consumes the tag (`buff:charged`) and the charged attack itself lands as a bare
- *  `attack`, not `attack:charged` (see the committed `richEnemy` snapshot for Malvex). Which entry
- *  carries the slot is therefore a function of emission ORDER in `playerTurn.ts`; a pure refactor
- *  that reorders emission (no behaviour change) can flip which entry gets tagged.
+ *  `buff-applied` consumes the tag (`buff:charged`) and THAT cast's attack lands as a bare
+ *  `attack`. Its committed `richEnemy` snapshot carries both `attack` and `attack:charged` for
+ *  exactly this reason: once the seeded enemy shield is spent, later charged casts grant no Barrier
+ *  and so keep their own tag. Which entry carries the slot is therefore a function of emission
+ *  ORDER in `playerTurn.ts`; a pure refactor that reorders emission (no behaviour change) can flip
+ *  which entry gets tagged.
  *
- *  What IS still true, and the reason this token is richer than bare `kind`: within a single actor,
- *  the suffix lets two same-kind entries from genuinely different sources be told apart in
- *  practice — e.g. Malvex's gated active-slot shield (`shield:active`) versus its passive
- *  on-damaged shield grant (bare `shield`). `skillName` is deliberately NOT part of the token — it
- *  is the ship's own skill name, so it carries nothing the ship key doesn't, and including it
- *  would churn snapshots on a cosmetic rename. */
+ *  So what does the suffix buy over a bare `kind`? Less than it looks, and it is worth being precise
+ *  because the cost above is real. It does NOT earn its keep by separating a cast entry from a
+ *  passive/reactive one of the same kind: on the current corpus that case does not arise, because
+ *  reactive grants tend not to log at all (Malvex's on-damaged shield passive fires in every
+ *  scenario, yet logs no `shield` entry — only its later `shield-destroyed` proves the pool
+ *  existed). What it does buy is NAMING the slot in a diff: `shield:active` disappearing says which
+ *  half of the kit regressed, where a vanished bare `shield` would not. `skillName` is deliberately
+ *  NOT part of the token — it is the ship's own skill name, so it carries nothing the ship key
+ *  doesn't, and including it would churn snapshots on a cosmetic rename. */
 function walkEntryTokens(entries: CombatLogEntry[], actorId: string, acc: Set<string>): void {
     for (const e of entries) {
         if (e.actorId === actorId) acc.add(e.slot ? `${e.kind}:${e.slot}` : e.kind);
