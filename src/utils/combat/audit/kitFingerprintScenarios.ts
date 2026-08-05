@@ -3,7 +3,10 @@ import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
+import { loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { canonicalPlacement } from './fixtures';
+import { runSeededBattle } from './seededBattle';
+import { fingerprintActorTokens } from './fingerprint';
 
 export type ScenarioName = 'plain' | 'richEnemy' | 'hurtAllies';
 
@@ -134,4 +137,32 @@ export function buildScenarioBattle(focus: Ship, scenario: ScenarioName): Battle
         rounds: ROUNDS,
         ...(tap ? { __testTapActors: tap } : {}),
     };
+}
+
+/** The focus ship is always the first player placement, and simulateBattle mints the first player
+ *  actor with the reserved id 'attacker' (battleSimulator's minting scheme; the rest are
+ *  `p:<shipId>:<idx>`). So the focus actor id is fixed. */
+const FOCUS_ACTOR_ID = 'attacker';
+
+/** Fingerprint one ship across all three scenarios. Every battle goes through runSeededBattle —
+ *  its `finally` restores Math.random rather than any ambient seed, so a raw simulateBattle call
+ *  afterwards would be nondeterministic.
+ *
+ *  Lives here (rather than in the `.test.ts` file that consumes it) so both the vitest suite and
+ *  `scripts/reportThinKitFingerprints.ts` (run under plain `tsx`, no vitest globals) can import it
+ *  without importing a `.test.ts` module. */
+export function fingerprintShip(ship: Ship): Record<ScenarioName, string[]> {
+    const out = {} as Record<ScenarioName, string[]>;
+    for (const scenario of SCENARIOS) {
+        const result = runSeededBattle(buildScenarioBattle(ship, scenario), SEED);
+        out[scenario] = fingerprintActorTokens(result, FOCUS_ACTOR_ID);
+    }
+    return out;
+}
+
+/** Corpus ship names, sorted for a stable order (CSV row order is not guaranteed). */
+export function corpusNames(): string[] {
+    return loadShipSkillRecords()
+        .map((r) => r.name)
+        .sort((a, b) => a.localeCompare(b));
 }

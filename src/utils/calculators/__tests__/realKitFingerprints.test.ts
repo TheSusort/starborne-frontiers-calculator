@@ -16,18 +16,14 @@
  * snapshot is a real behaviour change and must be explained in the commit that moves it.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { runSeededBattle } from '../../combat/audit/seededBattle';
-import { fingerprintActorTokens } from '../../combat/audit/fingerprint';
 import {
-    buildScenarioBattle,
     SCENARIOS,
-    SEED,
-    type ScenarioName,
+    fingerprintShip,
+    corpusNames,
 } from '../../combat/audit/kitFingerprintScenarios';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import type { Ship } from '../../../types/ship';
 
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -36,30 +32,6 @@ function requireReferenceData(): void {
                 '(gitignored reference data) — tests need them to resolve real ship skill text/stats.'
         );
     }
-}
-
-/** The focus ship is always the first player placement, and simulateBattle mints the first player
- *  actor with the reserved id 'attacker' (battleSimulator's minting scheme; the rest are
- *  `p:<shipId>:<idx>`). So the focus actor id is fixed. */
-const FOCUS_ACTOR_ID = 'attacker';
-
-/** Fingerprint one ship across all three scenarios. Every battle goes through runSeededBattle —
- *  its `finally` restores Math.random rather than any ambient seed, so a raw simulateBattle call
- *  afterwards would be nondeterministic. */
-export function fingerprintShip(ship: Ship): Record<ScenarioName, string[]> {
-    const out = {} as Record<ScenarioName, string[]>;
-    for (const scenario of SCENARIOS) {
-        const result = runSeededBattle(buildScenarioBattle(ship, scenario), SEED);
-        out[scenario] = fingerprintActorTokens(result, FOCUS_ACTOR_ID);
-    }
-    return out;
-}
-
-/** Corpus ship names, sorted for a stable it.each order (CSV row order is not guaranteed). */
-function corpusNames(): string[] {
-    return loadShipSkillRecords()
-        .map((r) => r.name)
-        .sort((a, b) => a.localeCompare(b));
 }
 
 describe('kit fingerprints', () => {
@@ -92,5 +64,55 @@ describe('pinned regression: Malvex target-shield gates (#296, #297)', () => {
         expect(fp.richEnemy).toContain('buff:charged');
         expect(fp.plain).not.toContain('buff:charged');
         expect(fp.hurtAllies).not.toContain('buff:charged');
+    });
+});
+
+describe('suite health', () => {
+    beforeAll(requireReferenceData);
+
+    it('is non-vacuous: every ship produces tokens, and the roster covers many kinds', () => {
+        // Without this, a harness bug that fingerprints nothing yields 147 empty snapshots and
+        // reads as passing.
+        const all = new Set<string>();
+        const empty: string[] = [];
+        for (const name of corpusNames()) {
+            const ship = buildTraceShip(name);
+            if (!ship) continue;
+            const fp = fingerprintShip(ship);
+            const tokens = SCENARIOS.flatMap((s) => fp[s]);
+            if (tokens.length === 0) empty.push(name);
+            for (const t of tokens) all.add(t);
+        }
+        expect(empty, `ships producing NO tokens in any scenario: ${empty.join(', ')}`).toEqual([]);
+        // 18 kinds exist; the roster should exercise a broad share of them.
+        expect(new Set([...all].map((t) => t.split(':')[0])).size).toBeGreaterThanOrEqual(10);
+    }, 20_000);
+    // ^ Re-fingerprints all 147 ships (441 battles) on top of the it.each block above already
+    // having done so — the default 5s vitest timeout is comfortable in isolation (~4s) but gets
+    // squeezed under full-suite worker contention. 20s is a generous margin, not a tuned value.
+
+    it('is deterministic: fingerprinting the same ship twice gives identical tokens', () => {
+        // Guards against RNG leaking across scenarios — runSeededBattle restores Math.random in
+        // its finally, so a battle run outside it would drift between calls.
+        const ship = buildTraceShip('Malvex');
+        expect(ship).not.toBeNull();
+        expect(fingerprintShip(ship!)).toEqual(fingerprintShip(ship!));
+    });
+
+    it('pins the corpus shape so a data refresh announces itself in ONE diff', () => {
+        // 147 snapshots derived from gitignored data would otherwise churn with no explanation.
+        // This entry moving ALONGSIDE many ship entries means "the corpus changed"; ship entries
+        // moving while this one holds still means "the engine changed".
+        const rows = loadShipSkillRecords();
+        const digest = rows
+            .map(
+                (r) =>
+                    `${r.name}|${r.active.length}|${r.charge.length}|${r.passives.join('').length}`
+            )
+            .sort()
+            .join('\n');
+        let hash = 0;
+        for (let i = 0; i < digest.length; i++) hash = (hash * 31 + digest.charCodeAt(i)) | 0;
+        expect({ shipCount: rows.length, digest: hash }).toMatchSnapshot();
     });
 });
