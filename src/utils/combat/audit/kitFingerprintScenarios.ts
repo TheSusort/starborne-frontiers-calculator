@@ -106,7 +106,7 @@ export function boardFor(scenario: FingerprintScenario): BoardLayout {
  *  several board tests read it directly. */
 export const FOCUS_POSITION: Position = PRIMARY_BOARD.focus;
 
-/** How many enemies resolve onto the focus each round under the layout above (M3/M2/M1). Drives
+/** How many enemies resolve onto the focus each round under PRIMARY_BOARD (M3/M2/M1). Drives
  *  the incoming-damage budget in `fillerAttackFor`; verified by the "focus is the one being
  *  attacked" scenario test. */
 const ATTACKERS_ON_FOCUS = 3;
@@ -280,12 +280,13 @@ function seedFor(
 }
 
 /**
- * The scenario battle for one focus ship: the focus at FOCUS_POSITION on the player side with 3
- * inert filler allies, against 4 inert filler enemies (see FOCUS_POSITION for why those cells).
- * Only the seeded initial state varies by scenario. The focus ship keeps `canonicalPlacement`'s
- * un-modified level-60 base stats — no gear, no refits, no engineering — so its fingerprint
- * reflects its kit, not a gearing choice. The FILLER stats, by contrast, are tuned (HP, attack)
- * and are the only lever this fixture pulls on how hard the battle presses.
+ * The scenario battle for one focus ship: the focus on the player side with 3 inert filler
+ * allies, against 4 inert filler enemies. Both the board geometry and seeded initial state vary
+ * by scenario (see `boardFor` for geometry selection, PRIMARY_BOARD and SUPPORT_ANCHOR_BOARD for
+ * cell rationales). The focus ship keeps `canonicalPlacement`'s un-modified level-60 base stats
+ * — no gear, no refits, no engineering — so its fingerprint reflects its kit, not a gearing
+ * choice. The FILLER stats, by contrast, are tuned (HP, attack) and are the only lever this
+ * fixture pulls on how hard the battle presses.
  */
 export function buildScenarioBattle(
     focus: Ship,
