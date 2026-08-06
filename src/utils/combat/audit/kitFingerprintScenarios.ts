@@ -300,6 +300,16 @@ export function buildScenarioBattle(
     const allyNames = FILLER_NAMES.slice(4, 7);
     const tap = seedFor(focus, scenario);
     const attack = fillerAttackFor(focus);
+
+    // The fragile ally is identified by its CELL, not by its index in this array. Task 4's `team`
+    // placement reorders playerTeam so the subject is not index 0, and index and position decouple
+    // there: keying on index would make the 1-HP ally the 'attacker' focus, where it dies to the
+    // first hit and the whole `wounded` scenario collapses. Baking fragility into the placement by
+    // position means any later reordering carries it along. Note `scenario === 'wounded'` and NOT
+    // the seeding branch: supportAnchor reuses wounded's HP seeding but must NOT get a fragile ally,
+    // because a dying support target would make reach flaky.
+    const fragileCell = scenario === 'wounded' ? board.allies[0] : undefined;
+
     return {
         playerTeam: [
             canonicalPlacement(focus, board.focus),
@@ -308,10 +318,7 @@ export function buildScenarioBattle(
                     name,
                     board.allies[i],
                     attack,
-                    // Note `scenario === 'wounded'` and NOT the seeding branch: supportAnchor
-                    // reuses wounded's HP seeding but must NOT get its fragile ally, because a
-                    // dying support target would make reach flaky.
-                    scenario === 'wounded' && i === 0 ? FRAGILE_ALLY_HP : FILLER_HP
+                    board.allies[i] === fragileCell ? FRAGILE_ALLY_HP : FILLER_HP
                 )
             ),
         ],

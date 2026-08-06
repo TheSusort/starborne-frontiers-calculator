@@ -420,3 +420,25 @@ describe('turn-order invariance — why a placement swap cannot reorder turns', 
         }
     });
 });
+
+describe('fragile ally is keyed by board position, not array index', () => {
+    beforeAll(requireReferenceData);
+
+    it("puts the 1-HP ally on the primary board's first ally cell", () => {
+        const subject = buildTraceShip('Sentinel');
+        if (!subject) throw new Error('Sentinel did not resolve from the corpus');
+        const input = buildScenarioBattle(subject, 'wounded');
+        const fragile = input.playerTeam.filter((p) => p.statOverrides?.hp === 1);
+        expect(fragile).toHaveLength(1);
+        expect(fragile[0].position).toBe(PRIMARY_BOARD.allies[0]);
+    });
+
+    it('has no fragile ally in plain, richEnemy or supportAnchor', () => {
+        const subject = buildTraceShip('Sentinel');
+        if (!subject) throw new Error('Sentinel did not resolve from the corpus');
+        for (const scenario of ['plain', 'richEnemy', 'supportAnchor'] as const) {
+            const input = buildScenarioBattle(subject, scenario);
+            expect(input.playerTeam.filter((p) => p.statOverrides?.hp === 1)).toHaveLength(0);
+        }
+    });
+});
