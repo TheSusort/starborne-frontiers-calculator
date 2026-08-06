@@ -1,0 +1,3928 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`kit fingerprints > AEGIS 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "shield",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "shield",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > APEX 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Akula 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Amartya 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Anemone 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+    "heal",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+    "heal",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Anjian 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Arum 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Asphodel 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "debuff:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "debuff:charged",
+  ],
+  "wounded": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "debuff:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Asphyxiator 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "control",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+    "dot-applied",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "control",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+    "dot-applied",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "control",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+    "dot-applied",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Bayah 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Bedrock 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Belladonna 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Berserker 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Bizon 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Butcher 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Carnation 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Centurion 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Chakara 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Chimei 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Chisel 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Cinya 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Cobalt 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Crocus 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Crucialis 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Crusher 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Cultivator 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Curator 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Custodian 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Defiant 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Demolisher 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "bomb",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "bomb",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "bomb",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Enforcer 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Faust 1`] = `
+{
+  "plain": [
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "charge-changed",
+  ],
+  "wounded": [
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Flamel 1`] = `
+{
+  "plain": [
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal",
+  ],
+  "wounded": [
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Forsythia 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > FrontLine 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "shield:active",
+    "shield:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "shield:active",
+    "shield:charged",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "shield:active",
+    "shield:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Gallant 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Graphite 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Grif 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Guardian 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "control:active",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "control:active",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "control:active",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Harvester 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Hayyan 1`] = `
+{
+  "plain": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Heliodor 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Hemlock 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "dot-applied:active",
+    "heal",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "dot-applied:active",
+    "heal",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "dot-applied:active",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Hermes 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Howler 1`] = `
+{
+  "plain": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Huanying 1`] = `
+{
+  "plain": [
+    "attack",
+    "bomb",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "dot-applied",
+    "dot-applied:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "bomb",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "dot-applied",
+    "dot-applied:active",
+  ],
+  "wounded": [
+    "attack",
+    "bomb",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "dot-applied",
+    "dot-applied:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Incinerator 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > IonScorp 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Iridium 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "heal:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "heal:active",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "heal:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Isha 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control",
+    "heal",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control",
+    "heal",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Jempol 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Judge 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Kafa 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Kinetik 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Krysa 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > LUXX 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Laika 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Larkspur 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Laska 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > LeSabre 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Lev 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Liberator 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Lingshe 1`] = `
+{
+  "plain": [
+    "bomb",
+    "buff",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied",
+  ],
+  "richEnemy": [
+    "bomb",
+    "buff",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied",
+  ],
+  "wounded": [
+    "bomb",
+    "buff",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Lionheart 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Lodolite 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Los 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Madax 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "control",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "control",
+  ],
+  "wounded": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "control",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Magnolia 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Makoli 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Malvex 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "shield-destroyed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "shield:active",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "shield-destroyed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Mangler 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "bomb",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "bomb",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "bomb",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Meatshield 1`] = `
+{
+  "plain": [
+    "buff:active",
+    "charge-changed",
+    "dot-ticked",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff:active",
+    "charge-changed",
+    "dot-ticked",
+    "heal",
+  ],
+  "wounded": [
+    "buff:active",
+    "charge-changed",
+    "dot-ticked",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Medved 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Meiying 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Mender 1`] = `
+{
+  "plain": [
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "charge-changed",
+  ],
+  "wounded": [
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Morao 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "heal",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "heal",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Nayra 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Nemesis 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "shield",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Nosorog 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Nuqtu 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Nyxen 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "wounded": [
+    "attack",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Obsidian 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Oleander 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "dot-ticked",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "dot-ticked",
+    "heal",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "dot-ticked",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Opal 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal:active",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "heal:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Orel 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "control",
+    "control:active",
+    "debuff",
+    "dot-ticked",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "control",
+    "control:active",
+    "debuff",
+    "dot-ticked",
+  ],
+  "wounded": [
+    "attack",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "control",
+    "control:active",
+    "debuff",
+    "dot-ticked",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Pallas 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "heal:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "heal:active",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "heal:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Panguan 1`] = `
+{
+  "plain": [
+    "attack",
+    "bomb",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "bomb",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "bomb",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Panon 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Paracelsus 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Pestilence 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied",
+    "dot-applied:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied",
+    "dot-applied:active",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied",
+    "dot-applied:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Prospect 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Provider 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Purifier 1`] = `
+{
+  "plain": [
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "charge-changed",
+  ],
+  "wounded": [
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Quixilver 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "shield:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "shield:active",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "shield:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Ravager 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Razi 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Redeemer 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Refine 1`] = `
+{
+  "plain": [
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "charge-changed",
+  ],
+  "wounded": [
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Rhodium 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Rikra 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Ripper 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Rookie 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Ruiner 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Rys 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Salvation 1`] = `
+{
+  "plain": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Sansi 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "control",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "control",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "control",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Sefuba 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Selenite 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Sentinel 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Sha Xing 1`] = `
+{
+  "plain": [
+    "attack",
+    "bomb",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "bomb",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "bomb",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Shashou 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Shelter 1`] = `
+{
+  "plain": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Shepherd 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied",
+    "heal:active",
+    "heal:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied",
+    "heal:active",
+    "heal:charged",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied",
+    "heal:active",
+    "heal:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Snakeroot 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Snapdragon 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Sokol 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Stalwart 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "buff:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "buff:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "buff:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Suku 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Sustainer 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Thresh 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Tithonus 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "heal:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "heal:active",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "heal:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Torcher 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "charge-changed",
+    "debuff",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Tormenter 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Trydent 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Tycho 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff-expired",
+    "charge-changed",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Tygr 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control",
+    "debuff",
+    "debuff-resisted",
+    "debuff:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control",
+    "debuff",
+    "debuff-resisted",
+    "debuff:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control",
+    "debuff",
+    "debuff-resisted",
+    "debuff:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Umayl 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Valerian 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Valiant 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Valkyrie 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "buff",
+    "buff-expired",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Vanguard 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Vindicator 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Volk 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Voron 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "dot-ticked",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "dot-ticked",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "dot-ticked",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Warden 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied",
+    "dot-applied:charged",
+    "heal",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied",
+    "dot-applied:charged",
+    "heal",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+    "dot-applied",
+    "dot-applied:charged",
+    "heal",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Wildfire 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "debuff:active",
+    "debuff:charged",
+    "dot-applied",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "debuff:active",
+    "debuff:charged",
+    "dot-applied",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "debuff:active",
+    "debuff:charged",
+    "dot-applied",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Wisteria 1`] = `
+{
+  "plain": [
+    "attack",
+    "charge-changed",
+    "dot-applied",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "charge-changed",
+    "dot-applied",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "charge-changed",
+    "dot-applied",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Wrecker 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Wusheng 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "control:charged",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Xcellence 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "control:active",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
+    "shield",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Xiaodao 1`] = `
+{
+  "plain": [
+    "attack:active",
+  ],
+  "richEnemy": [
+    "attack:active",
+  ],
+  "wounded": [
+    "attack:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Yarrow 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "dot-applied:active",
+    "dot-applied:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Yazid 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "heal:active",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "heal:active",
+  ],
+  "wounded": [
+    "attack",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+    "heal:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Yin Jian 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "buff-expired",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Yuyan 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "charge-changed",
+    "control:active",
+    "control:charged",
+    "debuff",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "charge-changed",
+    "control:active",
+    "control:charged",
+    "debuff",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "charge-changed",
+    "control:active",
+    "control:charged",
+    "debuff",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Zeolite 1`] = `
+{
+  "plain": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+  "richEnemy": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+  "wounded": [
+    "attack",
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff-resisted",
+    "debuff:active",
+    "debuff:charged",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Zosimos 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
+exports[`suite health > pins the corpus shape so a data refresh announces itself in ONE diff 1`] = `
+{
+  "digest": -1538500136,
+  "shipCount": 147,
+}
+`;

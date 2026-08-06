@@ -39,6 +39,7 @@
  * `simulateBattle` (the runCombat wrapper that produces these inputs) is Task 3 — NOT here.
  */
 import type { CombatEvent } from '../combat/events';
+import type { CombatActor } from '../combat/state';
 import type { Position } from '../../types/encounters';
 import type { Ship, AffinityName } from '../../types/ship';
 import type { CombatStatBlock, DoTType } from '../../types/calculator';
@@ -582,6 +583,12 @@ export interface BattleSimulationInput {
     playerSquadLeader?: SquadLeaderSelection;
     /** Enemy-side squad leader (pre-fight faction aura). Absent → no pre-fight change. */
     enemySquadLeader?: SquadLeaderSelection;
+    /** TEST-ONLY: forwarded verbatim to the engine's `__testTapActors` (engine.ts:1363, fired once
+     *  at actor construction). Lets a fixture seed initial actor state — `shieldPool`, `currentHp`
+     *  — that `BattlePlacement`/`statOverrides` cannot express, which is what the real-kit
+     *  fingerprint scenarios (richEnemy / hurtAllies) need. Never set by production callers.
+     *  Mutates the LIVE roster; the engine hands out `allActors` itself, not a copy. */
+    __testTapActors?: (actors: CombatActor[]) => void;
 }
 
 /** The combat stats simulateBattle resolves per placement. Derived from the ship's
@@ -1070,6 +1077,7 @@ export function simulateBattle(
         positionalTeamBattle: true,
         teamActors,
         enemyAttackers,
+        __testTapActors: input.__testTapActors,
         bus,
     });
 

@@ -45,6 +45,57 @@ export function diffFingerprints(
     return { actorId, shipName, missingInComposition: missing, extraInComposition: extra };
 }
 
+/** Recurse into an entry list AND every entry's nested `reactions`, collecting the `kind[:slot]`
+ *  token of every entry whose `actorId` matches.
+ *
+ *  The `:slot` suffix is NOT a reliable CAST-vs-passive/reactive marker, despite appearances.
+ *  `ctx.pendingSkill` (`{skillName, slot}`) is set exactly once per cast — from the single
+ *  `skill-fired` event emitted before any of its clauses resolve (`playerTurn.ts`) — and several
+ *  log-entry handlers in `buildCombatLog.ts` each spread `...(ctx.consumePendingSkill() ?? {})`,
+ *  which reads-and-clears it. So the tag is single-use FOR THE WHOLE CAST: whichever handler runs
+ *  first wins `:slot`, and every later entry from that same cast lands BARE. A bare token can
+ *  therefore be a genuine cast entry that simply lost the race, not a passive/reactive one.
+ *  Concretely, Malvex's charged cast grants Barrier via a named buff routed through the
+ *  `timedSelfBySlot` loop, which runs BEFORE the attack's `ability-performed` emission — so
+ *  `buff-applied` consumes the tag (`buff:charged`) and THAT cast's attack lands as a bare
+ *  `attack`. Its committed `richEnemy` snapshot carries both `attack` and `attack:charged` for
+ *  exactly this reason: once the seeded enemy shield is spent, later charged casts grant no Barrier
+ *  and so keep their own tag. Which entry carries the slot is therefore a function of emission
+ *  ORDER in `playerTurn.ts`; a pure refactor that reorders emission (no behaviour change) can flip
+ *  which entry gets tagged.
+ *
+ *  So what does the suffix buy over a bare `kind`? Less than it looks, and it is worth being precise
+ *  because the cost above is real. It does NOT earn its keep by separating a cast entry from a
+ *  passive/reactive one of the same kind: on the current corpus that case does not arise, because
+ *  reactive grants tend not to log at all (Malvex's on-damaged shield passive fires in every
+ *  scenario, yet logs no `shield` entry — only its later `shield-destroyed` proves the pool
+ *  existed). What it does buy is NAMING the slot in a diff: `shield:active` disappearing says which
+ *  half of the kit regressed, where a vanished bare `shield` would not. `skillName` is deliberately
+ *  NOT part of the token — it is the ship's own skill name, so it carries nothing the ship key
+ *  doesn't, and including it would churn snapshots on a cosmetic rename. */
+function walkEntryTokens(entries: CombatLogEntry[], actorId: string, acc: Set<string>): void {
+    for (const e of entries) {
+        if (e.actorId === actorId) acc.add(e.slot ? `${e.kind}:${e.slot}` : e.kind);
+        if (e.reactions?.length) walkEntryTokens(e.reactions, actorId, acc);
+    }
+}
+
+/** The behaviour fingerprint of one actor across a whole battle, as a SORTED array of
+ *  `kind[:slot]` tokens. Sorted so entry order can never churn a snapshot; de-duplicated because
+ *  it is a set of behaviours, not a count. Pure over an already-run `BattleResult`.
+ *
+ *  A REFINEMENT of `fingerprintActor`, not a replacement — that function is consumed by
+ *  `ablation.ts`'s differential oracle, which compares bare kind-sets, so it stays as-is. */
+export function fingerprintActorTokens(result: BattleResult, actorId: string): string[] {
+    const acc = new Set<string>();
+    for (const round of result.combatLog) {
+        walkEntryTokens(round.startOfRound, actorId, acc);
+        for (const turn of round.turns) walkEntryTokens(turn.entries, actorId, acc);
+        walkEntryTokens(round.endOfRound, actorId, acc);
+    }
+    return [...acc].sort();
+}
+
 /**
  * Consumer-facing differential entry point (Task 10 calls this). Fingerprints `shipName` in
  * each already-run `BattleResult` — via its OWN actorId in that result, since a ship's actorId
