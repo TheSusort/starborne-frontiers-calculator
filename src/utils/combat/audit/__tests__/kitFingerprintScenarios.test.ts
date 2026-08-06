@@ -15,12 +15,14 @@ import {
     FOCUS_ACTOR_ID,
     FOCUS_POSITION,
     occupiedCellCount,
+    PRIMARY_BOARD,
     ROUNDS,
     SCENARIOS,
     SEED,
     SUPPORT_ANCHOR_BOARD,
 } from '../kitFingerprintScenarios';
 import { runSeededBattle } from '../seededBattle';
+import { positionTurnRank } from '../../state';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
@@ -381,5 +383,40 @@ describe('support-anchor board', () => {
         const last = result.rounds[result.rounds.length - 1];
         const dead = last.ships.filter((s) => !s.alive).map((s) => s.actorId);
         expect(dead, 'nothing may die on the support-anchor board').toEqual([]);
+    });
+});
+
+describe('turn-order invariance — why a placement swap cannot reorder turns', () => {
+    // orderByTurnPriority (state.ts:331) is speed DESC -> positionTurnRank -> player-side-first ->
+    // input order. The side tiebreak WOULD be a confound for the placement-symmetry oracle: it is
+    // deterministic, so unioning over seeds cannot suppress it, and 33 of 147 corpus ships tie a
+    // filler's base speed. It is unreachable only because positionTurnRank is injective over
+    // positions and every board cell is distinct, so the comparator always returns at the position
+    // step. If a future board edit ever put two actors on one cell, this test fails and the oracle's
+    // soundness argument fails with it.
+    it.each([
+        ['primary', PRIMARY_BOARD],
+        ['support-anchor', SUPPORT_ANCHOR_BOARD],
+    ] as const)('%s board: all eight cells have distinct positionTurnRank', (_name, board) => {
+        const cells = [board.focus, ...board.allies, ...board.enemies];
+        expect(cells).toHaveLength(8);
+        const ranks = cells.map(positionTurnRank);
+        expect(new Set(ranks).size).toBe(8);
+    });
+
+    it('positionTurnRank never returns the position-less sentinel for a real cell', () => {
+        // A position-less actor ranks POSITIVE_INFINITY and would tie every other position-less
+        // actor, falling through to the side tiebreak. No board cell may do that.
+        const cells = [
+            PRIMARY_BOARD.focus,
+            ...PRIMARY_BOARD.allies,
+            ...PRIMARY_BOARD.enemies,
+            SUPPORT_ANCHOR_BOARD.focus,
+            ...SUPPORT_ANCHOR_BOARD.allies,
+            ...SUPPORT_ANCHOR_BOARD.enemies,
+        ];
+        for (const cell of cells) {
+            expect(Number.isFinite(positionTurnRank(cell))).toBe(true);
+        }
     });
 });
