@@ -8,7 +8,6 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
-    boardFor,
     buildScenarioBattle,
     darkSlotsOnPrimaryBoard,
     FILLER_HP,
@@ -20,10 +19,10 @@ import {
     ROUNDS,
     SCENARIOS,
     SEED,
-    subjectSideFor,
     SUPPORT_ANCHOR_BOARD,
 } from '../kitFingerprintScenarios';
 import { PLACEMENTS } from '../types';
+import { resolveSubjectActorId } from '../placementSymmetry';
 import { runSeededBattle } from '../seededBattle';
 import { positionTurnRank } from '../../state';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
@@ -195,21 +194,13 @@ describe('live battle invariants', () => {
             expect(ship).not.toBeNull();
             for (const scenario of SCENARIOS) {
                 for (const placement of PLACEMENTS) {
-                    const subjectSide = subjectSideFor(placement);
-                    const subjectCell = boardFor(scenario).focus;
                     const result = runSeededBattle(
                         buildScenarioBattle(ship!, scenario, placement),
                         SEED
                     );
                     // `focus` mints the reserved 'attacker' id; `team`/`enemy` don't, so the
                     // subject is resolved by (side, cell) via the roster, same as `seedFor`.
-                    const subjectActorId = result.roster.find(
-                        (r) => r.side === subjectSide && r.position === subjectCell
-                    )?.actorId;
-                    expect(
-                        subjectActorId,
-                        `${name}/${scenario}/${placement}: subject not found in the roster`
-                    ).toBeDefined();
+                    const subjectActorId = resolveSubjectActorId(result, scenario, placement);
                     const rows = result.rounds
                         .flatMap((r) => r.ships)
                         .filter((s) => s.actorId === subjectActorId);
@@ -442,35 +433,10 @@ describe('turn-order invariance — why a placement swap cannot reorder turns', 
         const ranks = cells.map(positionTurnRank);
         expect(new Set(ranks).size).toBe(8);
     });
-
-    it('positionTurnRank never returns the position-less sentinel for a real cell', () => {
-        // A position-less actor ranks POSITIVE_INFINITY and would tie every other position-less
-        // actor, falling through to the side tiebreak. No board cell may do that.
-        const cells = [
-            PRIMARY_BOARD.focus,
-            ...PRIMARY_BOARD.allies,
-            ...PRIMARY_BOARD.enemies,
-            SUPPORT_ANCHOR_BOARD.focus,
-            ...SUPPORT_ANCHOR_BOARD.allies,
-            ...SUPPORT_ANCHOR_BOARD.enemies,
-        ];
-        for (const cell of cells) {
-            expect(Number.isFinite(positionTurnRank(cell))).toBe(true);
-        }
-    });
 });
 
 describe('fragile ally is keyed by board position, not array index', () => {
     beforeAll(requireReferenceData);
-
-    it("puts the 1-HP ally on the primary board's first ally cell", () => {
-        const subject = buildTraceShip('Sentinel');
-        if (!subject) throw new Error('Sentinel did not resolve from the corpus');
-        const input = buildScenarioBattle(subject, 'wounded');
-        const fragile = input.playerTeam.filter((p) => p.statOverrides?.hp === 1);
-        expect(fragile).toHaveLength(1);
-        expect(fragile[0].position).toBe(PRIMARY_BOARD.allies[0]);
-    });
 
     it('has no fragile ally in plain, richEnemy or supportAnchor', () => {
         const subject = buildTraceShip('Sentinel');

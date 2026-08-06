@@ -53,9 +53,14 @@ function main(): void {
             'actor-id resolution for the attack pathway only. heal/shield/buff/death/charge-changed ' +
             'attribution is NOT exercised by this gate, not ruled out.)'
     );
+    console.log(
+        '  (caveat: RNG is actor-id-keyed and re-draws per placement, and playerTeam[0] is also the ' +
+            "engine's positional heal target — see the ledger's caveat block before instrumenting a " +
+            'low-ship-count or heal finding.)'
+    );
 
     const diffs: PlacementDiff[] = [];
-    const emptyByPlacement = { focus: 0, team: 0, enemy: 0 } as Record<Placement, number>;
+    const emptyByPlacement: Record<Placement, number> = { focus: 0, team: 0, enemy: 0 };
     const kindsSeen = {
         focus: new Set<CombatLogEntryKind>(),
         team: new Set<CombatLogEntryKind>(),

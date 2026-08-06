@@ -71,4 +71,16 @@ describe('renderPlacementLedgerMarkdown', () => {
         });
         expect(md).toMatch(/VACUITY WARNING/i);
     });
+
+    it('discloses the actor-id-keyed RNG seed-noise caveat', () => {
+        const md = renderPlacementLedgerMarkdown([diff], health);
+        expect(md).toMatch(/seed noise/i);
+        expect(md).toContain('--base-seed');
+    });
+
+    it("discloses the playerTeam[0]-is-the-heal-target caveat", () => {
+        const md = renderPlacementLedgerMarkdown([diff], health);
+        expect(md).toMatch(/heal target/i);
+        expect(md).toContain('positionalTeamBattle');
+    });
 });

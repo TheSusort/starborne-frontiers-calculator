@@ -133,6 +133,15 @@ export const FILLER_NAMES: readonly string[] = [
     'Rookie',
 ] as const;
 
+/** The enemy-side split of `FILLER_NAMES` (first 4). Exported so every consumer that needs "the
+ *  enemy fillers" derives it from the same slice instead of re-slicing `FILLER_NAMES` — a desync
+ *  between independent slices would put the same ship twice on one side, an illegal in-game state,
+ *  with nothing failing. */
+export const ENEMY_FILLER_NAMES: readonly string[] = FILLER_NAMES.slice(0, 4);
+
+/** The ally-side split of `FILLER_NAMES` (last 3). See `ENEMY_FILLER_NAMES`. */
+export const ALLY_FILLER_NAMES: readonly string[] = FILLER_NAMES.slice(4, 7);
+
 /** Filler survive the whole window: without this, a damage-formula change shifts kill timing,
  *  which shifts which clauses get to fire — numeric sensitivity leaking into a structural suite.
  *  Deliberately absurd rather than merely large: the corpus's per-battle damage output spans more
@@ -217,12 +226,14 @@ function fillerPlacement(
     return { ...base, statOverrides: { ...base.statOverrides, hp, attack } };
 }
 
-/** `richEnemy`'s seeded enemy shield, as a multiple of the focus ship's base attack — an ABSOLUTE
- *  pool, not a fraction of the filler's (absurd) max HP. A fraction was the original choice and it
- *  was inert: 20% of 500M is 100M against ~1.2k hits, so `enemy-shield` gates read true for the
- *  entire battle and nothing ever punched through. Three attack points' worth survives the first
- *  cast or two — long enough for a shield-gated clause to fire at least once — then depletes, so
- *  shield-removal and punch-through clauses see the other side of the gate too. */
+/** `richEnemy`'s seeded shield on the subject's OPPONENTS, as a multiple of the focus ship's base
+ *  attack — an ABSOLUTE pool, not a fraction of the filler's (absurd) max HP. A fraction was the
+ *  original choice and it was inert: 20% of 500M is 100M against ~1.2k hits, so `enemy-shield` gates
+ *  read true for the entire battle and nothing ever punched through. Three attack points' worth
+ *  survives the first cast or two — long enough for a shield-gated clause to fire at least once —
+ *  then depletes, so shield-removal and punch-through clauses see the other side of the gate too.
+ *  "Opponents" is placement-relative, not side-relative: in `focus`/`team` that's the enemy side, but
+ *  in `enemy` the subject IS the enemy side, so this seeds the PLAYER side instead (see `seedFor`). */
 const SHIELD_POOL_HITS = 3;
 
 /** `wounded` seeds every filler on BOTH sides to 35% HP: under the corpus's 40%- and 50%-HP gates
@@ -239,9 +250,11 @@ const HURT_FRACTION = 0.35;
  *  drops below 40%" clauses (Tycho) require and a static low start would never produce. */
 const FOCUS_HURT_FRACTION = 0.45;
 
-/** The focus ship is always the first player placement, and simulateBattle mints the first player
- *  actor with the reserved id 'attacker' (battleSimulator's minting scheme; the rest are
- *  `p:<shipId>:<idx>`). So the focus actor id is fixed. */
+/** The reserved actor id simulateBattle mints for the first player placement (battleSimulator's
+ *  minting scheme; the rest are `p:<shipId>:<idx>` / `e:<shipId>:<idx>`). The SUBJECT only gets this
+ *  id in the `focus` placement — in `team` it gives up index 0 to a filler and mints `p:...`, and in
+ *  `enemy` it sits on the enemy side entirely and mints `e:...`. Resolve the subject by (side, cell)
+ *  via `resolveSubjectActorId`, never by assuming this id. */
 export const FOCUS_ACTOR_ID = 'attacker';
 
 const maxHpOf = (a: CombatActor): number => a.stats.hp;
@@ -317,13 +330,18 @@ function seedFor(
 }
 
 /**
- * The scenario battle for one focus ship: the focus on the player side with 3 inert filler
- * allies, against 4 inert filler enemies. Both the board geometry and seeded initial state vary
- * by scenario (see `boardFor` for geometry selection, PRIMARY_BOARD and SUPPORT_ANCHOR_BOARD for
- * cell rationales). The focus ship keeps `canonicalPlacement`'s un-modified level-60 base stats
- * — no gear, no refits, no engineering — so its fingerprint reflects its kit, not a gearing
- * choice. The FILLER stats, by contrast, are tuned (HP, attack) and are the only lever this
- * fixture pulls on how hard the battle presses.
+ * The scenario battle for one subject ship, on one of the three engine actor paths named by
+ * `placement` (default `'focus'`, kept for the 147-ship fingerprint snapshot's byte-identical call
+ * shape — see `realKitFingerprints.test.ts`). In `'focus'` the subject sits first on the player side
+ * with 3 inert filler allies, against 4 inert filler enemies. In `'team'` it keeps its cell but gives
+ * up player index 0 to a filler, so the engine walks it as a 'team' actor instead of minting it
+ * 'attacker'. In `'enemy'` it is on the ENEMY side against the filler allies-turned-opponents — the
+ * geometric mirror of `'focus'`. Both the board geometry and seeded initial state vary by scenario
+ * (see `boardFor` for geometry selection, PRIMARY_BOARD and SUPPORT_ANCHOR_BOARD for cell
+ * rationales). The subject keeps `canonicalPlacement`'s un-modified level-60 base stats — no gear,
+ * no refits, no engineering — so its fingerprint reflects its kit, not a gearing choice. The FILLER
+ * stats, by contrast, are tuned (HP, attack) and are the only lever this fixture pulls on how hard
+ * the battle presses.
  */
 export function buildScenarioBattle(
     subject: Ship,
@@ -331,8 +349,8 @@ export function buildScenarioBattle(
     placement: Placement = 'focus'
 ): BattleSimulationInput {
     const board = boardFor(scenario);
-    const enemyNames = FILLER_NAMES.slice(0, 4);
-    const allyNames = FILLER_NAMES.slice(4, 7);
+    const enemyNames = ENEMY_FILLER_NAMES;
+    const allyNames = ALLY_FILLER_NAMES;
     const tap = seedFor(subject, scenario, placement);
     const attack = fillerAttackFor(subject);
     const rest = { rounds: ROUNDS, ...(tap ? { __testTapActors: tap } : {}) };

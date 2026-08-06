@@ -10,7 +10,7 @@ import {
     scenariosFor,
     subjectSideFor,
     FOCUS_ACTOR_ID,
-    FILLER_NAMES,
+    ENEMY_FILLER_NAMES,
     type FingerprintScenario,
 } from './kitFingerprintScenarios';
 import { PLACEMENT_PAIRS, type Placement, type PlacementDiff } from './types';
@@ -67,10 +67,13 @@ export function seedsFrom(base: number, count: number): number[] {
  *
  *  Union over seeds is what neutralises ownerId-keyed RNG: the same physical ship draws a different
  *  crit/landing/proc stream depending on its owner id, so a proc-gated kind can appear in one
- *  placement and not another purely by draw. A kind the placement can produce AT ALL shows up in the
- *  union of enough seeds, so only a kind appearing in ZERO seeds is reported. Union over scenarios
- *  goes the same way, trading "which scenario exposed it" for a lower false-positive rate. Both are
- *  deliberate false-negative trades: each finding costs a manual engine-instrumentation triage. */
+ *  placement and not another purely by draw. Union over enough seeds makes that convergent — a kind
+ *  the placement can produce AT ALL becomes overwhelmingly likely to show up — but this is a
+ *  probabilistic mitigation, not a guarantee, and at the CLI's default of 5 seeds it has REAL
+ *  measured residual: a landing- or proc-gated kind can still differ between placements purely by
+ *  draw (see the ledger's seed-noise caveat). Union over scenarios goes the same way, trading "which
+ *  scenario exposed it" for a lower false-positive rate. Both are deliberate false-negative trades:
+ *  each finding costs a manual engine-instrumentation triage. */
 export function fingerprintSubject(
     subject: Ship,
     placement: Placement,
@@ -124,7 +127,7 @@ export function diffAllPlacements(
     return out;
 }
 
-/** Calibration subjects: the ENEMY-side fillers only (`FILLER_NAMES.slice(0, 4)`).
+/** Calibration subjects: the ENEMY-side fillers only (`ENEMY_FILLER_NAMES`).
  *
  *  Verified kitless — no passives, no charge skill, a bare "deals 90% damage" active, guarded by the
  *  existing filler-inertness test — so their fingerprints are a function of the ENGINE alone. Any
@@ -133,7 +136,7 @@ export function diffAllPlacements(
  *  Deliberately NOT the ally-side fillers: the subject shares a side with those, so using one would
  *  put the same ship twice on one side — an illegal in-game state. An enemy-side filler is on the
  *  opposite side from the subject in every placement. */
-export const CALIBRATION_SUBJECT_NAMES: readonly string[] = FILLER_NAMES.slice(0, 4);
+export const CALIBRATION_SUBJECT_NAMES: readonly string[] = ENEMY_FILLER_NAMES;
 
 /** Run the placement sweep over the inert calibration subjects. An empty result is the pass
  *  condition; anything returned is a HARNESS asymmetry and invalidates the real sweep. */

@@ -1,4 +1,4 @@
-import type { Placement, PlacementDiff } from '../../src/utils/combat/audit/types';
+import { PLACEMENTS, type Placement, type PlacementDiff } from '../../src/utils/combat/audit/types';
 
 const DEFAULT_SEEDS = 5;
 
@@ -56,7 +56,7 @@ export function renderPlacementLedgerMarkdown(
         '| placement | distinct kinds | ships observing nothing |',
         '| --- | --- | --- |',
     ];
-    for (const placement of ['focus', 'team', 'enemy'] as Placement[]) {
+    for (const placement of PLACEMENTS) {
         lines.push(
             `| ${placement} | ${health.kindsByPlacement[placement]} | ${health.emptyByPlacement[placement]} |`
         );
@@ -78,6 +78,24 @@ export function renderPlacementLedgerMarkdown(
         "subject's actor id resolves correctly in all three placements for the `attack` pathway. It does NOT",
         'rule out an asymmetry in heal, shield, buff, death, or charge-changed attribution — those pathways',
         'are simply **not exercised** by the calibration gate at all.',
+        ''
+    );
+    lines.push(
+        '**Seed noise, not just calibration scope, is a confound.** The RNG sub-stream is keyed by actor',
+        'id, which necessarily changes with placement. Measured on this branch: the same crit landed at',
+        'rounds 6+13 as `focus`, 5+16 as `team`, 7+20 as `enemy` — same physical ship, same seed, three',
+        'different draws. Union-over-K-seeds is the mitigation, but at the default K=5 its strength is',
+        'unquantified, and a landing- or proc-gated kind can still differ between placements purely by',
+        'draw. The three `debuff-resisted` findings below (Belladonna, Enforcer, Valerian) point in',
+        'MUTUALLY INCONSISTENT directions across ships — that pattern is the signature of seed noise, not',
+        'a path gap. Before instrumenting a low-ship-count finding, re-run with a different `--base-seed`',
+        'and see if it survives.',
+        '',
+        "**`playerTeam[0]` is also the engine's heal target in positional mode**",
+        '(`src/utils/combat/engine.ts:2282`: `healTarget = explicitHealTarget ?? (input.positionalTeamBattle',
+        '? attacker : undefined)`). So the subject is the heal target ONLY in the `focus` placement — a',
+        'real engine-role difference the transform cannot remove, not a harness bug. Read any `heal`',
+        'finding below with that in mind.',
         ''
     );
     lines.push('## Findings', '');
