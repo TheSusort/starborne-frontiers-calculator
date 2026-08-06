@@ -443,6 +443,7 @@ function seedPassiveTimedStatuses(
                 bus.emit({
                     type: 'buff-applied',
                     actorId: rid,
+                    granterId: status.casterId ?? rt.actor.id,
                     round,
                     buffName: status.payload.buffName,
                     duration: status.duration,

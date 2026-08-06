@@ -2971,11 +2971,15 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
 
     const ROUNDS = 16; // carrier repairs each round → floor(16 × 0.16) = 2 proc fires
 
-    /** Collect every actorId that ever received a Power Infused Nanobots GRANT (combatLog). */
+    /** Collect every actorId that ever received a Power Infused Nanobots GRANT (combatLog).
+     *  `entry.actorId` on a 'buff' entry is the GRANTER (post-granter-attribution); the
+     *  recipient lives in `entry.targets`. */
     function buffedActors(result: ReturnType<typeof simulateBattle>): Set<string> {
         const set = new Set<string>();
         for (const entry of flattenCombatLog(result)) {
-            if (entry.kind === 'buff' && entry.note === NANOBOTS) set.add(entry.actorId);
+            if (entry.kind === 'buff' && entry.note === NANOBOTS) {
+                for (const t of entry.targets) set.add(t.targetId);
+            }
         }
         return set;
     }
@@ -3344,10 +3348,12 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
         // unreliable for the carrier here: the carrier grants the 1-turn buff on its OWN turn,
         // so it has already expired by the round-end snapshot — but the application still
         // happened (and folded into that turn's damage). The buff log captures every recipient.
+        // `e.actorId` is the GRANTER (post-granter-attribution); the recipient lives in
+        // `e.targets`.
         const buffedActors = new Set(
             flattenCombatLog(result)
                 .filter((e) => e.kind === 'buff' && e.note === ATTACK_UP_I)
-                .map((e) => e.actorId)
+                .flatMap((e) => e.targets.map((t) => t.targetId))
         );
 
         // Every player ally — including the carrier — got the buff at least once.

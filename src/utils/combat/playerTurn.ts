@@ -1794,6 +1794,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
+                granterId: status.casterId ?? actor.id,
                 round: r,
                 buffName: status.payload.buffName,
                 duration: status.duration,

@@ -2648,6 +2648,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ctx.bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
+                granterId: intent.ownerId,
                 round: ctx.round,
                 buffName: cfg.buffName,
                 duration,
@@ -2693,6 +2694,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.bus.emit({
                     type: 'buff-applied',
                     actorId: rid,
+                    granterId: intent.ownerId,
                     round: ctx.round,
                     buffName: extra.buffName,
                     duration: extra.duration,
