@@ -11,9 +11,11 @@ import {
     subjectSideFor,
     FRAGILE_ALLY_HP,
     SEED,
+    FOCUS_ACTOR_ID,
 } from '../kitFingerprintScenarios';
 import { PLACEMENTS } from '../types';
 import { runSeededBattle } from '../seededBattle';
+import { resolveSubjectActorId } from '../placementSymmetry';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
@@ -273,5 +275,32 @@ describe('placement transform — subject match-count guard (Finding 2)', () => 
         ] as unknown as CombatActor[];
 
         expect(() => tap!(noMatch)).toThrow(/expected exactly 1 subject actor/);
+    });
+});
+
+describe('subject actor-id resolution', () => {
+    beforeAll(requireReferenceData);
+
+    it('resolves the expected id SHAPE for each placement', () => {
+        const subject = subjectShip();
+        const ids: Record<string, string> = {};
+        for (const placement of PLACEMENTS) {
+            const result = runSeededBattle(buildScenarioBattle(subject, 'plain', placement), SEED);
+            ids[placement] = resolveSubjectActorId(result, 'plain', placement);
+        }
+        expect(ids.focus).toBe(FOCUS_ACTOR_ID);
+        expect(ids.team).toMatch(/^p:/);
+        expect(ids.enemy).toMatch(/^e:/);
+        // Distinctness is the vacuity guard: two placements resolving the same id would compare a
+        // fingerprint against itself and report a permanently clean sweep.
+        expect(new Set(Object.values(ids)).size).toBe(3);
+    });
+
+    it('throws rather than returning a wrong id when the shape does not match', () => {
+        const subject = subjectShip();
+        const result = runSeededBattle(buildScenarioBattle(subject, 'plain', 'focus'), SEED);
+        // Asking for the `enemy` placement's subject in a `focus` battle resolves the enemy at the
+        // subject cell — which does not exist on that board — so it must throw, not guess.
+        expect(() => resolveSubjectActorId(result, 'plain', 'enemy')).toThrow(/could not resolve/i);
     });
 });
