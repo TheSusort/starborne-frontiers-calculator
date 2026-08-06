@@ -551,6 +551,13 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // `dot-applied` (sourceId) already use. `buff` was the lone grant-style kind booked to
         // its recipient, which made an ally-only support kit invisible to any actor-scoped
         // reader. Falls back to the receiver when no granter is carried (self-grant).
+        //
+        // Giving this entry a non-empty `targets` puts it into setHp's reverse fallback scan for
+        // the first time (previously `targets: []` made it structurally invisible there).
+        // Currently harmless because in playerTurn.ts the buff-grant loop runs BEFORE
+        // shield-applied/heal-performed, so those more-recent entries win the reverse scan first —
+        // but reordering those emissions would silently let a buff entry's target get stamped with
+        // a stale resultingHpPct instead.
         const entry: CombatLogEntry = {
             kind: 'buff',
             actorId: e.granterId ?? e.actorId,

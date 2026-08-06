@@ -1770,7 +1770,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // is applied to EVERY recipient (Task 5): self → [caster]; ally/all-allies → all players.
         // The status lives on each recipient (decrements at the recipient's Post Turn; family +
         // persistent rules run per recipient side because applyTimedAbilityStatus threads
-        // recipientId). buff-applied emits ONCE PER RECIPIENT with the recipient's actorId.
+        // recipientId). buff-applied emits ONCE PER RECIPIENT with the recipient's actorId, with
+        // the granter riding alongside in `granterId`.
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).

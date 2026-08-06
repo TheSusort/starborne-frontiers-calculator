@@ -9,7 +9,12 @@
  * RECEIVER, so Purifier's own fingerprint was empty but for `charge-changed`.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { buildScenarioBattle, FILLER_NAMES, SEED } from '../../audit/kitFingerprintScenarios';
+import {
+    buildScenarioBattle,
+    FILLER_HP,
+    FILLER_NAMES,
+    SEED,
+} from '../../audit/kitFingerprintScenarios';
 import { runSeededBattle } from '../../audit/seededBattle';
 import type { CombatLogEntry } from '../types';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
@@ -80,11 +85,14 @@ describe('buff granter attribution (integration)', () => {
         const purifier = buildTraceShip('Purifier');
         expect(purifier).not.toBeNull();
         const filler = FILLER_NAMES.map((n) => buildTraceShip(n)!);
+        // Named assertion instead of letting a resolution failure crash opaquely inside
+        // canonicalPlacement below.
+        expect(filler.every(Boolean)).toBe(true);
         const pl = (ship: Ship, position: Position): BattlePlacement => {
             const base = canonicalPlacement(ship, position);
             return {
                 ...base,
-                statOverrides: { ...base.statOverrides, hp: 500_000_000, attack: 400 },
+                statOverrides: { ...base.statOverrides, hp: FILLER_HP, attack: 400 },
             };
         };
         const result = runSeededBattle(
@@ -126,6 +134,10 @@ describe('buff granter attribution (integration)', () => {
 
         const purifierId = result.roster.find((r) => r.name === 'Purifier')!.actorId;
         for (const b of enemyBuffs) {
+            // Pins the no-aggregation invariant itself (exactly one target per buff entry) rather
+            // than merely tolerating it — `some`/`every` above are equivalent today only because
+            // this holds.
+            expect(b.targets.length).toBe(1);
             expect(enemyIds.has(b.actorId)).toBe(true);
             expect(b.actorId).toBe(purifierId);
         }
