@@ -327,3 +327,88 @@ describe('active pattern reachability from FOCUS_POSITION', () => {
         ).toEqual([]);
     });
 });
+
+describe('support-anchor board', () => {
+    // The second board geometry. Its ONLY job is to give a forward-extending support pattern
+    // (Pattern-Line-Support-*) allies to actually reach: those patterns extend toward column 4,
+    // so a caster anchored at the front column resolves to zero cells. Anchoring at M1 with allies
+    // at M2/M3/M4 covers ranges 1 through 3.
+    //
+    // The focus takes ZERO incoming damage here and that is unavoidable, not a tuning miss: for a
+    // Line-Support caster to have anyone to support, allies must sit forward of it in its own row,
+    // which makes one of THEM the front-most player that selectTargets resolves onto. The primary
+    // board keeps the on-damaged coverage for these same ships; this board answers only "does the
+    // support footprint reach anyone".
+    let focus: Ship;
+
+    beforeAll(() => {
+        requireReferenceData();
+        const m = buildTraceShip('Malvex');
+        if (!m) throw new Error('Malvex did not resolve from the corpus');
+        focus = m;
+    });
+
+    it('anchors the focus at the BACK of the middle row with three allies forward of it', () => {
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        expect(battle.playerTeam[0].position).toBe('M1');
+        const allyPositions = battle.playerTeam.slice(1).map((p) => p.position);
+        expect(allyPositions).toEqual(['M2', 'M3', 'M4']);
+    });
+
+    it('keeps enemies out of the focus row so the support line is all allies', () => {
+        // Also keeps the focus's own enemy-directed kit live: its row scan is M -> B -> T, row M
+        // holds no enemies, so it finds B4 front-most and reaches all four under an `all` pattern.
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        for (const p of battle.enemyTeam) expect(p.position[0]).not.toBe('M');
+        expect(battle.enemyTeam.map((p) => p.position)).toEqual(['B4', 'B3', 'B2', 'T4']);
+    });
+
+    it('uses eight distinct cells, like the primary board', () => {
+        // An ally and an enemy on the same cell are indistinguishable in position-keyed engine state.
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        const positions = [...battle.playerTeam, ...battle.enemyTeam].map((p) => p.position);
+        expect(new Set(positions).size).toBe(positions.length);
+        expect(positions).toHaveLength(8);
+    });
+
+    it('has NO fragile ally — every support target must survive the window', () => {
+        // `wounded` drops ALLY_POSITIONS[0] to 1 HP so it dies and lights on-ally-destroyed
+        // clauses. Here a dying support target would make reach flaky, and on-ally-destroyed
+        // coverage for these ships already exists on the primary board.
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        for (const p of battle.playerTeam.slice(1)) {
+            expect(p.statOverrides?.hp).toBeGreaterThan(p.ship.baseStats.hp);
+        }
+    });
+
+    it("reuses wounded's seeding verbatim, so ally repairs land instead of overhealing", () => {
+        // Load-bearing, not tidiness: Faust and Mender's actives REPAIR allies, and a repair aimed
+        // at a full-HP 500,000,000-HP filler is an overheal that may log nothing at all. A
+        // plain-seeded support-anchor board would be green, deterministic, and observing nothing.
+        const anchorActors = fakeRoster();
+        const woundedActors = fakeRoster();
+        buildScenarioBattle(focus, 'supportAnchor').__testTapActors?.(anchorActors);
+        buildScenarioBattle(focus, 'wounded').__testTapActors?.(woundedActors);
+        expect(anchorActors.map((a) => a.currentHp)).toEqual(woundedActors.map((a) => a.currentHp));
+    });
+
+    it('leaves the primary board untouched', () => {
+        // The whole approach rests on 144 snapshots not moving.
+        const battle = buildScenarioBattle(focus, 'plain');
+        expect(battle.playerTeam.map((p) => p.position)).toEqual(['M4', 'T4', 'T2', 'B4']);
+        expect(battle.enemyTeam.map((p) => p.position)).toEqual(['M3', 'M2', 'M1', 'T3']);
+    });
+
+    it('runs a full 20 rounds with nobody dying', () => {
+        // The live half of the board contract. Static position assertions cannot show that the
+        // battle actually completes: a death among the support targets would silently shrink the
+        // footprint mid-battle, and an early end would truncate the fingerprint at an arbitrary
+        // round. Note this asserts NOBODY dies, including the focus — there is no fragile ally
+        // here, unlike `wounded`.
+        const result = runSeededBattle(buildScenarioBattle(focus, 'supportAnchor'), SEED);
+        expect(result.outcome.lastRound).toBe(ROUNDS);
+        const last = result.rounds[result.rounds.length - 1];
+        const dead = last.ships.filter((s) => !s.alive).map((s) => s.actorId);
+        expect(dead, 'nothing may die on the support-anchor board').toEqual([]);
+    });
+});

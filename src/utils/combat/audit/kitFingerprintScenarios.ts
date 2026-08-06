@@ -11,8 +11,14 @@ import { fingerprintActorTokens } from './fingerprint';
 
 export type ScenarioName = 'plain' | 'richEnemy' | 'wounded';
 
-/** Fixed scenario order — also the snapshot key order. */
+/** The three scenarios EVERY corpus ship runs. Deliberately narrower than `FingerprintScenario`:
+ *  the corpus-wide live invariants (focus takes real damage, focus survives) are asserted over this
+ *  array, and the support-anchor board cannot satisfy the first one by construction. Keeping it out
+ *  of `SCENARIOS` excludes it from those invariants with no exemption list to go stale. */
 export const SCENARIOS: readonly ScenarioName[] = ['plain', 'richEnemy', 'wounded'] as const;
+
+/** Every scenario a ship MAY run. `supportAnchor` is conditional — see `scenariosFor`. */
+export type FingerprintScenario = ScenarioName | 'supportAnchor';
 
 /** Pinned RNG seed for every scenario battle. One seed for all of them: the scenarios are meant
  *  to differ by initial STATE, not by RNG stream. */
@@ -22,17 +28,24 @@ export const SEED = 20260805;
  *  tick more than once, and cooldown-gated grants to re-arm. */
 export const ROUNDS = 20;
 
+/** One board geometry: where the focus sits, and where its filler allies and enemies sit. */
+export interface BoardLayout {
+    focus: Position;
+    allies: readonly Position[];
+    enemies: readonly Position[];
+}
+
 /**
- * BOARD LAYOUT — the single most load-bearing choice in this fixture, because it decides whether
- * the focus ship is ever ATTACKED. `selectTargets` scans rows starting at the CASTER's own row
- * (`rowScanOrder`: caster row → next → wrap) and takes the front-most occupied column (col 4 =
- * front) of the first row that holds a target. Consequences that drive the numbers below:
+ * THE PRIMARY BOARD — the single most load-bearing choice in this fixture, because it decides
+ * whether the focus ship is ever ATTACKED. `selectTargets` scans rows starting at the CASTER's own
+ * row (`rowScanOrder`: caster row → next → wrap) and takes the front-most occupied column (col 4 =
+ * front) of the first row that holds a target. Consequences:
  *
  *  - Three enemies share the focus's OWN row (M3/M2/M1 against the focus at M4). Their scan starts
  *    at row M, finds exactly one player there — the focus, front-most at col 4 — so all three
  *    single-target attacks land on the focus, every round. That is what makes on-damaged kit
  *    (counterattack, reflect, revenge, on-damaged grants, Barrier hit-counting) observable at all:
- *    the previous layout parked the focus behind an ally in another row and it took ZERO incoming
+ *    an earlier layout parked the focus behind an ally in another row and it took ZERO incoming
  *    damage in 136 of 147 fingerprints.
  *  - Sharing the row also keeps the focus's OWN offence multi-target: scanning from M it finds
  *    M3/M2/M1 front-to-back, so front/back/skip/adjacent patterns still differentiate, and `all`
@@ -46,13 +59,52 @@ export const ROUNDS = 20;
  *  - Allies at T4/B4 flank the focus's column-4 cell, so column/adjacency support footprints
  *    reach real allies.
  *
- * All eight cells are distinct: an ally and an enemy on the same cell would be
- * indistinguishable in position-keyed engine state.
+ * All eight cells are distinct: an ally and an enemy on the same cell would be indistinguishable
+ * in position-keyed engine state.
+ *
+ * WHAT THIS BOARD CANNOT DO, and why there is a second one: anchoring at the FRONT column means a
+ * forward-extending support pattern (`Pattern-Line-Support-*`, which extends +q toward col 4) has
+ * no cells ahead of it and resolves to ZERO. Three corpus ships are affected, in BOTH their active
+ * and charged slots (charged targeting inherits active when the charged columns are blank —
+ * `targetingParser.ts`). It cannot be fixed by moving this anchor: for such a caster to have
+ * anyone to support, allies must sit forward of it in its own row, which makes one of THEM
+ * front-most and stops the focus being attacked. The two requirements are mutually exclusive on one
+ * board, so they get one board each. See SUPPORT_ANCHOR_BOARD.
  */
-export const FOCUS_POSITION: Position = 'M4';
+export const PRIMARY_BOARD: BoardLayout = {
+    focus: 'M4',
+    allies: ['T4', 'T2', 'B4'],
+    enemies: ['M3', 'M2', 'M1', 'T3'],
+};
 
-const ALLY_POSITIONS: Position[] = ['T4', 'T2', 'B4'];
-const ENEMY_POSITIONS: Position[] = ['M3', 'M2', 'M1', 'T3'];
+/**
+ * THE SUPPORT-ANCHOR BOARD — run only by ships the primary board cannot reach (see
+ * `scenariosFor`). The focus sits at the BACK of the middle row with three allies forward of it,
+ * giving forward-extending support patterns three occupied cells to cover (ranges 1 through 3).
+ *
+ * Enemies stay OUT of row M, so the support line is all allies. The focus's own row scan is
+ * M → B → T, so with row M holding no enemies it finds B4 front-most and still reaches all four
+ * under an `all` pattern — its enemy-directed kit stays live.
+ *
+ * ACCEPTED LIMITATION: the focus takes zero incoming damage here, because the allies forward of it
+ * are front-most and absorb every attack. Nothing is lost — the affected ships keep their full
+ * primary-board fingerprints, which is where their on-damaged coverage lives. This board answers
+ * one narrow question: does this ship's support footprint reach anyone, and what does it do when
+ * it does.
+ */
+export const SUPPORT_ANCHOR_BOARD: BoardLayout = {
+    focus: 'M1',
+    allies: ['M2', 'M3', 'M4'],
+    enemies: ['B4', 'B3', 'B2', 'T4'],
+};
+
+export function boardFor(scenario: FingerprintScenario): BoardLayout {
+    return scenario === 'supportAnchor' ? SUPPORT_ANCHOR_BOARD : PRIMARY_BOARD;
+}
+
+/** The primary board's focus cell. Kept as a named export because the reachability derivation and
+ *  several board tests read it directly. */
+export const FOCUS_POSITION: Position = PRIMARY_BOARD.focus;
 
 /** How many enemies resolve onto the focus each round under the layout above (M3/M2/M1). Drives
  *  the incoming-damage budget in `fillerAttackFor`; verified by the "focus is the one being
@@ -192,7 +244,7 @@ const maxHpOf = (a: CombatActor): number => a.stats.hp;
 
 function seedFor(
     focus: Ship,
-    scenario: ScenarioName
+    scenario: FingerprintScenario
 ): ((actors: CombatActor[]) => void) | undefined {
     switch (scenario) {
         case 'plain':
@@ -205,7 +257,11 @@ function seedFor(
                 }
             };
         }
+        // `supportAnchor` shares wounded's seeding VERBATIM — one new variable (geometry), not two.
+        // It is also load-bearing: the ships this board exists for repair their allies, and a
+        // repair aimed at a full-HP filler is an overheal that may log nothing at all.
         case 'wounded':
+        case 'supportAnchor':
             return (actors) => {
                 for (const a of actors) {
                     const fraction = a.id === FOCUS_ACTOR_ID ? FOCUS_HURT_FRACTION : HURT_FRACTION;
@@ -231,24 +287,31 @@ function seedFor(
  * reflects its kit, not a gearing choice. The FILLER stats, by contrast, are tuned (HP, attack)
  * and are the only lever this fixture pulls on how hard the battle presses.
  */
-export function buildScenarioBattle(focus: Ship, scenario: ScenarioName): BattleSimulationInput {
+export function buildScenarioBattle(
+    focus: Ship,
+    scenario: FingerprintScenario
+): BattleSimulationInput {
+    const board = boardFor(scenario);
     const enemyNames = FILLER_NAMES.slice(0, 4);
     const allyNames = FILLER_NAMES.slice(4, 7);
     const tap = seedFor(focus, scenario);
     const attack = fillerAttackFor(focus);
     return {
         playerTeam: [
-            canonicalPlacement(focus, FOCUS_POSITION),
+            canonicalPlacement(focus, board.focus),
             ...allyNames.map((name, i) =>
                 fillerPlacement(
                     name,
-                    ALLY_POSITIONS[i],
+                    board.allies[i],
                     attack,
+                    // Note `scenario === 'wounded'` and NOT the seeding branch: supportAnchor
+                    // reuses wounded's HP seeding but must NOT get its fragile ally, because a
+                    // dying support target would make reach flaky.
                     scenario === 'wounded' && i === 0 ? FRAGILE_ALLY_HP : FILLER_HP
                 )
             ),
         ],
-        enemyTeam: enemyNames.map((name, i) => fillerPlacement(name, ENEMY_POSITIONS[i], attack)),
+        enemyTeam: enemyNames.map((name, i) => fillerPlacement(name, board.enemies[i], attack)),
         rounds: ROUNDS,
         ...(tap ? { __testTapActors: tap } : {}),
     };
