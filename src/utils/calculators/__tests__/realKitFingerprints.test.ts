@@ -182,6 +182,31 @@ describe('suite health', () => {
         );
     });
 
+    it('every KNOWN_ZERO_DAMAGE exemption is STILL warranted (a kit/board fix must remove the ship, not leave a stale exemption)', () => {
+        // The sibling suite (kitFingerprintScenarios.test.ts's "every allow-listed ship is STILL
+        // unreachable") solves the same problem for KNOWN_UNREACHABLE; this is the equivalent
+        // guard for KNOWN_ZERO_DAMAGE. Without it, a kit or board change that makes Meiying or
+        // Voron take real damage would pass silently — the exemption would keep suppressing a
+        // failure that no longer exists to suppress.
+        //
+        // `some`, not `every`: the exemption asserts "this ship takes no damage", a claim `some`
+        // falsifies on the first counterexample. `every` would only flag a ship once it takes
+        // damage in ALL three scenarios, staying silent indefinitely if a fix only partially
+        // restores damage (e.g. two scenarios fixed, one still silently zero) — exactly the kind
+        // of half-fixed state this suite exists to catch, not wave through.
+        const stale = KNOWN_ZERO_DAMAGE.filter((name) => {
+            const inv = observedInvariants.get(name);
+            return !!inv && SCENARIOS.some((scenario) => inv[scenario].taken > 0);
+        });
+        expect(
+            stale,
+            `KNOWN_ZERO_DAMAGE exemption(s) that now take real damage in at least one scenario: ` +
+                `${stale.join(', ')} — the ship's kit or the board changed; remove it from ` +
+                'KNOWN_ZERO_DAMAGE (or re-document the reasoning for the scenarios still zero) ' +
+                'rather than leaving a stale exemption.'
+        ).toEqual([]);
+    });
+
     /** The coverage LEDGER. Every kind listed here is produced by at least one corpus ship today;
      *  losing any one of them is a coverage regression that must be explained, not re-blessed.
      *

@@ -293,8 +293,18 @@ describe('active pattern reachability from FOCUS_POSITION', () => {
         return out;
     }
 
+    // Both tests below call unreachableShips(), which rebuilds all 147 corpus ships and re-runs
+    // parseShipTargeting/resolveCells for each — computed once here (registered AFTER the
+    // requireReferenceData beforeAll above, so reference data is guaranteed present first) rather
+    // than once per test.
+    let unreachable: string[];
+
+    beforeAll(() => {
+        unreachable = unreachableShips();
+    });
+
     it('no ship outside the allow-list resolves its active pattern to zero occupied cells', () => {
-        const unexpected = unreachableShips().filter((n) => !KNOWN_UNREACHABLE.includes(n));
+        const unexpected = unreachable.filter((n) => !KNOWN_UNREACHABLE.includes(n));
         expect(
             unexpected,
             `ship(s) whose active pattern resolves to ZERO occupied cells from FOCUS_POSITION and ` +
@@ -306,8 +316,8 @@ describe('active pattern reachability from FOCUS_POSITION', () => {
     });
 
     it('every allow-listed ship is STILL unreachable (a board fix must shrink this list, not leave a stale exemption)', () => {
-        const unreachable = new Set(unreachableShips());
-        const stale = KNOWN_UNREACHABLE.filter((n) => !unreachable.has(n));
+        const unreachableSet = new Set(unreachable);
+        const stale = KNOWN_UNREACHABLE.filter((n) => !unreachableSet.has(n));
         expect(
             stale,
             `allow-listed ship(s) that now resolve to a NON-empty set of occupied cells: ` +

@@ -212,6 +212,14 @@ function seedFor(
                     a.currentHp = maxHpOf(a) * fraction;
                 }
             };
+        default: {
+            // Exhaustiveness guard: `undefined` is a legitimate return for 'plain', so a fourth
+            // ScenarioName falling through the switch would silently run unseeded and still
+            // produce a plausible-looking (but vacuous) snapshot. Force a compile error instead —
+            // the spec DEFERS a status-seeded scenario, it does not cancel it.
+            const exhaustive: never = scenario;
+            throw new Error(`kitFingerprintScenarios: unhandled scenario ${String(exhaustive)}`);
+        }
     }
 }
 
