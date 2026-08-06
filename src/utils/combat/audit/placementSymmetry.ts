@@ -1,6 +1,7 @@
 import type { Ship } from '../../../types/ship';
 import type { BattleResult } from '../../calculators/battleSimulator';
 import type { CombatLogEntryKind } from '../log/types';
+import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { fingerprintActor } from './fingerprint';
 import { runSeededBattle } from './seededBattle';
 import {
@@ -9,6 +10,7 @@ import {
     scenariosFor,
     subjectSideFor,
     FOCUS_ACTOR_ID,
+    FILLER_NAMES,
     type FingerprintScenario,
 } from './kitFingerprintScenarios';
 import { PLACEMENT_PAIRS, type Placement, type PlacementDiff } from './types';
@@ -118,6 +120,40 @@ export function diffAllPlacements(
         if (ab) out.push(ab);
         const ba = diffPlacements(shipName, b, a, byPlacement[b], byPlacement[a]);
         if (ba) out.push(ba);
+    }
+    return out;
+}
+
+/** Calibration subjects: the ENEMY-side fillers only (`FILLER_NAMES.slice(0, 4)`).
+ *
+ *  Verified kitless — no passives, no charge skill, a bare "deals 90% damage" active, guarded by the
+ *  existing filler-inertness test — so their fingerprints are a function of the ENGINE alone. Any
+ *  placement difference is therefore a harness asymmetry, not a kit one.
+ *
+ *  Deliberately NOT the ally-side fillers: the subject shares a side with those, so using one would
+ *  put the same ship twice on one side — an illegal in-game state. An enemy-side filler is on the
+ *  opposite side from the subject in every placement. */
+export const CALIBRATION_SUBJECT_NAMES: readonly string[] = FILLER_NAMES.slice(0, 4);
+
+/** Run the placement sweep over the inert calibration subjects. An empty result is the pass
+ *  condition; anything returned is a HARNESS asymmetry and invalidates the real sweep. */
+export function runCalibration(seeds: readonly number[]): PlacementDiff[] {
+    const out: PlacementDiff[] = [];
+    for (const name of CALIBRATION_SUBJECT_NAMES) {
+        const subject = buildTraceShip(name);
+        if (!subject) {
+            throw new Error(
+                `placementSymmetry: calibration subject "${name}" did not resolve — ` +
+                    'docs/ship-skills.csv / docs/ship-data.json are gitignored reference data ' +
+                    'expected on dev machines (see CLAUDE.md).'
+            );
+        }
+        const byPlacement = {
+            focus: fingerprintSubject(subject, 'focus', seeds),
+            team: fingerprintSubject(subject, 'team', seeds),
+            enemy: fingerprintSubject(subject, 'enemy', seeds),
+        };
+        out.push(...diffAllPlacements(subject.name, byPlacement));
     }
     return out;
 }

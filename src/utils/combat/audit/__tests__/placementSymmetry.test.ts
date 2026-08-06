@@ -13,6 +13,7 @@ import {
     FRAGILE_ALLY_HP,
     SEED,
     FOCUS_ACTOR_ID,
+    FILLER_NAMES,
 } from '../kitFingerprintScenarios';
 import { PLACEMENTS, PLACEMENT_PAIRS } from '../types';
 import { runSeededBattle } from '../seededBattle';
@@ -23,6 +24,8 @@ import {
     fingerprintSubject,
     resolveSubjectActorId,
     seedsFrom,
+    CALIBRATION_SUBJECT_NAMES,
+    runCalibration,
 } from '../placementSymmetry';
 import type { CombatLogEntryKind } from '../../log/types';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
@@ -478,6 +481,35 @@ describe('fingerprintSubject — non-vacuity', () => {
             expect(spy.mock.calls.length - callsBefore).toBe(expectedCalls);
         } finally {
             spy.mockRestore();
+        }
+    });
+});
+
+describe('calibration — an inert kit is placement-symmetric', () => {
+    beforeAll(requireReferenceData);
+
+    it('uses only fillers that never share a side with their own twin', () => {
+        // The subject sits with the ALLY fillers (FILLER_NAMES.slice(4,7)). Drawing a calibration
+        // subject from that group would put the same ship twice on one side — an illegal in-game
+        // state. The ENEMY-side fillers are always on the opposite side from the subject.
+        for (const name of CALIBRATION_SUBJECT_NAMES) {
+            expect(FILLER_NAMES.slice(4, 7)).not.toContain(name);
+        }
+        expect(CALIBRATION_SUBJECT_NAMES.length).toBeGreaterThan(0);
+    });
+
+    it('reports no asymmetry for any inert subject', () => {
+        const diffs = runCalibration(seedsFrom(SEED, 2));
+        expect(diffs).toEqual([]);
+    });
+
+    it('is not vacuous — an inert subject still produces kinds', () => {
+        const subject = subjectShip(CALIBRATION_SUBJECT_NAMES[0]);
+        for (const placement of PLACEMENTS) {
+            expect(
+                fingerprintSubject(subject, placement, seedsFrom(SEED, 1)).size,
+                `${placement} observed nothing for an inert subject`
+            ).toBeGreaterThan(0);
         }
     });
 });
