@@ -151,6 +151,58 @@ describe('pinned regression: ally-directed kit is visible (buff granter attribut
     });
 });
 
+describe('pinned regression: Line-Support kit reaches allies on the support-anchor board', () => {
+    beforeAll(requireReferenceData);
+
+    // Pattern-Line-Support-* extends FORWARD, so anchored on the primary board's front column it
+    // resolved to zero cells and these three ships' actives AND charges were structurally
+    // unobservable — Faust and Mender fingerprinted as a bare ['charge-changed']. The snapshot
+    // catches any future regression; this test says WHY those entries exist.
+    //
+    // Kinds, not kind:slot tokens — see the note above: the suffix tracks emission order, the kind
+    // tracks the kit. `charge-changed` is never valid evidence here: it is emitted on cast whether
+    // or not the ability found a target, which is exactly what made the old fingerprints look
+    // alive when they were not.
+    //
+    // Mender has no `:active`-suffixed token below, yet its active heal fires correctly every
+    // round — verified by tracing the raw combat log (two allies healed for 4,179.35 each, rounds
+    // 1-20, the only entry in Mender's own turn, so there is no competing handler to lose the
+    // `ctx.consumePendingSkill()` race to). That heal code path simply never calls
+    // `consumePendingSkill()`; it is a pre-existing engine tag-attribution characteristic, not a
+    // fixture defect. This is exactly why the assertions below are kind-level, not slot-level.
+    const EXPECTED_KINDS: Record<string, string[]> = {
+        Faust: ['heal', 'buff'],
+        Mender: ['heal'],
+        Refine: ['buff'],
+    };
+
+    it.each(Object.keys(EXPECTED_KINDS))('%s supports its allies from M1', (name) => {
+        const ship = buildTraceShip(name);
+        expect(ship).not.toBeNull();
+        const fp = fingerprintShip(ship!);
+        expect(fp.supportAnchor, `${name} ran no supportAnchor scenario`).toBeDefined();
+
+        const anchor = fp.supportAnchor ?? [];
+        const primary = new Set(SCENARIOS.flatMap((s) => fp[s]));
+        for (const kind of EXPECTED_KINDS[name]) {
+            const matching = anchor.filter((t) => t.split(':')[0] === kind);
+            expect(
+                matching,
+                `${name} produced no ${kind} entry on the support-anchor board — its support ` +
+                    'clause stopped reaching its allies'
+            ).not.toEqual([]);
+            // ...and it must be NEW. Without this, a kind the ship already emitted on the primary
+            // board (Refine's passive `buff`) would satisfy the test without the active firing.
+            expect(
+                matching.some((t) => !primary.has(t)),
+                `${name}'s ${kind} entries are all ones it already produced on the primary board ` +
+                    '— either the support-anchor board added nothing, or the primary board now ' +
+                    'sees this kit and the second board no longer earns its keep'
+            ).toBe(true);
+        }
+    });
+});
+
 describe('suite health', () => {
     beforeAll(() => {
         requireReferenceData();
@@ -210,10 +262,10 @@ describe('suite health', () => {
     });
 
     it('every KNOWN_ZERO_DAMAGE exemption is STILL warranted (a kit/board fix must remove the ship, not leave a stale exemption)', () => {
-        // The sibling suite (kitFingerprintScenarios.test.ts's "every allow-listed ship is STILL
-        // unreachable") solves the same problem for KNOWN_UNREACHABLE; this is the equivalent
-        // guard for KNOWN_ZERO_DAMAGE. Without it, a kit or board change that makes Meiying or
-        // Voron take real damage would pass silently — the exemption would keep suppressing a
+        // KNOWN_ZERO_DAMAGE is the last hand-maintained exemption list in this suite — its sibling,
+        // KNOWN_UNREACHABLE, was replaced by a derivation (see kitFingerprintScenarios.test.ts's
+        // 'pattern reachability'). Without this guard, a kit or board change that makes Meiying or
+        // Voron take real damage would pass silently: the exemption would keep suppressing a
         // failure that no longer exists to suppress.
         //
         // `some`, not `every`: the exemption asserts "this ship takes no damage", a claim `some`

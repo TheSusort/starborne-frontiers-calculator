@@ -1,8 +1,10 @@
 /**
- * The three real-kit fingerprint scenarios. These tests pin the SHAPE of each battle (roster,
- * positions, seeded state) AND the two live invariants the fingerprints depend on — the focus ship
- * is the one being attacked, and it survives all 20 rounds. The fingerprint snapshots themselves
- * live in src/utils/calculators/__tests__/realKitFingerprints.test.ts.
+ * The real-kit fingerprint scenarios and the two board geometries they run on. These tests pin the
+ * SHAPE of each battle (roster, positions, seeded state), the live invariants the primary board's
+ * fingerprints depend on — the focus ship is the one being attacked, and it survives all 20 rounds
+ * — and the derivation that routes an unreachable ship onto the support-anchor board. The
+ * fingerprint snapshots themselves live in
+ * src/utils/calculators/__tests__/realKitFingerprints.test.ts.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
@@ -249,7 +251,7 @@ describe('filler inertness guard', () => {
 });
 
 describe('pattern reachability', () => {
-    // Replaces a hand-maintained KNOWN_UNREACHABLE allow-list. The set of unreachable ships is now
+    // Replaces a hand-maintained unreachable-ship allow-list. The set of unreachable ships is now
     // DERIVED, so a corpus refresh that makes a new ship unreachable routes it onto the
     // support-anchor board automatically instead of needing a human to notice and extend a list.
     //
