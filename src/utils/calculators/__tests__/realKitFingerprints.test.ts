@@ -5,9 +5,12 @@
  * the author had no local corpus), which is why 22 commits of real ship-behaviour change in #296
  * and the Malvex gate fix in #297 moved zero snapshots.
  *
- * Each of the 147 corpus ships is run through three fixed scenarios and reduced to the SET of
- * `kind[:slot]` behaviour tokens it produced. A diff means that ship's behaviour changed. The
- * suite is deliberately STRUCTURAL, not numeric: it answers "does this clause still fire", which
+ * Each of the 147 corpus ships is run through the three universal scenarios (plain, richEnemy,
+ * wounded), plus a fourth — supportAnchor, on the second board geometry — for the handful whose
+ * targeting pattern the primary board's geometry cannot reach (see kitFingerprintScenarios.ts's
+ * darkSlotsOnPrimaryBoard). Every run is reduced to the SET of `kind[:slot]` behaviour tokens it
+ * produced. A diff means that ship's behaviour changed. The suite is deliberately STRUCTURAL, not
+ * numeric: it answers "does this clause still fire", which
  * is the dominant defect class in the changelog ("now does something", "was a name in the buff
  * list with no effect", "the condition was not being read at all"). Numeric drift is
  * dpsGoldenParity / healingGoldenParity's job.
@@ -24,7 +27,10 @@ import {
     FOCUS_ACTOR_ID,
     ROUNDS,
     SEED,
+    scenariosFor,
+    darkSlotsOnPrimaryBoard,
     type ScenarioName,
+    type FingerprintScenario,
 } from '../../combat/audit/kitFingerprintScenarios';
 import { runSeededBattle } from '../../combat/audit/seededBattle';
 import { fingerprintActorTokens } from '../../combat/audit/fingerprint';
@@ -45,7 +51,7 @@ function requireReferenceData(): void {
  *  (~7s), so the health assertions read what the snapshot pass already computed instead of
  *  re-running the whole roster. `suite health` is declared AFTER the snapshot describe on purpose:
  *  vitest runs describes in declaration order. */
-const observed = new Map<string, Record<ScenarioName, string[]>>();
+const observed = new Map<string, Partial<Record<FingerprintScenario, string[]>>>();
 
 /** The two LIVE invariants every fingerprint rests on (see `kitFingerprintScenarios.test.ts`'s
  *  "live battle invariants" describe, which spot-checks only Xiaodao/Malvex): the focus must take
@@ -68,11 +74,16 @@ describe('kit fingerprints', () => {
         expect(ship, `${name} did not resolve from the corpus`).not.toBeNull();
         // Inlines fingerprintShip's own loop (rather than calling it) so the invariant fields can
         // be read off the same BattleResult instead of running each of the 441 battles twice.
-        const fp = {} as Record<ScenarioName, string[]>;
+        const fp: Partial<Record<FingerprintScenario, string[]>> = {};
         const invariants = {} as Record<ScenarioName, LiveInvariant>;
-        for (const scenario of SCENARIOS) {
+        for (const scenario of scenariosFor(ship!)) {
             const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
             fp[scenario] = fingerprintActorTokens(result, FOCUS_ACTOR_ID);
+            // The support-anchor board's focus takes zero incoming damage BY CONSTRUCTION (allies
+            // forward of it are front-most and absorb every attack), so it cannot satisfy the
+            // incoming-damage invariant and is deliberately excluded from it. Its own guard is
+            // "the previously-dark slot produced fresh tokens", asserted in `suite health`.
+            if (scenario === 'supportAnchor') continue;
             const rows = result.rounds
                 .flatMap((r) => r.ships)
                 .filter((s) => s.actorId === FOCUS_ACTOR_ID);
@@ -143,6 +154,58 @@ describe('pinned regression: ally-directed kit is visible (buff granter attribut
     });
 });
 
+describe('pinned regression: Line-Support kit reaches allies on the support-anchor board', () => {
+    beforeAll(requireReferenceData);
+
+    // Pattern-Line-Support-* extends FORWARD, so anchored on the primary board's front column it
+    // resolved to zero cells and these three ships' actives AND charges were structurally
+    // unobservable — Faust and Mender fingerprinted as a bare ['charge-changed']. The snapshot
+    // catches any future regression; this test says WHY those entries exist.
+    //
+    // Kinds, not kind:slot tokens — see the note above: the suffix tracks emission order, the kind
+    // tracks the kit. `charge-changed` is never valid evidence here: it is emitted on cast whether
+    // or not the ability found a target, which is exactly what made the old fingerprints look
+    // alive when they were not.
+    //
+    // Mender has no `:active`-suffixed token below, yet its active heal fires correctly every
+    // round — verified by tracing the raw combat log (two allies healed for 4,179.35 each, rounds
+    // 1-20, the only entry in Mender's own turn, so there is no competing handler to lose the
+    // `ctx.consumePendingSkill()` race to). That heal code path simply never calls
+    // `consumePendingSkill()`; it is a pre-existing engine tag-attribution characteristic, not a
+    // fixture defect. This is exactly why the assertions below are kind-level, not slot-level.
+    const EXPECTED_SUPPORT_KINDS: Record<string, string[]> = {
+        Faust: ['heal', 'buff'],
+        Mender: ['heal'],
+        Refine: ['buff'],
+    };
+
+    it.each(Object.keys(EXPECTED_SUPPORT_KINDS))('%s supports its allies from M1', (name) => {
+        const ship = buildTraceShip(name);
+        expect(ship).not.toBeNull();
+        const fp = fingerprintShip(ship!);
+        expect(fp.supportAnchor, `${name} ran no supportAnchor scenario`).toBeDefined();
+
+        const anchor = fp.supportAnchor ?? [];
+        const primary = new Set(SCENARIOS.flatMap((s) => fp[s]));
+        for (const kind of EXPECTED_SUPPORT_KINDS[name]) {
+            const matching = anchor.filter((t) => t.split(':')[0] === kind);
+            expect(
+                matching,
+                `${name} produced no ${kind} entry on the support-anchor board — its support ` +
+                    'clause stopped reaching its allies'
+            ).not.toEqual([]);
+            // ...and it must be NEW. Without this, a kind the ship already emitted on the primary
+            // board (Refine's passive `buff`) would satisfy the test without the active firing.
+            expect(
+                matching.some((t) => !primary.has(t)),
+                `${name}'s ${kind} entries are all ones it already produced on the primary board ` +
+                    '— either the support-anchor board added nothing, or the primary board now ' +
+                    'sees this kit and the second board no longer earns its keep'
+            ).toBe(true);
+        }
+    });
+});
+
 describe('suite health', () => {
     beforeAll(() => {
         requireReferenceData();
@@ -202,10 +265,10 @@ describe('suite health', () => {
     });
 
     it('every KNOWN_ZERO_DAMAGE exemption is STILL warranted (a kit/board fix must remove the ship, not leave a stale exemption)', () => {
-        // The sibling suite (kitFingerprintScenarios.test.ts's "every allow-listed ship is STILL
-        // unreachable") solves the same problem for KNOWN_UNREACHABLE; this is the equivalent
-        // guard for KNOWN_ZERO_DAMAGE. Without it, a kit or board change that makes Meiying or
-        // Voron take real damage would pass silently — the exemption would keep suppressing a
+        // KNOWN_ZERO_DAMAGE is the last hand-maintained exemption list in this suite — its sibling,
+        // KNOWN_UNREACHABLE, was replaced by a derivation (see kitFingerprintScenarios.test.ts's
+        // 'pattern reachability'). Without this guard, a kit or board change that makes Meiying or
+        // Voron take real damage would pass silently: the exemption would keep suppressing a
         // failure that no longer exists to suppress.
         //
         // `some`, not `every`: the exemption asserts "this ship takes no damage", a claim `some`
@@ -263,7 +326,7 @@ describe('suite health', () => {
         // Without this, a harness bug that fingerprints nothing yields 147 empty snapshots and
         // reads as passing.
         const empty = [...observed.entries()]
-            .filter(([, fp]) => SCENARIOS.every((s) => fp[s].length === 0))
+            .filter(([, fp]) => SCENARIOS.every((s) => (fp[s] ?? []).length === 0))
             .map(([name]) => name);
         expect(empty, `ships producing NO tokens in any scenario: ${empty.join(', ')}`).toEqual([]);
     });
@@ -271,8 +334,8 @@ describe('suite health', () => {
     it('covers every log kind the roster is expected to reach', () => {
         const kinds = new Set<string>();
         for (const fp of observed.values()) {
-            for (const scenario of SCENARIOS) {
-                for (const token of fp[scenario]) kinds.add(token.split(':')[0]);
+            for (const tokens of Object.values(fp)) {
+                for (const token of tokens) kinds.add(token.split(':')[0]);
             }
         }
         const missing = EXPECTED_KINDS.filter((k) => !kinds.has(k));
@@ -311,11 +374,60 @@ describe('suite health', () => {
         // misread as an engine change.
         const rows = loadShipSkillRecords();
         const digest = rows
-            .map((r) => `${r.name} ${r.active} ${r.charge} ${r.passives.join('')}`)
+            .map((r) => `${r.name}\0${r.active}\0${r.charge}\0${r.passives.join('\x01')}`)
             .sort()
             .join('\n');
         let hash = 0;
         for (let i = 0; i < digest.length; i++) hash = (hash * 31 + digest.charCodeAt(i)) | 0;
         expect({ shipCount: rows.length, digest: hash }).toMatchSnapshot();
+    });
+
+    it('every support-anchor ship produces behaviour there that the primary board never showed', () => {
+        // The #298 lesson, applied to the new board: a fixture that RUNS is not a fixture that
+        // OBSERVES. Without this, routing three ships onto a second board could snapshot three
+        // more vacuous entries and read as a fix.
+        //
+        // Compared against the UNION of all three primary scenarios, which controls for seeding:
+        // supportAnchor reuses `wounded`'s HP seeding, so anything the ship already does when
+        // wounded is not evidence that its support footprint reached anyone.
+        //
+        // `charge-changed` is excluded as evidence: it is emitted on cast regardless of whether
+        // the ability found any target, and it is exactly the token Faust and Mender's vacuous
+        // primary fingerprints already consisted of.
+        //
+        // Asserted per SHIP, not per slot, on purpose: `ctx.consumePendingSkill()` is single-use
+        // per cast, so only the first log entry of a cast carries `{skillName, slot}` and a
+        // later entry from the same cast legitimately lands bare. Per-slot evidence would be
+        // flaky for reasons unrelated to the kit. Per-SLOT geometry is guard 1's job, in
+        // kitFingerprintScenarios.test.ts.
+        const EVIDENCE_EXCLUDED = new Set(['charge-changed']);
+        const darkNames = [...new Set(darkSlotsOnPrimaryBoard().map((d) => d.name))].sort();
+        expect(
+            darkNames.length,
+            'the derivation found no dark ships — the sweep is broken'
+        ).toBeGreaterThan(0);
+
+        const barren: string[] = [];
+        for (const name of darkNames) {
+            const fp = observed.get(name);
+            expect(fp, `${name} was never fingerprinted`).toBeDefined();
+            expect(
+                fp!.supportAnchor,
+                `${name} is dark on the primary board but ran no supportAnchor scenario — ` +
+                    'scenariosFor did not route it'
+            ).toBeDefined();
+            const primary = new Set(SCENARIOS.flatMap((s) => fp![s] ?? []));
+            const fresh = (fp!.supportAnchor ?? []).filter(
+                (t) => !primary.has(t) && !EVIDENCE_EXCLUDED.has(t.split(':')[0])
+            );
+            if (fresh.length === 0) barren.push(name);
+        }
+        expect(
+            barren,
+            `ship(s) whose supportAnchor fingerprint adds NOTHING over their primary one: ` +
+                `${barren.join(', ')} — the second board reached their pattern geometrically ` +
+                '(guard 1 proves that) but their kit still produced no new behaviour. That is a ' +
+                'FINDING to investigate and report, not a reason to relax this assertion.'
+        ).toEqual([]);
     });
 });

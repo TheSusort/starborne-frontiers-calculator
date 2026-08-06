@@ -1,26 +1,30 @@
 /**
- * The three real-kit fingerprint scenarios. These tests pin the SHAPE of each battle (roster,
- * positions, seeded state) AND the two live invariants the fingerprints depend on — the focus ship
- * is the one being attacked, and it survives all 20 rounds. The fingerprint snapshots themselves
- * live in src/utils/calculators/__tests__/realKitFingerprints.test.ts.
+ * The real-kit fingerprint scenarios and the two board geometries they run on. These tests pin the
+ * SHAPE of each battle (roster, positions, seeded state), the live invariants the primary board's
+ * fingerprints depend on — the focus ship is the one being attacked, and it survives all 20 rounds
+ * — and the derivation that routes an unreachable ship onto the support-anchor board. The
+ * fingerprint snapshots themselves live in
+ * src/utils/calculators/__tests__/realKitFingerprints.test.ts.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
     buildScenarioBattle,
-    corpusNames,
+    darkSlotsOnPrimaryBoard,
+    FILLER_HP,
     FILLER_NAMES,
     FOCUS_ACTOR_ID,
     FOCUS_POSITION,
+    occupiedCellCount,
     ROUNDS,
     SCENARIOS,
     SEED,
+    SUPPORT_ANCHOR_BOARD,
 } from '../kitFingerprintScenarios';
 import { runSeededBattle } from '../seededBattle';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import { parseShipTargeting } from '../../../targetingParser';
-import { resolveCells } from '../../../targeting/resolvePattern';
 import type { Ship } from '../../../../types/ship';
 import type { CombatActor } from '../../state';
 
@@ -79,7 +83,7 @@ describe('buildScenarioBattle', () => {
     });
 
     it('puts three enemies in the focus row, behind the focus (the targeting contract)', () => {
-        // The whole layout rationale (see FOCUS_POSITION's docstring): selectTargets scans from the
+        // The whole layout rationale (see PRIMARY_BOARD's docstring): selectTargets scans from the
         // caster's own row and takes the front-most column, so enemies sharing the focus's row and
         // sitting behind it resolve onto the FOCUS. Break this and the focus stops taking damage —
         // which is exactly the hole this suite was found to have.
@@ -245,85 +249,137 @@ describe('filler inertness guard', () => {
     );
 });
 
-describe('active pattern reachability from FOCUS_POSITION', () => {
-    // FOCUS_POSITION ('M4') is the FRONT column of its row (see that constant's docstring for the
-    // whole board rationale), and Line-Support patterns extend FORWARD from the caster. A caster
-    // anchored at the front has no cells ahead of it, so those patterns resolve to zero cells —
-    // their active skill can never fire from here. This is a FIXTURE limitation (one anchor cell
-    // cannot reach every pattern geometry), not an engine bug: measured precisely, it affects
-    // exactly these 3 of 147 corpus ships, all Line-Support at different ranges, and all 3 would
-    // resolve fine from M2 (one column back). Moving FOCUS_POSITION was considered and rejected
-    // (see FOCUS_POSITION's docstring) — it would regenerate all 147 snapshots a third time,
-    // risking the hard-won on-damaged tuning (145/147 fixtures), to reach 3 ships.
-    const KNOWN_UNREACHABLE: readonly string[] = ['Faust', 'Mender', 'Refine'];
-
+describe('pattern reachability', () => {
+    // Replaces a hand-maintained unreachable-ship allow-list. The set of unreachable ships is now
+    // DERIVED, so a corpus refresh that makes a new ship unreachable routes it onto the
+    // support-anchor board automatically instead of needing a human to notice and extend a list.
+    //
+    // Both slots are swept, not just `active`. Charged targeting INHERITS active when both charged
+    // columns are blank (targetingParser.ts), and all three of today's dark ships have blank
+    // charged columns — so the old active-only guard under-reported by half.
     beforeAll(requireReferenceData);
 
-    /** Occupied cells DERIVED from the real scenario board (not hard-coded), so this guard follows
-     *  the layout automatically if it ever changes. Positions don't depend on which ship is the
-     *  focus, so any resolvable corpus ship works to build the board. */
-    function occupiedCells(): Set<string> {
-        const focus = buildTraceShip('Malvex');
-        if (!focus) throw new Error('Malvex did not resolve from the corpus');
-        const battle = buildScenarioBattle(focus, 'plain');
-        return new Set([...battle.playerTeam, ...battle.enemyTeam].map((p) => p.position));
-    }
+    it('finds the dark slots the primary board cannot reach', () => {
+        // Not an allow-list: a pin on the CURRENT corpus, so a data refresh that changes this
+        // announces itself in one named diff rather than silently changing which ships run a
+        // fourth scenario. Widening it is fine; it must be a deliberate edit.
+        const dark = darkSlotsOnPrimaryBoard()
+            .map((d) => `${d.name}:${d.slot}`)
+            .sort();
+        expect(dark).toEqual([
+            'Faust:active',
+            'Faust:charged',
+            'Mender:active',
+            'Mender:charged',
+            'Refine:active',
+            'Refine:charged',
+        ]);
+    });
 
-    /** Names of every corpus ship whose ACTIVE targeting pattern, anchored at FOCUS_POSITION,
-     *  resolves to zero cells that are actually occupied on the scenario board. Ships whose
-     *  targeting can't be parsed/resolved at all (parseShipTargeting/resolveCells can throw for
-     *  unrecognized text) are skipped rather than counted either way — this guard is about
-     *  geometry reachability, not targeting-text coverage. */
-    function unreachableShips(): string[] {
-        const occupied = occupiedCells();
-        const out: string[] = [];
-        for (const name of corpusNames()) {
+    it('every dark slot resolves to occupied cells on the support-anchor board', () => {
+        // The guard that makes the derivation safe. A ship dark on BOTH boards would silently run
+        // a fourth scenario that observes nothing; this names it instead.
+        const stranded: string[] = [];
+        for (const { name, slot } of darkSlotsOnPrimaryBoard()) {
             const ship = buildTraceShip(name);
             if (!ship) continue;
-            let pattern;
-            try {
-                pattern = parseShipTargeting(ship)?.active?.pattern;
-                if (!pattern) continue;
-                const cells = resolveCells(pattern, FOCUS_POSITION);
-                if (!cells.some((c) => occupied.has(c.position))) out.push(name);
-            } catch {
-                continue;
+            const pattern = parseShipTargeting(ship)?.[slot]?.pattern;
+            if (!pattern) continue;
+            if (occupiedCellCount(pattern, SUPPORT_ANCHOR_BOARD) === 0) {
+                stranded.push(`${name}:${slot}`);
             }
         }
-        return out;
-    }
+        expect(
+            stranded,
+            `slot(s) that resolve to ZERO occupied cells on BOTH boards: ${stranded.join(', ')} — ` +
+                'the support-anchor geometry does not cover this pattern shape. Either extend that ' +
+                'board or add a third one; do NOT leave the ship running a scenario that observes ' +
+                'nothing.'
+        ).toEqual([]);
+    });
+});
 
-    // Both tests below call unreachableShips(), which rebuilds all 147 corpus ships and re-runs
-    // parseShipTargeting/resolveCells for each — computed once here (registered AFTER the
-    // requireReferenceData beforeAll above, so reference data is guaranteed present first) rather
-    // than once per test.
-    let unreachable: string[];
+describe('support-anchor board', () => {
+    // The second board geometry. Its ONLY job is to give a forward-extending support pattern
+    // (Pattern-Line-Support-*) allies to actually reach: those patterns extend toward column 4,
+    // so a caster anchored at the front column resolves to zero cells. Anchoring at M1 with allies
+    // at M2/M3/M4 covers ranges 1 through 3.
+    //
+    // The focus takes ZERO incoming damage here and that is unavoidable, not a tuning miss: for a
+    // Line-Support caster to have anyone to support, allies must sit forward of it in its own row,
+    // which makes one of THEM the front-most player that selectTargets resolves onto. The primary
+    // board keeps the on-damaged coverage for these same ships; this board answers only "does the
+    // support footprint reach anyone".
+    let focus: Ship;
 
     beforeAll(() => {
-        unreachable = unreachableShips();
+        requireReferenceData();
+        const m = buildTraceShip('Malvex');
+        if (!m) throw new Error('Malvex did not resolve from the corpus');
+        focus = m;
     });
 
-    it('no ship outside the allow-list resolves its active pattern to zero occupied cells', () => {
-        const unexpected = unreachable.filter((n) => !KNOWN_UNREACHABLE.includes(n));
-        expect(
-            unexpected,
-            `ship(s) whose active pattern resolves to ZERO occupied cells from FOCUS_POSITION and ` +
-                `are not on the allow-list: ${unexpected.join(', ')} — either a board change made ` +
-                'a previously-reachable ship go dark, or a new/changed corpus ship has an ' +
-                'unreachable pattern. If genuinely unreachable given the front-column geometry, ' +
-                'add it to KNOWN_UNREACHABLE with the same reasoning as Faust/Mender/Refine.'
-        ).toEqual([]);
+    it('anchors the focus at the BACK of the middle row with three allies forward of it', () => {
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        expect(battle.playerTeam[0].position).toBe('M1');
+        const allyPositions = battle.playerTeam.slice(1).map((p) => p.position);
+        expect(allyPositions).toEqual(['M2', 'M3', 'M4']);
     });
 
-    it('every allow-listed ship is STILL unreachable (a board fix must shrink this list, not leave a stale exemption)', () => {
-        const unreachableSet = new Set(unreachable);
-        const stale = KNOWN_UNREACHABLE.filter((n) => !unreachableSet.has(n));
-        expect(
-            stale,
-            `allow-listed ship(s) that now resolve to a NON-empty set of occupied cells: ` +
-                `${stale.join(', ')} — the board (or this ship's pattern) changed and they are ` +
-                'reachable again. Remove them from KNOWN_UNREACHABLE rather than leaving a stale ' +
-                'exemption.'
-        ).toEqual([]);
+    it('keeps enemies out of the focus row so the support line is all allies', () => {
+        // Also keeps the focus's own enemy-directed kit live: its row scan is M -> B -> T, row M
+        // holds no enemies, so it finds B4 front-most and reaches all four under an `all` pattern.
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        for (const p of battle.enemyTeam) expect(p.position[0]).not.toBe('M');
+        expect(battle.enemyTeam.map((p) => p.position)).toEqual(['B4', 'B3', 'B2', 'T4']);
+    });
+
+    it('uses eight distinct cells, like the primary board', () => {
+        // An ally and an enemy on the same cell are indistinguishable in position-keyed engine state.
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        const positions = [...battle.playerTeam, ...battle.enemyTeam].map((p) => p.position);
+        expect(new Set(positions).size).toBe(positions.length);
+        expect(positions).toHaveLength(8);
+    });
+
+    it('has NO fragile ally — every support target must survive the window', () => {
+        // `wounded` drops ALLY_POSITIONS[0] to 1 HP so it dies and lights on-ally-destroyed
+        // clauses. Here a dying support target would make reach flaky, and on-ally-destroyed
+        // coverage for these ships already exists on the primary board.
+        const battle = buildScenarioBattle(focus, 'supportAnchor');
+        for (const p of battle.playerTeam.slice(1)) {
+            expect(p.statOverrides?.hp).toBe(FILLER_HP);
+        }
+    });
+
+    it("reuses wounded's seeding verbatim, so ally repairs land instead of overhealing", () => {
+        // Load-bearing, not tidiness: Faust and Mender's actives REPAIR allies, and a repair aimed
+        // at a full-HP 500,000,000-HP filler is an overheal that may log nothing at all. A
+        // plain-seeded support-anchor board would be green, deterministic, and observing nothing.
+        const anchorActors = fakeRoster();
+        const woundedActors = fakeRoster();
+        buildScenarioBattle(focus, 'supportAnchor').__testTapActors?.(anchorActors);
+        buildScenarioBattle(focus, 'wounded').__testTapActors?.(woundedActors);
+        expect(anchorActors.map((a) => a.currentHp)).toEqual(woundedActors.map((a) => a.currentHp));
+    });
+
+    it('leaves the primary board untouched', () => {
+        // The whole approach rests on 144 snapshots not moving.
+        const battle = buildScenarioBattle(focus, 'plain');
+        expect(battle.playerTeam.map((p) => p.position)).toEqual(['M4', 'T4', 'T2', 'B4']);
+        expect(battle.enemyTeam.map((p) => p.position)).toEqual(['M3', 'M2', 'M1', 'T3']);
+    });
+
+    it('runs a full 20 rounds with nobody dying', () => {
+        // The live half of the board contract. Static position assertions cannot show that the
+        // battle actually completes: a death among the support targets would silently shrink the
+        // footprint mid-battle, and an early end would truncate the fingerprint at an arbitrary
+        // round. Note this asserts NOBODY dies, including the focus — there is no fragile ally
+        // here, unlike `wounded`.
+        const result = runSeededBattle(buildScenarioBattle(focus, 'supportAnchor'), SEED);
+        expect(result.outcome.lastRound).toBe(ROUNDS);
+        const last = result.rounds[result.rounds.length - 1];
+        const dead = last.ships.filter((s) => !s.alive).map((s) => s.actorId);
+        expect(dead, 'nothing may die on the support-anchor board').toEqual([]);
     });
 });

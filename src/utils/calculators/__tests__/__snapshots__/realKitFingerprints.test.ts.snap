@@ -823,6 +823,13 @@ exports[`kit fingerprints > Faust 1`] = `
   "richEnemy": [
     "charge-changed",
   ],
+  "supportAnchor": [
+    "buff",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
   "wounded": [
     "charge-changed",
   ],
@@ -1981,6 +1988,12 @@ exports[`kit fingerprints > Mender 1`] = `
   "richEnemy": [
     "charge-changed",
   ],
+  "supportAnchor": [
+    "buff",
+    "buff:charged",
+    "charge-changed",
+    "heal",
+  ],
   "wounded": [
     "charge-changed",
   ],
@@ -2639,6 +2652,12 @@ exports[`kit fingerprints > Refine 1`] = `
   ],
   "richEnemy": [
     "buff",
+    "charge-changed",
+  ],
+  "supportAnchor": [
+    "buff",
+    "buff:active",
+    "buff:charged",
     "charge-changed",
   ],
   "wounded": [

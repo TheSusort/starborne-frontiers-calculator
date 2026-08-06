@@ -1,6 +1,7 @@
 /**
- * Reports which corpus ships fingerprint THIN — few distinct behaviour tokens across all three
- * real-kit scenarios. Diagnostic only, run by hand:
+ * Reports which corpus ships fingerprint THIN — few distinct behaviour tokens across every
+ * scenario the ship runs (three, or four for support-anchored ships). Diagnostic only, run by
+ * hand:
  *
  *   npx tsx scripts/reportThinKitFingerprints.ts
  *
@@ -9,7 +10,7 @@
  * nothing, and the spec defers the fourth-scenario decision until these numbers exist.
  */
 /* eslint-disable no-console */
-import { SCENARIOS, fingerprintShip, corpusNames } from '../src/utils/combat/audit/kitFingerprintScenarios';
+import { fingerprintShip, corpusNames } from '../src/utils/combat/audit/kitFingerprintScenarios';
 import { buildTraceShip } from './lib/traceShipFactory';
 
 const THIN_THRESHOLD = 3;
@@ -19,7 +20,7 @@ for (const name of corpusNames()) {
     const ship = buildTraceShip(name);
     if (!ship) continue;
     const fp = fingerprintShip(ship);
-    const distinct = new Set(SCENARIOS.flatMap((s) => fp[s]));
+    const distinct = new Set(Object.values(fp).flat());
     if (distinct.size <= THIN_THRESHOLD) thin.push(`${name}(${[...distinct].join(',')})`);
 }
 console.log(`thin ships (${thin.length} of ${corpusNames().length}):`);
