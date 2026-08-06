@@ -104,8 +104,9 @@ export function boardFor(scenario: FingerprintScenario): BoardLayout {
     return scenario === 'supportAnchor' ? SUPPORT_ANCHOR_BOARD : PRIMARY_BOARD;
 }
 
-/** The primary board's focus cell. Kept as a named export because the reachability derivation and
- *  several board tests read it directly. */
+/** The primary board's focus cell. Kept as a named export because several board tests read it
+ *  directly. The reachability derivation does NOT read it — `darkSlotsOnPrimaryBoard` goes through
+ *  `occupiedCellCount`, which reads `PRIMARY_BOARD.focus` instead. */
 export const FOCUS_POSITION: Position = PRIMARY_BOARD.focus;
 
 /** How many enemies resolve onto the focus each round under PRIMARY_BOARD (M3/M2/M1). Drives
@@ -271,7 +272,7 @@ function seedFor(
                 }
             };
         default: {
-            // Exhaustiveness guard: `undefined` is a legitimate return for 'plain', so a fourth
+            // Exhaustiveness guard: `undefined` is a legitimate return for 'plain', so a fifth
             // ScenarioName falling through the switch would silently run unseeded and still
             // produce a plausible-looking (but vacuous) snapshot. Force a compile error instead —
             // the spec DEFERS a status-seeded scenario, it does not cancel it.
@@ -368,9 +369,13 @@ let darkSlotCache: DarkSlot[] | null = null;
  *  would be quadratic.
  *
  *  Ships whose targeting cannot be parsed or resolved are SKIPPED rather than counted either way:
- *  this is a geometry-reachability question, not targeting-text coverage. */
+ *  this is a geometry-reachability question, not targeting-text coverage.
+ *
+ *  Returns a shallow COPY of the memo, not the cached array itself: `darkNameCache` below is
+ *  derived from this array, so a caller that mutated the returned reference would corrupt the
+ *  memo and desync it from that derived cache. */
 export function darkSlotsOnPrimaryBoard(): DarkSlot[] {
-    if (darkSlotCache) return darkSlotCache;
+    if (darkSlotCache) return [...darkSlotCache];
     const out: DarkSlot[] = [];
     for (const name of corpusNames()) {
         const ship = buildTraceShip(name);
@@ -386,7 +391,7 @@ export function darkSlotsOnPrimaryBoard(): DarkSlot[] {
         }
     }
     darkSlotCache = out;
-    return out;
+    return [...darkSlotCache];
 }
 
 /** UPPERCASE names of every ship with at least one dark slot. Case-folded because

@@ -5,9 +5,12 @@
  * the author had no local corpus), which is why 22 commits of real ship-behaviour change in #296
  * and the Malvex gate fix in #297 moved zero snapshots.
  *
- * Each of the 147 corpus ships is run through three fixed scenarios and reduced to the SET of
- * `kind[:slot]` behaviour tokens it produced. A diff means that ship's behaviour changed. The
- * suite is deliberately STRUCTURAL, not numeric: it answers "does this clause still fire", which
+ * Each of the 147 corpus ships is run through the three universal scenarios (plain, richEnemy,
+ * wounded), plus a fourth — supportAnchor, on the second board geometry — for the handful whose
+ * targeting pattern the primary board's geometry cannot reach (see kitFingerprintScenarios.ts's
+ * darkSlotsOnPrimaryBoard). Every run is reduced to the SET of `kind[:slot]` behaviour tokens it
+ * produced. A diff means that ship's behaviour changed. The suite is deliberately STRUCTURAL, not
+ * numeric: it answers "does this clause still fire", which
  * is the dominant defect class in the changelog ("now does something", "was a name in the buff
  * list with no effect", "the condition was not being read at all"). Numeric drift is
  * dpsGoldenParity / healingGoldenParity's job.
@@ -170,13 +173,13 @@ describe('pinned regression: Line-Support kit reaches allies on the support-anch
     // `ctx.consumePendingSkill()` race to). That heal code path simply never calls
     // `consumePendingSkill()`; it is a pre-existing engine tag-attribution characteristic, not a
     // fixture defect. This is exactly why the assertions below are kind-level, not slot-level.
-    const EXPECTED_KINDS: Record<string, string[]> = {
+    const EXPECTED_SUPPORT_KINDS: Record<string, string[]> = {
         Faust: ['heal', 'buff'],
         Mender: ['heal'],
         Refine: ['buff'],
     };
 
-    it.each(Object.keys(EXPECTED_KINDS))('%s supports its allies from M1', (name) => {
+    it.each(Object.keys(EXPECTED_SUPPORT_KINDS))('%s supports its allies from M1', (name) => {
         const ship = buildTraceShip(name);
         expect(ship).not.toBeNull();
         const fp = fingerprintShip(ship!);
@@ -184,7 +187,7 @@ describe('pinned regression: Line-Support kit reaches allies on the support-anch
 
         const anchor = fp.supportAnchor ?? [];
         const primary = new Set(SCENARIOS.flatMap((s) => fp[s]));
-        for (const kind of EXPECTED_KINDS[name]) {
+        for (const kind of EXPECTED_SUPPORT_KINDS[name]) {
             const matching = anchor.filter((t) => t.split(':')[0] === kind);
             expect(
                 matching,
@@ -371,7 +374,7 @@ describe('suite health', () => {
         // misread as an engine change.
         const rows = loadShipSkillRecords();
         const digest = rows
-            .map((r) => `${r.name} ${r.active} ${r.charge} ${r.passives.join('')}`)
+            .map((r) => `${r.name}\0${r.active}\0${r.charge}\0${r.passives.join('\x01')}`)
             .sort()
             .join('\n');
         let hash = 0;

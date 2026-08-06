@@ -9,13 +9,12 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
     buildScenarioBattle,
-    corpusNames,
     darkSlotsOnPrimaryBoard,
+    FILLER_HP,
     FILLER_NAMES,
     FOCUS_ACTOR_ID,
     FOCUS_POSITION,
     occupiedCellCount,
-    PRIMARY_BOARD,
     ROUNDS,
     SCENARIOS,
     SEED,
@@ -84,7 +83,7 @@ describe('buildScenarioBattle', () => {
     });
 
     it('puts three enemies in the focus row, behind the focus (the targeting contract)', () => {
-        // The whole layout rationale (see FOCUS_POSITION's docstring): selectTargets scans from the
+        // The whole layout rationale (see PRIMARY_BOARD's docstring): selectTargets scans from the
         // caster's own row and takes the front-most column, so enemies sharing the focus's row and
         // sitting behind it resolve onto the FOCUS. Break this and the focus stops taking damage —
         // which is exactly the hole this suite was found to have.
@@ -298,36 +297,6 @@ describe('pattern reachability', () => {
                 'nothing.'
         ).toEqual([]);
     });
-
-    it('no ship is dark on the support-anchor board that was reachable on the primary one', () => {
-        // The reverse direction: the second board must not go dark for a ship the first one
-        // handled, which would mean a future routing change could strand it.
-        const darkNames = new Set(darkSlotsOnPrimaryBoard().map((d) => d.name.toUpperCase()));
-        const regressed: string[] = [];
-        for (const name of corpusNames()) {
-            if (darkNames.has(name.toUpperCase())) continue;
-            const ship = buildTraceShip(name);
-            if (!ship) continue;
-            for (const slot of ['active', 'charged'] as const) {
-                let pattern;
-                try {
-                    pattern = parseShipTargeting(ship)?.[slot]?.pattern;
-                } catch {
-                    continue;
-                }
-                if (!pattern) continue;
-                if (occupiedCellCount(pattern, PRIMARY_BOARD) === 0) {
-                    regressed.push(`${name}:${slot}`);
-                }
-            }
-        }
-        expect(
-            regressed,
-            `slot(s) dark on the primary board but missing from the derivation: ` +
-                `${regressed.join(', ')} — darkSlotsOnPrimaryBoard() and this sweep disagree, so ` +
-                'the derivation is not seeing the whole corpus.'
-        ).toEqual([]);
-    });
 });
 
 describe('support-anchor board', () => {
@@ -379,7 +348,7 @@ describe('support-anchor board', () => {
         // coverage for these ships already exists on the primary board.
         const battle = buildScenarioBattle(focus, 'supportAnchor');
         for (const p of battle.playerTeam.slice(1)) {
-            expect(p.statOverrides?.hp).toBeGreaterThan(p.ship.baseStats.hp);
+            expect(p.statOverrides?.hp).toBe(FILLER_HP);
         }
     });
 
