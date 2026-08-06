@@ -124,6 +124,25 @@ describe('pinned regression: Malvex target-shield gates (#296, #297)', () => {
     });
 });
 
+describe('pinned regression: ally-directed kit is visible (buff granter attribution)', () => {
+    beforeAll(requireReferenceData);
+
+    it("sees Purifier's ally grants, which booked to the RECEIVER before granter attribution", () => {
+        // Purifier's whole active is other-directed: it grants Hacking Up II + Binderburg
+        // Resilience II to allies covered by Pattern-Wings-Support-Not-Self-Range-2 and never
+        // touches itself. Because `buff` was the one grant-style log kind booked to its
+        // recipient, its entire fingerprint was `charge-changed` — correct code that looked
+        // dead. This pins the fix: an ally-only support kit must produce a `buff` token of its
+        // own. A bare snapshot would also catch it, but only this test says WHY it moved.
+        const purifier = buildTraceShip('Purifier');
+        expect(purifier).not.toBeNull();
+        const fp = fingerprintShip(purifier!);
+        for (const scenario of SCENARIOS) {
+            expect(fp[scenario], `${scenario} lost Purifier's ally grants`).toContain('buff');
+        }
+    });
+});
+
 describe('suite health', () => {
     beforeAll(() => {
         requireReferenceData();
