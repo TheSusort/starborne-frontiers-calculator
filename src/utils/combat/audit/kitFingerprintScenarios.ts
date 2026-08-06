@@ -5,6 +5,8 @@ import type { BattlePlacement, BattleSimulationInput } from '../../calculators/b
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
+import { parseShipTargeting, type ParsedPattern } from '../../targetingParser';
+import { resolveCells } from '../../targeting/resolvePattern';
 import { canonicalPlacement } from './fixtures';
 import { runSeededBattle } from './seededBattle';
 import { fingerprintActorTokens } from './fingerprint';
@@ -332,6 +334,59 @@ export function fingerprintShip(ship: Ship): Record<ScenarioName, string[]> {
         out[scenario] = fingerprintActorTokens(result, FOCUS_ACTOR_ID);
     }
     return out;
+}
+
+/** One targeting slot of one ship that resolves to no occupied cell on a given board. */
+export interface DarkSlot {
+    name: string;
+    slot: 'active' | 'charged';
+}
+
+/** How many of a pattern's resolved cells are actually OCCUPIED on `board`, anchored at that
+ *  board's focus cell. Zero means the slot can never fire from there: the ability resolves, finds
+ *  nobody, and produces no log entry — a silent hole in that ship's fingerprint. */
+export function occupiedCellCount(pattern: ParsedPattern, board: BoardLayout): number {
+    const occupied = new Set<string>([board.focus, ...board.allies, ...board.enemies]);
+    return resolveCells(pattern, board.focus).filter((c) => occupied.has(c.position)).length;
+}
+
+let darkSlotCache: DarkSlot[] | null = null;
+
+/** Every corpus slot the PRIMARY board cannot reach. Memoized: `scenariosFor` is called once per
+ *  ship in a 147-ship loop, and this sweep rebuilds the whole corpus — without the memo the suite
+ *  would be quadratic.
+ *
+ *  Ships whose targeting cannot be parsed or resolved are SKIPPED rather than counted either way:
+ *  this is a geometry-reachability question, not targeting-text coverage. */
+export function darkSlotsOnPrimaryBoard(): DarkSlot[] {
+    if (darkSlotCache) return darkSlotCache;
+    const out: DarkSlot[] = [];
+    for (const name of corpusNames()) {
+        const ship = buildTraceShip(name);
+        if (!ship) continue;
+        for (const slot of ['active', 'charged'] as const) {
+            try {
+                const pattern = parseShipTargeting(ship)?.[slot]?.pattern;
+                if (!pattern) continue;
+                if (occupiedCellCount(pattern, PRIMARY_BOARD) === 0) out.push({ name, slot });
+            } catch {
+                continue;
+            }
+        }
+    }
+    darkSlotCache = out;
+    return out;
+}
+
+/** UPPERCASE names of every ship with at least one dark slot. Case-folded because
+ *  `loadShipSkillRecords()` names and `Ship.name` are not guaranteed to agree in case — the filler
+ *  inertness guard already compares this way. */
+let darkNameCache: Set<string> | null = null;
+export function darkShipNames(): ReadonlySet<string> {
+    if (!darkNameCache) {
+        darkNameCache = new Set(darkSlotsOnPrimaryBoard().map((d) => d.name.toUpperCase()));
+    }
+    return darkNameCache;
 }
 
 /** Corpus ship names, sorted for a stable order (CSV row order is not guaranteed). */

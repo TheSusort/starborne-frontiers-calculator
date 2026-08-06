@@ -8,19 +8,22 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
     buildScenarioBattle,
     corpusNames,
+    darkSlotsOnPrimaryBoard,
     FILLER_NAMES,
     FOCUS_ACTOR_ID,
     FOCUS_POSITION,
+    occupiedCellCount,
+    PRIMARY_BOARD,
     ROUNDS,
     SCENARIOS,
     SEED,
+    SUPPORT_ANCHOR_BOARD,
 } from '../kitFingerprintScenarios';
 import { runSeededBattle } from '../seededBattle';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import { parseShipTargeting } from '../../../targetingParser';
-import { resolveCells } from '../../../targeting/resolvePattern';
 import type { Ship } from '../../../../types/ship';
 import type { CombatActor } from '../../state';
 
@@ -245,85 +248,82 @@ describe('filler inertness guard', () => {
     );
 });
 
-describe('active pattern reachability from FOCUS_POSITION', () => {
-    // FOCUS_POSITION ('M4') is the FRONT column of its row (see that constant's docstring for the
-    // whole board rationale), and Line-Support patterns extend FORWARD from the caster. A caster
-    // anchored at the front has no cells ahead of it, so those patterns resolve to zero cells —
-    // their active skill can never fire from here. This is a FIXTURE limitation (one anchor cell
-    // cannot reach every pattern geometry), not an engine bug: measured precisely, it affects
-    // exactly these 3 of 147 corpus ships, all Line-Support at different ranges, and all 3 would
-    // resolve fine from M2 (one column back). Moving FOCUS_POSITION was considered and rejected
-    // (see FOCUS_POSITION's docstring) — it would regenerate all 147 snapshots a third time,
-    // risking the hard-won on-damaged tuning (145/147 fixtures), to reach 3 ships.
-    const KNOWN_UNREACHABLE: readonly string[] = ['Faust', 'Mender', 'Refine'];
-
+describe('pattern reachability', () => {
+    // Replaces a hand-maintained KNOWN_UNREACHABLE allow-list. The set of unreachable ships is now
+    // DERIVED, so a corpus refresh that makes a new ship unreachable routes it onto the
+    // support-anchor board automatically instead of needing a human to notice and extend a list.
+    //
+    // Both slots are swept, not just `active`. Charged targeting INHERITS active when both charged
+    // columns are blank (targetingParser.ts), and all three of today's dark ships have blank
+    // charged columns — so the old active-only guard under-reported by half.
     beforeAll(requireReferenceData);
 
-    /** Occupied cells DERIVED from the real scenario board (not hard-coded), so this guard follows
-     *  the layout automatically if it ever changes. Positions don't depend on which ship is the
-     *  focus, so any resolvable corpus ship works to build the board. */
-    function occupiedCells(): Set<string> {
-        const focus = buildTraceShip('Malvex');
-        if (!focus) throw new Error('Malvex did not resolve from the corpus');
-        const battle = buildScenarioBattle(focus, 'plain');
-        return new Set([...battle.playerTeam, ...battle.enemyTeam].map((p) => p.position));
-    }
-
-    /** Names of every corpus ship whose ACTIVE targeting pattern, anchored at FOCUS_POSITION,
-     *  resolves to zero cells that are actually occupied on the scenario board. Ships whose
-     *  targeting can't be parsed/resolved at all (parseShipTargeting/resolveCells can throw for
-     *  unrecognized text) are skipped rather than counted either way — this guard is about
-     *  geometry reachability, not targeting-text coverage. */
-    function unreachableShips(): string[] {
-        const occupied = occupiedCells();
-        const out: string[] = [];
-        for (const name of corpusNames()) {
-            const ship = buildTraceShip(name);
-            if (!ship) continue;
-            let pattern;
-            try {
-                pattern = parseShipTargeting(ship)?.active?.pattern;
-                if (!pattern) continue;
-                const cells = resolveCells(pattern, FOCUS_POSITION);
-                if (!cells.some((c) => occupied.has(c.position))) out.push(name);
-            } catch {
-                continue;
-            }
-        }
-        return out;
-    }
-
-    // Both tests below call unreachableShips(), which rebuilds all 147 corpus ships and re-runs
-    // parseShipTargeting/resolveCells for each — computed once here (registered AFTER the
-    // requireReferenceData beforeAll above, so reference data is guaranteed present first) rather
-    // than once per test.
-    let unreachable: string[];
-
-    beforeAll(() => {
-        unreachable = unreachableShips();
+    it('finds the dark slots the primary board cannot reach', () => {
+        // Not an allow-list: a pin on the CURRENT corpus, so a data refresh that changes this
+        // announces itself in one named diff rather than silently changing which ships run a
+        // fourth scenario. Widening it is fine; it must be a deliberate edit.
+        const dark = darkSlotsOnPrimaryBoard()
+            .map((d) => `${d.name}:${d.slot}`)
+            .sort();
+        expect(dark).toEqual([
+            'Faust:active',
+            'Faust:charged',
+            'Mender:active',
+            'Mender:charged',
+            'Refine:active',
+            'Refine:charged',
+        ]);
     });
 
-    it('no ship outside the allow-list resolves its active pattern to zero occupied cells', () => {
-        const unexpected = unreachable.filter((n) => !KNOWN_UNREACHABLE.includes(n));
+    it('every dark slot resolves to occupied cells on the support-anchor board', () => {
+        // The guard that makes the derivation safe. A ship dark on BOTH boards would silently run
+        // a fourth scenario that observes nothing; this names it instead.
+        const stranded: string[] = [];
+        for (const { name, slot } of darkSlotsOnPrimaryBoard()) {
+            const ship = buildTraceShip(name);
+            if (!ship) continue;
+            const pattern = parseShipTargeting(ship)?.[slot]?.pattern;
+            if (!pattern) continue;
+            if (occupiedCellCount(pattern, SUPPORT_ANCHOR_BOARD) === 0) {
+                stranded.push(`${name}:${slot}`);
+            }
+        }
         expect(
-            unexpected,
-            `ship(s) whose active pattern resolves to ZERO occupied cells from FOCUS_POSITION and ` +
-                `are not on the allow-list: ${unexpected.join(', ')} — either a board change made ` +
-                'a previously-reachable ship go dark, or a new/changed corpus ship has an ' +
-                'unreachable pattern. If genuinely unreachable given the front-column geometry, ' +
-                'add it to KNOWN_UNREACHABLE with the same reasoning as Faust/Mender/Refine.'
+            stranded,
+            `slot(s) that resolve to ZERO occupied cells on BOTH boards: ${stranded.join(', ')} — ` +
+                'the support-anchor geometry does not cover this pattern shape. Either extend that ' +
+                'board or add a third one; do NOT leave the ship running a scenario that observes ' +
+                'nothing.'
         ).toEqual([]);
     });
 
-    it('every allow-listed ship is STILL unreachable (a board fix must shrink this list, not leave a stale exemption)', () => {
-        const unreachableSet = new Set(unreachable);
-        const stale = KNOWN_UNREACHABLE.filter((n) => !unreachableSet.has(n));
+    it('no ship is dark on the support-anchor board that was reachable on the primary one', () => {
+        // The reverse direction: the second board must not go dark for a ship the first one
+        // handled, which would mean a future routing change could strand it.
+        const darkNames = new Set(darkSlotsOnPrimaryBoard().map((d) => d.name.toUpperCase()));
+        const regressed: string[] = [];
+        for (const name of corpusNames()) {
+            if (darkNames.has(name.toUpperCase())) continue;
+            const ship = buildTraceShip(name);
+            if (!ship) continue;
+            for (const slot of ['active', 'charged'] as const) {
+                let pattern;
+                try {
+                    pattern = parseShipTargeting(ship)?.[slot]?.pattern;
+                } catch {
+                    continue;
+                }
+                if (!pattern) continue;
+                if (occupiedCellCount(pattern, PRIMARY_BOARD) === 0) {
+                    regressed.push(`${name}:${slot}`);
+                }
+            }
+        }
         expect(
-            stale,
-            `allow-listed ship(s) that now resolve to a NON-empty set of occupied cells: ` +
-                `${stale.join(', ')} — the board (or this ship's pattern) changed and they are ` +
-                'reachable again. Remove them from KNOWN_UNREACHABLE rather than leaving a stale ' +
-                'exemption.'
+            regressed,
+            `slot(s) dark on the primary board but missing from the derivation: ` +
+                `${regressed.join(', ')} — darkSlotsOnPrimaryBoard() and this sweep disagree, so ` +
+                'the derivation is not seeing the whole corpus.'
         ).toEqual([]);
     });
 });
