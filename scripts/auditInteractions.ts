@@ -97,17 +97,9 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // buildStandardScenario opponents and composeBattle's real random-corpus opponents), not this
 // ship's own kit logic:
 //   - 'death'/'cheat-death'   — whether incoming damage was lethal this run (opponent power)
-//   - 'buff-expired'          — buff-applied's actorId is the RECIPIENT (types/abilities.ts:
-//                               "opposing-scoped on actorId — the buff RECIPIENT"), so this
-//                               fires whenever ANY other unit buffs/heals this one
-//   - 'buff'                  — as of the granter-attribution change, `buff` LOG ENTRIES book to
-//                               the GRANTER (buildCombatLog.ts), with the recipient carried only
-//                               in `targets` — the types/abilities.ts line above still describes
-//                               the underlying EVENT (unchanged, still recipient-scoped), but not
-//                               the log entry this script diffs. A `buff` token is therefore
-//                               self-kit signal now, not opponent noise. Kept in this set anyway,
-//                               pending a real-corpus recalibration run (dropping it is separate
-//                               work) — NOT because the opponent-driven rationale still applies.
+//   - 'buff-expired'          — books to the RECIPIENT: no granter is tracked at expiry time, so
+//                               unlike its `buff` counterpart (granter-attributed, see below)
+//                               this fires whenever ANY other unit's buff on this ship runs out
 //   - 'debuff-resisted'       — actorId = e.sourceId ?? e.targetId; even when this ship is the
 //                               caster, "resisted or not" hinges on the TARGET's security stat,
 //                               which varies hugely between canned (security 20) and real corpus
@@ -123,27 +115,55 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // premature-death cascades (a ship dying early empties its whole remaining kind-set on one side).
 // This exclusion set is what handles opponent-driven log noise: on the REAL 148-ship corpus
 // (not the inert-only calibration battery), forcing this set empty and re-running the
-// differential oracle at seed 1/count 5 produces 3 additional opponent-noise differentials that
-// the guard does NOT catch (Aegis dot-ticked+detonation, Yuyan debuff-resisted, Quixilver
-// buff+buff-expired — verified empirically). NOTE: that Quixilver result predates the
-// granter-attribution change above — it was measured while `buff` was still recipient-attributed,
-// same as `buff-expired`. Post-change, `buff` books to the granter while `buff-expired` stays
-// recipient-attributed, so the two no longer share a rationale and cannot be re-assessed jointly;
-// this old joint result does not transfer to a future recalibration. Both fixes are necessary;
-// neither subsumes the other. Excluding these kinds trades away differential-oracle coverage for them audit-wide —
-// the ablation oracle is unaffected and remains the live signal for bugs in these areas (see the
-// Task 10 report's "Differential sensitivity trade-off" concern).
+// differential oracle produces additional opponent-noise differentials that the guard does NOT
+// catch. Both fixes are necessary; neither subsumes the other. Excluding these kinds trades away
+// differential-oracle coverage for them audit-wide — the ablation oracle is unaffected and remains
+// the live signal for bugs in these areas (see the Task 10 report's "Differential sensitivity
+// trade-off" concern).
+//
+// 'buff' WAS in this set and was REMOVED after a real-corpus recalibration (2026-08-06). It was
+// excluded on the premise that `buff` entries book to the RECIPIENT, making them opponent-driven.
+// That premise is dead: all four production `buff-applied` emission sites (playerTurn.ts ×3,
+// engine.ts ×1) set `granterId`, and buildCombatLog books the entry to `e.granterId ?? e.actorId`,
+// so in production a `buff` entry always books to the GRANTER — self-kit signal. (The `?? actorId`
+// fallback is reachable only by statusEngine test fixtures that omit granterId.) Measured at seed 1
+// over 40, 120 and 150 fuzzed compositions, restricting the SAME battles with vs without 'buff':
+// identical finding counts every time (3/3, 6/6, 6/6), and 'buff' appeared in ZERO raw diffs. That
+// negative is non-vacuous — at count 150, 31 of the 37 comparable placements DID emit `buff`
+// tokens, and all 31 agreed across the solo and composition arms, so the kind is present and
+// stable rather than simply absent. Confirmed end-to-end at the ledger level too: `--seed 1
+// --count 40` with and without the exclusion writes a BYTE-IDENTICAL ledger.
+//
+// The other seven exclusions remain load-bearing over the same corpus: dropping all of them takes
+// seed 1/count 150 from 6 findings to 20. The per-kind numbers below are OCCURRENCE counts across
+// those 20 raw diffs, NOT a partition of them — one diff routinely cites two excluded kinds, so
+// they deliberately do not sum to 20 (all eight kinds together account for 28 mentions over the 20
+// diffs). Excluded kinds: shield-destroyed ×6, buff-expired ×6, dot-ticked ×5, debuff-resisted ×3,
+// detonation ×1. Non-excluded kinds, i.e. the ones that produce the 6 findings surviving
+// restriction: cleanse ×5, heal ×1, debuff ×1. So this was a targeted drop, not a teardown.
+//
+// Scope of the evidence, stated honestly: all of the above is seed-1-rooted. `survivedWholeBattle`
+// skips ~94% of placements on the real corpus (563 of 600 at count 150) because a wiped team's
+// ships are dead at the trimmed last round, so the differential oracle only ever compares a few
+// dozen placements per run — the sample behind ANY recalibration here is small, and that is a
+// property of the oracle, not of this change.
+//
+// The superseded pre-change measurement (seed 1/count 5: "Aegis dot-ticked+detonation, Yuyan
+// debuff-resisted, Quixilver buff+buff-expired") is retired — it was taken while `buff` was still
+// recipient-attributed, and its Quixilver entry conflated `buff` with `buff-expired`, which stays
+// recipient-attributed and so stays excluded. Do not cite it for either kind.
 //
 // KNOWN LIMITATION: the calibration gate above only ever exercises the inert-only battery (ships
 // with an empty class-tag set have no interaction primitives, so any raw diff there is harness
 // noise by construction). It does NOT run a "guard-only, no exclusions" configuration against the
 // real corpus, so calibration passing clean is not evidence that the exclusion set could safely
-// be dropped — the 3-differential regression above only shows up when actually fuzzing the real
-// corpus, which calibration by design does not do.
+// be dropped — the 6→20 regression above only shows up when actually fuzzing the real corpus,
+// which calibration by design does not do. Note the converse also held for 'buff': calibration was
+// clean both with and without it, which is exactly why dropping it required the real-corpus run
+// rather than a calibration pass.
 const BASE_EXCLUDED_KINDS = new Set<string>([
     'death',
     'cheat-death',
-    'buff',
     'buff-expired',
     'debuff-resisted',
     'dot-ticked',
