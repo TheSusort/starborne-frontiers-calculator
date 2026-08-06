@@ -13,7 +13,7 @@ import {
     FRAGILE_ALLY_HP,
     SEED,
     FOCUS_ACTOR_ID,
-    FILLER_NAMES,
+    ALLY_FILLER_NAMES,
 } from '../kitFingerprintScenarios';
 import { PLACEMENTS, PLACEMENT_PAIRS } from '../types';
 import { runSeededBattle } from '../seededBattle';
@@ -489,11 +489,15 @@ describe('calibration — an inert kit is placement-symmetric', () => {
     beforeAll(requireReferenceData);
 
     it('uses only fillers that never share a side with their own twin', () => {
-        // The subject sits with the ALLY fillers (FILLER_NAMES.slice(4,7)). Drawing a calibration
-        // subject from that group would put the same ship twice on one side — an illegal in-game
-        // state. The ENEMY-side fillers are always on the opposite side from the subject.
+        // The subject sits with the ALLY fillers. Drawing a calibration subject from that group
+        // would put the same ship twice on one side — an illegal in-game state. The ENEMY-side
+        // fillers are always on the opposite side from the subject.
+        //
+        // Reads ALLY_FILLER_NAMES rather than re-slicing FILLER_NAMES: a literal slice here would
+        // keep passing if the real split ever moved, so the test would silently stop proving what
+        // its own name claims.
         for (const name of CALIBRATION_SUBJECT_NAMES) {
-            expect(FILLER_NAMES.slice(4, 7)).not.toContain(name);
+            expect(ALLY_FILLER_NAMES).not.toContain(name);
         }
         expect(CALIBRATION_SUBJECT_NAMES.length).toBeGreaterThan(0);
     });
