@@ -320,20 +320,31 @@ export function buildScenarioBattle(
     };
 }
 
-/** Fingerprint one ship across all three scenarios. Every battle goes through runSeededBattle —
+/** The scenarios THIS ship runs: the three universal ones, plus `supportAnchor` when the primary
+ *  board cannot reach one of its targeting slots. */
+export function scenariosFor(ship: Ship): FingerprintScenario[] {
+    return darkShipNames().has(ship.name.toUpperCase())
+        ? [...SCENARIOS, 'supportAnchor']
+        : [...SCENARIOS];
+}
+
+/** The three universal scenarios are always present; `supportAnchor` only for dark ships. */
+export type FingerprintResult = Record<ScenarioName, string[]> & { supportAnchor?: string[] };
+
+/** Fingerprint one ship across every scenario it runs. Every battle goes through runSeededBattle —
  *  its `finally` restores Math.random rather than any ambient seed, so a raw simulateBattle call
  *  afterwards would be nondeterministic.
  *
  *  Lives here (rather than in the `.test.ts` file that consumes it) so both the vitest suite and
  *  `scripts/reportThinKitFingerprints.ts` (run under plain `tsx`, no vitest globals) can import it
  *  without importing a `.test.ts` module. */
-export function fingerprintShip(ship: Ship): Record<ScenarioName, string[]> {
-    const out = {} as Record<ScenarioName, string[]>;
-    for (const scenario of SCENARIOS) {
+export function fingerprintShip(ship: Ship): FingerprintResult {
+    const out: Partial<Record<FingerprintScenario, string[]>> = {};
+    for (const scenario of scenariosFor(ship)) {
         const result = runSeededBattle(buildScenarioBattle(ship, scenario), SEED);
         out[scenario] = fingerprintActorTokens(result, FOCUS_ACTOR_ID);
     }
-    return out;
+    return out as FingerprintResult;
 }
 
 /** One targeting slot of one ship that resolves to no occupied cell on a given board. */
