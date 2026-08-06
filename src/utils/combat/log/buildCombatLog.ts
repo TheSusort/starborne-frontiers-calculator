@@ -546,10 +546,15 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
 
     'buff-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
+        // Books to the GRANTER, with the receiver in `targets` — the same shape `heal`
+        // (casterId), `shield-applied` (granterId), `control` (casterId), `debuff` and
+        // `dot-applied` (sourceId) already use. `buff` was the lone grant-style kind booked to
+        // its recipient, which made an ally-only support kit invisible to any actor-scoped
+        // reader. Falls back to the receiver when no granter is carried (self-grant).
         const entry: CombatLogEntry = {
             kind: 'buff',
-            actorId: e.actorId,
-            targets: [],
+            actorId: e.granterId ?? e.actorId,
+            targets: [{ targetId: e.actorId }],
             reactions: [],
             note: e.buffName,
             ...(ctx.consumePendingSkill() ?? {}),
