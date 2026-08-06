@@ -97,9 +97,17 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // buildStandardScenario opponents and composeBattle's real random-corpus opponents), not this
 // ship's own kit logic:
 //   - 'death'/'cheat-death'   — whether incoming damage was lethal this run (opponent power)
-//   - 'buff'/'buff-expired'   — buff-applied's actorId is the RECIPIENT (types/abilities.ts:
+//   - 'buff-expired'          — buff-applied's actorId is the RECIPIENT (types/abilities.ts:
 //                               "opposing-scoped on actorId — the buff RECIPIENT"), so this
 //                               fires whenever ANY other unit buffs/heals this one
+//   - 'buff'                  — as of the granter-attribution change, `buff` LOG ENTRIES book to
+//                               the GRANTER (buildCombatLog.ts), with the recipient carried only
+//                               in `targets` — the types/abilities.ts line above still describes
+//                               the underlying EVENT (unchanged, still recipient-scoped), but not
+//                               the log entry this script diffs. A `buff` token is therefore
+//                               self-kit signal now, not opponent noise. Kept in this set anyway,
+//                               pending a real-corpus recalibration run (dropping it is separate
+//                               work) — NOT because the opponent-driven rationale still applies.
 //   - 'debuff-resisted'       — actorId = e.sourceId ?? e.targetId; even when this ship is the
 //                               caster, "resisted or not" hinges on the TARGET's security stat,
 //                               which varies hugely between canned (security 20) and real corpus
@@ -117,8 +125,12 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // (not the inert-only calibration battery), forcing this set empty and re-running the
 // differential oracle at seed 1/count 5 produces 3 additional opponent-noise differentials that
 // the guard does NOT catch (Aegis dot-ticked+detonation, Yuyan debuff-resisted, Quixilver
-// buff+buff-expired — verified empirically). Both fixes are necessary; neither subsumes the
-// other. Excluding these kinds trades away differential-oracle coverage for them audit-wide —
+// buff+buff-expired — verified empirically). NOTE: that Quixilver result predates the
+// granter-attribution change above — it was measured while `buff` was still recipient-attributed,
+// same as `buff-expired`. Post-change, `buff` books to the granter while `buff-expired` stays
+// recipient-attributed, so the two no longer share a rationale and cannot be re-assessed jointly;
+// this old joint result does not transfer to a future recalibration. Both fixes are necessary;
+// neither subsumes the other. Excluding these kinds trades away differential-oracle coverage for them audit-wide —
 // the ablation oracle is unaffected and remains the live signal for bugs in these areas (see the
 // Task 10 report's "Differential sensitivity trade-off" concern).
 //

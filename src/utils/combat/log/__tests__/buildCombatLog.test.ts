@@ -1018,11 +1018,18 @@ describe('buildCombatLog', () => {
         expect(entry.targets[0].targetId).toBe('B');
     });
 
-    it('buff-applied: self-buff — actorId is the buff receiver, targets is empty, note has buffName', () => {
+    it('buff-applied: self-buff — actorId is the granter (same as receiver), recipient in targets', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            ev({ type: 'buff-applied', actorId: 'A', round: 1, buffName: 'Inspire', duration: 2 }),
+            ev({
+                type: 'buff-applied',
+                actorId: 'A',
+                granterId: 'A',
+                round: 1,
+                buffName: 'Inspire',
+                duration: 2,
+            }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -1032,8 +1039,49 @@ describe('buildCombatLog', () => {
         const entry = entries[0];
         expect(entry.kind).toBe('buff');
         expect(entry.actorId).toBe('A');
-        expect(entry.targets).toEqual([]);
+        expect(entry.targets).toEqual([{ targetId: 'A' }]);
         expect(entry.note).toBe('Inspire');
+    });
+
+    it('buff-applied: ally grant — actorId is the GRANTER, not the receiver; receiver is the target', () => {
+        // The defect this whole change exists for: pre-change this entry booked to 'B' (the
+        // receiver), so a ship whose kit only ever buffs OTHERS produced no entries of its own
+        // and read as dead in an actor-scoped fingerprint.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'buff-applied',
+                actorId: 'B',
+                granterId: 'A',
+                round: 1,
+                buffName: 'Hacking Up II',
+                duration: 1,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toEqual([{ targetId: 'B' }]);
+        expect(entry.note).toBe('Hacking Up II');
+    });
+
+    it('buff-applied: no granterId — falls back to the receiver (fixture compatibility)', () => {
+        // granterId is optional so statusEngine unit fixtures need not restate it. An event
+        // without one must behave exactly as it did before this change.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'buff-applied', actorId: 'A', round: 1, buffName: 'Inspire', duration: 2 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toEqual([{ targetId: 'A' }]);
     });
 
     it('debuff-applied: actorId is sourceId (the INFLICTER), not the victim; target contains victim', () => {

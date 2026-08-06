@@ -445,14 +445,18 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
         },
     });
 
-    /** Every actorId that ever received a GRANT of `label` (hierarchical combatLog). */
+    /** Every actorId that ever received a GRANT of `label` (hierarchical combatLog).
+     *  `entry.actorId` on a 'buff' entry is the GRANTER (post-granter-attribution); the
+     *  recipient lives in `entry.targets`. */
     const buffedActors = (
         result: ReturnType<typeof simulateBattle>,
         label: string
     ): Set<string> => {
         const set = new Set<string>();
         for (const entry of flattenCombatLog(result)) {
-            if (entry.kind === 'buff' && entry.note === label) set.add(entry.actorId);
+            if (entry.kind === 'buff' && entry.note === label) {
+                for (const t of entry.targets) set.add(t.targetId);
+            }
         }
         return set;
     };

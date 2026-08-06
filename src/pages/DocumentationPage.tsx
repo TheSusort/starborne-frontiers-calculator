@@ -3308,6 +3308,13 @@ const DocumentationPage: React.FC = () => {
                                         shown rather than an even split.
                                     </li>
                                     <li>
+                                        <strong>Buff grants show who cast them:</strong> A buff
+                                        entry is attributed to the ship that granted it, with the
+                                        ally that received it listed as the target — so a support
+                                        ship&apos;s buffs to its allies are credited to that ship,
+                                        not just shown against the ally that gained the buff.
+                                    </li>
+                                    <li>
                                         <strong>Charge state and skill tags:</strong> Each turn
                                         shows the acting ship&apos;s current charge (e.g.
                                         &quot;charge 2/3&quot;) and whether it used its active or

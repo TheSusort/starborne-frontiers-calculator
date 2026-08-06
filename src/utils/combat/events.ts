@@ -91,7 +91,15 @@ export type CombatEvent =
       } & ReactiveStamp)
     | ({
           type: 'buff-applied';
+          /** The actor that RECEIVED the buff. */
           actorId: string;
+          /** The actor that GRANTED it — `status.casterId` / `intent.ownerId` at the emission
+           *  site. Optional only so statusEngine unit fixtures need not restate it; read sites
+           *  fall back to `actorId` (self-grant), which is what every pre-2026-08 event meant.
+           *  Log attribution reads this so a ship whose kit only buffs OTHERS is still
+           *  attributable to itself — `buff` was the sole grant-style kind booked to its
+           *  recipient while heal/shield/control/debuff/dot all book to the source. */
+          granterId?: string;
           round: number;
           buffName: string;
           duration: number | 'recurring';

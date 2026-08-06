@@ -142,7 +142,11 @@ const formatters: Record<
     },
     heal: (entry, ctx) => renderTargets(entry, ctx, `${ctx.nameOf(entry.actorId)} heals`),
     shield: (entry, ctx) => renderTargets(entry, ctx, `${ctx.nameOf(entry.actorId)} shields`),
-    buff: noteLine,
+    // Same source→target shape as `debuff`/`dot-applied`: `buff` entries book to the GRANTER
+    // with the recipient in `targets`, so an ally grant reads "Purifier → Jempol: Hacking Up II".
+    // `sourceTargetNoteLine` collapses to the plain "{src}: {note}" line when the target is the
+    // actor itself, so self-buffs render exactly as they did before granter attribution.
+    buff: sourceTargetNoteLine,
     debuff: sourceTargetNoteLine,
     'dot-applied': sourceTargetNoteLine,
     'dot-ticked': (entry, ctx) => {

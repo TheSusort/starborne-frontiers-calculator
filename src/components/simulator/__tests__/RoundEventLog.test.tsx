@@ -292,6 +292,38 @@ describe('RoundEventLog', () => {
         expect(screen.getByText(/^Nova: Overload$/)).toBeInTheDocument();
     });
 
+    it('buff: shows granter → recipient when the buff lands on an ally', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'buff',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'graphite' }],
+                    reactions: [],
+                    note: 'Hacking Up II',
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Nova → Graphite: Hacking Up II/)).toBeInTheDocument();
+    });
+
+    it('buff: collapses to just the actor when the target is itself (self-buff)', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'buff',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'nova' }],
+                    reactions: [],
+                    note: 'Attack Up',
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/^Nova: Attack Up$/)).toBeInTheDocument();
+    });
+
     it('shows a collapsed stats summary under a turn and expands to the full block', async () => {
         const round: CombatLogRound = {
             round: 1,

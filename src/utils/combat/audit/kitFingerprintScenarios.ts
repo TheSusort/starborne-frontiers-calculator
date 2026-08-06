@@ -84,7 +84,7 @@ export const FILLER_NAMES: readonly string[] = [
  *  killing and lets the softest one dent anything. HP% STATE is therefore seeded directly (see
  *  HURT_FRACTION) instead of being produced by damage — that decouples "which hp-threshold gates
  *  can read true" from "how hard this particular focus ship hits". */
-const FILLER_HP = 500_000_000;
+export const FILLER_HP = 500_000_000;
 
 /** Share of the focus ship's MAX HP that the whole 20-round battle should take off it.
  *
