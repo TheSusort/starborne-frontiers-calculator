@@ -32,6 +32,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Malvex's normal skill follows the same rule — it only shields itself for 15% of its max health when the target it hits has a Shield. It used to bank that Shield on every cast, which also fed the bonus damage its skills deal based on its own current Shield.",
     'Autogear: Defence and Crit Chance priorities are now weighted on the same scale as every other stat. Both were being compared against their raw values instead of a typical value for the stat, which made a Defence priority around 5000x too strong and a Crit Chance priority around 25x too strong — either one would swamp the priorities listed above it. If you have saved configurations that use Defence or Crit Chance as a priority, re-run autogear to get the corrected recommendation.',
     'Combat log now shows which ship granted a buff to an ally, instead of only naming the ship that received it.',
+    'Recruitment calculator: Centurion is now recruitable through beacons. It was on the non-recruitable list, so the calculator gave it no beacon odds at all.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
