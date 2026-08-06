@@ -135,8 +135,12 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // --count 40` with and without the exclusion writes a BYTE-IDENTICAL ledger.
 //
 // The other seven exclusions remain load-bearing over the same corpus: dropping all of them takes
-// seed 1/count 150 from 6 findings to 20 (shield-destroyed ×6, buff-expired ×6, dot-ticked ×5,
-// debuff-resisted ×3, detonation ×1). So this was a targeted drop, not a teardown of the set.
+// seed 1/count 150 from 6 findings to 20. The per-kind numbers below are OCCURRENCE counts across
+// those 20 raw diffs, NOT a partition of them — one diff routinely cites two excluded kinds, so
+// they deliberately do not sum to 20 (all eight kinds together account for 28 mentions over the 20
+// diffs). Excluded kinds: shield-destroyed ×6, buff-expired ×6, dot-ticked ×5, debuff-resisted ×3,
+// detonation ×1. Non-excluded kinds, i.e. the ones that produce the 6 findings surviving
+// restriction: cleanse ×5, heal ×1, debuff ×1. So this was a targeted drop, not a teardown.
 //
 // Scope of the evidence, stated honestly: all of the above is seed-1-rooted. `survivedWholeBattle`
 // skips ~94% of placements on the real corpus (563 of 600 at count 150) because a wiped team's
