@@ -285,6 +285,21 @@ function seedFor(
         case 'wounded':
         case 'supportAnchor':
             return (actors) => {
+                // Guard against isSubject matching anything other than exactly one actor: zero
+                // matches would silently degrade this to a uniform HURT_FRACTION seed (a plausible
+                // -looking but vacuous 'wounded'/'supportAnchor' battle), and more than one would mean
+                // (side, cell) stopped being unique. Neither failure mode would otherwise raise —
+                // in 'focus' the 147-ship snapshot would catch it, but 'team'/'enemy' have no
+                // snapshots and would instead surface later as a spurious placement asymmetry that
+                // reads exactly like an engine bug.
+                const matches = actors.filter(isSubject).length;
+                if (matches !== 1) {
+                    throw new Error(
+                        `kitFingerprintScenarios: expected exactly 1 subject actor for placement ` +
+                            `'${placement}' at side '${subjectSide}', cell '${subjectCell}', ` +
+                            `found ${matches}`
+                    );
+                }
                 for (const a of actors) {
                     const fraction = isSubject(a) ? FOCUS_HURT_FRACTION : HURT_FRACTION;
                     a.currentHp = maxHpOf(a) * fraction;
@@ -293,7 +308,8 @@ function seedFor(
         default: {
             // Exhaustiveness guard: `undefined` is a legitimate return for 'plain', so a fifth
             // ScenarioName falling through the switch would silently run unseeded and still
-            // produce a plausible-looking (but vacuous) snapshot. Force a compile error instead.
+            // produce a plausible-looking (but vacuous) snapshot. Force a compile error instead —
+            // the spec DEFERS a status-seeded scenario, it does not cancel it.
             const exhaustive: never = scenario;
             throw new Error(`kitFingerprintScenarios: unhandled scenario ${String(exhaustive)}`);
         }
@@ -323,7 +339,10 @@ export function buildScenarioBattle(
 
     const subjectPlacement = canonicalPlacement(subject, board.focus);
 
-    // Fragility travels with the placement by CELL, so the reordering below cannot move it.
+    // Fragility travels with the placement by CELL, so the reordering below cannot move it. Note
+    // this checks `scenario === 'wounded'` and NOT the seeding branch: supportAnchor reuses
+    // wounded's HP seeding but must NOT get a fragile ally, because a dying support target would
+    // make support-pattern reach flaky.
     const fragileCell = scenario === 'wounded' ? board.allies[0] : undefined;
     const allyFillers = allyNames.map((name, i) =>
         fillerPlacement(

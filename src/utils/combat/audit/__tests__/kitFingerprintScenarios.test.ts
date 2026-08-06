@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
+    boardFor,
     buildScenarioBattle,
     darkSlotsOnPrimaryBoard,
     FILLER_HP,
@@ -19,8 +20,10 @@ import {
     ROUNDS,
     SCENARIOS,
     SEED,
+    subjectSideFor,
     SUPPORT_ANCHOR_BOARD,
 } from '../kitFingerprintScenarios';
+import { PLACEMENTS } from '../types';
 import { runSeededBattle } from '../seededBattle';
 import { positionTurnRank } from '../../state';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
@@ -182,27 +185,47 @@ describe('live battle invariants', () => {
     beforeAll(requireReferenceData);
 
     it.each(['Xiaodao', 'Malvex'])(
-        '%s takes real incoming damage and survives all 20 rounds in every scenario',
+        // PRIMARY-board scenarios only (SCENARIOS excludes `supportAnchor` by construction — see
+        // its docstring): the support-anchor board takes zero incoming damage by design, so
+        // asserting `taken > 0` there would be a bug hunt against an accepted limitation, not a
+        // coverage extension.
+        '%s takes real incoming damage and survives all 20 rounds in every scenario and placement',
         (name) => {
             const ship = buildTraceShip(name);
             expect(ship).not.toBeNull();
             for (const scenario of SCENARIOS) {
-                const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
-                const rows = result.rounds
-                    .flatMap((r) => r.ships)
-                    .filter((s) => s.actorId === FOCUS_ACTOR_ID);
-                const taken = rows.reduce((sum, s) => sum + s.damageTaken, 0);
-                expect(
-                    taken,
-                    `${name}/${scenario}: focus took no damage — the enemies are not resolving ` +
-                        'onto it, so every on-damaged clause in the corpus is silent'
-                ).toBeGreaterThan(0);
-                expect(
-                    rows.every((s) => s.alive),
-                    `${name}/${scenario}: focus died — its fingerprint is truncated at the round ` +
-                        'it fell, so kill timing now leaks into the snapshot'
-                ).toBe(true);
-                expect(result.outcome.lastRound).toBe(ROUNDS);
+                for (const placement of PLACEMENTS) {
+                    const subjectSide = subjectSideFor(placement);
+                    const subjectCell = boardFor(scenario).focus;
+                    const result = runSeededBattle(
+                        buildScenarioBattle(ship!, scenario, placement),
+                        SEED
+                    );
+                    // `focus` mints the reserved 'attacker' id; `team`/`enemy` don't, so the
+                    // subject is resolved by (side, cell) via the roster, same as `seedFor`.
+                    const subjectActorId = result.roster.find(
+                        (r) => r.side === subjectSide && r.position === subjectCell
+                    )?.actorId;
+                    expect(
+                        subjectActorId,
+                        `${name}/${scenario}/${placement}: subject not found in the roster`
+                    ).toBeDefined();
+                    const rows = result.rounds
+                        .flatMap((r) => r.ships)
+                        .filter((s) => s.actorId === subjectActorId);
+                    const taken = rows.reduce((sum, s) => sum + s.damageTaken, 0);
+                    expect(
+                        taken,
+                        `${name}/${scenario}/${placement}: focus took no damage — the enemies are ` +
+                            'not resolving onto it, so every on-damaged clause in the corpus is silent'
+                    ).toBeGreaterThan(0);
+                    expect(
+                        rows.every((s) => s.alive),
+                        `${name}/${scenario}/${placement}: focus died — its fingerprint is ` +
+                            'truncated at the round it fell, so kill timing now leaks into the snapshot'
+                    ).toBe(true);
+                    expect(result.outcome.lastRound).toBe(ROUNDS);
+                }
             }
         }
     );

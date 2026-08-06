@@ -10,14 +10,17 @@ import {
     boardFor,
     subjectSideFor,
     FRAGILE_ALLY_HP,
+    SEED,
 } from '../kitFingerprintScenarios';
 import { PLACEMENTS } from '../types';
+import { runSeededBattle } from '../seededBattle';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import type { Ship } from '../../../../types/ship';
 import type { Position } from '../../../../types/encounters';
-import type { BattlePlacement } from '../../../calculators/battleSimulator';
+import type { BattlePlacement, BattleSimulationInput } from '../../../calculators/battleSimulator';
+import type { CombatActor } from '../../state';
 
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -127,5 +130,148 @@ describe('placement transform — board shape', () => {
                 expect(strip(legacy)).toEqual(strip(explicit));
             }
         }
+    });
+});
+
+/** A plain snapshot of the fields these tests need, taken the instant seeding runs — NOT a live
+ *  `CombatActor` reference. The array `__testTapActors` receives is the engine's own roster, which
+ *  the 20-round battle keeps mutating in place after the tap returns (real damage, shield spend),
+ *  so reading `.currentHp`/`.shieldPool` off it AFTER `runSeededBattle` resolves would observe the
+ *  end-of-battle state, not the seeded one. */
+interface ActorSeedSnapshot {
+    side: 'player' | 'enemy';
+    position?: Position;
+    currentHp: number;
+    maxHp: number;
+    shieldPool: number;
+}
+
+/** Runs the battle through `runSeededBattle`, wrapping `__testTapActors` so the real seeding tap
+ *  still runs (this must exercise the engine's actual seeding, not a hand-built stand-in), then
+ *  snapshots the actors immediately afterward — before combat has a chance to mutate them. */
+function capturedSeedSnapshot(input: BattleSimulationInput): ActorSeedSnapshot[] {
+    let captured: ActorSeedSnapshot[] = [];
+    const original = input.__testTapActors;
+    input.__testTapActors = (actors) => {
+        original?.(actors);
+        captured = actors.map((a) => ({
+            side: a.side,
+            position: a.position,
+            currentHp: a.currentHp,
+            maxHp: a.stats.hp,
+            shieldPool: a.shieldPool,
+        }));
+    };
+    runSeededBattle(input, SEED);
+    return captured;
+}
+
+/** Actors that carry a board `position`. One actor in every run — a vestigial enemy-side dummy
+ *  used for player-offense DPS accounting (battleSimulator.ts) — legitimately has none, and must
+ *  be excluded rather than tripping these assertions. */
+const positioned = (actors: ActorSeedSnapshot[]): ActorSeedSnapshot[] =>
+    actors.filter((a) => a.position !== undefined);
+
+const hpFraction = (a: ActorSeedSnapshot): number => a.currentHp / a.maxHp;
+
+describe('placement transform — live seeding regression (Finding 1)', () => {
+    // These pin the two behaviours Task 4 exists to fix. Both are extensionally equal to the OLD
+    // (focus-only) predicates under the default 'focus' placement, so every other test in this
+    // suite (and the whole existing corpus) stays green even if either predicate regresses —
+    // only a non-'focus' placement can catch it. Verified by hand: reverting
+    // `a.side !== subjectSide` to `a.side === 'enemy'` in the `richEnemy` branch, or `isSubject(a)`
+    // to `a.id === FOCUS_ACTOR_ID`, fails the corresponding test below.
+    beforeAll(requireReferenceData);
+
+    it("enemy placement: 'wounded' seeds the subject actor to 45% HP and fillers to 35%", () => {
+        const subject = subjectShip();
+        const subjectCell = boardFor('wounded').focus;
+        const actors = capturedSeedSnapshot(buildScenarioBattle(subject, 'wounded', 'enemy'));
+
+        const subjectActor = actors.find((a) => a.side === 'enemy' && a.position === subjectCell);
+        expect(subjectActor, 'subject actor not found on the enemy side at its cell').toBeDefined();
+        expect(hpFraction(subjectActor!)).toBeCloseTo(0.45, 5);
+
+        const fillers = positioned(actors).filter((a) => a !== subjectActor);
+        expect(fillers.length).toBeGreaterThan(0);
+        for (const filler of fillers) {
+            expect(hpFraction(filler)).toBeCloseTo(0.35, 5);
+        }
+    });
+
+    it("enemy placement: 'richEnemy' zeroes the subject's shieldPool and arms the player fillers", () => {
+        const subject = subjectShip();
+        const subjectCell = boardFor('richEnemy').focus;
+        const actors = capturedSeedSnapshot(buildScenarioBattle(subject, 'richEnemy', 'enemy'));
+
+        const subjectActor = actors.find((a) => a.side === 'enemy' && a.position === subjectCell);
+        expect(subjectActor, 'subject actor not found on the enemy side at its cell').toBeDefined();
+        expect(subjectActor!.shieldPool).toBe(0);
+
+        const playerFillers = actors.filter((a) => a.side === 'player');
+        expect(playerFillers.length).toBeGreaterThan(0);
+        for (const filler of playerFillers) {
+            expect(filler.shieldPool).toBeGreaterThan(0);
+        }
+    });
+
+    it("team placement: 'wounded' seeds the subject actor to 45% HP and fillers to 35%", () => {
+        const subject = subjectShip();
+        const subjectCell = boardFor('wounded').focus;
+        const actors = capturedSeedSnapshot(buildScenarioBattle(subject, 'wounded', 'team'));
+
+        const subjectActor = actors.find((a) => a.side === 'player' && a.position === subjectCell);
+        expect(
+            subjectActor,
+            'subject actor not found on the player side at its cell'
+        ).toBeDefined();
+        expect(hpFraction(subjectActor!)).toBeCloseTo(0.45, 5);
+
+        const fillers = positioned(actors).filter((a) => a !== subjectActor);
+        expect(fillers.length).toBeGreaterThan(0);
+        for (const filler of fillers) {
+            expect(hpFraction(filler)).toBeCloseTo(0.35, 5);
+        }
+    });
+
+    it("team placement: 'richEnemy' zeroes the subject's own shieldPool and arms the enemy fillers", () => {
+        const subject = subjectShip();
+        const subjectCell = boardFor('richEnemy').focus;
+        const actors = capturedSeedSnapshot(buildScenarioBattle(subject, 'richEnemy', 'team'));
+
+        const subjectActor = actors.find((a) => a.side === 'player' && a.position === subjectCell);
+        expect(
+            subjectActor,
+            'subject actor not found on the player side at its cell'
+        ).toBeDefined();
+        expect(subjectActor!.shieldPool).toBe(0);
+
+        const enemyFillers = actors.filter((a) => a.side === 'enemy' && a.position !== undefined);
+        expect(enemyFillers.length).toBeGreaterThan(0);
+        for (const filler of enemyFillers) {
+            expect(filler.shieldPool).toBeGreaterThan(0);
+        }
+    });
+});
+
+describe('placement transform — subject match-count guard (Finding 2)', () => {
+    // If `isSubject` ever matches zero actors, the 'wounded'/'supportAnchor' tap would otherwise
+    // silently degrade to a uniform 35% seed with nothing failing. `focus` is protected by the
+    // 147-ship snapshot; `team`/`enemy` have none, so this guard is the only thing standing between
+    // a broken predicate and a spurious placement-asymmetry finding that reads like an engine bug.
+    beforeAll(requireReferenceData);
+
+    it('throws when no actor matches the expected (side, cell)', () => {
+        const subject = subjectShip();
+        const tap = buildScenarioBattle(subject, 'wounded', 'enemy').__testTapActors;
+        expect(tap).toBeDefined();
+
+        // Deliberately no actor at (side: 'enemy', position: boardFor('wounded').focus).
+        const noMatch = [
+            { side: 'player', position: 'M4', currentHp: 100, stats: { hp: 100 } },
+            { side: 'enemy', position: 'T3', currentHp: 100, stats: { hp: 100 } },
+        ] as unknown as CombatActor[];
+
+        expect(() => tap!(noMatch)).toThrow(/expected exactly 1 subject actor/);
     });
 });
