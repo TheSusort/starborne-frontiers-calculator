@@ -10,6 +10,7 @@ import { resolveCells } from '../../targeting/resolvePattern';
 import { canonicalPlacement } from './fixtures';
 import { runSeededBattle } from './seededBattle';
 import { fingerprintActorTokens } from './fingerprint';
+import type { Placement } from './types';
 
 export type ScenarioName = 'plain' | 'richEnemy' | 'wounded';
 
@@ -184,7 +185,7 @@ function fillerAttackFor(focus: Ship): number {
  *  resolves to stats.hp = 1 and currentHp = 1 at actor construction — the ally starts ALIVE, then
  *  dies to the very first hit it takes. It sits at T4, the only ally cell an enemy resolves onto,
  *  and 1 HP makes the kill timing immune to any damage-formula change: ANY hit is lethal. */
-const FRAGILE_ALLY_HP = 1;
+export const FRAGILE_ALLY_HP = 1;
 
 let cache: Map<string, Ship> | null = null;
 
@@ -245,18 +246,36 @@ export const FOCUS_ACTOR_ID = 'attacker';
 
 const maxHpOf = (a: CombatActor): number => a.stats.hp;
 
+/** Which side the subject sits on for a given placement. `focus` and `team` differ only by ARRAY
+ *  INDEX within playerTeam — see buildScenarioBattle. */
+export function subjectSideFor(placement: Placement): 'player' | 'enemy' {
+    return placement === 'enemy' ? 'enemy' : 'player';
+}
+
 function seedFor(
-    focus: Ship,
-    scenario: FingerprintScenario
+    subject: Ship,
+    scenario: FingerprintScenario,
+    placement: Placement
 ): ((actors: CombatActor[]) => void) | undefined {
+    const subjectSide = subjectSideFor(placement);
+    const subjectCell = boardFor(scenario).focus;
+    // The subject is identified by (side, cell), never by actor id: only the `focus` placement mints
+    // the reserved 'attacker' id, and never by array index, which differs per placement. Every board
+    // cell is distinct, so (side, cell) is unique.
+    const isSubject = (a: CombatActor): boolean =>
+        a.side === subjectSide && a.position === subjectCell;
+
     switch (scenario) {
         case 'plain':
             return undefined;
         case 'richEnemy': {
-            const pool = SHIELD_POOL_HITS * focus.baseStats.attack;
+            const pool = SHIELD_POOL_HITS * subject.baseStats.attack;
+            // The subject's OPPONENTS get the shield, not "the enemy side". In the `enemy`
+            // placement the subject IS on the enemy side, and seeding by side would hand it the
+            // pool it is supposed to be punching through — inverting the scenario.
             return (actors) => {
                 for (const a of actors) {
-                    if (a.side === 'enemy') a.shieldPool = pool;
+                    if (a.side !== subjectSide) a.shieldPool = pool;
                 }
             };
         }
@@ -267,15 +286,14 @@ function seedFor(
         case 'supportAnchor':
             return (actors) => {
                 for (const a of actors) {
-                    const fraction = a.id === FOCUS_ACTOR_ID ? FOCUS_HURT_FRACTION : HURT_FRACTION;
+                    const fraction = isSubject(a) ? FOCUS_HURT_FRACTION : HURT_FRACTION;
                     a.currentHp = maxHpOf(a) * fraction;
                 }
             };
         default: {
             // Exhaustiveness guard: `undefined` is a legitimate return for 'plain', so a fifth
             // ScenarioName falling through the switch would silently run unseeded and still
-            // produce a plausible-looking (but vacuous) snapshot. Force a compile error instead —
-            // the spec DEFERS a status-seeded scenario, it does not cancel it.
+            // produce a plausible-looking (but vacuous) snapshot. Force a compile error instead.
             const exhaustive: never = scenario;
             throw new Error(`kitFingerprintScenarios: unhandled scenario ${String(exhaustive)}`);
         }
@@ -292,40 +310,67 @@ function seedFor(
  * fixture pulls on how hard the battle presses.
  */
 export function buildScenarioBattle(
-    focus: Ship,
-    scenario: FingerprintScenario
+    subject: Ship,
+    scenario: FingerprintScenario,
+    placement: Placement = 'focus'
 ): BattleSimulationInput {
     const board = boardFor(scenario);
     const enemyNames = FILLER_NAMES.slice(0, 4);
     const allyNames = FILLER_NAMES.slice(4, 7);
-    const tap = seedFor(focus, scenario);
-    const attack = fillerAttackFor(focus);
+    const tap = seedFor(subject, scenario, placement);
+    const attack = fillerAttackFor(subject);
+    const rest = { rounds: ROUNDS, ...(tap ? { __testTapActors: tap } : {}) };
 
-    // The fragile ally is identified by its CELL, not by its index in this array. Task 4's `team`
-    // placement reorders playerTeam so the subject is not index 0, and index and position decouple
-    // there: keying on index would make the 1-HP ally the 'attacker' focus, where it dies to the
-    // first hit and the whole `wounded` scenario collapses. Baking fragility into the placement by
-    // position means any later reordering carries it along. Note `scenario === 'wounded'` and NOT
-    // the seeding branch: supportAnchor reuses wounded's HP seeding but must NOT get a fragile ally,
-    // because a dying support target would make reach flaky.
+    const subjectPlacement = canonicalPlacement(subject, board.focus);
+
+    // Fragility travels with the placement by CELL, so the reordering below cannot move it.
     const fragileCell = scenario === 'wounded' ? board.allies[0] : undefined;
+    const allyFillers = allyNames.map((name, i) =>
+        fillerPlacement(
+            name,
+            board.allies[i],
+            attack,
+            board.allies[i] === fragileCell ? FRAGILE_ALLY_HP : FILLER_HP
+        )
+    );
+    const enemyFillers = enemyNames.map((name, i) =>
+        fillerPlacement(name, board.enemies[i], attack)
+    );
 
-    return {
-        playerTeam: [
-            canonicalPlacement(focus, board.focus),
-            ...allyNames.map((name, i) =>
-                fillerPlacement(
-                    name,
-                    board.allies[i],
-                    attack,
-                    board.allies[i] === fragileCell ? FRAGILE_ALLY_HP : FILLER_HP
-                )
-            ),
-        ],
-        enemyTeam: enemyNames.map((name, i) => fillerPlacement(name, board.enemies[i], attack)),
-        rounds: ROUNDS,
-        ...(tap ? { __testTapActors: tap } : {}),
-    };
+    switch (placement) {
+        case 'focus':
+            return {
+                playerTeam: [subjectPlacement, ...allyFillers],
+                enemyTeam: enemyFillers,
+                ...rest,
+            };
+        case 'team': {
+            // The subject keeps its cell but gives up index 0, so the engine runs it as a walked
+            // 'team' actor. Index 0 takes the filler on the LAST ally cell: the fragile 1-HP ally
+            // is always on the FIRST one, and a 1-HP focus would die to the first hit and collapse
+            // the scenario.
+            const lead = allyFillers[allyFillers.length - 1];
+            const rear = allyFillers.slice(0, -1);
+            return {
+                playerTeam: [lead, subjectPlacement, ...rear],
+                enemyTeam: enemyFillers,
+                ...rest,
+            };
+        }
+        case 'enemy':
+            // Exact geometric mirror: selectTargets works in the acting side's own frame
+            // (selectTargets.ts:9) and rowScanOrder is side-agnostic, so every cell keeps its
+            // meaning. The subject's allies and opponents are physically unchanged.
+            return {
+                playerTeam: enemyFillers,
+                enemyTeam: [subjectPlacement, ...allyFillers],
+                ...rest,
+            };
+        default: {
+            const exhaustive: never = placement;
+            throw new Error(`buildScenarioBattle: unhandled placement ${String(exhaustive)}`);
+        }
+    }
 }
 
 /** The scenarios THIS ship runs: the three universal ones, plus `supportAnchor` when the primary

@@ -28,6 +28,7 @@ import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/s
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import { parseShipTargeting } from '../../../targetingParser';
 import type { Ship } from '../../../../types/ship';
+import type { Position } from '../../../../types/encounters';
 import type { CombatActor } from '../../state';
 
 function requireReferenceData(): void {
@@ -40,10 +41,22 @@ function requireReferenceData(): void {
 }
 
 /** A stand-in roster for the seeding taps: two max-HP sizes per side so a FRACTION-of-max-HP
- *  seed and an ABSOLUTE seed can be told apart. */
-const fakeRoster = () =>
+ *  seed and an ABSOLUTE seed can be told apart. The focus actor also carries a `position`
+ *  (default `FOCUS_POSITION`, i.e. PRIMARY_BOARD's focus cell): `seedFor`'s `wounded`/`richEnemy`
+ *  taps now identify the subject by (side, position), not by id (Task 4 — only the `focus`
+ *  placement mints the 'attacker' id, so a placement-agnostic tap can't key off it). Callers
+ *  comparing a tap built for a different board (e.g. SUPPORT_ANCHOR_BOARD) must pass its focus
+ *  cell explicitly. */
+const fakeRoster = (focusPosition: Position = FOCUS_POSITION) =>
     [
-        { id: FOCUS_ACTOR_ID, side: 'player', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
+        {
+            id: FOCUS_ACTOR_ID,
+            side: 'player',
+            shieldPool: 0,
+            currentHp: 1000,
+            stats: { hp: 1000 },
+            position: focusPosition,
+        },
         { id: 'p:ally', side: 'player', shieldPool: 0, currentHp: 4000, stats: { hp: 4000 } },
         { id: 'e:small', side: 'enemy', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
         { id: 'e:big', side: 'enemy', shieldPool: 0, currentHp: 4000, stats: { hp: 4000 } },
@@ -358,8 +371,11 @@ describe('support-anchor board', () => {
         // Load-bearing, not tidiness: Faust and Mender's actives REPAIR allies, and a repair aimed
         // at a full-HP 500,000,000-HP filler is an overheal that may log nothing at all. A
         // plain-seeded support-anchor board would be green, deterministic, and observing nothing.
-        const anchorActors = fakeRoster();
-        const woundedActors = fakeRoster();
+        // Each roster's focus actor sits on ITS board's own focus cell (the two boards disagree —
+        // M1 vs M4) so `isSubject` still resolves the same actor index on both, and the resulting
+        // fractions compare like for like.
+        const anchorActors = fakeRoster(SUPPORT_ANCHOR_BOARD.focus);
+        const woundedActors = fakeRoster(PRIMARY_BOARD.focus);
         buildScenarioBattle(focus, 'supportAnchor').__testTapActors?.(anchorActors);
         buildScenarioBattle(focus, 'wounded').__testTapActors?.(woundedActors);
         expect(anchorActors.map((a) => a.currentHp)).toEqual(woundedActors.map((a) => a.currentHp));
