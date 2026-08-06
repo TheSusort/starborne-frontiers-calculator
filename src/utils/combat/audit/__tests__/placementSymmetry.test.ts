@@ -4,17 +4,19 @@
  * never at index 0, and scenario seeding that follows the subject rather than the player side.
  * Spec: docs/superpowers/specs/2026-08-06-placement-symmetry-oracle-design.md
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import {
     buildScenarioBattle,
     boardFor,
     subjectSideFor,
+    scenariosFor,
     FRAGILE_ALLY_HP,
     SEED,
     FOCUS_ACTOR_ID,
 } from '../kitFingerprintScenarios';
-import { PLACEMENTS } from '../types';
+import { PLACEMENTS, PLACEMENT_PAIRS } from '../types';
 import { runSeededBattle } from '../seededBattle';
+import * as seededBattleModule from '../seededBattle';
 import {
     diffAllPlacements,
     diffPlacements,
@@ -375,10 +377,54 @@ describe('diffAllPlacements', () => {
         const diffs = diffAllPlacements('X', {
             focus: kinds('attack'),
             team: kinds('attack'),
-            enemy: kinds('attack', 'counter'),
+            enemy: kinds('attack', 'debuff'),
         });
         expect(diffs).toHaveLength(2);
         expect(diffs.every((d) => d.from === 'enemy')).toBe(true);
+    });
+
+    it('reports all six ordered pairs when every placement has mutually distinct kinds (Finding 1)', () => {
+        // No shared kinds at all between any two placements, so every one of the six ORDERED
+        // comparisons (2 directions x 3 unordered pairs) must independently report a diff. If
+        // `PLACEMENT_PAIRS` silently dropped a pair (e.g. `['focus', 'team']`), this would catch
+        // it directly: the count would fall to 4 rather than staying accidentally green like the
+        // two focus==team-shaped cases above.
+        const diffs = diffAllPlacements('X', {
+            focus: kinds('attack', 'buff'),
+            team: kinds('heal', 'shield'),
+            enemy: kinds('dot-applied', 'cleanse'),
+        });
+        expect(diffs).toHaveLength(6);
+
+        const orderedPairs = diffs.map((d) => `${d.from}->${d.to}`);
+        expect(new Set(orderedPairs).size).toBe(6);
+    });
+});
+
+describe('PLACEMENT_PAIRS coverage (Finding 1)', () => {
+    it('covers every unordered pair of PLACEMENTS exactly once', () => {
+        // Derived from PLACEMENTS.length, not hardcoded to 3, so a fourth placement that never
+        // gets paired up fails this assertion loudly instead of silently under-comparing.
+        const expectedPairCount = (PLACEMENTS.length * (PLACEMENTS.length - 1)) / 2;
+        expect(PLACEMENT_PAIRS).toHaveLength(expectedPairCount);
+
+        const unorderedKey = (a: string, b: string) => [a, b].sort().join('|');
+        const seen = new Set<string>();
+        for (const [a, b] of PLACEMENT_PAIRS) {
+            const key = unorderedKey(a, b);
+            expect(seen.has(key), `pair ${key} appears more than once in PLACEMENT_PAIRS`).toBe(
+                false
+            );
+            seen.add(key);
+        }
+
+        const expectedPairs = new Set<string>();
+        for (let i = 0; i < PLACEMENTS.length; i++) {
+            for (let j = i + 1; j < PLACEMENTS.length; j++) {
+                expectedPairs.add(unorderedKey(PLACEMENTS[i], PLACEMENTS[j]));
+            }
+        }
+        expect(seen).toEqual(expectedPairs);
     });
 });
 
@@ -398,6 +444,40 @@ describe('fingerprintSubject — non-vacuity', () => {
         const subject = subjectShip();
         const one = fingerprintSubject(subject, 'focus', seedsFrom(SEED, 1));
         const three = fingerprintSubject(subject, 'focus', seedsFrom(SEED, 3));
+        // Without this, an empty `one` would make the loop below assert nothing at all
+        // (Finding 3) — a regression that produced a vacuous set would still pass.
+        expect(one.size).toBeGreaterThan(0);
         for (const kind of one) expect(three.has(kind)).toBe(true);
+    });
+
+    it('throws rather than silently returning an empty set when seeds is empty (Finding 2)', () => {
+        // `seedsFrom(base, 0)` returns `[]`; without a guard the inner loop never runs and
+        // every kind reads as "missing in that placement" — the exact vacuity failure mode
+        // `resolveSubjectActorId` already throws to avoid.
+        const subject = subjectShip();
+        expect(() => fingerprintSubject(subject, 'focus', [])).toThrow(
+            new RegExp(`${subject.name}.*focus`)
+        );
+    });
+
+    it('runs exactly scenarios.length * seeds.length battles (Finding 4)', () => {
+        // Pins the union's BREADTH directly. A regression that iterated only
+        // `scenariosFor(subject)[0]` or only `seeds[0]` would keep the non-vacuity and
+        // monotonicity tests above green (they only check size > 0 / superset), so this is the
+        // only thing standing between such a regression and a silently narrowed sweep.
+        const subject = subjectShip();
+        const seeds = seedsFrom(SEED, 3);
+        const expectedCalls = scenariosFor(subject).length * seeds.length;
+
+        // spyOn (no mockImplementation) calls through to the real runSeededBattle, so this
+        // exercises the actual engine rather than becoming a mock-only tautology.
+        const spy = vi.spyOn(seededBattleModule, 'runSeededBattle');
+        const callsBefore = spy.mock.calls.length;
+        try {
+            fingerprintSubject(subject, 'focus', seeds);
+            expect(spy.mock.calls.length - callsBefore).toBe(expectedCalls);
+        } finally {
+            spy.mockRestore();
+        }
     });
 });

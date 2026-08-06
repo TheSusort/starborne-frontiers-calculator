@@ -74,6 +74,12 @@ export function fingerprintSubject(
     placement: Placement,
     seeds: readonly number[]
 ): Set<CombatLogEntryKind> {
+    if (seeds.length === 0) {
+        throw new Error(
+            `fingerprintSubject: seeds is empty for "${subject.name}" in the ${placement} ` +
+                'placement — an empty seed list silently reads every kind as missing'
+        );
+    }
     const observed = new Set<CombatLogEntryKind>();
     for (const scenario of scenariosFor(subject)) {
         for (const seed of seeds) {
