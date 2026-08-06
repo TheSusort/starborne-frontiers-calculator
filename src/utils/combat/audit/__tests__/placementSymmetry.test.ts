@@ -15,7 +15,14 @@ import {
 } from '../kitFingerprintScenarios';
 import { PLACEMENTS } from '../types';
 import { runSeededBattle } from '../seededBattle';
-import { resolveSubjectActorId } from '../placementSymmetry';
+import {
+    diffAllPlacements,
+    diffPlacements,
+    fingerprintSubject,
+    resolveSubjectActorId,
+    seedsFrom,
+} from '../placementSymmetry';
+import type { CombatLogEntryKind } from '../../log/types';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
@@ -302,5 +309,95 @@ describe('subject actor-id resolution', () => {
         // Asking for the `enemy` placement's subject in a `focus` battle resolves the enemy at the
         // subject cell — which does not exist on that board — so it must throw, not guess.
         expect(() => resolveSubjectActorId(result, 'plain', 'enemy')).toThrow(/could not resolve/i);
+    });
+});
+
+const kinds = (...xs: string[]) => new Set(xs as CombatLogEntryKind[]);
+
+describe('seedsFrom', () => {
+    it('produces `count` consecutive seeds from `base`', () => {
+        expect(seedsFrom(100, 3)).toEqual([100, 101, 102]);
+    });
+
+    it('produces a single seed for count 1', () => {
+        expect(seedsFrom(7, 1)).toEqual([7]);
+    });
+});
+
+describe('diffPlacements', () => {
+    it('returns null when the sets are equal', () => {
+        expect(diffPlacements('X', 'focus', 'enemy', kinds('attack'), kinds('attack'))).toBeNull();
+    });
+
+    it('returns null when `to` is a strict SUPERSET of `from`', () => {
+        // This direction is not a finding — the reverse direction reports it.
+        expect(
+            diffPlacements('X', 'focus', 'enemy', kinds('attack'), kinds('attack', 'shield'))
+        ).toBeNull();
+    });
+
+    it('reports kinds present in `from` but absent in `to`', () => {
+        const diff = diffPlacements(
+            'X',
+            'focus',
+            'enemy',
+            kinds('attack', 'shield', 'heal'),
+            kinds('attack')
+        );
+        expect(diff).toEqual({
+            shipName: 'X',
+            from: 'focus',
+            to: 'enemy',
+            missing: ['heal', 'shield'],
+        });
+    });
+});
+
+describe('diffAllPlacements', () => {
+    it('returns nothing when all three placements agree', () => {
+        const same = kinds('attack', 'buff');
+        expect(diffAllPlacements('X', { focus: same, team: same, enemy: same })).toEqual([]);
+    });
+
+    it('reports BOTH directions of an asymmetry', () => {
+        const diffs = diffAllPlacements('X', {
+            focus: kinds('attack', 'shield'),
+            team: kinds('attack', 'shield'),
+            enemy: kinds('attack'),
+        });
+        // focus->enemy and team->enemy lose `shield`; the reverse directions are clean.
+        expect(diffs).toHaveLength(2);
+        expect(diffs.every((d) => d.to === 'enemy')).toBe(true);
+        expect(diffs.every((d) => d.missing.includes('shield' as CombatLogEntryKind))).toBe(true);
+    });
+
+    it('reports an `extra`-style asymmetry as the reverse direction', () => {
+        const diffs = diffAllPlacements('X', {
+            focus: kinds('attack'),
+            team: kinds('attack'),
+            enemy: kinds('attack', 'counter'),
+        });
+        expect(diffs).toHaveLength(2);
+        expect(diffs.every((d) => d.from === 'enemy')).toBe(true);
+    });
+});
+
+describe('fingerprintSubject — non-vacuity', () => {
+    beforeAll(requireReferenceData);
+
+    it('produces a NON-EMPTY kind set in every placement for a real kit', () => {
+        const subject = subjectShip();
+        const seeds = seedsFrom(SEED, 2);
+        for (const placement of PLACEMENTS) {
+            const observed = fingerprintSubject(subject, placement, seeds);
+            expect(observed.size, `${placement} observed nothing`).toBeGreaterThan(0);
+        }
+    });
+
+    it('unioning more seeds never SHRINKS the observed set', () => {
+        const subject = subjectShip();
+        const one = fingerprintSubject(subject, 'focus', seedsFrom(SEED, 1));
+        const three = fingerprintSubject(subject, 'focus', seedsFrom(SEED, 3));
+        for (const kind of one) expect(three.has(kind)).toBe(true);
     });
 });
