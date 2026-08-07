@@ -5688,11 +5688,17 @@ export function runCombat(input: CombatEngineInput): {
             // enemy) and taken (enemy→player) leech need opposite logic, each site supplies its
             // own callback (Tasks 3/5) rather than branching inside the shared inline path.
             // Unsupplied by every current caller → fully inert.
+            // PR2 Task 2: widened with PR1's trailing `subAttackIndex`. PR1 added it to
+            // applyPositionalDamage's own callback contract but NOT to this engine-side wrapper
+            // type, so the parameter was reachable at runtime (the hook is forwarded verbatim,
+            // below) yet un-typeable by a caller. Trailing and optional, so callers that ignore
+            // it keep compiling.
             onVictimResolved?: (
                 victim: CombatActor,
                 damage: number,
                 outcome: VictimDamageOutcome,
-                didCrit: boolean
+                didCrit: boolean,
+                subAttackIndex?: number
             ) => void;
             // Per-victim crit resolver (per-victim crit). The anchor victim reuses hitCrits[h];
             // each COVERED footprint victim rolls the attacker's crit gate at ITS OWN affinity-
@@ -6473,10 +6479,63 @@ export function runCombat(input: CombatEngineInput): {
             deferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
             positionalDetonation: DetonationRecipe | undefined;
         }
-        type PositionalAttackedSignals = Map<
-            string,
-            { damage: number; shieldWasHit: boolean; hitOutcomes: boolean[] }
-        >;
+        /** One footprint victim's `attacked` signal within ONE sub-attack. */
+        interface PositionalVictimSignal {
+            damage: number;
+            shieldWasHit: boolean;
+            hitOutcomes: boolean[];
+        }
+        /**
+         * A cast's `attacked` signals grouped by SUB-ATTACK (epic: multi-hit full-walk attacks,
+         * PR2 Task 2). Outer key = the 0-based sub-attack index PR1 threads through every
+         * per-victim callback; inner key = victim id. A multi-hit skill is N consecutive
+         * full-walk attacks, so each sub-attack owns its own footprint and its own signals —
+         * which is what lets PR2 Task 3 interleave sub-attack k's `ability-performed` with
+         * sub-attack k's `attacked` events.
+         *
+         * Because a victim appears at most ONCE per sub-attack, every inner signal carries
+         * exactly ONE `hitOutcomes` entry. The per-hit `attacked` cardinality that incoming
+         * procs (Reactive Ward / Tenacity / Second Wind) depend on is therefore unchanged —
+         * it simply moves from "one victim entry with N outcomes" to "N sub-attack entries
+         * with one outcome each". See {@link flattenAttackedSignals}.
+         */
+        type PositionalAttackedSignals = Map<number, Map<string, PositionalVictimSignal>>;
+        /**
+         * Collapse the sub-attack-grouped signals back into the cast-wide, victim-keyed view the
+         * three emit sites have always consumed.
+         *
+         * BYTE-IDENTICAL to the pre-grouping map, by construction: sub-attacks are folded in
+         * ascending index order and a victim is visited at most once per sub-attack, so the
+         * damage summation order, the `hitOutcomes` order, and the victim insertion order all
+         * reproduce the single flat accumulator exactly.
+         *
+         * Transitional: Task 2 is a pure data-structure change, so emission must not move. Task 3
+         * replaces this flatten with a per-sub-attack interleaved emit — at which point each
+         * `attacked` will carry its OWN sub-attack's damage instead of the cast aggregate. That
+         * payload change is deliberately NOT part of this commit.
+         */
+        const flattenAttackedSignals = (
+            grouped: PositionalAttackedSignals
+        ): Map<string, PositionalVictimSignal> => {
+            const flat = new Map<string, PositionalVictimSignal>();
+            for (const [, victims] of [...grouped.entries()].sort((a, b) => a[0] - b[0])) {
+                for (const [victimId, sig] of victims) {
+                    const prev = flat.get(victimId);
+                    if (!prev) {
+                        flat.set(victimId, {
+                            damage: sig.damage,
+                            shieldWasHit: sig.shieldWasHit,
+                            hitOutcomes: [...sig.hitOutcomes],
+                        });
+                        continue;
+                    }
+                    prev.damage += sig.damage;
+                    prev.shieldWasHit = prev.shieldWasHit || sig.shieldWasHit;
+                    prev.hitOutcomes.push(...sig.hitOutcomes);
+                }
+            }
+            return flat;
+        };
         const drivePositionalTurnApply = (
             actor: CombatActor,
             tb: TurnBindings,
@@ -6492,9 +6551,11 @@ export function runCombat(input: CombatEngineInput): {
             critAgg: { anyCrit: boolean; critPairs: number; critVictimIds: string[] };
             attackedSignals: PositionalAttackedSignals;
         } => {
-            // Aggregate EACH footprint victim's per-attack damage + OR its shield-hit flag across the
-            // attack's hits so the post-apply emit wakes EVERY hit victim's on-attacked reactives
-            // (counters + self-repairs/defensive buffs), not just the anchor. Keyed by victim.id.
+            // Record EACH footprint victim's damage + shield-hit flag so the post-apply emit wakes
+            // EVERY hit victim's on-attacked reactives (counters + self-repairs/defensive buffs),
+            // not just the anchor. Keyed by (subAttackIndex, victim.id) since PR2 Task 2 — the
+            // per-hit aggregation the emit sites still consume is rebuilt by
+            // flattenAttackedSignals, which is byte-identical to the old victim-keyed accumulator.
             const attackedSignals: PositionalAttackedSignals = new Map();
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
             // at hit time so its Stasis is broken too — the anchor break is handled at the call site.
@@ -6528,7 +6589,7 @@ export function runCombat(input: CombatEngineInput): {
                 rollVictimCrit: sel.rollVictimCrit
                     ? (v) => sel.rollVictimCrit!(v.affinity ?? 'antimatter')
                     : undefined,
-                onVictimResolved: (victim, damage, outcome, didCrit) => {
+                onVictimResolved: (victim, damage, outcome, didCrit, subAttackIndex) => {
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
                     onVictimResolved(victim, damage, outcome, didCrit);
@@ -6544,7 +6605,17 @@ export function runCombat(input: CombatEngineInput): {
                     // (the victim WAS targeted).
                     const fullyTransformedToDot = (outcome.transformedToDot ?? 0) > 0;
                     if (!fullyTransformedToDot) {
-                        const prev = attackedSignals.get(victim.id) ?? {
+                        // PR2 Task 2: bucket by sub-attack first. `subAttackIndex` is optional on
+                        // the callback contract (PR1 added it trailing so pre-existing callers keep
+                        // compiling); applyPositionalDamage always supplies it, and `?? 0` degrades
+                        // to the single-bucket, pre-grouping behaviour for any caller that does not.
+                        const subAttack = subAttackIndex ?? 0;
+                        let bySubAttack = attackedSignals.get(subAttack);
+                        if (!bySubAttack) {
+                            bySubAttack = new Map<string, PositionalVictimSignal>();
+                            attackedSignals.set(subAttack, bySubAttack);
+                        }
+                        const prev = bySubAttack.get(victim.id) ?? {
                             damage: 0,
                             shieldWasHit: false,
                             hitOutcomes: [],
@@ -6557,7 +6628,7 @@ export function runCombat(input: CombatEngineInput): {
                                 outcome.shieldBefore > 0 &&
                                 outcome.hpDamage < damage);
                         prev.hitOutcomes.push(didCrit);
-                        attackedSignals.set(victim.id, prev);
+                        bySubAttack.set(victim.id, prev);
                     }
                     // Record covered (non-anchor) victims stasised at hit time for the post-apply break.
                     if (
@@ -7848,13 +7919,18 @@ export function runCombat(input: CombatEngineInput): {
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
                                     (attackedSignals) => {
-                                        if (attackedSignals.size > 0) {
+                                        // PR2 Task 2: the signals arrive grouped by sub-attack;
+                                        // flatten (in index order) to the cast-wide victim view
+                                        // this emit has always consumed. Task 3 replaces the
+                                        // flatten with a per-sub-attack interleaved emit.
+                                        const victims = flattenAttackedSignals(attackedSignals);
+                                        if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
                                                 round: r,
                                                 attackerId: actor.id,
                                                 primaryId: tgt.id,
-                                                victims: attackedSignals,
+                                                victims,
                                             });
                                         }
                                     }
@@ -8074,13 +8150,15 @@ export function runCombat(input: CombatEngineInput): {
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
                                     (attackedSignals) => {
-                                        if (attackedSignals.size > 0) {
+                                        // PR2 Task 2 — mirror of the focus site's flatten.
+                                        const victims = flattenAttackedSignals(attackedSignals);
+                                        if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
                                                 round: r,
                                                 attackerId: actor.id,
                                                 primaryId: tgt.id,
-                                                victims: attackedSignals,
+                                                victims,
                                             });
                                         }
                                     }
@@ -8881,13 +8959,20 @@ export function runCombat(input: CombatEngineInput): {
                                     // SP-U U2: DEFERRED here (not inside the shared helper) because the enemy
                                     // emits AFTER its non-positional damage-taken-leech tail; enemyAttackedSignals
                                     // is the helper's returned per-victim signals (set whenever enemyPositional).
-                                    if (enemyAttackedSignals && enemyAttackedSignals.size > 0) {
+                                    // PR2 Task 2 — mirror of the two player-side sites' flatten.
+                                    // The outer map is non-empty iff at least one victim was
+                                    // recorded (a bucket is created only when a victim lands in
+                                    // it), so the gate is equivalent to the pre-grouping one.
+                                    const enemyVictims = enemyAttackedSignals
+                                        ? flattenAttackedSignals(enemyAttackedSignals)
+                                        : undefined;
+                                    if (enemyVictims && enemyVictims.size > 0) {
                                         emitPerVictimAttacked({
                                             bus,
                                             round: r,
                                             attackerId: actor.id,
                                             primaryId: tgt.id,
-                                            victims: enemyAttackedSignals,
+                                            victims: enemyVictims,
                                         });
                                     }
                                 } else {
