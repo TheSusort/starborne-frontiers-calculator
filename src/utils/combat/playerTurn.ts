@@ -3075,13 +3075,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (c.basis === 'damage-taken') return true;
             return c.basis === 'damage-dealt' && fromPassive;
         };
-        // Event-only mode (enemy walk, Task 5): the enemy path now performs the SAME real effects
-        // as the player path — heals restore each recipient's OWN currentHp (E5 §4.1), shields
-        // grant real pools (#166), and cleanse removes real debuffs (this lift) — via the
-        // side-agnostic helpers over recipientsFor; it only credits NO player healing/metric bucket
-        // and never mutates the player heal-target. Scope to the CAST skill only (the spec: "the
-        // cast skill carries"), never the passive. Normal (player/team) mode keeps both slots and
-        // credits/mutates as before.
+        // Event-only mode (enemy walk, Task 5): the enemy path performs the SAME real effects as
+        // the player path — heals restore each recipient's OWN currentHp (E5 §4.1), shields grant
+        // real pools (#166), and cleanse removes real debuffs (#167) — via the side-agnostic
+        // helpers over recipientsFor; it only credits NO player healing/metric bucket and never
+        // mutates the player heal-target.
+        //
+        // It used to scope to the CAST skill alone ("the cast skill carries"), dropping the
+        // passive slot entirely, so no enemy ever fired a passive-slot repair or shield. That is
+        // not the game rule: a ship fires its passives whenever their conditions are met, on
+        // either side of the board (user-confirmed 2026-08-07). Both modes now build the same
+        // list; healEventOnly continues to govern CREDIT, not which abilities run. The passive
+        // entries carry the same `isHookOwned(a, true)` filter as normal mode, so a leech-basis
+        // passive still belongs to its engine hook and cannot double-count here.
         // Epic PR4: pre-combat abilities ("At the start of combat, this Unit gains a Shield …" —
         // Crucialis/FrontLine) are one-time pre-fight grants seeded ONCE by the engine
         // (seedPreCombatShields, r === 1); processing them here would re-grant the pool on every
@@ -3091,18 +3097,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Each entry carries the slot it came from: `recipientsFor` needs it to decide whether
         // the firing skill's support footprint applies (cast: always; passive: only when the
         // ability is `patternScoped`). See `scopedByFootprint`.
-        const healAbilities: { ability: Ability; fromPassive: boolean }[] = healEventOnly
-            ? (gatedSkill?.abilities ?? [])
-                  .filter((a) => !isHookOwned(a, false) && notPreCombat(a))
-                  .map((ability) => ({ ability, fromPassive: false }))
-            : [
-                  ...(gatedSkill?.abilities ?? [])
-                      .filter((a) => !isHookOwned(a, false) && notPreCombat(a))
-                      .map((ability) => ({ ability, fromPassive: false })),
-                  ...(gatedPassive?.abilities ?? [])
-                      .filter((a) => !isHookOwned(a, true) && notPreCombat(a))
-                      .map((ability) => ({ ability, fromPassive: true })),
-              ];
+        const healAbilities: { ability: Ability; fromPassive: boolean }[] = [
+            ...(gatedSkill?.abilities ?? [])
+                .filter((a) => !isHookOwned(a, false) && notPreCombat(a))
+                .map((ability) => ({ ability, fromPassive: false })),
+            ...(gatedPassive?.abilities ?? [])
+                .filter((a) => !isHookOwned(a, true) && notPreCombat(a))
+                .map((ability) => ({ ability, fromPassive: true })),
+        ];
         const healTargets: string[] = [];
         let healCritCount = 0;
         let healRawSum = 0;

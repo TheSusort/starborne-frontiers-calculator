@@ -34,6 +34,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: Defence and Crit Chance priorities are now weighted on the same scale as every other stat. Both were being compared against their raw values instead of a typical value for the stat, which made a Defence priority around 5000x too strong and a Crit Chance priority around 25x too strong — either one would swamp the priorities listed above it. If you have saved configurations that use Defence or Crit Chance as a priority, re-run autogear to get the corrected recommendation.',
     'Combat log now shows which ship granted a buff to an ally, instead of only naming the ship that received it.',
     'Recruitment calculator: Centurion is now recruitable through beacons. It was on the non-recruitable list, so the calculator gave it no beacon odds at all.',
+    'Combat simulator: enemy ships now fire their passive repairs and shields, as they do in game. Three separate gaps all skipped the passive slot for enemies only: Volk\'s passive repair never went off, Malvex\'s and Quixilver\'s "gain a Shield when damaged" never triggered, and the "gain a Shield from the damage you deal" passives on FrontLine, Magnolia, Valerian and Valkyrie never paid out. Your own ships were always unaffected, so these enemies were easier to kill in the simulator than they are in game.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
