@@ -235,14 +235,20 @@ describe('Hermes Everliving Regeneration — once per attack, not per hit/victim
 
 /**
  * Regression lock — an ALLY-target rider on on-ally-crit (the shape of Howler's Blast grant /
- * Sentinel's ally repair) also fires exactly ONCE per critting attack.
+ * Sentinel's ally repair) fires exactly ONCE PER CRITTING ATTACK.
  *
- * This used to fire 3× for a 3-hit crit: the once-per-attack collapse lived in the executor and
- * was deliberately narrowed to `target: 'self'`, so ally-routed riders kept re-applying per
- * critting hit. That produced the user-reported "Sentinel heals → Ruiner: 1,152" twice for ONE
- * Ruiner AoE. The collapse now lives in the LISTENER and covers the whole on-ally-crit trigger:
- * "when an ally critically hits an enemy, this Unit <does X>" is one reaction per attack, whatever
- * X targets. Per-ENEMY fan-out for "…to that enemy" riders happens inside the damage executor via
+ * The unit of "attack" changed in the multi-hit full-walk epic (PR2): a `hits: N` skill is N
+ * consecutive full-walk attacks, so it emits N `ability-performed` events and this rider fires
+ * N times — once per critting sub-attack. That is the epic's approved decision ("an ally crits on
+ * 2 of 3 sub-attacks → fires twice"), and it is NOT the bug this file locks.
+ *
+ * The bug this file locks is per-HIT and per-VICTIM over-firing WITHIN one attack: the
+ * once-per-attack collapse used to live in the executor and was narrowed to `target: 'self'`, so
+ * ally-routed riders re-applied per critting (hit, victim) pair. That produced the user-reported
+ * "Sentinel heals → Ruiner: 1,152" twice for ONE Ruiner AoE. The collapse now lives in the
+ * LISTENER, which enqueues at most once per `ability-performed`: an AoE footprint is ONE attack
+ * and still grants ONCE however many victims crit (the `critHits`-driven fan-out is gone).
+ * Per-ENEMY fan-out for "…to that enemy" riders happens inside the damage executor via
  * eventCtx.critVictimIds, not by re-enqueuing.
  *
  * The executor's self-target guard is untouched and still load-bearing for the other per-hit
@@ -330,8 +336,11 @@ function runAllyTargetRider() {
 }
 
 describe('ally-target on-ally-crit rider — once per attack', () => {
-    it('an ally-target buff fires once for a 3-hit critting attack, not three times', () => {
-        // The crediting ally landed 3 critting hits in ONE attack → one ally-routed grant.
-        expect(runAllyTargetRider()).toBe(1);
+    it('an ally-target buff fires once per critting SUB-ATTACK of a 3-hit attack', () => {
+        // PR2 (multi-hit full-walk): `hits: 3` is THREE consecutive full-walk attacks, each with
+        // its own `ability-performed`, so the ally-routed grant lands three times — once per
+        // critting sub-attack, never per (hit, victim) pair. Pre-PR2 this read 1, because the
+        // engine collapsed the whole cast into a single event.
+        expect(runAllyTargetRider()).toBe(3);
     });
 });

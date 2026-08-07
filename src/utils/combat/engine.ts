@@ -59,6 +59,7 @@ import {
     footprintVictims,
     type VictimDamageOutcome,
     type AppliedVictimDamage,
+    type SubAttackOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { victimHitDamage } from './victimDamage';
@@ -3910,7 +3911,23 @@ export function runCombat(input: CombatEngineInput): {
         // identical, and the attack entry already exists to nest under. NO combat listener
         // subscribes to `reactive-damage-performed` → it can never chain.
         let deferReflectLogs = false;
-        const pendingReflectLogs: { sourceId: string; targetId: string; amount: number }[] = [];
+        /**
+         * The sub-attack currently being applied (epic: multi-hit full-walk attacks, PR2 Task 3),
+         * or `undefined` outside a positional apply. Set by `drivePositionalApply`'s
+         * `applyToVictim` wrapper, which is the ONLY entry point into the funnel during a
+         * positional cast, so every row the funnel buffers below can be stamped with the
+         * sub-attack that raised it. Needed because the buffers fill during the WHOLE apply (all
+         * N sub-attacks) but drain during emission: an untagged flush called once per sub-attack
+         * would empty the entire buffer on the FIRST call and nest sub-attack 1..N-1's rows under
+         * sub-attack 0's attack row.
+         */
+        let currentSubAttackIndex: number | undefined;
+        const pendingReflectLogs: {
+            sourceId: string;
+            targetId: string;
+            amount: number;
+            subAttack?: number;
+        }[] = [];
         // Shared LOG-ONLY consequence-event buffer. Carries the log-only twins
         // `shield-destroyed-log` / `cheat-death-log` (NOT the real shield-destroyed /
         // cheat-death-activated events, which emit inline for their combat listeners). NO combat
@@ -3919,13 +3936,27 @@ export function runCombat(input: CombatEngineInput): {
         // applyVictimDamage during drivePositionalApply must wait until the attack entry exists
         // (post emitDeferredAbilityPerformed) so buildCombatLog's routeReaction nests them under
         // it instead of a preceding sibling entry in the attacker's turn.
-        const pendingConsequenceLogs: CombatEvent[] = [];
+        const pendingConsequenceLogs: { ev: CombatEvent; subAttack?: number }[] = [];
         // Flush the log-only consequence twins buffered by an application. Split out of
         // flushReflectLogs so the REACTIVE-damage path can flush consequences alone (it buffers no
         // reflect rows), after its own attack row exists — see `deferConsequenceLogs`.
-        const flushConsequenceLogs = (): void => {
-            for (const ev of pendingConsequenceLogs) bus.emit(ev);
+        //
+        // PR2 Task 3: `subAttack` drains ONLY the rows raised by that sub-attack (plus any
+        // untagged row, which can only come from a non-positional buffering path), so each
+        // sub-attack's twins nest under ITS OWN attack row. Omitted ⟹ drain everything, which is
+        // what every non-positional caller (triggers.ts's `ctx.flushConsequenceLogs`) wants and
+        // what the positional path's post-loop sweep uses to guarantee nothing leaks into the
+        // next turn.
+        const flushConsequenceLogs = (subAttack?: number): void => {
+            if (pendingConsequenceLogs.length === 0) return;
+            const kept: typeof pendingConsequenceLogs = [];
+            for (const row of pendingConsequenceLogs) {
+                if (subAttack === undefined || row.subAttack === undefined) bus.emit(row.ev);
+                else if (row.subAttack === subAttack) bus.emit(row.ev);
+                else kept.push(row);
+            }
             pendingConsequenceLogs.length = 0;
+            pendingConsequenceLogs.push(...kept);
         };
         // A reactive-damage proc (Insidiousness, counters) applies its hit and only THEN emits its
         // own `reactive-damage-performed` log row (triggers.ts emitReactiveDamageLog). Consequence
@@ -3935,8 +3966,18 @@ export function runCombat(input: CombatEngineInput): {
         // they buffer instead; triggers.ts flushes them via `ctx.flushConsequenceLogs` immediately
         // after the attack row is emitted, so cause precedes consequence.
         let deferConsequenceLogs = false;
-        const flushReflectLogs = (): void => {
+        // PR2 Task 3: `subAttack` filters exactly as flushConsequenceLogs above — see its note.
+        const flushReflectLogs = (subAttack?: number): void => {
+            const kept: typeof pendingReflectLogs = [];
             for (const row of pendingReflectLogs) {
+                if (
+                    subAttack !== undefined &&
+                    row.subAttack !== undefined &&
+                    row.subAttack !== subAttack
+                ) {
+                    kept.push(row);
+                    continue;
+                }
                 bus.emit({
                     type: 'reactive-damage-performed',
                     sourceId: row.sourceId,
@@ -3949,7 +3990,8 @@ export function runCombat(input: CombatEngineInput): {
                 });
             }
             pendingReflectLogs.length = 0;
-            flushConsequenceLogs();
+            pendingReflectLogs.push(...kept);
+            flushConsequenceLogs(subAttack);
         };
         const applyVictimDamage = (
             rawDamage: number,
@@ -4429,7 +4471,10 @@ export function runCombat(input: CombatEngineInput): {
                         triggerActorId: actingActorId,
                     };
                     if (deferReflectLogs || deferConsequenceLogs)
-                        pendingConsequenceLogs.push(shieldConverterGrantLogEv);
+                        pendingConsequenceLogs.push({
+                            ev: shieldConverterGrantLogEv,
+                            subAttack: currentSubAttackIndex,
+                        });
                     else bus.emit(shieldConverterGrantLogEv);
                 }
             }
@@ -4577,7 +4622,10 @@ export function runCombat(input: CombatEngineInput): {
                             triggerActorId: actingActorId,
                         };
                         if (deferReflectLogs || deferConsequenceLogs)
-                            pendingConsequenceLogs.push(grantLogEv);
+                            pendingConsequenceLogs.push({
+                                ev: grantLogEv,
+                                subAttack: currentSubAttackIndex,
+                            });
                         else bus.emit(grantLogEv);
                     }
                 }
@@ -4614,7 +4662,8 @@ export function runCombat(input: CombatEngineInput): {
                     duringTurnOf: actingActorId,
                     triggerActorId: actingActorId,
                 };
-                if (deferReflectLogs || deferConsequenceLogs) pendingConsequenceLogs.push(logEv);
+                if (deferReflectLogs || deferConsequenceLogs)
+                    pendingConsequenceLogs.push({ ev: logEv, subAttack: currentSubAttackIndex });
                 else bus.emit(logEv);
             }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
@@ -4679,7 +4728,10 @@ export function runCombat(input: CombatEngineInput): {
                         triggerActorId: actingActorId,
                     };
                     if (deferReflectLogs || deferConsequenceLogs)
-                        pendingConsequenceLogs.push(cheatDeathLogEv);
+                        pendingConsequenceLogs.push({
+                            ev: cheatDeathLogEv,
+                            subAttack: currentSubAttackIndex,
+                        });
                     else bus.emit(cheatDeathLogEv);
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
@@ -4967,6 +5019,7 @@ export function runCombat(input: CombatEngineInput): {
                                     sourceId: victim.id,
                                     targetId: attacker.id,
                                     amount: reflected,
+                                    subAttack: currentSubAttackIndex,
                                 });
                             } else {
                                 bus.emit({
@@ -5715,7 +5768,15 @@ export function runCombat(input: CombatEngineInput): {
             // keyed by victim id. Required for a non-zero delta — see the causality note above
             // perVictimOutgoingDeltaPct. Unsupplied → delta stays 0 for every victim.
             preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
-        }): { anyCrit: boolean; critPairs: number; critVictimIds: string[] } => {
+        }): {
+            anyCrit: boolean;
+            critPairs: number;
+            critVictimIds: string[];
+            // PR2 Task 3: PR1's per-sub-attack outcomes. applyPositionalDamage has always returned
+            // them (the object below is forwarded verbatim); this declaration merely stops hiding
+            // them from the callers that now emit one `ability-performed` per entry.
+            subAttacks: SubAttackOutcome[];
+        } => {
             // Task 3: this is the ONE deferred (positional) apply path — reflects fired here must
             // buffer their log row until emitDeferredAbilityPerformed creates the attack entry
             // (see the deferReflectLogs doc above applyVictimDamage). try/finally so the flag
@@ -5766,7 +5827,20 @@ export function runCombat(input: CombatEngineInput): {
                             ]).includes('Defensive Affinity Override'),
                         };
                     },
-                    applyToVictim: args.applyToVictim,
+                    // PR2 Task 3: stamp the sub-attack under application so the funnel's deferred
+                    // LOG buffers (reflect rows + consequence twins) can be drained per sub-attack
+                    // rather than all under the first attack row. Save/restore rather than clear:
+                    // a reflect proc re-enters the funnel from INSIDE this call and still belongs
+                    // to the same sub-attack.
+                    applyToVictim: (victim, damage, isAnchor, subAttackIndex) => {
+                        const prevSubAttack = currentSubAttackIndex;
+                        currentSubAttackIndex = subAttackIndex;
+                        try {
+                            return args.applyToVictim(victim, damage, isAnchor);
+                        } finally {
+                            currentSubAttackIndex = prevSubAttack;
+                        }
+                    },
                     // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
                     // per-round map so the RoundData row can expose perTargetDamage. Identical
                     // across all three sites (focus / team / enemy), so it lives here.
@@ -5860,15 +5934,29 @@ export function runCombat(input: CombatEngineInput): {
         // walked-team positional, enemy positional, enemy 0-damage fallback). The caller
         // supplies the per-victim crit aggregate (anyCrit / critPairs) — or the anchor-based
         // fallback values for the 0-damage path — so each site only passes what it knows.
+        //
+        // PR2 Task 3: a multi-hit skill is N consecutive full-walk attacks, so a positional cast
+        // now calls this ONCE PER SUB-ATTACK (see the interleaved emission block in
+        // drivePositionalTurnApply) with that sub-attack's own damage slice and crit identity. `damage` and `subAttack` are therefore explicit
+        // parameters rather than being read off `dap`.
         const emitDeferredAbilityPerformed = (
             dap: NonNullable<PlayerTurnResult['deferredAbilityPerformed']>,
+            // This event's damage. The cast's `dap.damage` (pre-funnel directDamage) for the
+            // single-event paths; that same basis split across the emitting sub-attacks for a
+            // multi-hit cast. Deliberately NOT SubAttackOutcome.damage, which is the post-funnel
+            // `incomingBooked` sum — a different number, and changing the basis and the
+            // cardinality in one PR would conflate two behaviour moves.
+            damage: number,
             didCrit: boolean,
             critHits: number,
-            // The DISTINCT enemies this cast critically hit (positionalApply's per-victim crit
+            // The DISTINCT enemies this event critically hit (positionalApply's per-victim crit
             // identity). Carried on the event so an `on-ally-crit` reactive can route "that enemy"
             // to the enemies actually crit rather than the cast's SELECTED anchor (which may not
             // have crit at all in an AoE). Empty on the 0-damage fallback path (no apply ran).
-            critVictimIds: string[]
+            critVictimIds: string[],
+            // Which sub-attack this event belongs to, for the deferred-log drain below. Omitted on
+            // the single-event paths ⟹ drain everything (the pre-PR2 behaviour).
+            subAttack?: number
         ) => {
             bus.emit({
                 type: 'ability-performed',
@@ -5876,16 +5964,17 @@ export function runCombat(input: CombatEngineInput): {
                 targetId: dap.targetId,
                 round: dap.round,
                 abilityType: 'damage',
-                damage: dap.damage,
+                damage,
                 didCrit,
                 ...(critHits > 0 ? { critHits } : {}),
                 ...(critVictimIds.length > 0 ? { critVictimIds } : {}),
                 didHit: true,
             });
-            // Task 3: the attack entry now exists — drain any reflect rows buffered during this
-            // cast's per-victim apply so buildCombatLog nests them UNDER this attack (not a
-            // preceding charge/buff entry in the attacker's turn). No-op when none buffered.
-            flushReflectLogs();
+            // Task 3: the attack entry now exists — drain the reflect rows THIS sub-attack
+            // buffered during the per-victim apply so buildCombatLog nests them UNDER this attack
+            // (not a preceding charge/buff entry in the attacker's turn, nor — since PR2 — under
+            // an earlier sub-attack's row). No-op when none buffered.
+            flushReflectLogs(subAttack);
         };
 
         // ── Unified per-actor turn resolvers (bySide unification PR6a) ──────────────
@@ -6441,12 +6530,13 @@ export function runCombat(input: CombatEngineInput): {
         //     player→enemy sites proc a STANDING leech off the dealt damage; the enemy→player site
         //     procs a TAKEN leech off the damage each player victim took (+ captures the focus
         //     victim's shield-hit flag). Called at the SAME per-victim point for all three.
-        //   • emitAttacked — the per-victim `attacked` emit. The player→enemy sites emit it HERE
-        //     (before the per-victim detonation); the enemy site DEFERS its emit to AFTER its inline
-        //     non-positional damage-taken-leech tail (its row-14 accounting, kept inline → U5) and so
-        //     passes a no-op, consuming the RETURNED attackedSignals there instead.
-        // Returns { critAgg, attackedSignals } so the enemy site can record enemyCritAgg (for its
-        // 0-damage deferred-emit fallback) and run its deferred per-victim attacked emit. sel carries
+        //   • emitAttackedForSubAttack — ONE sub-attack's `attacked` emit (PR2 Task 3). The
+        //     player→enemy sites run the whole interleaved sequence HERE (before the per-victim
+        //     detonation); the enemy site DEFERS everything but its first `ability-performed` to
+        //     AFTER its inline non-positional damage-taken-leech tail (its row-14 accounting, kept
+        //     inline → U5) by passing `deferEmission` and running the returned `emitDeferred` there.
+        // Returns { critAgg, attackedSignals, emitDeferred } so the enemy site can record
+        // enemyCritAgg (for its 0-damage deferred-emit fallback) and run that remainder. sel carries
         // the pre-call head-locals the block reads (esp. preTurnVictimStatus, which MUST be the
         // pre-runPlayerTurn snapshot — never recomputed post-hoc).
         /**
@@ -6497,45 +6587,18 @@ export function runCombat(input: CombatEngineInput): {
          * exactly ONE `hitOutcomes` entry. The per-hit `attacked` cardinality that incoming
          * procs (Reactive Ward / Tenacity / Second Wind) depend on is therefore unchanged —
          * it simply moves from "one victim entry with N outcomes" to "N sub-attack entries
-         * with one outcome each". See {@link flattenAttackedSignals}.
+         * with one outcome each".
+         *
+         * PR2 Task 3 consumes the grouping: the buckets are emitted one at a time, each right
+         * after its own sub-attack's `ability-performed`. Two payload fields therefore change for
+         * a multi-hit cast (and ONLY for a multi-hit cast — with N=1 there is one bucket and the
+         * numbers are the cast's): each `attacked` now carries its SUB-ATTACK's damage rather than
+         * the victim's cast-wide aggregate, and `shieldWasHit` is that sub-attack's flag rather
+         * than an OR across the cast. Both are the corrected values — a per-hit `attacked` that
+         * reported the whole cast's damage over-fed Tenacity's >25%-maxHP gate and the log's
+         * splash `amount`.
          */
         type PositionalAttackedSignals = Map<number, Map<string, PositionalVictimSignal>>;
-        /**
-         * Collapse the sub-attack-grouped signals back into the cast-wide, victim-keyed view the
-         * three emit sites have always consumed.
-         *
-         * BYTE-IDENTICAL to the pre-grouping map, by construction: sub-attacks are folded in
-         * ascending index order and a victim is visited at most once per sub-attack, so the
-         * damage summation order, the `hitOutcomes` order, and the victim insertion order all
-         * reproduce the single flat accumulator exactly.
-         *
-         * Transitional: Task 2 is a pure data-structure change, so emission must not move. Task 3
-         * replaces this flatten with a per-sub-attack interleaved emit — at which point each
-         * `attacked` will carry its OWN sub-attack's damage instead of the cast aggregate. That
-         * payload change is deliberately NOT part of this commit.
-         */
-        const flattenAttackedSignals = (
-            grouped: PositionalAttackedSignals
-        ): Map<string, PositionalVictimSignal> => {
-            const flat = new Map<string, PositionalVictimSignal>();
-            for (const [, victims] of [...grouped.entries()].sort((a, b) => a[0] - b[0])) {
-                for (const [victimId, sig] of victims) {
-                    const prev = flat.get(victimId);
-                    if (!prev) {
-                        flat.set(victimId, {
-                            damage: sig.damage,
-                            shieldWasHit: sig.shieldWasHit,
-                            hitOutcomes: [...sig.hitOutcomes],
-                        });
-                        continue;
-                    }
-                    prev.damage += sig.damage;
-                    prev.shieldWasHit = prev.shieldWasHit || sig.shieldWasHit;
-                    prev.hitOutcomes.push(...sig.hitOutcomes);
-                }
-            }
-            return flat;
-        };
         const drivePositionalTurnApply = (
             actor: CombatActor,
             tb: TurnBindings,
@@ -6546,16 +6609,36 @@ export function runCombat(input: CombatEngineInput): {
                 outcome: VictimDamageOutcome,
                 didCrit: boolean
             ) => void,
-            emitAttacked: (attackedSignals: PositionalAttackedSignals) => void
+            /**
+             * Emits ONE sub-attack's `attacked` events (PR2 Task 3 — was one call for the whole
+             * cast). Invoked once per sub-attack that produced signals, in ascending index order,
+             * immediately after that sub-attack's own `ability-performed`.
+             */
+            emitAttackedForSubAttack: (victims: Map<string, PositionalVictimSignal>) => void,
+            /**
+             * The enemy site emits its `attacked` AFTER the helper returns (its row-14 accounting
+             * tail is kept inline — SP-U U5). Set to defer everything except the FIRST
+             * `ability-performed`, which stays exactly where the single aggregate emit has always
+             * been (before the per-victim detonation): the returned `emitDeferred` runs the rest
+             * of the interleaved sequence at the call site's own emit point. With N=1 that is
+             * byte-identical to the pre-PR2 order (event → detonation → attacked).
+             */
+            deferEmission = false
         ): {
-            critAgg: { anyCrit: boolean; critPairs: number; critVictimIds: string[] };
+            critAgg: {
+                anyCrit: boolean;
+                critPairs: number;
+                critVictimIds: string[];
+                subAttacks: SubAttackOutcome[];
+            };
             attackedSignals: PositionalAttackedSignals;
+            /** Runs the deferred remainder of the emission sequence. No-op unless `deferEmission`. */
+            emitDeferred: () => void;
         } => {
             // Record EACH footprint victim's damage + shield-hit flag so the post-apply emit wakes
             // EVERY hit victim's on-attacked reactives (counters + self-repairs/defensive buffs),
-            // not just the anchor. Keyed by (subAttackIndex, victim.id) since PR2 Task 2 — the
-            // per-hit aggregation the emit sites still consume is rebuilt by
-            // flattenAttackedSignals, which is byte-identical to the old victim-keyed accumulator.
+            // not just the anchor. Keyed by (subAttackIndex, victim.id) since PR2 Task 2, and
+            // consumed one bucket at a time by the interleaved emit below.
             const attackedSignals: PositionalAttackedSignals = new Map();
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
             // at hit time so its Stasis is broken too — the anchor break is handled at the call site.
@@ -6640,25 +6723,132 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 },
             });
-            // Emit this attacker's ONE aggregate ability-performed AFTER the per-victim apply, but
-            // BEFORE the per-victim `attacked` emits, with the TRUE per-victim crit signal. Present
-            // ⟺ this turn resolved positionally (same suppression condition).
-            if (sel.deferredAbilityPerformed) {
-                emitDeferredAbilityPerformed(
-                    sel.deferredAbilityPerformed,
-                    critAgg.anyCrit,
-                    critAgg.critPairs,
-                    critAgg.critVictimIds
-                );
-            }
             // Set the DEFERRED Stasis break for every covered victim (unconditional — covered victims
             // have no same-turn re-apply vector). The victim's own skip branch consumes it next turn.
+            // Pure state, no events: hoisted ABOVE the emission block (PR2 Task 3) so the
+            // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             for (const victimId of coveredStasisVictims) {
                 stasisBreakPending.set(victimId, true);
             }
-            // Player→enemy sites emit the per-victim `attacked` HERE (before detonation); the enemy
-            // site passes a no-op and emits from the RETURNED attackedSignals in its inline tail.
-            emitAttacked(attackedSignals);
+            // ── Interleaved per-sub-attack emission (PR2 Task 3) ───────────────────────────
+            // A multi-hit skill is N consecutive full-walk attacks, so this cast emits ONE
+            // `ability-performed` per sub-attack that landed, each IMMEDIATELY followed by that
+            // sub-attack's own `attacked` events.
+            //
+            // The adjacency is load-bearing, not cosmetic: buildCombatLog's `attacked` handler
+            // fills `openAttackEntry`, which is whichever attack row was created most recently.
+            // Emitting all N events first would leave rows 1..N-1 with zero targets, and
+            // `finalizeMissEntry` silently splices a target-less non-miss row out as a phantom —
+            // collapsing N rows into one and losing the per-sub-attack detail.
+            //
+            // Built as a step list rather than emitted inline so the enemy site can run the first
+            // step here and the remainder after its own tail (see `deferEmission`).
+            const steps: { isEvent: boolean; run: () => void }[] = [];
+            const signalledIndices = [...attackedSignals.keys()].sort((a, b) => a - b);
+            if (sel.deferredAbilityPerformed) {
+                const dap = sel.deferredAbilityPerformed;
+                // Gate on the FOOTPRINT, not on `whiffed`: `whiffed` records only that the anchor
+                // failed to resolve, so a resolved anchor over an empty footprint yields
+                // {whiffed:false, victimIds:[], damage:0} and emitting there would be a phantom
+                // attack. `on-crit` and `on-debuff-inflicted` have no damage guard the way
+                // `on-deal-damage` incidentally does, so a phantom event really would fire them.
+                const emitting = critAgg.subAttacks.filter(
+                    (sub) => sub.victimIds.length > 0 && sub.damage !== 0
+                );
+                if (emitting.length === 0) {
+                    // Nothing landed (every sub-attack whiffed, or the funnel booked nothing).
+                    // The cast still reports ONE attack with the cast-wide aggregate — exactly the
+                    // pre-PR2 emit, which is what keeps a whiffed/absorbed N=1 cast byte-identical
+                    // (its target-less row is pruned by finalizeMissEntry unless a reactive nested
+                    // under it, and that pruning decision must not change).
+                    steps.push({
+                        isEvent: true,
+                        run: () =>
+                            emitDeferredAbilityPerformed(
+                                dap,
+                                dap.damage,
+                                critAgg.anyCrit,
+                                critAgg.critPairs,
+                                critAgg.critVictimIds
+                            ),
+                    });
+                    for (const idx of signalledIndices) {
+                        const victims = attackedSignals.get(idx)!;
+                        steps.push({
+                            isEvent: false,
+                            run: () => emitAttackedForSubAttack(victims),
+                        });
+                    }
+                } else {
+                    // Per-event damage: the cast's pre-funnel `directDamage` split across the
+                    // emitting sub-attacks — today's basis, N ways (see the Decisions table).
+                    // N=1 ⟹ the divisor is 1 ⟹ the exact same number as before.
+                    const share = dap.damage / emitting.length;
+                    const emittingIndices = new Set(emitting.map((sub) => sub.index));
+                    const indices = [
+                        ...new Set([
+                            ...critAgg.subAttacks.map((sub) => sub.index),
+                            ...signalledIndices,
+                        ]),
+                    ].sort((a, b) => a - b);
+                    for (const idx of indices) {
+                        const sub = critAgg.subAttacks[idx];
+                        if (sub && emittingIndices.has(idx)) {
+                            steps.push({
+                                isEvent: true,
+                                run: () =>
+                                    emitDeferredAbilityPerformed(
+                                        dap,
+                                        share,
+                                        sub.didCrit,
+                                        // THIS sub-attack's critting victims, not the cast-wide
+                                        // critPairs — that count is hits × victims and would make
+                                        // `on-crit` fire the whole cast's tally N times over. Σ of
+                                        // these lengths reproduces critPairs exactly.
+                                        sub.critVictimIds.length,
+                                        sub.critVictimIds,
+                                        idx
+                                    ),
+                            });
+                        }
+                        // A bucket with signals but no event (every victim's booked damage was
+                        // diverted away) still emits its `attacked`: total attacked cardinality is
+                        // invariant across PR2, which is what keeps incoming procs correct.
+                        const victims = attackedSignals.get(idx);
+                        if (victims && victims.size > 0) {
+                            steps.push({
+                                isEvent: false,
+                                run: () => emitAttackedForSubAttack(victims),
+                            });
+                        }
+                    }
+                }
+                // Sweep: a sub-attack that buffered log rows but emitted no event (nothing landed)
+                // would otherwise leak them into the next turn's row. No-op in every normal case.
+                steps.push({ isEvent: false, run: () => flushReflectLogs() });
+            } else {
+                // runPlayerTurn already emitted this cast's `ability-performed` inline — only the
+                // `attacked` fan-out is ours. Same events, same per-victim order, now grouped by
+                // sub-attack.
+                for (const idx of signalledIndices) {
+                    const victims = attackedSignals.get(idx)!;
+                    steps.push({ isEvent: false, run: () => emitAttackedForSubAttack(victims) });
+                }
+            }
+            let emitDeferred = (): void => {};
+            if (deferEmission) {
+                // Keep ONLY the first `ability-performed` here (its historical position); the rest
+                // of the sequence — including that event's own `attacked` — runs at the call
+                // site's emit point.
+                const firstEvent = steps.findIndex((step) => step.isEvent);
+                if (firstEvent >= 0) steps[firstEvent].run();
+                const rest = steps.filter((_, i) => i !== firstEvent);
+                emitDeferred = () => {
+                    for (const step of rest) step.run();
+                };
+            } else {
+                for (const step of steps) step.run();
+            }
             // Per-victim skill-triggered detonation. Each victim HIT by this cast that is STILL ALIVE
             // detonates its OWN containers (no role-scale — full stored stacks). Bombs = full shield
             // drain/no pen; inferno+corrosion BYPASS shield (DoT semantics). Credited to the
@@ -6669,7 +6859,7 @@ export function runCombat(input: CombatEngineInput): {
             if (recipe && recipe.dets.length > 0) {
                 applyPerVictimDetonation(recipe, detonationTargets, sink, actor.id, tb);
             }
-            return { critAgg, attackedSignals };
+            return { critAgg, attackedSignals, emitDeferred };
         };
 
         // H1 Task 6: rebind the per-round shield-granted accumulator EVERY round (not gated on
@@ -7918,12 +8108,9 @@ export function runCombat(input: CombatEngineInput): {
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
-                                    (attackedSignals) => {
-                                        // PR2 Task 2: the signals arrive grouped by sub-attack;
-                                        // flatten (in index order) to the cast-wide victim view
-                                        // this emit has always consumed. Task 3 replaces the
-                                        // flatten with a per-sub-attack interleaved emit.
-                                        const victims = flattenAttackedSignals(attackedSignals);
+                                    // PR2 Task 3: ONE sub-attack's victims per call, emitted right
+                                    // after that sub-attack's own `ability-performed`.
+                                    (victims) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
@@ -8149,9 +8336,8 @@ export function runCombat(input: CombatEngineInput): {
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
-                                    (attackedSignals) => {
-                                        // PR2 Task 2 — mirror of the focus site's flatten.
-                                        const victims = flattenAttackedSignals(attackedSignals);
+                                    // PR2 Task 3 — mirror of the focus site's per-sub-attack emit.
+                                    (victims) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
@@ -8496,7 +8682,12 @@ export function runCombat(input: CombatEngineInput): {
                             // skipped), the deferred emit below falls back to the anchor-based crit values
                             // (byte-identical to the pre-Task-5 inline emit for that 0-damage edge case).
                             let enemyCritAgg:
-                                | { anyCrit: boolean; critPairs: number; critVictimIds: string[] }
+                                | {
+                                      anyCrit: boolean;
+                                      critPairs: number;
+                                      critVictimIds: string[];
+                                      subAttacks: SubAttackOutcome[];
+                                  }
                                 | undefined;
                             // Task 5: predict enemy positional apply (mirror of focus/team) so runPlayerTurn
                             // defers its inline ability-performed emit. The opposing roster from the enemy's
@@ -8773,7 +8964,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // helper return when enemyPositional; stays undefined on the non-positional
                                 // path (legacy single emit). The covered-victim Stasis break + detonation
                                 // targets are now owned INSIDE the helper.
-                                let enemyAttackedSignals: PositionalAttackedSignals | undefined;
+                                // PR2 Task 3: the deferred remainder of the enemy cast's
+                                // interleaved emission sequence (its first `ability-performed`
+                                // already fired inside the helper, at the position the single
+                                // aggregate emit has always held). Runs in the inline tail below.
+                                let enemyEmitDeferred: (() => void) | undefined;
                                 if (enemyPositional) {
                                     // Opposing roster + victim wrapper from the per-side bindings
                                     // (enemy→player here). PLAYER-side wrapper: each player victim takes
@@ -8787,14 +8982,14 @@ export function runCombat(input: CombatEngineInput): {
                                     // SP-U U2: shared drivePositionalTurnApply helper. The enemy injects the
                                     // enemy→player TAKEN leech (E2 Task 5 — each player victim procs its OWN
                                     // damage-taken heal/shield leech off the damage IT took) PLUS the focus
-                                    // victim's shield-hit capture; and it passes a NO-OP emitAttacked because
+                                    // victim's shield-hit capture; and it passes `deferEmission` because
                                     // the enemy defers its per-victim `attacked` emit to its inline row-14
                                     // tail below (after the non-positional damage-taken-leech block) — see the
                                     // U5 deferral note there. enemyRollVictimCrit is defined whenever
                                     // enemyPositional (captured from enemyTurn.rollVictimCrit in the same
                                     // non-dead block). The helper owns the detonation targets + covered-victim
                                     // Stasis break; it returns critAgg (for the 0-damage deferred-emit
-                                    // fallback) and attackedSignals (for the deferred emit).
+                                    // fallback) and emitDeferred (the rest of the interleaved sequence).
                                     const tb = turnBindings(actor.side);
                                     const posApply = drivePositionalTurnApply(
                                         actor,
@@ -8823,11 +9018,24 @@ export function runCombat(input: CombatEngineInput): {
                                                         outcome.hpDamage < dmg);
                                             }
                                         },
-                                        // Enemy defers its per-victim `attacked` emit to the inline tail (U5).
-                                        () => {}
+                                        // PR2 Task 3: ONE sub-attack's victims per call. The enemy
+                                        // still DEFERS the whole fan-out to its inline tail (U5),
+                                        // so these calls run from `emitDeferred` below, not here.
+                                        (victims) => {
+                                            if (victims.size > 0) {
+                                                emitPerVictimAttacked({
+                                                    bus,
+                                                    round: r,
+                                                    attackerId: actor.id,
+                                                    primaryId: tgt.id,
+                                                    victims,
+                                                });
+                                            }
+                                        },
+                                        true
                                     );
                                     enemyCritAgg = posApply.critAgg;
-                                    enemyAttackedSignals = posApply.attackedSignals;
+                                    enemyEmitDeferred = posApply.emitDeferred;
                                 } else {
                                     // SP-U U2: the enemy's non-positional INCOMING-damage accounting tail
                                     // (applyIncomingToTarget + the damage-taken heal/shield leech block + the
@@ -8959,22 +9167,12 @@ export function runCombat(input: CombatEngineInput): {
                                     // SP-U U2: DEFERRED here (not inside the shared helper) because the enemy
                                     // emits AFTER its non-positional damage-taken-leech tail; enemyAttackedSignals
                                     // is the helper's returned per-victim signals (set whenever enemyPositional).
-                                    // PR2 Task 2 — mirror of the two player-side sites' flatten.
-                                    // The outer map is non-empty iff at least one victim was
-                                    // recorded (a bucket is created only when a victim lands in
-                                    // it), so the gate is equivalent to the pre-grouping one.
-                                    const enemyVictims = enemyAttackedSignals
-                                        ? flattenAttackedSignals(enemyAttackedSignals)
-                                        : undefined;
-                                    if (enemyVictims && enemyVictims.size > 0) {
-                                        emitPerVictimAttacked({
-                                            bus,
-                                            round: r,
-                                            attackerId: actor.id,
-                                            primaryId: tgt.id,
-                                            victims: enemyVictims,
-                                        });
-                                    }
+                                    // PR2 Task 3 — the remainder of the interleaved sequence the
+                                    // helper handed back: sub-attack 0's `attacked`, then each
+                                    // later sub-attack's `ability-performed` immediately followed
+                                    // by its own `attacked`. With N=1 this is exactly the single
+                                    // per-victim fan-out that stood here before.
+                                    enemyEmitDeferred?.();
                                 } else {
                                     // LEGACY non-positional single emit — byte-identical to pre-Task-4.
                                     const shieldWasHit = positionalShieldCaptured
@@ -9011,6 +9209,7 @@ export function runCombat(input: CombatEngineInput): {
                                 const dap = enemyDeferredAbilityPerformed;
                                 emitDeferredAbilityPerformed(
                                     dap,
+                                    dap.damage,
                                     dap.didCrit,
                                     dap.critHits ?? 0,
                                     []

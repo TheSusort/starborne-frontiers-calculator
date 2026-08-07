@@ -86,7 +86,7 @@ export type AppliedVictimDamage = VictimDamageOutcome & { incomingBooked: number
  * Emitted for EVERY iteration including whiffs, so `subAttacks[h]` always corresponds to loop
  * iteration `h`.
  *
- * Nothing consumes this yet — PR2 turns each entry into its own `ability-performed`.
+ * PR2 turns each NON-EMPTY entry into its own `ability-performed`.
  * See docs/superpowers/specs/2026-08-07-multi-hit-full-walk-attacks-design.md.
  */
 export interface SubAttackOutcome {
@@ -104,6 +104,16 @@ export interface SubAttackOutcome {
     damage: number;
     /** Victims struck by this sub-attack, in footprint order. */
     victimIds: string[];
+    /**
+     * The victims THIS sub-attack critically hit, in footprint order.
+     *
+     * The per-sub-attack slice of the cast-wide `critVictimIds`/`critPairs` pair: a victim appears
+     * at most once per sub-attack (one footprint cell each), so this list's LENGTH is also this
+     * sub-attack's critting-(victim) count and Σ over the cast reproduces `critPairs` exactly.
+     * PR2 carries it on each sub-attack's own `ability-performed` as `critHits`/`critVictimIds`,
+     * so `on-crit` counts one attack's crits rather than the whole cast's.
+     */
+    critVictimIds: string[];
 }
 
 /** Per-cell damage scale keyed off the resolved CellRole. */
@@ -169,7 +179,8 @@ export function footprintVictims(
  *          enemies actually crit rather than the cast's selected anchor;
  *          `subAttacks` — one {@link SubAttackOutcome} per loop iteration, in order, including
  *          whiffs. Carries the SUB-ATTACK identity that `critPairs` also throws away (it
- *          multiplies hits × victims into one number). Unconsumed as of PR1.
+ *          multiplies hits × victims into one number). Consumed since PR2: the engine emits one
+ *          `ability-performed` per non-empty sub-attack off these entries.
  */
 export function applyPositionalDamage(args: {
     hitCrits: boolean[];
@@ -305,6 +316,7 @@ export function applyPositionalDamage(args: {
                 didCrit: false,
                 damage: 0,
                 victimIds: [],
+                critVictimIds: [],
             });
             continue;
         }
@@ -313,6 +325,7 @@ export function applyPositionalDamage(args: {
         let subDidCrit = false;
         let subDamage = 0;
         const subVictimIds: string[] = [];
+        const subCritVictimIds: string[] = [];
 
         for (const { victim, roleScale } of footprintVictims(
             pattern,
@@ -327,6 +340,7 @@ export function applyPositionalDamage(args: {
                 critPairs += 1;
                 critVictims.add(victim.id);
                 subDidCrit = true;
+                subCritVictimIds.push(victim.id);
             }
             const equipReductionPct = incomingReductionFor?.(victim, didCrit, h) ?? 0;
             const dmgBase = victimHitDamage(
@@ -362,6 +376,7 @@ export function applyPositionalDamage(args: {
             didCrit: subDidCrit,
             damage: subDamage,
             victimIds: subVictimIds,
+            critVictimIds: subCritVictimIds,
         });
     }
     return { anyCrit, critPairs, critVictimIds: [...critVictims], subAttacks };

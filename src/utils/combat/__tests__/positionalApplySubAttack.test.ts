@@ -137,6 +137,7 @@ describe('applyPositionalDamage — SubAttackOutcome', () => {
             didCrit: false,
             damage: 0,
             victimIds: [],
+            critVictimIds: [],
         });
     });
 });

@@ -188,6 +188,8 @@ describe('runCombat event emission', () => {
     });
 
     it('emits one ability-performed (damage) per round with the round crit flag', () => {
+        // One event per SUB-ATTACK since the multi-hit full-walk epic (PR2); this fixture's skill
+        // is single-hit, so that is one per round and the count still matches rounds.length.
         const { events, result } = collect(baseInput());
         const performed = events.filter((e) => e.type === 'ability-performed');
         expect(performed.length).toBe(result.rounds.length);
