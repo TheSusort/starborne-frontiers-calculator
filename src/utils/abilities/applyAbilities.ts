@@ -164,6 +164,31 @@ export function damageInputsFromSkill(skill: Skill | undefined): {
     };
 }
 
+/**
+ * Does this ship bank charges and have something to spend them on?
+ *
+ * THE single derivation of `hasChargedSkill`, which gates the entire charge cadence
+ * (`advanceChargeCadence` no-ops when it is false). It must be asked identically on all three
+ * actor paths — player focus, walked `team`, and enemy — because the same ship can occupy any
+ * of them and its kit does not change with placement.
+ *
+ * "Something to spend them on" is ANY ability in the charged slot, not specifically a damage
+ * one: a charged skill that only heals, shields, buffs or cleanses is a real charged skill and
+ * banks charges like any other. The enemy path used to additionally require a damage ability
+ * with `multiplier > 0` — a holdover from when enemies were damage-only stat blocks — which
+ * silently disabled the charge cadence for every support enemy in the corpus.
+ *
+ * `shipSkills` is undefined for a manually-entered flat stat card, which has no charged slot
+ * and therefore no charged skill.
+ */
+export function hasUsableChargedSkill(
+    shipSkills: ShipSkills | undefined,
+    chargeCount: number
+): boolean {
+    if (!shipSkills || chargeCount < 1) return false;
+    return (selectFiringSkill(shipSkills, 'charged')?.abilities.length ?? 0) > 0;
+}
+
 /** Enemy-facing `AbilityTarget` values — anything that resolves against the OPPOSING
  *  roster. Used by `skillNeedsOpposingVictim` below; kept as its own const so a future
  *  AbilityTarget addition is an explicit decision here rather than a silent gap. */

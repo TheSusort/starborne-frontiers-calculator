@@ -49,7 +49,7 @@ import { buildShipAbilities } from '../abilities/buildShipAbilities';
 import { buildShipAbilitiesWithEquipment } from '../abilities/buildShipAbilitiesWithEquipment';
 import type { ShipSkills } from '../../types/abilities';
 import type { GearPiece } from '../../types/gear';
-import { selectFiringSkill } from '../abilities/applyAbilities';
+import { hasUsableChargedSkill } from '../abilities/applyAbilities';
 import { parseShipTargeting, SkillTargeting, ParsedTarget } from '../targetingParser';
 import { buildCombatLog } from '../combat/log/buildCombatLog';
 import type { CombatLogRound } from '../combat/log/types';
@@ -894,10 +894,8 @@ export function simulateBattle(
     // Representative enemy security (threaded onto the dummy target for live landing recompute).
     const enemyRepSecurity = input.enemyTeam[0]?.ship.baseStats.security ?? 100;
 
-    const hasCharged = (plan: PlacementPlan): boolean => {
-        const charged = selectFiringSkill(plan.shipSkills, 'charged');
-        return plan.chargeCount >= 1 && (charged?.abilities.length ?? 0) > 0;
-    };
+    const hasCharged = (plan: PlacementPlan): boolean =>
+        hasUsableChargedSkill(plan.shipSkills, plan.chargeCount);
 
     // ----- Focus player actor (player[0]) -----
     const focus = playerPlans[0];
