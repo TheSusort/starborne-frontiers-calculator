@@ -50,3 +50,28 @@ export interface Finding {
     minimalRepro?: { playerShips: string[]; enemyShips: string[] };
     severity: 'high' | 'med' | 'low';
 }
+
+/** Which of the engine's three actor paths runs the subject. `playerTeam[0]` becomes the
+ *  `'attacker'` focus by ARRAY INDEX (battleSimulator.ts:842), `playerTeam[1..3]` become `'team'`
+ *  walked actors, and the enemy side is `'enemy'` — three distinct code paths for the same kit
+ *  (state.ts:133). */
+export type Placement = 'focus' | 'team' | 'enemy';
+
+export const PLACEMENTS: readonly Placement[] = ['focus', 'team', 'enemy'] as const;
+
+/** The unordered pairs to compare. Each yields TWO findings-directions (a→b and b→a), so all six
+ *  ordered comparisons are covered without duplicating a pair. */
+export const PLACEMENT_PAIRS: readonly (readonly [Placement, Placement])[] = [
+    ['focus', 'team'],
+    ['focus', 'enemy'],
+    ['team', 'enemy'],
+] as const;
+
+/** One directed placement asymmetry: kinds the subject produced in `from` but never in `to`.
+ *  `missing` is non-empty by construction — `diffPlacements` returns null otherwise. */
+export interface PlacementDiff {
+    shipName: string;
+    from: Placement;
+    to: Placement;
+    missing: CombatLogEntryKind[];
+}

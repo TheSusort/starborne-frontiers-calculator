@@ -15,17 +15,22 @@ import {
     FOCUS_ACTOR_ID,
     FOCUS_POSITION,
     occupiedCellCount,
+    PRIMARY_BOARD,
     ROUNDS,
     SCENARIOS,
     SEED,
     SUPPORT_ANCHOR_BOARD,
 } from '../kitFingerprintScenarios';
+import { PLACEMENTS } from '../types';
+import { resolveSubjectActorId } from '../placementSymmetry';
 import { runSeededBattle } from '../seededBattle';
+import { positionTurnRank } from '../../state';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import { parseShipTargeting } from '../../../targetingParser';
 import type { Ship } from '../../../../types/ship';
+import type { Position } from '../../../../types/encounters';
 import type { CombatActor } from '../../state';
 
 function requireReferenceData(): void {
@@ -38,10 +43,22 @@ function requireReferenceData(): void {
 }
 
 /** A stand-in roster for the seeding taps: two max-HP sizes per side so a FRACTION-of-max-HP
- *  seed and an ABSOLUTE seed can be told apart. */
-const fakeRoster = () =>
+ *  seed and an ABSOLUTE seed can be told apart. The focus actor also carries a `position`
+ *  (default `FOCUS_POSITION`, i.e. PRIMARY_BOARD's focus cell): `seedFor`'s `wounded`/`richEnemy`
+ *  taps now identify the subject by (side, position), not by id (Task 4 — only the `focus`
+ *  placement mints the 'attacker' id, so a placement-agnostic tap can't key off it). Callers
+ *  comparing a tap built for a different board (e.g. SUPPORT_ANCHOR_BOARD) must pass its focus
+ *  cell explicitly. */
+const fakeRoster = (focusPosition: Position = FOCUS_POSITION) =>
     [
-        { id: FOCUS_ACTOR_ID, side: 'player', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
+        {
+            id: FOCUS_ACTOR_ID,
+            side: 'player',
+            shieldPool: 0,
+            currentHp: 1000,
+            stats: { hp: 1000 },
+            position: focusPosition,
+        },
         { id: 'p:ally', side: 'player', shieldPool: 0, currentHp: 4000, stats: { hp: 4000 } },
         { id: 'e:small', side: 'enemy', shieldPool: 0, currentHp: 1000, stats: { hp: 1000 } },
         { id: 'e:big', side: 'enemy', shieldPool: 0, currentHp: 4000, stats: { hp: 4000 } },
@@ -167,27 +184,39 @@ describe('live battle invariants', () => {
     beforeAll(requireReferenceData);
 
     it.each(['Xiaodao', 'Malvex'])(
-        '%s takes real incoming damage and survives all 20 rounds in every scenario',
+        // PRIMARY-board scenarios only (SCENARIOS excludes `supportAnchor` by construction — see
+        // its docstring): the support-anchor board takes zero incoming damage by design, so
+        // asserting `taken > 0` there would be a bug hunt against an accepted limitation, not a
+        // coverage extension.
+        '%s takes real incoming damage and survives all 20 rounds in every scenario and placement',
         (name) => {
             const ship = buildTraceShip(name);
             expect(ship).not.toBeNull();
             for (const scenario of SCENARIOS) {
-                const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
-                const rows = result.rounds
-                    .flatMap((r) => r.ships)
-                    .filter((s) => s.actorId === FOCUS_ACTOR_ID);
-                const taken = rows.reduce((sum, s) => sum + s.damageTaken, 0);
-                expect(
-                    taken,
-                    `${name}/${scenario}: focus took no damage — the enemies are not resolving ` +
-                        'onto it, so every on-damaged clause in the corpus is silent'
-                ).toBeGreaterThan(0);
-                expect(
-                    rows.every((s) => s.alive),
-                    `${name}/${scenario}: focus died — its fingerprint is truncated at the round ` +
-                        'it fell, so kill timing now leaks into the snapshot'
-                ).toBe(true);
-                expect(result.outcome.lastRound).toBe(ROUNDS);
+                for (const placement of PLACEMENTS) {
+                    const result = runSeededBattle(
+                        buildScenarioBattle(ship!, scenario, placement),
+                        SEED
+                    );
+                    // `focus` mints the reserved 'attacker' id; `team`/`enemy` don't, so the
+                    // subject is resolved by (side, cell) via the roster, same as `seedFor`.
+                    const subjectActorId = resolveSubjectActorId(result, scenario, placement);
+                    const rows = result.rounds
+                        .flatMap((r) => r.ships)
+                        .filter((s) => s.actorId === subjectActorId);
+                    const taken = rows.reduce((sum, s) => sum + s.damageTaken, 0);
+                    expect(
+                        taken,
+                        `${name}/${scenario}/${placement}: focus took no damage — the enemies are ` +
+                            'not resolving onto it, so every on-damaged clause in the corpus is silent'
+                    ).toBeGreaterThan(0);
+                    expect(
+                        rows.every((s) => s.alive),
+                        `${name}/${scenario}/${placement}: focus died — its fingerprint is ` +
+                            'truncated at the round it fell, so kill timing now leaks into the snapshot'
+                    ).toBe(true);
+                    expect(result.outcome.lastRound).toBe(ROUNDS);
+                }
             }
         }
     );
@@ -356,8 +385,11 @@ describe('support-anchor board', () => {
         // Load-bearing, not tidiness: Faust and Mender's actives REPAIR allies, and a repair aimed
         // at a full-HP 500,000,000-HP filler is an overheal that may log nothing at all. A
         // plain-seeded support-anchor board would be green, deterministic, and observing nothing.
-        const anchorActors = fakeRoster();
-        const woundedActors = fakeRoster();
+        // Each roster's focus actor sits on ITS board's own focus cell (the two boards disagree —
+        // M1 vs M4) so `isSubject` still resolves the same actor index on both, and the resulting
+        // fractions compare like for like.
+        const anchorActors = fakeRoster(SUPPORT_ANCHOR_BOARD.focus);
+        const woundedActors = fakeRoster(PRIMARY_BOARD.focus);
         buildScenarioBattle(focus, 'supportAnchor').__testTapActors?.(anchorActors);
         buildScenarioBattle(focus, 'wounded').__testTapActors?.(woundedActors);
         expect(anchorActors.map((a) => a.currentHp)).toEqual(woundedActors.map((a) => a.currentHp));
@@ -381,5 +413,37 @@ describe('support-anchor board', () => {
         const last = result.rounds[result.rounds.length - 1];
         const dead = last.ships.filter((s) => !s.alive).map((s) => s.actorId);
         expect(dead, 'nothing may die on the support-anchor board').toEqual([]);
+    });
+});
+
+describe('turn-order invariance — why a placement swap cannot reorder turns', () => {
+    // orderByTurnPriority (state.ts:331) is speed DESC -> positionTurnRank -> player-side-first ->
+    // input order. The side tiebreak WOULD be a confound for the placement-symmetry oracle: it is
+    // deterministic, so unioning over seeds cannot suppress it, and 33 of 147 corpus ships tie a
+    // filler's base speed. It is unreachable only because positionTurnRank is injective over
+    // positions and every board cell is distinct, so the comparator always returns at the position
+    // step. If a future board edit ever put two actors on one cell, this test fails and the oracle's
+    // soundness argument fails with it.
+    it.each([
+        ['primary', PRIMARY_BOARD],
+        ['support-anchor', SUPPORT_ANCHOR_BOARD],
+    ] as const)('%s board: all eight cells have distinct positionTurnRank', (_name, board) => {
+        const cells = [board.focus, ...board.allies, ...board.enemies];
+        expect(cells).toHaveLength(8);
+        const ranks = cells.map(positionTurnRank);
+        expect(new Set(ranks).size).toBe(8);
+    });
+});
+
+describe('fragile ally is keyed by board position, not array index', () => {
+    beforeAll(requireReferenceData);
+
+    it('has no fragile ally in plain, richEnemy or supportAnchor', () => {
+        const subject = buildTraceShip('Sentinel');
+        if (!subject) throw new Error('Sentinel did not resolve from the corpus');
+        for (const scenario of ['plain', 'richEnemy', 'supportAnchor'] as const) {
+            const input = buildScenarioBattle(subject, scenario);
+            expect(input.playerTeam.filter((p) => p.statOverrides?.hp === 1)).toHaveLength(0);
+        }
     });
 });
