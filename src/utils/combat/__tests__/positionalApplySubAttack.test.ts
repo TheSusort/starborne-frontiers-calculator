@@ -140,3 +140,95 @@ describe('applyPositionalDamage — SubAttackOutcome', () => {
         });
     });
 });
+
+describe('applyPositionalDamage — subAttackIndex threading', () => {
+    it('every per-victim callback receives the index of its sub-attack', () => {
+        const applyIdx: number[] = [];
+        const emitIdx: number[] = [];
+        const resolvedIdx: number[] = [];
+        const reductionIdx: number[] = [];
+        const ampIdx: number[] = [];
+
+        applyPositionalDamage({
+            hitCrits: [false, false, false],
+            scalars: scalars(3),
+            pattern: parsePattern('Pattern-Base'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('front', 'M4')],
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage, _isAnchor, subAttackIndex) => {
+                applyIdx.push(subAttackIndex as number);
+                return bookingApply(victim, damage);
+            },
+            emitHit: (_v, _d, _c, subAttackIndex) => {
+                emitIdx.push(subAttackIndex as number);
+            },
+            onVictimResolved: (_v, _d, _o, _c, subAttackIndex) => {
+                resolvedIdx.push(subAttackIndex as number);
+            },
+            incomingReductionFor: (_v, _c, subAttackIndex) => {
+                reductionIdx.push(subAttackIndex as number);
+                return 0;
+            },
+            outgoingAmplificationFor: (_v, _c, subAttackIndex) => {
+                ampIdx.push(subAttackIndex as number);
+                return 0;
+            },
+        });
+
+        expect(applyIdx).toEqual([0, 1, 2]);
+        expect(emitIdx).toEqual([0, 1, 2]);
+        expect(resolvedIdx).toEqual([0, 1, 2]);
+        expect(reductionIdx).toEqual([0, 1, 2]);
+        expect(ampIdx).toEqual([0, 1, 2]);
+    });
+
+    it('an AoE sub-attack passes the SAME index to every footprint victim', () => {
+        const seen: Array<{ id: string; idx: number }> = [];
+
+        applyPositionalDamage({
+            hitCrits: [false, false],
+            scalars: scalars(2),
+            pattern: parsePattern('Pattern-Line-Range-1'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('origin', 'M4'), actor('covered', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage, _isAnchor, subAttackIndex) => {
+                seen.push({ id: victim.id, idx: subAttackIndex as number });
+                return bookingApply(victim, damage);
+            },
+        });
+
+        // Two sub-attacks x two footprint victims. Both victims of sub-attack 0 see index 0.
+        expect(seen).toEqual([
+            { id: 'origin', idx: 0 },
+            { id: 'covered', idx: 0 },
+            { id: 'origin', idx: 1 },
+            { id: 'covered', idx: 1 },
+        ]);
+    });
+
+    it('rollVictimCrit receives the sub-attack index', () => {
+        const rollIdx: number[] = [];
+
+        applyPositionalDamage({
+            hitCrits: [false, false],
+            scalars: scalars(2),
+            pattern: parsePattern('Pattern-Line-Range-1'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('origin', 'M4'), actor('covered', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+            // Only non-anchor victims resolve via this callback.
+            rollVictimCrit: (_victim, subAttackIndex) => {
+                rollIdx.push(subAttackIndex as number);
+                return false;
+            },
+        });
+
+        expect(rollIdx).toEqual([0, 1]);
+    });
+});

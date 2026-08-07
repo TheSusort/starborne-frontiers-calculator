@@ -183,6 +183,14 @@ export function applyPositionalDamage(args: {
     acting?: { ignoresForcedTargeting?: boolean; ignoresStealth?: boolean; provokedBy?: string };
     defenseProfileOf: (v: CombatActor) => VictimDefenseProfile;
     /**
+     * SUB-ATTACK INDEX (epic: multi-hit full-walk attacks, PR1). Every per-victim callback below
+     * takes a trailing optional `subAttackIndex` — the 0-based index of the sub-attack currently
+     * resolving. Trailing and optional so existing engine call sites compile unchanged and JS
+     * drops the extra argument, exactly as `isAnchor` was introduced. Every footprint victim of
+     * ONE sub-attack sees the SAME index: an AoE footprint is one attack's spread, whereas each
+     * multi-hit sub-attack is a separate attack.
+     */
+    /**
      * Engine wrapper — decrements the victim's currentHp (Task 8 passes applyOutgoingToEnemy)
      * and returns the resolved {@link VictimDamageOutcome} (shield-before / HP-damage / barriered).
      * Epic PR12 (A): the third param is `isAnchor` — true when this victim IS the attacker's
@@ -190,8 +198,18 @@ export function applyPositionalDamage(args: {
      * "reflects damage taken … as a PRIMARY TARGET" requirePrimaryTarget gate). Optional so
      * every pre-PR12 caller keeps compiling unchanged (JS simply drops the extra arg).
      */
-    applyToVictim: (victim: CombatActor, damage: number, isAnchor?: boolean) => VictimDamageOutcome;
-    emitHit?: (victim: CombatActor, damage: number, didCrit: boolean) => void;
+    applyToVictim: (
+        victim: CombatActor,
+        damage: number,
+        isAnchor?: boolean,
+        subAttackIndex?: number
+    ) => VictimDamageOutcome;
+    emitHit?: (
+        victim: CombatActor,
+        damage: number,
+        didCrit: boolean,
+        subAttackIndex?: number
+    ) => void;
     /**
      * OPTIONAL per-victim hook (E2 — per-victim leech). Invoked once per footprint victim AFTER
      * the hit resolves, with the resolved {@link VictimDamageOutcome}. Direction-specific leech
@@ -202,7 +220,8 @@ export function applyPositionalDamage(args: {
         victim: CombatActor,
         damage: number,
         outcome: VictimDamageOutcome,
-        didCrit: boolean
+        didCrit: boolean,
+        subAttackIndex?: number
     ) => void;
     /**
      * OPTIONAL per-sub-hit victim-side incoming %-reduction hook (D-PR3). Invoked per footprint
@@ -210,21 +229,29 @@ export function applyPositionalDamage(args: {
      * additively into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical
      * (inert for victims without an incoming-reduction ability).
      */
-    incomingReductionFor?: (victim: CombatActor, didCrit: boolean) => number;
+    incomingReductionFor?: (
+        victim: CombatActor,
+        didCrit: boolean,
+        subAttackIndex?: number
+    ) => number;
     /**
      * OPTIONAL per-hit attacker-side outgoing amplification % hook (D-PR4 — Menace/Giant Slayer).
      * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
      * is applied multiplicatively on the resolved hit BEFORE {@link applyToVictim}. Unsupplied → 0 →
      * byte-identical (inert for attackers without an outgoing-amplification ability).
      */
-    outgoingAmplificationFor?: (victim: CombatActor, didCrit: boolean) => number;
+    outgoingAmplificationFor?: (
+        victim: CombatActor,
+        didCrit: boolean,
+        subAttackIndex?: number
+    ) => number;
     /**
      * OPTIONAL per-victim crit resolver.
      * The anchor victim (the resolved target, `victim.id === anchorActor.id`) reuses
      * hitCrits[h]; each other footprint victim resolves via this callback.
      * Unsupplied → every victim uses hitCrits[h] → byte-identical.
      */
-    rollVictimCrit?: (victim: CombatActor) => boolean;
+    rollVictimCrit?: (victim: CombatActor, subAttackIndex?: number) => boolean;
 }): {
     anyCrit: boolean;
     critPairs: number;
@@ -294,14 +321,14 @@ export function applyPositionalDamage(args: {
         )) {
             // Anchor reuses the pre-rolled hitCrits[h]; covered victims resolve via callback.
             const isAnchor = victim.id === anchorActor.id;
-            const didCrit = isAnchor ? anchorCrit : (rollVictimCrit?.(victim) ?? anchorCrit);
+            const didCrit = isAnchor ? anchorCrit : (rollVictimCrit?.(victim, h) ?? anchorCrit);
             if (didCrit) {
                 anyCrit = true;
                 critPairs += 1;
                 critVictims.add(victim.id);
                 subDidCrit = true;
             }
-            const equipReductionPct = incomingReductionFor?.(victim, didCrit) ?? 0;
+            const equipReductionPct = incomingReductionFor?.(victim, didCrit, h) ?? 0;
             const dmgBase = victimHitDamage(
                 scalars,
                 defenseProfileOf(victim),
@@ -309,9 +336,9 @@ export function applyPositionalDamage(args: {
                 roleScale,
                 equipReductionPct
             );
-            const ampPct = outgoingAmplificationFor?.(victim, didCrit) ?? 0;
+            const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
-            const outcome = applyToVictim(victim, dmg, isAnchor);
+            const outcome = applyToVictim(victim, dmg, isAnchor, h);
             // Credit the victim the intake the funnel actually RECORDED for it, not the hit we
             // computed. The two differ whenever the funnel altered the hit before recording it: a
             // Protection cascade diverted a chunk to an ally (booked on that ally's own row by the
@@ -323,8 +350,8 @@ export function applyPositionalDamage(args: {
             // Fallback keeps the previous shape for a caller that supplies no `incomingBooked` —
             // only test stubs of `applyToVictim`; the engine's own funnel always sets it.
             const booked = outcome.incomingBooked ?? dmg - (outcome.transformedToDot ?? 0);
-            emitHit?.(victim, booked, didCrit);
-            onVictimResolved?.(victim, dmg, outcome, didCrit);
+            emitHit?.(victim, booked, didCrit, h);
+            onVictimResolved?.(victim, dmg, outcome, didCrit, h);
             subDamage += booked;
             subVictimIds.push(victim.id);
         }
