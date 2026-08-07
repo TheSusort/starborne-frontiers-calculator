@@ -412,10 +412,15 @@ export function registerReactiveListeners(args: {
                         // Per-event copy: carry e.damage (total damage for this ability-performed
                         // event) into eventCtx.triggerDamage so that a reactive basis:'damage-dealt'
                         // heal (e.g. Bloodthirst) scales off the triggering hit's damage.
-                        // KNOWN APPROXIMATION: for a multi-hit ability, each critting hit enqueues
-                        // with the same event-total damage (not per-hit damage), so the heal is
-                        // proportionally over-counted per fire when critHits > 1. Per-hit attribution
-                        // is not supported in the event model today; document and accept.
+                        // PR2 narrowed the old "multi-hit over-counts" approximation on the
+                        // POSITIONAL path: a `hits: N` skill now emits one event per SUB-ATTACK
+                        // carrying that sub-attack's own damage, so N crits heal off N slices
+                        // rather than N × the whole cast.
+                        // KNOWN APPROXIMATION, still: within ONE event, critHits > 1 (a multi-victim
+                        // AoE) enqueues that many times, each with the whole footprint's damage
+                        // rather than the critting victim's share. The non-positional DPS path also
+                        // still folds a multi-hit cast into a single event (that is PR5).
+                        // Per-victim attribution is not supported in the event model today.
                         for (let i = 0; i < n; i++) {
                             enqueue({
                                 ...intent,
@@ -426,13 +431,17 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-deal-damage':
                     bus.on('ability-performed', (e) => {
-                        // Warpstrike duration-reduction: fires on the OWNER's own damage-dealing
-                        // turn. runPlayerTurn emits exactly ONE aggregate ability-performed per
-                        // turn (positional path defers its emit; the engine emits exactly one
-                        // ability-performed post-apply), so this is once-per-turn for single-hit,
-                        // multi-hit, and AoE alike — no once-per-turn guard needed. The
-                        // while-debuffed requirement is an ability condition (self-debuff),
-                        // enforced at drain via gateConditions.
+                        // Fires on the OWNER's own damage-dealing attack. runPlayerTurn emits one
+                        // ability-performed per SUB-ATTACK (multi-hit full-walk, PR2): a multi-hit
+                        // skill is N consecutive full-walk attacks, so this fires N times, once
+                        // per sub-attack that dealt damage. An AoE footprint is ONE attack and
+                        // fires once however many victims it hits. Riders: Burner's Inferno,
+                        // Warpstrike's duration-reduction, Zeolite's purge. There is no
+                        // once-per-turn guard, and adding one would be wrong — per-sub-attack IS
+                        // the intended cardinality (pinned by
+                        // perSubAttackEvents.integration.test.ts). The while-debuffed requirement
+                        // is an ability condition (self-debuff), enforced at drain via
+                        // gateConditions.
                         if (e.actorId !== ownerId) return;
                         if ((e.damage ?? 0) <= 0) return;
                         // Capture the owner's own attack target so a reactive DoT rider (Burner's
@@ -647,6 +656,17 @@ export function registerReactiveListeners(args: {
                         // (Charge was already collapsed this way by an explicit special-case; the
                         // per-critHits loop for every other rider was the over-fire bug — Sentinel
                         // healed Ruiner twice for one AoE.)
+                        //
+                        // "ATTACK" here means SUB-ATTACK (multi-hit full-walk, PR2): a `hits: N`
+                        // skill is N consecutive full-walk attacks emitting N ability-performed
+                        // events, so an ally critting on 2 of 3 sub-attacks fires this TWICE. The
+                        // (hit, victim) collapse is what this one-enqueue-per-event shape guards,
+                        // and it survives untouched — a single-hit 3-victim AoE that crits two
+                        // victims still fires ONCE. Both halves are pinned by
+                        // perSubAttackEvents.integration.test.ts; the self-target side stays
+                        // once-per-TURN via oncePerAttackGuardKey (charge/buff branches only,
+                        // cleared at actor turn-start), locked by
+                        // hermesOncePerAttack.integration.test.ts.
                         if (!e.didCrit && (e.critHits ?? 0) === 0) return;
                         // The enemies actually crit. `critVictimIds` is present only on the
                         // POSITIONAL deferred emit; the single-target inline emit omits it, where

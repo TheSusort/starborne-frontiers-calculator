@@ -472,3 +472,260 @@ describe('combat log — one attack row per sub-attack, splash amount per sub-at
         expect(splash.reduce((s, a) => s + a, 0)).toBeCloseTo(3 * singleSplash, 6);
     });
 });
+
+/**
+ * TASK 4 — the three OUTGOING reactive triggers, measured against the new cardinality.
+ *
+ * Task 3 changed emission; this block pins what the listeners actually do with it. Each rider is
+ * a hand-built stand-in for the real equipment ability of the same shape (the corpus versions are
+ * gear/implant-sourced and drag their own proc rolls in):
+ *
+ *  • `on-deal-damage` → Burner's Inferno rider. Fires once per `ability-performed` that dealt
+ *    damage (`triggers.ts`'s `(e.damage ?? 0) <= 0` guard), so N sub-attacks = N applications.
+ *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues `critHits` times per
+ *    event and scales off THAT event's `damage`. This is the headline bug PR2 fixes: pre-PR2 the
+ *    single aggregate event carried the WHOLE cast's damage, so all three fires healed off the
+ *    full total. The amount, not just the count, is pinned below.
+ *  • `on-ally-crit`   → Howler/Sentinel's ally-routed grant. ONE enqueue per critting
+ *    `ability-performed`, which now means one per critting SUB-ATTACK while an AoE footprint
+ *    stays ONE attack however many victims crit.
+ *
+ * GUARD SCOPE (verified, not assumed). `oncePerAttackGuardKey` keys only `target: 'self'` riders
+ * on the per-hit triggers and is cleared at each actor TURN-start (`engine.ts`), so a self rider
+ * (Hermes's charge + Everliving Regeneration) stays once-per-turn across sub-attacks while
+ * ally-routed and enemy-routed riders fan out per sub-attack. That asymmetry is deliberate and is
+ * locked from the other side by `hermesOncePerAttack.integration.test.ts`.
+ */
+
+/** A keyed RNG walking a fixed draw sequence per stream key; unlisted keys always draw `fallback`. */
+const sequencedKeyedRng = (seqByKey: Record<string, number[]>, fallback = 0.9) => {
+    const cursor = new Map<string, number>();
+    return (key: string): number => {
+        const seq = seqByKey[key];
+        if (!seq) return fallback;
+        const i = cursor.get(key) ?? 0;
+        cursor.set(key, i + 1);
+        return seq[Math.min(i, seq.length - 1)];
+    };
+};
+
+describe('outgoing reactive triggers — per-sub-attack fan-out', () => {
+    afterEach(() => resetRateGateRng());
+
+    /** Burner: "applies Inferno" off the wearer's own damage. */
+    const burnerLike = (): Ability =>
+        ab({
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-deal-damage',
+            config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
+        });
+
+    /** Bloodthirst: "repair itself for N% of the damage dealt" on a crit. No procChance so every
+     *  enqueue lands — the fixture measures fan-out and amount, not the proc roll. */
+    const bloodthirstLike = (): Ability =>
+        ab({
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-crit',
+            config: { type: 'heal', pct: 20, basis: 'damage-dealt' },
+        });
+
+    /** Howler/Sentinel shape: an ALLY-routed grant on on-ally-crit (never self, so ungated). */
+    const allyCritRider = (): Ability =>
+        ab({
+            type: 'buff',
+            target: 'ally',
+            trigger: 'on-ally-crit',
+            config: {
+                type: 'buff',
+                buffName: 'Blast',
+                duration: 2,
+                stacks: 1,
+                isStackable: false,
+                parsedEffects: {},
+            },
+        });
+
+    /** A do-nothing same-side ally at M3 carrying `abilities` as its passive slot. */
+    const observer = (abilities: Ability[]): NonNullable<CombatEngineInput['teamActors']>[number] =>
+        ({
+            id: 'observer',
+            speed: 1,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position: 'M3' as Position,
+            affinity: 'antimatter',
+            walk: {
+                shipSkills: { slots: [{ slot: 'passive', abilities }] },
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
+                },
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        }) as NonNullable<CombatEngineInput['teamActors']>[number];
+
+    /** The focus cast with `riders` bolted on as its own passive slot. */
+    const focusWithRiders = (
+        hits: number,
+        pattern: ParsedPattern,
+        riders: Ability[],
+        crit = 100
+    ): CombatEngineInput => {
+        const base = focusCast(hits, pattern, crit);
+        return {
+            ...base,
+            speed: 500, // act before the observer, whose own turn does nothing
+            shipSkills: { slots: [attackSkill(hits), { slot: 'passive', abilities: riders }] },
+        };
+    };
+
+    // -- 1. on-deal-damage ---------------------------------------------------------------
+
+    it('on-deal-damage fires once per SUB-ATTACK: a hits:3 Burner lands three Infernos', () => {
+        idc = 0;
+        // Every gate open: the reactive DoT still has to clear the wearer's debuff-landing gate.
+        setRateGateRng(() => 0);
+        setKeyedRng(() => 0);
+
+        const run = (hits: number) => {
+            const bus = createEventBus();
+            const infernos: Extract<CombatEvent, { type: 'dot-applied' }>[] = [];
+            bus.on('dot-applied', (e) => {
+                if (e.sourceId === 'attacker' && e.dotType === 'inferno') infernos.push(e);
+            });
+            runCombat({ ...focusWithRiders(hits, basePattern(), [burnerLike()]), bus });
+            return infernos;
+        };
+
+        // Pre-PR2 the whole cast collapsed into ONE ability-performed, so the rider fired once
+        // however many hits landed. Three sub-attacks are three attacks and apply three stacks.
+        expect(run(3)).toHaveLength(3);
+        // N=1 control: the single-hit path is untouched.
+        expect(run(1)).toHaveLength(1);
+    });
+
+    // -- 2. on-crit (the headline bug) ---------------------------------------------------
+
+    it('on-crit fires per critting sub-attack and scales off THAT sub-attack’s damage', () => {
+        idc = 0;
+        setRateGateRng(() => 0);
+        setKeyedRng(() => 0);
+
+        const bus = createEventBus();
+        const perf: AbilityPerformed[] = [];
+        const heals: Extract<CombatEvent, { type: 'reactive-heal-performed' }>[] = [];
+        bus.on('ability-performed', (e) => {
+            if (e.actorId === 'attacker') perf.push(e);
+        });
+        // A reactive heal deliberately emits NO heal-performed (chain guard); this is its event,
+        // and its `amount` is the RAW repair, so the focus's full HP cannot clip the measurement.
+        bus.on('reactive-heal-performed', (e) => {
+            if (e.casterId === 'attacker') heals.push(e);
+        });
+        runCombat({ ...focusWithRiders(3, basePattern(), [bloodthirstLike()]), bus });
+
+        // Three critting sub-attacks (one victim each → critHits 1) → three enqueues.
+        expect(perf).toHaveLength(3);
+        for (const e of perf) expect(e.critHits).toBe(1);
+        expect(heals).toHaveLength(3);
+
+        // THE amount assertion. Each fire repairs 20% of ITS OWN sub-attack's damage.
+        const slice = perf[0].damage!;
+        expect(slice).toBeGreaterThan(0);
+        for (const h of heals) expect(h.amount).toBeCloseTo(0.2 * slice, 6);
+
+        // Stated as the bug it fixes: pre-PR2 the one aggregate event carried the cast total, so
+        // all three fires healed off 3× this. Σ heals must equal 20% of the CAST, not 60%.
+        const castTotal = perf.reduce((s, e) => s + (e.damage ?? 0), 0);
+        expect(castTotal).toBeCloseTo(3 * slice, 6);
+        expect(heals.reduce((s, h) => s + h.amount, 0)).toBeCloseTo(0.2 * castTotal, 6);
+        for (const h of heals) expect(h.amount).toBeLessThan(0.2 * castTotal);
+    });
+
+    // -- 3. on-ally-crit, per critting sub-attack ----------------------------------------
+
+    it('on-ally-crit fires once per CRITTING sub-attack: 2 of 3 crit → two grants', () => {
+        idc = 0;
+        // crit 50 → rate 0.5. Draws 0.1/0.1/0.9 on the attacker's own crit sub-stream make
+        // sub-attacks 0 and 1 crit and sub-attack 2 whiff the roll. Every other stream draws 0.9,
+        // which clears the (rate 1.0) debuff-landing gate and fires nothing else.
+        setRateGateRng(() => 0.9);
+        setKeyedRng(sequencedKeyedRng({ 'attacker:active-crit': [0.1, 0.1, 0.9] }));
+
+        const bus = createEventBus();
+        const perf: AbilityPerformed[] = [];
+        const grants: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('ability-performed', (e) => {
+            if (e.actorId === 'attacker') perf.push(e);
+        });
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Blast') grants.push(e);
+        });
+        runCombat({
+            ...focusCast(3, basePattern(), 50),
+            speed: 500,
+            teamActors: [observer([allyCritRider()])],
+            bus,
+        });
+
+        // Fixture self-check: the crit pattern really is crit / crit / no-crit.
+        expect(perf).toHaveLength(3);
+        expect(perf.map((e) => e.didCrit)).toEqual([true, true, false]);
+
+        // The approved decision: an ally critting on 2 of 3 sub-attacks fires the rider TWICE.
+        expect(grants).toHaveLength(2);
+        for (const g of grants) expect(g.actorId).toBe('attacker'); // ally-routed onto the critter
+    });
+
+    // -- 4. …but an AoE footprint is still ONE attack ------------------------------------
+
+    it('a single-hit 3-victim AoE that crits TWO victims still fires on-ally-crit ONCE', () => {
+        idc = 0;
+        setRateGateRng(() => 0.9);
+        // One crit draw per footprint victim: two crit, the third does not.
+        setKeyedRng(sequencedKeyedRng({ 'attacker:active-crit': [0.1, 0.1, 0.9] }));
+
+        const bus = createEventBus();
+        const perf: AbilityPerformed[] = [];
+        const grants: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('ability-performed', (e) => {
+            if (e.actorId === 'attacker') perf.push(e);
+        });
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Blast') grants.push(e);
+        });
+        runCombat({
+            ...focusCast(1, allPattern(), 50),
+            speed: 500,
+            teamActors: [observer([allyCritRider()])],
+            enemyAttackers: [
+                passiveEnemyAt('anchor', 'M4'),
+                passiveEnemyAt('covered', 'M3'),
+                passiveEnemyAt('third', 'M2'),
+            ],
+            bus,
+        });
+
+        // Fixture self-check: ONE attack, TWO critting victims — the (hit, victim) collapse is
+        // what is under test, so the fixture must actually have multiple critting pairs.
+        expect(perf).toHaveLength(1);
+        expect(perf[0].critHits).toBe(2);
+
+        // The distinction that must survive PR2: per SUB-ATTACK, not per critting pair.
+        expect(grants).toHaveLength(1);
+    });
+});
