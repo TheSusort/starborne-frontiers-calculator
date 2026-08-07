@@ -38,6 +38,35 @@ describe('parsePlacementArgs', () => {
     it('ignores unrecognized tokens', () => {
         expect(parsePlacementArgs(['--nope', 'x']).seeds).toBe(5);
     });
+
+    it('rejects a non-numeric --seeds, naming the offending token', () => {
+        expect(() => parsePlacementArgs(['--seeds', 'abc'])).toThrow(/abc/);
+    });
+
+    it('rejects --seeds 0, naming the offending token', () => {
+        expect(() => parsePlacementArgs(['--seeds', '0'])).toThrow(/0/);
+    });
+
+    it('rejects a fractional --seeds instead of silently truncating', () => {
+        expect(() => parsePlacementArgs(['--seeds', '3.7'])).toThrow(/3\.7/);
+    });
+
+    it('rejects a trailing --seeds with no value', () => {
+        expect(() => parsePlacementArgs(['--seeds'])).toThrow(/positive integer/);
+    });
+
+    it('rejects a negative --seeds', () => {
+        expect(() => parsePlacementArgs(['--seeds', '-1'])).toThrow(/-1/);
+    });
+
+    it('rejects a non-numeric --base-seed, naming the offending token', () => {
+        expect(() => parsePlacementArgs(['--base-seed', 'abc'])).toThrow(/abc/);
+    });
+
+    it('accepts a negative or zero --base-seed', () => {
+        expect(parsePlacementArgs(['--base-seed', '-1']).baseSeed).toBe(-1);
+        expect(parsePlacementArgs(['--base-seed', '0']).baseSeed).toBe(0);
+    });
 });
 
 describe('buildPlacementLedgerJson', () => {
@@ -64,6 +93,12 @@ describe('renderPlacementLedgerMarkdown', () => {
         expect(md).toContain('No placement asymmetries');
     });
 
+    it('does not hardcode the CombatLogEntryKind union size in the calibration caveat', () => {
+        const md = renderPlacementLedgerMarkdown([diff], health);
+        expect(md).toContain('CombatLogEntryKind');
+        expect(md).not.toContain('17 `CombatLogEntryKind`');
+    });
+
     it('flags a zero-kind placement as a vacuity warning', () => {
         const md = renderPlacementLedgerMarkdown([], {
             ...health,
@@ -76,6 +111,19 @@ describe('renderPlacementLedgerMarkdown', () => {
         const md = renderPlacementLedgerMarkdown([diff], health);
         expect(md).toMatch(/seed noise/i);
         expect(md).toContain('--base-seed');
+    });
+
+    it('derives the seed count in the seed-noise caveat instead of hardcoding it', () => {
+        const md = renderPlacementLedgerMarkdown([diff], health);
+        expect(md).toContain(`K=${health.seeds.length}`);
+    });
+
+    it('does not hardcode a specific run\'s findings in the generic seed-noise caveat', () => {
+        const md = renderPlacementLedgerMarkdown([diff], health);
+        expect(md).not.toContain('debuff-resisted');
+        expect(md).not.toContain('Belladonna');
+        expect(md).not.toContain('Enforcer');
+        expect(md).not.toContain('Valerian');
     });
 
     it("discloses the playerTeam[0]-is-the-heal-target caveat", () => {

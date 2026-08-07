@@ -2,13 +2,31 @@ import { PLACEMENTS, type Placement, type PlacementDiff } from '../../src/utils/
 
 const DEFAULT_SEEDS = 5;
 
+function parsePositiveIntArg(flag: string, raw: string | undefined): number {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+        throw new Error(`${flag} must be a positive integer, got ${JSON.stringify(raw)}`);
+    }
+    return n;
+}
+
+function parseIntArg(flag: string, raw: string | undefined): number {
+    const n = Number(raw);
+    if (!Number.isInteger(n)) {
+        throw new Error(`${flag} must be an integer, got ${JSON.stringify(raw)}`);
+    }
+    return n;
+}
+
 /** Pure: parses `--seeds <K>` / `--base-seed <N>`. `--seeds` is the number of consecutive seeds to
- *  union over, not a seed value. Unrecognized tokens are ignored (no positional args). */
+ *  union over, not a seed value, and must be a positive integer. `--base-seed` is a seed value
+ *  itself (any integer, including negative and zero). Unrecognized tokens are ignored (no
+ *  positional args). Throws with the offending raw token on an invalid value. */
 export function parsePlacementArgs(argv: string[]): { seeds: number; baseSeed: number } {
     const out = { seeds: DEFAULT_SEEDS, baseSeed: Number.NaN };
     for (let i = 0; i < argv.length; i++) {
-        if (argv[i] === '--seeds') out.seeds = Number(argv[++i]);
-        else if (argv[i] === '--base-seed') out.baseSeed = Number(argv[++i]);
+        if (argv[i] === '--seeds') out.seeds = parsePositiveIntArg('--seeds', argv[++i]);
+        else if (argv[i] === '--base-seed') out.baseSeed = parseIntArg('--base-seed', argv[++i]);
     }
     return out;
 }
@@ -73,8 +91,8 @@ export function renderPlacementLedgerMarkdown(
     lines.push(
         '**Calibration is narrower than it sounds.** The calibration subjects (`CALIBRATION_SUBJECT_NAMES`)',
         'have no passives, no charge skill, and only a bare damage-dealing active, so their fingerprint is',
-        'structurally bounded to `{}` or `{attack}` — none of the other 17 `CombatLogEntryKind` values can',
-        'EVER appear for them, in any placement, at any seed count. A clean calibration therefore proves the',
+        'structurally bounded to `{}` or `{attack}` — no other `CombatLogEntryKind` value can EVER appear',
+        'for them, in any placement, at any seed count. A clean calibration therefore proves the',
         "subject's actor id resolves correctly in all three placements for the `attack` pathway. It does NOT",
         'rule out an asymmetry in heal, shield, buff, death, or charge-changed attribution — those pathways',
         'are simply **not exercised** by the calibration gate at all.',
@@ -84,10 +102,10 @@ export function renderPlacementLedgerMarkdown(
         '**Seed noise, not just calibration scope, is a confound.** The RNG sub-stream is keyed by actor',
         'id, which necessarily changes with placement. Measured on this branch: the same crit landed at',
         'rounds 6+13 as `focus`, 5+16 as `team`, 7+20 as `enemy` — same physical ship, same seed, three',
-        'different draws. Union-over-K-seeds is the mitigation, but at the default K=5 its strength is',
-        'unquantified, and a landing- or proc-gated kind can still differ between placements purely by',
-        'draw. The three `debuff-resisted` findings below (Belladonna, Enforcer, Valerian) point in',
-        'MUTUALLY INCONSISTENT directions across ships — that pattern is the signature of seed noise, not',
+        `different draws. Union-over-K-seeds is the mitigation, but at K=${health.seeds.length} on this run its`,
+        'strength is unquantified, and a landing- or proc-gated kind can still differ between placements',
+        'purely by draw. A kind that appears in one placement and not another, for only a handful of',
+        'ships, and with no consistent direction across those ships, is the signature of seed noise, not',
         'a path gap. Before instrumenting a low-ship-count finding, re-run with a different `--base-seed`',
         'and see if it survives.',
         '',
