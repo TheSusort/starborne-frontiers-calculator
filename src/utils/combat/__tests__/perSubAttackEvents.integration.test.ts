@@ -227,6 +227,111 @@ describe('per-sub-attack ability-performed — cardinality and payload', () => {
 });
 
 /**
+ * THE FUNNEL-DIVERSION CASE — a sub-attack that struck victims but BOOKED NOTHING.
+ *
+ * `SubAttackOutcome.damage` is the POST-funnel `incomingBooked` sum, so it is legitimately 0 for a
+ * sub-attack whose whole hit the funnel diverted: a Protection cascade moving it onto an ally, or
+ * a one-shot transform deferring it into a DoT. Under the locked rule that is still a real
+ * attack — it resolved an anchor, expanded a footprint and rolled — so it MUST emit its own
+ * `ability-performed`.
+ *
+ * The plan originally prescribed gating on `victimIds.length === 0 || damage === 0`, which gets
+ * this wrong TWICE over: the diverted sub-attack vanishes, AND the survivors are re-inflated,
+ * because the per-event damage is `dap.damage / emitting.length` — drop one of three and the other
+ * two each report half the cast instead of a third. The gate tests the footprint alone.
+ *
+ * `Hit Mitigation` is the vehicle because it is a genuine ONE-SHOT (`hitMitigation.ts`): it blocks
+ * the NEXT direct hit and is consumed, so exactly sub-attack 0 is diverted and 1-2 land normally —
+ * the asymmetry that makes the inflation visible.
+ */
+describe('a sub-attack whose damage is fully diverted still emits its own event', () => {
+    afterEach(() => resetRateGateRng());
+
+    /** An enemy that self-casts a long `Hit Mitigation` from its ACTIVE slot and acts first, so
+     *  the one-shot block is armed before the focus attacker's cast. Deals nothing itself. */
+    const blockingEnemyAt = (id: string, position: Position) =>
+        ({
+            id,
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 999 },
+            chargeCount: 0,
+            startCharged: false,
+            position,
+            affinity: 'antimatter',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'buff',
+                                target: 'self',
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Hit Mitigation',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 99, // never expires inside the fixture
+                                },
+                            }),
+                            ab({ type: 'damage', config: { type: 'damage', multiplier: 0 } }),
+                        ],
+                    },
+                ],
+            },
+        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    const run = (blocked: boolean) => {
+        idc = 0;
+        setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
+        const bus = createEventBus();
+        const perf: AbilityPerformed[] = [];
+        const attacked: Attacked[] = [];
+        bus.on('ability-performed', (e) => {
+            if (e.actorId === 'attacker') perf.push(e);
+        });
+        bus.on('attacked', (e) => {
+            if (e.attackerId === 'attacker') attacked.push(e);
+        });
+        runCombat({
+            ...focusCast(3, basePattern(), 0),
+            speed: 1, // slower than the enemy, so the block is up before the cast
+            enemyAttackers: [
+                blocked ? blockingEnemyAt('anchor', 'M4') : passiveEnemyAt('anchor', 'M4'),
+            ],
+            bus,
+        });
+        return { perf, attacked };
+    };
+
+    it('emits all THREE events and leaves the surviving shares uninflated', () => {
+        const blockedRun = run(true);
+        const control = run(false);
+
+        // Fixture self-check: the block really did swallow sub-attack 0 and nothing else. A
+        // fully-transformed hit suppresses its `attacked` signal (it dealt no direct damage), so
+        // the blocked run shows 2 where the control shows 3. Without this the test could pass
+        // vacuously against a fixture where Hit Mitigation never fired.
+        expect(control.attacked).toHaveLength(3);
+        expect(blockedRun.attacked).toHaveLength(2);
+
+        // THE cardinality claim: a diverted sub-attack is still an attack.
+        expect(blockedRun.perf).toHaveLength(3);
+
+        // THE inflation claim: every event carries the same share as the unblocked control — one
+        // third of the cast. Under the rejected `damage === 0` gate this run would have produced
+        // TWO events each carrying HALF the cast, i.e. 1.5× these numbers.
+        const share = control.perf[0].damage!;
+        expect(share).toBeGreaterThan(0);
+        for (const e of blockedRun.perf) expect(e.damage).toBeCloseTo(share, 6);
+        expect(blockedRun.perf.reduce((s, e) => s + (e.damage ?? 0), 0)).toBeCloseTo(3 * share, 6);
+    });
+});
+
+/**
  * MANDATORY EXTRA COVERAGE 1 — Tenacity's "> 25% of max HP" gate.
  *
  * The gate reads `attacked.damage`. Before PR2 every per-hit `attacked` of a multi-hit cast
@@ -315,7 +420,14 @@ describe('attacked payload — Tenacity’s >25%-of-max-HP gate sees ONE sub-att
         const bus = createEventBus();
         const attacked: Attacked[] = [];
         const protections: CombatEvent[] = [];
+        // Ordered enemy-side stream: the enemy path is the only one that splits emission across
+        // `deferEmission` / `emitDeferred`, so its interleaving needs its own lock.
+        const stream: CombatEvent[] = [];
+        bus.on('ability-performed', (e) => {
+            if (e.actorId === 'enemy-mh') stream.push(e as CombatEvent);
+        });
         bus.on('attacked', (e) => {
+            if (e.attackerId === 'enemy-mh') stream.push(e as CombatEvent);
             if (e.targetId === 'victim') attacked.push(e);
         });
         bus.on('buff-applied', (e) => {
@@ -352,7 +464,7 @@ describe('attacked payload — Tenacity’s >25%-of-max-HP gate sees ONE sub-att
             enemyAttackers: [enemyMultiHit()],
             bus,
         });
-        return { attacked, protections: protections.length };
+        return { attacked, protections: protections.length, stream };
     };
 
     it('each attacked carries its SUB-ATTACK’s damage, not the cast aggregate', () => {
@@ -387,6 +499,33 @@ describe('attacked payload — Tenacity’s >25%-of-max-HP gate sees ONE sub-att
         // maxHp = 3.5·slice → 25% of it is 0.875·slice, under one sub-attack, and the victim still
         // outlives the 3·slice cast. The gate is genuinely satisfiable on the new basis.
         expect(runVictim(3.5 * slice).protections).toBeGreaterThan(0);
+    });
+
+    /**
+     * THE ENEMY-PATH INTERLEAVING LOCK.
+     *
+     * `deferEmission` / `emitDeferred` is PR2's only asymmetric plumbing: the enemy site keeps a
+     * LEADING `ability-performed` where the single aggregate emit has always sat and runs the rest
+     * of the sequence after its own inline damage-taken-leech tail (SP-U U5). Everything else in
+     * this file drives the PLAYER path, which runs the whole sequence in one place, so the enemy
+     * split is otherwise covered only by inference.
+     *
+     * This repo's history is that the enemy path rots silently and specifically (#305 enemy
+     * support ships never spent their charges, #306 enemy ships dropped their whole passive slot),
+     * so the shape is pinned literally for PR3-PR6 to inherit.
+     */
+    it('the ENEMY path interleaves too: P a P a P a for a hits:3 enemy cast', () => {
+        idc = 0;
+        setRateGateRng(() => 0.9);
+        setKeyedRng(() => 0.9);
+        const { stream } = runVictim(1_000_000_000);
+        const kinds = stream.map((e) => (e.type === 'ability-performed' ? 'P' : 'a'));
+        expect(kinds.join('')).toBe('PaPaPa');
+        // Stated as the invariant too: an event is never followed directly by another event, which
+        // is what would leave rows 1..N-1 target-less for finalizeMissEntry to splice out.
+        for (let i = 1; i < kinds.length; i++) {
+            if (kinds[i] === 'P') expect(kinds[i - 1]).toBe('a');
+        }
     });
 });
 

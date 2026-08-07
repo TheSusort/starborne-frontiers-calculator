@@ -5931,9 +5931,11 @@ export function runCombat(input: CombatEngineInput): {
 
         // ── Deferred ability-performed emit helper ────────────────────────────────────
         // Extracted from the four structurally identical bus.emit sites (focus positional,
-        // walked-team positional, enemy positional, enemy 0-damage fallback). The caller
-        // supplies the per-victim crit aggregate (anyCrit / critPairs) — or the anchor-based
-        // fallback values for the 0-damage path — so each site only passes what it knows.
+        // walked-team positional, enemy positional, enemy 0-damage fallback). The caller supplies
+        // this event's crit identity — since PR2 that is ONE SUB-ATTACK's `didCrit` /
+        // `critVictimIds` on the interleaved path, or the cast-wide per-victim aggregate
+        // (`anyCrit` / `critPairs`) on the nothing-landed and 0-damage fallbacks — so each site
+        // only passes what it knows.
         //
         // PR2 Task 3: a multi-hit skill is N consecutive full-walk attacks, so a positional cast
         // now calls this ONCE PER SUB-ATTACK (see the interleaved emission block in
@@ -6535,8 +6537,10 @@ export function runCombat(input: CombatEngineInput): {
         //     detonation); the enemy site DEFERS everything but its first `ability-performed` to
         //     AFTER its inline non-positional damage-taken-leech tail (its row-14 accounting, kept
         //     inline → U5) by passing `deferEmission` and running the returned `emitDeferred` there.
-        // Returns { critAgg, attackedSignals, emitDeferred } so the enemy site can record
-        // enemyCritAgg (for its 0-damage deferred-emit fallback) and run that remainder. sel carries
+        // Returns { critAgg, emitDeferred } so the enemy site can record enemyCritAgg (for its
+        // 0-damage deferred-emit fallback) and run that remainder. The signal map itself is NOT
+        // returned: since PR2 Task 3 every consumer reads it through `emitAttackedForSubAttack` /
+        // `emitDeferred`, so exposing it would only invite a second, out-of-order drain. sel carries
         // the pre-call head-locals the block reads (esp. preTurnVictimStatus, which MUST be the
         // pre-runPlayerTurn snapshot — never recomputed post-hoc).
         /**
@@ -6631,7 +6635,6 @@ export function runCombat(input: CombatEngineInput): {
                 critVictimIds: string[];
                 subAttacks: SubAttackOutcome[];
             };
-            attackedSignals: PositionalAttackedSignals;
             /** Runs the deferred remainder of the emission sequence. No-op unless `deferEmission`. */
             emitDeferred: () => void;
         } => {
@@ -6747,16 +6750,25 @@ export function runCombat(input: CombatEngineInput): {
             const signalledIndices = [...attackedSignals.keys()].sort((a, b) => a - b);
             if (sel.deferredAbilityPerformed) {
                 const dap = sel.deferredAbilityPerformed;
-                // Gate on the FOOTPRINT, not on `whiffed`: `whiffed` records only that the anchor
-                // failed to resolve, so a resolved anchor over an empty footprint yields
-                // {whiffed:false, victimIds:[], damage:0} and emitting there would be a phantom
-                // attack. `on-crit` and `on-debuff-inflicted` have no damage guard the way
-                // `on-deal-damage` incidentally does, so a phantom event really would fire them.
-                const emitting = critAgg.subAttacks.filter(
-                    (sub) => sub.victimIds.length > 0 && sub.damage !== 0
-                );
+                // Gate on the FOOTPRINT ALONE, not on `whiffed` and not on the damage:
+                //  • `whiffed` records only that the anchor failed to resolve, so a resolved anchor
+                //    over an empty footprint yields {whiffed:false, victimIds:[], damage:0} and
+                //    emitting there would be a phantom attack. `on-crit` and `on-debuff-inflicted`
+                //    have no damage guard the way `on-deal-damage` incidentally does, so a phantom
+                //    event really would fire them.
+                //  • `sub.damage` is the POST-funnel `incomingBooked` sum, which is legitimately 0
+                //    for a sub-attack whose whole hit was redirected by Protection or transformed
+                //    into a DoT. That is a real attack under the locked rule — it struck victims,
+                //    it rolled, it must emit — and excluding it ALSO re-inflates the survivors,
+                //    because `share = dap.damage / emitting.length` divides the cast's pre-funnel
+                //    directDamage by the emitting count. (The plan prescribed `damage === 0` here;
+                //    that was a plan defect, corrected in the plan file too.)
+                const emitting = critAgg.subAttacks.filter((sub) => sub.victimIds.length > 0);
                 if (emitting.length === 0) {
-                    // Nothing landed (every sub-attack whiffed, or the funnel booked nothing).
+                    // Nothing landed: every sub-attack either whiffed (no anchor) or resolved over
+                    // an EMPTY footprint. Note this is a footprint test only — a sub-attack that
+                    // struck victims but booked no damage (Protection redirect, DoT transform) is
+                    // still an attack and emits above.
                     // The cast still reports ONE attack with the cast-wide aggregate — exactly the
                     // pre-PR2 emit, which is what keeps a whiffed/absorbed N=1 cast byte-identical
                     // (its target-less row is pruned by finalizeMissEntry unless a reactive nested
@@ -6811,9 +6823,12 @@ export function runCombat(input: CombatEngineInput): {
                                     ),
                             });
                         }
-                        // A bucket with signals but no event (every victim's booked damage was
-                        // diverted away) still emits its `attacked`: total attacked cardinality is
-                        // invariant across PR2, which is what keeps incoming procs correct.
+                        // Emitted unconditionally on the index, independent of whether this bucket
+                        // also produced an event: total `attacked` cardinality is invariant across
+                        // PR2, which is what keeps incoming procs correct. (Since the gate above
+                        // tests the footprint alone, a bucket with signals always has an event too
+                        // — signals only exist for victims — but the two are kept independent so a
+                        // future gate change cannot silently drop `attacked` events.)
                         const victims = attackedSignals.get(idx);
                         if (victims && victims.size > 0) {
                             steps.push({
@@ -6837,12 +6852,20 @@ export function runCombat(input: CombatEngineInput): {
             }
             let emitDeferred = (): void => {};
             if (deferEmission) {
-                // Keep ONLY the first `ability-performed` here (its historical position); the rest
+                // Keep ONLY a LEADING `ability-performed` here (its historical position); the rest
                 // of the sequence — including that event's own `attacked` — runs at the call
                 // site's emit point.
-                const firstEvent = steps.findIndex((step) => step.isEvent);
-                if (firstEvent >= 0) steps[firstEvent].run();
-                const rest = steps.filter((_, i) => i !== firstEvent);
+                //
+                // The hoist tests `steps[0]` specifically, NOT `findIndex(isEvent)`. Searching past
+                // leading non-event steps would REORDER the stream whenever sub-attack 0 produced
+                // `attacked` signals but no event: it would pull sub-attack 1's event forward past
+                // sub-attack 0's `attacked`, which then replays after it and attaches sub-attack 0's
+                // victims to sub-attack 1's log row. When step 0 is not an event we defer the whole
+                // list, which keeps relative order intact at the cost of the historical position of
+                // the first event — the strictly safer trade.
+                const hoistFirst = steps.length > 0 && steps[0].isEvent;
+                if (hoistFirst) steps[0].run();
+                const rest = hoistFirst ? steps.slice(1) : steps;
                 emitDeferred = () => {
                     for (const step of rest) step.run();
                 };
@@ -6859,7 +6882,7 @@ export function runCombat(input: CombatEngineInput): {
             if (recipe && recipe.dets.length > 0) {
                 applyPerVictimDetonation(recipe, detonationTargets, sink, actor.id, tb);
             }
-            return { critAgg, attackedSignals, emitDeferred };
+            return { critAgg, emitDeferred };
         };
 
         // H1 Task 6: rebind the per-round shield-granted accumulator EVERY round (not gated on
