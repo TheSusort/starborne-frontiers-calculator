@@ -630,10 +630,12 @@ describe('combat log — one attack row per sub-attack, splash amount per sub-at
  *    stays ONE attack however many victims crit.
  *
  * GUARD SCOPE (verified, not assumed). `oncePerAttackGuardKey` keys only `target: 'self'` riders
- * on the per-hit triggers and is cleared at each actor TURN-start (`engine.ts`), so a self rider
- * (Hermes's charge + Everliving Regeneration) stays once-per-turn across sub-attacks while
- * ally-routed and enemy-routed riders fan out per sub-attack. That asymmetry is deliberate and is
- * locked from the other side by `hermesOncePerAttack.integration.test.ts`.
+ * on `PER_HIT_REACTIVE_TRIGGERS`, and `on-ally-crit` is no longer in that set — self-routed riders
+ * (Hermes's charge + Everliving Regeneration) therefore fan out per sub-attack exactly like the
+ * ally- and enemy-routed ones, which is the approved decision. The AoE collapse does not depend on
+ * the guard at all: it comes from the listener enqueuing at most once per `ability-performed`.
+ * Both halves are locked from the other side by `hermesOncePerAttack.integration.test.ts`. The
+ * guard itself is untouched and still load-bearing for `on-attacked` / `on-ally-attacked`.
  */
 
 /** A keyed RNG walking a fixed draw sequence per stream key; unlisted keys always draw `fallback`. */

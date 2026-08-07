@@ -290,7 +290,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * Register each owner's reactive abilities as bus listeners. Listener bodies are
  * PURE (Phase 1 contract): they only `enqueue` an intent — never mutate combat state. Match
  * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
- *  - on-crit → ability-performed where actorId === ownerId; enqueues once per CRITTING HIT (critHits field; falls back to the didCrit binary for events without it)
+ *  - on-crit → ability-performed where actorId === ownerId; enqueues once per critting VICTIM
+ *    WITHIN that event (its `critHits` field; falls back to the didCrit binary for events without
+ *    it). Since PR2 an event is one SUB-ATTACK, so a `hits: N` cast fans out per sub-attack and,
+ *    within each, per critting footprint victim — not once per cast-wide critting (hit, victim)
+ *    pair, which counted hits × victims on a single event
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
  *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
@@ -309,8 +313,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    of Power). Stamps eventCtx.repairedAllyIds (the non-self recipients) so the buff branch fans
  *    the grant out to exactly those allies. One enqueue per qualifying cast.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
- *    fires once PER CRITTING HIT; the owner's own casts and every opposing actor are excluded
- *    (a walked enemy attacker now emits ability-performed, but its crit is NOT an ally crit).
+ *    fires once per critting ability-performed — i.e. once per critting SUB-ATTACK, and ONCE for
+ *    an AoE footprint however many victims it crit, never per (hit, victim) pair; the owner's own
+ *    casts and every opposing actor are excluded (a walked enemy attacker now emits
+ *    ability-performed, but its crit is NOT an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round; C2b-2)
  *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
@@ -663,10 +669,12 @@ export function registerReactiveListeners(args: {
                         // (hit, victim) collapse is what this one-enqueue-per-event shape guards,
                         // and it survives untouched — a single-hit 3-victim AoE that crits two
                         // victims still fires ONCE. Both halves are pinned by
-                        // perSubAttackEvents.integration.test.ts; the self-target side stays
-                        // once-per-TURN via oncePerAttackGuardKey (charge/buff branches only,
-                        // cleared at actor turn-start), locked by
-                        // hermesOncePerAttack.integration.test.ts.
+                        // perSubAttackEvents.integration.test.ts. SELF-target riders (Hermes's
+                        // charge + Everliving Regeneration) behave the SAME as ally-routed ones:
+                        // `on-ally-crit` was removed from PER_HIT_REACTIVE_TRIGGERS, so
+                        // oncePerAttackGuardKey no longer collapses them across sub-attacks. This
+                        // one-enqueue-per-event shape is the whole collapse, and it is enough.
+                        // Locked by hermesOncePerAttack.integration.test.ts.
                         if (!e.didCrit && (e.critHits ?? 0) === 0) return;
                         // The enemies actually crit. `critVictimIds` is present only on the
                         // POSITIONAL deferred emit; the single-target inline emit omits it, where
@@ -1447,10 +1455,9 @@ export interface IntentExecContext {
      *  counter branch is inert without the engine ctx). */
     counterFiredThisTurn?: Set<string>;
     /** Task 5: per-actor-turn once-per-attack guard for SELF-scoped reactive buff/charge
-     *  riders (Hermes's Everliving Regeneration + charge on `on-ally-crit`). Keyed
-     *  `ownerId:abilityId`, cleared at each actor turn-start (engine) — mirroring
-     *  `counterFiredThisTurn`. The per-hit / per-victim reactive triggers (on-ally-crit,
-     *  on-attacked, on-ally-attacked) enqueue one intent per critting-hit / hit / victim; a
+     *  riders. Keyed `ownerId:abilityId`, cleared at each actor turn-start (engine) — mirroring
+     *  `counterFiredThisTurn`. The per-hit / per-victim reactive triggers (on-attacked,
+     *  on-ally-attacked) enqueue one intent per hit per victim; a
      *  SELF-target buff/charge must land only ONCE for that whole attack. Ally/enemy-routed
      *  reactions (Sentinel damage, Howler/Cultivator/Graphite ally heal) are per-victim by design,
      *  and reactive HEALS/SHIELDS scale per hit (Isha/Adaptive Plating) — neither is keyed here
@@ -2300,22 +2307,38 @@ function emitReactiveDamageLog(
     ctx.flushConsequenceLogs?.();
 }
 
-/** Task 5: reactive triggers that fan a single ATTACK into multiple `attacked`/`ability-performed`
- *  events — one per hit, per AoE victim, or per critting hit. A SELF-scoped fixed-state rider
- *  (buff/charge) on one of these must apply only ONCE for the whole attack; per-victim ally /
- *  enemy routing legitimately fires per event, and reactive HEALS/SHIELDS scale per hit (see the
- *  heal branch's scope note) so they are excluded too. */
+/** Task 5: reactive triggers that fan a single ATTACK into multiple `attacked` events — one per
+ *  hit and per AoE victim. A SELF-scoped fixed-state rider (buff/charge) on one of these must
+ *  apply only ONCE for the whole attack; per-victim ally / enemy routing legitimately fires per
+ *  event, and reactive HEALS/SHIELDS scale per hit (see the heal branch's scope note) so they are
+ *  excluded too.
+ *
+ *  `on-ally-crit` USED to be listed here and no longer is (multi-hit full-walk epic, PR2). Two
+ *  independent facts make the guard both unnecessary and actively wrong for it:
+ *   1. UNNECESSARY. Its listener was rewritten to enqueue AT MOST ONCE per `ability-performed`
+ *      (the `critHits`-driven fan-out is gone), so the per-hit / per-AoE-victim over-fire this
+ *      guard existed to stop — the user-reported "Everliving Regeneration III ×2-4 for one
+ *      attack" — is already impossible. An AoE footprint is ONE attack, one event, one grant.
+ *   2. WRONG. The guard is cleared per actor TURN, but a `hits: N` skill is N consecutive
+ *      full-walk attacks emitting N events. Keeping it collapsed a 3-sub-attack ally crit into a
+ *      single Hermes charge instead of three. Approved behaviour change: once per critting
+ *      SUB-ATTACK. Dropping the trigger achieves exactly that — one fire per event — without
+ *      threading a sub-attack index onto the guard key, which would have been strictly worse
+ *      (two DIFFERENT allies critting in one turn both carry index 0 and would collapse).
+ *  Both halves are locked by `hermesOncePerAttack.integration.test.ts`.
+ *
+ *  The two remaining triggers genuinely fan one attack into many events and keep the guard. */
 const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTrigger>([
-    'on-ally-crit',
     'on-attacked',
     'on-ally-attacked',
 ]);
 
 /** Returns the once-per-attack guard key `ownerId:abilityId` when this intent is a SELF-target
- *  rider on a per-hit reactive trigger (Hermes's Everliving Regeneration + charge), else undefined
- *  — meaning "not guarded". Only `target: 'self'` qualifies: ally-routed grants (damagedAllyId —
- *  Cultivator/Graphite/Howler/Sentinel repair) and enemy-routed damage (Sentinel) must stay
- *  per-victim, so they never key here. Cross-referenced by the charge and buff branches only. */
+ *  rider on a per-hit reactive trigger (an on-attacked / on-ally-attacked buff or charge), else
+ *  undefined — meaning "not guarded". Only `target: 'self'` qualifies: ally-routed grants
+ *  (damagedAllyId — Cultivator/Graphite/Howler/Sentinel repair) and enemy-routed damage (Sentinel)
+ *  must stay per-victim, so they never key here. Cross-referenced by the charge and buff branches
+ *  only. `on-ally-crit` is deliberately NOT in the set — see {@link PER_HIT_REACTIVE_TRIGGERS}. */
 function oncePerAttackGuardKey(intent: Intent): string | undefined {
     return intent.ability.target === 'self' && PER_HIT_REACTIVE_TRIGGERS.has(intent.ability.trigger)
         ? `${intent.ownerId}:${intent.ability.id}`
@@ -2481,8 +2504,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'charge') {
         if (!passesOncePerRoundGate(intent, ctx)) return;
-        // Task 5: a SELF-target charge on a per-hit reactive trigger (Hermes's on-ally-crit
-        // charge) collapses to +1 per attack. undefined key → not guarded (enemy/ally charges).
+        // Task 5: a SELF-target charge on a per-hit reactive trigger (on-attacked /
+        // on-ally-attacked) collapses to +1 per attack. undefined key → not guarded (enemy/ally
+        // charges, and every on-ally-crit rider — see PER_HIT_REACTIVE_TRIGGERS).
         const chargeGuardKey = oncePerAttackGuardKey(intent);
         if (chargeGuardKey && ctx.reactionFiredThisAttack?.has(chargeGuardKey)) return;
         if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
@@ -2533,12 +2557,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     }
 
     if (cfg.type === 'buff') {
-        // Task 5: a SELF-target reactive buff on a per-hit trigger (Hermes's Everliving
-        // Regeneration on on-ally-crit) applies once per attack — a multi-hit / AoE crit enqueues
-        // this intent once per critting hit, but the self-buff must land only once. Checked FIRST
-        // (before the once-per-combat/per-ally consumes below) so a collapsed duplicate burns no
-        // other cap; the key is consumed only once the buff actually applies (after all gates).
-        // undefined key → not guarded (ally/all-allies grants stay per-victim/per-hit).
+        // Task 5: a SELF-target reactive buff on a per-hit trigger (on-attacked /
+        // on-ally-attacked) applies once per attack — one attack fans into one `attacked` per hit
+        // per victim, but the self-buff must land only once. Checked FIRST (before the
+        // once-per-combat/per-ally consumes below) so a collapsed duplicate burns no other cap;
+        // the key is consumed only once the buff actually applies (after all gates). undefined key
+        // → not guarded (ally/all-allies grants stay per-victim/per-hit, and on-ally-crit riders
+        // are collapsed by their LISTENER instead — see PER_HIT_REACTIVE_TRIGGERS).
         const buffGuardKey = oncePerAttackGuardKey(intent);
         if (buffGuardKey && ctx.reactionFiredThisAttack?.has(buffGuardKey)) return;
         // "Once per battle" buff grant (Tycho/Shelter/Los Barrier): same combat-lifetime
