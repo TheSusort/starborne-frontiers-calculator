@@ -172,7 +172,20 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
             rollVictimCrit: (v) => v.id === 'covered', // only covered crits
         });
 
-        expect(result).toEqual({ anyCrit: true, critPairs: 1, critVictimIds: ['covered'] });
+        expect(result).toEqual({
+            anyCrit: true,
+            critPairs: 1,
+            critVictimIds: ['covered'],
+            subAttacks: [
+                {
+                    index: 0,
+                    whiffed: false,
+                    didCrit: true,
+                    damage: expect.any(Number),
+                    victimIds: ['origin', 'covered'],
+                },
+            ],
+        });
     });
 
     /**
@@ -201,7 +214,20 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
             // No rollVictimCrit → fallback to hitCrits[h]=false → nobody crits
         });
 
-        expect(result).toEqual({ anyCrit: false, critPairs: 0, critVictimIds: [] });
+        expect(result).toEqual({
+            anyCrit: false,
+            critPairs: 0,
+            critVictimIds: [],
+            subAttacks: [
+                {
+                    index: 0,
+                    whiffed: false,
+                    didCrit: false,
+                    damage: expect.any(Number),
+                    victimIds: ['origin', 'covered'],
+                },
+            ],
+        });
     });
 
     /**
@@ -280,10 +306,30 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
         // 2 hits × 2 victims, all crit → 4 critting pairs, but only 2 DISTINCT crit victims:
         // critVictimIds de-duplicates across hits ("deals X to that enemy" is per enemy, not per
         // critting (hit, victim) pair), and lists them in first-crit order.
+        //
+        // critPairs (4) and subAttacks.length (2) are DIFFERENT numbers measuring different axes:
+        // critPairs multiplies hits × victims, whereas a sub-attack is one full-walk attack whose
+        // AoE footprint is a single spread. Do NOT "fix" either to match the other.
         expect(result).toEqual({
             anyCrit: true,
             critPairs: 4,
             critVictimIds: ['origin', 'covered'],
+            subAttacks: [
+                {
+                    index: 0,
+                    whiffed: false,
+                    didCrit: true,
+                    damage: expect.any(Number),
+                    victimIds: ['origin', 'covered'],
+                },
+                {
+                    index: 1,
+                    whiffed: false,
+                    didCrit: true,
+                    damage: expect.any(Number),
+                    victimIds: ['origin', 'covered'],
+                },
+            ],
         });
     });
 });

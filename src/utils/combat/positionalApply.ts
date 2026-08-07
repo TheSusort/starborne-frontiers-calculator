@@ -75,6 +75,37 @@ export interface VictimDamageOutcome {
  *  by a minimal stub. */
 export type AppliedVictimDamage = VictimDamageOutcome & { incomingBooked: number };
 
+/**
+ * The outcome of ONE sub-attack — one iteration of `applyPositionalDamage`'s hit loop.
+ *
+ * A multi-hit skill is N consecutive FULL-WALK attacks (locked game rule: Enforcer critting on
+ * every sub-attack inflicts N Defense Shred stacks), so the sub-attack — not the cast and not the
+ * (hit, victim) pair — is the unit that outgoing effects resolve against. Its AoE footprint is
+ * ONE attack's spread and shares a single outgoing roll.
+ *
+ * Emitted for EVERY iteration including whiffs, so `subAttacks[h]` always corresponds to loop
+ * iteration `h`.
+ *
+ * Nothing consumes this yet — PR2 turns each entry into its own `ability-performed`.
+ * See docs/superpowers/specs/2026-08-07-multi-hit-full-walk-attacks-design.md.
+ */
+export interface SubAttackOutcome {
+    /** 0-based index within the cast. Always equals this entry's position in the array. */
+    index: number;
+    /** The anchor failed to resolve — this sub-attack landed nothing (no victims, no damage). */
+    whiffed: boolean;
+    /** At least one victim of THIS sub-attack critted. */
+    didCrit: boolean;
+    /**
+     * Sum of `incomingBooked` across this sub-attack's footprint victims — the funnel's own
+     * recorded intake, the same basis `emitHit` books. NOT the computed pre-funnel hit: a
+     * Protection cascade, incoming-block proc or DoT transform alters what actually landed.
+     */
+    damage: number;
+    /** Victims struck by this sub-attack, in footprint order. */
+    victimIds: string[];
+}
+
 /** Per-cell damage scale keyed off the resolved CellRole. */
 const roleScaleFor = (role: CellRole): number => (role === 'origin' ? 1.0 : 0.5);
 
@@ -135,7 +166,10 @@ export function footprintVictims(
  *          `critVictimIds` — the DISTINCT victims that took at least one critting hit, in
  *          first-crit order. Carries the per-victim crit IDENTITY that `critPairs` (a bare
  *          count) throws away, so an `on-ally-crit` reactive can route "that enemy" to the
- *          enemies actually crit rather than the cast's selected anchor.
+ *          enemies actually crit rather than the cast's selected anchor;
+ *          `subAttacks` — one {@link SubAttackOutcome} per loop iteration, in order, including
+ *          whiffs. Carries the SUB-ATTACK identity that `critPairs` also throws away (it
+ *          multiplies hits × victims into one number). Unconsumed as of PR1.
  */
 export function applyPositionalDamage(args: {
     hitCrits: boolean[];
@@ -191,7 +225,12 @@ export function applyPositionalDamage(args: {
      * Unsupplied → every victim uses hitCrits[h] → byte-identical.
      */
     rollVictimCrit?: (victim: CombatActor) => boolean;
-}): { anyCrit: boolean; critPairs: number; critVictimIds: string[] } {
+}): {
+    anyCrit: boolean;
+    critPairs: number;
+    critVictimIds: string[];
+    subAttacks: SubAttackOutcome[];
+} {
     const {
         hitCrits,
         scalars,
@@ -215,6 +254,7 @@ export function applyPositionalDamage(args: {
     // Insertion-ordered DISTINCT crit victims. A multi-hit cast that crits the same victim twice
     // lists it once — "deals X to that enemy" is per ENEMY, not per critting (hit, victim) pair.
     const critVictims = new Set<string>();
+    const subAttacks: SubAttackOutcome[] = [];
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
     // truth that victimHitDamage also reads), avoiding silent under/over-application from a
@@ -230,11 +270,22 @@ export function applyPositionalDamage(args: {
             acting
         );
         if (anchorActor === null || anchorActor.position === undefined) {
-            // WHIFF — no living target resolvable for this hit. Skip entirely.
+            // WHIFF — no living target resolvable for this sub-attack. Skip entirely, but still
+            // record an entry so `subAttacks[h]` stays aligned with the loop index.
+            subAttacks.push({
+                index: h,
+                whiffed: true,
+                didCrit: false,
+                damage: 0,
+                victimIds: [],
+            });
             continue;
         }
 
         const anchorCrit = hitCrits[h] ?? false;
+        let subDidCrit = false;
+        let subDamage = 0;
+        const subVictimIds: string[] = [];
 
         for (const { victim, roleScale } of footprintVictims(
             pattern,
@@ -248,6 +299,7 @@ export function applyPositionalDamage(args: {
                 anyCrit = true;
                 critPairs += 1;
                 critVictims.add(victim.id);
+                subDidCrit = true;
             }
             const equipReductionPct = incomingReductionFor?.(victim, didCrit) ?? 0;
             const dmgBase = victimHitDamage(
@@ -270,13 +322,20 @@ export function applyPositionalDamage(args: {
             //
             // Fallback keeps the previous shape for a caller that supplies no `incomingBooked` —
             // only test stubs of `applyToVictim`; the engine's own funnel always sets it.
-            emitHit?.(
-                victim,
-                outcome.incomingBooked ?? dmg - (outcome.transformedToDot ?? 0),
-                didCrit
-            );
+            const booked = outcome.incomingBooked ?? dmg - (outcome.transformedToDot ?? 0);
+            emitHit?.(victim, booked, didCrit);
             onVictimResolved?.(victim, dmg, outcome, didCrit);
+            subDamage += booked;
+            subVictimIds.push(victim.id);
         }
+
+        subAttacks.push({
+            index: h,
+            whiffed: false,
+            didCrit: subDidCrit,
+            damage: subDamage,
+            victimIds: subVictimIds,
+        });
     }
-    return { anyCrit, critPairs, critVictimIds: [...critVictims] };
+    return { anyCrit, critPairs, critVictimIds: [...critVictims], subAttacks };
 }
