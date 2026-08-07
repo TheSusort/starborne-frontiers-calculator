@@ -3652,6 +3652,29 @@ export function runCombat(input: CombatEngineInput): {
         }
     };
 
+    // BOTH leech directions for one resolved victim, in one place. Every positional attack pays
+    // out two independent passives: the ACTOR's damage-dealt standing leech and the VICTIM's
+    // damage-taken leech. All three attack sites (focus / walked team / enemy) call exactly this.
+    //
+    // Deliberately a single helper rather than the two calls hand-written per site: writing them
+    // out three times is the very shape that produced the bugs this seam fixes — the enemy site
+    // procced only the taken direction and the two player sites only the standing one, so each
+    // side ran just one of its two passive leeches. Duplicated call pairs drift; a single one
+    // cannot.
+    //
+    // The two procs act on DISJOINT actors (an actor is never its own victim) and accumulate
+    // additively into per-actor maps, so their relative order is not observable — it is fixed
+    // here only so no site has to think about it.
+    const procLeechesForVictim = (
+        actorId: string,
+        victim: CombatActor,
+        damage: number,
+        outcome: VictimDamageOutcome
+    ): void => {
+        procStandingLeechesPerVictim(actorId, damage);
+        procTakenLeechesPerVictim(victim, damage, outcome);
+    };
+
     // C2b-2 T5: the id of the actor whose turn is CURRENTLY executing. Set once at the top of
     // each actor's turn (after the dead-actor skips, before any damage is applied), so the
     // DIRECT-damage wrappers can stamp the lethal attacker onto ship-destroyed (Faust reads it
@@ -7822,13 +7845,8 @@ export function runCombat(input: CombatEngineInput): {
                                         deferredAbilityPerformed: turn.deferredAbilityPerformed,
                                         positionalDetonation: turn.positionalDetonation,
                                     },
-                                    // Both leech directions — see the enemy site's note: the
-                                    // actor's damage-DEALT leech and each victim's damage-TAKEN
-                                    // leech resolve at every attack, whichever side is acting.
-                                    (victim, damage, outcome) => {
-                                        procStandingLeechesPerVictim(actor.id, damage);
-                                        procTakenLeechesPerVictim(victim, damage, outcome);
-                                    },
+                                    (victim, damage, outcome) =>
+                                        procLeechesForVictim(actor.id, victim, damage, outcome),
                                     (attackedSignals) => {
                                         if (attackedSignals.size > 0) {
                                             emitPerVictimAttacked({
@@ -8053,11 +8071,8 @@ export function runCombat(input: CombatEngineInput): {
                                         deferredAbilityPerformed: teamTurn.deferredAbilityPerformed,
                                         positionalDetonation: teamTurn.positionalDetonation,
                                     },
-                                    // Both leech directions — see the enemy site's note.
-                                    (victim, damage, outcome) => {
-                                        procStandingLeechesPerVictim(actor.id, damage);
-                                        procTakenLeechesPerVictim(victim, damage, outcome);
-                                    },
+                                    (victim, damage, outcome) =>
+                                        procLeechesForVictim(actor.id, victim, damage, outcome),
                                     (attackedSignals) => {
                                         if (attackedSignals.size > 0) {
                                             emitPerVictimAttacked({
@@ -8719,14 +8734,7 @@ export function runCombat(input: CombatEngineInput): {
                                             positionalDetonation: enemyPositionalDetonation,
                                         },
                                         (victim, dmg, outcome) => {
-                                            procTakenLeechesPerVictim(victim, dmg, outcome);
-                                            // Both leech directions resolve at every attack: the
-                                            // victim's damage-TAKEN leech above, and the actor's
-                                            // own damage-DEALT leech here. This site used to proc
-                                            // only the first and the player→enemy sites only the
-                                            // second, so each side could run just one of its two
-                                            // passive leeches.
-                                            procStandingLeechesPerVictim(actor.id, dmg);
+                                            procLeechesForVictim(actor.id, victim, dmg, outcome);
                                             if (victim.id === tgt.id) {
                                                 positionalShieldCaptured = true;
                                                 positionalShieldWasHit =
