@@ -502,10 +502,15 @@ describe('calibration — an inert kit is placement-symmetric', () => {
         expect(CALIBRATION_SUBJECT_NAMES.length).toBeGreaterThan(0);
     });
 
+    // Explicit timeout: this runs 4 subjects × 3 placements × 3 scenarios × 2 seeds of REAL
+    // battles. It costs ~0.7s alone but is the most expensive single test in the suite, and
+    // under full-suite worker contention it can exceed vitest's 5s default and fail as a
+    // timeout — a flake with nothing to do with placement symmetry. Budget, not speed-up: if
+    // this ever takes 30s of CPU rather than 30s of waiting, that IS a regression worth failing.
     it('reports no asymmetry for any inert subject', () => {
         const diffs = runCalibration(seedsFrom(SEED, 2));
         expect(diffs).toEqual([]);
-    });
+    }, 30_000);
 
     it('is not vacuous — an inert subject still produces kinds', () => {
         const subject = subjectShip(CALIBRATION_SUBJECT_NAMES[0]);

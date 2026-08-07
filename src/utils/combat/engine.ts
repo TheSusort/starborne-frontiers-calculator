@@ -3102,6 +3102,17 @@ export function runCombat(input: CombatEngineInput): {
         ...teamRuntimeById,
     ]);
 
+    // Every actor's runtime regardless of side. `runtimesById` is PLAYER-side only, which is the
+    // right scope for owner-routed player accounting but the wrong one for any per-owner ABILITY
+    // scan: a ship carries its kit onto whichever side it is placed. Used by the leech maps and
+    // their procs below so an enemy's passive leech is registered and resolvable exactly like a
+    // player's. Player entries win a key collision (the focus is keyed 'attacker', so there is
+    // none in practice) — same precedence as `runtimeFor`.
+    const allRuntimesById = new Map<string, PlayerActorRuntime>([
+        ...enemyPlayerRuntimeByActorId,
+        ...runtimesById,
+    ]);
+
     // Passive-slot standing leeches per owner (damage-leech spec §4): X% of credited
     // damage repaired/shielded immediately at credit time. Scanned once at setup from each
     // runtime's reactive-partitioned castSkills (passive-slot heal/shield abilities are
@@ -3115,7 +3126,7 @@ export function runCombat(input: CombatEngineInput): {
     }
     const standingLeeches = new Map<string, StandingLeech[]>();
     if (healTarget) {
-        for (const [ownerId, rt] of runtimesById) {
+        for (const [ownerId, rt] of allRuntimesById) {
             const entries: StandingLeech[] = [];
             for (const slot of rt.castSkills.slots) {
                 if (slot.slot !== 'passive') continue;
@@ -3150,7 +3161,7 @@ export function runCombat(input: CombatEngineInput): {
     }
     const takenLeechesByOwner = new Map<string, TakenLeech[]>();
     if (healTarget) {
-        for (const [ownerId, rt] of runtimesById) {
+        for (const [ownerId, rt] of allRuntimesById) {
             const entries: TakenLeech[] = [];
             for (const slot of rt.castSkills.slots) {
                 if (slot.slot !== 'passive') continue;
@@ -3522,8 +3533,9 @@ export function runCombat(input: CombatEngineInput): {
         if (!healingCtx || amount <= 0) return;
         const entries = standingLeeches.get(sourceId);
         if (!entries) return;
-        const owner = runtimesById.get(sourceId);
+        const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
+        const ownerIsEnemy = owner.actor.side === 'enemy';
         for (const e of entries) {
             // Per-victim damage rides the `direct` channel only; detonation-scoped leeches
             // never fire here (bombs credit through the aggregate detonation path instead).
@@ -3536,16 +3548,29 @@ export function runCombat(input: CombatEngineInput): {
                     raw *= 1 + owner.critDamage / 100;
                 }
             }
+            // Recipient routing is SIDE-RELATIVE: "allies" means the owner's own side.
+            // `ally` (the single designated recipient) has no enemy-side equivalent — the player
+            // heal target is a player-only concept — and no corpus ship reaches it here: every
+            // passive leech that survives the reactive partition into `standingLeeches` targets
+            // `self` (Magnolia, Malvex, Quixilver, Valerian; Valkyrie's `ally` one is
+            // `on-bomb-detonated`, so it is reactive and never enters this map). An enemy owner
+            // therefore resolves to NO recipient rather than silently repairing a PLAYER — the
+            // same nothing it got before enemy owners were registered at all. Wire a real rule
+            // here if a future enemy kit needs one.
             const recipients =
                 e.target === 'ally'
-                    ? [healTarget!.id]
+                    ? ownerIsEnemy
+                        ? []
+                        : [healTarget!.id]
                     : e.target === 'all-allies'
-                      ? healingCtx.playerIds
+                      ? ownerIsEnemy
+                          ? healingCtx.enemyIds
+                          : healingCtx.playerIds
                       : [sourceId];
             for (const rid of recipients) {
                 // Resolve the recipient's live actor for the pool application (Task-1 closures
-                // take an explicit victim). runtimesById, not allActorsById: the focus is 'attacker'.
-                const recipientActor = runtimesById.get(rid)?.actor;
+                // take an explicit victim). Runtime maps, not allActorsById: the focus is 'attacker'.
+                const recipientActor = allRuntimesById.get(rid)?.actor;
                 if (e.kind === 'heal') {
                     healingCtx.credit(sourceId, 'directHeal', raw);
                     if (recipientActor) {
@@ -3597,7 +3622,7 @@ export function runCombat(input: CombatEngineInput): {
         if (outcome.barriered) return;
         const entries = takenLeechesByOwner.get(victim.id);
         if (!entries) return;
-        const rt = runtimesById.get(victim.id);
+        const rt = allRuntimesById.get(victim.id);
         for (const e of entries) {
             // requiresHpDamage gate (per victim): shield present at hit start AND HP damage dealt.
             if (e.requiresHpDamage && !(outcome.shieldBefore > 0 && outcome.hpDamage > 0)) {
@@ -7797,8 +7822,13 @@ export function runCombat(input: CombatEngineInput): {
                                         deferredAbilityPerformed: turn.deferredAbilityPerformed,
                                         positionalDetonation: turn.positionalDetonation,
                                     },
-                                    (_victim, damage) =>
-                                        procStandingLeechesPerVictim(actor.id, damage),
+                                    // Both leech directions — see the enemy site's note: the
+                                    // actor's damage-DEALT leech and each victim's damage-TAKEN
+                                    // leech resolve at every attack, whichever side is acting.
+                                    (victim, damage, outcome) => {
+                                        procStandingLeechesPerVictim(actor.id, damage);
+                                        procTakenLeechesPerVictim(victim, damage, outcome);
+                                    },
                                     (attackedSignals) => {
                                         if (attackedSignals.size > 0) {
                                             emitPerVictimAttacked({
@@ -8023,8 +8053,11 @@ export function runCombat(input: CombatEngineInput): {
                                         deferredAbilityPerformed: teamTurn.deferredAbilityPerformed,
                                         positionalDetonation: teamTurn.positionalDetonation,
                                     },
-                                    (_victim, damage) =>
-                                        procStandingLeechesPerVictim(actor.id, damage),
+                                    // Both leech directions — see the enemy site's note.
+                                    (victim, damage, outcome) => {
+                                        procStandingLeechesPerVictim(actor.id, damage);
+                                        procTakenLeechesPerVictim(victim, damage, outcome);
+                                    },
                                     (attackedSignals) => {
                                         if (attackedSignals.size > 0) {
                                             emitPerVictimAttacked({
@@ -8687,6 +8720,13 @@ export function runCombat(input: CombatEngineInput): {
                                         },
                                         (victim, dmg, outcome) => {
                                             procTakenLeechesPerVictim(victim, dmg, outcome);
+                                            // Both leech directions resolve at every attack: the
+                                            // victim's damage-TAKEN leech above, and the actor's
+                                            // own damage-DEALT leech here. This site used to proc
+                                            // only the first and the player→enemy sites only the
+                                            // second, so each side could run just one of its two
+                                            // passive leeches.
+                                            procStandingLeechesPerVictim(actor.id, dmg);
                                             if (victim.id === tgt.id) {
                                                 positionalShieldCaptured = true;
                                                 positionalShieldWasHit =
