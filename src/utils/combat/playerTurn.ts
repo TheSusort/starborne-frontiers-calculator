@@ -2396,10 +2396,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (deferAbilityPerformedToEngine set AND a damage ability fired — the exact condition under
     // which the engine runs its per-victim apply, since its `positional` gate requires
     // positionalScalars != null ⟺ hasDamageAbility), DO NOT emit here. The engine emits ONE
-    // aggregate `ability-performed` AFTER its per-victim apply so `didCrit`/`critHits` reflect the
-    // TRUE per-victim outcomes (anyCrit OR / critPairs count) rather than the anchor-only values.
-    // Emitting once, later, keeps exactly ONE ability-performed per positional cast (no combat-log
-    // pollution) and preserves the ability-performed → per-victim `attacked` bus order.
+    // `ability-performed` AFTER its per-victim apply so `didCrit`/`critHits` reflect the TRUE
+    // per-victim outcomes rather than the anchor-only values.
+    // Since PR2 of the multi-hit full-walk epic the engine emits ONE event per SUB-ATTACK (a
+    // `hits: N` skill is N consecutive full-walk attacks), each immediately followed by that
+    // sub-attack's own `attacked` events — so what deferring preserves is the
+    // ability-performed → per-victim `attacked` bus order, per sub-attack. With N=1 that is one
+    // event per positional cast, exactly as before.
     // Non-positional / DPS / healing (flag absent, or no damage ability) → emit inline as before
     // → byte-identical.
     const deferAbilityPerformed = args.deferAbilityPerformedToEngine === true && hasDamageAbility;

@@ -169,9 +169,13 @@ export type AbilityTrigger =
     // event's slot discriminator). Self-scoped: the listener matches actorId === ownerId
     // && slot === 'charged'. Used by the Spearhead implant (all-allies Attack Up grant).
     | 'on-charged-cast'
-    // Warpstrike: owner dealt direct damage on its turn. Rides the aggregate
-    // ability-performed event emitted once per damage-dealing turn (runPlayerTurn
-    // emits exactly one; positional path emits none — engine.ts ~2887).
+    // Warpstrike: owner dealt direct damage on its turn. Rides the `ability-performed` event,
+    // which since the multi-hit full-walk epic (PR2) is emitted once per SUB-ATTACK, not once per
+    // turn: a `hits: N` skill is N consecutive full-walk attacks and fires this N times. An AoE
+    // footprint is ONE attack and fires once, however many victims it covers. On the positional
+    // path runPlayerTurn emits none and the engine emits them all after its per-victim apply
+    // (`emitDeferredAbilityPerformed`); on the non-positional/DPS path runPlayerTurn still emits
+    // exactly one per turn (its per-sub-attack split is PR5).
     | 'on-deal-damage'
     | 'on-enemy-charged-cast' // Phase 4: opposing-scoped reaction to an ENEMY casting its
     // charged skill (Curator purge/Block-Buff, FrontLine damage+shield). Mirror of

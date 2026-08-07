@@ -22,10 +22,13 @@ const dotNote = (dotType: DoTType, tier: number | undefined, stacks: number): st
  * then everything that FOLLOWED from the skill.
  *
  * Why a display sort rather than reordering the engine's emissions: the log renders events in
- * emission order, and for a POSITIONAL cast the engine deliberately defers its one aggregate
+ * emission order, and for a POSITIONAL cast the engine deliberately defers its
  * `ability-performed` until AFTER the per-victim apply (engine.ts `emitDeferredAbilityPerformed`),
- * so it can report the TRUE per-victim crit outcome instead of the anchor-only guess. That is why
- * the attack line landed last, under its own consequences:
+ * so it can report the TRUE per-victim crit outcome instead of the anchor-only guess. (Since the
+ * multi-hit full-walk epic, PR2, there is one such event per SUB-ATTACK rather than one per cast —
+ * a `hits: N` skill produces N attack rows, all carrying the same sticky skill tag. The deferral,
+ * and therefore this sort, is unchanged.) That is why the attack line landed last, under its own
+ * consequences:
  *
  *     Butcher: charge 0→1
  *     Butcher → Enemy Heliodor: Inferno II resisted

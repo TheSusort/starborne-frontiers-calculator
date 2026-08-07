@@ -50,15 +50,25 @@ export function diffFingerprints(
  *
  *  The `:slot` suffix is NOT a reliable CAST-vs-passive/reactive marker, despite appearances.
  *  `ctx.pendingSkill` (`{skillName, slot}`) is set exactly once per cast — from the single
- *  `skill-fired` event emitted before any of its clauses resolve (`playerTurn.ts`) — and several
+ *  `skill-fired` event emitted before any of its clauses resolve (`playerTurn.ts`) — and EIGHT
  *  log-entry handlers in `buildCombatLog.ts` each spread `...(ctx.consumePendingSkill() ?? {})`,
- *  which reads-and-clears it. So the tag is single-use FOR THE WHOLE CAST: whichever handler runs
- *  first wins `:slot`, and every later entry from that same cast lands BARE. A bare token can
- *  therefore be a genuine cast entry that simply lost the race, not a passive/reactive one.
+ *  which reads-and-clears it. So the tag is single-use FOR THE WHOLE CAST: whichever of those
+ *  handlers runs first wins `:slot`, and every later entry from that same cast lands BARE. A bare
+ *  token can therefore be a genuine cast entry that simply lost the race, not a passive/reactive
+ *  one.
  *  Concretely, Malvex's charged cast grants Barrier via a named buff routed through the
  *  `timedSelfBySlot` loop, which runs BEFORE the attack's `ability-performed` emission — so
  *  `buff-applied` consumes the tag (`buff:charged`) and THAT cast's attack lands as a bare
- *  `attack`. Its committed `richEnemy` snapshot carries both `attack` and `attack:charged` for
+ *  `attack`.
+ *
+ *  ONE handler is no longer among the eight: since the multi-hit full-walk epic (PR2) the
+ *  `ability-performed` handler calls `ctx.currentSkillTag()` instead, which LATCHES the tag for
+ *  the rest of the cast so all N of a multi-hit skill's attack rows read as the same named skill.
+ *  That does not change the outcome described above — `currentSkillTag` still consumes
+ *  `pendingSkill` on its first call, so a handler that ran earlier has already cleared it and the
+ *  attack still lands bare (verified: the Malvex snapshot is unmoved). Only the mechanism differs:
+ *  the `attack` token can lose the race, but it can no longer lose it to a SIBLING attack row of
+ *  its own cast. Its committed `richEnemy` snapshot carries both `attack` and `attack:charged` for
  *  exactly this reason: once the seeded enemy shield is spent, later charged casts grant no Barrier
  *  and so keep their own tag. Which entry carries the slot is therefore a function of emission
  *  ORDER in `playerTurn.ts`; a pure refactor that reorders emission (no behaviour change) can flip

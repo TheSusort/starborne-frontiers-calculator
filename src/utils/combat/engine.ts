@@ -5716,8 +5716,11 @@ export function runCombat(input: CombatEngineInput): {
         // the victim's own self-buff store (both channels: scheduled + ability payload).
         // Direction-agnostic: victimIncomingModifiers(v.id) works for ENEMY victims
         // (focus/team site) and PLAYER victims (enemy site) alike.
-        // No emitHit: runPlayerTurn already emits ONE aggregate ability-performed per turn;
-        // per-hit/per-victim event fidelity is a documented Phase-5 follow-up.
+        // No emitHit: this pure driver emits nothing. On the positional path runPlayerTurn defers
+        // its `ability-performed` to the engine, which emits one per SUB-ATTACK from the outcomes
+        // this driver returns (see drivePositionalTurnApply's interleaved emission block).
+        // Per-HIT event fidelity below the sub-attack — one event per (hit, victim) pair — remains
+        // a documented follow-up.
         const drivePositionalApply = (args: {
             scalars: AttackerDamageScalars;
             // hitCrits is co-populated with positionalScalars by Task 7 (both are set iff a damage
