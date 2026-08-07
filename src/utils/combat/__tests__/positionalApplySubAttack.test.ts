@@ -232,3 +232,88 @@ describe('applyPositionalDamage — subAttackIndex threading', () => {
         expect(rollIdx).toEqual([0, 1]);
     });
 });
+
+describe('applyPositionalDamage — PR1 invariants', () => {
+    it('N=1: a single-hit cast produces exactly one sub-attack whose damage is the cast total', () => {
+        const booked: number[] = [];
+
+        const result = applyPositionalDamage({
+            hitCrits: [false],
+            scalars: scalars(1),
+            pattern: parsePattern('Pattern-Line-Range-1'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('origin', 'M4'), actor('covered', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+            emitHit: (_v, damage) => {
+                booked.push(damage);
+            },
+        });
+
+        expect(result.subAttacks).toHaveLength(1);
+        const total = booked.reduce((s, d) => s + d, 0);
+        expect(result.subAttacks[0].damage).toBeCloseTo(total, 10);
+    });
+
+    it('the cast-level aggregates are unchanged by the sub-attack addition', () => {
+        // 2 sub-attacks x 2 footprint victims, all critting → critPairs 4, 2 distinct victims,
+        // and 2 sub-attacks each flagged didCrit. critPairs must NOT collapse to the sub-attack
+        // count, and subAttacks must NOT collapse to critPairs.
+        const result = applyPositionalDamage({
+            hitCrits: [true, true],
+            scalars: scalars(2),
+            pattern: parsePattern('Pattern-Line-Range-1'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('origin', 'M4'), actor('covered', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+            rollVictimCrit: () => true,
+        });
+
+        expect(result.anyCrit).toBe(true);
+        expect(result.critPairs).toBe(4);
+        expect(result.critVictimIds).toEqual(['origin', 'covered']);
+        expect(result.subAttacks).toHaveLength(2);
+        expect(result.subAttacks.map((s) => s.didCrit)).toEqual([true, true]);
+    });
+
+    it('sub-attack damage reconciles with the total booked across the whole cast', () => {
+        const booked: number[] = [];
+
+        const result = applyPositionalDamage({
+            hitCrits: [false, true, false],
+            scalars: scalars(3),
+            pattern: parsePattern('Pattern-Line-Range-1'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('origin', 'M4'), actor('covered', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+            emitHit: (_v, damage) => {
+                booked.push(damage);
+            },
+        });
+
+        const castTotal = booked.reduce((s, d) => s + d, 0);
+        const subTotal = result.subAttacks.reduce((s, a) => s + a.damage, 0);
+        expect(subTotal).toBeCloseTo(castTotal, 10);
+    });
+
+    it('subAttacks[h].index always equals its array position, whiffs included', () => {
+        const only = actor('only', 'M4', 1);
+        const result = applyPositionalDamage({
+            hitCrits: [false, false, false, false],
+            scalars: scalars(4),
+            pattern: parsePattern('Pattern-Base'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [only],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+        });
+
+        result.subAttacks.forEach((s, i) => expect(s.index).toBe(i));
+    });
+});
