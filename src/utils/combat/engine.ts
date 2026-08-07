@@ -24,7 +24,7 @@ import { calculateDamageReduction } from '../autogear/priorityScore';
 import {
     type ExtraActionGrant,
     selectFiringSkill,
-    damageInputsFromSkill,
+    hasUsableChargedSkill,
     modifierTotalsFromAbilities,
     skillNeedsOpposingVictim,
 } from '../abilities/applyAbilities';
@@ -648,13 +648,10 @@ export function buildEnemyPlayerActorRuntime(
         enemyIds
     );
 
-    // hasChargedSkill: true only when the enemy banks charges (chargeCount >= 1) AND its
-    // charged slot actually carries a damage ability (multiplier > 0). A manual flat card
-    // (no shipSkills) never has a charged slot → false.
-    const hasChargedSkill = e.shipSkills
-        ? e.chargeCount >= 1 &&
-          damageInputsFromSkill(selectFiringSkill(e.shipSkills, 'charged')).multiplier > 0
-        : false;
+    // Shared with the player focus and walked-team paths — see hasUsableChargedSkill. Deriving
+    // this per-path is what let the enemy side drift into requiring a charged DAMAGE ability,
+    // which disabled the charge cadence for every support enemy.
+    const hasChargedSkill = hasUsableChargedSkill(e.shipSkills, e.chargeCount);
 
     const actor = createActor({
         id: e.id,
