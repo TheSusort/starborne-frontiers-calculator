@@ -2303,3 +2303,146 @@ describe('buildCombatLog — turn entry display order', () => {
         expect(turn.entries[0].reactions.map((r) => r.actorId)).toEqual(['B']);
     });
 });
+
+// ─── PR2 Task 1: sticky skill tag across sub-attack rows ─────────────────────
+
+describe('buildCombatLog — sticky skill tag across sub-attack rows', () => {
+    it('every ability-performed in one cast carries the skill name and slot', () => {
+        // Three sub-attack rows from ONE skill-fired, each followed by its own attacked.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'skill-fired',
+                actorId: 'A',
+                round: 1,
+                slot: 'active',
+                skillName: 'Volley',
+            }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+            }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+            }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+
+        const log = buildCombatLog(events, roster, initialCharge);
+        const attacks = log[0].turns[0].entries.filter((e) => e.kind === 'attack');
+
+        expect(attacks).toHaveLength(3);
+        for (const a of attacks) {
+            expect(a.skillName).toBe('Volley');
+            expect(a.slot).toBe('active');
+        }
+    });
+
+    it('a NEW skill-fired replaces the sticky tag', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'skill-fired', actorId: 'A', round: 1, slot: 'active', skillName: 'First' }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+            }),
+            ev({
+                type: 'skill-fired',
+                actorId: 'A',
+                round: 1,
+                slot: 'charged',
+                skillName: 'Second',
+            }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+
+        const log = buildCombatLog(events, roster, initialCharge);
+        const attacks = log[0].turns[0].entries.filter((e) => e.kind === 'attack');
+
+        expect(attacks.map((a) => a.skillName)).toEqual(['First', 'Second']);
+        expect(attacks.map((a) => a.slot)).toEqual(['active', 'charged']);
+    });
+});

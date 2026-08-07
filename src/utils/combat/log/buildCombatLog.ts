@@ -111,6 +111,15 @@ interface BuildContext {
      */
     pendingSkill: { skillName?: string; slot: 'active' | 'charged' } | undefined;
     /**
+     * The skill identity of the cast currently being logged, latched from
+     * `pendingSkill` by the first `ability-performed` of the cast.
+     *
+     * Sticky for the whole cast: a multi-hit skill emits one ability-performed per
+     * sub-attack (PR2) and every row must carry the same skill identity. Cleared at
+     * turn-started and replaced by the next skill-fired.
+     */
+    castSkillTag: { skillName?: string; slot: 'active' | 'charged' } | undefined;
+    /**
      * Reaction stamp for the event currently being dispatched. Captured in the
      * dispatch loop from the event's ReactiveStamp; consumed by attachEntry to
      * route the produced entry into a trigger entry's `.reactions`.
@@ -157,6 +166,18 @@ interface BuildContext {
      * Call when creating an action-producing entry so it picks up the skill tag.
      */
     consumePendingSkill(): { skillName?: string; slot: 'active' | 'charged' } | undefined;
+    /**
+     * Returns the skill tag for the cast currently being logged WITHOUT clearing it.
+     *
+     * Sticky for the whole cast: a multi-hit skill emits one ability-performed per
+     * sub-attack (PR2) and every row must carry the same skill identity. Cleared at
+     * turn-started and replaced by the next skill-fired.
+     *
+     * The first call of a cast still *consumes* `pendingSkill` (latching it into
+     * `castSkillTag`), so the non-attack handlers keep their existing single-use
+     * semantics — only repeated `ability-performed` rows share the tag.
+     */
+    currentSkillTag(): { skillName?: string; slot: 'active' | 'charged' } | undefined;
 }
 
 function createBuildContext(
@@ -185,6 +206,7 @@ function createBuildContext(
         runningCharge,
         chargeMax: chargeMaxMap,
         pendingSkill: undefined,
+        castSkillTag: undefined,
         currentStamp: undefined,
         reactiveEntries: new WeakSet<CombatLogEntry>(),
 
@@ -344,12 +366,22 @@ function createBuildContext(
             ctx.openAttackAbilityDidHit = undefined;
             // Clear pending skill at every turn/round boundary so it never bleeds.
             ctx.pendingSkill = undefined;
+            // The cast-sticky tag is scoped to the turn for the same reason.
+            ctx.castSkillTag = undefined;
         },
 
         consumePendingSkill() {
             const pending = ctx.pendingSkill;
             ctx.pendingSkill = undefined;
             return pending;
+        },
+
+        currentSkillTag() {
+            // Latch a freshly-fired skill; otherwise keep returning the cast's tag so
+            // every sub-attack row of a multi-hit skill reads as the same named skill.
+            const pending = ctx.consumePendingSkill();
+            if (pending) ctx.castSkillTag = pending;
+            return ctx.castSkillTag;
         },
     };
     return ctx;
@@ -424,13 +456,14 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         // Finalize any pending miss entry before opening a new one.
         ctx.finalizeMissEntry();
-        // Consume pending skill-fired data (if any) and stamp onto the entry.
+        // Stamp the cast's skill tag onto the entry. Sticky, not consuming: a multi-hit
+        // skill emits one ability-performed per sub-attack and every row must carry it.
         const entry: CombatLogEntry = {
             kind: 'attack',
             actorId: e.actorId,
             targets: [],
             reactions: [],
-            ...(ctx.consumePendingSkill() ?? {}),
+            ...(ctx.currentSkillTag() ?? {}),
         };
         ctx.attachEntry(entry);
         ctx.openAttackEntry = entry;
