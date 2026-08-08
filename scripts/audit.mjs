@@ -52,10 +52,21 @@ const SEVERITY_ORDER = ['info', 'low', 'moderate', 'high', 'critical'];
  *
  * @type {{ package: string, id: string, reason: string }[]}
  */
+/** The advisory's durable identity: its GHSA. Read from `url` (…/advisories/GHSA-xxxx-…), falling
+ *  back to a `GHSA-` bearing `github_advisory_id`/`cve_id` field if the endpoint ever supplies one.
+ *  Returns undefined when no GHSA is present, which can never match an allowlist entry — an
+ *  unidentifiable advisory must fail the gate, not slip through it. */
+function ghsaOf(advisory) {
+    const fromUrl = /GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}/i.exec(advisory.url ?? '');
+    if (fromUrl) return fromUrl[0].toUpperCase();
+    const direct = advisory.github_advisory_id ?? advisory.cve_id ?? '';
+    return /^GHSA-/i.test(direct) ? direct.toUpperCase() : undefined;
+}
+
 const ALLOWLIST = [
     {
         package: 'react-router',
-        id: '1124282', // GHSA-qwww-vcr4-c8h2
+        ghsa: 'GHSA-QWWW-VCR4-C8H2',
         reason:
             'RSC Mode CSRF Bypass — requires React Router RSC mode, which this app does not use. ' +
             'It is a client-only Vite SPA: BrowserRouter only, no server request handler, no SSR, ' +
@@ -149,11 +160,12 @@ for (const [name, list] of Object.entries(advisories)) {
             semver.satisfies(v, advisory.vulnerable_versions, { includePrerelease: true })
         );
         if (!affected.length) continue;
-        // The endpoint sends `id` as a NUMBER; compare as strings so an allowlist entry written
-        // either way matches.
-        const allowed = ALLOWLIST.find(
-            (a) => a.package === name && String(a.id) === String(advisory.id)
-        );
+        // Match on the GHSA, never on the registry's numeric `id`. The numeric id is NOT stable:
+        // on 2026-08-07 this exact advisory was re-issued from 1124282 to 1138769 with an
+        // identical GHSA, title and URL, which silently un-allowlisted it and turned the gate red
+        // on every branch at once. The GHSA is the advisory's durable identity, so key on that.
+        const ghsa = ghsaOf(advisory);
+        const allowed = ALLOWLIST.find((a) => a.package === name && a.ghsa === ghsa);
         findings.push({
             name,
             versions: affected,
