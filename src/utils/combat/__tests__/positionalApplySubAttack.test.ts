@@ -136,6 +136,7 @@ describe('applyPositionalDamage — SubAttackOutcome', () => {
             whiffed: true,
             didCrit: false,
             damage: 0,
+            deliveredDamage: 0,
             victimIds: [],
             critVictimIds: [],
         });
@@ -368,5 +369,86 @@ describe('applyPositionalDamage — attacked signal grouping', () => {
         // origin died on sub-attack 0 → later sub-attacks re-anchor and must not list it.
         expect(result.subAttacks[1].victimIds).not.toContain('origin');
         expect(result.subAttacks[2].victimIds).not.toContain('origin');
+    });
+});
+
+describe('applyPositionalDamage — deliveredDamage (PR7)', () => {
+    it('equals damage when nothing was redirected', () => {
+        const result = applyPositionalDamage({
+            hitCrits: [false],
+            scalars: scalars(1),
+            pattern: parsePattern('Pattern-Base'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('front', 'M4')],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+        });
+
+        expect(result.subAttacks[0].deliveredDamage).toBe(result.subAttacks[0].damage);
+    });
+
+    it('adds the Protection-redirected chunk back on top of the booked remainder', () => {
+        // Funnel stub: books a quarter on the victim, reports three quarters as redirected.
+        const redirectingApply = (victim: CombatActor, damage: number) => {
+            victim.currentHp -= damage / 4;
+            return {
+                shieldBefore: 0,
+                hpDamage: damage / 4,
+                barriered: false,
+                incomingBooked: damage / 4,
+                protectionRedirected: (damage * 3) / 4,
+            };
+        };
+
+        const result = applyPositionalDamage({
+            hitCrits: [false],
+            scalars: scalars(1),
+            pattern: parsePattern('Pattern-Base'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('front', 'M4')],
+            defenseProfileOf: profile,
+            applyToVictim: redirectingApply,
+        });
+
+        const sub = result.subAttacks[0];
+        expect(sub.damage).toBeGreaterThan(0);
+        // Delivered is the WHOLE hit: victim remainder + redirected chunk.
+        expect(sub.deliveredDamage).toBeCloseTo(sub.damage * 4, 6);
+    });
+
+    it('sums delivered damage across a multi-victim footprint', () => {
+        const result = applyPositionalDamage({
+            hitCrits: [false],
+            scalars: scalars(1),
+            pattern: parsePattern('Pattern-All'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('a', 'M4'), actor('b', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+        });
+
+        const sub = result.subAttacks[0];
+        expect(sub.victimIds).toHaveLength(2);
+        expect(sub.deliveredDamage).toBe(sub.damage);
+        expect(sub.deliveredDamage).toBeGreaterThan(0);
+    });
+
+    it('is 0 on a whiffed sub-attack', () => {
+        const result = applyPositionalDamage({
+            hitCrits: [false],
+            scalars: scalars(1),
+            pattern: parsePattern('Pattern-Base'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+        });
+
+        expect(result.subAttacks[0].whiffed).toBe(true);
+        expect(result.subAttacks[0].deliveredDamage).toBe(0);
     });
 });
