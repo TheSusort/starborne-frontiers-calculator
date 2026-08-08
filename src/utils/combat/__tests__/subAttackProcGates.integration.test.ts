@@ -333,3 +333,70 @@ describe('PR4 Task 3 — procScope:"per-attack" is per SUB-attack, not per turn'
         expect(fires).toBe(2);
     });
 });
+
+/** A self-target buff rider on on-attacked — the shape `oncePerAttackGuardKey` guards. */
+const onAttackedSelfBuff = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-attacked',
+            config: {
+                type: 'buff',
+                buffName: 'Everliving Regeneration',
+                parsedEffects: { attack: 5 },
+                stacks: 1,
+                isStackable: true,
+                maxStacks: 20,
+                duration: 3,
+            },
+        }),
+    ],
+});
+
+/** An enemy at M4 that actually attacks, `hits` times, and outruns the focus. */
+const aggressorAt = (hits: number) =>
+    ({
+        id: 'aggressor',
+        stats: { attack: 5000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 999 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4',
+        affinity: 'antimatter',
+        shipSkills: { slots: [attackSkill(hits)] },
+    }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+describe('PR4 Task 4 — the once-per-attack rider guard resets per sub-attack', () => {
+    afterEach(() => resetRateGateRng());
+
+    // The VICTIM carries the rider here, so the ENEMY must be the one attacking. One attack fans
+    // into one `attacked` per hit per victim and the self-rider must collapse across those — but a
+    // `hits: N` attack is N consecutive attacks (R1) and must NOT collapse across those. Pre-PR4
+    // `reactionFiredThisAttack` was keyed `owner:ability:victim` and cleared only at actor
+    // turn-start, so all N collapsed to 1 (spec §4.4).
+    //
+    // Index-keying is safe here in a way it was not for `on-ally-crit` (see PER_HIT_REACTIVE_TRIGGERS
+    // in triggers.ts, where two different critting allies both carrying index 0 ruled it out):
+    // adding a component to a key can only SPLIT keys, never merge them, so this can never collapse
+    // something the pre-PR4 guard kept separate.
+    it.each([
+        [1, 1],
+        [3, 3],
+    ])('an enemy hits:%i attack grants the rider %i time(s)', (hits, expected) => {
+        idc = 0;
+        alwaysFire();
+        const bus = createEventBus();
+        let grants = 0;
+        bus.on('buff-applied', (e) => {
+            if (e.actorId === 'attacker' && e.buffName === 'Everliving Regeneration') grants++;
+        });
+        runCombat({
+            ...focusCast([attackSkill(1), onAttackedSelfBuff()], basePattern()),
+            numRounds: 1,
+            enemyAttackers: [aggressorAt(hits)],
+            bus,
+        });
+        expect(grants).toBe(expected);
+    });
+});

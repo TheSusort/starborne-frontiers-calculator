@@ -30,6 +30,10 @@ describe('emitAttacked', () => {
             shieldWasHit: true,
             didCrit: true,
             damage: 500,
+            // PR4: with no explicit `subAttackIndex` the caller is the non-positional one, which
+            // passes the whole cast's hitOutcomes in ONE call — so the hit's own position IS its
+            // sub-attack index (a `hits: N` cast is N consecutive attacks, R1).
+            subAttackIndex: 0,
         });
         expect(events[1]).toEqual({
             type: 'attacked',
@@ -39,7 +43,27 @@ describe('emitAttacked', () => {
             isPrimaryTarget: true,
             shieldWasHit: true,
             damage: 500,
+            subAttackIndex: 1,
         });
+    });
+
+    it('an explicit subAttackIndex overrides the hit position (the positional callers)', () => {
+        const { events, bus } = fakeBus();
+        // The positional path groups signals by sub-attack, so each call carries exactly ONE hit
+        // outcome and the index it belongs to — which is NOT its position within this call.
+        emitAttacked({
+            bus,
+            round: 2,
+            targetId: 't1',
+            attackerId: 'a1',
+            hitOutcomes: [true],
+            isPrimaryTarget: true,
+            shieldWasHit: false,
+            damage: 500,
+            subAttackIndex: 2,
+        });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ subAttackIndex: 2 });
     });
 
     it('omits shieldWasHit/damage when falsy and isPrimaryTarget when false', () => {
@@ -54,6 +78,14 @@ describe('emitAttacked', () => {
             shieldWasHit: false,
             damage: 0,
         });
-        expect(events[0]).toEqual({ type: 'attacked', targetId: 't', attackerId: 'a', round: 1 });
+        expect(events[0]).toEqual({
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'a',
+            round: 1,
+            // PR4: `subAttackIndex` is NOT conditional — every `attacked` carries one, so the
+            // once-per-attack rider guard always has an attack identity to key on.
+            subAttackIndex: 0,
+        });
     });
 });

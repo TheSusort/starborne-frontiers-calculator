@@ -539,6 +539,12 @@ export type CombatEvent =
            *  penetrated to HP, a Barrier blocked it (shield untouched), or Shield Converter
            *  converted the hit (shield gained, not drained). */
           shieldWasHit?: boolean;
+          /** The 0-based sub-attack of the ATTACKER's cast that produced this hit (multi-hit
+           *  full-walk epic, PR4). PR2 already emits one `attacked` per (sub-attack, victim); this
+           *  names which sub-attack, so a victim-side once-per-attack guard can reset between the
+           *  attacker's consecutive attacks instead of collapsing all N into one. Absent on
+           *  non-positional emits (a single aggregate attack). */
+          subAttackIndex?: number;
       };
 
 export type CombatEventType = CombatEvent['type'];

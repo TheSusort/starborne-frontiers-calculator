@@ -6652,8 +6652,15 @@ export function runCombat(input: CombatEngineInput): {
              * Emits ONE sub-attack's `attacked` events (PR2 Task 3 — was one call for the whole
              * cast). Invoked once per sub-attack that produced signals, in ascending index order,
              * immediately after that sub-attack's own `ability-performed`.
+             *
+             * PR4: the bucket's index is passed too, so it can be stamped onto each `attacked`
+             * event. A victim-side once-per-attack rider guard needs it to reset between the
+             * attacker's consecutive attacks instead of collapsing all N into one.
              */
-            emitAttackedForSubAttack: (victims: Map<string, PositionalVictimSignal>) => void,
+            emitAttackedForSubAttack: (
+                victims: Map<string, PositionalVictimSignal>,
+                subAttackIndex: number
+            ) => void,
             /**
              * The enemy site emits its `attacked` AFTER the helper returns (its row-14 accounting
              * tail is kept inline — SP-U U5). Set to defer everything except the FIRST
@@ -6823,7 +6830,7 @@ export function runCombat(input: CombatEngineInput): {
                         const victims = attackedSignals.get(idx)!;
                         steps.push({
                             isEvent: false,
-                            run: () => emitAttackedForSubAttack(victims),
+                            run: () => emitAttackedForSubAttack(victims, idx),
                         });
                     }
                 } else {
@@ -6868,7 +6875,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (victims && victims.size > 0) {
                             steps.push({
                                 isEvent: false,
-                                run: () => emitAttackedForSubAttack(victims),
+                                run: () => emitAttackedForSubAttack(victims, idx),
                             });
                         }
                     }
@@ -6882,7 +6889,10 @@ export function runCombat(input: CombatEngineInput): {
                 // sub-attack.
                 for (const idx of signalledIndices) {
                     const victims = attackedSignals.get(idx)!;
-                    steps.push({ isEvent: false, run: () => emitAttackedForSubAttack(victims) });
+                    steps.push({
+                        isEvent: false,
+                        run: () => emitAttackedForSubAttack(victims, idx),
+                    });
                 }
             }
             let emitDeferred = (): void => {};
@@ -8169,8 +8179,9 @@ export function runCombat(input: CombatEngineInput): {
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
                                     // PR2 Task 3: ONE sub-attack's victims per call, emitted right
-                                    // after that sub-attack's own `ability-performed`.
-                                    (victims) => {
+                                    // after that sub-attack's own `ability-performed`. PR4 stamps
+                                    // the index onto each event.
+                                    (victims, subAttackIndex) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
@@ -8178,6 +8189,7 @@ export function runCombat(input: CombatEngineInput): {
                                                 attackerId: actor.id,
                                                 primaryId: tgt.id,
                                                 victims,
+                                                subAttackIndex,
                                             });
                                         }
                                     }
@@ -8397,7 +8409,7 @@ export function runCombat(input: CombatEngineInput): {
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
                                     // PR2 Task 3 — mirror of the focus site's per-sub-attack emit.
-                                    (victims) => {
+                                    (victims, subAttackIndex) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
@@ -8405,6 +8417,7 @@ export function runCombat(input: CombatEngineInput): {
                                                 attackerId: actor.id,
                                                 primaryId: tgt.id,
                                                 victims,
+                                                subAttackIndex,
                                             });
                                         }
                                     }
@@ -9081,7 +9094,7 @@ export function runCombat(input: CombatEngineInput): {
                                         // PR2 Task 3: ONE sub-attack's victims per call. The enemy
                                         // still DEFERS the whole fan-out to its inline tail (U5),
                                         // so these calls run from `emitDeferred` below, not here.
-                                        (victims) => {
+                                        (victims, subAttackIndex) => {
                                             if (victims.size > 0) {
                                                 emitPerVictimAttacked({
                                                     bus,
@@ -9089,6 +9102,7 @@ export function runCombat(input: CombatEngineInput): {
                                                     attackerId: actor.id,
                                                     primaryId: tgt.id,
                                                     victims,
+                                                    subAttackIndex,
                                                 });
                                             }
                                         },

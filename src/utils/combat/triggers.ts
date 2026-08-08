@@ -819,6 +819,11 @@ export function registerReactiveListeners(args: {
                                 triggerDamage: e.damage,
                                 isPrimaryTarget: e.isPrimaryTarget,
                                 shieldWasHit: e.shieldWasHit,
+                                // PR4: which of the attacker's consecutive attacks this hit
+                                // belonged to. Read ONLY by `oncePerAttackGuardKey` — the per-hit
+                                // cardinality this trigger fans out at is unchanged (and correct:
+                                // incoming effects resolve per hit, R2).
+                                subAttackIndex: e.subAttackIndex,
                             },
                         });
                     });
@@ -939,7 +944,13 @@ export function registerReactiveListeners(args: {
                         // payloads to exactly the hit ally (Cultivator/Refine/Graphite).
                         enqueue({
                             ...intent,
-                            eventCtx: { counterTargetId: e.attackerId, damagedAllyId: e.targetId },
+                            eventCtx: {
+                                counterTargetId: e.attackerId,
+                                damagedAllyId: e.targetId,
+                                // PR4: see the on-attacked listener — read only by
+                                // `oncePerAttackGuardKey`.
+                                subAttackIndex: e.subAttackIndex,
+                            },
                         });
                     });
                     break;
@@ -2372,10 +2383,20 @@ const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTr
  *  undefined — meaning "not guarded". Only `target: 'self'` qualifies: ally-routed grants
  *  (damagedAllyId — Cultivator/Graphite/Howler/Sentinel repair) and enemy-routed damage (Sentinel)
  *  must stay per-victim, so they never key here. Cross-referenced by the charge and buff branches
- *  only. `on-ally-crit` is deliberately NOT in the set — see {@link PER_HIT_REACTIVE_TRIGGERS}. */
+ *  only. `on-ally-crit` is deliberately NOT in the set — see {@link PER_HIT_REACTIVE_TRIGGERS}.
+ *
+ *  PR4: the key carries the ATTACKER's sub-attack index. One attack fans into one `attacked` per
+ *  hit per victim and the rider must collapse across those — but a `hits: N` attack is N
+ *  consecutive attacks (R1) and must NOT collapse across those; `reactionFiredThisAttack` is
+ *  cleared only at actor turn-start, so before PR4 all N collapsed into one grant.
+ *
+ *  Safe here in a way it was not for `on-ally-crit` (where two DIFFERENT critting allies both
+ *  carrying index 0 ruled it out): adding a component to a key can only SPLIT keys, never merge
+ *  them, so this can never collapse something the pre-PR4 guard kept separate. Missing index → 'x',
+ *  i.e. exactly today's behaviour on every non-positional path. */
 function oncePerAttackGuardKey(intent: Intent): string | undefined {
     return intent.ability.target === 'self' && PER_HIT_REACTIVE_TRIGGERS.has(intent.ability.trigger)
-        ? `${intent.ownerId}:${intent.ability.id}`
+        ? `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.subAttackIndex ?? 'x'}`
         : undefined;
 }
 
