@@ -72,6 +72,8 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
 });
 /** Single-cell footprint: the anchor only. */
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
+/** Whole-roster footprint: every occupied cell is struck by each sub-attack. */
+const allPattern = (): ParsedPattern => ({ raw: 'all', shape: 'all', range: 'all', modifiers: {} });
 
 /** A positioned enemy that never fires back. */
 const passiveEnemyAt = (id: string, position: Position) =>
@@ -147,5 +149,104 @@ describe('PR4 Task 1 — the on-crit reactive debuff path is already per-sub-att
         expect(
             countOf(focusCast([attackSkill(hits), onCritShred()], basePattern()), 'debuff-applied')
         ).toBe(expected);
+    });
+});
+
+/** Menace's shape: passive-slot outgoing-amplification, crit-conditional, 50% proc. */
+const menacePassive = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'MENACE',
+            type: 'outgoing-amplification',
+            target: 'self',
+            trigger: 'passive',
+            conditions: [],
+            config: {
+                type: 'outgoing-amplification',
+                condition: 'amplify-on-crit',
+                ampPct: 50,
+                procChance: 0.5,
+            },
+        } as unknown as Ability,
+    ],
+});
+
+/**
+ * Counts draws on the amplification proc's own RNG sub-stream. `rollRateGate` keys amp draws
+ * `${actorId}:${abilityId}`, and `setKeyedRng` gives every key its own stream — so this counts
+ * exactly the amplification rolls and nothing else.
+ */
+const ampDrawsFor = (input: CombatEngineInput): number => {
+    let draws = 0;
+    setRateGateRng(() => 0);
+    setKeyedRng((key) => {
+        if (key === 'attacker:MENACE') draws++;
+        return 0;
+    });
+    runCombat({ ...input, bus: createEventBus() });
+    return draws;
+};
+
+describe('PR4 Task 2 — the amplification proc rolls once per sub-attack', () => {
+    afterEach(() => resetRateGateRng());
+
+    // Pre-fix draw counts were `hits × (1 + victims)` — 2 / 6 / 3 / 9 — because runPlayerTurn's
+    // per-hit loop drew once per hit AND the positional per-victim apply drew again per
+    // (hit, victim), both against the same `procChanceGates` key (spec §4.3 + the §4.6
+    // double-advance, confirmed by measurement). The correct count is `hits`, independent of
+    // footprint size: an AoE footprint is ONE attack and shares one roll (R3), while each
+    // multi-hit sub-attack draws its own (R1).
+    it.each([
+        ['base', 1, 1],
+        ['base', 3, 3],
+        ['all', 1, 1],
+        ['all', 3, 3],
+    ] as const)('%s pattern, hits=%i draws exactly %i time(s)', (shape, hits, expected) => {
+        idc = 0;
+        const pattern = shape === 'base' ? basePattern() : allPattern();
+        expect(ampDrawsFor(focusCast([attackSkill(hits), menacePassive()], pattern))).toBe(
+            expected
+        );
+    });
+
+    /** Per-victim booked damage for one cast, under a caller-supplied MENACE draw sequence. */
+    const perVictimDamage = (
+        slots: ShipSkills['slots'],
+        menaceDraw: (n: number) => number
+    ): number[] => {
+        let n = 0;
+        setRateGateRng(() => 0);
+        setKeyedRng((key) => (key === 'attacker:MENACE' ? menaceDraw(n++) : 0));
+        const bus = createEventBus();
+        const perVictim = new Map<string, number>();
+        bus.on('attacked', (e) => {
+            perVictim.set(e.targetId, (perVictim.get(e.targetId) ?? 0) + (e.damage ?? 0));
+        });
+        runCombat({ ...focusCast(slots, allPattern()), bus });
+        return [...perVictim.values()];
+    };
+
+    it('every victim of one sub-attack shares that sub-attack’s single verdict', () => {
+        idc = 0;
+        // Fire draw #1 and fail every later one, then check BOTH victims came out amplified.
+        //
+        // The equality of the two victims alone would be a VACUOUS assertion: pre-fix, draw #1 was
+        // runPlayerTurn's discarded aggregate roll, so both victims saw a FAILING draw and were
+        // equal-but-unamplified. Comparing against a no-amplification baseline is what makes this
+        // discriminate — post-fix the single fired verdict is the one both victims resolve off, so
+        // both take strictly more than baseline.
+        const baseline = perVictimDamage([attackSkill(1)], () => 0);
+        idc = 0;
+        const amplified = perVictimDamage([attackSkill(1), menacePassive()], (n) =>
+            n === 0 ? 0 : 1
+        );
+        expect(baseline).toHaveLength(2);
+        expect(amplified).toHaveLength(2);
+        expect(baseline[0]).toBeGreaterThan(0);
+        // Shared verdict: the two victims of the one sub-attack agree...
+        expect(amplified[0]).toBeCloseTo(amplified[1], 6);
+        // ...and they agree on the AMPLIFIED value, not on having both missed the proc.
+        expect(amplified[0]).toBeGreaterThan(baseline[0]);
     });
 });

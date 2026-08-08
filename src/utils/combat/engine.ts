@@ -5780,6 +5780,19 @@ export function runCombat(input: CombatEngineInput): {
             // them from the callers that now emit one `ability-performed` per entry.
             subAttacks: SubAttackOutcome[];
         } => {
+            // ONE amplification verdict per (ability, sub-attack), for THIS cast only (multi-hit
+            // full-walk epic, PR4 — spec §4.3). A multi-hit skill is N consecutive attacks, each
+            // drawing its own roll (R1); an AoE footprint is ONE attack whose victims share a
+            // single roll (R3). Declared here, per cast — `drivePositionalApply` runs once per cast
+            // — so a later turn's sub-attack 0 can never reuse this turn's verdict.
+            //
+            // Drawn LAZILY, from inside `outgoingAmplificationForHit`, which checks `conditionMet`
+            // before it calls `rollProc`. That is what preserves "eligibility gates the gate": a
+            // sub-attack whose every victim is ineligible (nothing crit / no higher-attack target)
+            // still advances nothing. It is also why the roll cannot simply be hoisted into
+            // runPlayerTurn — eligibility for 'amplify-vs-higher-attack' is per victim, and on this
+            // path so is crit.
+            const ampVerdictBySubAttack = new Map<string, boolean>();
             // Task 3: this is the ONE deferred (positional) apply path — reflects fired here must
             // buffer their log row until emitDeferredAbilityPerformed creates the attack entry
             // (see the deferReflectLogs doc above applyVictimDamage). try/finally so the flag
@@ -5902,7 +5915,7 @@ export function runCombat(input: CombatEngineInput): {
                     // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
                     // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
                     // outgoing-amplification ability → byte-identical when no such equipment exists.
-                    outgoingAmplificationFor: (victim, didCrit) => {
+                    outgoingAmplificationFor: (victim, didCrit, subAttackIndex) => {
                         // Fast path: skip the per-victim effectiveStatsOf folds when the attacker has no
                         // outgoing-amplification ability (the overwhelmingly common case) — matches the
                         // aggregate path's `ampAbilities.length > 0` guard. Byte-identical (returns 0).
@@ -5918,12 +5931,24 @@ export function runCombat(input: CombatEngineInput): {
                                     effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack >
                                     effectiveStatsOf(statusEngine, selfBuffLookup, attacker).attack,
                             },
-                            (abilityId, chance) =>
-                                rollRateGate(
+                            (abilityId, chance) => {
+                                // PR4: the verdict belongs to the SUB-ATTACK, not to this victim —
+                                // one roll decides *whether*, each victim decides *if it qualifies*
+                                // (its own `conditionMet`, checked before this closure is reached).
+                                // `subAttackIndex` is optional on PR1's callback contract; `?? 0`
+                                // makes a caller that omits it behave as the single sub-attack it
+                                // is. Scoped to `ampVerdictBySubAttack`, which is per cast.
+                                const key = `${abilityId}:${subAttackIndex ?? 0}`;
+                                const cached = ampVerdictBySubAttack.get(key);
+                                if (cached !== undefined) return cached;
+                                const verdict = rollRateGate(
                                     procChanceGates,
                                     `${args.actingId}:${abilityId}`,
                                     chance
-                                )
+                                );
+                                ampVerdictBySubAttack.set(key, verdict);
+                                return verdict;
+                            }
                         );
                     },
                 });
