@@ -3825,7 +3825,13 @@ describe('on-deal-damage live trigger', () => {
         expect(intents).toHaveLength(3);
 
         // AoE: one attack, one footprint of many victims → still ONE event, ONE more fire
-        // (4 total, not 3 + victim-count).
+        // (4 total, not 3 + victim-count). `critHits`/`critVictimIds` carry the footprint's
+        // victim MULTIPLICITY (3 covered victims) so this fixture can actually distinguish the
+        // correct one-enqueue-per-event behaviour from the realistic regression of copying the
+        // sibling on-crit fallback's shape into this listener, i.e.
+        // `for (let i = 0; i < (e.critVictimIds?.length ?? 1); i++)` — without victim
+        // multiplicity in the fixture that mutant would also enqueue exactly once here (length
+        // undefined -> `?? 1`) and pass for the wrong reason.
         bus.emit({
             type: 'ability-performed',
             actorId: 'warpstrike',
@@ -3833,6 +3839,8 @@ describe('on-deal-damage live trigger', () => {
             round: 3,
             abilityType: 'damage',
             damage: 12000,
+            critHits: 3,
+            critVictimIds: ['e1', 'e2', 'e3'],
             didHit: true,
         });
         expect(intents).toHaveLength(4);
