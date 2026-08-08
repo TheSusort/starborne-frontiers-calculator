@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`perHitCrit > on-crit follow-up fires once PER CRITTING HIT (3-hit @100% crit → 3 enqueues/turn) 1`] = `
+exports[`perHitCrit > on-crit follow-up fires once per critting SUB-ATTACK (3-hit @100% crit → 3 enqueues/turn) 1`] = `
 [
   "1:active:4",
   "2:active:6",

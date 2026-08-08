@@ -49,7 +49,9 @@ const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => 
     ...p,
 });
 
-/** A damage active whose folded multiplier is re-split across `hits` sub-attacks. */
+/** A damage active at multiplier 100 with `hits: N`. NOTE: this MULTIPLIES — playerTurn folds
+ *  `effectiveMultiplier = rawMultiplier * hits`, so an N-hit cast deals N x a single-hit cast.
+ *  It does NOT re-split a fixed total. Any assertion shaped `three[0] ~ one[0]/3` is wrong. */
 const attackSkill = (hits: number): ShipSkills['slots'][number] => ({
     slot: 'active',
     abilities: [
@@ -176,9 +178,9 @@ describe('per-sub-attack ability-performed — cardinality and payload', () => {
         idc = 0;
         alwaysCrit();
         // MEASURED, not assumed: `multiplier: 100, hits: 3` is three FULL 100% hits (the folded
-        // multiplier is 300, re-split three ways), so a 3-hit cast deals 3× a 1-hit cast — NOT the
-        // same total split three ways. The plan's suggested "capture the total from a
-        // hits:1-equivalent run" would have pinned the wrong number.
+        // multiplier is 300 — it MULTIPLIES, it does not re-split a fixed total), so a 3-hit cast
+        // deals 3× a 1-hit cast — NOT the same total split three ways. The plan's suggested
+        // "capture the total from a hits:1-equivalent run" would have pinned the wrong number.
         const stream = runStream(focusCast(3, basePattern()));
         const triple = perfOf(stream, 'attacker');
         expect(triple).toHaveLength(3);
@@ -651,12 +653,14 @@ describe('combat log — one attack row per sub-attack, splash amount per sub-at
  *
  *  • `on-deal-damage` → Burner's Inferno rider. Fires once per `ability-performed` that dealt
  *    damage (`triggers.ts`'s `(e.damage ?? 0) <= 0` guard), so N sub-attacks = N applications.
- *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues ONCE per positional
- *    `ability-performed` event (i.e. once per sub-attack) and scales off THAT event's
- *    `deliveredDamage` (PR7). `critHits` remains a per-victim crit-identity signal on the payload
- *    but is not the enqueue driver here. This is the headline bug PR2 fixes: pre-PR2 the single
- *    aggregate event carried the WHOLE cast's damage, so all three fires healed off the full
- *    total. The amount, not just the count, is pinned below.
+ *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues ONCE per
+ *    `ability-performed` event (i.e. once per sub-attack — since PR5 this holds on BOTH the
+ *    positional and non-positional/DPS emitters, not just the positional one) and scales off THAT
+ *    event's `deliveredDamage` (PR7) where present, falling back to `damage` on the non-positional
+ *    path. `critHits` remains a per-victim crit-identity signal on the payload but is not the
+ *    enqueue driver here. This is the headline bug PR2 fixes: pre-PR2 the single aggregate event
+ *    carried the WHOLE cast's damage, so all three fires healed off the full total. The amount,
+ *    not just the count, is pinned below.
  *  • `on-ally-crit`   → Howler/Sentinel's ally-routed grant. ONE enqueue per critting
  *    `ability-performed`, which now means one per critting SUB-ATTACK while an AoE footprint
  *    stays ONE attack however many victims crit.

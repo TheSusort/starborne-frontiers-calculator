@@ -2428,17 +2428,75 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // → byte-identical.
     const deferAbilityPerformed = args.deferAbilityPerformedToEngine === true && hasDamageAbility;
     if (!deferAbilityPerformed) {
-        bus.emit({
-            type: 'ability-performed',
-            actorId: actor.id,
-            targetId: enemy.id,
-            round: r,
-            abilityType: 'damage',
-            damage: directDamage,
-            didCrit: roundCrit,
-            ...(critHits > 0 ? { critHits } : {}),
-            didHit: true,
-        });
+        // PR5 (multi-hit full-walk epic): ONE event per SUB-ATTACK, matching the positional
+        // path's interleaved emission (engine.ts `emitDeferredAbilityPerformed`, per sub-attack
+        // since PR2). A `hits: N` skill is N consecutive FULL-WALK attacks (locked rule R1), so
+        // outgoing riders must fire N times: `on-deal-damage` (Burner's Inferno, Warpstrike's
+        // duration-reduction, Zeolite's purge), `on-crit`, `on-ally-crit`. Folding the cast into
+        // one event fired them ONCE — which is why the DPS calculator reported one Inferno stack
+        // for Enforcer + Burner while the simulator reported three (verified in-game 2026-08-08).
+        //
+        // CARDINALITY comes from `hits` — the GATED count (damageInputsFromSkill(gatedSkill)),
+        // the same value that built `effectiveMultiplier`, so the event count and the damage it
+        // splits derive from ONE number. Deliberately NOT `drawHits`, which reads the UNGATED
+        // firingSkill and can only diverge if a gate lands on an active/charged damage ability
+        // (not representable from parser output today — see the KNOWN LIMITATION at the
+        // `drawHits` read). A cast with NO damage ability gets hits === 1 from
+        // damageInputsFromSkill's default, so heal/buff/utility casts emit exactly one event as
+        // before.
+        //
+        // DAMAGE per event is the cast's pre-funnel `directDamage` split N ways — the SAME basis
+        // and the SAME split the positional path uses (`share = dap.damage / emitting.length`).
+        // Sigma over the loop reproduces the old single event's `damage` exactly, so NO damage
+        // total moves. Looping buys zero damage accuracy (victimDamage.ts:16-30 proves the fold
+        // is algebraically identical); it buys one derivation of "a sub-attack" instead of two
+        // that can drift.
+        //
+        // KNOWN ASYMMETRY (epic spec PR5 section 5.4), deliberately NOT decided here:
+        // `secondaryStatValue` and `conditionalBonusPct` are folded into `preCritDamage` ONCE per
+        // cast while the base multiplier scales with `hits`, so each sub-attack receives 1/N of a
+        // single secondary/conditional payload rather than a full one. Corpus-inert and
+        // untestable in-game today (no multi-hit ship carries defence/HP-scaling or a conditional
+        // bonus); flagged for the next in-game pass rather than silently resolved.
+        //
+        // RULE R5 ("with no living target left the multi-hit stops dealing damage") is NOT
+        // implemented here because it is structurally unreachable on this path — see the
+        // derivation in the block comment below.
+        for (let h = 0; h < hits; h++) {
+            // This sub-attack's OWN crit outcome, from the draws the per-hit loop above already
+            // collected. `hitCrits` is populated only when a damage ability fired and only for
+            // `drawHits` entries, so fall back to the cast-wide binary when it is empty: a noCrit
+            // cast (drawHits 0 -> roundCrit false) and a non-damage cast (hitCrits never pushed,
+            // hits === 1, roundCrit carries the single draw) both then reproduce exactly the value
+            // the old single emit carried.
+            const subCrit = hitCrits.length > 0 ? (hitCrits[h] ?? false) : roundCrit;
+            bus.emit({
+                type: 'ability-performed',
+                actorId: actor.id,
+                targetId: enemy.id,
+                round: r,
+                abilityType: 'damage',
+                damage: directDamage / hits,
+                didCrit: subCrit,
+                // 1, not the cast-wide `critHits`: this counts the critting VICTIMS within THIS
+                // sub-attack, which for the single bound non-positional enemy is exactly the crit
+                // binary. That is the SAME meaning the positional path carries
+                // (sub.critVictimIds.length), which is what lets triggers.ts's `on-crit` listener
+                // drop its second, non-positional branch. At hits === 1 this is identical to the
+                // old payload (drawHits is 1 there, so critHits was already 0 or 1).
+                ...(subCrit ? { critHits: 1 } : {}),
+                // PR4: the outgoing reactive listeners stamp this onto the intents they enqueue so
+                // the end-of-turn drain — which runs once per turn, after every sub-attack — can
+                // gate at sub-attack scope (`passesProcChanceGate`'s memo key; the per-victim
+                // `firedKey` in the reactive-damage branch). Emitted unconditionally now that this
+                // path has a real sub-attack identity. Safe at hits === 1: both maps
+                // (`procDecisionThisSubAttack`, `reactionFiredThisAttack`) are cleared at every
+                // actor turn-start (engine.ts:7730/7735) and both keys are already owner-scoped,
+                // so moving the suffix from 'x' to 0 is a pure rename with no collision.
+                subAttackIndex: h,
+                didHit: true,
+            });
+        }
     }
 
     extendDoTs({
