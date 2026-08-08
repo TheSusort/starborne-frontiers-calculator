@@ -87,6 +87,18 @@ export type CombatEvent =
            *  victims but not the selected anchor, `targetId` names a victim that never crit, so a
            *  "deals X to that enemy" reactive routed off `targetId` hits the wrong ship. */
           critVictimIds?: string[];
+          /** The 0-based sub-attack this event belongs to (multi-hit full-walk epic, PR4). A
+           *  multi-hit skill is N consecutive full-walk attacks and PR2 emits one event per
+           *  sub-attack; this names which one. Absent on the non-positional inline emit (a single
+           *  aggregate attack) — consumers must read absent as "the only sub-attack", and must NOT
+           *  substitute 0 when comparing across DIFFERENT actors, since every actor's first
+           *  sub-attack is also 0.
+           *
+           *  Exists so a reactive intent enqueued during sub-attack k can be gated at sub-attack
+           *  scope: intents from all N sub-attacks drain together at end of turn (drainIntentsFor),
+           *  long after the engine's ambient `currentSubAttackIndex` has been cleared, so the
+           *  identity has to travel on the event. */
+          subAttackIndex?: number;
           didHit?: boolean;
       } & ReactiveStamp)
     | ({
@@ -510,10 +522,10 @@ export type CombatEvent =
           attackerId: string;
           round: number;
           didCrit?: boolean;
-          /** D-PR16: per-ATTACK aggregate direct damage dealt this turn (identical across the
-           *  turn's per-hit events — per-hit damage is not tracked, same approximation as
-           *  Bloodthirst's triggerDamage). Present only when a damage aggregate is in scope.
-           *  Tenacity's >25%-max-HP filter reads this. */
+          /** D-PR16: direct damage this SUB-ATTACK dealt to this victim (multi-hit full-walk epic,
+           *  PR2 — previously the per-TURN aggregate, repeated identically on every per-hit event).
+           *  Present only when a damage aggregate is in scope. Tenacity's >25%-max-HP filter reads
+           *  this, and it needs ONE hit's damage rather than the cast's. */
           damage?: number;
           /** G PR1: true when the victim was the directly-targeted (primary) target of the
            *  attack, false/absent for splash/covered AoE victims. Today the sole emit is the
@@ -527,6 +539,12 @@ export type CombatEvent =
            *  penetrated to HP, a Barrier blocked it (shield untouched), or Shield Converter
            *  converted the hit (shield gained, not drained). */
           shieldWasHit?: boolean;
+          /** The 0-based sub-attack of the ATTACKER's cast that produced this hit (multi-hit
+           *  full-walk epic, PR4). PR2 already emits one `attacked` per (sub-attack, victim); this
+           *  names which sub-attack, so a victim-side once-per-attack guard can reset between the
+           *  attacker's consecutive attacks instead of collapsing all N into one. Absent on
+           *  non-positional emits (a single aggregate attack). */
+          subAttackIndex?: number;
       };
 
 export type CombatEventType = CombatEvent['type'];

@@ -23,6 +23,8 @@ export function emitPerVictimAttacked(args: {
     attackerId: string;
     primaryId: string;
     victims: Map<string, { damage: number; shieldWasHit: boolean; hitOutcomes: boolean[] }>;
+    /** The sub-attack `victims` belongs to (PR4) — stamped onto every event it emits. */
+    subAttackIndex?: number;
 }): void {
     for (const [victimId, sig] of args.victims) {
         emitAttacked({
@@ -34,6 +36,7 @@ export function emitPerVictimAttacked(args: {
             isPrimaryTarget: victimId === args.primaryId,
             shieldWasHit: sig.shieldWasHit,
             damage: sig.damage,
+            ...(args.subAttackIndex !== undefined ? { subAttackIndex: args.subAttackIndex } : {}),
         });
     }
 }

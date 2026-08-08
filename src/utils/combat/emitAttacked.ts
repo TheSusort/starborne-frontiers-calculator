@@ -27,10 +27,31 @@ export function emitAttacked(args: {
      * non-positional call sites (one attack per call) were never affected.
      */
     damage: number;
+    /**
+     * Which sub-attack of the attacker's cast these events belong to (multi-hit full-walk epic,
+     * PR4). Carried on the event so a victim-side once-per-attack rider guard can reset between the
+     * attacker's consecutive attacks instead of collapsing all N into one grant.
+     *
+     * Supplied by the POSITIONAL callers, where the engine has already grouped signals by
+     * sub-attack and `hitOutcomes` therefore holds exactly one entry per call. OMITTED by the
+     * non-positional caller, which passes the whole cast's `hitOutcomes` in ONE call — there the
+     * loop index below IS the sub-attack index (a `hits: N` cast is N consecutive attacks, R1), so
+     * it is used as the fallback rather than leaving the field absent.
+     */
+    subAttackIndex?: number;
 }): void {
-    const { bus, round, targetId, attackerId, hitOutcomes, isPrimaryTarget, shieldWasHit, damage } =
-        args;
-    for (const hitCrit of hitOutcomes) {
+    const {
+        bus,
+        round,
+        targetId,
+        attackerId,
+        hitOutcomes,
+        isPrimaryTarget,
+        shieldWasHit,
+        damage,
+        subAttackIndex,
+    } = args;
+    hitOutcomes.forEach((hitCrit, hitIndex) => {
         bus.emit({
             type: 'attacked',
             targetId,
@@ -40,6 +61,7 @@ export function emitAttacked(args: {
             ...(shieldWasHit ? { shieldWasHit: true } : {}),
             ...(hitCrit ? { didCrit: true } : {}),
             ...(damage > 0 ? { damage } : {}),
+            subAttackIndex: subAttackIndex ?? hitIndex,
         });
-    }
+    });
 }

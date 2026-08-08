@@ -2846,10 +2846,12 @@ export function runCombat(input: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
     // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
-    // Per-actor-turn verdict cache for procScope:'per-attack' proc abilities (Insidiousness).
-    // Keyed `${ownerId}:${abilityId}`; cleared at each actor turn-start beside
+    // Per-SUB-ATTACK verdict cache for procScope:'per-attack' proc abilities (Insidiousness).
+    // Keyed `${ownerId}:${abilityId}:${subAttackIndex}` (multi-hit full-walk epic, PR4 — was
+    // `${ownerId}:${abilityId}`, which silently made it per-TURN, so a hits:N skill replayed
+    // sub-attack #1's verdict for all N); cleared at each actor turn-start beside
     // reactionFiredThisAttack so a later attack rolls afresh.
-    const procDecisionThisAttack = new Map<string, boolean>();
+    const procDecisionThisSubAttack = new Map<string, boolean>();
     // G PR1: dedicated crit-gate for counterattacks. A NEW map (NOT any existing per-actor
     // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
     // for every existing fixture → byte-identical.
@@ -5780,6 +5782,19 @@ export function runCombat(input: CombatEngineInput): {
             // them from the callers that now emit one `ability-performed` per entry.
             subAttacks: SubAttackOutcome[];
         } => {
+            // ONE amplification verdict per (ability, sub-attack), for THIS cast only (multi-hit
+            // full-walk epic, PR4 — spec §4.3). A multi-hit skill is N consecutive attacks, each
+            // drawing its own roll (R1); an AoE footprint is ONE attack whose victims share a
+            // single roll (R3). Declared here, per cast — `drivePositionalApply` runs once per cast
+            // — so a later turn's sub-attack 0 can never reuse this turn's verdict.
+            //
+            // Drawn LAZILY, from inside `outgoingAmplificationForHit`, which checks `conditionMet`
+            // before it calls `rollProc`. That is what preserves "eligibility gates the gate": a
+            // sub-attack whose every victim is ineligible (nothing crit / no higher-attack target)
+            // still advances nothing. It is also why the roll cannot simply be hoisted into
+            // runPlayerTurn — eligibility for 'amplify-vs-higher-attack' is per victim, and on this
+            // path so is crit.
+            const ampVerdictBySubAttack = new Map<string, boolean>();
             // Task 3: this is the ONE deferred (positional) apply path — reflects fired here must
             // buffer their log row until emitDeferredAbilityPerformed creates the attack entry
             // (see the deferReflectLogs doc above applyVictimDamage). try/finally so the flag
@@ -5902,7 +5917,7 @@ export function runCombat(input: CombatEngineInput): {
                     // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
                     // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
                     // outgoing-amplification ability → byte-identical when no such equipment exists.
-                    outgoingAmplificationFor: (victim, didCrit) => {
+                    outgoingAmplificationFor: (victim, didCrit, subAttackIndex) => {
                         // Fast path: skip the per-victim effectiveStatsOf folds when the attacker has no
                         // outgoing-amplification ability (the overwhelmingly common case) — matches the
                         // aggregate path's `ampAbilities.length > 0` guard. Byte-identical (returns 0).
@@ -5918,12 +5933,24 @@ export function runCombat(input: CombatEngineInput): {
                                     effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack >
                                     effectiveStatsOf(statusEngine, selfBuffLookup, attacker).attack,
                             },
-                            (abilityId, chance) =>
-                                rollRateGate(
+                            (abilityId, chance) => {
+                                // PR4: the verdict belongs to the SUB-ATTACK, not to this victim —
+                                // one roll decides *whether*, each victim decides *if it qualifies*
+                                // (its own `conditionMet`, checked before this closure is reached).
+                                // `subAttackIndex` is optional on PR1's callback contract; `?? 0`
+                                // makes a caller that omits it behave as the single sub-attack it
+                                // is. Scoped to `ampVerdictBySubAttack`, which is per cast.
+                                const key = `${abilityId}:${subAttackIndex ?? 0}`;
+                                const cached = ampVerdictBySubAttack.get(key);
+                                if (cached !== undefined) return cached;
+                                const verdict = rollRateGate(
                                     procChanceGates,
                                     `${args.actingId}:${abilityId}`,
                                     chance
-                                )
+                                );
+                                ampVerdictBySubAttack.set(key, verdict);
+                                return verdict;
+                            }
                         );
                     },
                 });
@@ -5959,8 +5986,9 @@ export function runCombat(input: CombatEngineInput): {
             // to the enemies actually crit rather than the cast's SELECTED anchor (which may not
             // have crit at all in an AoE). Empty on the 0-damage fallback path (no apply ran).
             critVictimIds: string[],
-            // Which sub-attack this event belongs to, for the deferred-log drain below. Omitted on
-            // the single-event paths ⟹ drain everything (the pre-PR2 behaviour).
+            // Which sub-attack this event belongs to, for the deferred-log drain below AND (PR4) as
+            // the event's own sub-attack identity. Omitted on the single-event paths ⟹ drain
+            // everything (the pre-PR2 behaviour) and emit no index.
             subAttack?: number
         ) => {
             bus.emit({
@@ -5973,6 +6001,10 @@ export function runCombat(input: CombatEngineInput): {
                 didCrit,
                 ...(critHits > 0 ? { critHits } : {}),
                 ...(critVictimIds.length > 0 ? { critVictimIds } : {}),
+                // PR4: the OUTGOING reactive listeners stamp this onto the intents they enqueue, so
+                // the drain (which runs once per turn, after every sub-attack) can gate per
+                // sub-attack. Conditional spread → the single-event paths stay byte-identical.
+                ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
                 didHit: true,
             });
             // Task 3: the attack entry now exists — drain the reflect rows THIS sub-attack
@@ -6620,8 +6652,15 @@ export function runCombat(input: CombatEngineInput): {
              * Emits ONE sub-attack's `attacked` events (PR2 Task 3 — was one call for the whole
              * cast). Invoked once per sub-attack that produced signals, in ascending index order,
              * immediately after that sub-attack's own `ability-performed`.
+             *
+             * PR4: the bucket's index is passed too, so it can be stamped onto each `attacked`
+             * event. A victim-side once-per-attack rider guard needs it to reset between the
+             * attacker's consecutive attacks instead of collapsing all N into one.
              */
-            emitAttackedForSubAttack: (victims: Map<string, PositionalVictimSignal>) => void,
+            emitAttackedForSubAttack: (
+                victims: Map<string, PositionalVictimSignal>,
+                subAttackIndex: number
+            ) => void,
             /**
              * The enemy site emits its `attacked` AFTER the helper returns (its row-14 accounting
              * tail is kept inline — SP-U U5). Set to defer everything except the FIRST
@@ -6791,7 +6830,7 @@ export function runCombat(input: CombatEngineInput): {
                         const victims = attackedSignals.get(idx)!;
                         steps.push({
                             isEvent: false,
-                            run: () => emitAttackedForSubAttack(victims),
+                            run: () => emitAttackedForSubAttack(victims, idx),
                         });
                     }
                 } else {
@@ -6836,7 +6875,7 @@ export function runCombat(input: CombatEngineInput): {
                         if (victims && victims.size > 0) {
                             steps.push({
                                 isEvent: false,
-                                run: () => emitAttackedForSubAttack(victims),
+                                run: () => emitAttackedForSubAttack(victims, idx),
                             });
                         }
                     }
@@ -6850,7 +6889,10 @@ export function runCombat(input: CombatEngineInput): {
                 // sub-attack.
                 for (const idx of signalledIndices) {
                     const victims = attackedSignals.get(idx)!;
-                    steps.push({ isEvent: false, run: () => emitAttackedForSubAttack(victims) });
+                    steps.push({
+                        isEvent: false,
+                        run: () => emitAttackedForSubAttack(victims, idx),
+                    });
                 }
             }
             let emitDeferred = (): void => {};
@@ -7180,7 +7222,7 @@ export function runCombat(input: CombatEngineInput): {
                         procChanceGates,
                         // Per-attack proc verdict cache (Insidiousness): one roll per attack,
                         // replayed for every debuff event that attack inflicts.
-                        procDecisionThisAttack,
+                        procDecisionThisSubAttack,
                         // Phase 4c PR 6: live lowest-speed-ally gate. UNCONDITIONAL (unlike the
                         // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
                         // the lone attacker resolves true and DPS gating stays byte-identical.
@@ -7663,9 +7705,11 @@ export function runCombat(input: CombatEngineInput): {
                 // Task 5: reset the self-rider once-per-attack guard beside the counter guard so a
                 // later attack re-applies Hermes's Everliving Regeneration / charge.
                 reactionFiredThisAttack.clear();
-                // Insidiousness: drop the per-attack proc verdicts so this attack draws its own
-                // single roll (and every debuff it inflicts shares that one verdict).
-                procDecisionThisAttack.clear();
+                // Insidiousness: drop the per-sub-attack proc verdicts so each sub-attack of this
+                // turn draws its own single roll (and every debuff ONE sub-attack inflicts shares
+                // that sub-attack's verdict). Keys carry the sub-attack index since PR4, so this
+                // clear is what stops turn N+1's sub-attack 0 reading turn N's verdict.
+                procDecisionThisSubAttack.clear();
 
                 // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff
                 // written during this actor's own turn is flagged appliedThisTurn so it survives
@@ -8135,8 +8179,9 @@ export function runCombat(input: CombatEngineInput): {
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
                                     // PR2 Task 3: ONE sub-attack's victims per call, emitted right
-                                    // after that sub-attack's own `ability-performed`.
-                                    (victims) => {
+                                    // after that sub-attack's own `ability-performed`. PR4 stamps
+                                    // the index onto each event.
+                                    (victims, subAttackIndex) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
@@ -8144,6 +8189,7 @@ export function runCombat(input: CombatEngineInput): {
                                                 attackerId: actor.id,
                                                 primaryId: tgt.id,
                                                 victims,
+                                                subAttackIndex,
                                             });
                                         }
                                     }
@@ -8363,7 +8409,7 @@ export function runCombat(input: CombatEngineInput): {
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
                                     // PR2 Task 3 — mirror of the focus site's per-sub-attack emit.
-                                    (victims) => {
+                                    (victims, subAttackIndex) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
@@ -8371,6 +8417,7 @@ export function runCombat(input: CombatEngineInput): {
                                                 attackerId: actor.id,
                                                 primaryId: tgt.id,
                                                 victims,
+                                                subAttackIndex,
                                             });
                                         }
                                     }
@@ -9047,7 +9094,7 @@ export function runCombat(input: CombatEngineInput): {
                                         // PR2 Task 3: ONE sub-attack's victims per call. The enemy
                                         // still DEFERS the whole fan-out to its inline tail (U5),
                                         // so these calls run from `emitDeferred` below, not here.
-                                        (victims) => {
+                                        (victims, subAttackIndex) => {
                                             if (victims.size > 0) {
                                                 emitPerVictimAttacked({
                                                     bus,
@@ -9055,6 +9102,7 @@ export function runCombat(input: CombatEngineInput): {
                                                     attackerId: actor.id,
                                                     primaryId: tgt.id,
                                                     victims,
+                                                    subAttackIndex,
                                                 });
                                             }
                                         },

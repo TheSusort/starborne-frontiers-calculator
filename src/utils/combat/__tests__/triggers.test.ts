@@ -4128,7 +4128,7 @@ describe("procScope 'per-attack' verdict cache", () => {
             recordResisted: () => {},
             oncePerRoundConsumed: new Set<string>(),
             procChanceGates: new Map(),
-            procDecisionThisAttack: new Map<string, boolean>(),
+            procDecisionThisSubAttack: new Map<string, boolean>(),
             reactionFiredThisAttack: new Set<string>(),
             applyReactiveDamage: (_o: string, victim: string) => calls.push(victim),
             ...over,
@@ -4190,7 +4190,7 @@ describe("procScope 'per-attack' verdict cache", () => {
         const cache = new Map<string, boolean>();
         const fired = new Set<string>();
         const { ctx, calls } = makeCtx({
-            procDecisionThisAttack: cache,
+            procDecisionThisSubAttack: cache,
             reactionFiredThisAttack: fired,
         });
         executeIntent(intent('enemy1', true), ctx);

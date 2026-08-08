@@ -2018,6 +2018,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const hitCrits: boolean[] = [];
     let ampNonCritWeight = 0;
     let ampCritWeight = 0;
+    // The engine resolves amplification per footprint victim exactly when it also takes over the
+    // `ability-performed` emit — the same condition, spelled the same way as `deferAbilityPerformed`
+    // further down. Kept as its own named const so the two reads cannot drift apart.
+    const deferAmplificationToEngine =
+        args.deferAbilityPerformedToEngine === true && hasDamageAbility;
     for (let h = 0; h < drawHits; h++) {
         const didCritHit = critGate(effectiveCrit / 100);
         if (didCritHit) critHits += 1;
@@ -2026,8 +2031,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (hasDamageAbility) hitCrits.push(didCritHit);
         // Only call outgoingAmplificationForHit when amplification is actually present AND a
         // proc gate is supplied — keeps the critGate sequence and behaviour untouched otherwise.
+        //
+        // NOT on the positional path (multi-hit full-walk epic, PR4 — spec §4.6). There the
+        // engine's per-victim apply is the authority on amplification: it resolves the condition
+        // against each footprint victim's OWN crit outcome and attack matchup, and THIS aggregate
+        // result is never applied to anyone's HP. Drawing here anyway advanced the SAME
+        // `procChanceGates` key (`${ownerId}:${abilityId}`) a second time — measured
+        // `hits × (1 + victims)` draws for one cast — and left the deferred `ability-performed`
+        // damage basis decided by a coin flip the applied damage ignored. One verdict per
+        // sub-attack, drawn where eligibility is actually known, is the fix; the accepted cost is
+        // that the positional event's pre-funnel `damage` basis no longer carries amplification
+        // (it never reflected any other per-victim outcome either). Non-positional / DPS / healing
+        // casts are the sole remaining consumer here and stay byte-identical.
         const amp =
-            ampAbilities.length > 0 && rollOutgoingProc
+            ampAbilities.length > 0 && rollOutgoingProc && !deferAmplificationToEngine
                 ? outgoingAmplificationForHit(
                       ampAbilities,
                       { didCrit: didCritHit, targetHigherAttack },

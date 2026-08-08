@@ -64,6 +64,9 @@ describe('emitPerVictimAttacked', () => {
             round: 1,
             isPrimaryTarget: true,
             damage: 50,
+            // PR4: every `attacked` carries a sub-attack index. No `subAttackIndex` was passed
+            // here, so it falls back to the hit's position within the call — 0.
+            subAttackIndex: 0,
         });
     });
 
