@@ -123,8 +123,8 @@ export interface SubAttackOutcome {
      *
      * Differs from {@link damage} only when a Protection cascade fired. Both deliberately exclude a
      * DoT-transformed portion (ruled: "if dot, no heal") and an incoming-block shave, and both
-     * deliberately INCLUDE shield-absorbed damage, because `incomingRecorded` is captured before the
-     * shield/HP split.
+     * deliberately INCLUDE shield-absorbed damage, because {@link incomingBooked} — this field's
+     * own basis — is recorded before the shield/HP split.
      *
      * NOT the combat log's number: the log's primary-target amount reads `ability-performed.damage`
      * (the cast's pre-funnel `directDamage`), which PR7 leaves untouched.

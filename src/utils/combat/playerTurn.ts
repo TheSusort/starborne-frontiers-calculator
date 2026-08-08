@@ -2043,6 +2043,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // that the positional event's pre-funnel `damage` basis no longer carries amplification
         // (it never reflected any other per-victim outcome either). Non-positional / DPS / healing
         // casts are the sole remaining consumer here and stay byte-identical.
+        //
+        // PR7 RESOLVED that cost for effect purposes: damage-proportional reactives now read the
+        // event's `deliveredDamage` (post-amplification, per-victim, funnel-accurate). This field
+        // remains the pre-funnel DISPLAY basis that buildCombatLog reads.
         const amp =
             ampAbilities.length > 0 && rollOutgoingProc && !deferAmplificationToEngine
                 ? outgoingAmplificationForHit(
