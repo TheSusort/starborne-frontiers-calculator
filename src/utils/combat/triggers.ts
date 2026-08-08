@@ -303,8 +303,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once PER ATTACK, never per
  *    target. Every emitter is per-sub-attack since PR5, so ONE enqueue per event implements this
- *    on every path: the POSITIONAL path's own sub-attack `deliveredDamage`, or (every other path)
- *    that event's `damage`, which is already this sub-attack's own share.
+ *    on every path: the POSITIONAL path's own sub-attack `deliveredDamage`, or (every other
+ *    per-sub-attack emitter) that event's `damage`, which is already this sub-attack's own share.
+ *    Exception: the two CAST-SCOPED fallback emits (engine.ts's nothing-landed and enemy
+ *    0-damage sites) publish `e.damage` as the cast total (`dap.damage`), not a share — harmless
+ *    today since both carry 0, but not "already a share" like the rest.
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
  *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
@@ -438,8 +441,16 @@ export function registerReactiveListeners(args: {
                         // The two remaining CAST-SCOPED emitters are the engine's fallbacks, and one
                         // enqueue is right for both: the nothing-landed site (engine.ts:6843) can
                         // only carry critPairs 0 (no sub-attack had a victim, and critPairs
-                        // increments only inside the per-victim loop), and the enemy 0-damage site
-                        // (engine.ts:9307) has no damage ability, hence hits 1, hence critHits 0 or 1.
+                        // increments only inside the per-victim loop). The enemy 0-damage site
+                        // (engine.ts:9307) is reached only when a damage ability actually fired
+                        // (the deferred payload only exists when deferAbilityPerformedToEngine &&
+                        // hasDamageAbility) AND the cast's total damage is 0. For a PARSED kit that
+                        // means a multiplier-0 damage ability, and parseHitCount only assigns
+                        // hits > 1 on an explicit "attacks N times" phrase — so critHits <= 1 holds
+                        // for every ship in docs/ship-skills.csv today, but that is a CORPUS
+                        // property, not a structural guarantee: the ability editor exposes
+                        // multiplier and hits independently, so a hand-authored multiplier-0,
+                        // hits:3 ability would carry critHits > 1 through this same fallback.
                         const critted = (e.critHits ?? 0) > 0 || e.didCrit === true;
                         if (!critted) return;
                         enqueue({
@@ -452,8 +463,11 @@ export function registerReactiveListeners(args: {
                                 // portion. This is the locked `basis:'damage-dealt'` value
                                 // (Bloodthirst). Present only on the interleaved positional path,
                                 // which is the only path with a funnel to differ from; every other
-                                // emitter falls back to the pre-funnel `damage` it publishes, which
-                                // since PR5 is already this sub-attack's own share.
+                                // per-sub-attack emitter falls back to the pre-funnel `damage` it
+                                // publishes, which since PR5 is already this sub-attack's own share.
+                                // The two CAST-SCOPED fallback emits are the exception — there
+                                // `damage` is the cast total, not a share — but harmlessly, since
+                                // both carry 0.
                                 triggerDamage: e.deliveredDamage ?? e.damage,
                                 // PR4: carry this sub-attack's identity to the drain, which runs
                                 // once per turn — after every sub-attack — so it cannot ask the
