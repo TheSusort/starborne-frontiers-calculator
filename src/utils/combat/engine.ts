@@ -5978,6 +5978,8 @@ export function runCombat(input: CombatEngineInput): {
             // multi-hit cast. Deliberately NOT SubAttackOutcome.damage, which is the post-funnel
             // `incomingBooked` sum — a different number, and changing the basis and the
             // cardinality in one PR would conflate two behaviour moves.
+            // PR7 resolved that split: the true delivered amount now rides alongside as
+            // `deliveredDamage`, and THIS field stays the pre-funnel display basis buildCombatLog reads.
             damage: number,
             didCrit: boolean,
             critHits: number,
@@ -5989,7 +5991,10 @@ export function runCombat(input: CombatEngineInput): {
             // Which sub-attack this event belongs to, for the deferred-log drain below AND (PR4) as
             // the event's own sub-attack identity. Omitted on the single-event paths ⟹ drain
             // everything (the pre-PR2 behaviour) and emit no index.
-            subAttack?: number
+            subAttack?: number,
+            // PR7: this sub-attack's delivered damage. Omitted on the single-event paths, whose
+            // consumers fall back to `damage` — keeping them byte-identical.
+            deliveredDamage?: number
         ) => {
             bus.emit({
                 type: 'ability-performed',
@@ -6005,6 +6010,7 @@ export function runCombat(input: CombatEngineInput): {
                 // the drain (which runs once per turn, after every sub-attack) can gate per
                 // sub-attack. Conditional spread → the single-event paths stay byte-identical.
                 ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
+                ...(deliveredDamage !== undefined ? { deliveredDamage } : {}),
                 didHit: true,
             });
             // Task 3: the attack entry now exists — drain the reflect rows THIS sub-attack
@@ -6861,7 +6867,8 @@ export function runCombat(input: CombatEngineInput): {
                                         // these lengths reproduces critPairs exactly.
                                         sub.critVictimIds.length,
                                         sub.critVictimIds,
-                                        idx
+                                        idx,
+                                        sub.deliveredDamage
                                     ),
                             });
                         }

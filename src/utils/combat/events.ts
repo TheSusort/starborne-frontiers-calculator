@@ -87,6 +87,17 @@ export type CombatEvent =
            *  victims but not the selected anchor, `targetId` names a victim that never crit, so a
            *  "deals X to that enemy" reactive routed off `targetId` hits the wrong ship. */
           critVictimIds?: string[];
+          /** PR7: what this sub-attack actually DELIVERED — post-crit, post-amplification,
+           *  post-victim-defence, INCLUDING damage a Protection cascade diverted to protectors and
+           *  EXCLUDING damage deferred into a DoT. The locked basis for damage-proportional outgoing
+           *  effects (Bloodthirst).
+           *
+           *  A SEPARATE field from `damage` on purpose: `damage` is the cast's pre-funnel
+           *  `directDamage` and drives the combat log's primary-target amount (buildCombatLog's
+           *  `openAttackAbilityDamage`), so repurposing it would move every golden. Present only on
+           *  the interleaved positional path — consumers MUST fall back to `damage` for the
+           *  non-positional and DPS paths. */
+          deliveredDamage?: number;
           /** The 0-based sub-attack this event belongs to (multi-hit full-walk epic, PR4). A
            *  multi-hit skill is N consecutive full-walk attacks and PR2 emits one event per
            *  sub-attack; this names which one. Absent on the non-positional inline emit (a single

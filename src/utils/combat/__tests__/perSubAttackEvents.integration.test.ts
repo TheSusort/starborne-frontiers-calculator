@@ -224,6 +224,34 @@ describe('per-sub-attack ability-performed — cardinality and payload', () => {
             expect(e.critHits).toBeUndefined();
         }
     });
+
+    it('PR7: each sub-attack event carries its own deliveredDamage, and damage is unchanged', () => {
+        alwaysCrit();
+        const stream = runStream(focusCast(3, basePattern()));
+        const performed = perfOf(stream, 'attacker');
+
+        expect(performed).toHaveLength(3);
+        for (const e of performed) expect(e.deliveredDamage).toBeGreaterThan(0);
+
+        // The DISPLAY basis must not move: each sub-attack's `damage` still equals exactly what a
+        // 1-hit cast's single aggregate event reports — this file's existing Σ-damage test's own
+        // per-event assertion (:198), which pins `damage` to the pre-funnel share. Comparing the
+        // SUM of the three `damage`s to a single-hit run's value would be the rejected "capture the
+        // total from a hits:1-equivalent run" approach that comment (:180-181) warns pins the wrong
+        // number: `hits: 3` deals 3× a 1-hit cast, not the same total split three ways.
+        const single = perfOf(runStream(focusCast(1, basePattern())), 'attacker');
+        for (const e of performed) expect(e.damage).toBeCloseTo(single[0].damage!, 6);
+    });
+
+    it('PR7: an AoE footprint reports the whole footprint on ONE event', () => {
+        alwaysCrit();
+        const performed = perfOf(runStream(focusCast(1, allPattern())), 'attacker');
+
+        expect(performed).toHaveLength(1);
+        const base = perfOf(runStream(focusCast(1, basePattern())), 'attacker');
+        // One attack, several victims → one event whose delivered amount exceeds a single-victim hit.
+        expect(performed[0].deliveredDamage).toBeGreaterThan(base[0].deliveredDamage!);
+    });
 });
 
 /**
