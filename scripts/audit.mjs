@@ -52,15 +52,25 @@ const SEVERITY_ORDER = ['info', 'low', 'moderate', 'high', 'critical'];
  *
  * @type {{ package: string, id: string, reason: string }[]}
  */
-/** The advisory's durable identity: its GHSA. Read from `url` (…/advisories/GHSA-xxxx-…), falling
- *  back to a `GHSA-` bearing `github_advisory_id`/`cve_id` field if the endpoint ever supplies one.
- *  Returns undefined when no GHSA is present, which can never match an allowlist entry — an
- *  unidentifiable advisory must fail the gate, not slip through it. */
+const GHSA_RE = /GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}/i;
+
+/** The advisory's durable identity: its GHSA.
+ *
+ *  Scans EVERY field that might carry one — `url` (…/advisories/GHSA-xxxx-…) is what the registry
+ *  actually sends today; `github_advisory_id`/`cve_id` are defensive, in case the endpoint ever
+ *  supplies the id directly. Each candidate is searched for an embedded GHSA token rather than
+ *  tested for a prefix, and ALL of them are searched rather than stopping at the first non-empty
+ *  one — otherwise a CVE sitting in `github_advisory_id` would mask a GHSA in `cve_id`, and a
+ *  field carrying surrounding text ("See GHSA-…") would be missed.
+ *
+ *  Returns undefined when no GHSA is present anywhere, which can never match an allowlist entry —
+ *  an unidentifiable advisory must fail the gate, not slip through it. */
 function ghsaOf(advisory) {
-    const fromUrl = /GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}/i.exec(advisory.url ?? '');
-    if (fromUrl) return fromUrl[0].toUpperCase();
-    const direct = advisory.github_advisory_id ?? advisory.cve_id ?? '';
-    return /^GHSA-/i.test(direct) ? direct.toUpperCase() : undefined;
+    for (const candidate of [advisory.url, advisory.github_advisory_id, advisory.cve_id]) {
+        const match = GHSA_RE.exec(String(candidate ?? ''));
+        if (match) return match[0].toUpperCase();
+    }
+    return undefined;
 }
 
 const ALLOWLIST = [
