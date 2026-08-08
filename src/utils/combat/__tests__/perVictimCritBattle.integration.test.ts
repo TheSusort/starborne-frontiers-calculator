@@ -352,7 +352,10 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
             (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
                 e.type === 'ability-performed' && e.actorId === 'attacker'
         );
-        expect(focusPerf.length).toBe(1); // exactly one ability-performed per positional cast
+        // One ability-performed per SUB-ATTACK (multi-hit full-walk epic, PR2). This fixture is
+        // single-hit — an AoE footprint is ONE attack however many victims it spreads over — so
+        // the count stays 1. It is the CARDINALITY of hits, not of victims, that fans this out.
+        expect(focusPerf.length).toBe(1);
         const perf = focusPerf[0];
 
         // The heart of Task 5: the attacker signal reflects the per-victim outcomes.
@@ -495,7 +498,9 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
             (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
                 e.type === 'ability-performed' && e.actorId === 'enemy-zero'
         );
-        // The 0-damage fallback branch must emit exactly one ability-performed for the enemy.
+        // The 0-damage fallback branch must emit exactly one ability-performed for the enemy: no
+        // apply ran, so there are no sub-attacks to fan out over and the cast-wide anchor payload
+        // is emitted once (unchanged by PR2).
         expect(enemyPerf.length).toBe(1);
     });
 

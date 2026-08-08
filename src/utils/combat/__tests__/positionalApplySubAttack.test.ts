@@ -137,6 +137,7 @@ describe('applyPositionalDamage — SubAttackOutcome', () => {
             didCrit: false,
             damage: 0,
             victimIds: [],
+            critVictimIds: [],
         });
     });
 });
@@ -315,5 +316,57 @@ describe('applyPositionalDamage — PR1 invariants', () => {
         });
 
         result.subAttacks.forEach((s, i) => expect(s.index).toBe(i));
+    });
+});
+
+// PR2 Task 2 — the engine buckets its `attacked` signals by (subAttackIndex, victim) instead of
+// by victim alone. These pin the enumeration that grouping relies on: exactly one visit per
+// (sub-attack, victim) pair, so every bucket holds exactly ONE hitOutcome and the TOTAL number of
+// `attacked` events a cast emits is unchanged by the regrouping.
+describe('applyPositionalDamage — attacked signal grouping', () => {
+    it('total attacked cardinality is unchanged when grouped by sub-attack', () => {
+        // 3 sub-attacks x 2 footprint victims = 6 (sub-attack, victim) pairs.
+        // Grouping must not add or drop any.
+        const pairs: Array<{ idx: number; id: string }> = [];
+
+        const result = applyPositionalDamage({
+            hitCrits: [false, false, false],
+            scalars: scalars(3),
+            pattern: parsePattern('Pattern-Line-Range-1'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('origin', 'M4'), actor('covered', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage, _isAnchor, subAttackIndex) => {
+                pairs.push({ idx: subAttackIndex as number, id: victim.id });
+                return bookingApply(victim, damage);
+            },
+        });
+
+        expect(pairs).toHaveLength(6);
+        expect(result.subAttacks.map((s) => s.victimIds.length)).toEqual([2, 2, 2]);
+        // Every (sub-attack, victim) pair appears exactly once — so bucketing by the pair yields
+        // one hitOutcome per bucket and 6 `attacked` events in total, the same 6 the flat
+        // victim-keyed map produced as 2 victims x 3 outcomes.
+        expect(new Set(pairs.map((p) => `${p.idx}:${p.id}`)).size).toBe(6);
+    });
+
+    it('a victim killed on sub-attack 0 is absent from later sub-attacks', () => {
+        const frail = actor('origin', 'M4', 1);
+        const result = applyPositionalDamage({
+            hitCrits: [false, false, false],
+            scalars: scalars(3),
+            pattern: parsePattern('Pattern-Line-Range-1'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [frail, actor('covered', 'M3')],
+            defenseProfileOf: profile,
+            applyToVictim: bookingApply,
+        });
+
+        expect(result.subAttacks[0].victimIds).toContain('origin');
+        // origin died on sub-attack 0 → later sub-attacks re-anchor and must not list it.
+        expect(result.subAttacks[1].victimIds).not.toContain('origin');
+        expect(result.subAttacks[2].victimIds).not.toContain('origin');
     });
 });

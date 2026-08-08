@@ -2,17 +2,20 @@ import type { CombatEventBus } from './events';
 import { emitAttacked } from './emitAttacked';
 
 /**
- * Emits per-victim `attacked` events for an AoE cast: one event per hit per
- * footprint victim, each carrying that victim's OWN damage / shieldWasHit /
- * hitOutcomes, with `isPrimaryTarget` set only on the selected target. Delegates
- * to `emitAttacked` per victim so the per-event conditional-spread shape stays
- * identical to the legacy focus-only emit. Direction-agnostic (caller supplies
- * attacker/victim ids).
+ * Emits per-victim `attacked` events for ONE attack's AoE footprint: one event
+ * per hit per footprint victim, each carrying that victim's OWN damage /
+ * shieldWasHit / hitOutcomes, with `isPrimaryTarget` set only on the selected
+ * target. Delegates to `emitAttacked` per victim so the per-event
+ * conditional-spread shape stays identical to the legacy focus-only emit.
+ * Direction-agnostic (caller supplies attacker/victim ids).
  *
- * Each victim carries its OWN `hitOutcomes` (one entry per hit the victim was
- * actually present for): a victim killed on an earlier hit drops out of later
- * hits, so it collects fewer outcomes than the attack-wide hit count and emits
- * exactly that many `attacked` events — no over-firing of its on-hit reactives.
+ * Multi-hit full-walk epic, PR2: the engine calls this once per SUB-ATTACK, so
+ * `victims` is one sub-attack's footprint and each signal carries exactly one
+ * `hitOutcomes` entry. The drop-out story therefore lives in the engine's outer
+ * sub-attack map, not here: a victim killed on an earlier sub-attack simply has
+ * no entry in the later sub-attacks' maps, so it collects fewer `attacked`
+ * events than the cast's hit count — no over-firing of its on-hit reactives.
+ * Total `attacked` cardinality across the cast is unchanged by the regrouping.
  */
 export function emitPerVictimAttacked(args: {
     bus: CombatEventBus;

@@ -1,24 +1,35 @@
 /**
- * Task 5 — reactive SELF-scoped riders fire ONCE PER ATTACK, not per hit / per AoE victim.
+ * Reactive SELF-scoped riders on `on-ally-crit` fire ONCE PER ATTACK — never per hit and never
+ * per AoE victim — where "attack" means SUB-ATTACK.
  *
  * User-reported bug: Hermes's reactive passive over-triggers against AoE / multi-hit attacks —
- * the combat log shows "Everliving Regeneration III" 2–4× for a single incoming attack, while the
- * charge gain nets exactly +1.
+ * the combat log shows "Everliving Regeneration III" 2–4× for a single attack, while the charge
+ * gain nets exactly +1.
  *
- * ROOT CAUSE (verified in triggers.ts, `case 'on-ally-crit'`, ~lines 519-542):
+ * ROOT CAUSE (verified in triggers.ts, `case 'on-ally-crit'`):
  *   Hermes's charge AND Everliving Regeneration III are BOTH self-target riders on the
- *   `on-ally-crit` trigger (parsed from the R4 passive — see the mutation guard below). When an
- *   ally lands a multi-hit / AoE crit, the engine emits ONE `ability-performed` carrying
- *   `critHits = N`. The listener enqueues the rider `n` times where
+ *   `on-ally-crit` trigger (parsed from the R4 passive — see the mutation guard below). The
+ *   listener used to enqueue the rider `n` times per `ability-performed`, where
  *       n = config.type === 'charge' ? (didCrit ? 1 : 0) : (critHits ?? (didCrit ? 1 : 0))
- *   so the CHARGE is already collapsed to 1 (explicit special-case), but the BUFF uses `critHits`
- *   → the Everliving intent is enqueued N times → the buff re-applies N× to Hermes. THAT is why
- *   the two diverge: the charge has a hand-rolled once-per-attack collapse; the buff does not.
+ *   so the CHARGE was collapsed to 1 by an explicit special-case but the BUFF fanned out on
+ *   `critHits` — hits × victims — and re-applied that many times. THAT is why the two diverged.
  *
- * The other on-ally-crit riders (Sentinel's reactive DAMAGE → 'enemy', Sentinel/Howler's heal /
- * cleanse / Blast → 'ally', routed per-victim via damagedAllyId) LEGITIMATELY fire once per
- * critting hit. So the fix collapses ONLY self-target buff/heal/charge riders, keyed
- * `${ownerId}:${abilityId}`, cleared at each actor turn-start (mirroring `counterFiredThisTurn`).
+ * THE FIX, and where it lives now. The collapse is in the LISTENER: it enqueues AT MOST ONCE per
+ * `ability-performed`, for self- and ally-routed riders alike. So the two over-fire axes are shut
+ * off structurally — a 3-victim AoE crit is one event and grants once, and there is no
+ * `critHits` loop left to multiply anything.
+ *
+ * WHAT IS NOT COLLAPSED, by decision. A `hits: N` skill is N consecutive FULL-WALK attacks
+ * (locked game rule) and since PR2 of the multi-hit epic it emits N `ability-performed` events.
+ * Hermes therefore gains 3 charges and 3 Everliving applications from a 3-sub-attack ally crit —
+ * one per critting sub-attack. This is a USER-APPROVED behaviour change; previously the executor's
+ * `oncePerAttackGuardKey` (cleared per actor TURN) held it at 1, and `on-ally-crit` has been
+ * removed from `PER_HIT_REACTIVE_TRIGGERS` so it no longer does. The guard is untouched and still
+ * load-bearing for `on-attacked` / `on-ally-attacked`, which genuinely fan ONE attack into many
+ * events.
+ *
+ * The two axes are independent and both are pinned below: per-sub-attack fan-out (3) and
+ * per-AoE-victim collapse (1).
  *
  * Everything is extracted through the REAL production path (buildShipAbilities on verbatim CSV
  * skill text, driven through runCombat) — never a hand-built self-rider.
@@ -159,9 +170,9 @@ const hermesObserver = (position: Position): TeamActorEngineInput =>
         },
     }) as TeamActorEngineInput;
 
-/** The focus ally lands a 3-hit crit (all hits crit → critHits === 3) on a single enemy in ONE
- *  attack. Hermes, its ally, should apply Everliving Regeneration III EXACTLY once and gain
- *  EXACTLY one charge from that single attack. */
+/** The focus ally fires `hits: 3` at a single enemy, critting on every sub-attack. That is THREE
+ *  consecutive full-walk attacks, so Hermes applies Everliving Regeneration III three times and
+ *  gains three charges — once per critting sub-attack. */
 function runHermes() {
     const input: CombatEngineInput = {
         attack: 1000,
@@ -223,26 +234,133 @@ function runHermes() {
     return { everlivingApplications: everliving.length, chargeGained };
 }
 
-describe('Hermes Everliving Regeneration — once per attack, not per hit/victim', () => {
-    it('a single 3-hit crit applies Everliving once and grants exactly one charge', () => {
+describe('Hermes Everliving Regeneration — once per SUB-ATTACK, not per hit/victim', () => {
+    it('a hits:3 ally crit applies Everliving three times and grants three charges', () => {
         const { everlivingApplications, chargeGained } = runHermes();
-        // Pre-fix: Everliving 3× (one per critting hit). Post-fix: 1× (one per attack that crits).
+        // `hits: 3` is THREE full-walk attacks, each with its own critting `ability-performed`.
+        // History of this number: 3 (the original per-critHits over-fire bug) → 1 (the listener
+        // collapse PLUS the executor's per-TURN guard) → 3 again, but for a DIFFERENT and correct
+        // reason — three attacks, one grant each. The AoE case below is what discriminates the two
+        // 3s: under the old bug it read 2, and it must now read 1.
+        expect(everlivingApplications).toBe(3);
+        // The charge rides the same trigger and now tracks the buff exactly. Previously the
+        // listener's hand-rolled special-case held it at +1 while the buff over-fired; that
+        // divergence is gone.
+        expect(chargeGained).toBe(3);
+    });
+});
+
+/**
+ * THE OTHER AXIS — the user-reported bug itself, which must STAY fixed.
+ *
+ * ONE single-hit attack whose AoE footprint crits TWO victims. That is one attack, so Hermes gets
+ * ONE Everliving application and ONE charge, however many footprint victims crit. Pre-fix this
+ * read 2 (the `critHits`-driven enqueue loop); it is structurally impossible now because the
+ * listener enqueues at most once per `ability-performed`, and it is deliberately NOT protected by
+ * `oncePerAttackGuardKey` any more — so this test is the only thing standing between the codebase
+ * and a regression of the original report.
+ */
+function runHermesAoe() {
+    const observer = hermesObserver('M3');
+    const input: CombatEngineInput = {
+        attack: 1000,
+        crit: 100, // every footprint victim crits
+        critDamage: 100,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'single-hit-aoe',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            // hits: 1 — ONE attack. The spread comes from the pattern below.
+                            config: { type: 'damage', multiplier: 100 },
+                        },
+                    ],
+                },
+            ],
+        },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 500,
+        healTargetId: 'hermes',
+        position: 'M1',
+        target: parsedTarget('front'),
+        // Whole-roster footprint: one attack, two victims, both critting.
+        pattern: { raw: 'all', shape: 'all', range: 'all', modifiers: {} } as ParsedPattern,
+        teamActors: [observer],
+        enemyAttackers: [dummyEnemy('enemy-a', 'M4'), dummyEnemy('enemy-b', 'M3')],
+    };
+
+    const bus = createEventBus();
+    const everliving: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+    const chargeGains: Extract<CombatEvent, { type: 'charge-changed' }>[] = [];
+    const perf: Extract<CombatEvent, { type: 'ability-performed' }>[] = [];
+    bus.on('ability-performed', (e) => {
+        if (e.actorId === 'attacker') perf.push(e);
+    });
+    bus.on('buff-applied', (e) => {
+        if (e.actorId === 'hermes' && /Everliving/.test(e.buffName)) everliving.push(e);
+    });
+    bus.on('charge-changed', (e) => {
+        if (e.actorId === 'hermes' && e.reason === 'manip') chargeGains.push(e);
+    });
+    runCombat({ ...input, bus });
+    return {
+        everlivingApplications: everliving.length,
+        chargeGained: chargeGains.reduce((s, e) => s + (e.newCharge - e.oldCharge), 0),
+        perf,
+    };
+}
+
+describe('Hermes Everliving Regeneration — an AoE footprint is still ONE attack', () => {
+    it('a single-hit crit across TWO victims applies Everliving once and grants one charge', () => {
+        const { everlivingApplications, chargeGained, perf } = runHermesAoe();
+        // Fixture self-check: the fan-out axis under test must actually exist. ONE attack, TWO
+        // critting victims — without this the assertions below would be vacuously satisfied.
+        expect(perf).toHaveLength(1);
+        expect(perf[0].critHits).toBe(2);
+
+        // THE user-reported bug. Pre-fix: 2 (one per critting victim). Must stay 1.
         expect(everlivingApplications).toBe(1);
-        // Charge was already collapsed to +1 by the listener special-case; must stay +1.
         expect(chargeGained).toBe(1);
     });
 });
 
 /**
  * Regression lock — an ALLY-target rider on on-ally-crit (the shape of Howler's Blast grant /
- * Sentinel's ally repair) also fires exactly ONCE per critting attack.
+ * Sentinel's ally repair) fires exactly ONCE PER CRITTING ATTACK.
  *
- * This used to fire 3× for a 3-hit crit: the once-per-attack collapse lived in the executor and
- * was deliberately narrowed to `target: 'self'`, so ally-routed riders kept re-applying per
- * critting hit. That produced the user-reported "Sentinel heals → Ruiner: 1,152" twice for ONE
- * Ruiner AoE. The collapse now lives in the LISTENER and covers the whole on-ally-crit trigger:
- * "when an ally critically hits an enemy, this Unit <does X>" is one reaction per attack, whatever
- * X targets. Per-ENEMY fan-out for "…to that enemy" riders happens inside the damage executor via
+ * The unit of "attack" changed in the multi-hit full-walk epic (PR2): a `hits: N` skill is N
+ * consecutive full-walk attacks, so it emits N `ability-performed` events and this rider fires
+ * N times — once per critting sub-attack. That is the epic's approved decision ("an ally crits on
+ * 2 of 3 sub-attacks → fires twice"), and it is NOT the bug this file locks.
+ *
+ * The bug this file locks is per-HIT and per-VICTIM over-firing WITHIN one attack: the
+ * once-per-attack collapse used to live in the executor and was narrowed to `target: 'self'`, so
+ * ally-routed riders re-applied per critting (hit, victim) pair. That produced the user-reported
+ * "Sentinel heals → Ruiner: 1,152" twice for ONE Ruiner AoE. The collapse now lives in the
+ * LISTENER, which enqueues at most once per `ability-performed`: an AoE footprint is ONE attack
+ * and still grants ONCE however many victims crit (the `critHits`-driven fan-out is gone).
+ * Per-ENEMY fan-out for "…to that enemy" riders happens inside the damage executor via
  * eventCtx.critVictimIds, not by re-enqueuing.
  *
  * The executor's self-target guard is untouched and still load-bearing for the other per-hit
@@ -330,8 +448,11 @@ function runAllyTargetRider() {
 }
 
 describe('ally-target on-ally-crit rider — once per attack', () => {
-    it('an ally-target buff fires once for a 3-hit critting attack, not three times', () => {
-        // The crediting ally landed 3 critting hits in ONE attack → one ally-routed grant.
-        expect(runAllyTargetRider()).toBe(1);
+    it('an ally-target buff fires once per critting SUB-ATTACK of a 3-hit attack', () => {
+        // PR2 (multi-hit full-walk): `hits: 3` is THREE consecutive full-walk attacks, each with
+        // its own `ability-performed`, so the ally-routed grant lands three times — once per
+        // critting sub-attack, never per (hit, victim) pair. Pre-PR2 this read 1, because the
+        // engine collapsed the whole cast into a single event.
+        expect(runAllyTargetRider()).toBe(3);
     });
 });

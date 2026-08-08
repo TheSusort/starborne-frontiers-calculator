@@ -16,7 +16,16 @@ export function emitAttacked(args: {
     hitOutcomes: boolean[];
     isPrimaryTarget: boolean;
     shieldWasHit: boolean;
-    /** per-attack aggregate dealt to the focus victim (Tenacity's >25%-maxHP gate reads this). */
+    /**
+     * The damage this victim took from the ONE attack these events belong to (Tenacity's
+     * >25%-maxHP gate reads it).
+     *
+     * Multi-hit full-walk epic, PR2: on the positional path the engine now groups its signals by
+     * SUB-ATTACK and calls this once per sub-attack, so for a `hits: N` cast this is that
+     * sub-attack's slice, not the victim's cast-wide aggregate. That is the corrected basis — a
+     * gate phrased "in one hit" was previously fed N hits' worth. N=1 is unchanged, and the
+     * non-positional call sites (one attack per call) were never affected.
+     */
     damage: number;
 }): void {
     const { bus, round, targetId, attackerId, hitOutcomes, isPrimaryTarget, shieldWasHit, damage } =
