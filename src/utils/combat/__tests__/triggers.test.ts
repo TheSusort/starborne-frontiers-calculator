@@ -3787,9 +3787,15 @@ describe('on-deal-damage live trigger', () => {
         expect(intents).toHaveLength(0);
     });
 
-    it('fires exactly once per turn regardless of hit count (aggregate event model)', () => {
-        // runPlayerTurn emits ONE ability-performed per turn. Multi-hit and AoE are
-        // already aggregated — this test confirms the listener enqueues exactly once.
+    it('enqueues exactly once per ability-performed event: N sub-attacks fire N times, one AoE-footprint event fires once', () => {
+        // The rule that actually holds (triggers.ts ~493-503): the listener has no
+        // once-per-turn guard — it enqueues once per `ability-performed` event, full stop.
+        // Two halves follow, and a future reader must not collapse either into the other:
+        //   - A `hits: N` skill is N consecutive full-walk attacks (locked rule), each its own
+        //     event (PR2/PR5) → N events must fire the rider N times, not once per turn.
+        //   - One event can still cover an AoE footprint of many victims → that is ONE event
+        //     and must fire only ONCE, however many victims it hit. Multi-hit is NOT AoE; this
+        //     is the collapse the old (misleadingly-named) version of this test was protecting.
         const ra: ReactiveAbility = {
             ability: onDealDamageAbility(),
             sourceSlot: 'passive',
@@ -3802,16 +3808,34 @@ describe('on-deal-damage live trigger', () => {
             enqueue: (i) => intents.push(i),
             isOpposing: (id) => id === 'enemy',
         });
-        // Emit ONE aggregate event (as the engine does for a multi-hit turn).
+
+        // Multi-hit: 3 sub-attacks, 3 separate events → 3 fires.
+        for (let h = 0; h < 3; h++) {
+            bus.emit({
+                type: 'ability-performed',
+                actorId: 'warpstrike',
+                targetId: 'enemy',
+                round: 2,
+                abilityType: 'damage',
+                damage: 4000,
+                subAttackIndex: h,
+                didHit: true,
+            });
+        }
+        expect(intents).toHaveLength(3);
+
+        // AoE: one attack, one footprint of many victims → still ONE event, ONE more fire
+        // (4 total, not 3 + victim-count).
         bus.emit({
             type: 'ability-performed',
             actorId: 'warpstrike',
             targetId: 'enemy',
-            round: 2,
+            round: 3,
             abilityType: 'damage',
             damage: 12000,
+            didHit: true,
         });
-        expect(intents).toHaveLength(1);
+        expect(intents).toHaveLength(4);
     });
 
     it('fires only the matching owner when multiple owners are registered', () => {

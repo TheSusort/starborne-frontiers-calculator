@@ -2412,7 +2412,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const secondaryDamage = secondaryStatValue * postDefenseFactor;
     const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
 
-    // ability-performed: ONE event for the firing damage hit, full directDamage.
+    // ability-performed: emitted below, once per SUB-ATTACK when not deferred to the engine —
+    // see the loop's own comment for cardinality, the DAMAGE split, and the hits===1
+    // byte-identical guarantee (not restated here).
     // Task 5 (per-victim crit signal): when the ENGINE will resolve this cast POSITIONALLY
     // (deferAbilityPerformedToEngine set AND a damage ability fired — the exact condition under
     // which the engine runs its per-victim apply, since its `positional` gate requires
@@ -2424,8 +2426,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // sub-attack's own `attacked` events — so what deferring preserves is the
     // ability-performed → per-victim `attacked` bus order, per sub-attack. With N=1 that is one
     // event per positional cast, exactly as before.
-    // Non-positional / DPS / healing (flag absent, or no damage ability) → emit inline as before
-    // → byte-identical.
+    // Non-positional / DPS / healing (flag absent, or no damage ability): emitted inline in the
+    // loop below, at the SAME per-sub-attack cardinality as the positional/engine path since PR5.
     const deferAbilityPerformed = args.deferAbilityPerformedToEngine === true && hasDamageAbility;
     if (!deferAbilityPerformed) {
         // PR5 (multi-hit full-walk epic): ONE event per SUB-ATTACK, matching the positional
@@ -2438,12 +2440,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //
         // CARDINALITY comes from `hits` — the GATED count (damageInputsFromSkill(gatedSkill)),
         // the same value that built `effectiveMultiplier`, so the event count and the damage it
-        // splits derive from ONE number. Deliberately NOT `drawHits`, which reads the UNGATED
-        // firingSkill and can only diverge if a gate lands on an active/charged damage ability
-        // (not representable from parser output today — see the KNOWN LIMITATION at the
-        // `drawHits` read). A cast with NO damage ability gets hits === 1 from
-        // damageInputsFromSkill's default, so heal/buff/utility casts emit exactly one event as
-        // before.
+        // splits derive from ONE number (clamped to at least 1 by `emitHits` below). Deliberately
+        // NOT `drawHits`, which reads the UNGATED firingSkill and can only diverge if a gate lands
+        // on an active/charged damage ability (not representable from parser output today — see
+        // the KNOWN LIMITATION at the `drawHits` read). A cast with NO damage ability gets
+        // hits === 1 from damageInputsFromSkill's default, so heal/buff/utility casts emit
+        // exactly one event as before.
+        //
+        // `hits: 0` GUARD: the ability editor's `min={1}` is advisory HTML — a hand-stored 0
+        // survives `damageInputsFromSkill`'s `?? 1` (that only guards `undefined`) and
+        // `parseInt('0', 10) === 0`. A bare `h < hits` loop would then run zero times: no event,
+        // no riders, no log row, silently dropping the ONE zero-damage event pre-PR5 code
+        // unconditionally emitted. `emitHits` (declared just above the loop) clamps BOTH the loop
+        // bound and the damage divisor to the same value so they cannot drift apart, reproducing
+        // that one event exactly (directDamage undivided) for an explicit hits:0 cast.
         //
         // DAMAGE per event is the cast's pre-funnel `directDamage` split N ways — the SAME basis
         // and the SAME split the positional path uses (`share = dap.damage / emitting.length`).
@@ -2462,7 +2472,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // RULE R5 ("with no living target left the multi-hit stops dealing damage") is NOT
         // implemented here because it is structurally unreachable on this path — see the
         // derivation in the block comment below.
-        for (let h = 0; h < hits; h++) {
+        const emitHits = hits > 0 ? hits : 1;
+        for (let h = 0; h < emitHits; h++) {
             // This sub-attack's OWN crit outcome, from the draws the per-hit loop above already
             // collected. `hitCrits` is populated only when a damage ability fired and only for
             // `drawHits` entries, so fall back to the cast-wide binary when it is empty: a noCrit
@@ -2476,7 +2487,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 targetId: enemy.id,
                 round: r,
                 abilityType: 'damage',
-                damage: directDamage / hits,
+                damage: directDamage / emitHits,
                 didCrit: subCrit,
                 // 1, not the cast-wide `critHits`: this counts the critting VICTIMS within THIS
                 // sub-attack, which for the single bound non-positional enemy is exactly the crit
