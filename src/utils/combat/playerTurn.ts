@@ -2469,9 +2469,40 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // untestable in-game today (no multi-hit ship carries defence/HP-scaling or a conditional
         // bonus); flagged for the next in-game pass rather than silently resolved.
         //
-        // RULE R5 ("with no living target left the multi-hit stops dealing damage") is NOT
-        // implemented here because it is structurally unreachable on this path — see the
-        // derivation in the block comment below.
+        // RULE R5 ("with no living target left, the multi-hit simply stops dealing damage",
+        // verified in-game 2026-08-08) is NOT implemented here, deliberately: it is structurally
+        // unreachable on this path, so a whiff guard would be a branch no test could ever take.
+        // The derivation, re-verified for PR5 (independently re-walked, not assumed):
+        //   • DPS mode (`dpsEnemyTarget`, engine.ts) drives a REAL destructible enemy, but its HP
+        //     lands POST-round in a single applyVictimDamage call after every turn of the round
+        //     has run (engine.ts ~9469-9494, and the round-tail reactive re-fold ~9638-9673), and
+        //     the run breaks the moment `destroyedRound` is set (engine.ts:9899). Nothing declines
+        //     its HP mid-round, so it is alive at every cast this loop can reach.
+        //   • Every OTHER non-positional mode (sim/healing) binds the VESTIGIAL sink (engine.ts's
+        //     `enemy` has no `position`, so `isPositional(enemy.position, …)` is always false),
+        //     whose HP is in the billions and which by construction never dies.
+        //   • The general reactive-proc funnel (engine.ts:5523, `applyVictimDamage` for a proc
+        //     victim) is explicitly gated `positionalTeamBattle && victim.id !== enemy.id`.
+        //   • Every OTHER mid-round `applyVictimDamage` call site (protection redirect, bomb
+        //     splash-on-death, reflect, counterattack, DoT ticks, positioned bomb/accumulator
+        //     bursts) is gated on `victim.position !== undefined` or on the victim carrying an
+        //     ability/kit — both false for the bound `enemy` sink, which has neither. The one
+        //     ungated site, `forceDetonateBomb` (Lingshe/Heliodor countdown-to-0), is only ever
+        //     invoked with a same-side cleanse recipient (`reactiveRecipients` resolves 'ally' /
+        //     'all-allies' / 'adjacent-allies' / self — triggers.ts:2118), so it can never resolve
+        //     to the opposing `enemy` id either.
+        //   • Independently: this loop itself never mutates HP — it only emits events. The bound
+        //     target's actual currentHp decrement happens exactly ONCE, after `runPlayerTurn`
+        //     returns, via the caller's own aggregate apply. So even on the symmetric reverse
+        //     invocation (an enemy actor's turn against a player `enemy`/tgt, e.g. healing mode's
+        //     tank), a mid-cast kill inside this loop is impossible — and a target already dead
+        //     BEFORE the cast is caught by the turn-level `skipDeadTargetTurn` guard (engine.ts
+        //     ~8705), which skips calling `runPlayerTurn` at all rather than letting it fire hits
+        //     into a corpse.
+        // The positional path, where the rule IS observable, implements it at positionalApply.ts's
+        // per-sub-attack anchor re-resolution against `opposingLiving`. If a future change lands
+        // in-round HP on a non-positional enemy, this loop needs `if (enemy.currentHp <= 0) break;`
+        // and a direct-runPlayerTurn test for it.
         const emitHits = hits > 0 ? hits : 1;
         for (let h = 0; h < emitHits; h++) {
             // This sub-attack's OWN crit outcome, from the draws the per-hit loop above already
