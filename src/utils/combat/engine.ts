@@ -4118,6 +4118,14 @@ export function runCombat(input: CombatEngineInput): {
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
+            //
+            // PR7: how much of this hit a Protection cascade diverted to protectors. Deliberately
+            // NOT folded into `incomingBooked` — that is the VICTIM's own booked intake, and the
+            // chunk is already booked on each protector's row (the Σ perTargetDealt identity of
+            // #293). Reported separately so a sub-attack can reconstruct the FULL amount the attack
+            // delivered, which is the locked basis for damage-proportional effects (protector damage
+            // + target remainder).
+            let protectionRedirected = 0;
             if (
                 cause?.byDirectDamage &&
                 !carriesBarrier &&
@@ -4202,6 +4210,7 @@ export function runCombat(input: CombatEngineInput): {
                         // near-zero emission (a real chunk is always >> 1e-9, so this never affects a
                         // genuine remainder).
                         if (intakeTotal > 1e-9) {
+                            protectionRedirected += intakeTotal;
                             roundPerTargetDamage.set(
                                 p.actor.id,
                                 (roundPerTargetDamage.get(p.actor.id) ?? 0) + intakeTotal
@@ -4556,6 +4565,7 @@ export function runCombat(input: CombatEngineInput): {
                     // display channels book it, exactly as they do for any other barriered hit —
                     // unlike `immediateDamage`, which is 0 here (nothing landed).
                     incomingBooked: incomingRecorded,
+                    ...(protectionRedirected > 0 ? { protectionRedirected } : {}),
                 };
             }
             const shieldBefore = victim.shieldPool;
@@ -5113,6 +5123,7 @@ export function runCombat(input: CombatEngineInput): {
                 // net intake this application booked excludes it — the deferred amount is booked
                 // later, per tick, by the DoT path.
                 incomingBooked: incomingRecorded - transformedToDot,
+                ...(protectionRedirected > 0 ? { protectionRedirected } : {}),
             };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink

@@ -102,8 +102,9 @@ const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0
 /** Whole-roster footprint: every occupied cell is struck by each sub-attack. */
 const allPattern = (): ParsedPattern => ({ raw: 'all', shape: 'all', range: 'all', modifiers: {} });
 
-/** A positioned enemy that never fires back. */
-const passiveEnemyAt = (id: string, position: Position) =>
+/** A positioned enemy that never fires back. `slots` lets one of them carry a passive (the
+ *  Protection aura below); left empty it is a pure damageable body, as before. */
+const passiveEnemyAt = (id: string, position: Position, slots: ShipSkills['slots'] = []) =>
     ({
         id,
         stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
@@ -111,15 +112,49 @@ const passiveEnemyAt = (id: string, position: Position) =>
         startCharged: false,
         position,
         affinity: 'antimatter',
-        shipSkills: { slots: [] },
+        shipSkills: { slots },
     }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+/**
+ * Grants SELF `Protection` the PRODUCTION way — an aura (a `buff` config with NO duration +
+ * isStackable), the classification a real Meatshield's "gains N stacks of Protection" passive parses
+ * to. Copied from `protectionTransfer.integration.test.ts` (which exports nothing); that file's
+ * enemy-side-symmetry test proves this exact shape makes a positioned enemy a live protector.
+ *
+ * Protector DEFENCE is deliberately 0 here (`passiveEnemyAt`), so the chunk re-mitigates at ratio 1
+ * and `protectorChunk + targetRemainder` is EXACTLY the undiverted hit — which is what lets the
+ * assertion below be an equality rather than a hand-computed mitigation product.
+ */
+const protectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'meatshield-protection',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Protection',
+                parsedEffects: {},
+                stacks,
+                isStackable: true,
+            },
+        } as Ability,
+    ],
+});
 
 /**
  * The focus player at M1 fires `slots`. `crit: 100` with a neutral-affinity roster makes every
  * (sub-attack, victim) pair crit. Two occupied enemy cells ⟹ an `all` footprint has 2 victims,
  * which is what makes the per-target/per-attack distinction observable at all.
  */
-const focusCast = (slots: ShipSkills['slots'], pattern: ParsedPattern): CombatEngineInput => ({
+const focusCast = (
+    slots: ShipSkills['slots'],
+    pattern: ParsedPattern,
+    opts: { protectTarget?: boolean } = {}
+): CombatEngineInput => ({
     attack: 5000,
     crit: 100,
     critDamage: 100,
@@ -146,7 +181,13 @@ const focusCast = (slots: ShipSkills['slots'], pattern: ParsedPattern): CombatEn
     position: 'M1',
     target: parsedTarget('front'),
     pattern,
-    enemyAttackers: [passiveEnemyAt('anchor', 'M4'), passiveEnemyAt('covered', 'M3')],
+    // 'anchor' (M4, the FRONT column) is what `target:'front'` binds to; 'covered' (M3) is the
+    // second footprint cell for the `all` pattern — and, under `protectTarget`, the ally holding
+    // Protection, so part of every hit on 'anchor' is redirected onto it.
+    enemyAttackers: [
+        passiveEnemyAt('anchor', 'M4'),
+        passiveEnemyAt('covered', 'M3', opts.protectTarget ? [protectionAuraPassive(3)] : []),
+    ],
 });
 
 /** Everything fires: crit gates, landing gates, proc gates. */
@@ -183,10 +224,22 @@ const healsAndAttacks = (
 };
 
 /** One pinned cast: `hits` sub-attacks over `pattern`, with Bloodthirst in the passive slot. */
-const cast = (hits: number, pattern: ParsedPattern): CombatEngineInput => {
+const cast = (
+    hits: number,
+    pattern: ParsedPattern,
+    opts: { protectTarget?: boolean } = {}
+): CombatEngineInput => {
     idc = 0;
     alwaysFire();
-    return focusCast([attackSkill(hits), bloodthirstPassive()], pattern);
+    return focusCast([attackSkill(hits), bloodthirstPassive()], pattern, opts);
+};
+
+/** Total damage `id` actually TOOK across the run (post-transfer), read from the per-actor intake
+ *  bucket — the same read `protectionTransfer.integration.test.ts`'s `totalIncoming` uses. */
+const incomingOf = (input: CombatEngineInput, id: string): number => {
+    let sum = 0;
+    for (const rd of runCombat(input).rounds) sum += rd.perActorIncoming?.[id]?.incoming ?? 0;
+    return sum;
 };
 
 describe('Bloodthirst damage-dealt basis (PR7)', () => {
@@ -235,5 +288,39 @@ describe('Bloodthirst damage-dealt basis (PR7)', () => {
         attacks.forEach((a, i) => {
             expect(heals[i]).toBeCloseTo((a.deliveredDamage! * HEAL_PCT) / 100, 6);
         });
+    });
+
+    it('heals off the FULL delivered amount when Protection redirects part of the hit', () => {
+        const unprotected = healAmounts(cast(1, basePattern()));
+        const withProtector = healAmounts(cast(1, basePattern(), { protectTarget: true }));
+
+        expect(unprotected).toHaveLength(1);
+        expect(withProtector).toHaveLength(1);
+        // Locked ruling (in-game verified 2026-08-08): "if protection triggers, it will heal based
+        // on the total damage of the damage to the protector, and whatever damage is left on the
+        // target." The redirect MOVES damage between victims; it must not shrink the basis.
+        // Pre-fix `deliveredDamage` was the victim's booked REMAINDER only, so this measured 1400
+        // against an unprotected 2000 — exactly the 0.7x the 3-stack redirect leaves behind. The
+        // sibling test below is what keeps this from passing vacuously if the cascade goes inert.
+        expect(withProtector[0]).toBeCloseTo(unprotected[0], 4);
+    });
+
+    it('…and the redirect it heals through is real: the protector took 30%, the target kept 70%', () => {
+        // NON-VACUITY GUARD for the test above. If the fixture ever stopped redirecting, that
+        // assertion would pass trivially (both sides equal because nothing moved). These read the
+        // post-transfer per-actor intake directly, so they fail the moment the cascade goes inert.
+        const victimAlone = incomingOf(cast(1, basePattern()), 'anchor');
+        const protectedInput = cast(1, basePattern(), { protectTarget: true });
+        const victimProtected = incomingOf(protectedInput, 'anchor');
+        const protector = incomingOf(protectedInput, 'covered');
+
+        expect(victimAlone).toBeGreaterThan(0);
+        // 3 stacks → 30% diverted. Protector defence is 0, so the chunk re-mitigates at ratio 1 and
+        // the two shares sum back to exactly the undiverted hit — the arithmetic that makes the
+        // equality above exact rather than approximate.
+        expect(victimProtected).toBeCloseTo(0.7 * victimAlone, 4);
+        expect(protector).toBeCloseTo(0.3 * victimAlone, 4);
+        expect(protector).toBeGreaterThan(0);
+        expect(victimProtected + protector).toBeCloseTo(victimAlone, 4);
     });
 });
