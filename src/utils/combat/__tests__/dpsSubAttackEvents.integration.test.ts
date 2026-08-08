@@ -346,12 +346,108 @@ describe('non-positional outgoing riders — per-sub-attack fan-out', () => {
         const slice = performed[0].damage!;
         expect(slice).toBeGreaterThan(0);
         const castTotal = performed.reduce((s, e) => s + (e.damage ?? 0), 0);
-        // ANTI-VACUITY: the two candidate bases must actually differ in this fixture, or an
-        // assertion against either would pass for the wrong reason.
+        // EQUAL-SPLIT invariant, NOT an anti-vacuity guard (it was mislabelled as one): given the
+        // three events asserted above, `castTotal === 3 * slice` follows from the loop dividing
+        // `directDamage` equally, so it can only catch an UNEQUAL split — not a reverted fold.
+        // What actually discriminates the fold is the `toHaveLength(3)` pair above (both
+        // mutation-confirmed: reverting the loop to a single emit fails them).
         expect(castTotal).toBeCloseTo(3 * slice, 6);
+        // THE REAL ANTI-VACUITY GUARD: the two candidate repair bases must be distinguishable in
+        // this fixture, or `0.2 * slice` and `0.2 * castTotal` would be the same number and the
+        // per-sub-attack assertion below would pass for a cast-total repair too.
+        expect(castTotal).toBeGreaterThan(slice);
         // Each fire repairs 20% of ITS OWN sub-attack, so the cast repairs 20% of the CAST —
         // not 60%, which is what the pre-PR5 fold produced (three fires off the full total).
         for (const h of heals) expect(h.amount).toBeCloseTo(0.2 * slice, 6);
         expect(heals.reduce((s, h) => s + h.amount, 0)).toBeCloseTo(0.2 * castTotal, 6);
+    });
+});
+
+/**
+ * The PROC GATE on the non-positional path — the one real BEHAVIOUR change PR5 makes beyond
+ * event cardinality, and the one nothing else pins.
+ *
+ * Stamping `subAttackIndex: h` on the inline emit moves `passesProcChanceGate`'s memo key from
+ * `${owner}:${ability}:x` to `…:0..N-1`. A `procScope:'per-attack'` outgoing rider that used to
+ * get ONE verdict per TURN on the DPS/healing path therefore now draws one per SUB-ATTACK (and
+ * the same re-keying applies to the reactive-damage `firedKey` dedupe in triggers.ts). That is
+ * the correct reading of the locked rules — a multi-hit skill is N consecutive full-walk attacks
+ * and each draws its own roll — but `subAttackProcGates.integration.test.ts` drives this
+ * entirely through the POSITIONAL engine path, so before this block nothing covered the inline
+ * emit.
+ *
+ * WHY `procChance` IS PRESENT HERE, against the describe block above's TRAP note: there the gate
+ * is an incidental dependency and is omitted so riders fire unconditionally while COUNTS are
+ * measured. Here the gate IS the subject, so it has to be armed — and the draw stream is pinned
+ * exactly (`setKeyedRng` keyed on the owner's `proc` sub-stream) rather than left to chance. The
+ * engine is NOT deterministic (`rateAccumulator.ts` uses `Math.random`), so both RNG seams are
+ * installed and reset in `afterEach`.
+ */
+describe('non-positional proc gates — one verdict per SUB-ATTACK, not per turn', () => {
+    afterEach(() => resetRateGateRng());
+
+    /** Insidiousness's shape: a `procScope:'per-attack'` reactive damage rider on on-crit. */
+    const procScopedRider = (procChance: number): Ability =>
+        ab({
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-crit',
+            procScope: 'per-attack',
+            procChance,
+            config: { type: 'damage', multiplier: 40 },
+        });
+
+    /** Runs one cast under a scripted draw sequence on the owner's `proc` sub-stream.
+     *  Returns how many draws that stream took and how many times the rider actually fired. */
+    const runRider = (
+        hits: number,
+        draw: (n: number) => number
+    ): { draws: number; fires: number } => {
+        idc = 0;
+        let draws = 0;
+        setRateGateRng(() => 0);
+        // Keyed per stream: only `attacker:proc` (the gate's own key, `makeRateGate(
+        // `${ownerId}:proc`)`) is scripted; every other keyed gate in the run gets a plain 0 so
+        // crit/landing gates stay wide open and cannot perturb the count.
+        setKeyedRng((key) => (key.startsWith('attacker:proc') ? draw(draws++) : 0));
+        const bus = createEventBus();
+        let fires = 0;
+        bus.on('reactive-damage-performed', () => {
+            fires++;
+        });
+        simulateDPS({
+            ...BASE,
+            rounds: 1,
+            shipSkills: multiHit(hits, [procScopedRider(0.5)]),
+            bus,
+        });
+        return { draws, fires };
+    };
+
+    it('a hits:3 cast draws THREE verdicts and honours each one (FAIL, FIRE, FIRE)', () => {
+        const { draws, fires } = runRider(3, (n) => (n === 0 ? 1 : 0));
+        // Three independent draws — one per sub-attack. With the index omitted from the emit all
+        // three collapse onto the `…:x` memo key and only ONE draw is ever taken.
+        expect(draws).toBe(3);
+        // ...and each sub-attack honours its OWN verdict. A replayed memo would give 0 here
+        // (sub-attack #1's FAIL reused for #2 and #3); a count of 3 would mean the memo stopped
+        // memoizing at all and the rider went per-victim.
+        expect(fires).toBe(2);
+    });
+
+    it('the mirror sequence (FIRE, FAIL, FAIL) fires exactly once', () => {
+        // Discriminates a gate that simply ignores the verdict and always fires: same fixture,
+        // same three draws, inverted script, one fire instead of two.
+        const { draws, fires } = runRider(3, (n) => (n === 0 ? 0 : 1));
+        expect(draws).toBe(3);
+        expect(fires).toBe(1);
+    });
+
+    it('N=1 control: a single-attack cast still draws exactly one verdict', () => {
+        // The byte-identical guarantee at hits === 1. The memo key moves from `…:x` to `…:0`,
+        // which is a pure rename (both maps are cleared at every actor turn-start and both keys
+        // are already owner-scoped), so the observable behaviour is unchanged: one draw, honoured.
+        expect(runRider(1, () => 0)).toEqual({ draws: 1, fires: 1 });
+        expect(runRider(1, () => 1)).toEqual({ draws: 1, fires: 0 });
     });
 });

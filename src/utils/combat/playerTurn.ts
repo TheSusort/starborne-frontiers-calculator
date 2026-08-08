@@ -465,8 +465,12 @@ export interface PlayerTurnArgs {
      *  this ONLY on the positional-apply branch (its `positional` gate is `... && positionalScalars
      *  != null`, i.e. exactly `hasDamageAbility` — so the suppression condition here matches EXACTLY
      *  which turns the engine will resolve positionally). Absent/false, OR set on a cast with no
-     *  damage ability → runPlayerTurn emits inline exactly as before (non-positional / DPS / healing
-     *  path byte-identical). */
+     *  damage ability → runPlayerTurn emits inline instead. NOT "as before": since PR5 of the
+     *  multi-hit full-walk epic that inline emit is itself ONE event per SUB-ATTACK, each carrying
+     *  `directDamage / N` and its own `subAttackIndex` — the SAME cardinality the engine's deferred
+     *  path has emitted since PR2, not the pre-PR5 single aggregate. Only at hits === 1 (every
+     *  corpus ship but Enforcer) is it one event carrying the undivided damage, i.e. byte-identical.
+     *  See the block comment at the emit loop for the cardinality/damage-split derivation. */
     deferAbilityPerformedToEngine?: boolean;
     /** Active-skill parsed pattern (support footprint for on-cast grants/heals/shields/buffs). */
     activePattern?: ParsedPattern;
@@ -2463,42 +2467,74 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // that can drift.
         //
         // KNOWN ASYMMETRY (epic spec PR5 section 5.4), deliberately NOT decided here:
-        // `secondaryStatValue` and `conditionalBonusPct` are folded into `preCritDamage` ONCE per
-        // cast while the base multiplier scales with `hits`, so each sub-attack receives 1/N of a
-        // single secondary/conditional payload rather than a full one. Corpus-inert and
-        // untestable in-game today (no multi-hit ship carries defence/HP-scaling or a conditional
-        // bonus); flagged for the next in-game pass rather than silently resolved.
+        // `secondaryStatValue`, `conditionalBonusPct` and the passive-slot hit (`passiveDamage`,
+        // computed just above and added into `directDamage` BEFORE this divisor) are each folded
+        // in ONCE per cast while the base multiplier scales with `hits`, so each sub-attack
+        // receives 1/N of a single secondary / conditional / passive payload rather than a full
+        // one. All three are the same class. Note the split is REPORTING-only for all three: the
+        // cast's Sigma is unchanged, so no damage total moves — what is uncertain is only whether
+        // a per-sub-attack rider reading `e.damage` should see a 1/N share of them. Untestable
+        // in-game today (no multi-hit ship carries defence/HP-scaling or a conditional bonus);
+        // flagged for the next in-game pass rather than silently resolved.
         //
         // RULE R5 ("with no living target left, the multi-hit simply stops dealing damage",
         // verified in-game 2026-08-08) is NOT implemented here, deliberately: it is structurally
         // unreachable on this path, so a whiff guard would be a branch no test could ever take.
-        // The derivation, re-verified for PR5 (independently re-walked, not assumed):
+        // The derivation, re-walked against source for PR5:
+        //   • THE PRIMARY ARGUMENT, and self-sufficient on its own — it needs nothing from the
+        //     engine enumeration below. This loop never mutates HP: it only emits events, and the
+        //     listeners those events reach are enqueue-only (the Phase 1 listener contract,
+        //     triggers.ts), draining at end of turn. The bound target's actual currentHp decrement
+        //     happens exactly ONCE, after `runPlayerTurn` returns, via the caller's own aggregate
+        //     apply. So a mid-cast kill inside this loop is impossible — including on the
+        //     symmetric reverse invocation (an enemy actor's turn against a player `enemy`/tgt,
+        //     e.g. healing mode's tank) — and a target already dead BEFORE the cast is caught by
+        //     the turn-level `skipDeadTargetTurn` guard (engine.ts ~8705), which skips calling
+        //     `runPlayerTurn` at all rather than letting it fire hits into a corpse.
+        //   Everything below is CORROBORATION: it shows no OTHER actor's mid-round work can
+        //   decline the bound target's HP either, so the target is alive at every cast this loop
+        //   can reach and not merely un-killable by this loop.
         //   • DPS mode (`dpsEnemyTarget`, engine.ts) drives a REAL destructible enemy, but its HP
         //     lands POST-round in a single applyVictimDamage call after every turn of the round
         //     has run (engine.ts ~9469-9494, and the round-tail reactive re-fold ~9638-9673), and
         //     the run breaks the moment `destroyedRound` is set (engine.ts:9899). Nothing declines
-        //     its HP mid-round, so it is alive at every cast this loop can reach.
+        //     its HP mid-round.
         //   • Every OTHER non-positional mode (sim/healing) binds the VESTIGIAL sink (engine.ts's
         //     `enemy` has no `position`, so `isPositional(enemy.position, …)` is always false),
         //     whose HP is in the billions and which by construction never dies.
         //   • The general reactive-proc funnel (engine.ts:5523, `applyVictimDamage` for a proc
         //     victim) is explicitly gated `positionalTeamBattle && victim.id !== enemy.id`.
-        //   • Every OTHER mid-round `applyVictimDamage` call site (protection redirect, bomb
-        //     splash-on-death, reflect, counterattack, DoT ticks, positioned bomb/accumulator
-        //     bursts) is gated on `victim.position !== undefined` or on the victim carrying an
-        //     ability/kit — both false for the bound `enemy` sink, which has neither. The one
-        //     ungated site, `forceDetonateBomb` (Lingshe/Heliodor countdown-to-0), is only ever
-        //     invoked with a same-side cleanse recipient (`reactiveRecipients` resolves 'ally' /
-        //     'all-allies' / 'adjacent-allies' / self — triggers.ts:2118), so it can never resolve
-        //     to the opposing `enemy` id either.
-        //   • Independently: this loop itself never mutates HP — it only emits events. The bound
-        //     target's actual currentHp decrement happens exactly ONCE, after `runPlayerTurn`
-        //     returns, via the caller's own aggregate apply. So even on the symmetric reverse
-        //     invocation (an enemy actor's turn against a player `enemy`/tgt, e.g. healing mode's
-        //     tank), a mid-cast kill inside this loop is impossible — and a target already dead
-        //     BEFORE the cast is caught by the turn-level `skipDeadTargetTurn` guard (engine.ts
-        //     ~8705), which skips calling `runPlayerTurn` at all rather than letting it fire hits
-        //     into a corpse.
+        //   • The remaining mid-round `applyVictimDamage` sites do NOT share one gate. An earlier
+        //     draft of this comment claimed they were all "gated on `victim.position !== undefined`
+        //     or on the victim carrying an ability/kit"; that is WRONG for two of them. The real
+        //     grouping:
+        //       – POSITION-gated: bomb splash-on-death (engine.ts:4772, `victim.position !==
+        //         undefined`) and positioned bomb/accumulator bursts (`applyPositionedTimedBurst`,
+        //         engine.ts ~6286, `isPositional(actor.position, opposingRoster)`).
+        //       – VICTIM'S-OWN-KIT-gated: the protection redirect (engine.ts ~4181) applies to the
+        //         hit victim's own PROTECTORS, and a DoT-tick batch applies to the container's own
+        //         carrier. The kit-less sink is never granted Protection and carries no DoTs.
+        //       – NEITHER: reflect (engine.ts:4982) and counterattack (engine.ts:5307) resolve
+        //         their victim from whoever DELIVERED the triggering hit —
+        //         `allActorsById.get(cause.killerId)` and the `counterTargetId` triggers.ts routes
+        //         into `applyCounterAttack`'s `attackerId`. Position has nothing to do with it.
+        //         They are safe because the vestigial `enemy` never acts as an ATTACKER, so it is
+        //         never a killerId or a counterTargetId.
+        //   • `forceDetonateBomb` (Lingshe/Heliodor countdown-to-0) has TWO producers and NEITHER
+        //     is position-gated. (a) The reactive cleanse path resolves same-side recipients only
+        //     (`reactiveRecipients` → 'ally' / 'all-allies' / 'adjacent-allies' / self,
+        //     triggers.ts:2118), so it never reaches an opposing id. (b) `reduceEnemyBombs`
+        //     (this file, ~2556 → `reduceBombsOnVictim` ~941 → `args.forceDetonateBomb` →
+        //     `forceDetonateBombOnVictim`, engine.ts:6252 → `applyVictimDamage`) routes to
+        //     OPPOSING victims and never touches `reactiveRecipients`. There is no guard inside it.
+        //     WARNING: path (b) misses the vestigial `enemy` today only as an INCIDENTAL SIDE-EFFECT of
+        //     unrelated plumbing: `reduceEnemyBombs` bails at this file's line ~929
+        //     (`if (args.targetId === undefined) return;`), and engine.ts ~6452 deliberately leaves
+        //     `targetId` unset whenever the player-side target resolved to the dummy sink — a
+        //     BUFF-ROUTING parity choice whose own comment flags the unset field as a gap that may
+        //     later be "fixed". That is not an intentional guard on this rule. A maintainer who
+        //     closes that gap MUST revisit this derivation: path (b) would then be able to land
+        //     real mid-cast HP damage on a non-positional bound target.
         // The positional path, where the rule IS observable, implements it at positionalApply.ts's
         // per-sub-attack anchor re-resolution against `opposingLiving`. If a future change lands
         // in-round HP on a non-positional enemy, this loop needs `if (enemy.currentHp <= 0) break;`
@@ -2525,7 +2561,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // binary. That is the SAME meaning the positional path carries
                 // (sub.critVictimIds.length), which is what lets triggers.ts's `on-crit` listener
                 // drop its second, non-positional branch. At hits === 1 this is identical to the
-                // old payload (drawHits is 1 there, so critHits was already 0 or 1).
+                // old payload WHENEVER `drawHits` is also 1 — which is every cast the parser can
+                // produce, since `hits` and `drawHits` diverge only when a gate lands on an
+                // active/charged damage ability (see the KNOWN LIMITATION at the `drawHits` read
+                // above). In that hand-authored-only case — a gated-off `hits: 3` ability leaving
+                // hits 1 with drawHits 3 — the old payload could carry critHits up to 3 and this
+                // one caps at 1. Deliberate: 1 is the CORRECT value under the new per-sub-attack
+                // meaning (critting victims in this sub-attack, and there is exactly one bound
+                // victim), and the two sentences must not be read as claiming drawHits is always 1.
                 ...(subCrit ? { critHits: 1 } : {}),
                 // PR4: the outgoing reactive listeners stamp this onto the intents they enqueue so
                 // the end-of-turn drain — which runs once per turn, after every sub-attack — can

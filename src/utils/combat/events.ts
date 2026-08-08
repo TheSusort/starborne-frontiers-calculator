@@ -555,8 +555,11 @@ export type CombatEvent =
           /** The 0-based sub-attack of the ATTACKER's cast that produced this hit (multi-hit
            *  full-walk epic, PR4). PR2 already emits one `attacked` per (sub-attack, victim); this
            *  names which sub-attack, so a victim-side once-per-attack guard can reset between the
-           *  attacker's consecutive attacks instead of collapsing all N into one. Absent on
-           *  non-positional emits (a single aggregate attack). */
+           *  attacker's consecutive attacks instead of collapsing all N into one. ALWAYS present
+           *  on a real `attacked` event, positional or not: `emitAttacked` stamps
+           *  `subAttackIndex ?? hitIndex` unconditionally on every path, falling back to the
+           *  per-hit loop index when the caller supplies no sub-attack identity. Optional here
+           *  only so hand-built fixture events can omit it. */
           subAttackIndex?: number;
       };
 

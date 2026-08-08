@@ -138,7 +138,10 @@ export interface Intent {
         fromPurgeEvent?: boolean;
         /** The sub-attack that raised the triggering event (multi-hit full-walk epic, PR4).
          *  Stamped by the OUTGOING listeners (`on-crit`, `on-deal-damage`) from
-         *  `ability-performed.subAttackIndex`. Undefined for triggers with no attack identity
+         *  `ability-performed.subAttackIndex`, AND by the INCOMING ones (`on-attacked`,
+         *  `on-ally-attacked`) from `attacked.subAttackIndex` — the incoming stamp is what makes
+         *  `oncePerAttackGuardKey` reset between the attacker's consecutive attacks instead of
+         *  collapsing all N into one. Undefined for triggers with no attack identity
          *  (start-of-round / end-of-round) — those keep per-turn gating, which is correct for them.
          *  Read by `passesProcChanceGate`'s memo key, so `procScope:'per-attack'` means per
          *  sub-attack rather than per turn. */
@@ -429,9 +432,10 @@ export function registerReactiveListeners(args: {
                         // reaction fires N times; an AoE footprint is ONE attack, so it fires ONCE
                         // however many victims crit and heals MORE through the AMOUNT, not the count.
                         //
-                        // ONE enqueue per event implements both halves, because since PR5 EVERY
-                        // emitter is per-sub-attack and `critHits` means the same thing on all of
-                        // them: the critting VICTIMS within THIS ONE sub-attack. (Before PR5 the
+                        // ONE enqueue per event implements both halves, because since PR5 every
+                        // emitter EXCEPT the engine's two cast-scoped fallbacks (enumerated below)
+                        // is per-sub-attack, and on those `critHits` means the same thing: the
+                        // critting VICTIMS within THIS ONE sub-attack. (Before PR5 the
                         // non-positional emitter folded the whole cast into one event where
                         // `critHits` counted critting HITS, and a LOOP over it was what implemented
                         // "per attack" on that path. Two meanings for one field was the epic's
@@ -2185,10 +2189,12 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     // PR4: one verdict per SUB-ATTACK. The gate/stream key stays `${owner}:${ability}` — that is the
     // owner's shared "proc" sub-stream and fragmenting it would re-roll cross-actor locality — but
     // the MEMO key carries the sub-attack, so attacks #2..#N draw afresh instead of replaying #1's
-    // verdict. An event with no sub-attack identity (start-of-round, on-attacked, or one of the two
-    // cast-scoped engine fallbacks — nothing-landed / enemy 0-damage) keys 'x' and keeps exactly
-    // today's per-turn behaviour. PR5: the non-positional inline emit now ALSO stamps a real index
-    // on every real cast, so it no longer falls into this bucket.
+    // verdict. An event with no sub-attack identity (start-of-round / end-of-round, or one of the
+    // two cast-scoped engine fallbacks — nothing-landed / enemy 0-damage) keys 'x' and keeps
+    // exactly today's per-turn behaviour. PR5: the non-positional inline emit now ALSO stamps a
+    // real index on every real cast, so it no longer falls into this bucket. NOTE `on-attacked` /
+    // `on-ally-attacked` are NOT in the 'x' bucket either — their listeners stamp the index off
+    // `attacked.subAttackIndex`, which `emitAttacked` always populates.
     const memoKey = `${gateKey}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
     const cached = memo?.get(memoKey);
     if (cached !== undefined) return cached;
@@ -3736,8 +3742,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // PR4: the key carries the SUB-ATTACK too. `reactionFiredThisAttack` is cleared
                 // only at actor turn-start, so without the index this suppressed a victim for
                 // sub-attacks #2..#N of a multi-hit cast — collapsing three attacks into one hit
-                // even after the verdict memo above was re-keyed. Missing index → 'x', i.e. exactly
-                // today's per-turn behaviour for every single-attack path.
+                // even after the verdict memo above was re-keyed. PR5 SWEEP: 'x' is no longer the
+                // single-attack path's key. Every real cast now carries an index — the positional
+                // deferred emit since PR2, the non-positional inline emit since PR5 — so a
+                // single-attack cast keys ':0', not ':x'. The 'x' bucket is left for the events
+                // with no attack identity at all (start-of-round / end-of-round triggers, the two
+                // cast-scoped engine fallbacks, hand-built fixture intents with no eventCtx), where
+                // per-turn dedupe remains the correct reading.
                 const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
                 if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
                 ctx.reactionFiredThisAttack?.add(firedKey);
