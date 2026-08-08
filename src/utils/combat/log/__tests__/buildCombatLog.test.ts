@@ -2445,4 +2445,80 @@ describe('buildCombatLog — sticky skill tag across sub-attack rows', () => {
         expect(attacks.map((a) => a.skillName)).toEqual(['First', 'Second']);
         expect(attacks.map((a) => a.slot)).toEqual(['active', 'charged']);
     });
+
+    it('a second cast whose debuff clause resolves FIRST is not mislabelled with the previous skill', () => {
+        // The gap the sibling test above cannot see. `currentSkillTag()` latches `pendingSkill`,
+        // but eight other handlers still `consumePendingSkill()` — so an intra-cast debuff written
+        // ahead of the damage clause consumes it before this cast's first `ability-performed`.
+        // Without an explicit clear on `skill-fired`, the latch still held 'First' and the second
+        // attack row was labelled with the FIRST skill's name.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'skill-fired', actorId: 'A', round: 1, slot: 'active', skillName: 'First' }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+            }),
+            ev({
+                type: 'skill-fired',
+                actorId: 'A',
+                round: 1,
+                slot: 'charged',
+                skillName: 'Second',
+            }),
+            // The clause-order case: this consumes `pendingSkill` before the damage clause lands.
+            ev({
+                type: 'debuff-applied',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                buffName: 'Attack Down I',
+            }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+
+        const log = buildCombatLog(events, roster, initialCharge);
+        const attacks = log[0].turns[0].entries.filter((e) => e.kind === 'attack');
+
+        // The second row must NOT read 'First'. It may carry 'Second' or no tag at all
+        // (the debuff handler consumed the pending tag) — what must never happen is the
+        // previous cast's identity leaking onto it.
+        expect(attacks).toHaveLength(2);
+        expect(attacks[0].skillName).toBe('First');
+        expect(attacks[1].skillName).not.toBe('First');
+    });
 });

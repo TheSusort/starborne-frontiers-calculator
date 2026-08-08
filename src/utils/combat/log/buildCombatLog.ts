@@ -425,6 +425,14 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     'skill-fired': (e, ctx) => {
         if (!ctx.currentTurn) return;
         ctx.pendingSkill = { skillName: e.skillName, slot: e.slot };
+        // Drop the previous cast's latched tag: a NEW skill fired, so any sub-attack row from here
+        // on belongs to THIS skill. Clearing here rather than relying on `pendingSkill` being
+        // non-empty at the next `currentSkillTag()` call is load-bearing — eight other handlers
+        // still `consumePendingSkill()`, so a clause that emits before this cast's first
+        // `ability-performed` (an intra-cast debuff written ahead of the damage clause, say) would
+        // consume `pendingSkill` first and leave `currentSkillTag()` serving the STALE latch,
+        // mislabelling the attack row with the previous skill's name.
+        ctx.castSkillTag = undefined;
     },
 
     'charge-changed': (e, ctx) => {
