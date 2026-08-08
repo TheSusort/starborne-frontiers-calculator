@@ -250,3 +250,86 @@ describe('PR4 Task 2 — the amplification proc rolls once per sub-attack', () =
         expect(amplified[0]).toBeGreaterThan(baseline[0]);
     });
 });
+
+/**
+ * Insidiousness's shape: a `procScope:'per-attack'` reactive damage rider on on-crit.
+ * `procChance` is optional here because the two gates it must clear are independent:
+ *  - with NO procChance, `passesProcChanceGate` returns early and only the per-victim
+ *    `reactionFiredThisAttack` suppression is in play;
+ *  - with one, the verdict MEMO is consulted too.
+ * Both were per-TURN before PR4 and both had to be re-keyed, so both are exercised below.
+ */
+const procScopedRider = (procChance?: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-crit',
+            procScope: 'per-attack',
+            ...(procChance !== undefined ? { procChance } : {}),
+            config: { type: 'damage', multiplier: 40 },
+        }),
+    ],
+});
+
+describe('PR4 Task 3 — procScope:"per-attack" is per SUB-attack, not per turn', () => {
+    afterEach(() => resetRateGateRng());
+
+    // Pre-fix: 1 fire for hits=3. The verdict was memoized on `${owner}:${ability}` and cleared
+    // only at actor turn-start, so "ThisAttack" was really a per-TURN cache and sub-attacks
+    // #2..#N replayed #1's verdict (spec §4.4 — the misnomer IS the bug's hiding place).
+    it.each([
+        [1, 1],
+        [3, 3],
+    ])('hits=%i fires the rider %i time(s)', (hits, expected) => {
+        idc = 0;
+        alwaysFire();
+        expect(
+            countOf(
+                focusCast([attackSkill(hits), procScopedRider()], basePattern()),
+                'reactive-damage-performed'
+            )
+        ).toBe(expected);
+    });
+
+    it('within ONE sub-attack the verdict is still shared across victims', () => {
+        idc = 0;
+        alwaysFire();
+        // The whole point of procScope: an AoE footprint is one attack, so its victims share one
+        // roll and the rider hits once (R3). Re-keying by sub-attack must not break that — this is
+        // the guard against "fixed" meaning "now fires per victim".
+        expect(
+            countOf(
+                focusCast([attackSkill(1), procScopedRider()], allPattern()),
+                'reactive-damage-performed'
+            )
+        ).toBe(1);
+    });
+
+    it('each sub-attack draws its OWN verdict — the memo is not replayed', () => {
+        idc = 0;
+        // This is the case that pins the verdict MEMO specifically (the test above pins the
+        // per-victim suppression instead: with no procChance, passesProcChanceGate returns early
+        // and never touches the memo).
+        //
+        // A 3-hit cast with a 50% rider under the draw sequence FAIL, FIRE, FIRE. Pre-PR4 the
+        // verdict was memoized on `${owner}:${ability}` and cleared only at actor turn-start, so
+        // sub-attack #1's FAIL was replayed for #2 and #3 → 0 fires. Keyed by sub-attack, each
+        // draws its own → 2 fires. A count of 3 would mean the memo stopped memoizing at all.
+        let n = 0;
+        setRateGateRng(() => 0);
+        setKeyedRng((key) => (key.startsWith('attacker:proc') ? (n++ === 0 ? 1 : 0) : 0));
+        const bus = createEventBus();
+        let fires = 0;
+        bus.on('reactive-damage-performed', () => {
+            fires++;
+        });
+        runCombat({
+            ...focusCast([attackSkill(3), procScopedRider(0.5)], basePattern()),
+            bus,
+        });
+        expect(n).toBe(3);
+        expect(fires).toBe(2);
+    });
+});

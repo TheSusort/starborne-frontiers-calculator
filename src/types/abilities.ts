@@ -1111,11 +1111,17 @@ export interface Ability {
      *  → fires on every qualifying trigger. */
     procChance?: number;
     /** Proc-roll granularity for a probabilistic reactive ability. `'per-attack'` draws the
-     *  gate ONCE per actor turn and reuses that verdict for every qualifying trigger event in
-     *  the same attack, via IntentExecContext.procDecisionThisAttack — so Insidiousness either
+     *  gate ONCE per ATTACK and reuses that verdict for every qualifying trigger event in that
+     *  same attack, via IntentExecContext.procDecisionThisSubAttack — so Insidiousness either
      *  damages EVERY enemy its attack debuffed or none of them, matching the game. Absent →
      *  per-event draws, the historical behaviour of every other procChance ability (Adaptive
-     *  Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity, Bulwark). */
+     *  Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity, Bulwark).
+     *
+     *  "Attack" here means ONE attack, and a `hits: N` skill is N consecutive full-walk attacks
+     *  (multi-hit full-walk epic, R1), so a 3-hit skill draws THREE verdicts — one per sub-attack,
+     *  each shared across that sub-attack's footprint. Until PR4 the verdict was keyed without the
+     *  sub-attack and cleared only at actor turn-start, making this per-TURN and replaying
+     *  sub-attack #1's verdict for all N. */
     procScope?: 'per-attack';
     /** Reactive event-frequency gate: fire this ability only every Nth qualifying trigger
      *  event, counted per SOURCE (the triggering actor). N=2 → every second event. Gated

@@ -2846,10 +2846,12 @@ export function runCombat(input: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
     // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
-    // Per-actor-turn verdict cache for procScope:'per-attack' proc abilities (Insidiousness).
-    // Keyed `${ownerId}:${abilityId}`; cleared at each actor turn-start beside
+    // Per-SUB-ATTACK verdict cache for procScope:'per-attack' proc abilities (Insidiousness).
+    // Keyed `${ownerId}:${abilityId}:${subAttackIndex}` (multi-hit full-walk epic, PR4 — was
+    // `${ownerId}:${abilityId}`, which silently made it per-TURN, so a hits:N skill replayed
+    // sub-attack #1's verdict for all N); cleared at each actor turn-start beside
     // reactionFiredThisAttack so a later attack rolls afresh.
-    const procDecisionThisAttack = new Map<string, boolean>();
+    const procDecisionThisSubAttack = new Map<string, boolean>();
     // G PR1: dedicated crit-gate for counterattacks. A NEW map (NOT any existing per-actor
     // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
     // for every existing fixture → byte-identical.
@@ -5984,8 +5986,9 @@ export function runCombat(input: CombatEngineInput): {
             // to the enemies actually crit rather than the cast's SELECTED anchor (which may not
             // have crit at all in an AoE). Empty on the 0-damage fallback path (no apply ran).
             critVictimIds: string[],
-            // Which sub-attack this event belongs to, for the deferred-log drain below. Omitted on
-            // the single-event paths ⟹ drain everything (the pre-PR2 behaviour).
+            // Which sub-attack this event belongs to, for the deferred-log drain below AND (PR4) as
+            // the event's own sub-attack identity. Omitted on the single-event paths ⟹ drain
+            // everything (the pre-PR2 behaviour) and emit no index.
             subAttack?: number
         ) => {
             bus.emit({
@@ -5998,6 +6001,10 @@ export function runCombat(input: CombatEngineInput): {
                 didCrit,
                 ...(critHits > 0 ? { critHits } : {}),
                 ...(critVictimIds.length > 0 ? { critVictimIds } : {}),
+                // PR4: the OUTGOING reactive listeners stamp this onto the intents they enqueue, so
+                // the drain (which runs once per turn, after every sub-attack) can gate per
+                // sub-attack. Conditional spread → the single-event paths stay byte-identical.
+                ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
                 didHit: true,
             });
             // Task 3: the attack entry now exists — drain the reflect rows THIS sub-attack
@@ -7205,7 +7212,7 @@ export function runCombat(input: CombatEngineInput): {
                         procChanceGates,
                         // Per-attack proc verdict cache (Insidiousness): one roll per attack,
                         // replayed for every debuff event that attack inflicts.
-                        procDecisionThisAttack,
+                        procDecisionThisSubAttack,
                         // Phase 4c PR 6: live lowest-speed-ally gate. UNCONDITIONAL (unlike the
                         // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
                         // the lone attacker resolves true and DPS gating stays byte-identical.
@@ -7688,9 +7695,11 @@ export function runCombat(input: CombatEngineInput): {
                 // Task 5: reset the self-rider once-per-attack guard beside the counter guard so a
                 // later attack re-applies Hermes's Everliving Regeneration / charge.
                 reactionFiredThisAttack.clear();
-                // Insidiousness: drop the per-attack proc verdicts so this attack draws its own
-                // single roll (and every debuff it inflicts shares that one verdict).
-                procDecisionThisAttack.clear();
+                // Insidiousness: drop the per-sub-attack proc verdicts so each sub-attack of this
+                // turn draws its own single roll (and every debuff ONE sub-attack inflicts shares
+                // that sub-attack's verdict). Keys carry the sub-attack index since PR4, so this
+                // clear is what stops turn N+1's sub-attack 0 reading turn N's verdict.
+                procDecisionThisSubAttack.clear();
 
                 // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff
                 // written during this actor's own turn is flagged appliedThisTurn so it survives

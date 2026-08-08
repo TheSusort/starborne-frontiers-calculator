@@ -136,6 +136,13 @@ export interface Intent {
         counterTargetId?: string;
         damagedAllyId?: string;
         fromPurgeEvent?: boolean;
+        /** The sub-attack that raised the triggering event (multi-hit full-walk epic, PR4).
+         *  Stamped by the OUTGOING listeners (`on-crit`, `on-deal-damage`) from
+         *  `ability-performed.subAttackIndex`. Undefined for triggers with no attack identity
+         *  (start-of-round / end-of-round) — those keep per-turn gating, which is correct for them.
+         *  Read by `passesProcChanceGate`'s memo key, so `procScope:'per-attack'` means per
+         *  sub-attack rather than per turn. */
+        subAttackIndex?: number;
         /** The damage of the triggering event, used by a reactive heal/shield to scale off
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
          *  (ability-performed.damage — damage the owner DEALT, e.g. Bloodthirst) and
@@ -430,7 +437,14 @@ export function registerReactiveListeners(args: {
                         for (let i = 0; i < n; i++) {
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, triggerDamage: e.damage },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    triggerDamage: e.damage,
+                                    // PR4: carry this sub-attack's identity to the drain, which runs
+                                    // once per turn — after every sub-attack — so it cannot ask the
+                                    // engine which sub-attack it is in.
+                                    subAttackIndex: e.subAttackIndex,
+                                },
                             });
                         }
                     });
@@ -457,7 +471,12 @@ export function registerReactiveListeners(args: {
                         // (Warpstrike duration-reduction) ignore victimId, so this is inert there.
                         enqueue({
                             ...intent,
-                            eventCtx: { ...intent.eventCtx, victimId: e.targetId },
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                victimId: e.targetId,
+                                // PR4: see the on-crit listener above.
+                                subAttackIndex: e.subAttackIndex,
+                            },
                         });
                     });
                     break;
@@ -1464,13 +1483,21 @@ export interface IntentExecContext {
      *  (see oncePerAttackGuardKey + the heal branch). Absent → no guard (unit ctxs without the
      *  engine keep firing per intent, byte-identical). */
     reactionFiredThisAttack?: Set<string>;
-    /** Per-actor-turn verdict cache for `procScope:'per-attack'` abilities (Insidiousness).
-     *  Keyed `ownerId:abilityId` → the single roll's outcome, cleared at each actor turn-start
-     *  (engine) beside `reactionFiredThisAttack`. Distinct from that Set: this is not a
-     *  suppression guard but a memo, so EVERY qualifying event in the attack still executes
-     *  against its own victim under one shared pass/fail. Absent (unit ctxs) → per-event draws,
-     *  byte-identical. */
-    procDecisionThisAttack?: Map<string, boolean>;
+    /** Per-SUB-ATTACK verdict cache for `procScope:'per-attack'` abilities (Insidiousness).
+     *  Keyed `ownerId:abilityId:subAttackIndex` → the single roll's outcome; the map is cleared at
+     *  each actor turn-start (engine) beside `reactionFiredThisAttack`.
+     *
+     *  Named `…ThisSubAttack` deliberately: the field this replaced was called
+     *  `procDecisionThisAttack` while keying on `ownerId:abilityId` alone, which made it a
+     *  per-TURN cache — so a `hits: N` skill replayed sub-attack #1's verdict for all N (multi-hit
+     *  full-walk epic, spec §4.4). The misnomer is why that read as correct to every reviewer for
+     *  months. `procScope` itself KEEPS the value name `'per-attack'`: with the index in the key it
+     *  is now accurate, because a sub-attack IS an attack (R1).
+     *
+     *  Distinct from `reactionFiredThisAttack`: this is not a suppression guard but a memo, so
+     *  EVERY qualifying event in the sub-attack still executes against its own victim under one
+     *  shared pass/fail. Absent (unit ctxs) → per-event draws, byte-identical. */
+    procDecisionThisSubAttack?: Map<string, boolean>;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
@@ -2114,8 +2141,15 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     // debuffed enemy. Opt-in by design — this gate is shared with the heal/shield/buff/debuff
     // branches, and memoizing unconditionally would silently convert every other proc ability
     // (Adaptive Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity) to per-turn.
-    const memo = intent.ability.procScope === 'per-attack' ? ctx.procDecisionThisAttack : undefined;
-    const cached = memo?.get(gateKey);
+    const memo =
+        intent.ability.procScope === 'per-attack' ? ctx.procDecisionThisSubAttack : undefined;
+    // PR4: one verdict per SUB-ATTACK. The gate/stream key stays `${owner}:${ability}` — that is the
+    // owner's shared "proc" sub-stream and fragmenting it would re-roll cross-actor locality — but
+    // the MEMO key carries the sub-attack, so attacks #2..#N draw afresh instead of replaying #1's
+    // verdict. An event with no sub-attack identity (start-of-round, on-attacked, the
+    // non-positional inline emit) keys 'x' and keeps exactly today's per-turn behaviour.
+    const memoKey = `${gateKey}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+    const cached = memo?.get(memoKey);
     if (cached !== undefined) return cached;
     let gate = ctx.procChanceGates?.get(gateKey);
     if (ctx.procChanceGates && !gate) {
@@ -2127,7 +2161,7 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
         ctx.procChanceGates.set(gateKey, gate);
     }
     const verdict = !gate || gate(pc);
-    memo?.set(gateKey, verdict);
+    memo?.set(memoKey, verdict);
     return verdict;
 }
 
@@ -3645,7 +3679,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // `reactionFiredThisAttack`, which the engine clears at each actor turn-start beside
             // the proc verdict cache. Absent set (unit ctxs) → no dedupe, byte-identical.
             if (intent.ability.procScope === 'per-attack') {
-                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}`;
+                // PR4: the key carries the SUB-ATTACK too. `reactionFiredThisAttack` is cleared
+                // only at actor turn-start, so without the index this suppressed a victim for
+                // sub-attacks #2..#N of a multi-hit cast — collapsing three attacks into one hit
+                // even after the verdict memo above was re-keyed. Missing index → 'x', i.e. exactly
+                // today's per-turn behaviour for every single-attack path.
+                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
                 if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
                 ctx.reactionFiredThisAttack?.add(firedKey);
             }
