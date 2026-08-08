@@ -23,11 +23,7 @@ import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
-import {
-    makeRateGate,
-    setRateGateRng,
-    resetRateGateRng,
-} from '../../calculators/rateAccumulator';
+import { makeRateGate, setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 
 let idCounter = 0;
@@ -172,17 +168,28 @@ describe('perHitCrit', () => {
     // Reactive charge-on-crit: +1 charge per crit event, chargeCount 6.
     // The damage ability has 3 hits and crit=100, so critHits=3 every active turn.
     //
-    // Charge trace (WITH FIX — 3 on-crit enqueues per active turn):
+    // PATH NOTE (PR7): this rides the NON-POSITIONAL DPS path (`simulateDPS`), which folds the
+    // whole `hits: 3` cast into ONE `ability-performed` carrying `critHits: 3` and NO
+    // `deliveredDamage`. On that path `critHits` counts critting HITS, and each hit IS its own
+    // sub-attack, so the listener's LOOP is what implements PER ATTACK, NOT PER TARGET here —
+    // there is no event cardinality to carry the count. (On the positional path the listener
+    // enqueues once per event instead, because PR2 already emits one event per sub-attack and
+    // there `critHits` counts critting VICTIMS. subAttackProcGates / damageDealtBasis pin that
+    // side.) PR5 makes the DPS loop emit per sub-attack too, at which point both paths converge
+    // and this count is produced by cardinality rather than the loop — the number must not move.
+    //
+    // Charge trace (3 on-crit enqueues per active turn):
     //   NOTATION: preTurn banks +1; drain (after cast-path banking) fires 3 on-crit intents.
     //   R1 preTurn: 0+1=1. Cast-path banking: bonusCharges=0 (charge ability is reactive/
     //     partitioned out), charges=min(1+0,6)=1. Drain: +1+1+1=4. RoundData: active, charges=4.
     //   R2 preTurn: 4+1=5. Cast-path: min(5+0,6)=5. Drain: +1→6, +1→cap 6, +1→cap 6. RoundData: active, charges=6.
     //   R3 preTurn: 6>=6 → charged, charges=0. RoundData: charged, charges=0.  ← firstCharged=3
     //
-    // Pre-fix (1 on-crit enqueue regardless of critHits):
+    // Collapsed to ONE enqueue regardless of critHits (the mutation this test kills — it is the
+    // pin that the positional branch's single-enqueue rule was NOT applied unconditionally):
     //   R1: 0+1=1 drain→+1=2. R2: 2+1=3 drain→+1=4. R3: 4+1=5 drain→+1=6. R4: charged. ← firstCharged=4
     //
-    // Assertion: firstCharged < 4 → fails pre-fix (4 not < 4), passes post-fix (3 < 4).
+    // Assertion: firstCharged < 4 → fails when collapsed (4 not < 4), passes with the loop (3 < 4).
     it('on-crit follow-up fires once PER CRITTING HIT (3-hit @100% crit → 3 enqueues/turn)', () => {
         idCounter = 0;
         const skills: ShipSkills = {
@@ -214,7 +221,7 @@ describe('perHitCrit', () => {
         const result = simulateDPS({ ...BASE, chargeCount: 6, rounds: 6, shipSkills: skills });
         const firstCharged = result.rounds.find((rw) => rw.action === 'charged')?.round;
         expect(firstCharged).toBeDefined();
-        // Post-fix: firstCharged=3 (< 4). Pre-fix: firstCharged=4 (not < 4 → FAIL).
+        // Loop kept: firstCharged=3 (< 4). Collapsed to one enqueue: firstCharged=4 (not < 4 → FAIL).
         expect(firstCharged!).toBeLessThan(4);
         expect(firstCharged).toBe(3);
         expect(

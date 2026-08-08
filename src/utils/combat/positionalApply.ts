@@ -67,6 +67,19 @@ export interface VictimDamageOutcome {
      *  Absent only on outcomes from callers that don't set it (test stubs of `applyToVictim`);
      *  `applyVictimDamage` always sets it — see {@link AppliedVictimDamage}. */
     incomingBooked?: number;
+    /** PR7 (multi-hit full-walk epic): the portion of this hit a Protection cascade diverted to
+     *  protecting allies, summed across protectors and measured as the intake the funnel actually
+     *  RECORDED on each (`incomingBooked` per sub-hit), so a protector's own incoming-block or
+     *  DoT-transform is already netted out.
+     *
+     *  Deliberately NOT part of {@link incomingBooked}: that is THIS victim's own booked intake, and
+     *  the diverted chunk is booked on each protector's row instead — folding it in here would
+     *  double-count it and break the `Σ perTargetDealt[attacker] == Σ perTargetDamage` identity.
+     *
+     *  Exists so a sub-attack can reconstruct the FULL amount the attack delivered (protector damage
+     *  + target remainder), which is the locked basis for damage-proportional effects like
+     *  Bloodthirst. Absent when no cascade fired. */
+    protectionRedirected?: number;
 }
 
 /** {@link VictimDamageOutcome} as returned by the engine's real apply funnel, where
@@ -102,6 +115,27 @@ export interface SubAttackOutcome {
      * Protection cascade, incoming-block proc or DoT transform alters what actually landed.
      */
     damage: number;
+    /**
+     * What this sub-attack actually DELIVERED — {@link damage} plus every victim's
+     * `protectionRedirected`. The locked basis for damage-proportional outgoing effects
+     * (Bloodthirst): the heal counts the damage dealt to the protector AND the remainder left on
+     * the original target.
+     *
+     * Differs from {@link damage} only when a Protection cascade fired. Both deliberately exclude a
+     * DoT-transformed portion (ruled: "if dot, no heal") and an incoming-block shave, and both
+     * deliberately INCLUDE shield-absorbed damage, because {@link incomingBooked} — this field's
+     * own basis — is recorded before the shield/HP split.
+     *
+     * This is a SUM over every footprint victim of this sub-attack, critting or not — an AoE that
+     * crits one victim and not another still contributes both victims' shares to one total. The
+     * per-victim outcome in that mixed-crit case (should a non-critting victim's share count at
+     * all, or count differently?) has NOT been verified in-game; today it is folded into the sum
+     * unconditionally. A future PR may need to reverse this if that verification lands otherwise.
+     *
+     * NOT the combat log's number: the log's primary-target amount reads `ability-performed.damage`
+     * (the cast's pre-funnel `directDamage`), which PR7 leaves untouched.
+     */
+    deliveredDamage: number;
     /** Victims struck by this sub-attack, in footprint order. */
     victimIds: string[];
     /**
@@ -315,6 +349,7 @@ export function applyPositionalDamage(args: {
                 whiffed: true,
                 didCrit: false,
                 damage: 0,
+                deliveredDamage: 0,
                 victimIds: [],
                 critVictimIds: [],
             });
@@ -324,6 +359,7 @@ export function applyPositionalDamage(args: {
         const anchorCrit = hitCrits[h] ?? false;
         let subDidCrit = false;
         let subDamage = 0;
+        let subDelivered = 0;
         const subVictimIds: string[] = [];
         const subCritVictimIds: string[] = [];
 
@@ -367,6 +403,11 @@ export function applyPositionalDamage(args: {
             emitHit?.(victim, booked, didCrit, h);
             onVictimResolved?.(victim, dmg, outcome, didCrit, h);
             subDamage += booked;
+            // PR7: the FULL amount this hit delivered. `booked` is the victim's own intake, which
+            // excludes anything a Protection cascade diverted to protectors; the ruled basis counts
+            // both. A DoT-transformed portion is already netted out of `booked` and is correctly
+            // absent here too.
+            subDelivered += booked + (outcome.protectionRedirected ?? 0);
             subVictimIds.push(victim.id);
         }
 
@@ -375,6 +416,7 @@ export function applyPositionalDamage(args: {
             whiffed: false,
             didCrit: subDidCrit,
             damage: subDamage,
+            deliveredDamage: subDelivered,
             victimIds: subVictimIds,
             critVictimIds: subCritVictimIds,
         });

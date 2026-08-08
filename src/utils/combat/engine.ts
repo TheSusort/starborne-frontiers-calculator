@@ -4118,6 +4118,14 @@ export function runCombat(input: CombatEngineInput): {
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
+            //
+            // PR7: how much of this hit a Protection cascade diverted to protectors. Deliberately
+            // NOT folded into `incomingBooked` — that is the VICTIM's own booked intake, and the
+            // chunk is already booked on each protector's row (the Σ perTargetDealt identity of
+            // #293). Reported separately so a sub-attack can reconstruct the FULL amount the attack
+            // delivered, which is the locked basis for damage-proportional effects (protector damage
+            // + target remainder).
+            let protectionRedirected = 0;
             if (
                 cause?.byDirectDamage &&
                 !carriesBarrier &&
@@ -4202,6 +4210,7 @@ export function runCombat(input: CombatEngineInput): {
                         // near-zero emission (a real chunk is always >> 1e-9, so this never affects a
                         // genuine remainder).
                         if (intakeTotal > 1e-9) {
+                            protectionRedirected += intakeTotal;
                             roundPerTargetDamage.set(
                                 p.actor.id,
                                 (roundPerTargetDamage.get(p.actor.id) ?? 0) + intakeTotal
@@ -4556,6 +4565,12 @@ export function runCombat(input: CombatEngineInput): {
                     // display channels book it, exactly as they do for any other barriered hit —
                     // unlike `immediateDamage`, which is 0 here (nothing landed).
                     incomingBooked: incomingRecorded,
+                    // Provably always 0 here: this branch is `carriesBarrier === true`, but the
+                    // cascade that populates `protectionRedirected` (:4131) is gated on
+                    // `!carriesBarrier` and sits upstream of this return, so it never ran. Kept
+                    // for shape uniformity with the main `VictimDamageOutcome` return below, not
+                    // because this case can populate it.
+                    ...(protectionRedirected > 0 ? { protectionRedirected } : {}),
                 };
             }
             const shieldBefore = victim.shieldPool;
@@ -5113,6 +5128,7 @@ export function runCombat(input: CombatEngineInput): {
                 // net intake this application booked excludes it — the deferred amount is booked
                 // later, per tick, by the DoT path.
                 incomingBooked: incomingRecorded - transformedToDot,
+                ...(protectionRedirected > 0 ? { protectionRedirected } : {}),
             };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
@@ -5978,6 +5994,8 @@ export function runCombat(input: CombatEngineInput): {
             // multi-hit cast. Deliberately NOT SubAttackOutcome.damage, which is the post-funnel
             // `incomingBooked` sum — a different number, and changing the basis and the
             // cardinality in one PR would conflate two behaviour moves.
+            // PR7 resolved that split: the true delivered amount now rides alongside as
+            // `deliveredDamage`, and THIS field stays the pre-funnel display basis buildCombatLog reads.
             damage: number,
             didCrit: boolean,
             critHits: number,
@@ -5989,7 +6007,10 @@ export function runCombat(input: CombatEngineInput): {
             // Which sub-attack this event belongs to, for the deferred-log drain below AND (PR4) as
             // the event's own sub-attack identity. Omitted on the single-event paths ⟹ drain
             // everything (the pre-PR2 behaviour) and emit no index.
-            subAttack?: number
+            subAttack?: number,
+            // PR7: this sub-attack's delivered damage. Omitted on the single-event paths, whose
+            // consumers fall back to `damage` — keeping them byte-identical.
+            deliveredDamage?: number
         ) => {
             bus.emit({
                 type: 'ability-performed',
@@ -6005,6 +6026,7 @@ export function runCombat(input: CombatEngineInput): {
                 // the drain (which runs once per turn, after every sub-attack) can gate per
                 // sub-attack. Conditional spread → the single-event paths stay byte-identical.
                 ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
+                ...(deliveredDamage !== undefined ? { deliveredDamage } : {}),
                 didHit: true,
             });
             // Task 3: the attack entry now exists — drain the reflect rows THIS sub-attack
@@ -6861,7 +6883,8 @@ export function runCombat(input: CombatEngineInput): {
                                         // these lengths reproduces critPairs exactly.
                                         sub.critVictimIds.length,
                                         sub.critVictimIds,
-                                        idx
+                                        idx,
+                                        sub.deliveredDamage
                                     ),
                             });
                         }

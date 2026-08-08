@@ -182,6 +182,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     whiffed: false,
                     didCrit: true,
                     damage: expect.any(Number),
+                    deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
                     critVictimIds: ['covered'],
                 },
@@ -225,6 +226,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     whiffed: false,
                     didCrit: false,
                     damage: expect.any(Number),
+                    deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
                     critVictimIds: [],
                 },
@@ -322,6 +324,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     whiffed: false,
                     didCrit: true,
                     damage: expect.any(Number),
+                    deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
                     // Per-SUB-ATTACK crit slice: each sub-attack crit both victims, so Σ of the
                     // two lengths (2 + 2) reproduces the cast-wide critPairs of 4 exactly. This is
@@ -334,6 +337,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     whiffed: false,
                     didCrit: true,
                     damage: expect.any(Number),
+                    deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
                     critVictimIds: ['origin', 'covered'],
                 },

@@ -1041,6 +1041,14 @@ describe('dpsGoldenParity', () => {
     // follow-up. Locks the per-hit draw schedule, the blended crit multiplier,
     // and per-critting-hit trigger frequency. Added with the per-hit-crit increment
     // (2026-06-06); hand-verified.
+    //
+    // UNMOVED BY PR7 (multi-hit full-walk epic), deliberately. This fixture rides the
+    // non-positional DPS path, which folds `hits: 3` into ONE `ability-performed` carrying
+    // `critHits` and no `deliveredDamage`. There `critHits` counts critting HITS — each its own
+    // sub-attack — so the on-crit listener keeps looping it: PER ATTACK, NOT PER TARGET is
+    // implemented by the loop on this path and by event cardinality on the positional one. Round
+    // 1's `charges: 3` (2 critting hits + the preTurn bank) is the pin: collapsing the listener
+    // to one enqueue unconditionally drops it to 2.
     snap('per-hit crits (multi-hit + on-crit follow-up)', () => ({
         ...BASE,
         chargeCount: 4,

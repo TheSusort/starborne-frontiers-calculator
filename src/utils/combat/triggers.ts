@@ -149,7 +149,11 @@ export interface Intent {
          *  `basis:'damage-taken'` (attacked.damage — damage the owner TOOK, e.g. Adaptive
          *  Plating). NOTE: attacked.damage is the per-attack aggregate and on-attacked fires
          *  once per hit, so a non-oncePerRound damage-taken reactive would grant N times for
-         *  an N-hit attack; Adaptive Plating's oncePerRound gate caps it to one grant/round. */
+         *  an N-hit attack; Adaptive Plating's oncePerRound gate caps it to one grant/round.
+         *  PR7: for `basis:'damage-dealt'` the on-crit listener prefers the event's
+         *  `deliveredDamage` — what the sub-attack actually delivered, including a Protection
+         *  cascade's redirected chunk and excluding a DoT-transformed portion. `damage` remains the
+         *  fallback for the non-positional and DPS paths (PR5). */
         triggerDamage?: number;
         /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
          *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
@@ -297,11 +301,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * Register each owner's reactive abilities as bus listeners. Listener bodies are
  * PURE (Phase 1 contract): they only `enqueue` an intent — never mutate combat state. Match
  * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
- *  - on-crit → ability-performed where actorId === ownerId; enqueues once per critting VICTIM
- *    WITHIN that event (its `critHits` field; falls back to the didCrit binary for events without
- *    it). Since PR2 an event is one SUB-ATTACK, so a `hits: N` cast fans out per sub-attack and,
- *    within each, per critting footprint victim — not once per cast-wide critting (hit, victim)
- *    pair, which counted hits × victims on a single event
+ *  - on-crit → ability-performed where actorId === ownerId; enqueues once PER ATTACK, never per
+ *    target. On the POSITIONAL path an event is one SUB-ATTACK (PR2) so it enqueues once per
+ *    critting sub-attack, off that sub-attack's `deliveredDamage`. On the NON-POSITIONAL/DPS path
+ *    the whole cast folds into one event whose `critHits` counts critting HITS, so it loops that
+ *    many times off the cast's display `damage`. See the handler for why the two differ
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
  *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
@@ -418,31 +422,66 @@ export function registerReactiveListeners(args: {
                 case 'on-crit':
                     bus.on('ability-performed', (e) => {
                         if (e.actorId !== ownerId) return;
-                        // Per-critting-hit (game-verified): 2 of 3 hits crit → the
-                        // follow-up fires twice. Events without critHits fall back
-                        // to the didCrit binary (one enqueue).
+                        // PER ATTACK, NOT PER TARGET (locked game rule, user-verified in-game
+                        // 2026-08-08): a multi-hit skill is N consecutive FULL-WALK attacks, so the
+                        // reaction fires N times; an AoE footprint is ONE attack, so it fires ONCE
+                        // however many victims crit and heals MORE through the AMOUNT, not the count.
+                        //
+                        // Both branches below implement that one rule. They differ because
+                        // `critHits` MEANS DIFFERENT THINGS depending on which path emitted the
+                        // event, and only one meaning is "victims":
+                        //
+                        //   POSITIONAL (interleaved, one event per SUB-ATTACK since PR2) —
+                        //     critHits = sub.critVictimIds.length, the critting VICTIMS within THIS
+                        //     ONE sub-attack. The per-attack count is already carried by the event
+                        //     CARDINALITY, so looping critHits here would re-add the per-target
+                        //     multiplier the rule forbids: a 4-victim AoE would resolve 4 times, each
+                        //     off the whole footprint's damage. Enqueue exactly once.
+                        //
+                        //   NON-POSITIONAL / DPS (playerTurn's inline emit; one event per CAST) —
+                        //     critHits = critting HITS across the cast, and each of those hits IS a
+                        //     separate sub-attack. There is no event cardinality to carry the count,
+                        //     so the LOOP is what implements "per attack" here. Collapsing this
+                        //     branch to one enqueue would make a `hits: N` cast fire once — it would
+                        //     CONTRADICT the rule, not implement it. PR5 replaces this branch
+                        //     wholesale by making the DPS loop emit per sub-attack like the engine;
+                        //     when it does, the loop becomes dead and the discriminator can go.
+                        //
+                        // The discriminator is `deliveredDamage`, which Task 2 emits ONLY on the
+                        // interleaved positional path — it is absent on the non-positional/DPS emit
+                        // and on both nothing-landed/0-damage engine fallbacks, all of which are
+                        // cast-scoped events that must keep the loop.
+                        if (e.deliveredDamage !== undefined) {
+                            const critted = (e.critHits ?? 0) > 0 || e.didCrit === true;
+                            if (!critted) return;
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    // What this sub-attack actually DELIVERED — post-crit,
+                                    // post-amplification, post-victim-defence, including a Protection
+                                    // cascade's redirected chunk and excluding a DoT-transformed
+                                    // portion. This is the locked `basis:'damage-dealt'` value
+                                    // (Bloodthirst).
+                                    triggerDamage: e.deliveredDamage,
+                                    // PR4: carry this sub-attack's identity to the drain, which runs
+                                    // once per turn — after every sub-attack — so it cannot ask the
+                                    // engine which sub-attack it is in.
+                                    subAttackIndex: e.subAttackIndex,
+                                },
+                            });
+                            return;
+                        }
+                        // Cast-scoped event: one enqueue per critting HIT (= per sub-attack), off the
+                        // cast's pre-funnel DISPLAY damage — the only damage figure these paths
+                        // publish. Unchanged from pre-PR7 so every DPS golden stays byte-identical.
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
-                        // Per-event copy: carry e.damage (total damage for this ability-performed
-                        // event) into eventCtx.triggerDamage so that a reactive basis:'damage-dealt'
-                        // heal (e.g. Bloodthirst) scales off the triggering hit's damage.
-                        // PR2 narrowed the old "multi-hit over-counts" approximation on the
-                        // POSITIONAL path: a `hits: N` skill now emits one event per SUB-ATTACK
-                        // carrying that sub-attack's own damage, so N crits heal off N slices
-                        // rather than N × the whole cast.
-                        // KNOWN APPROXIMATION, still: within ONE event, critHits > 1 (a multi-victim
-                        // AoE) enqueues that many times, each with the whole footprint's damage
-                        // rather than the critting victim's share. The non-positional DPS path also
-                        // still folds a multi-hit cast into a single event (that is PR5).
-                        // Per-victim attribution is not supported in the event model today.
                         for (let i = 0; i < n; i++) {
                             enqueue({
                                 ...intent,
                                 eventCtx: {
                                     ...intent.eventCtx,
                                     triggerDamage: e.damage,
-                                    // PR4: carry this sub-attack's identity to the drain, which runs
-                                    // once per turn — after every sub-attack — so it cannot ask the
-                                    // engine which sub-attack it is in.
                                     subAttackIndex: e.subAttackIndex,
                                 },
                             });

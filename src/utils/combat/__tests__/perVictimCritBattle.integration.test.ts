@@ -229,8 +229,10 @@ describe('per-victim crit — end-to-end battle (per-victim crit, Task 3)', () =
  * Task 5 — the ATTACKER's aggregate crit signal (the `ability-performed` event) must reflect the
  * PER-VICTIM outcomes on the sim/positional path:
  *   - didCrit  = anyCrit   (OR across all footprint victims — Lev-style "if crit, hit all enemies")
- *   - critHits = critPairs (count of critting (hit, victim) pairs — Bloodthirst rolls its proc per
- *                critting victim)
+ *   - critHits = critPairs (count of critting (hit, victim) pairs — a per-victim crit-identity
+ *                signal on the payload; post-PR7, Bloodthirst no longer rolls its proc per
+ *                critting victim, it enqueues once per positional `ability-performed` event and
+ *                scales off that event's `deliveredDamage`)
  *
  * BEFORE Task 5 the event carried ANCHOR-based values (critHits ≤ 1 for a single-hit ability), so
  * a single-hit AoE that crit 2 of its 3 covered victims still reported critHits ≤ 1 — this block

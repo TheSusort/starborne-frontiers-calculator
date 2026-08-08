@@ -1727,14 +1727,16 @@ function abilitiesFromText(
     // writeup): kept on trigger:'on-cast' with a live-derivable `self-crit` CONDITION
     // (abilityStatusGating.ts LIVE_SUBJECTS), gated the SAME way parseCritPowerExtend's
     // Valerian condition is above (conditions:[{subject:'self-crit', derivable:true}]) —
-    // NOT the reactive 'on-crit' AbilityTrigger. Rationale: 'on-crit' as a LIVE_TRIGGER has
-    // exactly one corpus user (buildEquipmentAbilities' Bloodthirst, a SELF-target reactive
-    // heal) and carries no AoE fan-out plumbing — reactiveRecipients has no 'all-enemies'
-    // branch, and the reactive on-crit listener stamps no hit-enemy ids in eventCtx. Staying
-    // on-cast instead reuses the SAME aoeVictimIds fan-out the on-cast purge/steal blocks
-    // already use for "all hit enemies" semantics (this cast's actual hit set), which is the
-    // literal wording of Lev's clause — reusing existing on-cast plumbing rather than adding
-    // new reactive machinery. Task 6's executor MUST honor this shape (on-cast + condition).
+    // NOT the reactive 'on-crit' AbilityTrigger. Rationale: 'on-crit' carries no AoE fan-out
+    // plumbing — reactiveRecipients has no 'all-enemies' branch, and the reactive on-crit listener
+    // stamps no hit-enemy ids in eventCtx. (Measured 2026-08-08: the corpus has FOUR on-crit
+    // abilities — Enforcer's Defense Shred, Lionheart's two Attack Up grants and Wusheng's Stealth —
+    // plus Bloodthirst from equipment. An earlier version of this comment claimed Bloodthirst was
+    // the only one; it was wrong.) Staying on-cast instead reuses the SAME aoeVictimIds fan-out
+    // the on-cast purge/steal blocks already use for "all hit enemies" semantics (this cast's
+    // actual hit set), which is the literal wording of Lev's clause — reusing existing on-cast
+    // plumbing rather than adding new reactive machinery. Task 6's executor MUST honor this shape
+    // (on-cast + condition).
     const extendStatus = parseExtendStatus(text);
     if (extendStatus) {
         const plainForExtend = stripTags(text);
