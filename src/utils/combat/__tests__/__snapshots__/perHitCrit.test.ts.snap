@@ -1,12 +1,12 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`perHitCrit > on-crit follow-up fires once PER CRITTING HIT (3-hit @100% crit → 3 enqueues/turn) 1`] = `
+exports[`perHitCrit > on-crit follow-up fires once per ATTACK (DPS path folds hits:3 into one event → 1 enqueue/turn) 1`] = `
 [
-  "1:active:4",
-  "2:active:6",
-  "3:charged:1",
-  "4:active:5",
-  "5:active:6",
-  "6:charged:1",
+  "1:active:2",
+  "2:active:4",
+  "3:active:6",
+  "4:charged:1",
+  "5:active:3",
+  "6:active:5",
 ]
 `;

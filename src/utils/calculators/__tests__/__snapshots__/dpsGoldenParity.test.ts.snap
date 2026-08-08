@@ -6703,7 +6703,7 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "activeSelfBuffs": [],
       "appliedDoTs": [],
       "chargeCount": 4,
-      "charges": 3,
+      "charges": 2,
       "corrosionDamage": 0,
       "cumulativeDamage": 26678,
       "detonationDamage": 0,

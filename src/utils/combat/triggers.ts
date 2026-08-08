@@ -418,35 +418,33 @@ export function registerReactiveListeners(args: {
                 case 'on-crit':
                     bus.on('ability-performed', (e) => {
                         if (e.actorId !== ownerId) return;
-                        // Per-critting-hit (game-verified): 2 of 3 hits crit → the
-                        // follow-up fires twice. Events without critHits fall back
-                        // to the didCrit binary (one enqueue).
-                        const n = e.critHits ?? (e.didCrit ? 1 : 0);
-                        // Per-event copy: carry e.damage (total damage for this ability-performed
-                        // event) into eventCtx.triggerDamage so that a reactive basis:'damage-dealt'
-                        // heal (e.g. Bloodthirst) scales off the triggering hit's damage.
-                        // PR2 narrowed the old "multi-hit over-counts" approximation on the
-                        // POSITIONAL path: a `hits: N` skill now emits one event per SUB-ATTACK
-                        // carrying that sub-attack's own damage, so N crits heal off N slices
-                        // rather than N × the whole cast.
-                        // KNOWN APPROXIMATION, still: within ONE event, critHits > 1 (a multi-victim
-                        // AoE) enqueues that many times, each with the whole footprint's damage
-                        // rather than the critting victim's share. The non-positional DPS path also
-                        // still folds a multi-hit cast into a single event (that is PR5).
-                        // Per-victim attribution is not supported in the event model today.
-                        for (let i = 0; i < n; i++) {
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    triggerDamage: e.damage,
-                                    // PR4: carry this sub-attack's identity to the drain, which runs
-                                    // once per turn — after every sub-attack — so it cannot ask the
-                                    // engine which sub-attack it is in.
-                                    subAttackIndex: e.subAttackIndex,
-                                },
-                            });
-                        }
+                        // PER ATTACK, NOT PER TARGET (locked game rule, user 2026-08-08). A multi-hit
+                        // skill is N consecutive full-walk attacks and each emits its own event
+                        // (PR2), so this fires once per SUB-ATTACK that critically hit anything. An
+                        // AoE footprint is ONE attack: it fires once however many victims crit, and
+                        // heals MORE through the AMOUNT below, not through the count. This replaced a
+                        // `for i < critHits` loop that resolved once per critting (victim) pair — the
+                        // same victim-scope-instead-of-attack-scope defect PR4 fixed for outgoing
+                        // amplification.
+                        const critted = (e.critHits ?? 0) > 0 || e.didCrit === true;
+                        if (!critted) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                // The damage this attack actually DELIVERED — post-crit,
+                                // post-amplification, post-victim-defence, including a Protection
+                                // cascade's redirected chunk and excluding a DoT-transformed portion.
+                                // `damage` is the pre-funnel DISPLAY basis the combat log reads, so
+                                // it is only the FALLBACK, for the non-positional and DPS paths that
+                                // emit no deliveredDamage (PR5 aligns those).
+                                triggerDamage: e.deliveredDamage ?? e.damage,
+                                // PR4: carry this sub-attack's identity to the drain, which runs once
+                                // per turn — after every sub-attack — so it cannot ask the engine
+                                // which sub-attack it is in.
+                                subAttackIndex: e.subAttackIndex,
+                            },
+                        });
                     });
                     break;
                 case 'on-deal-damage':

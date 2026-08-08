@@ -23,11 +23,7 @@ import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
-import {
-    makeRateGate,
-    setRateGateRng,
-    resetRateGateRng,
-} from '../../calculators/rateAccumulator';
+import { makeRateGate, setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 
 let idCounter = 0;
@@ -168,22 +164,34 @@ describe('perHitCrit', () => {
         }
     });
 
-    // ── Test 5: on-crit triggers fire once PER CRITTING HIT ─────────────────
-    // Reactive charge-on-crit: +1 charge per crit event, chargeCount 6.
-    // The damage ability has 3 hits and crit=100, so critHits=3 every active turn.
+    // ── Test 5: on-crit fires once per ATTACK — the DPS path's interim count ─
+    // Reactive charge-on-crit: +1 charge per on-crit enqueue, chargeCount 6.
+    // The damage ability has 3 hits and crit=100, so this event carries critHits=3.
     //
-    // Charge trace (WITH FIX — 3 on-crit enqueues per active turn):
-    //   NOTATION: preTurn banks +1; drain (after cast-path banking) fires 3 on-crit intents.
-    //   R1 preTurn: 0+1=1. Cast-path banking: bonusCharges=0 (charge ability is reactive/
-    //     partitioned out), charges=min(1+0,6)=1. Drain: +1+1+1=4. RoundData: active, charges=4.
-    //   R2 preTurn: 4+1=5. Cast-path: min(5+0,6)=5. Drain: +1→6, +1→cap 6, +1→cap 6. RoundData: active, charges=6.
-    //   R3 preTurn: 6>=6 → charged, charges=0. RoundData: charged, charges=0.  ← firstCharged=3
+    // MOVED BY PR7 (multi-hit full-walk epic), deliberately. Under the locked game rule the
+    // on-crit listener resolves PER ATTACK, NOT PER TARGET, so it stopped looping `critHits`
+    // times: `critHits` counts critting VICTIMS of ONE sub-attack on the positional path, and
+    // looping it made a 4-victim AoE resolve the reaction 4 times off the whole footprint's
+    // damage. One enqueue per `ability-performed` is correct there, because PR2 already emits one
+    // event per SUB-ATTACK.
     //
-    // Pre-fix (1 on-crit enqueue regardless of critHits):
-    //   R1: 0+1=1 drain→+1=2. R2: 2+1=3 drain→+1=4. R3: 4+1=5 drain→+1=6. R4: charged. ← firstCharged=4
+    // This test rides the NON-POSITIONAL DPS path (`simulateDPS`), which still folds a whole
+    // `hits: 3` cast into a SINGLE `ability-performed` with `critHits: 3`. So here — and only
+    // here — the collapse costs the multi-hit count: 3 enqueues per turn became 1. That is the
+    // known interim state PR5 closes by emitting one event per sub-attack on the DPS loop too;
+    // the engine's positional path (which every non-DPS consumer uses) already fires 3 times for
+    // a `hits: 3` cast, pinned by subAttackProcGates.integration.test.ts.
     //
-    // Assertion: firstCharged < 4 → fails pre-fix (4 not < 4), passes post-fix (3 < 4).
-    it('on-crit follow-up fires once PER CRITTING HIT (3-hit @100% crit → 3 enqueues/turn)', () => {
+    // Charge trace (1 on-crit enqueue per active turn):
+    //   NOTATION: preTurn banks +1; drain (after cast-path banking) fires 1 on-crit intent.
+    //   R1: 0+1=1, cast-path bonusCharges=0, drain +1 → 2.  RoundData: active, charges=2.
+    //   R2: 2+1=3, drain +1 → 4.                            RoundData: active, charges=4.
+    //   R3: 4+1=5, drain +1 → 6.                            RoundData: active, charges=6.
+    //   R4: 6>=6 → charged.                                 ← firstCharged=4
+    //
+    // Kept (rather than deleted) as the regression pin on the DPS path's count: when PR5 lands,
+    // this must go back to 3 — a silently-still-4 would mean PR5 did not reach this path.
+    it('on-crit follow-up fires once per ATTACK (DPS path folds hits:3 into one event → 1 enqueue/turn)', () => {
         idCounter = 0;
         const skills: ShipSkills = {
             slots: [
@@ -214,9 +222,10 @@ describe('perHitCrit', () => {
         const result = simulateDPS({ ...BASE, chargeCount: 6, rounds: 6, shipSkills: skills });
         const firstCharged = result.rounds.find((rw) => rw.action === 'charged')?.round;
         expect(firstCharged).toBeDefined();
-        // Post-fix: firstCharged=3 (< 4). Pre-fix: firstCharged=4 (not < 4 → FAIL).
-        expect(firstCharged!).toBeLessThan(4);
-        expect(firstCharged).toBe(3);
+        // 4 = one enqueue per active turn. 3 would mean the DPS path had regained the per-hit
+        // count (PR5 has landed → restore the pre-PR7 expectation); 5+ would mean the on-crit
+        // reaction stopped firing on this path at all.
+        expect(firstCharged).toBe(4);
         expect(
             result.rounds.map((rw) => `${rw.round}:${rw.action}:${rw.charges}`)
         ).toMatchSnapshot();
