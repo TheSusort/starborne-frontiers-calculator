@@ -4565,6 +4565,11 @@ export function runCombat(input: CombatEngineInput): {
                     // display channels book it, exactly as they do for any other barriered hit —
                     // unlike `immediateDamage`, which is 0 here (nothing landed).
                     incomingBooked: incomingRecorded,
+                    // Provably always 0 here: this branch is `carriesBarrier === true`, but the
+                    // cascade that populates `protectionRedirected` (:4131) is gated on
+                    // `!carriesBarrier` and sits upstream of this return, so it never ran. Kept
+                    // for shape uniformity with the main `VictimDamageOutcome` return below, not
+                    // because this case can populate it.
                     ...(protectionRedirected > 0 ? { protectionRedirected } : {}),
                 };
             }

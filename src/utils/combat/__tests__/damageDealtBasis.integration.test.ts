@@ -324,3 +324,74 @@ describe('Bloodthirst damage-dealt basis (PR7)', () => {
         expect(victimProtected + protector).toBeCloseTo(victimAlone, 4);
     });
 });
+
+/**
+ * Locked rule 2 coverage: "if dot, no heal." A DoT-transformed portion of a sub-attack contributes
+ * NOTHING to the damage-dealt basis — this is the only one of the five locked rules that shipped
+ * with no assertion anywhere. Pre-PR7, `triggerDamage` was `e.damage` (the pre-funnel
+ * `directDamage`), which INCLUDED the transformed portion, so a fully-transformed sub-attack still
+ * healed; post-PR7 it reads `deliveredDamage`, which nets the transform out, so it heals 0.
+ *
+ * `Hit Mitigation` is the vehicle (as in perSubAttackEvents.integration.test.ts's funnel-diversion
+ * case): a one-shot that blocks the NEXT direct hit, converting it wholesale into a DoT, so exactly
+ * sub-attack 0 of a 3-hit cast is diverted and sub-attacks 1-2 land normally — the asymmetry that
+ * makes a zero heal observable against non-zero siblings in the SAME run, rather than needing a
+ * separate control run.
+ */
+describe('Bloodthirst heals 0 off a DoT-transformed sub-attack (locked rule 2, PR7)', () => {
+    afterEach(() => resetRateGateRng());
+
+    /** 'anchor' self-casts a long Hit Mitigation from its ACTIVE slot and acts first (speed 999
+     *  vs the focus's forced speed 1 below), so the block is armed before the focus attacker's
+     *  cast lands. Shape copied from perSubAttackEvents.integration.test.ts's `blockingEnemyAt`. */
+    const mitigatingAnchor = (): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
+        ({
+            id: 'anchor',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 999 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4' as Position,
+            affinity: 'antimatter',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'buff',
+                                target: 'self',
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Hit Mitigation',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 99, // never expires inside the fixture
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    it('the diverted sub-attack heals 0 while its siblings heal normally', () => {
+        idc = 0;
+        alwaysFire();
+        const input: CombatEngineInput = {
+            ...focusCast([attackSkill(3), bloodthirstPassive()], basePattern()),
+            speed: 1, // slower than the mitigating anchor, so the block is up before the cast
+            enemyAttackers: [mitigatingAnchor()],
+        };
+
+        const heals = healAmounts(input);
+
+        expect(heals).toHaveLength(3);
+        // THE rule-2 assertion: the diverted sub-attack (index 0) contributes NOTHING.
+        expect(heals[0]).toBe(0);
+        // Its siblings are unaffected — same pct of the same undiverted delivered damage.
+        expect(heals[1]).toBeGreaterThan(0);
+        expect(heals[2]).toBeGreaterThan(0);
+        expect(heals[2]).toBeCloseTo(heals[1], 6);
+    });
+});

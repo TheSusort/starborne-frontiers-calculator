@@ -226,6 +226,7 @@ describe('per-sub-attack ability-performed — cardinality and payload', () => {
     });
 
     it('PR7: each sub-attack event carries its own deliveredDamage, and damage is unchanged', () => {
+        idc = 0;
         alwaysCrit();
         const stream = runStream(focusCast(3, basePattern()));
         const performed = perfOf(stream, 'attacker');
@@ -244,6 +245,7 @@ describe('per-sub-attack ability-performed — cardinality and payload', () => {
     });
 
     it('PR7: an AoE footprint reports the whole footprint on ONE event', () => {
+        idc = 0;
         alwaysCrit();
         const performed = perfOf(runStream(focusCast(1, allPattern())), 'attacker');
 
@@ -649,10 +651,12 @@ describe('combat log — one attack row per sub-attack, splash amount per sub-at
  *
  *  • `on-deal-damage` → Burner's Inferno rider. Fires once per `ability-performed` that dealt
  *    damage (`triggers.ts`'s `(e.damage ?? 0) <= 0` guard), so N sub-attacks = N applications.
- *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues `critHits` times per
- *    event and scales off THAT event's `damage`. This is the headline bug PR2 fixes: pre-PR2 the
- *    single aggregate event carried the WHOLE cast's damage, so all three fires healed off the
- *    full total. The amount, not just the count, is pinned below.
+ *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues ONCE per positional
+ *    `ability-performed` event (i.e. once per sub-attack) and scales off THAT event's
+ *    `deliveredDamage` (PR7). `critHits` remains a per-victim crit-identity signal on the payload
+ *    but is not the enqueue driver here. This is the headline bug PR2 fixes: pre-PR2 the single
+ *    aggregate event carried the WHOLE cast's damage, so all three fires healed off the full
+ *    total. The amount, not just the count, is pinned below.
  *  • `on-ally-crit`   → Howler/Sentinel's ally-routed grant. ONE enqueue per critting
  *    `ability-performed`, which now means one per critting SUB-ATTACK while an AoE footprint
  *    stays ONE attack however many victims crit.

@@ -37,6 +37,18 @@ const bookingApply = (victim: CombatActor, damage: number) => {
     return { shieldBefore: 0, hpDamage: damage, barriered: false, incomingBooked: damage };
 };
 
+/** applyToVictim stub that books a quarter on the victim and redirects three quarters (Protection). */
+const redirectingApply = (victim: CombatActor, damage: number) => {
+    victim.currentHp -= damage / 4;
+    return {
+        shieldBefore: 0,
+        hpDamage: damage / 4,
+        barriered: false,
+        incomingBooked: damage / 4,
+        protectionRedirected: (damage * 3) / 4,
+    };
+};
+
 describe('applyPositionalDamage — SubAttackOutcome', () => {
     it('hits:3 single-target → one entry per sub-attack, indexed 0..2', () => {
         const result = applyPositionalDamage({
@@ -389,18 +401,6 @@ describe('applyPositionalDamage — deliveredDamage (PR7)', () => {
     });
 
     it('adds the Protection-redirected chunk back on top of the booked remainder', () => {
-        // Funnel stub: books a quarter on the victim, reports three quarters as redirected.
-        const redirectingApply = (victim: CombatActor, damage: number) => {
-            victim.currentHp -= damage / 4;
-            return {
-                shieldBefore: 0,
-                hpDamage: damage / 4,
-                barriered: false,
-                incomingBooked: damage / 4,
-                protectionRedirected: (damage * 3) / 4,
-            };
-        };
-
         const result = applyPositionalDamage({
             hitCrits: [false],
             scalars: scalars(1),
@@ -418,7 +418,12 @@ describe('applyPositionalDamage — deliveredDamage (PR7)', () => {
         expect(sub.deliveredDamage).toBeCloseTo(sub.damage * 4, 6);
     });
 
-    it('sums delivered damage across a multi-victim footprint', () => {
+    it('sums delivered damage across a multi-victim footprint WITH a Protection redirect', () => {
+        // Reuses `redirectingApply` (not `bookingApply`) on the multi-victim Pattern-All board, so
+        // the multi-victim summation AND the per-victim `protectionRedirected` add-back are both
+        // exercised by the SAME test — the non-redirecting version of this test degenerated into
+        // the 'equals damage when nothing was redirected' case above, covering the redirect
+        // combination only indirectly.
         const result = applyPositionalDamage({
             hitCrits: [false],
             scalars: scalars(1),
@@ -427,13 +432,16 @@ describe('applyPositionalDamage — deliveredDamage (PR7)', () => {
             target: parseTarget('front'),
             opposingLiving: [actor('a', 'M4'), actor('b', 'M3')],
             defenseProfileOf: profile,
-            applyToVictim: bookingApply,
+            applyToVictim: redirectingApply,
         });
 
         const sub = result.subAttacks[0];
         expect(sub.victimIds).toHaveLength(2);
-        expect(sub.deliveredDamage).toBe(sub.damage);
-        expect(sub.deliveredDamage).toBeGreaterThan(0);
+        expect(sub.damage).toBeGreaterThan(0);
+        // Each victim's booked share is 1/4 of its hit and its redirected share is 3/4, so summed
+        // across both victims delivered = 4x booked — the multi-victim analogue of the single-
+        // victim redirect test above.
+        expect(sub.deliveredDamage).toBeCloseTo(sub.damage * 4, 6);
     });
 
     it('is 0 on a whiffed sub-attack', () => {

@@ -3,10 +3,14 @@
  *
  * Three "consumer" effects that must behave per-victim after the per-victim crit wiring:
  *
- * 1. BLOODTHIRST (on-crit implant): the engine's on-crit listener enqueues one proc roll per
- *    critting (hit, victim) pair — `critHits` on the ability-performed event. A multi-victim AoE
- *    that crits MORE victims should report a higher `critHits` count, so the Bloodthirst heal
- *    fires more often (fan-out scales with critting-victim count, not just 1).
+ * 1. BLOODTHIRST (on-crit implant): `critHits` on the ability-performed event is a per-victim
+ *    crit-identity signal — the count of critting (hit, victim) pairs a positional cast produced.
+ *    Post-PR7, the on-crit listener no longer drives its enqueue count off `critHits`: it enqueues
+ *    ONCE per positional `ability-performed` event (i.e. once per sub-attack) and scales the
+ *    Bloodthirst heal off THAT event's `deliveredDamage`. (On the non-positional/DPS path, where a
+ *    whole cast folds into one event, `critHits` counts critting HITS — each of which is a
+ *    sub-attack — and IS the enqueue driver there.) These tests still pin `critHits` itself as a
+ *    per-victim signal on the payload; they do not exercise the enqueue count.
  *
  * 2. REACTIVE WARD (on-attacked): each AoE victim receives its OWN per-victim `attacked` event
  *    carrying THAT victim's own crit outcome. An AoE where the anchor crits but a disadvantaged
@@ -141,20 +145,22 @@ function collectAttacked(input: CombatEngineInput): AttackedEvent[] {
 // 1. BLOODTHIRST — per-crit fan-out: critHits scales with critting-victim count
 // ---------------------------------------------------------------------------
 
-describe('per-victim crit consumers — Bloodthirst critHits fan-out (Task 6)', () => {
+describe('per-victim crit identity on the event payload (Task 6)', () => {
     afterEach(() => resetRateGateRng());
 
     /**
-     * The engine's on-crit listener reads `e.critHits` from the ability-performed event and
-     * enqueues the on-crit ability that many times (one proc roll per critting victim pair).
-     * Bloodthirst is the canonical on-crit implant. We wire it as a passive ability with
-     * trigger:'on-crit' and verify the ability-performed event carries the expected critHits count.
+     * `critHits` on the ability-performed event is a per-victim crit-identity signal — the count
+     * of critting (hit, victim) pairs a positional cast produced — regardless of how many times
+     * any listener enqueues off it. Bloodthirst is the canonical on-crit implant, wired here as a
+     * passive ability with trigger:'on-crit' so we can read the payload it receives.
      *
      * Scenario A: 2 neutral enemies → both crit (rate 1.0, rng=0.9 → 0.9<1.0) → critHits=2.
      * Scenario B: 1 neutral enemy → only 1 crits → critHits=1.
      *
-     * critHits is the direct driver of how many proc rolls Bloodthirst gets (the on-crit listener
-     * enqueues `n = e.critHits ?? (e.didCrit ? 1 : 0)` times). critHits=2 proves per-victim fan-out.
+     * Post-PR7, the on-crit listener no longer enqueues `critHits` times: on the positional path it
+     * enqueues ONCE per `ability-performed` event (per sub-attack) and scales the Bloodthirst heal
+     * off that event's `deliveredDamage`. critHits=2 here proves per-victim crit identity on the
+     * payload, not the proc-roll count.
      */
     it('2-victim AoE where both crit produces critHits=2; 1-victim produces critHits=1', () => {
         setRateGateRng(() => 0.9);
@@ -193,8 +199,8 @@ describe('per-victim crit consumers — Bloodthirst critHits fan-out (Task 6)', 
         expect(oneVictimPerf.length).toBeGreaterThan(0);
         const critHitsB = oneVictimPerf[0].critHits;
 
-        // Core assertion: critHits scales with critting-victim count.
-        // Bloodthirst enqueues n=critHits proc rolls → 2-victim AoE enqueues more.
+        // Core assertion: critHits scales with critting-victim count (a payload identity signal;
+        // Bloodthirst itself no longer enqueues n=critHits times — see the describe-block doc).
         expect(critHitsA).toBe(2); // 2 critting (hit, victim) pairs
         expect(critHitsB).toBe(1); // 1 critting pair
         expect(critHitsA).toBeGreaterThan(critHitsB!);
@@ -240,7 +246,8 @@ describe('per-victim crit consumers — Bloodthirst critHits fan-out (Task 6)', 
         expect(perfBoth.length).toBeGreaterThan(0);
         const critHitsBoth = perfBoth[0].critHits ?? 0;
 
-        // When the covered victim crits too, critHits is higher → more proc rolls for Bloodthirst.
+        // When the covered victim crits too, critHits is higher — a payload identity signal, not a
+        // proc-roll count (Bloodthirst's on-crit enqueue no longer scales off critHits, see above).
         expect(critHitsMiss).toBe(1); // only anchor critted
         expect(critHitsBoth).toBe(2); // both critted
         expect(critHitsBoth).toBeGreaterThan(critHitsMiss);

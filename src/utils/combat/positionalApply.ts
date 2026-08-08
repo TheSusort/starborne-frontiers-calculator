@@ -126,6 +126,12 @@ export interface SubAttackOutcome {
      * deliberately INCLUDE shield-absorbed damage, because {@link incomingBooked} — this field's
      * own basis — is recorded before the shield/HP split.
      *
+     * This is a SUM over every footprint victim of this sub-attack, critting or not — an AoE that
+     * crits one victim and not another still contributes both victims' shares to one total. The
+     * per-victim outcome in that mixed-crit case (should a non-critting victim's share count at
+     * all, or count differently?) has NOT been verified in-game; today it is folded into the sum
+     * unconditionally. A future PR may need to reverse this if that verification lands otherwise.
+     *
      * NOT the combat log's number: the log's primary-target amount reads `ability-performed.damage`
      * (the cast's pre-funnel `directDamage`), which PR7 leaves untouched.
      */
