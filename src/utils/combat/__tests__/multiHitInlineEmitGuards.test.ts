@@ -7,6 +7,7 @@
  * that silently removes the only coverage these guards have.
  */
 import { describe, expect, it } from 'vitest';
+import type { CombatEvent } from '../events';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
@@ -152,5 +153,58 @@ describe('R5 whiff guard on the inline ability-performed loop', () => {
         runPlayerTurn(makeArgs(makeRuntime(damageSkill(3)), bus));
 
         expect(performed).toHaveLength(3);
+    });
+});
+
+type AbilityPerformed = Extract<CombatEvent, { type: 'ability-performed' }>;
+
+/**
+ * Deliberately DIRECT runPlayerTurn tests, for the same reason as the R5 guard above: a `hits > 1`
+ * cast with no targeting data inside a positional team battle is unreachable through any production
+ * cast (the only multi-hit corpus ship has front / Pattern-Base, and battleSimulator.ts:772 falls
+ * her charged targeting back to her active columns), so an integration test would pass whether the
+ * clamp exists or not. Do NOT "upgrade" these to integration tests — that silently removes the only
+ * coverage this guard has.
+ *
+ * Damage arithmetic (attack 10000, multiplier 100, hits 3, no crit, 0 defence):
+ *   effectiveMultiplier = 100 x 3 = 300 → directDamage = 10000 x 3.0 = 30000.
+ * Clamped: ONE event carrying the undivided 30000. Unclamped: THREE carrying 10000 each.
+ */
+describe('inline emit clamp inside a positional team battle', () => {
+    it('clamps a 3-hit cast with no targeting data to ONE event carrying the undivided damage', () => {
+        const bus = createEventBus();
+        const performed: AbilityPerformed[] = [];
+        bus.on('ability-performed', (e) => performed.push(e));
+
+        runPlayerTurn({
+            ...makeArgs(makeRuntime(damageSkill(3)), bus),
+            inPositionalTeamBattle: true,
+            // deferAbilityPerformedToEngine deliberately unset: that IS the malformed case — a
+            // positional battle whose cast could not be deferred because it has no target/pattern.
+        });
+
+        expect(performed).toHaveLength(1);
+        expect(performed[0].damage).toBe(30000);
+    });
+
+    /**
+     * The load-bearing half. PR5's whole deliverable was making the non-positional DPS/healing path
+     * emit once per SUB-ATTACK; a careless clamp would silently revert it. This pins that the clamp
+     * is inert outside a positional team battle.
+     */
+    it('leaves the DPS/healing path at THREE events, each carrying a third of the damage', () => {
+        const bus = createEventBus();
+        const performed: AbilityPerformed[] = [];
+        bus.on('ability-performed', (e) => performed.push(e));
+
+        runPlayerTurn({
+            ...makeArgs(makeRuntime(damageSkill(3)), bus),
+            inPositionalTeamBattle: false,
+        });
+
+        expect(performed).toHaveLength(3);
+        expect(performed.map((e) => e.damage)).toEqual([10000, 10000, 10000]);
+        // Sigma is unchanged either way — the split is reporting-only.
+        expect(performed.reduce((sum, e) => sum + (e.damage ?? 0), 0)).toBe(30000);
     });
 });
