@@ -2622,4 +2622,30 @@ describe('buildCombatLog — target-less rows from a non-roster-bound cast', () 
 
         expect(notes).toEqual(['Rider', 'Rider', 'Rider']);
     });
+
+    /**
+     * ISOLATES THE ROSTER AXIS. The two fixtures above differ from each other on TWO axes at
+     * once — roster membership ('B' vs 'dummy-sink') AND presence of an `attacked` event
+     * (true vs false) — so neither one alone pins the `!ctx.rosterIds.has(...)` disjunct: a
+     * mutant that deleted the roster check and always pruned would still pass both, because
+     * the companion test never reaches the second guard (its `attacked` event populates
+     * `targets`, so `targets.length === 0` already fails) and the dummy-sink test still gets
+     * pruned by the same mutant for the same (right) reason.
+     *
+     * This fixture holds cardinality fixed at "no `attacked` event" (matching the dummy-sink
+     * case) and flips only roster membership back to a real roster member ('B'). A target-less
+     * row bound to a ROSTER member must still survive on the strength of its nested rider
+     * grant — the `reactions.length === 0` reprieve applies, and the roster-membership
+     * override must NOT fire for it.
+     */
+    it('a roster-bound cast with no attacked event still keeps its target-less rows', () => {
+        const turn = buildCombatLog(cast('B', false), roster, initialCharge)[0].turns[0];
+        const attacks = turn.entries.filter((e) => e.kind === 'attack');
+
+        expect(attacks).toHaveLength(3);
+        for (const a of attacks) {
+            expect(a.targets).toHaveLength(0);
+            expect(a.reactions.map((r) => r.note)).toEqual(['Rider']);
+        }
+    });
 });

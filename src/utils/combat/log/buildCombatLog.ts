@@ -367,6 +367,23 @@ function createBuildContext(
             // N `ability-performed`, so per-sub-attack riders (`on-deal-damage`, `on-crit`,
             // `on-ally-crit`) still fire N times and each event's crit signalling is unchanged.
             // Only the ROW is suppressed.
+            //
+            // The `=== undefined` arm just above the roster check can never actually be true here:
+            // `ability-performed.targetId` (events.ts) is a required `string`, and
+            // `openAttackAbilityTargetId` is set from it (below, on the `ability-performed`
+            // handler) and cleared only in `closeOpenAttack` alongside `openAttackEntry` — which
+            // the leading `ctx.openAttackEntry &&` condition already requires to be truthy. It is
+            // kept solely so `rosterIds.has(...)` below type-checks against the field's declared
+            // `string | undefined` type; the sole condition that can actually fire the override is
+            // roster non-membership.
+            //
+            // RE-PARENTING HAZARD (only reachable once this arm is, i.e. today it is not): a
+            // promoted `buff` reaction keeps its `targets: [{ targetId }]`, and splicing it into
+            // `currentTurn.entries` puts it into `setHp`'s top-level reverse fallback scan
+            // (above, :313-324) for the first time — the exact stale-`resultingHpPct` hazard the
+            // `buff-applied` handler's own comment already flags for that shape. A later
+            // `hp-changed` for that actor could stamp the promoted grant instead of the row that
+            // was actually meant. Worth checking if this arm is ever made reachable.
             if (
                 ctx.openAttackEntry &&
                 ctx.openAttackEntry.kind === 'attack' &&
