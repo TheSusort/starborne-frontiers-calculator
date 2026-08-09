@@ -654,9 +654,10 @@ describe('combat log — one attack row per sub-attack, splash amount per sub-at
  *  • `on-deal-damage` → Burner's Inferno rider. Fires once per `ability-performed` that actually
  *    DELIVERED damage — `triggers.ts`'s guard reads `(e.deliveredDamage ?? e.damage ?? 0) <= 0`
  *    (PR6; it read the pre-funnel `e.damage` alone before), so N sub-attacks = N applications
- *    here, where nothing on the victim side absorbs or defers any of them. A sub-attack fully
- *    absorbed by a shield or fully replaced by a DoT transform delivers 0 and now fires nothing —
- *    pinned by `onDealDamageDeliveredBasis.integration.test.ts`.
+ *    here, where nothing on the victim side defers or blocks any of them. A sub-attack fully
+ *    deferred into a DoT transform, or fully shaved by an incoming-block ability, delivers 0 and
+ *    now fires nothing. A shield-soaked hit still counts as delivered (on-screen damage) and still
+ *    fires — pinned by `onDealDamageDeliveredBasis.integration.test.ts`.
  *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues ONCE per
  *    `ability-performed` event (i.e. once per sub-attack — since PR5 this holds on BOTH the
  *    positional and non-positional/DPS emitters, not just the positional one) and scales off THAT

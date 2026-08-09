@@ -498,16 +498,26 @@ export function registerReactiveListeners(args: {
                         // PR6: gate on what the sub-attack actually DELIVERED, not on the
                         // pre-funnel display number. `e.damage` is playerTurn's `directDamage`,
                         // computed once per cast against the anchor's defence profile and never
-                        // shown the incoming funnel at all. So a sub-attack fully absorbed by a
-                        // shield, fully shaved by an incoming-block proc, or fully deferred into a
-                        // DoT by a transform still carried a positive `damage` and still fired its
-                        // riders off a hit that landed for nothing.
+                        // shown the incoming funnel at all. So a sub-attack fully shaved by an
+                        // incoming-block proc, or fully deferred into a DoT by a transform, still
+                        // carried a positive `damage` and still fired its riders off a hit that
+                        // landed for nothing.
                         //
-                        // `deliveredDamage` (PR7, events.ts) is the post-funnel number. Note it
-                        // COUNTS damage a Protection cascade diverted to protectors as delivered —
-                        // that hit did land, just on someone else — and EXCLUDES only damage
-                        // deferred into a DoT. A Protection redirect therefore does NOT silence
-                        // these riders; a full absorb/block/transform does.
+                        // `deliveredDamage` (PR7, events.ts) is the post-funnel number. Per funnel
+                        // leg, what counts as delivered:
+                        //   - DoT transform          NO  (engine.ts:5132 subtracts transformedToDot)
+                        //   - incoming-block shave   NO  (engine.ts:4111 shaves before the number
+                        //                                is even recorded)
+                        //   - shield absorption      YES (incomingRecorded is captured at
+                        //                                engine.ts:4271, before the shield/HP split —
+                        //                                a shield-soaked hit is still on-screen damage)
+                        //   - Protection redirect    YES (positionalApply.ts:410 adds the diverted
+                        //                                chunk back — that hit did land, just on
+                        //                                someone else)
+                        //   - Barrier nullification  YES (engine.ts:4569 books it as delivered anyway)
+                        // So only a DoT transform or an incoming-block shave silences these riders.
+                        // A shield-soaked, Barrier-nullified, or Protection-redirected hit still
+                        // fires them.
                         //
                         // It is emitted ONLY on the interleaved positional path, so the `??` chain
                         // leaves the DPS path byte-identical: that path has no funnel, so its two
