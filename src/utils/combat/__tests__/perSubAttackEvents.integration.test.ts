@@ -656,8 +656,14 @@ describe('combat log — one attack row per sub-attack, splash amount per sub-at
  *    (PR6; it read the pre-funnel `e.damage` alone before), so N sub-attacks = N applications
  *    here, where nothing on the victim side defers or blocks any of them. A sub-attack fully
  *    deferred into a DoT transform, or fully shaved by an incoming-block ability, delivers 0 and
- *    now fires nothing. A shield-soaked hit still counts as delivered (on-screen damage) and still
- *    fires — pinned by `onDealDamageDeliveredBasis.integration.test.ts`.
+ *    now fires nothing. A shield-soaked hit, and a Barrier-nullified one, still count as delivered
+ *    (on-screen damage) and still fire — pinned by
+ *    `onDealDamageDeliveredBasis.integration.test.ts`'s "the funnel legs that COUNT as delivered
+ *    still fire the rider" block, which asserts both the absorption actually happened and the
+ *    rider still fired three times. (Until PR6's review that named file explicitly DISCLAIMED
+ *    covering those legs; the block was added to make this cross-reference true rather than
+ *    dropped.) The fifth leg, a Protection redirect, also counts as delivered but has no
+ *    rider-level fixture — only the unit-level basis assertion in `positionalApplySubAttack.test.ts`.
  *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues ONCE per
  *    `ability-performed` event (i.e. once per sub-attack — since PR5 this holds on BOTH the
  *    positional and non-positional/DPS emitters, not just the positional one) and scales off THAT

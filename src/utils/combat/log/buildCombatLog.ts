@@ -377,13 +377,23 @@ function createBuildContext(
             // `string | undefined` type; the sole condition that can actually fire the override is
             // roster non-membership.
             //
-            // RE-PARENTING HAZARD (only reachable once this arm is, i.e. today it is not): a
-            // promoted `buff` reaction keeps its `targets: [{ targetId }]`, and splicing it into
-            // `currentTurn.entries` puts it into `setHp`'s top-level reverse fallback scan
-            // (above, :313-324) for the first time — the exact stale-`resultingHpPct` hazard the
-            // `buff-applied` handler's own comment already flags for that shape. A later
-            // `hp-changed` for that actor could stamp the promoted grant instead of the row that
-            // was actually meant. Worth checking if this arm is ever made reachable.
+            // RE-PARENTING HAZARD — LIVE, NARROW, DISPLAY-ONLY. An earlier draft said this was
+            // "only reachable once this arm is, i.e. today it is not". Wrong on both halves: the
+            // roster arm is reachable today (it is the point of this change — a multi-hit cast
+            // bound to the vestigial sink takes it), and `buildCombatLog.test.ts`'s "keeps the
+            // drained rider grants when the parent row is suppressed" already asserts three
+            // promoted `buff` entries landing in `currentTurn.entries`. A promoted `buff` reaction
+            // keeps its `targets: [{ targetId }]`, so those three are ALREADY inside `setHp`'s
+            // top-level reverse fallback scan (above, :315-324) — the exact stale-`resultingHpPct`
+            // hazard the `buff-applied` handler's own comment flags for that shape. A later
+            // `hp-changed` for that actor can stamp a promoted grant instead of the row that was
+            // actually meant.
+            // WHY IT IS NOT FIXED HERE: the field is a rendered HP percentage on a log row and
+            // nothing downstream computes from it — no damage, no accounting, no test. The
+            // mis-stamp is also self-limiting: the scan takes the most recent matching target, so
+            // it can only mis-stamp when a promoted grant is the LAST entry naming that actor.
+            // The pre-existing hazard on `buff` rows is unchanged in kind by this arm; it is
+            // recorded rather than papered over, and behaviour is deliberately left alone.
             if (
                 ctx.openAttackEntry &&
                 ctx.openAttackEntry.kind === 'attack' &&
