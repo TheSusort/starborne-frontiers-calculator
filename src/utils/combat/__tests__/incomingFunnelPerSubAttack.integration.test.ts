@@ -158,17 +158,27 @@ const focusCast = (
     enemyAttackers: enemies,
 });
 
-/** A player team actor at `position` carrying `slots`, which never attacks. `hp` defaults to
- *  the standard `HP` constant so existing call sites are unaffected. */
+/** A player team actor at `position` carrying `slots`, which never attacks (it has no `active`
+ *  slot) but MAY still deal REACTIVE damage (a counter reads the OWNER's own attack stat, unlike
+ *  its passive incoming role) — hence the `attack` param. `hp` defaults to the standard `HP`
+ *  constant, `speed` to `1`, and `attack` to `0` so existing call sites (Sections A-C, which
+ *  never counter) are unaffected; PR6's DoT-transform block (Section D) overrides `speed` to
+ *  outrun the attacker (mirroring `transformIncomingToDot.test.ts`'s turn-order requirement) and
+ *  the counter block (Section F) overrides `attack` to a nonzero value so its counter has
+ *  something to hit with (`applyCounterAttack` computes `raw` off the OWNER's `effectiveAttack`
+ *  and no-ops when `raw <= 0` — confirmed by a throwaway probe: attack:0 produced ZERO counter
+ *  events, not the expected one-per-turn-collapse, until this override was added). */
 const teamVictim = (
     id: string,
     position: Position,
     slots: ShipSkills['slots'],
-    hp: number = HP
+    hp: number = HP,
+    speed: number = 1,
+    attack: number = 0
 ): TeamActor =>
     ({
         id,
-        speed: 1,
+        speed,
         chargeCount: 0,
         startCharged: false,
         selfBuffs: [],
@@ -177,7 +187,7 @@ const teamVictim = (
         walk: {
             shipSkills: { slots },
             stats: {
-                attack: 0,
+                attack,
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
@@ -541,5 +551,266 @@ describe('PR6 Tier 2 — the incoming-block proc rolls per sub-attack', () => {
         }
         const partial = [...counts].filter((c) => c === 1 || c === 2);
         expect(partial.length).toBeGreaterThan(0);
+    });
+});
+
+// ── Tier 2, Section D: the DoT transform resolves per sub-attack ──────────────────────────
+//
+// DEVIATIONS FROM task-3-brief.md (measured against source before writing assertions, per the
+// task's three corrections plus what surfaced verifying them):
+//
+// 1. DAMAGE ARITHMETIC (task correction #1): as in every prior section, `crit: 100,
+//    critDamage: 100` on both `focusCast` and `offensiveEnemy` means every hit crits and
+//    doubles — each sub-attack of a 3-hit cast delivers 10,000, not the brief's assumed 5,000.
+//
+// 2. NO EVENT MARKS DoT-ENTRY CREATION. `convertHitToSelfDot` (engine.ts ~1602) pushes straight
+//    onto `victim.genericDoTEntries` with no accompanying emit — `dot-applied` (events.ts:164)
+//    is a DIFFERENT mechanism (inflicted corrosion/inferno), never fired by the transform path,
+//    confirmed by reading every call site of `bus.emit({ type: 'dot-applied', ...})` (none is
+//    inside convertHitToSelfDot or its two call sites). So `dotEntryCountFor` cannot read
+//    `dot-applied`, as the brief assumed.
+//
+//    The working signal: `tickDoTs` (engine.ts ~1049) sums ALL generic entries into a SINGLE
+//    `dot-ticked` event per tick round (`emitTicked('generic', genericSum, genericStacks, 0)`,
+//    engine.ts:1060) — so the event's own COUNT never discriminates (always <= 1 per victim per
+//    round, an instance of the brief's own linearity warning). But `convertHitToSelfDot` always
+//    pushes `stacks: 1` per entry (engine.ts:1602), so the event's `stacks` FIELD is the summed
+//    stack count across every entry that ticked together — i.e., the entry count itself. A
+//    per-cast bug that created ONE entry (carrying the whole 3x damage, since `attackSkill`
+//    multiplies) would tick with `stacks: 1` regardless of N; a correct per-sub-attack model
+//    that created N entries ticks with `stacks: N`. `dotEntryCountFor` below reads exactly that
+//    field, matching the brief's own request for something that "breaks the linearity" of a
+//    plain damage/tick sum.
+//
+// 3. TURN ORDER (per the reference file's own requirement, reused here): the victim needs a
+//    HIGHER speed than the attacker so its OWN tick step (which reads whatever entries already
+//    exist at the start of ITS turn) does not fire mid-creation. `teamVictim`'s speed defaults
+//    to 1 (Sections A-C's implicit assumption) and `offensiveEnemy`'s to 1000 — the OPPOSITE of
+//    what this block needs, so `teamVictim`'s now-optional 5th `speed` param (see its own
+//    comment) is used to override it to 2000 here. `numRounds` is bumped from
+//    `enemyDrivenBattle`'s default 1 to 2 (via a spread override) so a tick round actually
+//    occurs after the creating round.
+
+/** Voron/Orel's transform-incoming-to-dot passive (task-3-brief.md's own shape) — unconditional,
+ *  self-targeted, on-attacked. */
+const voronTransform = (turns: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'transform-incoming-to-dot',
+            target: 'self',
+            trigger: 'on-attacked',
+            config: { type: 'transform-incoming-to-dot', turns, condition: 'always' },
+        }),
+    ],
+});
+
+/** Reads the STACKS field of the first `dot-ticked` (dotType 'generic') event targeting
+ *  `victimId` — the summed entry count of whichever entries ticked together this round (see
+ *  DEVIATION 2 above for why this, not a `dot-applied` count or the tick's own event count, is
+ *  the discriminating signal). Round 1 (the creating round) never ticks anything created that
+ *  same round under the turn-order fixture below, so the FIRST event observed is round 2's tick
+ *  of round 1's freshly-created entries — exactly the count this test wants. */
+const dotEntryCountFor = (input: CombatEngineInput, victimId: string): number => {
+    const bus = createEventBus();
+    let stacks: number | undefined;
+    bus.on('dot-ticked', (e: Extract<CombatEvent, { type: 'dot-ticked' }>) => {
+        if (stacks === undefined && e.targetId === victimId && e.dotType === 'generic') {
+            stacks = e.stacks;
+        }
+    });
+    runCombat({ ...input, bus });
+    return stacks ?? 0;
+};
+
+describe('PR6 Tier 2 — the DoT transform creates one entry PER sub-attack — PLAYER side', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('a 3-hit cast against a transform carrier creates 3 independent DoT entries, so the next tick round sums 3 stacks', () => {
+        // ANTI-VACUITY: total tick DAMAGE is non-discriminating here (the brief's own flagged
+        // trap) — a per-cast bug funnels the whole 3x10,000 into ONE entry, and since
+        // `attackSkill` multiplies the CAST's damage by `hits`, that single entry's total ticked
+        // damage over its lifetime is the SAME 30,000 a correct 3-entry model produces. What
+        // differs is the ENTRY COUNT feeding that total: 1 vs 3. `dotEntryCountFor` reads
+        // exactly that (via the tick event's summed `stacks`), which is why this assertion, and
+        // not a damage total, is the one that discriminates the two models.
+        const build = (hits: number) => ({
+            ...enemyDrivenBattle(
+                [teamVictim('voron', 'M4', [voronTransform(3)], HP, 2000)],
+                [offensiveEnemy('foe', 'M1', hits)]
+            ),
+            numRounds: 2,
+        });
+        expect(dotEntryCountFor(build(3), 'voron')).toBe(3);
+        expect(dotEntryCountFor(build(1), 'voron')).toBe(1);
+    });
+});
+
+describe('PR6 Tier 2 — the DoT transform on the ENEMY side (team symmetry)', () => {
+    it('a 3-hit player cast against an enemy transform carrier also creates 3 independent DoT entries', () => {
+        // Mirrors the player-side test above via this file's own `focusCast`/`enemyAt` pair
+        // (already proven positional-enemy-victim helpers, Section C). `enemyAt`'s hardcoded
+        // speed (1) is already LOWER than the player focus's default, so the enemy's own tick
+        // step naturally lands on its OWN following turn — no speed override needed here.
+        const build = (hits: number) => ({
+            ...focusCast([attackSkill(hits)], [enemyAt('voron-e', 'M4', [voronTransform(3)])]),
+            numRounds: 2,
+        });
+        expect(dotEntryCountFor(build(3), 'voron-e')).toBe(3);
+        expect(dotEntryCountFor(build(1), 'voron-e')).toBe(1);
+    });
+});
+
+// ── Tier 2, Section E: damage reflection resolves per sub-attack ──────────────────────────
+//
+// Reflection is applied INSIDE `applyVictimDamage` itself (engine.ts ~4970-5043), the SAME
+// per-arrival funnel Tier 1/2's shield/Protection/block tests already proved runs once per
+// sub-attack — so, unlike the counter block below, no separate guard layer is in play here. The
+// reflect's LOG-ONLY event is `reactive-damage-performed` (task correction #3; confirmed at
+// events.ts:229 and its sole emit sites, engine.ts:3984/4229/5043) — `sourceId` is the
+// REFLECTOR (the wearer who took the hit and bounced it back), `targetId` the original attacker.
+// There is no separate discriminator between a reflect and a counter on this event (both funnel
+// through the same LOG-ONLY shape) — but filtering by `sourceId === <the reflecting victim's
+// id>` isolates reflection unambiguously here, since only the reflector ever carries that id as
+// a `sourceId` in this fixture (the attacker never reflects).
+
+const reflectPct = (pct: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            // DEVIATION from the brief's own `type: 'damage-reflection'`: that string is not a
+            // member of `AbilityType` at all (tsc rejects it) — 'damage-reflection' only ever
+            // appears as an `AbilityConfig.type` discriminant. `incomingAbilitiesOf` (engine.ts
+            // ~3199) collects a passive-slot ability purely by `config.type`, ignoring the outer
+            // `type`/`trigger` entirely, so the REAL production shape (Reflect gear set,
+            // buildEquipmentAbilities.ts REFLECT) uses `type: 'modifier'` as a placeholder —
+            // matched here.
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            config: { type: 'damage-reflection', pct },
+        }),
+    ],
+});
+
+/** Counts `reactive-damage-performed` events sourced from `victimId` (see the section header for
+ *  why `sourceId` alone disambiguates reflect from counter in this fixture). */
+const reflectEventCount = (input: CombatEngineInput, victimId: string): number => {
+    const bus = createEventBus();
+    let count = 0;
+    bus.on(
+        'reactive-damage-performed',
+        (e: Extract<CombatEvent, { type: 'reactive-damage-performed' }>) => {
+            if (e.sourceId === victimId) count++;
+        }
+    );
+    runCombat({ ...input, bus });
+    return count;
+};
+
+describe('PR6 Tier 2 — damage reflection fires per sub-attack', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('reflects 3 times off a 3-hit cast, each off its OWN sub-attack damage', () => {
+        // ANTI-VACUITY: a COUNT of reflect events is only discriminating because reflection has
+        // no once-per-attack guard at all (unlike the counter below) — a per-cast bug would have
+        // to emit the reflect ONCE, off the summed 30,000, which this test's N=1 control (1
+        // reflect off 10,000) already rules out being confused with by cardinality alone: 3
+        // distinct events vs 1 is impossible to produce from a single aggregate application. A
+        // TOTAL-damage assertion would not discriminate (3 reflects of ~pct% each of D sum to
+        // the same total as 1 reflect of pct% of 3D) — cardinality, not magnitude, is pinned.
+        const build = (hits: number) =>
+            enemyDrivenBattle(
+                [teamVictim('mirror', 'M4', [reflectPct(20)])],
+                [offensiveEnemy('foe', 'M1', hits)]
+            );
+        expect(reflectEventCount(build(3), 'mirror')).toBe(3);
+        expect(reflectEventCount(build(1), 'mirror')).toBe(1);
+    });
+});
+
+// ── Tier 2, Section F: counterattacks — a genuine per-TURN collapse (finding) ──────────────
+//
+// task-3-brief.md's correction #3 pointed at triggers.ts:3752's `reactionFiredThisAttack` key
+// (`ownerId:abilityId:victimId:subAttackIndex`) as the guard to watch — but that key belongs to
+// the SIBLING 'damage'-type reactive branch (procScope:'per-attack', e.g. Insidiousness), NOT
+// the 'counter' ability type this block exercises. Read directly at the source (triggers.ts
+// ~3567-3606): the COUNTER branch guards with its OWN set, `ctx.counterFiredThisTurn`, keyed
+// `${ownerId}:${ability.id}` — NO victimId, NO subAttackIndex — and cleared only at every actor
+// TURN-START (engine.ts:7727, unconditionally, once per actor whose turn begins), never
+// per-sub-attack. The guard's own comment (triggers.ts ~3582-3590) is explicit that this is a
+// pre-multi-hit-epic design: "Once-per-ATTACK: all per-hit `attacked` events of ONE attack
+// collapse to a single counter" — written when "one attack" and "one turn" were the same thing.
+// R1 broke that equivalence (a `hits: N` skill is N full attacks within ONE turn), and this
+// branch was never re-keyed with the sub-attack index the sibling branch gained in PR4.
+//
+// CONSEQUENCE (measured, not assumed): within a 3-hit cast, sub-attack 1's `on-attacked` fires,
+// finds the key absent, fires the counter, and sets the key. Sub-attacks 2 and 3 of the SAME
+// cast find the key already set (it is not cleared until the NEXT actor turn-start) and are
+// silently suppressed. A 100%-chance counter therefore fires exactly ONCE per multi-hit cast,
+// regardless of N.
+//
+// Per the task's explicit instruction ("a genuine finding, and exactly what this tier exists to
+// surface. Report it, do not fix it") and the binding characterization-test rule (pin what the
+// code ACTUALLY does, never reshape the assertion to match a hoped-for fix), the test below pins
+// the ACTUAL count (1 for both N=3 and N=1) rather than the brief's illustrative "fires 3 times."
+
+const counterOnAttacked = (procChancePct: number): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'counter',
+            target: 'self',
+            trigger: 'on-attacked',
+            // procChance is a top-level Ability field (0..1); >= 1 bypasses the proc gate
+            // entirely (passesProcChanceGate, triggers.ts:2177-2179), leaving only the
+            // once-per-TURN counterFiredThisTurn guard this block characterizes.
+            procChance: procChancePct / 100,
+            config: { type: 'counter', multiplier: 30 },
+        }),
+    ],
+});
+
+/** Counts `reactive-damage-performed` events sourced from `victimId` — the counter owner (see
+ *  Section E's header for why `sourceId` alone disambiguates in this fixture: only the
+ *  countering victim, never the attacking 'foe', ever appears as a `sourceId` here). */
+const counterEventCount = (input: CombatEngineInput, victimId: string): number => {
+    const bus = createEventBus();
+    let count = 0;
+    bus.on(
+        'reactive-damage-performed',
+        (e: Extract<CombatEvent, { type: 'reactive-damage-performed' }>) => {
+            if (e.sourceId === victimId) count++;
+        }
+    );
+    runCombat({ ...input, bus });
+    return count;
+};
+
+describe('PR6 Tier 2 — counterattacks: the guard collapses per TURN, not per sub-attack (finding)', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('a 100%-chance counter fires ONLY ONCE against a 3-hit cast — counterFiredThisTurn is turn-scoped, not sub-attack-scoped', () => {
+        // ANTI-VACUITY: a CORRECT per-sub-attack guard (matching R1: hits:N is N full attacks,
+        // and matching the sibling reactionFiredThisAttack branch's own PR4 fix) would produce 3
+        // counters for a 3-hit cast, clearly distinct from the 1-hit case's 1 — that contrast is
+        // exactly what Section E's reflect test measures successfully next door. What is
+        // measured here instead is 1 for BOTH N=3 and N=1: the signature of a per-TURN collapse,
+        // not a per-sub-attack one. Pinning 1 (not the brief's illustrative 3) is the whole point
+        // of a characterization test — it recorded what the code does, not what it should do.
+        //
+        // `teamVictim`'s new `attack` override (see its own comment) is set to 10,000 here:
+        // `applyCounterAttack` computes its raw damage off the OWNER's `effectiveAttack` and
+        // no-ops when that raw is <= 0 (engine.ts ~5283) — a throwaway probe with the default
+        // attack:0 produced ZERO `reactive-damage-performed` events (not even the one this test
+        // pins), which would have been a DIFFERENT, unrelated no-op bug masking the actual
+        // per-turn-collapse finding this block exists to characterize.
+        const build = (hits: number) =>
+            enemyDrivenBattle(
+                [teamVictim('counter', 'M4', [counterOnAttacked(100)], HP, 1, 10_000)],
+                [offensiveEnemy('foe', 'M1', hits)]
+            );
+        expect(counterEventCount(build(3), 'counter')).toBe(1);
+        expect(counterEventCount(build(1), 'counter')).toBe(1);
     });
 });
