@@ -62,9 +62,10 @@
  * of turn, after the owner is already marked destroyed, whether that owner died from one hit or
  * from the last of several. Because this behavior is N=1-identical, it sits OUTSIDE this PR's
  * scope (the epic's governing invariant is that N=1 must be byte-identical to pre-epic behavior —
- * a bug that reproduces at N=1 was never introduced by, and is not fixable within, the multi-hit
- * work). It is recorded here as a pre-existing, general engine question — whether a dying victim's
- * reactives should bank before the killing blow — not as a multi-hit defect. Anyone revisiting it
+ * a bug that reproduces at N=1 was never introduced by the multi-hit work, and fixing it is
+ * out of scope for this PR). It is recorded here as a pre-existing, general engine question —
+ * whether a dying victim's reactives should bank before the killing blow — not as a multi-hit
+ * defect. Anyone revisiting it
  * should treat it as exactly that general question, not as multi-hit follow-up work.
  *
  * This is flagged as a real (corrected) finding, NOT fixed in this task. The two Tenacity gate
@@ -337,23 +338,25 @@ describe('PR6 Tier 1 — incoming reactives fire once per sub-attack (player att
         expect(buffGrantsOf(focusCast([attackSkill(3)], [victim]), 'Tenacity', 'victim')).toBe(3);
     });
 
-    it('a victim killed by an early sub-attack collects FEWER attacked events than the cast hit count', () => {
+    it('a victim killed mid-cast collects exactly the sub-attacks banked before its death, not the full cast', () => {
         // The drop-out story `emitPerVictimAttacked`'s docstring claims: a dead victim has no
         // entry in later sub-attacks' buckets, so its on-hit reactives do not over-fire.
-        // HP 6000 vs a MEASURED 10,000/sub-attack (see ADAPTATION NOTE 2 — the brief assumed
-        // 5,000): dies on sub-attack 1, so at most 1 of the 3 `attacked` events can land. The
-        // assertion only pins "fewer than 3, more than 0" (not a specific count), so it holds
-        // regardless of the exact sub-attack index the victim dies on.
+        // HP 15,000 vs a MEASURED 10,000/sub-attack (see ADAPTATION NOTE 2 — the brief assumed
+        // 5,000): the victim survives sub-attack 0 (10,000 dealt, 5,000 left) and dies on
+        // sub-attack 1 (10,000 more), never reaching sub-attack 2. That pins exactly 2 events —
+        // a count NEITHER failure mode produces: a per-cast collapse gives 1, a broken drop-out
+        // (one that keeps delivering to a dead victim) gives 3. 6,000 HP (dies on sub-attack 0)
+        // could not make this distinction, since both the correct model and a per-cast collapse
+        // yield exactly 1 event there.
         const frail = {
             ...enemyAt('frail', 'M4'),
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 6_000, speed: 1 },
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 15_000, speed: 1 },
         } as EnemyAttacker;
         const events = attackedOn(
             focusCast([attackSkill(3)], [frail, enemyAt('spare', 'M3')]),
             'frail'
         );
-        expect(events.length).toBeLessThan(3);
-        expect(events.length).toBeGreaterThan(0);
+        expect(events.map((e) => e.subAttackIndex)).toEqual([0, 1]);
     });
 });
 
