@@ -2522,3 +2522,104 @@ describe('buildCombatLog — sticky skill tag across sub-attack rows', () => {
         expect(attacks[1].skillName).not.toBe('First');
     });
 });
+
+// ─── PR6: no visible attack row for a cast bound to a non-roster target ──────
+
+/**
+ * The hazard (multi-hit full-walk epic, PR6). `willApplyPositionally` requires
+ * `target != null && pattern != null`, so a `hits > 1` cast with NO targeting data is NOT deferred
+ * to the engine and emits inline — N `ability-performed`, all naming the engine's vestigial `enemy`
+ * sink, and no `attacked` at all (the player-side `attacked` emit lives only on the positional
+ * apply). Each opens an attack row the renderer has no name to put in.
+ *
+ * WHY EVERY FIXTURE HERE NESTS A REACTION. `finalizeMissEntry`'s phantom-row splice already removes
+ * a target-less row when nothing nested under it, so the bare 3-hit stream produces an empty turn
+ * with or without this guard — an assertion on it would observe nothing. `reactions.length === 0`
+ * is the exact condition under which that splice declines to prune, and a per-sub-attack rider's
+ * drained grant (`on-deal-damage`, `on-crit`, `on-ally-crit`) is precisely such a nested reaction.
+ * So the stamped `buff-applied` after each sub-attack is not decoration: it is the only shape in
+ * which the target-less rows actually survive to be seen.
+ */
+describe('buildCombatLog — target-less rows from a non-roster-bound cast', () => {
+    /** One sub-attack: the event plus the stamped grant a rider drains for it. */
+    const subAttack = (targetId: string, withAttacked: boolean): CombatEvent[] => [
+        ev({
+            type: 'ability-performed',
+            actorId: 'A',
+            targetId,
+            round: 1,
+            abilityType: 'damage',
+            damage: 10000,
+            didCrit: false,
+            didHit: true,
+        }),
+        ...(withAttacked
+            ? [
+                  ev({
+                      type: 'attacked',
+                      attackerId: 'A',
+                      targetId,
+                      round: 1,
+                      damage: 10000,
+                      isPrimaryTarget: true,
+                  } as CombatEvent),
+              ]
+            : []),
+        ev({
+            type: 'buff-applied',
+            actorId: 'A',
+            round: 1,
+            buffName: 'Rider',
+            duringTurnOf: 'A',
+            triggerActorId: 'A',
+        } as CombatEvent),
+    ];
+
+    const cast = (targetId: string, withAttacked: boolean): CombatEvent[] => [
+        ev({ type: 'round-started', round: 1 }),
+        ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+        ev({ type: 'skill-fired', actorId: 'A', round: 1, slot: 'active', skillName: 'Volley' }),
+        ...subAttack(targetId, withAttacked),
+        ...subAttack(targetId, withAttacked),
+        ...subAttack(targetId, withAttacked),
+        ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+        ev({ type: 'round-ended', round: 1 }),
+    ];
+
+    /**
+     * The COMPANION, and it is written first on purpose: a guard that suppressed every row would
+     * pass the dummy-sink assertion below while silently deleting the real log. A positioned
+     * 3-hit cast must keep all three of its rows, each naming its victim.
+     */
+    it('a positioned 3-hit cast still produces its three named attack rows', () => {
+        const turn = buildCombatLog(cast('B', true), roster, initialCharge)[0].turns[0];
+        const attacks = turn.entries.filter((e) => e.kind === 'attack');
+
+        expect(attacks).toHaveLength(3);
+        for (const a of attacks) {
+            expect(a.targets.map((t) => t.targetId)).toEqual(['B']);
+            expect(a.skillName).toBe('Volley');
+            // The rider's grant stays nested under its own sub-attack.
+            expect(a.reactions.map((r) => r.note)).toEqual(['Rider']);
+        }
+    });
+
+    it('a 3-hit cast bound to the dummy sink leaves no attack row in the log', () => {
+        const turn = buildCombatLog(cast('dummy-sink', false), roster, initialCharge)[0].turns[0];
+
+        expect(turn.entries.filter((e) => e.kind === 'attack')).toHaveLength(0);
+        // …and no attack row survives NESTED either — pruning a parent must not be faked by
+        // demoting it into someone else's `.reactions[]`.
+        for (const e of turn.entries) {
+            expect(e.reactions.filter((r) => r.kind === 'attack')).toHaveLength(0);
+        }
+    });
+
+    /** The riders themselves must stay visible — the guard drops the row, not its contents. */
+    it('keeps the drained rider grants when the parent row is suppressed', () => {
+        const turn = buildCombatLog(cast('dummy-sink', false), roster, initialCharge)[0].turns[0];
+        const notes = turn.entries.filter((e) => e.kind === 'buff').map((e) => e.note);
+
+        expect(notes).toEqual(['Rider', 'Rider', 'Rider']);
+    });
+});

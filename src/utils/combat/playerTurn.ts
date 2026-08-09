@@ -470,23 +470,8 @@ export interface PlayerTurnArgs {
      *  `directDamage / N` and its own `subAttackIndex` — the SAME cardinality the engine's deferred
      *  path has emitted since PR2, not the pre-PR5 single aggregate. Only at hits === 1 (every
      *  corpus ship but Enforcer) is it one event carrying the undivided damage, i.e. byte-identical.
-     *  PR6 adds one exception: an inline emit inside a positional team battle (see
-     *  `inPositionalTeamBattle` below) clamps back to a single event.
      *  See the block comment at the emit loop for the cardinality/damage-split derivation. */
     deferAbilityPerformedToEngine?: boolean;
-    /** True when the ENGINE is running a POSITIONAL team battle (`input.positionalTeamBattle`),
-     *  where `buildCombatLog` opens one row per `ability-performed`. Combined with
-     *  `deferAbilityPerformedToEngine` being unset it marks the malformed case PR6 guards: a
-     *  `hits > 1` cast with NO targeting data (`willApplyPositionally` needs `target != null &&
-     *  pattern != null`, so such a cast is not deferred), which would otherwise emit N events all
-     *  bound to the dummy sink and produce N target-less log rows. The inline loop then clamps to
-     *  ONE event carrying the undivided damage — the pre-PR5 payload for such a cast.
-     *  Unreachable today: the only `hits > 1` corpus ship has front / Pattern-Base, and
-     *  battleSimulator.ts:772 resolves `chargedTargeting: targeting.charged ?? targeting.active`,
-     *  covering her empty charged columns. This is a guard for a FUTURE ship, not a live fix.
-     *  Absent/false → DPS, healing and every non-positional caller keep PR5's per-sub-attack
-     *  emission, which is that PR's whole deliverable. */
-    inPositionalTeamBattle?: boolean;
     /** Active-skill parsed pattern (support footprint for on-cast grants/heals/shields/buffs). */
     activePattern?: ParsedPattern;
     /** Charged-skill parsed pattern when it differs from active; falls back to activePattern. */
@@ -2448,9 +2433,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // event per positional cast, exactly as before.
     // Non-positional / DPS / healing (flag absent, or no damage ability): emitted inline in the
     // loop below, at the SAME per-sub-attack cardinality as the positional/engine path since PR5.
-    // ONE exception, added by PR6: an inline emit that happens INSIDE a positional team battle
-    // (`inPositionalTeamBattle`) clamps back to a single event, because buildCombatLog opens a row
-    // per event and such a cast has no target to name. See the clamp at the loop.
     const deferAbilityPerformed = args.deferAbilityPerformedToEngine === true && hasDamageAbility;
     if (!deferAbilityPerformed) {
         // PR5 (multi-hit full-walk epic): ONE event per SUB-ATTACK, matching the positional
@@ -2565,20 +2547,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     turn this into (at worst) an unreachable branch becoming reachable — not a whiff bug.
         // The positional path, where the rule is also observable, implements it separately at
         // positionalApply.ts's per-sub-attack anchor re-resolution against `opposingLiving`.
-        // PR6: a multi-hit cast with NO targeting data inside a positional team battle would emit N
-        // events all bound to the dummy sink, and buildCombatLog opens a row per event — N
-        // target-less rows. Reaching here in a positional battle already MEANS the cast was not
-        // deferred (the engine sets deferAbilityPerformedToEngine = willApplyPositionally, which
-        // requires target != null && pattern != null), so the second conjunct is a belt-and-braces
-        // restatement rather than a live discriminator; it keeps the clamp from firing if a future
-        // caller ever passes both flags. Collapse to the single pre-PR5 event. Does NOT touch
-        // DPS/healing mode, where inPositionalTeamBattle is false and PR5's per-sub-attack emission
-        // is the deliverable. Unreachable today — see the arg's own doc comment.
-        const inlineMultiHitInPositionalBattle =
-            args.inPositionalTeamBattle === true && args.deferAbilityPerformedToEngine !== true;
-        // `emitHits` is BOTH the loop bound and the damage divisor so the two cannot drift apart.
-        // At the clamp `directDamage / 1` is the full undivided amount — exactly the pre-PR5 payload.
-        const emitHits = inlineMultiHitInPositionalBattle ? 1 : hits > 0 ? hits : 1;
+        const emitHits = hits > 0 ? hits : 1;
         for (let h = 0; h < emitHits; h++) {
             // R5 whiff guard (PR6). `currentHp` is the bound target's live HP field (state.ts:136);
             // at or below 0 the remaining sub-attacks land on a corpse and, per R5, deal nothing —

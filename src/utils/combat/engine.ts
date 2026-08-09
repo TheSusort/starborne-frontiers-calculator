@@ -8129,11 +8129,6 @@ export function runCombat(input: CombatEngineInput): {
                             const turn = runPlayerTurn({
                                 ...focusTurnArgs,
                                 deferAbilityPerformedToEngine: willApplyPositionally,
-                                // PR6: lets the inline emit clamp a `hits > 1` cast with no
-                                // targeting data to ONE event, so buildCombatLog cannot open N
-                                // target-less rows. Passed at all THREE runPlayerTurn sites
-                                // (focus, walked team, enemy) — the guard must be team-symmetric.
-                                inPositionalTeamBattle: input.positionalTeamBattle === true,
                                 onHitBreakStasis: tgtWasStasised
                                     ? (targetId: string) => {
                                           turnStasisHitVictims.add(targetId);
@@ -8388,8 +8383,6 @@ export function runCombat(input: CombatEngineInput): {
                             const teamTurn = runPlayerTurn({
                                 ...teamTurnArgs,
                                 deferAbilityPerformedToEngine: teamWillApplyPositionally,
-                                // PR6 target-less-row clamp (mirrors the focus site).
-                                inPositionalTeamBattle: input.positionalTeamBattle === true,
                                 onHitBreakStasis: teamTgtWasStasised
                                     ? (targetId: string) => {
                                           teamTurnStasisHitVictims.add(targetId);
@@ -8899,10 +8892,6 @@ export function runCombat(input: CombatEngineInput): {
                                 const enemyTurn = runPlayerTurn({
                                     ...enemyTurnArgs,
                                     deferAbilityPerformedToEngine: enemyWillApplyPositionally,
-                                    // PR6 target-less-row clamp (mirrors the focus site). The
-                                    // ENEMY site: skipping it here is the asymmetry this codebase
-                                    // has shipped twice (#305, #306), so it is passed explicitly.
-                                    inPositionalTeamBattle: input.positionalTeamBattle === true,
                                     onHitBreakStasis: enemyBreakHook,
                                     incomingReductionNonCritPct,
                                     incomingReductionCritFamilyPct,

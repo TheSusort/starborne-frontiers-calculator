@@ -341,22 +341,45 @@ function createBuildContext(
             // Suppress a phantom attack row: an ability-performed that produced no `attacked`
             // event and was NOT a miss (buff/heal/utility-only cast). Remove it from the current
             // turn's entries if present (the only container an on-turn attack entry lands in).
-            // Guarded on `reactions.length === 0`: a reactive trigger (e.g. Ravager's
+            //
+            // Normally guarded on `reactions.length === 0`: a reactive trigger (e.g. Ravager's
             // on-own-debuff-resisted Hacking Module Overdrive grant) can nest under this entry
             // via routeReaction BEFORE the boundary that finalizes it — pruning the entry would
             // silently discard that nested reaction along with it, so a non-empty `.reactions[]`
             // keeps the (now target-less) parent row so its children stay visible in the log.
+            //
+            // UNNAMEABLE TARGET (multi-hit full-walk epic, PR6) overrides that reprieve. When the
+            // ability named a target OUTSIDE the roster, keeping the row is not a trade worth
+            // making: `roster` is the only id→name map the renderer has, so the parent renders as
+            // an attack on nobody. The reactions are re-parented in its place (spliced INTO the
+            // slot it occupied) instead of being discarded, so nothing is lost — the same place
+            // routeReaction's own no-trigger fallback would have put them. They stay in
+            // `reactiveEntries`, so a promoted reaction still cannot be picked as a trigger.
+            //
+            // Roster membership is the right discriminator because it is precisely the question
+            // the log layer has to answer, and the only id the engine produces outside the roster
+            // is its vestigial `enemy` sink (engine.ts:1756) — the actor a cast binds when it has
+            // no positioned victim, carrying no `position` and never appearing in battleSimulator's
+            // roster (built from placed ships only, battleSimulator.ts:1127). What it EXCLUDES: any
+            // row that collected a target (a real hit always emits `attacked`, so the arm is
+            // unreachable for it), and any miss row (the branch above returns first, having
+            // synthesized a target). Event cardinality is untouched — a `hits: N` cast still emits
+            // N `ability-performed`, so per-sub-attack riders (`on-deal-damage`, `on-crit`,
+            // `on-ally-crit`) still fire N times and each event's crit signalling is unchanged.
+            // Only the ROW is suppressed.
             if (
                 ctx.openAttackEntry &&
                 ctx.openAttackEntry.kind === 'attack' &&
                 ctx.openAttackEntry.targets.length === 0 &&
                 ctx.openAttackAbilityDidHit !== false &&
-                ctx.openAttackEntry.reactions.length === 0
+                (ctx.openAttackEntry.reactions.length === 0 ||
+                    ctx.openAttackAbilityTargetId === undefined ||
+                    !ctx.rosterIds.has(ctx.openAttackAbilityTargetId))
             ) {
                 const entries = ctx.currentTurn?.entries;
                 if (entries) {
                     const idx = entries.indexOf(ctx.openAttackEntry);
-                    if (idx !== -1) entries.splice(idx, 1);
+                    if (idx !== -1) entries.splice(idx, 1, ...ctx.openAttackEntry.reactions);
                 }
             }
         },
