@@ -486,7 +486,7 @@ export function registerReactiveListeners(args: {
                         // Fires on the OWNER's own damage-dealing attack. runPlayerTurn emits one
                         // ability-performed per SUB-ATTACK (multi-hit full-walk, PR2): a multi-hit
                         // skill is N consecutive full-walk attacks, so this fires N times, once
-                        // per sub-attack that dealt damage. An AoE footprint is ONE attack and
+                        // per sub-attack that DELIVERED damage. An AoE footprint is ONE attack and
                         // fires once however many victims it hits. Riders: Burner's Inferno,
                         // Warpstrike's duration-reduction, Zeolite's purge. There is no
                         // once-per-turn guard, and adding one would be wrong — per-sub-attack IS
@@ -495,7 +495,26 @@ export function registerReactiveListeners(args: {
                         // is an ability condition (self-debuff), enforced at drain via
                         // gateConditions.
                         if (e.actorId !== ownerId) return;
-                        if ((e.damage ?? 0) <= 0) return;
+                        // PR6: gate on what the sub-attack actually DELIVERED, not on the
+                        // pre-funnel display number. `e.damage` is playerTurn's `directDamage`,
+                        // computed once per cast against the anchor's defence profile and never
+                        // shown the incoming funnel at all. So a sub-attack fully absorbed by a
+                        // shield, fully shaved by an incoming-block proc, or fully deferred into a
+                        // DoT by a transform still carried a positive `damage` and still fired its
+                        // riders off a hit that landed for nothing.
+                        //
+                        // `deliveredDamage` (PR7, events.ts) is the post-funnel number. Note it
+                        // COUNTS damage a Protection cascade diverted to protectors as delivered —
+                        // that hit did land, just on someone else — and EXCLUDES only damage
+                        // deferred into a DoT. A Protection redirect therefore does NOT silence
+                        // these riders; a full absorb/block/transform does.
+                        //
+                        // It is emitted ONLY on the interleaved positional path, so the `??` chain
+                        // leaves the DPS path byte-identical: that path has no funnel, so its two
+                        // bases cannot disagree. Riders affected: Burner (Inferno), Warpstrike
+                        // (duration-reduction), Zeolite (purge). Pinned by
+                        // onDealDamageDeliveredBasis.integration.test.ts.
+                        if ((e.deliveredDamage ?? e.damage ?? 0) <= 0) return;
                         // Capture the owner's own attack target so a reactive DoT rider (Burner's
                         // on-deal-damage Inferno) lands on the enemy actually hit — the real
                         // positional victim — instead of falling back to the DPS dummy `enemy`
