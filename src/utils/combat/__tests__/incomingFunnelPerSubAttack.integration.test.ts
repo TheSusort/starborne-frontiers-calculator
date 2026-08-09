@@ -74,6 +74,7 @@ import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { emptyPreFightModifiers } from '../preFight/types';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -157,8 +158,14 @@ const focusCast = (
     enemyAttackers: enemies,
 });
 
-/** A player team actor at `position` carrying `slots`, which never attacks. */
-const teamVictim = (id: string, position: Position, slots: ShipSkills['slots']): TeamActor =>
+/** A player team actor at `position` carrying `slots`, which never attacks. `hp` defaults to
+ *  the standard `HP` constant so existing call sites are unaffected. */
+const teamVictim = (
+    id: string,
+    position: Position,
+    slots: ShipSkills['slots'],
+    hp: number = HP
+): TeamActor =>
     ({
         id,
         speed: 1,
@@ -176,7 +183,7 @@ const teamVictim = (id: string, position: Position, slots: ShipSkills['slots']):
                 defensePenetration: 0,
                 hacking: 0,
                 defence: 0,
-                hp: HP,
+                hp,
             },
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
@@ -262,15 +269,7 @@ const enemyWithShieldPool = (
     ({
         ...enemyAt(id, position, []),
         stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        preFight: {
-            outgoingDamage: 0,
-            outgoingCritDamage: 0,
-            incomingDamage: 0,
-            incomingCritDamage: 0,
-            outgoingHeal: 0,
-            incomingHeal: 0,
-            startingShieldPctOfHp: (pool / hp) * 100,
-        },
+        preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: (pool / hp) * 100 },
     }) as EnemyAttacker;
 
 describe('PR6 Tier 2 — shield absorption resolves per sub-attack', () => {
@@ -347,38 +346,39 @@ const perTargetDamageFor = (input: CombatEngineInput, actorId: string): number =
     return sum;
 };
 
+/** Same as `perTargetDamageFor`, but reads multiple actors' totals from a single run — used
+ *  when both the protector's and the protected actor's booked damage are needed from the same
+ *  fixture (avoids re-running combat once per actor). */
+const perTargetDamagesFor = (
+    input: CombatEngineInput,
+    actorIds: string[]
+): Record<string, number> => {
+    const result = runCombat(input);
+    const sums: Record<string, number> = {};
+    for (const id of actorIds) sums[id] = 0;
+    for (const rd of result.rounds) {
+        for (const id of actorIds) sums[id] += rd.perTargetDamage?.[id] ?? 0;
+    }
+    return sums;
+};
+
 describe('PR6 Tier 2 — Protection redirect resolves per sub-attack', () => {
     afterEach(() => resetRateGateRng());
 
-    it('a protector absorbs a share of EVERY sub-attack, so its booked damage scales with N', () => {
-        // The identity #293 locked: sigma perTargetDealt[attacker] == sigma perTargetDamage. Under
-        // a per-sub-attack funnel the protector is credited on each of the 3 arrivals; under a
-        // per-cast funnel it would be credited once (on the cast's summed total, if at all).
+    it('a protector absorbs a share of EVERY sub-attack, so its booked damage scales with N (linearity baseline)', () => {
+        // LINEARITY BASELINE — this test does NOT by itself discriminate a per-sub-attack funnel
+        // from a per-cast one. A per-cast funnel that redirects a fixed fraction of the summed
+        // cast damage ONCE would ALSO scale perfectly linearly with N here (the fixture's damage
+        // is a fixed 100% multiplier x hits, not re-split, so the aggregate triples from N=1 to
+        // N=3 exactly as three separate redirects would). What actually discriminates the two
+        // models is the dying-protector test below: killing the protector mid-cast breaks this
+        // linearity in a way a per-cast rollup cannot reproduce under any ordering.
         //
         // MEASURED (throwaway probe, matching production's protectionCascade at 10%/stack): 3
-        // Protection stacks -> 30% redirect fraction. A 3-hit cast against 'protected' (M4) with
-        // 'protector' (M3) holding Protection redirects 30% of each 10,000 sub-attack's post-
-        // defence damage onto the protector (defence 0, so the redirected chunk re-mitigates at
-        // ratio 1 and needs no hand-computed mitigation product): 3000/sub-attack.
-        //
-        // ANTI-VACUITY: the 3-hit protector total is 3x the 1-hit protector total (measured
-        // ~3000 vs ~9000). Both runs use the same protector, same redirect fraction, same damage
-        // per sub-attack — the ONLY thing that can produce the exact 3x is three separate
-        // redirects. A per-cast funnel that redirected the aggregate ONCE would still scale with
-        // total damage dealt (which also triples from N=1 to N=3, since the fixture's damage is a
-        // fixed 100% multiplier x hits, not re-split), so the ratio alone cannot distinguish the
-        // two models FOR THIS ONE COMPARISON — what distinguishes them is Tier 1's independent
-        // proof that the underlying `attacked`/`ability-performed` events are already separate
-        // per-sub-attack occurrences (not a single aggregate event); this test's job is only to
-        // confirm the ACCOUNTING (the redirect fraction and the credited amount) tracks that
-        // established per-sub-attack cardinality rather than silently re-aggregating it — which a
-        // regression that summed all N sub-attacks' damage before applying ONE redirect roll
-        // would still often get right in total (redirect is a fixed fraction, not a proc), but
-        // would visibly diverge on any fixture where the redirect fraction or protector defence
-        // changes mid-cast (out of scope here) or where fewer than N sub-attacks connect. The
-        // `toBeGreaterThan(0)` precondition below is the load-bearing anti-vacuity guard from the
-        // brief: without it, a fixture where the redirect never fired would assert `0 ~= 0 * 3`
-        // and pass regardless of which model is correct.
+        // Protection stacks -> 30% redirect fraction. A living protector at defence 0 absorbs 30%
+        // of each 10,000-per-sub-attack cast:
+        //   N=1: protector books 3,000 (one redirect of 10,000 * 30%)
+        //   N=3: protector books 9,000 (three redirects of 10,000 * 30%, exactly 3x N=1)
         const build = (hits: number) =>
             enemyDrivenBattle(
                 [
@@ -389,8 +389,56 @@ describe('PR6 Tier 2 — Protection redirect resolves per sub-attack', () => {
             );
         const one = perTargetDamageFor(build(1), 'protector');
         const three = perTargetDamageFor(build(3), 'protector');
-        expect(one).toBeGreaterThan(0); // precondition: the redirect fires at all
-        expect(three).toBeCloseTo(one * 3, 6);
+        expect(one).toBeCloseTo(3_000, 6);
+        expect(three).toBeCloseTo(9_000, 6);
+    });
+
+    it('a protector that dies mid-cast stops covering later sub-attacks — the result a per-cast rollup cannot reach', () => {
+        // Same redirect math as the linearity baseline above (3 stacks -> 30% of each 10,000
+        // sub-attack, defence 0), but the protector's hp is set to 2,000 — below the 3,000 it
+        // absorbs from sub-attack 1 — so it dies on sub-attack 1. `protectorsFor` (engine.ts
+        // ~3337) filters on `a.currentHp > 0` and is re-evaluated per arrival inside
+        // `applyVictimDamage`'s recursive redirect call, so under a per-sub-attack funnel, once
+        // the protector is dead, sub-attacks 2 and 3 find no living protector and land
+        // unredirected on 'protected'.
+        //
+        // MEASURED (probe, not derived):
+        //   model                            | protector           | protected
+        //   per-sub-attack (correct, actual)  | 3000.0000000000005  | 27000
+        //   per-cast (the bug)                | 9000                | 21000
+        //   no Protection at all              | 0                   | 30000
+        //
+        // 27,000 = 7,000 (sub-attack 1's unredirected remainder, 10,000 - 3,000) + 10,000 +
+        // 10,000 (sub-attacks 2 and 3, arriving unredirected once the protector is dead). A
+        // per-cast funnel that redirects a fixed fraction of the summed 30,000 aggregate cannot
+        // produce this number however the protector's death is ordered — it only ever has ONE
+        // redirect roll to spend against the aggregate, never one split partway through by a
+        // death that only a per-sub-attack funnel can even observe.
+        const build = (hits: number) =>
+            enemyDrivenBattle(
+                [
+                    teamVictim('protected', 'M4', []),
+                    teamVictim('protector', 'M3', [protectionAura(3)], 2_000),
+                ],
+                [offensiveEnemy('foe', 'M1', hits)]
+            );
+        const rows = perTargetDamagesFor(build(3), ['protector', 'protected']);
+        expect(rows.protected).toBe(27_000);
+        expect(rows.protector).toBeCloseTo(3_000, 6);
+    });
+
+    it('N=1 against the same dying-protector fixture matches the living-protector case — the fixture only diverges over a multi-hit cast', () => {
+        const build = (hits: number) =>
+            enemyDrivenBattle(
+                [
+                    teamVictim('protected', 'M4', []),
+                    teamVictim('protector', 'M3', [protectionAura(3)], 2_000),
+                ],
+                [offensiveEnemy('foe', 'M1', hits)]
+            );
+        const rows = perTargetDamagesFor(build(1), ['protector', 'protected']);
+        expect(rows.protector).toBeCloseTo(3_000, 6);
+        expect(rows.protected).toBe(7_000);
     });
 });
 
@@ -467,9 +515,23 @@ describe('PR6 Tier 2 — the incoming-block proc rolls per sub-attack', () => {
         // impossible under it, however the RNG stream is seeded.
         //
         // MEASURED (throwaway probe, seeds 1-12 against this exact fixture): seed 1 delivers
-        // [10000, 10000, 0] (count 1); seed 3 delivers [0, 10000, 0] (count 2). Both are
-        // reproduced below without needing the full 12-seed sweep — the loop is kept anyway so a
-        // future engine change has to break BOTH concrete seeds and the general search to pass.
+        // [10000, 10000, 0] (count 1); seed 3 delivers [0, 10000, 0] (count 2). Both are pinned
+        // exactly below — a mixed array like these is impossible under a per-cast roll, which is
+        // what proves the roll is per-sub-attack rather than merely that blocking happened. The
+        // 12-seed sweep is kept as well, so a future engine change has to break BOTH the two
+        // concrete seeds and the general search to pass.
+        setKeyedRng(mulberry32(1));
+        const seed1Victim = enemyAt('victim', 'M4', [blockPassive(0.5, 1)]);
+        expect(deliveredDamagesOf(focusCast([attackSkill(3)], [seed1Victim]), 'attacker')).toEqual([
+            10_000, 10_000, 0,
+        ]);
+
+        setKeyedRng(mulberry32(3));
+        const seed3Victim = enemyAt('victim', 'M4', [blockPassive(0.5, 1)]);
+        expect(deliveredDamagesOf(focusCast([attackSkill(3)], [seed3Victim]), 'attacker')).toEqual([
+            0, 10_000, 0,
+        ]);
+
         const counts = new Set<number>();
         for (let seed = 1; seed <= 12; seed++) {
             setKeyedRng(mulberry32(seed));
