@@ -3469,7 +3469,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // that would re-trigger the REPAIRER'S OWN on-repair listeners and loop). Its only combat
         // subscriber is on-enemy-repaired, whose riders never heal → still no chain. Stamped
         // duringTurnOf via ctx.bus so it nests under the triggering turn.
-        if (cfg.type === 'heal' && healPerTarget.length > 0 && ctx.bus) {
+        //
+        // PR6: a repair that repaired NOTHING must not open a combat-log row — symmetric with the
+        // shield branch above, which already emits only when a recipient actually gained pool.
+        // `healSum` is the gross across recipients (the very number this event carries as
+        // `amount`), so this suppresses exactly the genuinely-zero case: a `damage-dealt` basis on
+        // a sub-attack that delivered nothing (a DoT transform, a full soak), a zero-count
+        // event-scaled repair. A repair that lands but fully overheals still emits — the gross was
+        // real, only the target was full.
+        if (cfg.type === 'heal' && healPerTarget.length > 0 && healSum > 0 && ctx.bus) {
             ctx.bus.emit({
                 type: 'reactive-heal-performed',
                 casterId: intent.ownerId,
