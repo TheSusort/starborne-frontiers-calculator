@@ -729,31 +729,34 @@ describe('PR6 Tier 2 — damage reflection fires per sub-attack', () => {
     });
 });
 
-// ── Tier 2, Section F: counterattacks — a genuine per-TURN collapse (finding) ──────────────
+// ── Tier 2, Section F: counterattacks fire per sub-attack ─────────────────────────────────
 //
-// task-3-brief.md's correction #3 pointed at triggers.ts:3752's `reactionFiredThisAttack` key
+// HISTORY (Task 3 found the defect here; Task 3b fixed it — this section now pins the FIX, and
+// the record of what it replaced is kept deliberately so a future reader does not re-derive it).
+//
+// task-3-brief.md's correction #3 pointed at triggers.ts's `reactionFiredThisAttack` key
 // (`ownerId:abilityId:victimId:subAttackIndex`) as the guard to watch — but that key belongs to
 // the SIBLING 'damage'-type reactive branch (procScope:'per-attack', e.g. Insidiousness), NOT
-// the 'counter' ability type this block exercises. Read directly at the source (triggers.ts
-// ~3567-3606): the COUNTER branch guards with its OWN set, `ctx.counterFiredThisTurn`, keyed
-// `${ownerId}:${ability.id}` — NO victimId, NO subAttackIndex — and cleared only at every actor
-// TURN-START (engine.ts:7727, unconditionally, once per actor whose turn begins), never
-// per-sub-attack. The guard's own comment (triggers.ts ~3582-3590) is explicit that this is a
-// pre-multi-hit-epic design: "Once-per-ATTACK: all per-hit `attacked` events of ONE attack
-// collapse to a single counter" — written when "one attack" and "one turn" were the same thing.
-// R1 broke that equivalence (a `hits: N` skill is N full attacks within ONE turn), and this
-// branch was never re-keyed with the sub-attack index the sibling branch gained in PR4.
+// the 'counter' ability type this block exercises. The COUNTER branch guards with its OWN set,
+// `ctx.counterFiredThisTurn`, cleared only at every actor TURN-START (engine.ts, unconditionally,
+// once per actor whose turn begins) — never per-sub-attack.
 //
-// CONSEQUENCE (measured, not assumed): within a 3-hit cast, sub-attack 1's `on-attacked` fires,
-// finds the key absent, fires the counter, and sets the key. Sub-attacks 2 and 3 of the SAME
-// cast find the key already set (it is not cleared until the NEXT actor turn-start) and are
-// silently suppressed. A 100%-chance counter therefore fires exactly ONCE per multi-hit cast,
-// regardless of N.
+// THE DEFECT, as this section originally measured it: that set was keyed `ownerId:abilityId` —
+// NO victimId, NO subAttackIndex. So within a 3-hit cast, sub-attack 1's `on-attacked` fired,
+// found the key absent, countered, and set the key; sub-attacks 2 and 3 of the SAME cast found it
+// already set and were silently suppressed. A 100%-chance counter fired exactly ONCE per
+// multi-hit cast, regardless of N. That keying was CORRECT before this epic (one attack == one
+// turn) and the guard's own comment predicted its own obsolescence; R1 (`hits: N` is N full
+// attacks inside one turn) broke the equivalence, and this branch was never re-keyed with the
+// sub-attack index the sibling branch gained in PR4.
 //
-// Per the task's explicit instruction ("a genuine finding, and exactly what this tier exists to
-// surface. Report it, do not fix it") and the binding characterization-test rule (pin what the
-// code ACTUALLY does, never reshape the assertion to match a hoped-for fix), the test below pins
-// the ACTUAL count (1 for both N=3 and N=1) rather than the brief's illustrative "fires 3 times."
+// THE FIX (Task 3b): the key gained the triggering event's `subAttackIndex`, exactly as its own
+// SCOPE NOTE prescribed and matching `oncePerAttackGuardKey`'s convention. A counter is an
+// INCOMING-triggered reaction, and R2 resolves those per hit — so a victim of a 3-hit cast
+// counters three times. The assertions below now pin 3-for-N=3 / 1-for-N=1. They previously
+// pinned 1 for BOTH, which was a faithful characterization of the code at the time but, left
+// standing after the fix, would have been a test whose assertion blessed a defect — the failure
+// mode this repo has shipped before.
 
 const counterOnAttacked = (procChancePct: number): ShipSkills['slots'][number] => ({
     slot: 'passive',
@@ -764,7 +767,7 @@ const counterOnAttacked = (procChancePct: number): ShipSkills['slots'][number] =
             trigger: 'on-attacked',
             // procChance is a top-level Ability field (0..1); >= 1 bypasses the proc gate
             // entirely (passesProcChanceGate, triggers.ts:2177-2179), leaving only the
-            // once-per-TURN counterFiredThisTurn guard this block characterizes.
+            // counterFiredThisTurn guard this block exercises.
             procChance: procChancePct / 100,
             config: { type: 'counter', multiplier: 30 },
         }),
@@ -787,30 +790,54 @@ const counterEventCount = (input: CombatEngineInput, victimId: string): number =
     return count;
 };
 
-describe('PR6 Tier 2 — counterattacks: the guard collapses per TURN, not per sub-attack (finding)', () => {
+describe('PR6 Tier 2 — counterattacks fire once per sub-attack — PLAYER side', () => {
     afterEach(() => resetRateGateRng());
 
-    it('a 100%-chance counter fires ONLY ONCE against a 3-hit cast — counterFiredThisTurn is turn-scoped, not sub-attack-scoped', () => {
-        // ANTI-VACUITY: a CORRECT per-sub-attack guard (matching R1: hits:N is N full attacks,
-        // and matching the sibling reactionFiredThisAttack branch's own PR4 fix) would produce 3
-        // counters for a 3-hit cast, clearly distinct from the 1-hit case's 1 — that contrast is
-        // exactly what Section E's reflect test measures successfully next door. What is
-        // measured here instead is 1 for BOTH N=3 and N=1: the signature of a per-TURN collapse,
-        // not a per-sub-attack one. Pinning 1 (not the brief's illustrative 3) is the whole point
-        // of a characterization test — it recorded what the code does, not what it should do.
+    it('a 100%-chance counter fires 3 times against a 3-hit cast and once against a 1-hit cast', () => {
+        // ANTI-VACUITY: cardinality, not magnitude, is the discriminator (same argument as
+        // Section E's reflect test). The pre-fix engine produced 1 for BOTH N=3 and N=1 — the
+        // signature of a per-TURN collapse — so the N=3 assertion alone would fail against it.
+        // The N=1 control is what keeps the fix honest in the other direction: a guard that had
+        // simply been DELETED (rather than re-keyed per sub-attack) would over-fire wherever a
+        // single attack fans into multiple `attacked` events, and N=1 pinned at exactly 1 is the
+        // assertion that catches that.
         //
-        // `teamVictim`'s new `attack` override (see its own comment) is set to 10,000 here:
+        // `teamVictim`'s `attack` override (see its own comment) is set to 10,000 here:
         // `applyCounterAttack` computes its raw damage off the OWNER's `effectiveAttack` and
         // no-ops when that raw is <= 0 (engine.ts ~5283) — a throwaway probe with the default
-        // attack:0 produced ZERO `reactive-damage-performed` events (not even the one this test
-        // pins), which would have been a DIFFERENT, unrelated no-op bug masking the actual
-        // per-turn-collapse finding this block exists to characterize.
+        // attack:0 produced ZERO `reactive-damage-performed` events, which would have made this
+        // whole block vacuous.
         const build = (hits: number) =>
             enemyDrivenBattle(
                 [teamVictim('counter', 'M4', [counterOnAttacked(100)], HP, 1, 10_000)],
                 [offensiveEnemy('foe', 'M1', hits)]
             );
-        expect(counterEventCount(build(3), 'counter')).toBe(1);
+        expect(counterEventCount(build(3), 'counter')).toBe(3);
         expect(counterEventCount(build(1), 'counter')).toBe(1);
+    });
+});
+
+describe('PR6 Tier 2 — counterattacks on the ENEMY side (team symmetry)', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('an ENEMY counter carrier hit by a 3-hit PLAYER cast also counters 3 times', () => {
+        // Team symmetry is mandatory in this engine and the enemy path has silently dropped
+        // mechanics before (the enemy passive slot went entirely unwired once, #306). The counter
+        // guard lives in the SIDE-AGNOSTIC intent executor, so a side-specific regression could
+        // only come from the enemy-side `attacked` emit failing to stamp `subAttackIndex` — which
+        // is precisely what this mirror pins.
+        //
+        // Mirrors the player-side test via this file's own `focusCast`/`enemyAt` pair. `enemyAt`
+        // hardcodes attack:0, so the stats are overridden here for the same `applyCounterAttack`
+        // raw > 0 reason the player-side fixture needs its `attack` override.
+        const build = (hits: number) => {
+            const carrier = {
+                ...enemyAt('counter-e', 'M4', [counterOnAttacked(100)]),
+                stats: { attack: 10_000, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
+            } as EnemyAttacker;
+            return focusCast([attackSkill(hits)], [carrier]);
+        };
+        expect(counterEventCount(build(3), 'counter-e')).toBe(3);
+        expect(counterEventCount(build(1), 'counter-e')).toBe(1);
     });
 });

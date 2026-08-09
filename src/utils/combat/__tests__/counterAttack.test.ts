@@ -138,11 +138,19 @@ describe('G PR1 — counter executor branch (end-to-end via runCombat)', () => {
         expect(withCounter % 5000).toBeCloseTo(0, 6);
     });
 
-    // (b) ONCE PER ATTACK: a 3-hit enemy attack produces exactly ONE counter (5000), not 3×.
-    it('(b) a multi-hit attack triggers exactly ONE counter (once-per-attack guard)', () => {
+    // (b) ONCE PER SUB-ATTACK: a 3-hit enemy attack is 3 consecutive FULL attacks (R1), and a
+    // counter is an INCOMING-triggered reaction, so it draws 3 counters (3 × 5000 = 15000).
+    // HISTORY (multi-hit epic, PR6): this case previously asserted exactly ONE counter (5000).
+    // That was faithful to the engine of the time — `counterFiredThisTurn` was keyed
+    // `ownerId:abilityId` and cleared only at actor turn-start, so all N sub-attacks of one cast
+    // shared a single guard slot — but it stopped being correct the moment R1 landed, and a test
+    // that keeps asserting the old number turns into a defect the suite defends. The key now
+    // carries the triggering event's `subAttackIndex` (triggers.ts, counter branch SCOPE NOTE),
+    // so each sub-attack counters on its own while the per-HIT `attacked` events WITHIN one
+    // sub-attack still collapse to one.
+    it('(b) a multi-hit attack triggers ONE counter PER SUB-ATTACK (3 hits → 3 counters)', () => {
         idCounter = 0;
-        // Enemy with a 3-hit active: each hit emits its own `attacked` event, but the per-turn
-        // guard collapses them to a single counter.
+        // Enemy with a 3-hit active: 3 consecutive full attacks, each drawing its own counter.
         const multiHitEnemy: ShipSkills = {
             slots: [
                 {
@@ -165,10 +173,13 @@ describe('G PR1 — counter executor branch (end-to-end via runCombat)', () => {
                 enemyAttackers: [basicEnemy('foe', 3_000, { shipSkills: multiHitEnemy })],
             })
         );
-        // Each round the 3-hit attack lands → exactly ONE counter (5000), never 3 × 5000 = 15000.
+        // Each round the 3-hit attack lands → 3 counters of 5000 = 15000. The single-hit control
+        // is case (a) above, which pins 5000 per round off the same fixture — so the pair
+        // discriminates a per-sub-attack guard from BOTH a per-turn collapse (5000 here too) and
+        // a deleted guard (which would over-fire per HIT, not per sub-attack).
         for (const rd of result.rounds) {
             const dealt = rd.perTargetDamage?.['foe'] ?? 0;
-            if (dealt > 0) expect(dealt).toBeCloseTo(5000, 6);
+            if (dealt > 0) expect(dealt).toBeCloseTo(15_000, 6);
         }
         expect(totalPerTargetDamage(result, 'foe')).toBeGreaterThan(0);
     });
@@ -383,14 +394,48 @@ describe('G PR2 — Centurion self/adjacent-ally counter (executor level)', () =
         expect(spy).not.toHaveBeenCalled();
     });
 
-    it('once-per-attack: 3 attacked events on the same focus victim collapse to ONE counter', () => {
+    it('once-per-SUB-ATTACK: 3 attacked events from the SAME sub-attack collapse to ONE counter', () => {
+        // The per-HIT fan-out within one sub-attack still collapses — this is the half of the
+        // guard PR6 did NOT change.
+        const spy = vi.fn();
+        const ctx = makeCounterCtx(spy);
+        const intent = counterIntent(
+            { type: 'counter', multiplier: 100 },
+            { counterTargetId: 'foe', subAttackIndex: 0 }
+        );
+        executeIntent(intent, ctx);
+        executeIntent(intent, ctx);
+        executeIntent(intent, ctx);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('3 attacked events from DIFFERENT sub-attacks each draw their own counter', () => {
+        // PR6: the half of the guard that DID change. Before the key carried `subAttackIndex`
+        // these three collapsed to one, which is what made a 3-hit cast draw a single counter.
+        const spy = vi.fn();
+        const ctx = makeCounterCtx(spy);
+        for (const subAttackIndex of [0, 1, 2]) {
+            executeIntent(
+                counterIntent(
+                    { type: 'counter', multiplier: 100 },
+                    { counterTargetId: 'foe', subAttackIndex }
+                ),
+                ctx
+            );
+        }
+        expect(spy).toHaveBeenCalledTimes(3);
+    });
+
+    it('an intent carrying NO subAttackIndex falls back to the old turn-scoped collapse', () => {
+        // The `?? 'x'` fallback is unreachable from the engine (`emitAttacked` stamps a defined
+        // index on every path) but is pinned here so a future reader knows the hand-built-fixture
+        // behaviour is deliberate, not an accident of the key format.
         const spy = vi.fn();
         const ctx = makeCounterCtx(spy);
         const intent = counterIntent(
             { type: 'counter', multiplier: 100 },
             { counterTargetId: 'foe' }
         );
-        executeIntent(intent, ctx);
         executeIntent(intent, ctx);
         executeIntent(intent, ctx);
         expect(spy).toHaveBeenCalledTimes(1);

@@ -1306,10 +1306,14 @@ function abilitiesFromText(
     // returns 0 → NOT an on-cast base-damage component, so it cannot ride the re-type path above.
     // Push it directly as TWO counter abilities: a self counter (on-attacked, any direct hit) +
     // an adjacent-ally counter (on-ally-attacked, reusing the existing requireDamagedAllyAdjacent
-    // gate). The per-ability once-per-attack guard collapses multi-hit; self/ally are mutually
-    // exclusive per attack (single-focus `attacked` emit), so exactly one retaliation fires. If
-    // multi-victim `attacked` emission is ever added, switch the executor guard to `${ownerId}` to
-    // dedupe across these two abilities. The co-located "start of combat … attack per adjacent
+    // gate). The per-ability guard collapses the per-HIT fan-out within one sub-attack; since the
+    // multi-hit epic's PR6 it does NOT collapse across sub-attacks, so a `hits: N` cast draws N
+    // retaliations — correct, since R1 makes that N separate attacks. Self/ally were also
+    // mutually exclusive per attack back when the `attacked` emit was single-focus. NOTE: per-
+    // victim `attacked` emission HAS since landed, so an AoE covering both this unit and an
+    // adjacent ally can now wake both abilities in one sub-attack; deduping across the two would
+    // need the executor guard keyed on `${ownerId}` rather than the ability id. Untouched by PR6
+    // (that is a multi-VICTIM question, not a multi-HIT one) and tracked separately. The co-located "start of combat … attack per adjacent
     // ally" buff parses independently and is unaffected.
     if (slot === 'passive' && counter && counter.allySubject) {
         const hits = parseHitCount(text);

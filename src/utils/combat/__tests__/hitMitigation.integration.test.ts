@@ -863,8 +863,11 @@ describe('a Protection-redirected chunk is blocked by the protector’s Hit Miti
 // — both assertions fail, in both legs.
 //
 // Why the follow-up hit rather than a second bounce in the same turn: a counterattack fires at most
-// once per attacking turn (`counterFiredThisTurn`), so a two-hit attack draws only one counter. A
-// reflect does bounce per hit, but pinning both legs the same way keeps them comparable.
+// once per SUB-ATTACK (`counterFiredThisTurn`, keyed with the sub-attack index since the multi-hit
+// epic's PR6), so the per-HIT fan-out of a single attack still draws only one counter. A reflect
+// does bounce per hit, but pinning both legs the same way keeps them comparable. (Before PR6 this
+// read "once per attacking turn", which would have made a `hits: 2` cast draw one counter too —
+// this fixture is single-hit either way, so the correction is to the reasoning, not the fixture.)
 //
 // `perActorIncoming` is the primary channel here (the conversion nets it back out) — but
 // `perTargetDamage`, which `simHpLossFor` falls back to when a round leaves no `perActorIncoming`

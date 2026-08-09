@@ -1511,13 +1511,16 @@ export interface IntentExecContext {
         multiplier: number,
         hits: number
     ) => { dealt: number; didCrit: boolean } | void;
-    /** G PR1: per-actor-turn once-per-attack guard. Keyed `ownerId:abilityId`. Cleared at each
-     *  actor turn-start (engine) so the per-hit `attacked` events of ONE attack collapse to a
-     *  single counter; a later attack (different turn) counters again. Absent → no guard (the
-     *  counter branch is inert without the engine ctx). */
+    /** G PR1: once-per-attack counter guard. Keyed `ownerId:abilityId:subAttackIndex` (the
+     *  sub-attack token added in PR6 — see the counter branch's SCOPE NOTE). Cleared at each
+     *  actor turn-start (engine) so the per-hit `attacked` events of ONE sub-attack collapse to a
+     *  single counter, while each sub-attack of a `hits: N` cast counters on its own and a later
+     *  turn counters again. Absent → no guard (the counter branch is inert without the engine
+     *  ctx). */
     counterFiredThisTurn?: Set<string>;
     /** Task 5: per-actor-turn once-per-attack guard for SELF-scoped reactive buff/charge
-     *  riders. Keyed `ownerId:abilityId`, cleared at each actor turn-start (engine) — mirroring
+     *  riders. Keyed `ownerId:abilityId:subAttackIndex` (PR4), cleared at each actor turn-start
+     *  (engine) — mirroring
      *  `counterFiredThisTurn`. The per-hit / per-victim reactive triggers (on-attacked,
      *  on-ally-attacked) enqueue one intent per hit per victim; a
      *  SELF-target buff/charge must land only ONCE for that whole attack. Ally/enemy-routed
@@ -2414,7 +2417,7 @@ const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTr
     'on-ally-attacked',
 ]);
 
-/** Returns the once-per-attack guard key `ownerId:abilityId` when this intent is a SELF-target
+/** Returns the once-per-attack guard key `ownerId:abilityId:subAttackIndex` when this intent is a SELF-target
  *  rider on a per-hit reactive trigger (an on-attacked / on-ally-attacked buff or charge), else
  *  undefined — meaning "not guarded". Only `target: 'self'` qualifies: ally-routed grants
  *  (damagedAllyId — Cultivator/Graphite/Howler/Sentinel repair) and enemy-routed damage (Sentinel)
@@ -3579,16 +3582,32 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (cfg.requireShieldHit && intent.eventCtx?.shieldWasHit !== true) return; // PR2 plumbs shieldWasHit
         const attackerId = intent.eventCtx?.counterTargetId;
         if (!attackerId) return;
-        // Once-per-ATTACK: all per-hit `attacked` events of ONE attack collapse to a single counter.
-        // The guard set is cleared at every actor turn-start (engine), so a separate later attack
-        // counters again. Absent (unit ctxs without the engine) → no guard.
-        // SCOPE NOTE: today this turn-granularity IS per-attack — the `attacked` event is emitted
-        // once per turn for the focus victim only (events.ts), and extra actions re-enter the turn
-        // loop (re-clearing the guard), so one actor can't land two DISTINCT attacks on the same
-        // victim inside one guard window. When positional per-victim emission or multi-attack-per-turn
-        // lands (the same future work that makes isPrimaryTarget meaningful), this key must gain an
-        // attack-instance token from the triggering `attacked` event to stay once-per-attack.
-        const key = `${intent.ownerId}:${intent.ability.id}`;
+        // Once-per-ATTACK: all per-hit `attacked` events of ONE attack collapse to a single counter,
+        // but each of a `hits: N` cast's N sub-attacks counters on its own. The guard set is cleared
+        // at every actor turn-start (engine), so a separate later turn counters again. Absent (unit
+        // ctxs without the engine) → no guard.
+        //
+        // SCOPE NOTE (multi-hit full-walk epic, PR6 — this key's history matters):
+        // The key was once just `ownerId:abilityId`, and that WAS per-attack at the time: the
+        // `attacked` event fired once per turn for the focus victim only, and extra actions
+        // re-entered the turn loop (re-clearing the guard), so one actor could not land two DISTINCT
+        // attacks on the same victim inside one guard window — "one attack" and "one turn" were the
+        // same thing. The note that stood here predicted its own obsolescence, and the future it
+        // named has arrived: PR2 made the engine emit one `ability-performed` and one `attacked` per
+        // SUB-ATTACK, and R1 locks a `hits: N` skill as N consecutive FULL attacks. A counter is an
+        // INCOMING-triggered reaction, so a victim of a 3-hit cast counters three times; keyed on
+        // turn alone it countered once.
+        //
+        // Hence the sub-attack token, mirroring the sibling rider guard `oncePerAttackGuardKey`
+        // (which gained the same component in PR4) down to its `?? 'x'` fallback. Adding a component
+        // can only SPLIT keys, never merge them, so this can never collapse two counters the
+        // turn-scoped guard kept apart. The fallback is dead for any real `attacked` event —
+        // `emitAttacked` stamps a defined index on every path (the positional caller's own
+        // sub-attack index; the non-positional caller's per-hit loop index, which IS the sub-attack
+        // index there since it passes the whole cast in one call) — and matters only to a hand-built
+        // fixture whose intent carries no `eventCtx`, where it reproduces the old turn-scoped
+        // collapse.
+        const key = `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
         if (ctx.counterFiredThisTurn?.has(key)) return;
         // Consuming gates LAST (see ordering note above).
         if (!passesProcChanceGate(intent, ctx)) return;

@@ -2932,8 +2932,10 @@ export function runCombat(input: CombatEngineInput): {
     const hitThisRound = new Set<string>();
 
     // G PR1: once-per-attack guard. Cleared at every actor turn-start so all per-hit `attacked`
-    // events of ONE attack collapse to a single counter, while a separate later attack (a different
-    // turn) counters again. NOT per-round.
+    // events of ONE sub-attack collapse to a single counter, while a separate later attack (a
+    // different turn) counters again. NOT per-round. PR6: the key itself carries the triggering
+    // event's sub-attack index, so a `hits: N` cast — N consecutive full attacks inside ONE turn
+    // (R1) — draws N counters rather than collapsing into one.
     const counterFiredThisTurn = new Set<string>();
 
     // Task 5: sibling once-per-attack guard for SELF-scoped reactive buff/heal/charge riders
@@ -7723,7 +7725,9 @@ export function runCombat(input: CombatEngineInput): {
 
                 // G PR1: reset the once-per-attack counter guard at each actor turn-start so a
                 // later attack (a different turn) can counter again while all per-hit `attacked`
-                // events of ONE attack collapse to a single counter.
+                // events of ONE sub-attack collapse to a single counter. PR6: the key carries the
+                // sub-attack index, so this clear is no longer what separates a `hits: N` cast's
+                // N attacks from each other — the key does that on its own, within the turn.
                 counterFiredThisTurn.clear();
                 // Task 5: reset the self-rider once-per-attack guard beside the counter guard so a
                 // later attack re-applies Hermes's Everliving Regeneration / charge.
