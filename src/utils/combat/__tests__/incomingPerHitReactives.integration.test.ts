@@ -29,30 +29,50 @@
  * unchanged from the brief.
  *
  * ADAPTATION NOTE 2 (measured, not assumed — the brief's Tenacity-gate fixture math was wrong,
- * and it was masking a genuine engine finding). The brief's comment claims "Each sub-attack deals
- * 5000 x 100% = 5000", but `focusCast` sets `crit: 100, critDamage: 100`, so every hit crits and
- * doubles: the MEASURED per-sub-attack slice is 10,000, not 5,000 (confirmed via
- * `attacked.damage` on a throwaway probe). At the brief's literal `maxHp: 30_000`, three 10,000
- * slices sum to exactly 30,000 — the victim dies exactly on sub-attack 3 of 3 (the last hit is
- * still processed as lethal), and BOTH gate tests then observe 0 grants regardless of the frac
- * threshold. That is not the frac gate discriminating correctly: it is a SEPARATE, genuine engine
- * behavior — `executeIntent`'s dead-owner gate (triggers.ts ~line 2514,
- * `if (owner.actor.destroyedRound !== undefined && !intent.eventCtx?.fromOwnDeath) return;`) drops
- * EVERY queued reactive intent for an owner once `destroyedRound` is set, including intents
- * enqueued by EARLIER, non-lethal sub-attacks of the SAME cast. A multi-hit cast's N sub-attacks
- * appear to enqueue into one shared intent queue that drains only after the whole cast resolves,
- * so a victim who dies on sub-attack 3 loses the reactive buff grants it should already have
- * banked from sub-attacks 1 and 2. Confirmed in isolation with an UNGATED on-attacked buff at the
- * same HP (0 grants at exactly-lethal HP vs 3 at a survivable HP) — the confound has nothing to do
- * with `requireIncomingDamageFracOfMaxHp` specifically.
+ * and chasing it down surfaced a real engine behavior that a first pass mischaracterized as
+ * multi-hit-specific; CORRECTED below after a controlling measurement disproved that framing).
+ * The brief's comment claims "Each sub-attack deals 5000 x 100% = 5000", but `focusCast` sets
+ * `crit: 100, critDamage: 100`, so every hit crits and doubles: the MEASURED per-sub-attack slice
+ * is 10,000, not 5,000 (confirmed via `attacked.damage` on a throwaway probe). At the brief's
+ * literal `maxHp: 30_000`, three 10,000 slices sum to exactly 30,000 — the victim dies exactly on
+ * sub-attack 3 of 3 (the last hit is still processed as lethal), and BOTH gate tests then observe
+ * 0 grants regardless of the frac threshold. That is not the frac gate discriminating correctly:
+ * the fixture was confounded by a SEPARATE engine behavior — `executeIntent`'s dead-owner gate
+ * (triggers.ts ~line 2514, `if (owner.actor.destroyedRound !== undefined &&
+ * !intent.eventCtx?.fromOwnDeath) return;`) drops EVERY queued reactive intent for an owner once
+ * `destroyedRound` is set, including intents enqueued by EARLIER sub-attacks of the SAME cast
+ * that were themselves non-lethal.
  *
- * This is flagged here as a GENUINE FINDING, NOT fixed in this task (per this task's own
- * instructions: a failing characterization test is evidence to record, not a defect to patch
- * silently). The two Tenacity gate fixtures below use `maxHp: 50_000` instead of the brief's
- * `30_000` so the victim survives the whole cast and the tests measure the frac gate alone,
- * corroborated by a throwaway probe: at hp 50,000 the SAME 0.25/0.1 thresholds against the
- * measured 10,000 slice give the intended opposite verdicts (0 grants / 3 grants) with no death
- * in the picture. The dead-owner-gate-vs-multi-hit interaction remains open — see task-1-report.md.
+ * CORRECTION: an earlier pass through this file framed that as a multi-hit-specific defect (a
+ * shared intent queue draining only after the whole cast resolves, so an N-hit cast's earlier,
+ * non-lethal hits lose their already-banked grants when a later hit in the same cast kills the
+ * owner). That framing does not survive the controlling experiment: a LETHAL SINGLE-HIT cast
+ * drops the grant identically. Measured, holding total damage constant at 30,000 against a
+ * 30,000-HP victim carrying an ungated on-attacked self-buff:
+ *
+ *   | case                                      | grants observed |
+ *   |--------------------------------------------|-----------------|
+ *   | lethal N=1 (multiplier 300, hits 1)         | 0               |
+ *   | lethal N=3 (multiplier 100, hits 3)          | 0               |
+ *   | survivable N=1                              | 1               |
+ *   | survivable N=3                               | 3               |
+ *
+ * N=1 and N=3 behave IDENTICALLY when lethal. So this is not a multi-hit interaction at all — it
+ * is the dead-owner gate behaving the same regardless of hit count: reactive intents drain at end
+ * of turn, after the owner is already marked destroyed, whether that owner died from one hit or
+ * from the last of several. Because this behavior is N=1-identical, it sits OUTSIDE this PR's
+ * scope (the epic's governing invariant is that N=1 must be byte-identical to pre-epic behavior —
+ * a bug that reproduces at N=1 was never introduced by, and is not fixable within, the multi-hit
+ * work). It is recorded here as a pre-existing, general engine question — whether a dying victim's
+ * reactives should bank before the killing blow — not as a multi-hit defect. Anyone revisiting it
+ * should treat it as exactly that general question, not as multi-hit follow-up work.
+ *
+ * This is flagged as a real (corrected) finding, NOT fixed in this task. The two Tenacity gate
+ * fixtures below use `maxHp: 50_000` instead of the brief's `30_000` so the victim survives the
+ * whole cast and the tests measure the frac gate alone, corroborated by a throwaway probe: at hp
+ * 50,000 the SAME 0.25/0.1 thresholds against the measured 10,000 slice give the intended opposite
+ * verdicts (0 grants / 3 grants) with no death in the picture. See task-1-report.md's "Fix pass"
+ * section for the full correction and the N=1 control measurement.
  *
  * NOTE ON RNG: unlike sibling files in this epic, no test here calls `setRateGateRng` /
  * `setKeyedRng` directly. `src/setupTests.ts` already installs a seeded mulberry32 (both the
