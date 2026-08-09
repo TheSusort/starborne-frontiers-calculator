@@ -2479,8 +2479,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // flagged for the next in-game pass rather than silently resolved.
         //
         // RULE R5 ("with no living target left, the multi-hit simply stops dealing damage",
-        // verified in-game 2026-08-08) IS implemented here, by the `enemy.currentHp <= 0` break at
-        // the top of the loop below. PR5 derived the branch to be structurally UNREACHABLE on this
+        // verified in-game 2026-08-08). The `enemy.currentHp <= 0` break at the top of the loop
+        // below implements the LOG/EVENT half of it, and ONLY that half: it stops the remaining
+        // sub-attacks from emitting `ability-performed`, so they open no log row and fire no
+        // outgoing rider. It computes and applies NO HP loss — `directDamage` was totalled above,
+        // before this loop, and still flows out unchanged in this function's return value for the
+        // CALLER to apply. So the damage half of R5 remains the caller's responsibility on this
+        // path; do not read the break as making a dead-target multi-hit deal zero.
+        // PR5 derived the branch to be structurally UNREACHABLE on this
         // path and left it unbuilt; PR6 builds it anyway so that the whiff safety is INTENTIONAL
         // rather than an incidental side-effect of unrelated plumbing (see WAS-COUPLED-TO below).
         // Because the branch is unreachable, its ONLY coverage is a direct-runPlayerTurn test
@@ -2533,28 +2539,37 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     (this file, ~2556 → `reduceBombsOnVictim` ~941 → `args.forceDetonateBomb` →
         //     `forceDetonateBombOnVictim`, engine.ts:6252 → `applyVictimDamage`) routes to
         //     OPPOSING victims and never touches `reactiveRecipients`. There is no guard inside it.
-        //     WAS-COUPLED-TO (PR5's WARNING, defused by PR6 — kept because a reader tracing why
-        //     the guard below exists needs to know what it replaced): path (b) missed the
-        //     vestigial `enemy` only as an INCIDENTAL SIDE-EFFECT of unrelated plumbing.
+        //     WAS-COUPLED-TO (PR5's WARNING, NARROWED — not discharged — by PR6; kept because a
+        //     reader tracing why the guard below exists needs to know what it replaced): path (b)
+        //     missed the vestigial `enemy` only as an INCIDENTAL SIDE-EFFECT of unrelated plumbing.
         //     `reduceEnemyBombs` bails at this file's line ~929 (`if (args.targetId === undefined)
         //     return;`), and engine.ts ~6452 deliberately leaves `targetId` unset whenever the
         //     player-side target resolved to the dummy sink — a BUFF-ROUTING parity choice whose
         //     own comment flags the unset field as a gap that may later be "fixed". That was never
         //     an intentional guard on this rule, so PR5 required a maintainer closing that gap to
         //     revisit this derivation: path (b) would then land real mid-cast HP damage on a
-        //     non-positional bound target. That obligation NO LONGER BINDS. The guard below stops
-        //     the loop on a dead bound target whatever killed it, so closing engine.ts's gap can
-        //     turn this into (at worst) an unreachable branch becoming reachable — not a whiff bug.
+        //     non-positional bound target.
+        //     WHAT THE OBLIGATION NOW COVERS. PR5's WARNING was about DAMAGE, and the guard below
+        //     is an EVENT guard — it stops the loop emitting, not the caller applying. Closing
+        //     engine.ts's ~6452 gap would still let path (b) land real mid-cast HP damage on a
+        //     non-positional bound target, and the aggregate `directDamage` this function returns
+        //     would still be applied on top of it by the caller. So the maintainer who closes that
+        //     gap still owes this derivation a re-walk. What PR6 removes from the obligation is
+        //     only its LOG/EVENT half: however the bound target dies mid-cast, the remaining
+        //     sub-attacks emit nothing, so no phantom sub-attack row or rider firing can result.
+        //     The damage half stands.
         // The positional path, where the rule is also observable, implements it separately at
         // positionalApply.ts's per-sub-attack anchor re-resolution against `opposingLiving`.
         const emitHits = hits > 0 ? hits : 1;
         for (let h = 0; h < emitHits; h++) {
             // R5 whiff guard (PR6). `currentHp` is the bound target's live HP field (state.ts:136);
             // at or below 0 the remaining sub-attacks land on a corpse and, per R5, deal nothing —
-            // so they emit nothing either. Unreachable through any production cast (the derivation
-            // above), and INTENTIONALLY built anyway: before PR6 the same outcome depended on
-            // engine.ts ~6452 leaving `targetId` unset for the dummy sink, a choice that site's own
-            // comment flags as a gap a maintainer may later close.
+            // so they emit nothing either. EVENTS only: the cast's `directDamage` is already
+            // totalled and is returned to the caller regardless of where this break lands, so the
+            // damage half of R5 is not enforced here. Unreachable through any production cast (the
+            // derivation above), and INTENTIONALLY built anyway: before PR6 the same outcome
+            // depended on engine.ts ~6452 leaving `targetId` unset for the dummy sink, a choice
+            // that site's own comment flags as a gap a maintainer may later close.
             if (enemy.currentHp <= 0) break;
             // This sub-attack's OWN crit outcome, from the draws the per-hit loop above already
             // collected. `hitCrits` is populated only when a damage ability fired and only for
