@@ -199,7 +199,14 @@ describe('extraActions', () => {
     // The asymmetric [2, 1] pair still proves the per-hit draw STREAM is shared/continued
     // across the extra turn rather than reset (a reset would re-run an identical pattern;
     // draws would repeat as [x, y, z] on both turns instead of continuing on).
-    it('per-hit crit draw continues across extra turn (critHits [2, 1])', () => {
+    //
+    // PR5 (multi-hit full-walk epic): the non-positional path now emits one `ability-performed`
+    // PER SUB-ATTACK instead of one folded event per turn, so a `hits: 3` cast produces THREE
+    // events per turn (six total across the normal + extra turn) instead of two. The per-hit draw
+    // schedule itself is unaffected — grouping the six events back into their two turns (three
+    // consecutive events each, in emission order) and summing each turn's critting sub-attacks
+    // recovers exactly the same [2, 1] pair this test has always pinned.
+    it('per-hit crit draw continues across extra turn (per-turn critting counts [2, 1])', () => {
         const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
         let i = 0;
         setRateGateRng(() => {
@@ -209,10 +216,14 @@ describe('extraActions', () => {
             return seq[i++];
         });
         const bus = createEventBus();
-        const performed: { critHits?: number }[] = [];
+        const performed: { didCrit?: boolean; critHits?: number; subAttackIndex?: number }[] = [];
         bus.on('ability-performed', (e) => {
             if (e.actorId === 'attacker' && e.round === 1 && e.abilityType === 'damage') {
-                performed.push({ critHits: e.critHits });
+                performed.push({
+                    didCrit: e.didCrit,
+                    critHits: e.critHits,
+                    subAttackIndex: e.subAttackIndex,
+                });
             }
         });
         idCounter = 0;
@@ -250,15 +261,31 @@ describe('extraActions', () => {
             bus,
         });
 
-        // Two ability-performed events: one per attacker turn in round 1.
-        expect(performed).toHaveLength(2);
+        // Six ability-performed events: 2 attacker turns x 3 sub-attacks (PR5) in round 1,
+        // where pre-PR5 there were two (one folded event per turn).
+        expect(performed).toHaveLength(6);
 
-        // Turn 1 critHits=2, turn 2 critHits=1 (see draw trace above).
-        // The [2, 1] pair is only possible when the gate accumulator carries over between
-        // turns. A resetting gate would replay the same pattern both turns; a shared
-        // single-outcome gate would yield either both equal or both undefined.
-        expect(performed[0].critHits).toBe(2);
-        expect(performed[1].critHits).toBe(1);
+        // Each turn's three sub-attacks arrive consecutively and re-start their own
+        // subAttackIndex — chunking recovers the per-turn grouping without relying on any
+        // turn-identifying field the payload doesn't carry.
+        const turn1 = performed.slice(0, 3);
+        const turn2 = performed.slice(3, 6);
+        expect(turn1.map((e) => e.subAttackIndex)).toEqual([0, 1, 2]);
+        expect(turn2.map((e) => e.subAttackIndex)).toEqual([0, 1, 2]);
+
+        // Turn 1: 2 of 3 sub-attacks crit. Turn 2: 1 of 3 crits (see draw trace above).
+        // The asymmetric [2, 1] pair is only possible when the gate accumulator carries over
+        // between turns. A resetting gate would replay the same pattern both turns; a shared
+        // single-outcome gate would yield either both equal or both zero/three.
+        const critCount = (events: typeof performed) => events.filter((e) => e.didCrit).length;
+        expect(critCount(turn1)).toBe(2);
+        expect(critCount(turn2)).toBe(1);
+
+        // Per-sub-attack payload shape: a critting sub-attack's own critHits is 1 (the critting
+        // VICTIM count for that one sub-attack), not the turn-wide tally the pre-PR5 fold carried.
+        for (const e of [...turn1, ...turn2]) {
+            expect(e.critHits).toBe(e.didCrit ? 1 : undefined);
+        }
     });
 
     // ── Test 5: Per-turn ticking across the extra turn ───────────────────────

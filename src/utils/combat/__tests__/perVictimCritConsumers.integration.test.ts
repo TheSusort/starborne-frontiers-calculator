@@ -7,10 +7,12 @@
  *    crit-identity signal — the count of critting (hit, victim) pairs a positional cast produced.
  *    Post-PR7, the on-crit listener no longer drives its enqueue count off `critHits`: it enqueues
  *    ONCE per positional `ability-performed` event (i.e. once per sub-attack) and scales the
- *    Bloodthirst heal off THAT event's `deliveredDamage`. (On the non-positional/DPS path, where a
- *    whole cast folds into one event, `critHits` counts critting HITS — each of which is a
- *    sub-attack — and IS the enqueue driver there.) These tests still pin `critHits` itself as a
- *    per-victim signal on the payload; they do not exercise the enqueue count.
+ *    Bloodthirst heal off THAT event's `deliveredDamage`. (Since PR5 of the multi-hit epic, the
+ *    non-positional/DPS path emits the SAME shape as the positional path — one event per
+ *    sub-attack, with `critHits` 0 or 1 for THAT sub-attack's own crit outcome. There is no fold
+ *    left anywhere and no separate enqueue-count meaning to carry: both paths enqueue once per
+ *    event.) These tests still pin `critHits` itself as a per-victim signal on the payload; they
+ *    do not exercise the enqueue count.
  *
  * 2. REACTIVE WARD (on-attacked): each AoE victim receives its OWN per-victim `attacked` event
  *    carrying THAT victim's own crit outcome. An AoE where the anchor crits but a disadvantaged

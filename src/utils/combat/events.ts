@@ -100,10 +100,12 @@ export type CombatEvent =
           deliveredDamage?: number;
           /** The 0-based sub-attack this event belongs to (multi-hit full-walk epic, PR4). A
            *  multi-hit skill is N consecutive full-walk attacks and PR2 emits one event per
-           *  sub-attack; this names which one. Absent on the non-positional inline emit (a single
-           *  aggregate attack) — consumers must read absent as "the only sub-attack", and must NOT
-           *  substitute 0 when comparing across DIFFERENT actors, since every actor's first
-           *  sub-attack is also 0.
+           *  sub-attack; this names which one. Since PR5 BOTH emitters stamp it — the positional
+           *  interleaved emit and runPlayerTurn's non-positional inline loop — so it is present on
+           *  every event a real cast produces. It is still optional because the two cast-scoped
+           *  engine fallbacks (nothing-landed, enemy 0-damage) omit it; consumers must read absent
+           *  as "the only sub-attack", and must NOT substitute 0 when comparing across DIFFERENT
+           *  actors, since every actor's first sub-attack is also 0.
            *
            *  Exists so a reactive intent enqueued during sub-attack k can be gated at sub-attack
            *  scope: intents from all N sub-attacks drain together at end of turn (drainIntentsFor),
@@ -553,8 +555,11 @@ export type CombatEvent =
           /** The 0-based sub-attack of the ATTACKER's cast that produced this hit (multi-hit
            *  full-walk epic, PR4). PR2 already emits one `attacked` per (sub-attack, victim); this
            *  names which sub-attack, so a victim-side once-per-attack guard can reset between the
-           *  attacker's consecutive attacks instead of collapsing all N into one. Absent on
-           *  non-positional emits (a single aggregate attack). */
+           *  attacker's consecutive attacks instead of collapsing all N into one. ALWAYS present
+           *  on a real `attacked` event, positional or not: `emitAttacked` stamps
+           *  `subAttackIndex ?? hitIndex` unconditionally on every path, falling back to the
+           *  per-hit loop index when the caller supplies no sub-attack identity. Optional here
+           *  only so hand-built fixture events can omit it. */
           subAttackIndex?: number;
       };
 

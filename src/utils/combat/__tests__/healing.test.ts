@@ -2147,7 +2147,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
         expect(focusHeal(result, 'cleanseCount')).toBe(0);
     });
 
-    it('on-ally-crit: a walked ally crit multi-hits (2) each round → focus banks 1 charge per ally cast (per attack that crits, not per hit)', () => {
+    it('on-ally-crit: a walked ally crit multi-hits (2) each round → focus banks once per critting SUB-ATTACK, not per (hit, victim) pair', () => {
         idCounter = 0;
         const result = runCombat(
             BASE({
@@ -2180,10 +2180,17 @@ describe('healing — Task 9: reactive trigger integration', () => {
                 },
             })
         );
-        // The ally's active crit-hits twice, but charge gain is once PER ATTACK that crits (Hermes:
-        // "gains 1 charge" per ally-crit event) — so the focus banks exactly 1 charge, not one per
-        // critting hit. Surfaced via the round's charge accounting.
-        expect(result.rounds[0].charges).toBe(1);
+        // A `hits: 2` cast is TWO consecutive full-walk attacks (locked rule R1), not one hit
+        // applied twice — and the walked ally goes through the same non-positional `runPlayerTurn`
+        // emit as the DPS path, which since PR5 fires one `ability-performed` per SUB-ATTACK
+        // (previously one folded event for the whole cast). `crit: 100` means both sub-attacks
+        // crit, and charge gain is once PER CRITTING SUB-ATTACK (Hermes: "gains 1 charge" per
+        // ally-crit event) — so the focus banks 2 charges, one per critting attack, not one per
+        // (hit, victim) pair inside a single attack's footprint (that half of "not per hit" is
+        // untouched and still holds — see `perSubAttackEvents.integration.test.ts`'s "a single-hit
+        // 3-victim AoE that crits TWO victims still fires on-ally-crit ONCE"). Surfaced via the
+        // round's charge accounting.
+        expect(result.rounds[0].charges).toBe(2);
     });
 });
 

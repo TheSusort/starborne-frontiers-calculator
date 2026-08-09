@@ -138,7 +138,10 @@ export interface Intent {
         fromPurgeEvent?: boolean;
         /** The sub-attack that raised the triggering event (multi-hit full-walk epic, PR4).
          *  Stamped by the OUTGOING listeners (`on-crit`, `on-deal-damage`) from
-         *  `ability-performed.subAttackIndex`. Undefined for triggers with no attack identity
+         *  `ability-performed.subAttackIndex`, AND by the INCOMING ones (`on-attacked`,
+         *  `on-ally-attacked`) from `attacked.subAttackIndex` — the incoming stamp is what makes
+         *  `oncePerAttackGuardKey` reset between the attacker's consecutive attacks instead of
+         *  collapsing all N into one. Undefined for triggers with no attack identity
          *  (start-of-round / end-of-round) — those keep per-turn gating, which is correct for them.
          *  Read by `passesProcChanceGate`'s memo key, so `procScope:'per-attack'` means per
          *  sub-attack rather than per turn. */
@@ -302,10 +305,12 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * PURE (Phase 1 contract): they only `enqueue` an intent — never mutate combat state. Match
  * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once PER ATTACK, never per
- *    target. On the POSITIONAL path an event is one SUB-ATTACK (PR2) so it enqueues once per
- *    critting sub-attack, off that sub-attack's `deliveredDamage`. On the NON-POSITIONAL/DPS path
- *    the whole cast folds into one event whose `critHits` counts critting HITS, so it loops that
- *    many times off the cast's display `damage`. See the handler for why the two differ
+ *    target. Every emitter is per-sub-attack since PR5, so ONE enqueue per event implements this
+ *    on every path: the POSITIONAL path's own sub-attack `deliveredDamage`, or (every other
+ *    per-sub-attack emitter) that event's `damage`, which is already this sub-attack's own share.
+ *    Exception: the two CAST-SCOPED fallback emits (engine.ts's nothing-landed and enemy
+ *    0-damage sites) publish `e.damage` as the cast total (`dap.damage`), not a share — harmless
+ *    today since both carry 0, but not "already a share" like the rest.
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
  *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
@@ -427,65 +432,53 @@ export function registerReactiveListeners(args: {
                         // reaction fires N times; an AoE footprint is ONE attack, so it fires ONCE
                         // however many victims crit and heals MORE through the AMOUNT, not the count.
                         //
-                        // Both branches below implement that one rule. They differ because
-                        // `critHits` MEANS DIFFERENT THINGS depending on which path emitted the
-                        // event, and only one meaning is "victims":
+                        // ONE enqueue per event implements both halves, because since PR5 every
+                        // emitter EXCEPT the engine's two cast-scoped fallbacks (enumerated below)
+                        // is per-sub-attack, and on those `critHits` means the same thing: the
+                        // critting VICTIMS within THIS ONE sub-attack. (Before PR5 the
+                        // non-positional emitter folded the whole cast into one event where
+                        // `critHits` counted critting HITS, and a LOOP over it was what implemented
+                        // "per attack" on that path. Two meanings for one field was the epic's
+                        // sharpest trap — it already caused one pre-merge defect in PR7 — and PR5
+                        // removed it by making the DPS path emit like the engine.)
                         //
-                        //   POSITIONAL (interleaved, one event per SUB-ATTACK since PR2) —
-                        //     critHits = sub.critVictimIds.length, the critting VICTIMS within THIS
-                        //     ONE sub-attack. The per-attack count is already carried by the event
-                        //     CARDINALITY, so looping critHits here would re-add the per-target
-                        //     multiplier the rule forbids: a 4-victim AoE would resolve 4 times, each
-                        //     off the whole footprint's damage. Enqueue exactly once.
-                        //
-                        //   NON-POSITIONAL / DPS (playerTurn's inline emit; one event per CAST) —
-                        //     critHits = critting HITS across the cast, and each of those hits IS a
-                        //     separate sub-attack. There is no event cardinality to carry the count,
-                        //     so the LOOP is what implements "per attack" here. Collapsing this
-                        //     branch to one enqueue would make a `hits: N` cast fire once — it would
-                        //     CONTRADICT the rule, not implement it. PR5 replaces this branch
-                        //     wholesale by making the DPS loop emit per sub-attack like the engine;
-                        //     when it does, the loop becomes dead and the discriminator can go.
-                        //
-                        // The discriminator is `deliveredDamage`, which Task 2 emits ONLY on the
-                        // interleaved positional path — it is absent on the non-positional/DPS emit
-                        // and on both nothing-landed/0-damage engine fallbacks, all of which are
-                        // cast-scoped events that must keep the loop.
-                        if (e.deliveredDamage !== undefined) {
-                            const critted = (e.critHits ?? 0) > 0 || e.didCrit === true;
-                            if (!critted) return;
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    // What this sub-attack actually DELIVERED — post-crit,
-                                    // post-amplification, post-victim-defence, including a Protection
-                                    // cascade's redirected chunk and excluding a DoT-transformed
-                                    // portion. This is the locked `basis:'damage-dealt'` value
-                                    // (Bloodthirst).
-                                    triggerDamage: e.deliveredDamage,
-                                    // PR4: carry this sub-attack's identity to the drain, which runs
-                                    // once per turn — after every sub-attack — so it cannot ask the
-                                    // engine which sub-attack it is in.
-                                    subAttackIndex: e.subAttackIndex,
-                                },
-                            });
-                            return;
-                        }
-                        // Cast-scoped event: one enqueue per critting HIT (= per sub-attack), off the
-                        // cast's pre-funnel DISPLAY damage — the only damage figure these paths
-                        // publish. Unchanged from pre-PR7 so every DPS golden stays byte-identical.
-                        const n = e.critHits ?? (e.didCrit ? 1 : 0);
-                        for (let i = 0; i < n; i++) {
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    triggerDamage: e.damage,
-                                    subAttackIndex: e.subAttackIndex,
-                                },
-                            });
-                        }
+                        // The two remaining CAST-SCOPED emitters are the engine's fallbacks, and one
+                        // enqueue is right for both: the nothing-landed site (engine.ts:6843) can
+                        // only carry critPairs 0 (no sub-attack had a victim, and critPairs
+                        // increments only inside the per-victim loop). The enemy 0-damage site
+                        // (engine.ts:9307) is reached only when a damage ability actually fired
+                        // (the deferred payload only exists when deferAbilityPerformedToEngine &&
+                        // hasDamageAbility) AND the cast's total damage is 0. For a PARSED kit that
+                        // means a multiplier-0 damage ability, and parseHitCount only assigns
+                        // hits > 1 on an explicit "attacks N times" phrase — so critHits <= 1 holds
+                        // for every ship in docs/ship-skills.csv today, but that is a CORPUS
+                        // property, not a structural guarantee: the ability editor exposes
+                        // multiplier and hits independently, so a hand-authored multiplier-0,
+                        // hits:3 ability would carry critHits > 1 through this same fallback.
+                        const critted = (e.critHits ?? 0) > 0 || e.didCrit === true;
+                        if (!critted) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                // What this sub-attack actually DELIVERED — post-crit,
+                                // post-amplification, post-victim-defence, including a Protection
+                                // cascade's redirected chunk and excluding a DoT-transformed
+                                // portion. This is the locked `basis:'damage-dealt'` value
+                                // (Bloodthirst). Present only on the interleaved positional path,
+                                // which is the only path with a funnel to differ from; every other
+                                // per-sub-attack emitter falls back to the pre-funnel `damage` it
+                                // publishes, which since PR5 is already this sub-attack's own share.
+                                // The two CAST-SCOPED fallback emits are the exception — there
+                                // `damage` is the cast total, not a share — but harmlessly, since
+                                // both carry 0.
+                                triggerDamage: e.deliveredDamage ?? e.damage,
+                                // PR4: carry this sub-attack's identity to the drain, which runs
+                                // once per turn — after every sub-attack — so it cannot ask the
+                                // engine which sub-attack it is in.
+                                subAttackIndex: e.subAttackIndex,
+                            },
+                        });
                     });
                     break;
                 case 'on-deal-damage':
@@ -2196,8 +2189,12 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     // PR4: one verdict per SUB-ATTACK. The gate/stream key stays `${owner}:${ability}` — that is the
     // owner's shared "proc" sub-stream and fragmenting it would re-roll cross-actor locality — but
     // the MEMO key carries the sub-attack, so attacks #2..#N draw afresh instead of replaying #1's
-    // verdict. An event with no sub-attack identity (start-of-round, on-attacked, the
-    // non-positional inline emit) keys 'x' and keeps exactly today's per-turn behaviour.
+    // verdict. An event with no sub-attack identity (start-of-round / end-of-round, or one of the
+    // two cast-scoped engine fallbacks — nothing-landed / enemy 0-damage) keys 'x' and keeps
+    // exactly today's per-turn behaviour. PR5: the non-positional inline emit now ALSO stamps a
+    // real index on every real cast, so it no longer falls into this bucket. NOTE `on-attacked` /
+    // `on-ally-attacked` are NOT in the 'x' bucket either — their listeners stamp the index off
+    // `attacked.subAttackIndex`, which `emitAttacked` always populates.
     const memoKey = `${gateKey}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
     const cached = memo?.get(memoKey);
     if (cached !== undefined) return cached;
@@ -2431,8 +2428,11 @@ const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTr
  *
  *  Safe here in a way it was not for `on-ally-crit` (where two DIFFERENT critting allies both
  *  carrying index 0 ruled it out): adding a component to a key can only SPLIT keys, never merge
- *  them, so this can never collapse something the pre-PR4 guard kept separate. Missing index → 'x',
- *  i.e. exactly today's behaviour on every non-positional path. */
+ *  them, so this can never collapse something the pre-PR4 guard kept separate. In practice the
+ *  `?? 'x'` fallback below is dead for any real `attacked` event: `emitAttacked` always stamps a
+ *  defined index (the caller's own sub-attack index, or — when the caller omits it — the per-hit
+ *  loop index as a fallback), on every path, positional or not. It only matters for a hand-built
+ *  fixture whose intent carries no `eventCtx` at all. */
 function oncePerAttackGuardKey(intent: Intent): string | undefined {
     return intent.ability.target === 'self' && PER_HIT_REACTIVE_TRIGGERS.has(intent.ability.trigger)
         ? `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.subAttackIndex ?? 'x'}`
@@ -3742,8 +3742,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // PR4: the key carries the SUB-ATTACK too. `reactionFiredThisAttack` is cleared
                 // only at actor turn-start, so without the index this suppressed a victim for
                 // sub-attacks #2..#N of a multi-hit cast — collapsing three attacks into one hit
-                // even after the verdict memo above was re-keyed. Missing index → 'x', i.e. exactly
-                // today's per-turn behaviour for every single-attack path.
+                // even after the verdict memo above was re-keyed. PR5 SWEEP: 'x' is no longer the
+                // single-attack path's key. Every real cast now carries an index — the positional
+                // deferred emit since PR2, the non-positional inline emit since PR5 — so a
+                // single-attack cast keys ':0', not ':x'. The 'x' bucket is left for the events
+                // with no attack identity at all (start-of-round / end-of-round triggers, the two
+                // cast-scoped engine fallbacks, hand-built fixture intents with no eventCtx), where
+                // per-turn dedupe remains the correct reading.
                 const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
                 if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
                 ctx.reactionFiredThisAttack?.add(firedKey);

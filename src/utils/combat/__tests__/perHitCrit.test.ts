@@ -8,7 +8,7 @@
  * explicit ()=>true/false gates are RNG-independent and left unchanged.
  *
  * Damage formula (0 defence, 0 buffs):
- *   effectiveMultiplier = multiplier × hits   (folded in playerTurn.ts line 968)
+ *   effectiveMultiplier = multiplier × hits   (playerTurn.ts's `const effectiveMultiplier`)
  *   preCritDamage = attack × (effectiveMultiplier / 100)
  *   directDamage  = preCritDamage × (1 + critFraction × critDamage/100)
  *
@@ -142,13 +142,22 @@ describe('perHitCrit', () => {
         expect(result.rounds.map((r) => r.didCrit)).toEqual([true, true, false, true]);
     });
 
-    // ── Test 4: critHits event field at 100% crit, 3-hit ────────────────────
-    it('100% crit 3-hit ability-performed carries { didCrit: true, critHits: 3 }', () => {
+    // ── Test 4: per-sub-attack crit payload at 100% crit, 3-hit ─────────────
+    // PR5 (multi-hit full-walk epic): the non-positional path emits one `ability-performed` per
+    // SUB-ATTACK, so a `hits: 3` cast produces THREE events each carrying its own crit outcome.
+    // `critHits` counts the critting VICTIMS in that one sub-attack — 1 for the single bound DPS
+    // enemy — which is the same meaning the positional path carries. Pre-PR5 this was ONE event
+    // carrying the cast-wide `critHits: 3`.
+    it('100% crit 3-hit emits three ability-performed, each { didCrit: true, critHits: 1 }', () => {
         idCounter = 0;
         const bus = createEventBus();
-        const performed: { didCrit?: boolean; critHits?: number }[] = [];
+        const performed: { didCrit?: boolean; critHits?: number; subAttackIndex?: number }[] = [];
         bus.on('ability-performed', (e) => {
-            performed.push({ didCrit: e.didCrit, critHits: e.critHits });
+            performed.push({
+                didCrit: e.didCrit,
+                critHits: e.critHits,
+                subAttackIndex: e.subAttackIndex,
+            });
         });
         simulateDPS({
             ...BASE,
@@ -157,26 +166,26 @@ describe('perHitCrit', () => {
             shipSkills: multiHitSkills(3),
             bus,
         });
-        expect(performed.length).toBeGreaterThan(0);
+        // 4 rounds x 3 sub-attacks. The count IS the assertion — it is what the fold suppressed.
+        expect(performed).toHaveLength(12);
         for (const e of performed) {
             expect(e.didCrit).toBe(true);
-            expect(e.critHits).toBe(3);
+            expect(e.critHits).toBe(1);
         }
+        expect(performed.slice(0, 3).map((e) => e.subAttackIndex)).toEqual([0, 1, 2]);
     });
 
     // ── Test 5: on-crit triggers fire once PER CRITTING HIT ─────────────────
     // Reactive charge-on-crit: +1 charge per crit event, chargeCount 6.
     // The damage ability has 3 hits and crit=100, so critHits=3 every active turn.
     //
-    // PATH NOTE (PR7): this rides the NON-POSITIONAL DPS path (`simulateDPS`), which folds the
-    // whole `hits: 3` cast into ONE `ability-performed` carrying `critHits: 3` and NO
-    // `deliveredDamage`. On that path `critHits` counts critting HITS, and each hit IS its own
-    // sub-attack, so the listener's LOOP is what implements PER ATTACK, NOT PER TARGET here —
-    // there is no event cardinality to carry the count. (On the positional path the listener
-    // enqueues once per event instead, because PR2 already emits one event per sub-attack and
-    // there `critHits` counts critting VICTIMS. subAttackProcGates / damageDealtBasis pin that
-    // side.) PR5 makes the DPS loop emit per sub-attack too, at which point both paths converge
-    // and this count is produced by cardinality rather than the loop — the number must not move.
+    // PATH NOTE (PR5): this rides the NON-POSITIONAL DPS path (`simulateDPS`), which since PR5
+    // emits ONE `ability-performed` per SUB-ATTACK — three events per cast, each carrying
+    // `critHits: 1`. The three enqueues per turn are therefore produced by event CARDINALITY, the
+    // same way the positional path produces them, and the listener enqueues at most once per
+    // event on every path (PR5 collapsed its two branches). Pre-PR5 this path folded the cast
+    // into one event carrying `critHits: 3` and the listener LOOPED it; the count was the same,
+    // which is why this assertion is unchanged across PR5 and is a useful equivalence pin.
     //
     // Charge trace (3 on-crit enqueues per active turn):
     //   NOTATION: preTurn banks +1; drain (after cast-path banking) fires 3 on-crit intents.
@@ -190,7 +199,7 @@ describe('perHitCrit', () => {
     //   R1: 0+1=1 drain→+1=2. R2: 2+1=3 drain→+1=4. R3: 4+1=5 drain→+1=6. R4: charged. ← firstCharged=4
     //
     // Assertion: firstCharged < 4 → fails when collapsed (4 not < 4), passes with the loop (3 < 4).
-    it('on-crit follow-up fires once PER CRITTING HIT (3-hit @100% crit → 3 enqueues/turn)', () => {
+    it('on-crit follow-up fires once per critting SUB-ATTACK (3-hit @100% crit → 3 enqueues/turn)', () => {
         idCounter = 0;
         const skills: ShipSkills = {
             slots: [
