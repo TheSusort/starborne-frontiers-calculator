@@ -2479,19 +2479,38 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // flagged for the next in-game pass rather than silently resolved.
         //
         // RULE R5 ("with no living target left, the multi-hit simply stops dealing damage",
-        // verified in-game 2026-08-08). The `enemy.currentHp <= 0` break at the top of the loop
-        // below implements the LOG/EVENT half of it, and ONLY that half: it stops the remaining
-        // sub-attacks from emitting `ability-performed`, so they open no log row and fire no
-        // outgoing rider. It computes and applies NO HP loss — `directDamage` was totalled above,
-        // before this loop, and still flows out unchanged in this function's return value for the
-        // CALLER to apply. So the damage half of R5 remains the caller's responsibility on this
-        // path; do not read the break as making a dead-target multi-hit deal zero.
+        // verified in-game 2026-08-08). The `enemy.destroyedRound !== undefined` break at the top
+        // of the loop below implements the LOG/EVENT half of it, and ONLY that half: it stops the
+        // remaining sub-attacks from emitting `ability-performed`, so they open no log row and fire
+        // no outgoing rider. It computes and applies NO HP loss — `directDamage` was totalled
+        // above, before this loop, and still flows out unchanged in this function's return value
+        // for the CALLER to apply. So the damage half of R5 remains the caller's responsibility on
+        // this path; do not read the break as making a dead-target multi-hit deal zero.
         // PR5 derived the branch to be structurally UNREACHABLE on this
         // path and left it unbuilt; PR6 builds it anyway so that the whiff safety is INTENTIONAL
         // rather than an incidental side-effect of unrelated plumbing (see WAS-COUPLED-TO below).
         // Because the branch is unreachable, its ONLY coverage is a direct-runPlayerTurn test
         // (`__tests__/multiHitInlineEmitGuards.test.ts`); no integration test can take it, so do
         // not "consolidate" that test into one.
+        //
+        // WHICH SIGNAL, AND WHY NOT `currentHp <= 0` (PR6, after a review caught the first cut).
+        // The guard's first version read `enemy.currentHp <= 0` and was WRONG — reachable, in
+        // healing/sim mode, where it silently killed the focus's entire event stream from the
+        // moment cumulative damage crossed `enemyHp` (round 6 of 10 in the reproduction; see
+        // `multiHitInlineEmitGuards.test.ts`'s runCombat-level block). The sink NEVER DIES, but its
+        // `currentHp` is CLAMPED: engine.ts (~9513) sets it to `Math.max(0, enemyHp -
+        // cumulativeDamage - cumulativeTeamDamage)` at every round tail, so it reaches 0 and stays
+        // there forever, and nothing terminates the run (the `dpsEnemyTarget &&
+        // enemy.destroyedRound !== undefined` break at ~9911 is gated OFF for this mode).
+        // THE READING ERROR WORTH NOT REPEATING: the derivation below reasons exclusively about
+        // MID-CAST HP application — "can anything decline this target's HP while the loop runs" —
+        // and every bullet in it is still true. It simply never asked the OTHER question, "can the
+        // bound target already be at 0 before the cast begins", for which the answer on the sink is
+        // yes, permanently, without a death. `currentHp <= 0` conflates "at the HP floor" with
+        // "dead"; on the sink those are different facts. `destroyedRound` is the canonical
+        // aliveness signal (state.ts:151, stamped once by `recordDestroyed`, state.ts:243 — the
+        // same signal the dead-owner gate at triggers.ts ~2514 reads) and is never stamped on the
+        // sink, so the guard is inert there and fires only on a genuinely destroyed bound target.
         // The unreachability derivation, re-walked against source for PR5 and still accurate:
         //   • THE PRIMARY ARGUMENT, and self-sufficient on its own — it needs nothing from the
         //     engine enumeration below. This loop never mutates HP: it only emits events, and the
@@ -2513,7 +2532,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     its HP mid-round.
         //   • Every OTHER non-positional mode (sim/healing) binds the VESTIGIAL sink (engine.ts's
         //     `enemy` has no `position`, so `isPositional(enemy.position, …)` is always false),
-        //     whose HP is in the billions and which by construction never dies.
+        //     whose HP is in the billions and which by construction never DIES — `recordDestroyed`
+        //     is never called on it, so `destroyedRound` stays undefined for the whole run.
+        //     NOT the same as "its currentHp stays positive": the round-tail clamp drives that
+        //     field to 0 and pins it there (see WHICH SIGNAL above). Never-dies is the property
+        //     this guard relies on; never-at-zero-HP is false and must not be substituted for it.
         //   • The general reactive-proc funnel (engine.ts:5523, `applyVictimDamage` for a proc
         //     victim) is explicitly gated `positionalTeamBattle && victim.id !== enemy.id`.
         //   • The remaining mid-round `applyVictimDamage` sites do NOT share one gate. An earlier
@@ -2562,15 +2585,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // positionalApply.ts's per-sub-attack anchor re-resolution against `opposingLiving`.
         const emitHits = hits > 0 ? hits : 1;
         for (let h = 0; h < emitHits; h++) {
-            // R5 whiff guard (PR6). `currentHp` is the bound target's live HP field (state.ts:136);
-            // at or below 0 the remaining sub-attacks land on a corpse and, per R5, deal nothing —
-            // so they emit nothing either. EVENTS only: the cast's `directDamage` is already
-            // totalled and is returned to the caller regardless of where this break lands, so the
-            // damage half of R5 is not enforced here. Unreachable through any production cast (the
-            // derivation above), and INTENTIONALLY built anyway: before PR6 the same outcome
-            // depended on engine.ts ~6452 leaving `targetId` unset for the dummy sink, a choice
-            // that site's own comment flags as a gap a maintainer may later close.
-            if (enemy.currentHp <= 0) break;
+            // R5 whiff guard (PR6). `destroyedRound` is the bound target's DEATH stamp
+            // (state.ts:151, written once by `recordDestroyed`): once set, the remaining
+            // sub-attacks land on a corpse and, per R5, deal nothing — so they emit nothing either.
+            // Deliberately NOT `currentHp <= 0`, which is an HP FLOOR and not a death: the
+            // vestigial sim/healing sink sits clamped at 0 forever without ever dying, and gating
+            // on it silences the focus's whole event stream (see WHICH SIGNAL in the derivation
+            // above — that was this guard's first cut, and it was a live regression).
+            // EVENTS only: the cast's `directDamage` is already totalled and is returned to the
+            // caller regardless of where this break lands, so the damage half of R5 is not enforced
+            // here. Unreachable through any production cast (the derivation above), and
+            // INTENTIONALLY built anyway: before PR6 the same outcome depended on engine.ts ~6452
+            // leaving `targetId` unset for the dummy sink, a choice that site's own comment flags
+            // as a gap a maintainer may later close.
+            if (enemy.destroyedRound !== undefined) break;
             // This sub-attack's OWN crit outcome, from the draws the per-hit loop above already
             // collected. `hitCrits` is populated only when a damage ability fired and only for
             // `drawHits` entries, so fall back to the cast-wide binary when it is empty: a noCrit
