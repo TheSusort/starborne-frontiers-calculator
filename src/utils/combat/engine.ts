@@ -6826,14 +6826,17 @@ export function runCombat(input: CombatEngineInput): {
                 //    for a sub-attack whose whole hit was redirected by Protection or transformed
                 //    into a DoT. That is a real attack under the locked rule — it struck victims,
                 //    it rolled, it must emit — and excluding it ALSO re-inflates the survivors,
-                //    (PR6 nuance: emitting is still right, but such an event carries
-                //    `deliveredDamage: 0`, and the `on-deal-damage` guard above now reads THAT —
-                //    so the event exists for the log and the incoming side while its outgoing
-                //    riders correctly stay silent. Protection-redirected damage does NOT zero
-                //    `deliveredDamage`, which counts a cascade's diverted chunk as delivered.)
                 //    because `share = dap.damage / emitting.length` divides the cast's pre-funnel
                 //    directDamage by the emitting count. (The plan prescribed `damage === 0` here;
                 //    that was a plan defect, corrected in the plan file too.)
+                //    PR6 NUANCE: emitting is still right, and the outgoing riders no longer pay out
+                //    for it. Such an event carries `deliveredDamage: 0` and the `on-deal-damage`
+                //    guard (triggers.ts) now reads THAT rather than `damage`, so the event exists
+                //    for the log and for the incoming side while its outgoing riders stay silent.
+                //    Note this splits the two cases named above: a DoT transform zeroes
+                //    `deliveredDamage`, a Protection REDIRECT does not — the cascade's diverted
+                //    chunk still counts as delivered, so a fully-redirected sub-attack still pays
+                //    its riders.
                 const emitting = critAgg.subAttacks.filter((sub) => sub.victimIds.length > 0);
                 if (emitting.length === 0) {
                     // Nothing landed: every sub-attack either whiffed (no anchor) or resolved over

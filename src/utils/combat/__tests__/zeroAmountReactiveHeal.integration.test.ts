@@ -9,9 +9,9 @@
  * `healPerTarget`, and emitted an `amount: 0` event, which `buildCombatLog` turns into a visible
  * "repaired 0" row for a repair that never happened.
  *
- * The SHIELD sibling fourteen lines above already guards correctly — it emits only when a recipient
- * actually gained pool (`shieldRecipientIds.length > 0`). This file pins the heal branch's symmetry
- * with it: `healSum > 0`, the gross across recipients.
+ * The SHIELD sibling immediately above it in the same executor branch already guards correctly — it
+ * emits only when a recipient actually gained pool (`shieldRecipientIds.length > 0`). This file pins
+ * the heal branch's symmetry with it: `healSum > 0`, the gross across recipients.
  *
  * ANTI-VACUITY. The victim carries an unconditional `transform-incoming-to-dot` (Voron's shape) —
  * the same fixture PR6's `on-deal-damage` task used — so the entire post-block hit is deferred and

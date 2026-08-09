@@ -3522,6 +3522,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // number of heal abilities that crit (present-only-when-positive). In event-only
         // (enemy) mode E5 §4.1 now computes the numeric, so amount/critHits reflect the real
         // enemy heal (the player healing buckets stay uncredited — see the healEventOnly note above).
+        //
+        // ASYMMETRY, KNOWN AND DELIBERATE (multi-hit full-walk epic, PR6). The gate is
+        // "resolved to at least one recipient", NOT "restored a positive amount" — so a CAST heal
+        // that resolves to zero still emits, still opens a "repaired 0" combat-log row, and still
+        // counts as a repair for the `on-enemy-repaired` riders (Ruiner's Bomb, Overload, Zosimos's
+        // charge removal, Amartya's Defense Shred). PR6 added exactly that amount gate to the
+        // REACTIVE path (`healSum > 0` on `reactive-heal-performed`, triggers.ts heal branch) and
+        // left this one alone: the reactive path is where a zero-gross repair is actually
+        // reachable in the corpus (a `damage-dealt` basis on a sub-attack that delivered nothing),
+        // and widening the change to the cast path was out of scope for that PR. So the two paths
+        // now disagree on the zero case. If you are here to make them agree, that is a behaviour
+        // change with golden movement, not a cleanup.
         if (healTargets.length > 0) {
             bus.emit({
                 type: 'heal-performed',

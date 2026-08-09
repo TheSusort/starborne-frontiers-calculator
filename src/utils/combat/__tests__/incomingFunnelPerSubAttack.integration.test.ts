@@ -797,10 +797,13 @@ describe('PR6 Tier 2 — counterattacks fire once per sub-attack — PLAYER side
         // ANTI-VACUITY: cardinality, not magnitude, is the discriminator (same argument as
         // Section E's reflect test). The pre-fix engine produced 1 for BOTH N=3 and N=1 — the
         // signature of a per-TURN collapse — so the N=3 assertion alone would fail against it.
-        // The N=1 control is what keeps the fix honest in the other direction: a guard that had
-        // simply been DELETED (rather than re-keyed per sub-attack) would over-fire wherever a
-        // single attack fans into multiple `attacked` events, and N=1 pinned at exactly 1 is the
-        // assertion that catches that.
+        // What the N=1 control does NOT do is detect a DELETED guard. With `hits: 1` this victim
+        // receives exactly ONE `attacked` event (the positional path calls `emitAttacked` once per
+        // sub-attack with a single hit outcome), so an executor with no guard at all also scores 1
+        // here — and 3 at N=3. The pair therefore discriminates per-SUB-ATTACK from per-CAST, and
+        // nothing more. The only genuine deleted-guard detector is the executor-level unit case
+        // "3 attacked events from the SAME sub-attack collapse to ONE counter"
+        // (counterAttack.test.ts), which drives the collapse the engine cannot stage here.
         //
         // `teamVictim`'s `attack` override (see its own comment) is set to 10,000 here:
         // `applyCounterAttack` computes its raw damage off the OWNER's `effectiveAttack` and

@@ -242,7 +242,15 @@ export type CombatEvent =
      *  a reactive repair is still "an enemy performing a repair" (Ruiner's Bomb) and reaction-healers
      *  repair almost exclusively through this event. That subscription is safe specifically because
      *  no on-enemy-repaired rider heals, so it cannot re-enter this emit — any NEW subscriber must
-     *  re-establish that argument for itself rather than assume this event is inert. */
+     *  re-establish that argument for itself rather than assume this event is inert.
+     *
+     *  NOT EMITTED FOR A ZERO-GROSS REPAIR (multi-hit full-walk epic, PR6). The executor gates this
+     *  emit on `healSum > 0` (triggers.ts heal branch), so a reactive repair that resolved to
+     *  nothing — a `damage-dealt` basis on a sub-attack that delivered nothing, a zero-count
+     *  event-scaled repair — produces no event at all. A repair that lands and then fully
+     *  OVERHEALS still emits: the gross was real, only the target was full. Any rider that counts
+     *  repairs off this event (a metric, a proc-counter) therefore counts landed repairs, not
+     *  attempted ones, and will under-count against an attempt-based expectation. */
     | ({
           type: 'reactive-heal-performed';
           casterId: string;

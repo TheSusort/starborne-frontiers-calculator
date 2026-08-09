@@ -3477,6 +3477,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // a sub-attack that delivered nothing (a DoT transform, a full soak), a zero-count
         // event-scaled repair. A repair that lands but fully overheals still emits — the gross was
         // real, only the target was full.
+        //
+        // NOT LOG-ONLY — the knock-on is deliberate. `reactive-heal-performed` has a second
+        // subscriber, the `on-enemy-repaired` listener at ~line 1118, so suppressing the emit also
+        // means a zero-gross repair no longer COUNTS AS A REPAIR for that trigger's riders:
+        // Ruiner's Bomb debuff and Overload self-buff, Zosimos's charge removal, Amartya's Defense
+        // Shred. That was adjudicated correct — a repair that restored nothing is not an enemy
+        // "performing a repair" in any sense those riders are meant to punish — but it is a
+        // behaviour change beyond the log, not a display tweak. Do not re-derive this gate as
+        // presentational and move it into buildCombatLog.
         if (cfg.type === 'heal' && healPerTarget.length > 0 && healSum > 0 && ctx.bus) {
             ctx.bus.emit({
                 type: 'reactive-heal-performed',

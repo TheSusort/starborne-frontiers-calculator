@@ -5,7 +5,10 @@
  * `owner.attack × multiplier/100`, mitigated by the attacker's defence/affinity. The counter:
  *   - is mitigated/crit-walked through the engine's `applyCounterAttack` (no `attacked` event → no
  *     re-counter — a counter-of-a-counter never fires);
- *   - collapses ALL per-hit `attacked` events of ONE attack to a SINGLE counter (per-turn guard);
+ *   - collapses the per-hit `attacked` events of ONE SUB-ATTACK to a SINGLE counter, while each
+ *     sub-attack of a `hits: N` cast counters on its own (the guard key carries the triggering
+ *     event's `subAttackIndex` since the multi-hit epic's PR6; before that it was keyed on the
+ *     turn alone and a 3-hit cast drew ONE counter);
  *   - obeys the `requirePrimaryTarget` gate (the live emit always sets isPrimaryTarget:true, so the
  *     false-case is asserted at the executor gate level; the true-case is asserted end-to-end).
  *
@@ -175,8 +178,11 @@ describe('G PR1 — counter executor branch (end-to-end via runCombat)', () => {
         );
         // Each round the 3-hit attack lands → 3 counters of 5000 = 15000. The single-hit control
         // is case (a) above, which pins 5000 per round off the same fixture — so the pair
-        // discriminates a per-sub-attack guard from BOTH a per-turn collapse (5000 here too) and
-        // a deleted guard (which would over-fire per HIT, not per sub-attack).
+        // discriminates a per-SUB-ATTACK guard from a per-TURN collapse (which would score 5000
+        // here too). It does NOT discriminate against a DELETED guard: each sub-attack emits one
+        // `attacked` event for this victim, so an unguarded executor scores 3 here and 1 in case
+        // (a) — the same numbers. That half of the guard is pinned at the executor level instead,
+        // by "3 attacked events from the SAME sub-attack collapse to ONE counter" below.
         for (const rd of result.rounds) {
             const dealt = rd.perTargetDamage?.['foe'] ?? 0;
             if (dealt > 0) expect(dealt).toBeCloseTo(15_000, 6);

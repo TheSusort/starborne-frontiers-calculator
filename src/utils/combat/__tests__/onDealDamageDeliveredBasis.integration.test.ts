@@ -3,10 +3,16 @@
  *
  * `triggers.ts`'s on-deal-damage guard read `e.damage`, the pre-funnel DISPLAY basis that
  * buildCombatLog shows: `playerTurn`'s `directDamage`, computed against the anchor's defence
- * profile before the victim-side funnel runs. It never sees shield absorption, a Protection
- * redirect, an incoming-block shave, or a DoT transform. So a sub-attack that DELIVERED nothing
- * still carried a positive `damage` and still fired its riders — Burner's Inferno, Warpstrike's
- * duration-reduction, Zeolite's purge. PR7 built `ability-performed.deliveredDamage` (events.ts,
+ * profile before the victim-side funnel runs — it never sees the funnel at all. So a sub-attack
+ * that DELIVERED nothing still carried a positive `damage` and still fired its riders — Burner's
+ * Inferno, Warpstrike's duration-reduction, Zeolite's purge.
+ *
+ * Only TWO funnel legs zero out `deliveredDamage`, and so only those two are what this fix
+ * silences: a DoT transform (the whole hit deferred) and an incoming-block shave (the hit
+ * cancelled). The other legs deliberately still count as delivered and still fire the riders —
+ * shield absorption (a soaked hit is still on-screen damage), a Protection redirect (the hit
+ * landed, on someone else), and Barrier nullification. See the per-leg table in the
+ * `on-deal-damage` listener (triggers.ts). Do not read this file as having fixed all four. PR7 built `ability-performed.deliveredDamage` (events.ts,
  * populated at engine.ts's interleaved positional emit) for exactly this question and one consumer
  * (the `on-crit` listener) adopted it; this file pins the second consumer.
  *

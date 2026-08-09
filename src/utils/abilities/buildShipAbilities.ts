@@ -1313,8 +1313,9 @@ function abilitiesFromText(
     // victim `attacked` emission HAS since landed, so an AoE covering both this unit and an
     // adjacent ally can now wake both abilities in one sub-attack; deduping across the two would
     // need the executor guard keyed on `${ownerId}` rather than the ability id. Untouched by PR6
-    // (that is a multi-VICTIM question, not a multi-HIT one) and tracked separately. The co-located "start of combat … attack per adjacent
-    // ally" buff parses independently and is unaffected.
+    // (that is a multi-VICTIM question, not a multi-HIT one) and tracked separately. The
+    // co-located "start of combat … attack per adjacent ally" buff parses independently and is
+    // unaffected.
     if (slot === 'passive' && counter && counter.allySubject) {
         const hits = parseHitCount(text);
         const counterConfig = {
