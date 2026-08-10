@@ -433,7 +433,11 @@ describe('PR6 Tier 2 — Protection redirect resolves per sub-attack', () => {
                 [offensiveEnemy('foe', 'M1', hits)]
             );
         const rows = perTargetDamagesFor(build(3), ['protector', 'protected']);
-        expect(rows.protected).toBe(27_000);
+        // Both legs use `toBeCloseTo`: 27,000 carries sub-attack 1's remainder (10,000 - 3,000)
+        // from the same redirect arithmetic that produced the measured 3000.0000000000005 above,
+        // so the float residue can land on either side. 6 decimal places still separates the three
+        // models in the table (27,000 vs 21,000 vs 30,000) by four orders of magnitude.
+        expect(rows.protected).toBeCloseTo(27_000, 6);
         expect(rows.protector).toBeCloseTo(3_000, 6);
     });
 

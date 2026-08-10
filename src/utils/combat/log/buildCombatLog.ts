@@ -342,6 +342,34 @@ function createBuildContext(
             // event and was NOT a miss (buff/heal/utility-only cast). Remove it from the current
             // turn's entries if present (the only container an on-turn attack entry lands in).
             //
+            // WHY THAT IS THE ONLY CONTAINER (asked in review of PR6 — `attachEntry` has three
+            // arms, and the `.reactions[]` arm is not swept here). `attachEntry` routes to
+            // `routeReaction` — the arm that would bury this entry inside some other entry's
+            // `.reactions[]` — if and only if `ctx.currentStamp` is set, and `currentStamp` is
+            // read off the DISPATCHED EVENT's own `duringTurnOf` (dispatch loop, below). The type
+            // permits that stamp (`ability-performed` is in `StampedEventType` /
+            // `REACTIVE_STAMPED_EVENT_TYPES`, triggers.ts), but no PRODUCER can set it: the stamp
+            // is applied only by `makeReactiveStampingBus`, which exists solely as a fresh
+            // per-intent wrapper built inside `executeIntent` (triggers.ts) and assigned to that
+            // intent's `ctx.bus`; it never replaces the engine's own `bus` binding (engine.ts —
+            // a `const` fanning out to the external tap plus the internal bus). Both
+            // `ability-performed` emitters — runPlayerTurn's inline emit and the engine's
+            // `emitDeferredAbilityPerformed` — emit on THAT engine bus, so the event is always
+            // unstamped. Reactive damage cannot sneak one in either: it deliberately emits
+            // `reactive-damage-performed` and NO `ability-performed` (events.ts chain guard). Nor
+            // can a reactive extra action: `grantExtraAction` only bumps a pending count, so the
+            // granted turn runs later in the selection loop on the engine bus like any other.
+            // Verified empirically too — a temporary `throw` on a stamped `ability-performed`,
+            // run across the whole combat + simulation corpus, fired ONLY on three hand-crafted
+            // counterattack fixtures in `log/__tests__/buildCombatLog.test.ts` (synthetic event
+            // literals), never on an engine-produced stream. That leaves `attachEntry`'s third arm:
+            // with no open turn the row lands in the round's startOfRound / endOfRound drain, which
+            // needs an `ability-performed` from an actor whose `turn-started` the roster filter
+            // dropped (a non-roster actor). A second probe — `throw` when this prune arm fires on an
+            // entry NOT found in `currentTurn.entries` — never fired over that same corpus, so that
+            // arm is left as-is rather than swept speculatively; `indexOf` returning -1 already
+            // makes the splice a no-op if one ever appears.
+            //
             // Normally guarded on `reactions.length === 0`: a reactive trigger (e.g. Ravager's
             // on-own-debuff-resisted Hacking Module Overdrive grant) can nest under this entry
             // via routeReaction BEFORE the boundary that finalizes it — pruning the entry would
