@@ -1628,31 +1628,42 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 //    store state. The §4.5 Stasis-break re-inflict check reads it back before the
                 //    flush runs (engine, `reInflictedStasis`); deferring the row let that check
                 //    conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
+                // Single source of truth for the store write — both the deferred `applyState`
+                // path and the cast-time inline branch below call this instead of each keeping
+                // their own copy of `statusEngine.applyTimedAbilityStatus(...)` (a second copy is
+                // exactly how the two paths would drift, per the doc comment above).
+                const writeState = (): void => {
+                    statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                };
+                // DISPLAY ONLY: the round's reported enemy-debuff window
+                // (RoundData.activeEnemyDebuffs, sourced from `landedEnemyDebuffs`) is
+                // assembled below, BEFORE this write runs — so re-read this status and
+                // add/refresh its row. Without it a debuff the cast really did apply is
+                // missing from the round it landed in, and a persistent-stacking family
+                // reports one stack short. With N sub-attacks that shortfall multiplies,
+                // which is why the refresh re-reads the LIVE stack count every time rather
+                // than incrementing. Touches ONLY the display list: the modifier fold
+                // (`roundEnemyDebuffs`) and every gate ctx are already computed, which is
+                // exactly the rule — this sub-attack's own damage and its later clauses
+                // must not see the status. Referencing a `const` declared further down is
+                // safe only because `applyState` is never invoked from inside `runPlayerTurn`
+                // — the inline branch calls `writeState` directly for exactly this reason.
+                const refreshDisplayRow = (): void => {
+                    const live = statusEngine
+                        .timedAbilityStatuses('enemy', actor.id, vid ?? targetId)
+                        .find((s) => s.payload.buffName === status.payload.buffName);
+                    if (live) {
+                        const at = landedEnemyDebuffs.findIndex(
+                            (b) => b.buffName === live.active.buffName
+                        );
+                        if (at >= 0) landedEnemyDebuffs[at] = live.active;
+                        else landedEnemyDebuffs.push(live.active);
+                    }
+                };
                 const pair: DeferredEnemyApplication = {
                     applyState: () => {
-                        statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
-                        // DISPLAY ONLY: the round's reported enemy-debuff window
-                        // (RoundData.activeEnemyDebuffs, sourced from `landedEnemyDebuffs`) is
-                        // assembled below, BEFORE this write runs — so re-read this status and
-                        // add/refresh its row. Without it a debuff the cast really did apply is
-                        // missing from the round it landed in, and a persistent-stacking family
-                        // reports one stack short. With N sub-attacks that shortfall multiplies,
-                        // which is why the refresh re-reads the LIVE stack count every time rather
-                        // than incrementing. Touches ONLY the display list: the modifier fold
-                        // (`roundEnemyDebuffs`) and every gate ctx are already computed, which is
-                        // exactly the rule — this sub-attack's own damage and its later clauses
-                        // must not see the status. Referencing a `const` declared further down is
-                        // safe because every caller runs after runPlayerTurn returned.
-                        const live = statusEngine
-                            .timedAbilityStatuses('enemy', actor.id, vid ?? targetId)
-                            .find((s) => s.payload.buffName === status.payload.buffName);
-                        if (live) {
-                            const at = landedEnemyDebuffs.findIndex(
-                                (b) => b.buffName === live.active.buffName
-                            );
-                            if (at >= 0) landedEnemyDebuffs[at] = live.active;
-                            else landedEnemyDebuffs.push(live.active);
-                        }
+                        writeState();
+                        refreshDisplayRow();
                     },
                     emitEvents: () => {
                         emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
@@ -1665,7 +1676,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 } else {
                     // Cast-time inline apply: EXACTLY pre-PR8 — the raw write plus the discrete
                     // emit, without the display-list refresh (see the TDZ note above pair).
-                    statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                    writeState();
                     pair.emitEvents();
                 }
                 if (!anyLanded) {

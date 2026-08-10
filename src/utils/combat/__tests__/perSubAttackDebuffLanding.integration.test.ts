@@ -9,6 +9,9 @@
  * direct active/charged debuff-inflict clause, intersection EMPTY. Every fixture here is
  * therefore synthetic, and synthetic fixtures are the only verification this behaviour gets —
  * which is why each assertion below carries an anti-vacuity control.
+ *
+ * Task 5 fills in the fidelity assertions; this file currently holds only the compile-time shape
+ * probe below.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { resetRateGateRng } from '../../calculators/rateAccumulator';
