@@ -5791,6 +5791,21 @@ export function runCombat(input: CombatEngineInput): {
             // keyed by victim id. Required for a non-zero delta — see the causality note above
             // perVictimOutgoingDeltaPct. Unsupplied → delta stays 0 for every victim.
             preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
+            // PR8: applyPositionalDamage's sub-attack boundary hooks (Task 2), forwarded verbatim
+            // below. Widened here for the same reason PR2 Task 2 had to widen `onVictimResolved`:
+            // this engine-side wrapper declares its OWN args type, so a hook that exists on
+            // applyPositionalDamage is un-typeable by an engine caller until it is repeated here.
+            // Unsupplied by a caller → no boundary work → byte-identical.
+            onSubAttackStart?: (sub: {
+                index: number;
+                anchorId: string;
+                victimIds: string[];
+            }) => void;
+            onSubAttackEnd?: (sub: {
+                index: number;
+                anchorId: string;
+                victimIds: string[];
+            }) => void;
         }): {
             anyCrit: boolean;
             critPairs: number;
@@ -5897,6 +5912,9 @@ export function runCombat(input: CombatEngineInput): {
                     },
                     // E2: forward the per-direction leech hook (unsupplied by all current callers).
                     onVictimResolved: args.onVictimResolved,
+                    // PR8: forward the sub-attack boundary hooks (the per-sub-attack debuff landing).
+                    onSubAttackStart: args.onSubAttackStart,
+                    onSubAttackEnd: args.onSubAttackEnd,
                     // Per-victim crit: forward the firing turn's per-victim crit resolver.
                     rollVictimCrit: args.rollVictimCrit,
                     // D-PR3: victim-side incoming %-reduction, per footprint victim per sub-hit. Shared
@@ -6638,6 +6656,15 @@ export function runCombat(input: CombatEngineInput): {
             rollVictimCrit?: (victimAffinity: AffinityName) => boolean;
             deferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
             positionalDetonation: DetonationRecipe | undefined;
+            /**
+             * PR8: this cast's per-sub-attack debuff applier and its cast-time deferred list.
+             * The helper owns WHEN each landing's state write happens; playerTurn owns the roll.
+             * Both optional in effect — `applyDebuffsForSubAttack` is undefined for a cast with no
+             * gated debuff clause, and the deferred list is empty for a cast whose clauses all
+             * precede its damage, which is almost the whole corpus.
+             */
+            applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
+            deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
         }
         /** One footprint victim's `attacked` signal within ONE sub-attack. */
         interface PositionalVictimSignal {
@@ -6716,6 +6743,21 @@ export function runCombat(input: CombatEngineInput): {
             // not just the anchor. Keyed by (subAttackIndex, victim.id) since PR2 Task 2, and
             // consumed one bucket at a time by the interleaved emit below.
             const attackedSignals: PositionalAttackedSignals = new Map();
+            // PR8: buffered `debuff-applied` / `debuff-resisted` emitters, keyed by the sub-attack
+            // whose boundary produced them. The STATE writes already ran in the loop (that is the
+            // point — sub-attack k's stack must be in the store when sub-attack k+1 reads
+            // defenseProfileOf); only the events wait here, so each lands after its own
+            // sub-attack's `ability-performed` row exists.
+            const debuffEmittersBySubAttack = new Map<number, (() => void)[]>();
+            const bufferDebuffEmitters = (
+                index: number,
+                pairs: PlayerTurnResult['deferredEnemyApplications']
+            ): void => {
+                if (pairs.length === 0) return;
+                const at = debuffEmittersBySubAttack.get(index) ?? [];
+                for (const pair of pairs) at.push(pair.emitEvents);
+                debuffEmittersBySubAttack.set(index, at);
+            };
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
             // at hit time so its Stasis is broken too — the anchor break is handled at the call site.
             // Covered victims have no same-turn re-apply vector → unconditional break.
@@ -6798,6 +6840,38 @@ export function runCombat(input: CombatEngineInput): {
                         coveredStasisVictims.add(victim.id);
                     }
                 },
+                onSubAttackStart: (sub) => {
+                    // Clauses written BEFORE the damage clause apply ahead of this sub-attack's
+                    // damage — the locked intra-cast order, now per sub-attack. Sub-attack 0's
+                    // before-damage clauses already applied inline at cast time.
+                    if (sub.index === 0) return;
+                    bufferDebuffEmitters(
+                        sub.index,
+                        sel.applyDebuffsForSubAttack?.(sub, 'before-damage') ?? []
+                    );
+                },
+                onSubAttackEnd: (sub) => {
+                    if (sub.index === 0) {
+                        // Sub-attack 0 keeps its CAST-TIME roll (three consumers read that outcome
+                        // before this loop runs — see applyDebuffsForSubAttack's doc). What moves is
+                        // only the state write, and only when a LATER sub-attack exists to see it.
+                        // With one sub-attack there is no next reader, so the write stays at the
+                        // historical flush site and N=1 is byte-identical BY CONSTRUCTION.
+                        if (sub.index < sel.scalars.hits - 1) {
+                            const pending = sel.deferredEnemyApplications.splice(
+                                0,
+                                sel.deferredEnemyApplications.length
+                            );
+                            for (const pair of pending) pair.applyState();
+                            bufferDebuffEmitters(sub.index, pending);
+                        }
+                        return;
+                    }
+                    bufferDebuffEmitters(
+                        sub.index,
+                        sel.applyDebuffsForSubAttack?.(sub, 'after-damage') ?? []
+                    );
+                },
             });
             // Set the DEFERRED Stasis break for every covered victim (unconditional — covered victims
             // have no same-turn re-apply vector). The victim's own skip branch consumes it next turn.
@@ -6820,7 +6894,30 @@ export function runCombat(input: CombatEngineInput): {
             // Built as a step list rather than emitted inline so the enemy site can run the first
             // step here and the remainder after its own tail (see `deferEmission`).
             const steps: { isEvent: boolean; run: () => void }[] = [];
+            /** Push sub-attack `idx`'s buffered debuff events, after that index's `attacked`. */
+            const pushDebuffSteps = (idx: number): void => {
+                const emitters = debuffEmittersBySubAttack.get(idx);
+                if (!emitters || emitters.length === 0) return;
+                steps.push({
+                    isEvent: false,
+                    run: () => {
+                        for (const emit of emitters) emit();
+                    },
+                });
+            };
             const signalledIndices = [...attackedSignals.keys()].sort((a, b) => a - b);
+            // PR8: the indices that owe an emission step in the two loops that would otherwise walk
+            // `attacked` signals ALONE — the nothing-landed fallback and the inline-emitted `else`.
+            // A sub-attack can hold buffered debuff events with NO signals: the boundary hooks fire
+            // whenever the anchor resolved, including over an EMPTY footprint, and a single-target
+            // clause lands on the anchor regardless. Walking signals alone would drop those events.
+            // Every signalled index has size > 0 (entries exist only once a signal is pushed), so
+            // for a cast with no buffered events this set is `signalledIndices` and both loops stay
+            // byte-identical. The main per-index loop below needs no such union: its `indices` is
+            // already built over every `critAgg.subAttacks` entry, whiffs included.
+            const emissionIndices = [
+                ...new Set([...signalledIndices, ...debuffEmittersBySubAttack.keys()]),
+            ].sort((a, b) => a - b);
             if (sel.deferredAbilityPerformed) {
                 const dap = sel.deferredAbilityPerformed;
                 // Gate on the FOOTPRINT ALONE, not on `whiffed` and not on the damage:
@@ -6865,12 +6962,15 @@ export function runCombat(input: CombatEngineInput): {
                                 critAgg.critVictimIds
                             ),
                     });
-                    for (const idx of signalledIndices) {
-                        const victims = attackedSignals.get(idx)!;
-                        steps.push({
-                            isEvent: false,
-                            run: () => emitAttackedForSubAttack(victims, idx),
-                        });
+                    for (const idx of emissionIndices) {
+                        const victims = attackedSignals.get(idx);
+                        if (victims && victims.size > 0) {
+                            steps.push({
+                                isEvent: false,
+                                run: () => emitAttackedForSubAttack(victims, idx),
+                            });
+                        }
+                        pushDebuffSteps(idx);
                     }
                 } else {
                     // Per-event damage: the cast's pre-funnel `directDamage` split across the
@@ -6918,6 +7018,10 @@ export function runCombat(input: CombatEngineInput): {
                                 run: () => emitAttackedForSubAttack(victims, idx),
                             });
                         }
+                        // PR8: this sub-attack's own debuff events, after its `attacked`.
+                        // Unconditional on the index — a bucket can hold debuff events with no
+                        // `attacked` signals when every hit was transformed into a DoT.
+                        pushDebuffSteps(idx);
                     }
                 }
                 // Sweep: a sub-attack that buffered log rows but emitted no event (nothing landed)
@@ -6927,12 +7031,15 @@ export function runCombat(input: CombatEngineInput): {
                 // runPlayerTurn already emitted this cast's `ability-performed` inline — only the
                 // `attacked` fan-out is ours. Same events, same per-victim order, now grouped by
                 // sub-attack.
-                for (const idx of signalledIndices) {
-                    const victims = attackedSignals.get(idx)!;
-                    steps.push({
-                        isEvent: false,
-                        run: () => emitAttackedForSubAttack(victims, idx),
-                    });
+                for (const idx of emissionIndices) {
+                    const victims = attackedSignals.get(idx);
+                    if (victims && victims.size > 0) {
+                        steps.push({
+                            isEvent: false,
+                            run: () => emitAttackedForSubAttack(victims, idx),
+                        });
+                    }
+                    pushDebuffSteps(idx);
                 }
             }
             let emitDeferred = (): void => {};
@@ -8146,6 +8253,21 @@ export function runCombat(input: CombatEngineInput): {
                                     : undefined,
                             });
                             if (turnStasisHitVictims.size > 0) {
+                                // KNOWN LIMITATION, deliberate for PR8 (multi-hit full-walk epic):
+                                // this reads `inflictedEnemyDebuffs` as it stands the moment
+                                // runPlayerTurn returns, which is BEFORE the positional drive runs
+                                // the per-sub-attack landings. `inflictedEnemyDebuffs` is not
+                                // `collect`-guarded, so a sub-attack ≥ 1's landing does push a row —
+                                // but it pushes it too late to be seen here. Consequence: a Stasis
+                                // that RESISTED on sub-attack 0 and LANDED on sub-attack 1 reads as
+                                // "not re-inflicted", so the break fires anyway and shaves a turn off
+                                // the freshly applied Stasis. The walked-team and enemy sites are
+                                // asymmetric the same way (the enemy spreads the list into its entry
+                                // before its own drive call too).
+                                // Corpus-inert today: Enforcer is the only ship with hits > 1 and she
+                                // carries no direct debuff-inflict clause, so nothing can reach this
+                                // shape. Left as-is on purpose — restructuring the check would move
+                                // the N=1 break decision, which PR8 must keep byte-identical.
                                 const reInflictedStasis = turn.inflictedEnemyDebuffs.some((ab) =>
                                     isStasis(ab.buffName)
                                 );
@@ -8217,6 +8339,8 @@ export function runCombat(input: CombatEngineInput): {
                                         rollVictimCrit: turn.rollVictimCrit,
                                         deferredAbilityPerformed: turn.deferredAbilityPerformed,
                                         positionalDetonation: turn.positionalDetonation,
+                                        applyDebuffsForSubAttack: turn.applyDebuffsForSubAttack,
+                                        deferredEnemyApplications: turn.deferredEnemyApplications,
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
@@ -8447,6 +8571,9 @@ export function runCombat(input: CombatEngineInput): {
                                         rollVictimCrit: teamTurn.rollVictimCrit,
                                         deferredAbilityPerformed: teamTurn.deferredAbilityPerformed,
                                         positionalDetonation: teamTurn.positionalDetonation,
+                                        applyDebuffsForSubAttack: teamTurn.applyDebuffsForSubAttack,
+                                        deferredEnemyApplications:
+                                            teamTurn.deferredEnemyApplications,
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
@@ -8791,6 +8918,12 @@ export function runCombat(input: CombatEngineInput): {
                             // damage — positional or not. Empty for a dead-target/flat-card turn.
                             let enemyDeferredApplications: PlayerTurnResult['deferredEnemyApplications'] =
                                 [];
+                            // PR8: the enemy cast's per-sub-attack debuff applier, hoisted for the
+                            // same scoping reason as the list above — the positional drive call sits
+                            // OUTSIDE the else block that declares `enemyTurn`. Undefined on a
+                            // dead-target/flat-card turn and for any cast with no gated debuff
+                            // clause, which the helper's `?.` call already tolerates.
+                            let enemyApplyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
                             // Task 5: the per-victim crit aggregate from the enemy positional apply, hoisted
                             // out of the `if (damage > 0)` block. Present only when the positional apply
                             // actually ran; when the enemy turn is positional but deals 0 damage (apply
@@ -8951,7 +9084,13 @@ export function runCombat(input: CombatEngineInput): {
                                 // enemy inline emit was suppressed, i.e. enemyPositional true).
                                 enemyDeferredAbilityPerformed = enemyTurn.deferredAbilityPerformed;
                                 // Clause order: capture the held-back landings for the post-damage flush.
+                                // PR8: THIS array identity is what the positional drive splices at a
+                                // sub-attack boundary AND what the fallback flush below drains — the
+                                // two must be the same object or the enemy path silently keeps
+                                // once-per-cast arrival. Both captures happen HERE, before the drive
+                                // call, so the helper sees them.
                                 enemyDeferredApplications = enemyTurn.deferredEnemyApplications;
+                                enemyApplyDebuffsForSubAttack = enemyTurn.applyDebuffsForSubAttack;
                                 // PR3: capture the per-victim detonation recipe (returned whenever
                                 // `positional: true` was set for this enemy turn — see the positional
                                 // hint gate). Consumed by the enemy-site per-victim detonation loop below.
@@ -9120,6 +9259,10 @@ export function runCombat(input: CombatEngineInput): {
                                             rollVictimCrit: enemyRollVictimCrit,
                                             deferredAbilityPerformed: enemyDeferredAbilityPerformed,
                                             positionalDetonation: enemyPositionalDetonation,
+                                            applyDebuffsForSubAttack: enemyApplyDebuffsForSubAttack,
+                                            // The SAME array the fallback flush below drains (see
+                                            // the capture note), never a fresh one.
+                                            deferredEnemyApplications: enemyDeferredApplications,
                                         },
                                         (victim, dmg, outcome) => {
                                             procLeechesForVictim(actor.id, victim, dmg, outcome);

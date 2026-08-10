@@ -15,6 +15,25 @@
  * The chosen model is FULL resolution order: a post-damage clause's application, its
  * `debuff-applied` event, and anything reacting to it all land after the damage. Only the LANDING
  * ROLL stays at its original point in the turn, so the RNG draw order is untouched.
+ *
+ * MULTI-HIT SCOPE (PR8 of the multi-hit full-walk epic). Every fixture below is a 2-HIT cast, and
+ * the unit this rule is scoped to is the SUB-ATTACK, not the cast — because the other locked rule
+ * says a multi-hit skill is N consecutive FULL attacks, each running the entire pipeline. So for a
+ * 2-hit cast:
+ *
+ *   damage-then-debuff → attack 0 deals plain damage, THEN lands the debuff; attack 1's damage
+ *                        rides it. Total = 1.5x a debuff-free control (one of the two hits
+ *                        amplified), not 1.0x.
+ *   debuff-then-damage → each attack lands the debuff and then spends it. Total = 2.0x.
+ *
+ * The rule still has its teeth: 1.5x is what "a post-damage clause never amplifies the damage it
+ * follows" looks like once the unit is the attack — the clause misses its OWN attack every time.
+ * Were it still applying before the damage it followed, these would read 2.0x, which is exactly
+ * what the debuff-first fixtures do read. The gap between the two orders is the assertion.
+ *
+ * These numbers were 1.0x / 1.5x before PR8, when the landing was drawn once per cast and flushed
+ * once after all N sub-attacks. N=1 is unchanged (the Zosimos corpus case at the bottom is a
+ * single-hit cast and still reads exactly its control).
  */
 import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
@@ -184,20 +203,23 @@ function enemyCast(abilities: Ability[]): number {
 const INC_UP = { incomingDamage: 100 };
 
 describe('intra-cast clause order — a debuff clause AFTER the damage clause misses that damage', () => {
-    it('Exposed inflicted AFTER the damage clause does not amplify its own cast', () => {
+    it('Exposed inflicted AFTER the damage clause does not amplify the sub-attack it follows', () => {
         const plain = focusCast([twoHitAttack()]).damageTo('foe');
         const damageFirst = focusCast([twoHitAttack(), castDebuff('Exposed')]).damageTo('foe');
 
         expect(plain).toBeGreaterThan(0);
-        expect(damageFirst).toBe(plain);
+        // Attack 0 plain, then Exposed lands; attack 1 doubled and spends it → 3 half-shares vs 2.
+        // The clause missing its OWN attack is what keeps this below the 2.0 the debuff-first
+        // ordering reads.
+        expect(damageFirst / plain).toBeCloseTo(1.5, 5);
     });
 
-    it('Exposed inflicted BEFORE the damage clause is spent on that same cast', () => {
+    it('Exposed inflicted BEFORE the damage clause is spent on that same sub-attack', () => {
         const plain = focusCast([twoHitAttack()]).damageTo('foe');
         const debuffFirst = focusCast([castDebuff('Exposed'), twoHitAttack()]).damageTo('foe');
 
-        // Hit 1 doubled, hit 2 plain (Exposed consumed) → 3 half-shares vs 2.
-        expect(debuffFirst / plain).toBeCloseTo(1.5, 5);
+        // Each attack applies Exposed and then spends it on its own hit → both hits doubled.
+        expect(debuffFirst / plain).toBeCloseTo(2, 5);
     });
 
     it('the same rule governs the stat channels — Inc. Damage Up after damage misses it', () => {
@@ -211,7 +233,10 @@ describe('intra-cast clause order — a debuff clause AFTER the damage clause mi
             twoHitAttack(),
         ]).damageTo('foe');
 
-        expect(damageFirst).toBe(plain);
+        // Attack 0 plain, then Inc. Damage Up lands; attack 1 carries it. A standing modifier is
+        // never consumed, so at N=2 this reads the same 1.5 as Exposed — the distinguishing
+        // comparison is against the debuff-first ordering below.
+        expect(damageFirst / plain).toBeCloseTo(1.5, 5);
         // Not consumed on hit — a standing modifier amplifies BOTH hits of its own cast.
         expect(debuffFirst / plain).toBeCloseTo(2, 5);
     });
@@ -226,14 +251,26 @@ describe('intra-cast clause order — a debuff clause AFTER the damage clause mi
         expect(damageTo('foe')).toBeGreaterThan(plain);
     });
 
-    it('a post-damage clause emits its debuff-applied AFTER the hits it follows', () => {
+    it("a post-damage clause emits each debuff-applied AFTER its own sub-attack's hits", () => {
         const { events } = focusCast([twoHitAttack(), castDebuff('Exposed')]);
-        const firstApplied = events.findIndex((e) => e.type === 'debuff-applied');
-        const lastAttacked = events.map((e) => e.type).lastIndexOf('attacked');
 
-        expect(firstApplied).toBeGreaterThan(-1);
-        expect(lastAttacked).toBeGreaterThan(-1);
-        expect(firstApplied).toBeGreaterThan(lastAttacked);
+        // One landing per sub-attack, each emitted after THAT sub-attack's `attacked` — never
+        // before it (which would report the debuff as active for damage it did not amplify) and
+        // never both at the end (which is the once-per-cast flush PR8 replaced). Asserted as the
+        // exact interleaving rather than a pair of indices: the whole point is the alternation.
+        expect(events.map((e) => e.type)).toEqual([
+            'attacked',
+            'debuff-applied',
+            'attacked',
+            'debuff-applied',
+        ]);
+        // And the amounts confirm which side of its own landing each attack fell on: attack 0
+        // unamplified, attack 1 doubled by attack 0's Exposed.
+        const amounts = events
+            .filter((e): e is Extract<CombatEvent, { type: 'attacked' }> => e.type === 'attacked')
+            .map((e) => e.damage ?? 0);
+        expect(amounts[0]).toBeGreaterThan(0);
+        expect(amounts[1] / amounts[0]).toBeCloseTo(2, 5);
     });
 
     it('is team-symmetric — an ENEMY cast obeys clause order against a player victim', () => {
@@ -242,8 +279,11 @@ describe('intra-cast clause order — a debuff clause AFTER the damage clause mi
         const debuffFirst = enemyCast([castDebuff('Exposed'), twoHitAttack()]);
 
         expect(plain).toBeGreaterThan(0);
-        expect(damageFirst).toBe(plain);
-        expect(debuffFirst / plain).toBeCloseTo(1.5, 5);
+        // Same two ratios as the player-side cases above (1.5 post-damage, 2.0 pre-damage) — the
+        // enemy path routes through the same shared positional helper, so a regression that reached
+        // only one side would split them.
+        expect(damageFirst / plain).toBeCloseTo(1.5, 5);
+        expect(debuffFirst / plain).toBeCloseTo(2, 5);
     });
 });
 

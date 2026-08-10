@@ -1,25 +1,14 @@
 /**
- * Multi-hit full-walk attacks, PR6 Tier 3 — debuff ARRIVAL cardinality.
+ * Multi-hit full-walk attacks — debuff ARRIVAL cardinality.
  *
- * *** THIS FILE PINS BEHAVIOUR THAT IS KNOWN TO BE WRONG. ***
+ * R1: each sub-attack runs the full pipeline including the debuff landing roll, so a 3-hit cast
+ * carrying a direct debuff clause applies THREE stacks. PR8 made that true; before it, the landing
+ * was drawn once per cast in runPlayerTurn and flushed once after all N sub-attacks.
  *
- * R1 says each sub-attack runs the full pipeline including the debuff landing roll, so a 3-hit
- * cast carrying a direct debuff clause should apply THREE stacks. It applies ONE: the landing is
- * drawn once per cast inside runPlayerTurn (playerTurn.ts ~1580) and flushed once after all N
- * sub-attacks (flushDeferredEnemyApplications, engine.ts:6615). Everything downstream of
- * application — Firewall's `on-debuffed`, Lockdown's `on-debuff-resisted` — inherits that
- * cardinality.
- *
- * That is PR8's charter, NOT a bug this PR fixes. The assertions below record the CURRENT numbers
- * so PR8 has a before-picture and so its change is proven to move exactly this and nothing else.
- *
- * PR8 FLIPS the two assertions marked `PRE-PR8` below (the direct debuff-application count and the
- * downstream on-debuffed reactive count) and leaves every other assertion in this file untouched.
- * If PR8 moves anything else in this file, that is a regression, not expected churn.
- *
- * Do NOT read these titles as endorsing once-per-cast arrival. This epic has already shipped one
- * test whose NAME blessed a regression the code explicitly forbids; the titles here say
- * "PRE-PR8" for that reason.
+ * The two N=1 assertions and the two zero-controls below are the regression fence: N=1 arrival is
+ * unchanged by PR8 (a single sub-attack keeps the cast-time draw and the historical flush point),
+ * and the controls prove the counts are driven by the clause rather than by a stray event or a
+ * hard-coded counter.
  *
  * DEVIATIONS FROM task-4-brief.md, corrected per the task's own instructions before writing a
  * single assertion:
@@ -222,23 +211,23 @@ const buffGrantsOf = (input: CombatEngineInput, buffName: string, recipientId: s
     return n;
 };
 
-describe('PR6 Tier 3 — debuff arrival is once per CAST (PRE-PR8 behaviour, recorded not endorsed)', () => {
+describe('multi-hit full-walk attacks — debuff arrival is once per SUB-ATTACK (R1)', () => {
     afterEach(() => resetRateGateRng());
 
-    it('control: with NO debuff clause at all, a 3-hit cast produces zero debuff-applied events — proves the "1" below is driven by the clause, not a stray unrelated event or a hard-coded counter', () => {
+    it('control: with NO debuff clause at all, a 3-hit cast produces zero debuff-applied events — proves the count below is driven by the clause, not a stray unrelated event or a hard-coded counter', () => {
         const victim = enemyAt('victim', 'M4');
         const n = debuffApplications(focusCast([attackSkill(3)], [victim]), 'Corrode', 'victim');
         expect(n).toBe(0);
     });
 
-    it('PRE-PR8: a 3-hit cast with a direct debuff clause applies the debuff ONCE (R1 wants 3 — PR8 flips this to 3)', () => {
+    it('a 3-hit cast with a direct debuff clause applies the debuff ONCE PER SUB-ATTACK (R1)', () => {
         const victim = enemyAt('victim', 'M4');
         const n = debuffApplications(
             focusCast([activeWithDebuffClause(3)], [victim]),
             'Corrode',
             'victim'
         );
-        expect(n).toBe(1);
+        expect(n).toBe(3);
     });
 
     it('N=1 applies the debuff once — this assertion is CORRECT today and must NOT move in PR8', () => {
@@ -251,20 +240,20 @@ describe('PR6 Tier 3 — debuff arrival is once per CAST (PRE-PR8 behaviour, rec
         expect(n).toBe(1);
     });
 
-    it('control: with NO debuff clause at all, the on-debuffed reactive never fires — proves the "1" below is driven by an actual debuff-applied event, not a stray grant', () => {
+    it('control: with NO debuff clause at all, the on-debuffed reactive never fires — proves the count below is driven by an actual debuff-applied event, not a stray grant', () => {
         const victim = enemyAt('victim', 'M4', [onDebuffedSelfBuff('Firewall')]);
         const n = buffGrantsOf(focusCast([attackSkill(3)], [victim]), 'Firewall', 'victim');
         expect(n).toBe(0);
     });
 
-    it('PRE-PR8: an on-debuffed reactive on the victim therefore fires ONCE (PR8 flips this to 3)', () => {
+    it('an on-debuffed reactive on the victim therefore fires once per sub-attack', () => {
         const victim = enemyAt('victim', 'M4', [onDebuffedSelfBuff('Firewall')]);
         const n = buffGrantsOf(
             focusCast([activeWithDebuffClause(3)], [victim]),
             'Firewall',
             'victim'
         );
-        expect(n).toBe(1);
+        expect(n).toBe(3);
     });
 
     it('N=1 on-debuffed reactive fires exactly once — this assertion is CORRECT today and must NOT move in PR8', () => {
