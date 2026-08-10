@@ -1778,6 +1778,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const { status, abTarget } of perSubAttackDebuffRecipes) {
             const isAfter = status.afterDamageClause === true;
             if (isAfter !== (phase === 'after-damage')) continue;
+            const before = collected.length;
             landStatusOnRecipients(
                 status,
                 resolveDebuffRecipientIds({
@@ -1791,8 +1792,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }),
                 collected
             );
+            // Write THIS clause's landings before the next clause resolves, mirroring the cast-time
+            // path — where a before-damage clause applies inline and after-damage clauses run
+            // sequentially at the flush, so clause 2 always evaluates against clause 1's store
+            // write. Collecting every pair and applying afterwards would make sub-attacks >= 1
+            // asymmetric with sub-attack 0 for a cast carrying two same-phase debuff clauses:
+            // clause 2's landing roll reads the victim's live status (the Block-Debuff gate in
+            // `landsDebuffOnVictim`), so it must see what clause 1 just applied. Latent today —
+            // no corpus ship has that shape (CodeRabbit, PR #314).
+            for (let i = before; i < collected.length; i++) collected[i].applyState();
         }
-        for (const pair of collected) pair.applyState();
         return collected;
     };
 
