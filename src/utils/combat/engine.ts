@@ -6613,12 +6613,19 @@ export function runCombat(input: CombatEngineInput): {
          *
          * Empties the list, making a second call a no-op — the sites are allowed to overlap.
          * Team-symmetric: one helper, all three sites (focus / walked team / enemy).
+         *
+         * PR8 split the thunk into {applyState, emitEvents}. Running them back-to-back here is
+         * byte-identical to the pre-PR8 single thunk — the split only matters where the engine
+         * deliberately separates them (the sub-attack boundary wiring, Task 4).
          */
         const flushDeferredEnemyApplications = (
             deferred: PlayerTurnResult['deferredEnemyApplications']
         ): void => {
             if (deferred.length === 0) return;
-            for (const apply of deferred.splice(0, deferred.length)) apply();
+            for (const pending of deferred.splice(0, deferred.length)) {
+                pending.applyState();
+                pending.emitEvents();
+            }
         };
         interface PositionalTurnSel {
             tgt: CombatActor;

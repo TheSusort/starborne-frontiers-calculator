@@ -172,6 +172,23 @@ export interface HealingRuntimeCtx {
     teamBattle?: boolean;
 }
 
+/**
+ * One enemy-debuff landing this cast decided but has not yet written, split so the ENGINE can run
+ * its two halves at different moments (multi-hit full-walk epic, PR8).
+ *
+ * `applyState` performs the `applyTimedAbilityStatus` write plus the display-list refresh;
+ * `emitEvents` emits the paired discrete `debuff-applied`. They are separate because a multi-hit
+ * cast needs the STATE in the store at its sub-attack's boundary — so the next sub-attack's
+ * `defenseProfileOf` read sees it — while the EVENT must wait for that sub-attack's
+ * `ability-performed` row to exist, or `buildCombatLog`'s `openAttackEntry` misattributes it.
+ * `flushDeferredEnemyApplications` runs them back-to-back, which is what keeps a single-sub-attack
+ * cast byte-identical to the pre-PR8 single thunk.
+ */
+export interface DeferredEnemyApplication {
+    applyState: () => void;
+    emitEvents: () => void;
+}
+
 /** Everything one player actor's turn contributes to the round's RoundData row. */
 export interface PlayerTurnResult {
     action: 'active' | 'charged';
@@ -189,15 +206,46 @@ export interface PlayerTurnResult {
     /**
      * Enemy-debuff landings this cast decided but held back, because their clause follows a damage
      * clause in the same firing slot (user-confirmed game rule: "deals X% damage and inflicts
-     * Defense Down" resolves the damage first). Each thunk performs the deferred
-     * `applyTimedAbilityStatus` + its discrete `debuff-applied`; the landing roll already happened.
+     * Defense Down" resolves the damage first). Each pair's `applyState` performs the deferred
+     * `applyTimedAbilityStatus` write; `emitEvents` emits its discrete `debuff-applied`. The
+     * landing roll already happened.
      *
      * The ENGINE must flush these once this turn's damage has landed (`flushDeferredEnemyApplications`),
      * before the actor's Post-Turn decrement so the status still runs its normal window. Empty for
      * every cast whose debuff clauses all precede its damage — i.e. for almost the whole corpus,
      * which keeps those byte-identical.
+     *
+     * PR8 split the element from a bare `() => void` thunk into `{applyState, emitEvents}` so the
+     * engine can run the two halves at different moments at a multi-hit cast's sub-attack boundary.
      */
-    deferredEnemyApplications: (() => void)[];
+    deferredEnemyApplications: DeferredEnemyApplication[];
+    /**
+     * Rolls and applies this cast's direct enemy-debuff clauses for ONE sub-attack ≥ 1
+     * (multi-hit full-walk epic, PR8). Present only on a positional cast that has at least one
+     * condition-gated direct debuff clause; `undefined` everywhere else, which is what keeps DPS
+     * mode, healing mode and every non-positional path on the single-flush behaviour they have
+     * today.
+     *
+     * Sub-attack 0 is NOT served by this — it keeps its cast-time draw, because three consumers
+     * read that outcome before the positional loop runs: `resistedTimedEnemyNames` (gates this
+     * turn's `control-applied` emission, inside this function), `resistedEnemyDebuffs` (the round
+     * display list), and `inflictedEnemyDebuffs` (the engine's `reInflictedStasis` check, which
+     * runs immediately after this function returns). Keeping the k=0 draw where it is also keeps
+     * the `${ownerId}:landing` RNG stream's draw order untouched for a single-hit cast.
+     *
+     * `phase` selects clause order WITHIN the sub-attack: `'before-damage'` for clauses written
+     * ahead of the damage clause (applied at the sub-attack's start), `'after-damage'` for those
+     * written after it (applied at its end). The locked intra-cast rule therefore holds per
+     * sub-attack rather than per cast.
+     *
+     * Returns the landings' {@link DeferredEnemyApplication} pairs with `applyState` ALREADY RUN —
+     * the caller only has to emit. The roll is fresh per call, against the anchor and footprint
+     * that sub-attack actually resolved, so overkill retargeting is correct without extra work.
+     */
+    applyDebuffsForSubAttack?: (
+        sub: { index: number; anchorId: string; victimIds: string[] },
+        phase: 'before-damage' | 'after-damage'
+    ) => DeferredEnemyApplication[];
     directDamage: number;
     secondaryDamage: number;
     conditionalDamage: number;
@@ -1523,7 +1571,151 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const resistedTimedEnemyNames: string[] = [];
     // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
     // Returned on the turn result; the engine flushes them once this turn's damage has landed.
-    const deferredEnemyApplications: (() => void)[] = [];
+    const deferredEnemyApplications: DeferredEnemyApplication[] = [];
+
+    /**
+     * Roll + apply ONE timed enemy status over one recipient list. Extracted from the cast-time
+     * loop (multi-hit full-walk epic, PR8) so sub-attacks ≥ 1 re-run the IDENTICAL body against
+     * their own anchor and footprint — a second copy is how the two paths would drift on the
+     * resist bookkeeping or the display refresh.
+     *
+     * `collect`: when supplied, a landing's pair (landed OR resisted) is pushed here instead of
+     * being applied/emitted inline, and `applyState` is NOT run by this function — the caller owns
+     * both halves' timing. When absent (the cast-time path) behaviour is exactly pre-PR8: a
+     * before-damage clause applies inline, an after-damage clause is pushed to the deferred list
+     * unapplied.
+     *
+     * Cast-time inline note: the inline (before-damage, `collect` absent) branch deliberately does
+     * NOT call `pair.applyState` — it performs the raw store write directly instead. `applyState`
+     * also re-reads the live status to refresh the `landedEnemyDebuffs` DISPLAY list, closing over
+     * the `const landedEnemyDebuffs` declared further down this function (after `landedAbilityEnemy`
+     * is computed from a POST-write store read, which is what already carries an inline write into
+     * the round's display list without any refresh). Calling `pair.applyState` from inside this
+     * loop — before that later declaration runs — would throw (TDZ). It is safe only for the
+     * deferred/collect callers (`flushDeferredEnemyApplications`, `applyDebuffsForSubAttack`),
+     * which always run after runPlayerTurn has returned.
+     */
+    const landStatusOnRecipients = (
+        status: TimedStatus,
+        recipientIds: (string | undefined)[],
+        collect?: DeferredEnemyApplication[]
+    ): void => {
+        let anyLanded = false;
+        for (const vid of recipientIds) {
+            const victim =
+                vid !== undefined
+                    ? (opposingVictimById?.get(vid) ?? (vid === enemy.id ? enemy : undefined))
+                    : enemy;
+            const usePerVictim =
+                positionalLanding && opposingVictimById != null && vid !== undefined;
+            if (usePerVictim && victim === undefined) continue;
+            const resolvedVictim = victim ?? enemy;
+            const emitTargetId = vid ?? resolvedVictim.id;
+
+            const lands = usePerVictim
+                ? landsDebuffOnVictim(status.payload.application, resolvedVictim)
+                : landsTimedEnemyApplicationLive(status.payload.application);
+
+            if (lands) {
+                // Intra-cast clause order: a clause that follows a damage clause in this same slot
+                // must not be in the store while that damage resolves. Since PR8 the unit of
+                // "that damage" is the SUB-ATTACK, not the cast.
+                // NOT deferred:
+                //  - the LANDING decision for sub-attack 0 (drawn at the cast-time call site) — so
+                //    its RNG draw order and the resist bookkeeping below, which gates this turn's
+                //    control-applied emission, are untouched;
+                //  - `inflictedEnemyDebuffs`, a record of what THIS cast inflicted rather than of
+                //    store state. The §4.5 Stasis-break re-inflict check reads it back before the
+                //    flush runs (engine, `reInflictedStasis`); deferring the row let that check
+                //    conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
+                const pair: DeferredEnemyApplication = {
+                    applyState: () => {
+                        statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                        // DISPLAY ONLY: the round's reported enemy-debuff window
+                        // (RoundData.activeEnemyDebuffs, sourced from `landedEnemyDebuffs`) is
+                        // assembled below, BEFORE this write runs — so re-read this status and
+                        // add/refresh its row. Without it a debuff the cast really did apply is
+                        // missing from the round it landed in, and a persistent-stacking family
+                        // reports one stack short. With N sub-attacks that shortfall multiplies,
+                        // which is why the refresh re-reads the LIVE stack count every time rather
+                        // than incrementing. Touches ONLY the display list: the modifier fold
+                        // (`roundEnemyDebuffs`) and every gate ctx are already computed, which is
+                        // exactly the rule — this sub-attack's own damage and its later clauses
+                        // must not see the status. Referencing a `const` declared further down is
+                        // safe because every caller runs after runPlayerTurn returned.
+                        const live = statusEngine
+                            .timedAbilityStatuses('enemy', actor.id, vid ?? targetId)
+                            .find((s) => s.payload.buffName === status.payload.buffName);
+                        if (live) {
+                            const at = landedEnemyDebuffs.findIndex(
+                                (b) => b.buffName === live.active.buffName
+                            );
+                            if (at >= 0) landedEnemyDebuffs[at] = live.active;
+                            else landedEnemyDebuffs.push(live.active);
+                        }
+                    },
+                    emitEvents: () => {
+                        emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
+                    },
+                };
+                if (collect) {
+                    collect.push(pair);
+                } else if (status.afterDamageClause === true) {
+                    deferredEnemyApplications.push(pair);
+                } else {
+                    // Cast-time inline apply: EXACTLY pre-PR8 — the raw write plus the discrete
+                    // emit, without the display-list refresh (see the TDZ note above pair).
+                    statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                    pair.emitEvents();
+                }
+                if (!anyLanded) {
+                    inflictedEnemyDebuffs.push({
+                        buffName: status.payload.buffName,
+                        turnsRemaining: status.duration,
+                    });
+                }
+                anyLanded = true;
+            } else if (collect) {
+                // A later sub-attack's resist: the event still fires, but buffered like its
+                // landed sibling so the log row it attaches to is that sub-attack's own.
+                collect.push({
+                    applyState: () => {},
+                    emitEvents: () => emitDebuffResisted(status.payload.buffName, emitTargetId),
+                });
+            } else {
+                emitDebuffResisted(status.payload.buffName, emitTargetId);
+            }
+        }
+
+        // Resist bookkeeping is CAST-TIME only. It gates this turn's control-applied emission
+        // (below), which is emitted before any sub-attack ≥ 1 has rolled — a later sub-attack's
+        // resist cannot retroactively suppress an event that already fired, and adding it here
+        // would double-count the name in the round's display list.
+        if (!collect && !anyLanded && recipientIds.length > 0) {
+            resistedAbilityTimedEnemy.push({
+                buffName: status.payload.buffName,
+                turnsRemaining: status.duration,
+            });
+            resistedTimedEnemyNames.push(status.payload.buffName);
+        }
+    };
+
+    /**
+     * The condition-gated direct debuff clauses of THIS cast, captured for replay on sub-attacks
+     * ≥ 1 (multi-hit full-walk epic, PR8).
+     *
+     * DELIBERATE SCOPE LINE: the recipe carries the RESULT of the cast-time
+     * `conditionsMet(status.conditions, preDebuffGateCtx)` gate, not the conditions themselves.
+     * Re-evaluating per sub-attack means rebuilding `preDebuffGateCtx` (~30 live-sourced fields,
+     * built earlier in this function) inside the hit loop; that is a separate change. Consequence:
+     * a clause gated on state the cast itself changes (e.g. the victim's HP%) is judged once, at
+     * cast time, for all N sub-attacks.
+     */
+    const perSubAttackDebuffRecipes: {
+        status: TimedStatus;
+        abTarget: Ability['target'] | undefined;
+    }[] = [];
+
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
@@ -1548,85 +1740,36 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             positionalLanding,
         });
 
-        let anyLanded = false;
-        for (const vid of recipientIds) {
-            const victim =
-                vid !== undefined
-                    ? (opposingVictimById?.get(vid) ?? (vid === enemy.id ? enemy : undefined))
-                    : enemy;
-            const usePerVictim =
-                positionalLanding && opposingVictimById != null && vid !== undefined;
-            if (usePerVictim && victim === undefined) continue;
-            const resolvedVictim = victim ?? enemy;
-            const emitTargetId = vid ?? resolvedVictim.id;
-
-            const lands = usePerVictim
-                ? landsDebuffOnVictim(status.payload.application, resolvedVictim)
-                : landsTimedEnemyApplicationLive(status.payload.application);
-
-            if (lands) {
-                // Intra-cast clause order: a clause that follows a damage clause in this same slot
-                // must not be in the store while the cast's damage resolves. Deferred to the
-                // engine's post-apply flush: the state write and its discrete `debuff-applied`.
-                // NOT deferred:
-                //  - the LANDING decision (already drawn above) — so the RNG draw order and the
-                //    resist bookkeeping below, which gates this turn's control-applied emission,
-                //    are untouched;
-                //  - `inflictedEnemyDebuffs`, a record of what THIS cast inflicted rather than of
-                //    store state. The §4.5 Stasis-break re-inflict check reads it back before the
-                //    flush runs (engine, `reInflictedStasis`); deferring the row let that check
-                //    conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
-                const applyLanding = (): void => {
-                    statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
-                    emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
-                };
-                if (status.afterDamageClause === true) {
-                    deferredEnemyApplications.push(() => {
-                        applyLanding();
-                        // DISPLAY ONLY: the round's reported enemy-debuff window
-                        // (RoundData.activeEnemyDebuffs, sourced from `landedEnemyDebuffs`) is
-                        // assembled below, BEFORE this deferred write runs — so re-read this status
-                        // and add/refresh its row. Without it a debuff the cast really did apply is
-                        // missing from the round it landed in, and a persistent-stacking family
-                        // reports one stack short every round. Touches ONLY the display list: the
-                        // modifier fold (`roundEnemyDebuffs`) and every gate ctx are already
-                        // computed, which is exactly the rule — this cast's own damage and its later
-                        // clauses must not see the status. Referencing a `const` declared further
-                        // down is safe HERE and only here: this thunk runs after runPlayerTurn has
-                        // returned (the inline branch below would hit its TDZ), and the returned
-                        // result holds this very array.
-                        const live = statusEngine
-                            .timedAbilityStatuses('enemy', actor.id, vid ?? targetId)
-                            .find((s) => s.payload.buffName === status.payload.buffName);
-                        if (live) {
-                            const at = landedEnemyDebuffs.findIndex(
-                                (b) => b.buffName === live.active.buffName
-                            );
-                            if (at >= 0) landedEnemyDebuffs[at] = live.active;
-                            else landedEnemyDebuffs.push(live.active);
-                        }
-                    });
-                } else applyLanding();
-                if (!anyLanded) {
-                    inflictedEnemyDebuffs.push({
-                        buffName: status.payload.buffName,
-                        turnsRemaining: status.duration,
-                    });
-                }
-                anyLanded = true;
-            } else {
-                emitDebuffResisted(status.payload.buffName, emitTargetId);
-            }
-        }
-
-        if (!anyLanded && recipientIds.length > 0) {
-            resistedAbilityTimedEnemy.push({
-                buffName: status.payload.buffName,
-                turnsRemaining: status.duration,
-            });
-            resistedTimedEnemyNames.push(status.payload.buffName);
-        }
+        landStatusOnRecipients(status, recipientIds);
+        if (positionalLanding) perSubAttackDebuffRecipes.push({ status, abTarget });
     }
+
+    /** PR8: sub-attacks ≥ 1 re-roll every gated clause against their own anchor + footprint. */
+    const applyDebuffsForSubAttack = (
+        sub: { index: number; anchorId: string; victimIds: string[] },
+        phase: 'before-damage' | 'after-damage'
+    ): DeferredEnemyApplication[] => {
+        const collected: DeferredEnemyApplication[] = [];
+        for (const { status, abTarget } of perSubAttackDebuffRecipes) {
+            const isAfter = status.afterDamageClause === true;
+            if (isAfter !== (phase === 'after-damage')) continue;
+            landStatusOnRecipients(
+                status,
+                resolveDebuffRecipientIds({
+                    abTarget,
+                    anchorId: sub.anchorId,
+                    // THIS sub-attack's real footprint, not the cast's — so an `all-enemies`
+                    // clause fans over who it actually struck and a killed victim drops out.
+                    aoeVictimIds: sub.victimIds,
+                    adjacentEnemyIdsFor,
+                    positionalLanding: true,
+                }),
+                collected
+            );
+        }
+        for (const pair of collected) pair.applyState();
+        return collected;
+    };
 
     // Caster-ctx resolver (Task 5): activeAbilityStatuses gates each aura/accum against ITS
     // CASTER's context. For the acting actor's OWN statuses (casterId === actor.id) the resolver
@@ -3651,6 +3794,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         inflictedEnemyDebuffs,
         resistedEnemyDebuffs,
         deferredEnemyApplications,
+        // PR8: only meaningful on a positional cast that has gated clauses to replay. Left
+        // undefined otherwise so the engine's wiring is a no-op for DPS/healing/non-positional.
+        applyDebuffsForSubAttack:
+            positionalLanding && perSubAttackDebuffRecipes.length > 0
+                ? applyDebuffsForSubAttack
+                : undefined,
         directDamage,
         secondaryDamage,
         conditionalDamage,
