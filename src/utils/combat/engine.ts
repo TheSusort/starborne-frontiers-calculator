@@ -6854,8 +6854,14 @@ export function runCombat(input: CombatEngineInput): {
                     if (sub.index === 0) {
                         // Sub-attack 0 keeps its CAST-TIME roll (three consumers read that outcome
                         // before this loop runs — see applyDebuffsForSubAttack's doc). What moves is
-                        // only the state write, and only when a LATER sub-attack exists to see it.
-                        // With one sub-attack there is no next reader, so the write stays at the
+                        // the state write AND the paired `debuff-applied`'s EMISSION POINT: the
+                        // `bufferDebuffEmitters` call below reattaches sub-attack 0's events to
+                        // sub-attack 0's own emission step instead of leaving them to the historical
+                        // post-walk flush. That ordering is observable — with a victim killed on
+                        // sub-attack 0, the cast's first `debuff-applied` names that victim here and
+                        // names a LATER sub-attack's victim with this branch forced off. Both effects
+                        // are gated on a LATER sub-attack existing to see them: with one sub-attack
+                        // there is no next reader, so the write and the emission both stay at the
                         // historical flush site and N=1 is byte-identical BY CONSTRUCTION.
                         if (sub.index < sel.scalars.hits - 1) {
                             const pending = sel.deferredEnemyApplications.splice(

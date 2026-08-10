@@ -12,10 +12,11 @@
  *
  * ANTI-VACUITY DISCIPLINE. Every numeric constant below was MEASURED against this fixture before
  * it was written down (task-5-report.md holds the probe transcripts), and every test was
- * confirmed to go RED under a mutation of the production line it targets — the four mutations
+ * confirmed to go RED under a mutation of the production line it targets — the five mutations
  * used are `sub.index < sel.scalars.hits - 1` forced to `false` and to `true` (engine.ts ~6860),
- * `applyDebuffsForSubAttack` returning `[]` (playerTurn.ts ~1759), and the `onSubAttackStart` /
- * `onSubAttackEnd` hooks (engine.ts ~6843 / ~6853) no-oped. Each test names its own killer.
+ * `applyDebuffsForSubAttack` returning `[]` (playerTurn.ts ~1759), the `onSubAttackStart` /
+ * `onSubAttackEnd` hooks (engine.ts ~6843 / ~6853) no-oped, and `aoeVictimIds: sub.victimIds`
+ * reverted to the CAST's footprint (playerTurn.ts ~1774). Each test names its own killer.
  *
  * DEVIATIONS FROM task-5-brief.md (measured against source before writing a single assertion):
  *
@@ -90,8 +91,9 @@ const ALLY_SLICE = 5_000;
 // COPIED VERBATIM from `incomingDebuffArrivalCardinality.integration.test.ts` (`ab`,
 // `attackSkill`, `activeWithDebuffClause`, `parsedTarget`, `basePattern`, `enemyAt`, `focusCast`,
 // `debuffApplications`), not imported — this epic's established convention is that fixtures are
-// copied per file. `focusCast` gained two optional trailing parameters and an explicit `speed`;
-// both are additive and documented on the helper itself.
+// copied per file. `focusCast` gained three optional trailing parameters and an explicit `speed`;
+// all are additive and documented on the helper itself. `allPattern` is the multi-cell footprint
+// shape the sibling positional suites use (`subAttackProcGates`, `perSubAttackEvents`, …).
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -110,11 +112,18 @@ const damageClause = (hits: number): Ability =>
         config: { type: 'damage', multiplier: 100, ...(hits > 1 ? { hits } : {}) },
     });
 
-/** A direct enemy-debuff clause. `parsedEffects` empty for name-keyed statuses (Exposed). */
-const debuffClause = (buffName: string, parsedEffects: Record<string, number>): Ability =>
+/** A direct enemy-debuff clause. `parsedEffects` empty for name-keyed statuses (Exposed).
+ *  `abTarget` defaults to single-target `'enemy'`, for which `resolveDebuffRecipientIds` returns
+ *  `[anchorId]` and NEVER READS THE FOOTPRINT — so the footprint fence below must pass
+ *  `'all-enemies'` to reach the branch that does. */
+const debuffClause = (
+    buffName: string,
+    parsedEffects: Record<string, number>,
+    abTarget: Ability['target'] = 'enemy'
+): Ability =>
     ab({
         type: 'debuff',
-        target: 'enemy',
+        target: abTarget,
         config: {
             type: 'debuff',
             buffName,
@@ -139,6 +148,15 @@ const attackSkill = (hits: number): ShipSkills['slots'][number] => ({
 const activeWithDebuffClause = (hits: number): ShipSkills['slots'][number] => ({
     slot: 'active',
     abilities: [damageClause(hits), debuffClause('Corrode', { defense: -2 })],
+});
+
+/** As `activeWithDebuffClause`, but the debuff ability targets ALL ENEMIES, so
+ *  `resolveDebuffRecipientIds` takes its `positionalLanding && isAllEnemies` branch and fans the
+ *  status over the footprint it is handed. Paired with `allPattern` this is the only fixture in the
+ *  file whose landing is footprint-driven rather than anchor-driven. */
+const activeWithAllEnemiesDebuffClause = (hits: number): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [damageClause(hits), debuffClause('Corrode', { defense: -2 }, 'all-enemies')],
 });
 
 /** `[damage, debuff]` — the clause is written AFTER the damage clause. */
@@ -167,6 +185,11 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
     selection,
 });
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
+/** The MULTI-CELL footprint shape, copied from the sibling positional suites
+ *  (`subAttackProcGates.integration.test.ts` ~76, `perSubAttackEvents.integration.test.ts` ~74).
+ *  Every OTHER fixture in this file uses `basePattern`, a single-victim footprint — which is why
+ *  none of them can observe which footprint the per-sub-attack applier is handed. */
+const allPattern = (): ParsedPattern => ({ raw: 'all', shape: 'all', range: 'all', modifiers: {} });
 
 /** A positioned enemy carrying `slots`, which never attacks unless given an active. `hp` is
  *  exposed so the overkill fixture can size the front victim below one slice. */
@@ -264,12 +287,14 @@ const residualProbeAlly = (): TeamActor => teamActor('probe', 'M2', [attackSkill
 /** The focus player at M1 fires `slots` at the front enemy (column 4). `hacking` is high by
  *  default so the debuff landing roll never resists and confounds a count; the gate test lowers
  *  it deliberately. `speed: 500` is explicit so the walked residual probe (speed 1) is
- *  guaranteed to act after this cast. */
+ *  guaranteed to act after this cast. `pattern` defaults to the single-victim `basePattern`; only
+ *  the footprint fence overrides it, with `allPattern`. */
 const focusCast = (
     slots: ShipSkills['slots'],
     enemies: EnemyAttacker[],
     team: TeamActor[] = [],
-    hacking: number = 100_000
+    hacking: number = 100_000,
+    pattern: ParsedPattern = basePattern()
 ): CombatEngineInput => ({
     attack: 5000,
     crit: 100,
@@ -297,7 +322,7 @@ const focusCast = (
     position: 'M1',
     speed: 500,
     target: parsedTarget('front'),
-    pattern: basePattern(),
+    pattern,
     positionalTeamBattle: true,
     enemyAttackers: enemies,
     ...(team.length > 0 ? { teamActors: team } : {}),
@@ -362,6 +387,22 @@ const residualExposedStacks = (input: CombatEngineInput): number => {
     const ratio = amount! / ALLY_SLICE;
     expect(Number.isInteger(ratio)).toBe(true);
     return ratio - 1;
+};
+
+/**
+ * Every `ability-performed` `actorId` in emission order.
+ *
+ * Exists so the residual readings can state their own TURN-ORDER PREMISE instead of inheriting it:
+ * `residualExposedStacks` only decodes the victim's leftover stacks if the probe ally really acted
+ * AFTER the focus's last sub-attack. A probe that acted FIRST would read 0 stacks too — the same
+ * number a correct 0-residual fixture reads — so the ordering is asserted rather than assumed.
+ */
+const abilityPerformedActors = (input: CombatEngineInput): string[] => {
+    const bus = createEventBus();
+    const out: string[] = [];
+    bus.on('ability-performed', (e: AbilityPerformed) => out.push(e.actorId));
+    runCombat({ ...input, bus });
+    return out;
 };
 
 const sum = (xs: (number | undefined)[]): number => xs.reduce<number>((a, b) => a + (b ?? 0), 0);
@@ -532,15 +573,20 @@ describe('PR8 — clause order within a sub-attack', () => {
         expect(delivered).toEqual([2 * SLICE, 2 * SLICE]);
         expect(delivered[0]!).toBeGreaterThan(control[0]!);
         expect(sum(delivered)).toBe(2 * sum(control));
-        expect(
-            residualExposedStacks(
-                focusCast(
-                    [beforeDamage(2, EXPOSED())],
-                    [enemyAt('victim', 'M4')],
-                    [residualProbeAlly()]
-                )
-            )
-        ).toBe(0);
+
+        // The 0-residual reading below is only meaningful if the probe ally acted AFTER the focus's
+        // LAST sub-attack — a probe that acted first would read 0 too, and so would a fixture whose
+        // clause never landed at all. So the turn-order premise is asserted here rather than
+        // inherited from `teamActor`'s speed comment or from the sibling test above.
+        const withProbe = focusCast(
+            [beforeDamage(2, EXPOSED())],
+            [enemyAt('victim', 'M4')],
+            [residualProbeAlly()]
+        );
+        const actorOrder = abilityPerformedActors(withProbe);
+        expect(actorOrder).toContain('probe');
+        expect(actorOrder.lastIndexOf('probe')).toBeGreaterThan(actorOrder.lastIndexOf('attacker'));
+        expect(residualExposedStacks(withProbe)).toBe(0);
     });
 });
 
@@ -577,6 +623,59 @@ describe('PR8 — overkill retargeting', () => {
         const one = debuffApplicationsByTarget(overkillCast(1), 'Corrode');
         expect(one.frontling).toBe(1);
         expect(one.survivor).toBeUndefined();
+    });
+});
+
+describe('PR8 — the per-sub-attack FOOTPRINT', () => {
+    afterEach(() => resetRateGateRng());
+
+    /** As `overkillCast`, but the clause targets ALL ENEMIES over an `allPattern` footprint, so
+     *  recipient resolution is footprint-driven. `frontling` at column 4 (the FRONT) is the anchor
+     *  and is sized below one DOUBLED slice; `survivor` behind it is at the full 10,000,000. */
+    const footprintCast = (hits: number) =>
+        focusCast(
+            [activeWithAllEnemiesDebuffClause(hits)],
+            [enemyAt('frontling', 'M4', [], 5_000), enemyAt('survivor', 'M3')],
+            [],
+            100_000,
+            allPattern()
+        );
+
+    it('an all-enemies clause fans over the victims THAT sub-attack struck, so a killed victim drops out', () => {
+        // THE GAP THIS CLOSES: every other fixture in this file uses `basePattern` and an `abTarget`
+        // of `'enemy'`, for which `resolveDebuffRecipientIds` returns `[anchorId]` and never looks at
+        // `aoeVictimIds` at all — so mutating playerTurn.ts's `aoeVictimIds: sub.victimIds` back to
+        // the CAST's footprint (the pre-PR8 value) left the whole suite green. This is the only test
+        // that reads the footprint argument.
+        //
+        // DERIVATION (MEASURED against this fixture, `deliveredDamage` [20,000, 10,000, 10,000]):
+        //   the `all` shape scales every cell at 1.0, so one sub-attack delivers 10,000 to EACH of
+        //   the two enemies. `frontling`'s 5,000 HP is below that DOUBLED slice (crit 100 /
+        //   critDamage 100 doubles every hit — the per-hit slice is 10,000, not 5,000), so:
+        //   sub-attack 0: footprint [survivor, frontling] -> one landing EACH; frontling DIES
+        //   sub-attack 1: footprint re-expands over the LIVING roster -> [survivor] only
+        //   sub-attack 2: [survivor] only
+        //   => frontling exactly 1, survivor exactly 3, four `debuff-applied` in total.
+        // Under the mutation the later sub-attacks reuse the cast-time footprint, which still holds
+        // the dead `frontling`, and its count reads 3.
+        //
+        // ANTI-VACUITY: `survivor: 3` alone would also be produced by an anchor-collapsing
+        // resolution (sub-attacks 1-2 re-resolve `front` to `survivor` anyway), so the load-bearing
+        // legs are `frontling: 1` — which pins that the footprint SHRANK — and the total of 4, which
+        // pins that sub-attack 0 fanned over BOTH cells and no landing was silently dropped.
+        // KILLED BY: `aoeVictimIds: sub.victimIds` -> the cast's `aoeVictimIds` (playerTurn.ts
+        // ~1774), and by `applyDebuffsForSubAttack` returning [].
+        const counts = debuffApplicationsByTarget(footprintCast(3), 'Corrode');
+        expect(counts.frontling).toBe(1);
+        expect(counts.survivor).toBe(3);
+        expect(sum(Object.values(counts))).toBe(4);
+
+        // N=1 control: a single sub-attack fans over the cast-time footprint and nothing more, so
+        // both enemies take exactly one landing. This is what pins the 1-vs-3 split above as a
+        // multi-hit effect rather than a property of the `all-enemies` fan-out itself.
+        const one = debuffApplicationsByTarget(footprintCast(1), 'Corrode');
+        expect(one.frontling).toBe(1);
+        expect(one.survivor).toBe(1);
     });
 });
 
