@@ -6632,6 +6632,17 @@ export function runCombat(input: CombatEngineInput): {
          * Empties the list, making a second call a no-op — the sites are allowed to overlap.
          * Team-symmetric: one helper, all three sites (focus / walked team / enemy).
          *
+         * NOT the only application point since PR8 (multi-hit full-walk epic). It is now the
+         * FALLBACK plus the FINAL flush:
+         *   • A multi-hit cast's sub-attack-0 landings are spliced out of this list and applied at
+         *     the end of iteration 0 by the `onSubAttackEnd` hook below, so sub-attack 1 can see
+         *     them. By the time this runs, that splice has already emptied the list — hence the
+         *     early return, not a second application.
+         *   • Sub-attacks ≥ 1 never populate this list at all; they roll and apply through
+         *     `applyDebuffsForSubAttack` at their own boundaries.
+         *   • A single-hit cast, a whiff, a non-positional cast, or any cast the hooks never see
+         *     still lands HERE — which is what keeps N=1 on its historical path.
+         *
          * PR8 split the thunk into {applyState, emitEvents}. Running them back-to-back here is
          * byte-identical to the pre-PR8 single thunk — the split only matters where the engine
          * deliberately separates them (the sub-attack boundary wiring, Task 4).
@@ -8531,8 +8542,9 @@ export function runCombat(input: CombatEngineInput): {
                             });
                             if (teamTurnStasisHitVictims.size > 0) {
                                 // KNOWN LIMITATION — see the focus site's note above its own
-                                // `reInflictedStasis` read (~line 8256) for the full explanation;
-                                // this read has the same pre-positional-drive ordering.
+                                // `reInflictedStasis` read (search `turnStasisHitVictims.size > 0`)
+                                // for the full explanation; this read has the same
+                                // pre-positional-drive ordering.
                                 const reInflictedStasis = teamTurn.inflictedEnemyDebuffs.some(
                                     (ab) => isStasis(ab.buffName)
                                 );
@@ -9051,7 +9063,8 @@ export function runCombat(input: CombatEngineInput): {
                                 // §4.5: resolve Stasis break for player victims hit by this enemy.
                                 if (enemyTurnStasisHitVictims.size > 0) {
                                     // KNOWN LIMITATION — see the focus site's note above its own
-                                    // `reInflictedStasis` read (~line 8256) for the full explanation;
+                                    // `reInflictedStasis` read (search
+                                    // `turnStasisHitVictims.size > 0`) for the full explanation;
                                     // this read has the same pre-positional-drive ordering.
                                     const reInflictedStasis = enemyTurn.inflictedEnemyDebuffs.some(
                                         (ab) => isStasis(ab.buffName)

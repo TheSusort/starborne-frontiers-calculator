@@ -1544,11 +1544,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (targetId !== undefined) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
-    // Each application that passes its condition gate draws the landing decision
-    // ONCE here (Task 7): 'apply' → lands unless affinity-disadvantaged (no draw);
-    // otherwise draws the hacking-vs-security gate. Resisted → the apply is SKIPPED
-    // (no status stored), recorded resisted with its would-be duration, and emitted.
-    // Landed → emit debuff-applied ONCE at this infliction site (Phase 3 retiming).
+    // Each application that passes its condition gate draws the landing decision here
+    // (Task 7): 'apply' → lands unless affinity-disadvantaged (no draw); otherwise draws
+    // the hacking-vs-security gate. Resisted → the apply is SKIPPED (no status stored),
+    // recorded resisted with its would-be duration, and emitted. Landed → emit
+    // debuff-applied at this infliction site (Phase 3 retiming).
+    //
+    // CARDINALITY (multi-hit full-walk epic, PR8): this draw is SUB-ATTACK 0's, not the
+    // whole cast's. A multi-hit skill is N consecutive full attacks, so sub-attacks ≥ 1
+    // re-roll every clause below against their OWN anchor and footprint, via
+    // `applyDebuffsForSubAttack` (defined after this loop, driven by the engine's
+    // sub-attack boundary hooks). Reading this block as "the cast's one landing decision"
+    // is only correct at N=1. The condition GATE, the resist bookkeeping and the
+    // `control-applied` gating below do stay cast-time — see `perSubAttackDebuffRecipes`
+    // and `resistedTimedEnemyNames` for why each has to.
     const resistedAbilityTimedEnemy: ActiveBuff[] = [];
     // Debuffs THIS actor discretely inflicted on the target this turn (source-accurate
     // attribution for the enemy-effects overview — Task 10a). Unlike landedEnemyDebuffs,
@@ -1570,7 +1579,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // still emits (only Block-Debuff immunity gates a standalone control — preserved separately).
     const resistedTimedEnemyNames: string[] = [];
     // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
-    // Returned on the turn result; the engine flushes them once this turn's damage has landed.
+    // Returned on the turn result. PR8: the engine drains this at ONE of two points — at the end of
+    // sub-attack 0 when a later sub-attack exists (so hit 2 can see hit 1's stack), otherwise at the
+    // historical post-walk `flushDeferredEnemyApplications`. Both run before the actor's Post-Turn
+    // decrement, so either way the status keeps its normal window.
     const deferredEnemyApplications: DeferredEnemyApplication[] = [];
 
     /**
@@ -1734,11 +1746,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const matchingAbility = firingSkill?.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );
-        // Ship-kit W5 Task A3: 'adjacent-enemies' / 'target-and-adjacent-enemies' fan the status
-        // over the resolved target's board neighbours (adjacentEnemyIdsFor, engine.ts's
-        // buildTurnArgs — team-symmetric via bySide). Only meaningful once a real `targetId` is
-        // resolved (positional cast on a real opposing actor); DPS/non-positional callers never
-        // supply `adjacentEnemyIdsFor` (or `targetId` is undefined there), so this is [] then.
+        // Ship-kit W5 Task A3 introduced the 'adjacent-enemies' / 'target-and-adjacent-enemies'
+        // board-neighbour fan-out (`adjacentEnemyIdsFor`, supplied by engine.ts's buildTurnArgs —
+        // team-symmetric via bySide). That mapping is no longer written here: PR8 Task 1 moved the
+        // whole nine-branch ternary into ./debuffRecipients, whose JSDoc is now the one place it is
+        // described (including why a positional caller gets [] rather than the non-positional
+        // `undefined` sink). Do not restate the branch rules here — two copies is exactly how the
+        // cast-time and per-sub-attack paths would drift.
         const abTarget = matchingAbility?.target;
         // PR8 Task 1: the nine-branch mapping now lives in ./debuffRecipients so the
         // per-sub-attack path (PR8 Task 3) resolves recipients by exactly the same rules,
