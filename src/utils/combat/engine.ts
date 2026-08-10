@@ -6973,6 +6973,13 @@ export function runCombat(input: CombatEngineInput): {
                     // pre-PR2 emit, which is what keeps a whiffed/absorbed N=1 cast byte-identical
                     // (its target-less row is pruned by finalizeMissEntry unless a reactive nested
                     // under it, and that pruning decision must not change).
+                    // R5(i): `deliveredDamage: 0` is REQUIRED, not decorative. `damage` here is the
+                    // cast's pre-funnel `directDamage` and stays positive, so an omitted delivered
+                    // basis let the `on-deal-damage` guard's `(deliveredDamage ?? damage)` chain
+                    // fall through to it — and riders (Burner's Inferno, Warpstrike, Zeolite) paid
+                    // out for a cast that struck nobody. `subAttack` stays undefined: this row has
+                    // no sub-attack identity, and that is also what makes `flushReflectLogs` drain
+                    // everything, which is the pre-PR2 behaviour this branch exists to preserve.
                     steps.push({
                         isEvent: true,
                         run: () =>
@@ -6981,7 +6988,9 @@ export function runCombat(input: CombatEngineInput): {
                                 dap.damage,
                                 critAgg.anyCrit,
                                 critAgg.critPairs,
-                                critAgg.critVictimIds
+                                critAgg.critVictimIds,
+                                undefined,
+                                0
                             ),
                     });
                     for (const idx of emissionIndices) {
@@ -8337,6 +8346,10 @@ export function runCombat(input: CombatEngineInput): {
                                 target != null &&
                                 pattern != null &&
                                 turn.positionalScalars != null;
+                            // R-cast: the delivered total this turn's support pass needs when it deferred
+                            // (a firing-slot `damage-dealt` rider). Stays undefined when no positional
+                            // apply ran, in which case the fallback below reproduces the inline basis.
+                            let castDelivered: number | undefined;
                             if (positional) {
                                 // Opposing roster + victim wrapper come from the per-side bindings
                                 // (player→enemy here). pattern/target are non-null via the `positional` gate.
@@ -8347,7 +8360,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // per-victim `attacked` inline (before detonation). The turn's deferred
                                 // ability-performed carries the anchor firing-hit values for the log.
                                 const tb = turnBindings(actor.side);
-                                drivePositionalTurnApply(
+                                const posApply = drivePositionalTurnApply(
                                     actor,
                                     tb,
                                     {
@@ -8382,10 +8395,20 @@ export function runCombat(input: CombatEngineInput): {
                                         }
                                     }
                                 );
+                                castDelivered = posApply.critAgg.subAttacks.reduce(
+                                    (sum, sub) => sum + (sub.deliveredDamage ?? 0),
+                                    0
+                                );
                             }
                             // Clause order: this turn's damage has landed (or the cast had none) —
                             // now apply the debuff clauses that followed it.
                             flushDeferredEnemyApplications(turn.deferredEnemyApplications);
+                            // Same seam, same reason: a cast whose repair/shield scales off the damage
+                            // it dealt could not resolve until that damage existed. No-op unless this
+                            // cast deferred. The `?? turn.directDamage` fallback is unreachable while
+                            // deferral is pinned to the positional gate, and is there so a future
+                            // divergence degrades to the old basis instead of silently dropping the repair.
+                            turn.resolveCastSupport?.(castDelivered ?? turn.directDamage);
 
                             // Fold the focus turn's numeric damage into the round accumulator.
                             // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
@@ -8575,6 +8598,8 @@ export function runCombat(input: CombatEngineInput): {
                                 teamTarget != null &&
                                 teamPattern != null &&
                                 teamTurn.positionalScalars != null;
+                            // R-cast: mirror of the focus site — see its note.
+                            let teamCastDelivered: number | undefined;
                             if (teamPositional) {
                                 // Same direction as the focus site (player→enemy); keyed to THIS team
                                 // actor's position / parsed target / parsed pattern. Non-null via the gate.
@@ -8583,7 +8608,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // the player→enemy STANDING leech and emits the per-victim `attacked`
                                 // inline (before detonation).
                                 const tb = turnBindings(actor.side);
-                                drivePositionalTurnApply(
+                                const teamPosApply = drivePositionalTurnApply(
                                     actor,
                                     tb,
                                     {
@@ -8617,9 +8642,16 @@ export function runCombat(input: CombatEngineInput): {
                                         }
                                     }
                                 );
+                                teamCastDelivered = teamPosApply.critAgg.subAttacks.reduce(
+                                    (sum, sub) => sum + (sub.deliveredDamage ?? 0),
+                                    0
+                                );
                             }
                             // Clause order — mirror of the focus site (see flushDeferredEnemyApplications).
                             flushDeferredEnemyApplications(teamTurn.deferredEnemyApplications);
+                            teamTurn.resolveCastSupport?.(
+                                teamCastDelivered ?? teamTurn.directDamage
+                            );
 
                             // Fold the team turn's damage into ITS OWN map entry (post-round assembly
                             // sums all non-focus entries into teamDamage). secondary/conditional are
@@ -8938,6 +8970,11 @@ export function runCombat(input: CombatEngineInput): {
                             // enemy drivePositionalApply site can emit it post-apply with the true per-victim
                             // crit signal. Present ⟺ enemyPositional true (same suppression condition).
                             let enemyDeferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
+                            // R-cast: same hoist as its six siblings — `enemyTurn` is scoped inside the
+                            // block far above, so the deferred support pass and its fallback basis have to
+                            // be carried out to where the flush runs.
+                            let enemyResolveCastSupport: PlayerTurnResult['resolveCastSupport'];
+                            let enemyDirectDamage = 0;
                             // Intra-cast clause order: the enemy cast's held-back enemy-debuff
                             // landings, hoisted for the same reason as the payload above (enemyTurn is
                             // scoped inside the else block) so the flush can run after this turn's
@@ -9113,6 +9150,8 @@ export function runCombat(input: CombatEngineInput): {
                                 // Task 5: capture the deferred ability-performed payload (present ⟺ the
                                 // enemy inline emit was suppressed, i.e. enemyPositional true).
                                 enemyDeferredAbilityPerformed = enemyTurn.deferredAbilityPerformed;
+                                enemyResolveCastSupport = enemyTurn.resolveCastSupport;
+                                enemyDirectDamage = enemyTurn.directDamage;
                                 // Clause order: capture the held-back landings for the post-damage flush.
                                 // PR8: THIS array identity is what the positional drive splices at a
                                 // sub-attack boundary AND what the fallback flush below drains — the
@@ -9487,6 +9526,18 @@ export function runCombat(input: CombatEngineInput): {
                             // debuff but deals no damage (a pure Stasis bot) still has to apply it,
                             // and inside that guard the landings were silently dropped.
                             flushDeferredEnemyApplications(enemyDeferredApplications);
+                            // Same seam as both player sites: a deferred cast repair/shield resolves now
+                            // that the damage it scales off exists. `enemyCritAgg` is this turn's per-victim
+                            // aggregate (undefined when no positional apply ran), so the fallback degrades
+                            // to the pre-funnel basis rather than dropping the repair.
+                            enemyResolveCastSupport?.(
+                                enemyCritAgg
+                                    ? enemyCritAgg.subAttacks.reduce(
+                                          (sum, sub) => sum + (sub.deliveredDamage ?? 0),
+                                          0
+                                      )
+                                    : enemyDirectDamage
+                            );
                             // Task 5 (per-victim crit signal): a positional enemy turn that dealt 0
                             // damage skips the `if (damage > 0)` apply block entirely — so no per-victim
                             // apply ran (enemyCritAgg undefined) and the deferred ability-performed was
@@ -9494,6 +9545,23 @@ export function runCombat(input: CombatEngineInput): {
                             // (didCrit/critHits carried on the deferred payload), byte-identical to the
                             // pre-Task-5 inline emit for this 0-damage edge case. Only reachable when the
                             // enemy is positional (deferred payload present) AND the apply was skipped.
+                            // R5(i) — why this sibling fallback does NOT also pass `deliveredDamage: 0`,
+                            // though the player-side one at the interleaved emit now must.
+                            // There the omission was live: that branch is reached by a WHIFF, whose
+                            // `dap.damage` (pre-funnel `directDamage`) is positive, so the
+                            // `on-deal-damage` guard's `(deliveredDamage ?? damage)` chain fell through
+                            // to it and paid out riders for a cast that struck nobody.
+                            // Here it cannot be: this branch is gated on the apply block having been
+                            // skipped, and `damage = directDamage + detonationDamage` — both
+                            // non-negative — so reaching it with a positive `dap.damage` would need
+                            // the skip to have fired on a positive total. Verified rather than
+                            // reasoned: a temporary `throw` on `dap.damage > 0` here ran the FULL
+                            // suite (488 files / 5566 tests) without firing once. `(0 ?? 0) <= 0`
+                            // already silences the riders, so adding the field would change the
+                            // event's SHAPE for no behavioural gain — and there is no failing test
+                            // to justify it. If `directDamage` ever becomes positive on a skipped
+                            // enemy apply, this becomes the enemy-side mirror of the player bug and
+                            // wants the same `0`.
                             if (enemyDeferredAbilityPerformed && !enemyCritAgg) {
                                 const dap = enemyDeferredAbilityPerformed;
                                 emitDeferredAbilityPerformed(

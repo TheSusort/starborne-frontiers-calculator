@@ -885,22 +885,22 @@ exports[`kit fingerprints > Forsythia 1`] = `
 exports[`kit fingerprints > FrontLine 1`] = `
 {
   "plain": [
-    "attack",
+    "attack:active",
+    "attack:charged",
     "charge-changed",
-    "shield:active",
-    "shield:charged",
+    "shield",
   ],
   "richEnemy": [
-    "attack",
+    "attack:active",
+    "attack:charged",
     "charge-changed",
-    "shield:active",
-    "shield:charged",
+    "shield",
   ],
   "wounded": [
-    "attack",
+    "attack:active",
+    "attack:charged",
     "charge-changed",
-    "shield:active",
-    "shield:charged",
+    "shield",
   ],
 }
 `;
@@ -1271,33 +1271,36 @@ exports[`kit fingerprints > Iridium 1`] = `
 {
   "plain": [
     "attack",
+    "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
     "control:charged",
     "debuff",
     "debuff-resisted",
-    "heal:active",
+    "heal",
   ],
   "richEnemy": [
     "attack",
+    "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
     "control:charged",
     "debuff",
     "debuff-resisted",
-    "heal:active",
+    "heal",
   ],
   "wounded": [
     "attack",
+    "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
     "control:charged",
     "debuff",
     "debuff-resisted",
-    "heal:active",
+    "heal",
   ],
 }
 `;
@@ -2229,34 +2232,34 @@ exports[`kit fingerprints > Oleander 1`] = `
 exports[`kit fingerprints > Opal 1`] = `
 {
   "plain": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "buff",
     "buff-expired",
     "charge-changed",
     "debuff",
     "debuff-resisted",
-    "heal:active",
+    "heal",
   ],
   "richEnemy": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "buff",
     "buff-expired",
     "charge-changed",
     "debuff",
     "debuff-resisted",
-    "heal:active",
+    "heal",
   ],
   "wounded": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "buff",
     "buff-expired",
     "charge-changed",
     "debuff",
     "debuff-resisted",
-    "heal:active",
+    "heal",
   ],
 }
 `;
@@ -2302,25 +2305,25 @@ exports[`kit fingerprints > Orel 1`] = `
 exports[`kit fingerprints > Pallas 1`] = `
 {
   "plain": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
-    "heal:active",
+    "heal",
   ],
   "richEnemy": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
-    "heal:active",
+    "heal",
   ],
   "wounded": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
-    "heal:active",
+    "heal",
   ],
 }
 `;
@@ -2531,22 +2534,22 @@ exports[`kit fingerprints > Purifier 1`] = `
 exports[`kit fingerprints > Quixilver 1`] = `
 {
   "plain": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "charge-changed",
-    "shield:active",
+    "shield",
   ],
   "richEnemy": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "charge-changed",
-    "shield:active",
+    "shield",
   ],
   "wounded": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "charge-changed",
-    "shield:active",
+    "shield",
   ],
 }
 `;
@@ -3275,22 +3278,22 @@ exports[`kit fingerprints > Thresh 1`] = `
 exports[`kit fingerprints > Tithonus 1`] = `
 {
   "plain": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "charge-changed",
-    "heal:active",
+    "heal",
   ],
   "richEnemy": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "charge-changed",
-    "heal:active",
+    "heal",
   ],
   "wounded": [
-    "attack",
+    "attack:active",
     "attack:charged",
     "charge-changed",
-    "heal:active",
+    "heal",
   ],
 }
 `;

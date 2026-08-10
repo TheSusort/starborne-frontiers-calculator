@@ -306,6 +306,7 @@ const observe = (
     infernos: number;
     display: (number | undefined)[];
     delivered: (number | undefined)[];
+    subIndices: (number | undefined)[];
     shieldFlags: boolean[];
     intake: Intake;
 } => {
@@ -313,6 +314,7 @@ const observe = (
     let infernos = 0;
     const display: (number | undefined)[] = [];
     const delivered: (number | undefined)[] = [];
+    const subIndices: (number | undefined)[] = [];
     const shieldFlags: boolean[] = [];
     bus.on('dot-applied', (e: DotApplied) => {
         if (e.dotType === 'inferno' && e.sourceId === attackerId) infernos += 1;
@@ -321,6 +323,7 @@ const observe = (
         if (e.actorId === attackerId) {
             display.push(e.damage);
             delivered.push(e.deliveredDamage);
+            subIndices.push(e.subAttackIndex);
         }
     });
     bus.on('attacked', (e: Attacked) => {
@@ -332,6 +335,7 @@ const observe = (
         infernos,
         display,
         delivered,
+        subIndices,
         shieldFlags,
         intake: raw
             ? {
@@ -525,6 +529,125 @@ describe('PR6 — the funnel legs that COUNT as delivered still fire the rider',
         expect(shieldFlags).toEqual([false, false, false]);
         // (b) THE BASIS: nullified is still delivered.
         expect(display).toEqual([SLICE, SLICE, SLICE]);
+        expect(delivered).toEqual([SLICE, SLICE, SLICE]);
+        expect(infernos).toBe(3);
+    });
+});
+
+// ── Multi-hit epic residual R5(i) — the WHIFF fallback must carry a delivered basis ───────────
+//
+// PR6/PR7 routed `deliveredDamage` onto the per-sub-attack emit, and the `on-deal-damage` guard
+// reads `(e.deliveredDamage ?? e.damage ?? 0)`. But the engine has a SECOND emit path: when every
+// sub-attack resolved over an empty footprint (nothing to hit at all), the cast falls back to a
+// single cast-wide `ability-performed` — and that call omitted `deliveredDamage` entirely. The
+// `??` chain then fell through to `damage`, which is the cast's PRE-FUNNEL `directDamage` and is
+// positive even though the attack struck nobody. So the riders paid out on a cast that hit
+// nothing: an Inferno from a swing at thin air.
+//
+// This is the same defect the block above pins for the funnel legs, on the path that block never
+// reaches. The fallback's own comment already said "nothing landed" — the emit just never said so
+// in the field the guard reads.
+//
+// FIXTURE — and the one that does NOT work, recorded so nobody re-derives it. An EMPTY
+// `enemyAttackers` roster looks like the obvious whiff, but it is not this path at all: with no
+// positional enemies the cast falls through to the legacy DPS dummy sink (`targetId: 'enemy'`, zero
+// `attacked` events), which deliberately carries no `deliveredDamage` because the DPS path has no
+// funnel. Asserting there would have pinned an out-of-scope path and quietly changed DPS mode.
+//
+// The real fixture keeps a POSITIONAL enemy in the roster and has a faster ally kill it first. The
+// focus then resolves `front` against an empty LIVING roster → no anchor on any of its three hits →
+// the fallback fires. Measured on this exact fixture before any assertion was written:
+//
+//     focus row: { damage: 30000, didCrit: false, subAttackIndex: ABSENT, deliveredDamage: ABSENT }
+//     Infernos:  1     <- the bug: a rider paid out by a cast that struck nobody
+//
+// The absent `subAttackIndex` is what identifies this as the cast-wide fallback rather than the
+// per-sub-attack emit, so it is asserted directly rather than inferred from the row count.
+/** A FAST player ally that one-shots the front enemy before the (slow) focus acts. */
+const killerAlly = (id: string, position: Position, attack: number): TeamActor =>
+    ({
+        id,
+        speed: 500,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        walk: {
+            shipSkills: { slots: [attackSkill(1)] },
+            stats: {
+                attack,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    }) as TeamActorEngineInput;
+
+/** A positional enemy frail enough for `killerAlly` to one-shot. */
+const frailEnemyAt = (id: string, position: Position, hp: number) =>
+    ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        affinity: 'antimatter',
+        shipSkills: { slots: [] },
+    }) as EnemyAttacker;
+
+/** The focus (slow, wearing the Burner rider) casts into a roster whose only enemy a faster ally
+ *  already killed → every hit resolves against an empty living roster → the whiff fallback. */
+const whiffedCast = (skill: ShipSkills['slots'][number]): CombatEngineInput => ({
+    ...focusCast([skill, burnerRider()], [frailEnemyAt('victim', 'M4', 5_000)]),
+    speed: 1, // slower than the killer ally, so the enemy is already dead when the focus acts
+    teamActors: [killerAlly('team-fast', 'M2', 9_000)],
+});
+
+describe('R5(i) — a cast that landed on NOBODY reports zero delivered, and fires no rider', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('a 3-hit cast whose only enemy died before it acted lands ZERO Infernos, though its display damage stays positive', () => {
+        const { infernos, display, delivered, subIndices } = observe(
+            whiffedCast(attackSkill(3)),
+            'attacker'
+        );
+        // FIXTURE GUARD (see the header's ANTI-VACUITY note): the two bases must DISAGREE here, or
+        // the Inferno assertion is satisfied for the wrong reason. ONE cast-wide row carrying the
+        // whole cast's pre-funnel aggregate, and no sub-attack identity — that IS the fallback.
+        expect(display).toEqual([3 * SLICE]);
+        expect(subIndices).toEqual([undefined]);
+        // Pre-fix: [undefined] → the guard fell through to `damage` (30000). Post-fix: [0].
+        expect(delivered).toEqual([0]);
+        // Pre-fix: 1. Nothing was struck, so nothing rides.
+        expect(infernos).toBe(0);
+    });
+
+    it('a 1-hit whiffed cast also fires no rider — the payout is not a multi-hit artefact', () => {
+        const { infernos, display, delivered } = observe(whiffedCast(attackSkill(1)), 'attacker');
+        expect(display).toEqual([SLICE]);
+        expect(delivered).toEqual([0]);
+        expect(infernos).toBe(0);
+    });
+
+    it('CONTROL: the same rider against a victim that survives still lands one Inferno per sub-attack', () => {
+        // Without this, "no Inferno" would also be satisfied by the rider being broken outright, or
+        // by the killer ally having somehow suppressed it.
+        const { infernos, delivered } = observe(
+            focusCast([attackSkill(3), burnerRider()], [enemyAt('victim', 'M4')]),
+            'attacker'
+        );
         expect(delivered).toEqual([SLICE, SLICE, SLICE]);
         expect(infernos).toBe(3);
     });
