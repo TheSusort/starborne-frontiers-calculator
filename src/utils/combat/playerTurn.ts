@@ -54,6 +54,7 @@ import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
 import { resolveSupportRecipients } from './supportRecipients';
+import { resolveDebuffRecipientIds } from './debuffRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
 import type { PreFightCombatModifiers } from './preFight/types';
@@ -1530,37 +1531,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const matchingAbility = firingSkill?.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );
-        const isAllEnemies = matchingAbility?.target === 'all-enemies';
         // Ship-kit W5 Task A3: 'adjacent-enemies' / 'target-and-adjacent-enemies' fan the status
         // over the resolved target's board neighbours (adjacentEnemyIdsFor, engine.ts's
         // buildTurnArgs — team-symmetric via bySide). Only meaningful once a real `targetId` is
         // resolved (positional cast on a real opposing actor); DPS/non-positional callers never
         // supply `adjacentEnemyIdsFor` (or `targetId` is undefined there), so this is [] then.
         const abTarget = matchingAbility?.target;
-        const adjacentEnemyRecipients: string[] =
-            targetId !== undefined && adjacentEnemyIdsFor ? adjacentEnemyIdsFor(targetId) : [];
-        const recipientIds: (string | undefined)[] =
-            abTarget === 'adjacent-enemies'
-                ? adjacentEnemyRecipients
-                : abTarget === 'target-and-adjacent-enemies'
-                  ? targetId !== undefined
-                      ? [targetId, ...adjacentEnemyRecipients]
-                      : // DPS-parity fallback: no real anchor to fan out from (mirrors the
-                        // plain-'enemy' tail below) — non-positional lands on the dummy sink
-                        // (`[undefined]` → victim resolves to `enemy`), positional-with-no-target
-                        // (shouldn't occur for a real opposing cast) no-ops.
-                        positionalLanding
-                        ? []
-                        : [undefined]
-                  : positionalLanding && isAllEnemies
-                    ? (aoeVictimIds ?? [])
-                    : isAllEnemies && aoeVictimIds && aoeVictimIds.length > 0
-                      ? aoeVictimIds
-                      : targetId !== undefined
-                        ? [targetId]
-                        : positionalLanding
-                          ? []
-                          : [undefined];
+        // PR8 Task 1: the nine-branch mapping now lives in ./debuffRecipients so the
+        // per-sub-attack path (PR8 Task 3) resolves recipients by exactly the same rules,
+        // keyed off ITS OWN re-resolved anchor and footprint instead of the cast's.
+        const recipientIds: (string | undefined)[] = resolveDebuffRecipientIds({
+            abTarget,
+            anchorId: targetId,
+            aoeVictimIds,
+            adjacentEnemyIdsFor,
+            positionalLanding,
+        });
 
         let anyLanded = false;
         for (const vid of recipientIds) {
