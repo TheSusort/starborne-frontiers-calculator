@@ -486,7 +486,7 @@ export function registerReactiveListeners(args: {
                         // Fires on the OWNER's own damage-dealing attack. runPlayerTurn emits one
                         // ability-performed per SUB-ATTACK (multi-hit full-walk, PR2): a multi-hit
                         // skill is N consecutive full-walk attacks, so this fires N times, once
-                        // per sub-attack that dealt damage. An AoE footprint is ONE attack and
+                        // per sub-attack that DELIVERED damage. An AoE footprint is ONE attack and
                         // fires once however many victims it hits. Riders: Burner's Inferno,
                         // Warpstrike's duration-reduction, Zeolite's purge. There is no
                         // once-per-turn guard, and adding one would be wrong — per-sub-attack IS
@@ -495,7 +495,36 @@ export function registerReactiveListeners(args: {
                         // is an ability condition (self-debuff), enforced at drain via
                         // gateConditions.
                         if (e.actorId !== ownerId) return;
-                        if ((e.damage ?? 0) <= 0) return;
+                        // PR6: gate on what the sub-attack actually DELIVERED, not on the
+                        // pre-funnel display number. `e.damage` is playerTurn's `directDamage`,
+                        // computed once per cast against the anchor's defence profile and never
+                        // shown the incoming funnel at all. So a sub-attack fully shaved by an
+                        // incoming-block proc, or fully deferred into a DoT by a transform, still
+                        // carried a positive `damage` and still fired its riders off a hit that
+                        // landed for nothing.
+                        //
+                        // `deliveredDamage` (PR7, events.ts) is the post-funnel number. Per funnel
+                        // leg, what counts as delivered:
+                        //   - DoT transform          NO  (engine.ts:5132 subtracts transformedToDot)
+                        //   - incoming-block shave   NO  (engine.ts:4111 shaves before the number
+                        //                                is even recorded)
+                        //   - shield absorption      YES (incomingRecorded is captured at
+                        //                                engine.ts:4271, before the shield/HP split —
+                        //                                a shield-soaked hit is still on-screen damage)
+                        //   - Protection redirect    YES (positionalApply.ts:410 adds the diverted
+                        //                                chunk back — that hit did land, just on
+                        //                                someone else)
+                        //   - Barrier nullification  YES (engine.ts:4569 books it as delivered anyway)
+                        // So only a DoT transform or an incoming-block shave silences these riders.
+                        // A shield-soaked, Barrier-nullified, or Protection-redirected hit still
+                        // fires them.
+                        //
+                        // It is emitted ONLY on the interleaved positional path, so the `??` chain
+                        // leaves the DPS path byte-identical: that path has no funnel, so its two
+                        // bases cannot disagree. Riders affected: Burner (Inferno), Warpstrike
+                        // (duration-reduction), Zeolite (purge). Pinned by
+                        // onDealDamageDeliveredBasis.integration.test.ts.
+                        if ((e.deliveredDamage ?? e.damage ?? 0) <= 0) return;
                         // Capture the owner's own attack target so a reactive DoT rider (Burner's
                         // on-deal-damage Inferno) lands on the enemy actually hit — the real
                         // positional victim — instead of falling back to the DPS dummy `enemy`
@@ -1511,13 +1540,16 @@ export interface IntentExecContext {
         multiplier: number,
         hits: number
     ) => { dealt: number; didCrit: boolean } | void;
-    /** G PR1: per-actor-turn once-per-attack guard. Keyed `ownerId:abilityId`. Cleared at each
-     *  actor turn-start (engine) so the per-hit `attacked` events of ONE attack collapse to a
-     *  single counter; a later attack (different turn) counters again. Absent → no guard (the
-     *  counter branch is inert without the engine ctx). */
+    /** G PR1: once-per-attack counter guard. Keyed `ownerId:abilityId:subAttackIndex` (the
+     *  sub-attack token added in PR6 — see the counter branch's SCOPE NOTE). Cleared at each
+     *  actor turn-start (engine) so the per-hit `attacked` events of ONE sub-attack collapse to a
+     *  single counter, while each sub-attack of a `hits: N` cast counters on its own and a later
+     *  turn counters again. Absent → no guard (the counter branch is inert without the engine
+     *  ctx). */
     counterFiredThisTurn?: Set<string>;
     /** Task 5: per-actor-turn once-per-attack guard for SELF-scoped reactive buff/charge
-     *  riders. Keyed `ownerId:abilityId`, cleared at each actor turn-start (engine) — mirroring
+     *  riders. Keyed `ownerId:abilityId:subAttackIndex` (PR4), cleared at each actor turn-start
+     *  (engine) — mirroring
      *  `counterFiredThisTurn`. The per-hit / per-victim reactive triggers (on-attacked,
      *  on-ally-attacked) enqueue one intent per hit per victim; a
      *  SELF-target buff/charge must land only ONCE for that whole attack. Ally/enemy-routed
@@ -2414,7 +2446,7 @@ const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTr
     'on-ally-attacked',
 ]);
 
-/** Returns the once-per-attack guard key `ownerId:abilityId` when this intent is a SELF-target
+/** Returns the once-per-attack guard key `ownerId:abilityId:subAttackIndex` when this intent is a SELF-target
  *  rider on a per-hit reactive trigger (an on-attacked / on-ally-attacked buff or charge), else
  *  undefined — meaning "not guarded". Only `target: 'self'` qualifies: ally-routed grants
  *  (damagedAllyId — Cultivator/Graphite/Howler/Sentinel repair) and enemy-routed damage (Sentinel)
@@ -3437,7 +3469,24 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // that would re-trigger the REPAIRER'S OWN on-repair listeners and loop). Its only combat
         // subscriber is on-enemy-repaired, whose riders never heal → still no chain. Stamped
         // duringTurnOf via ctx.bus so it nests under the triggering turn.
-        if (cfg.type === 'heal' && healPerTarget.length > 0 && ctx.bus) {
+        //
+        // PR6: a repair that repaired NOTHING must not open a combat-log row — symmetric with the
+        // shield branch above, which already emits only when a recipient actually gained pool.
+        // `healSum` is the gross across recipients (the very number this event carries as
+        // `amount`), so this suppresses exactly the genuinely-zero case: a `damage-dealt` basis on
+        // a sub-attack that delivered nothing (a DoT transform, a full soak), a zero-count
+        // event-scaled repair. A repair that lands but fully overheals still emits — the gross was
+        // real, only the target was full.
+        //
+        // NOT LOG-ONLY — the knock-on is deliberate. `reactive-heal-performed` has a second
+        // subscriber, the `on-enemy-repaired` listener at ~line 1118, so suppressing the emit also
+        // means a zero-gross repair no longer COUNTS AS A REPAIR for that trigger's riders:
+        // Ruiner's Bomb debuff and Overload self-buff, Zosimos's charge removal, Amartya's Defense
+        // Shred. That was adjudicated correct — a repair that restored nothing is not an enemy
+        // "performing a repair" in any sense those riders are meant to punish — but it is a
+        // behaviour change beyond the log, not a display tweak. Do not re-derive this gate as
+        // presentational and move it into buildCombatLog.
+        if (cfg.type === 'heal' && healPerTarget.length > 0 && healSum > 0 && ctx.bus) {
             ctx.bus.emit({
                 type: 'reactive-heal-performed',
                 casterId: intent.ownerId,
@@ -3579,16 +3628,32 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (cfg.requireShieldHit && intent.eventCtx?.shieldWasHit !== true) return; // PR2 plumbs shieldWasHit
         const attackerId = intent.eventCtx?.counterTargetId;
         if (!attackerId) return;
-        // Once-per-ATTACK: all per-hit `attacked` events of ONE attack collapse to a single counter.
-        // The guard set is cleared at every actor turn-start (engine), so a separate later attack
-        // counters again. Absent (unit ctxs without the engine) → no guard.
-        // SCOPE NOTE: today this turn-granularity IS per-attack — the `attacked` event is emitted
-        // once per turn for the focus victim only (events.ts), and extra actions re-enter the turn
-        // loop (re-clearing the guard), so one actor can't land two DISTINCT attacks on the same
-        // victim inside one guard window. When positional per-victim emission or multi-attack-per-turn
-        // lands (the same future work that makes isPrimaryTarget meaningful), this key must gain an
-        // attack-instance token from the triggering `attacked` event to stay once-per-attack.
-        const key = `${intent.ownerId}:${intent.ability.id}`;
+        // Once-per-ATTACK: all per-hit `attacked` events of ONE attack collapse to a single counter,
+        // but each of a `hits: N` cast's N sub-attacks counters on its own. The guard set is cleared
+        // at every actor turn-start (engine), so a separate later turn counters again. Absent (unit
+        // ctxs without the engine) → no guard.
+        //
+        // SCOPE NOTE (multi-hit full-walk epic, PR6 — this key's history matters):
+        // The key was once just `ownerId:abilityId`, and that WAS per-attack at the time: the
+        // `attacked` event fired once per turn for the focus victim only, and extra actions
+        // re-entered the turn loop (re-clearing the guard), so one actor could not land two DISTINCT
+        // attacks on the same victim inside one guard window — "one attack" and "one turn" were the
+        // same thing. The note that stood here predicted its own obsolescence, and the future it
+        // named has arrived: PR2 made the engine emit one `ability-performed` and one `attacked` per
+        // SUB-ATTACK, and R1 locks a `hits: N` skill as N consecutive FULL attacks. A counter is an
+        // INCOMING-triggered reaction, so a victim of a 3-hit cast counters three times; keyed on
+        // turn alone it countered once.
+        //
+        // Hence the sub-attack token, mirroring the sibling rider guard `oncePerAttackGuardKey`
+        // (which gained the same component in PR4) down to its `?? 'x'` fallback. Adding a component
+        // can only SPLIT keys, never merge them, so this can never collapse two counters the
+        // turn-scoped guard kept apart. The fallback is dead for any real `attacked` event —
+        // `emitAttacked` stamps a defined index on every path (the positional caller's own
+        // sub-attack index; the non-positional caller's per-hit loop index, which IS the sub-attack
+        // index there since it passes the whole cast in one call) — and matters only to a hand-built
+        // fixture whose intent carries no `eventCtx`, where it reproduces the old turn-scoped
+        // collapse.
+        const key = `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
         if (ctx.counterFiredThisTurn?.has(key)) return;
         // Consuming gates LAST (see ordering note above).
         if (!passesProcChanceGate(intent, ctx)) return;

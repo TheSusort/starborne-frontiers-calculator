@@ -341,22 +341,100 @@ function createBuildContext(
             // Suppress a phantom attack row: an ability-performed that produced no `attacked`
             // event and was NOT a miss (buff/heal/utility-only cast). Remove it from the current
             // turn's entries if present (the only container an on-turn attack entry lands in).
-            // Guarded on `reactions.length === 0`: a reactive trigger (e.g. Ravager's
+            //
+            // WHY THAT IS THE ONLY CONTAINER (asked in review of PR6 — `attachEntry` has three
+            // arms, and the `.reactions[]` arm is not swept here). `attachEntry` routes to
+            // `routeReaction` — the arm that would bury this entry inside some other entry's
+            // `.reactions[]` — if and only if `ctx.currentStamp` is set, and `currentStamp` is
+            // read off the DISPATCHED EVENT's own `duringTurnOf` (dispatch loop, below). The type
+            // permits that stamp (`ability-performed` is in `StampedEventType` /
+            // `REACTIVE_STAMPED_EVENT_TYPES`, triggers.ts), but no PRODUCER can set it: the stamp
+            // is applied only by `makeReactiveStampingBus`, which exists solely as a fresh
+            // per-intent wrapper built inside `executeIntent` (triggers.ts) and assigned to that
+            // intent's `ctx.bus`; it never replaces the engine's own `bus` binding (engine.ts —
+            // a `const` fanning out to the external tap plus the internal bus). Both
+            // `ability-performed` emitters — runPlayerTurn's inline emit and the engine's
+            // `emitDeferredAbilityPerformed` — emit on THAT engine bus, so the event is always
+            // unstamped. Reactive damage cannot sneak one in either: it deliberately emits
+            // `reactive-damage-performed` and NO `ability-performed` (events.ts chain guard). Nor
+            // can a reactive extra action: `grantExtraAction` only bumps a pending count, so the
+            // granted turn runs later in the selection loop on the engine bus like any other.
+            // Verified empirically too — a temporary `throw` on a stamped `ability-performed`,
+            // run across the whole combat + simulation corpus, fired ONLY on three hand-crafted
+            // counterattack fixtures in `log/__tests__/buildCombatLog.test.ts` (synthetic event
+            // literals), never on an engine-produced stream. That leaves `attachEntry`'s third arm:
+            // with no open turn the row lands in the round's startOfRound / endOfRound drain, which
+            // needs an `ability-performed` from an actor whose `turn-started` the roster filter
+            // dropped (a non-roster actor). A second probe — `throw` when this prune arm fires on an
+            // entry NOT found in `currentTurn.entries` — never fired over that same corpus, so that
+            // arm is left as-is rather than swept speculatively; `indexOf` returning -1 already
+            // makes the splice a no-op if one ever appears.
+            //
+            // Normally guarded on `reactions.length === 0`: a reactive trigger (e.g. Ravager's
             // on-own-debuff-resisted Hacking Module Overdrive grant) can nest under this entry
             // via routeReaction BEFORE the boundary that finalizes it — pruning the entry would
             // silently discard that nested reaction along with it, so a non-empty `.reactions[]`
             // keeps the (now target-less) parent row so its children stay visible in the log.
+            //
+            // UNNAMEABLE TARGET (multi-hit full-walk epic, PR6) overrides that reprieve. When the
+            // ability named a target OUTSIDE the roster, keeping the row is not a trade worth
+            // making: `roster` is the only id→name map the renderer has, so the parent renders as
+            // an attack on nobody. The reactions are re-parented in its place (spliced INTO the
+            // slot it occupied) instead of being discarded, so nothing is lost — the same place
+            // routeReaction's own no-trigger fallback would have put them. They stay in
+            // `reactiveEntries`, so a promoted reaction still cannot be picked as a trigger.
+            //
+            // Roster membership is the right discriminator because it is precisely the question
+            // the log layer has to answer, and the only id the engine produces outside the roster
+            // is its vestigial `enemy` sink (engine.ts:1756) — the actor a cast binds when it has
+            // no positioned victim, carrying no `position` and never appearing in battleSimulator's
+            // roster (built from placed ships only, battleSimulator.ts:1127). What it EXCLUDES: any
+            // row that collected a target (a real hit always emits `attacked`, so the arm is
+            // unreachable for it), and any miss row (the branch above returns first, having
+            // synthesized a target). Event cardinality is untouched — a `hits: N` cast still emits
+            // N `ability-performed`, so per-sub-attack riders (`on-deal-damage`, `on-crit`,
+            // `on-ally-crit`) still fire N times and each event's crit signalling is unchanged.
+            // Only the ROW is suppressed.
+            //
+            // The `=== undefined` arm just above the roster check can never actually be true here:
+            // `ability-performed.targetId` (events.ts) is a required `string`, and
+            // `openAttackAbilityTargetId` is set from it (below, on the `ability-performed`
+            // handler) and cleared only in `closeOpenAttack` alongside `openAttackEntry` — which
+            // the leading `ctx.openAttackEntry &&` condition already requires to be truthy. It is
+            // kept solely so `rosterIds.has(...)` below type-checks against the field's declared
+            // `string | undefined` type; the sole condition that can actually fire the override is
+            // roster non-membership.
+            //
+            // RE-PARENTING HAZARD — LIVE, NARROW, DISPLAY-ONLY. An earlier draft said this was
+            // "only reachable once this arm is, i.e. today it is not". Wrong on both halves: the
+            // roster arm is reachable today (it is the point of this change — a multi-hit cast
+            // bound to the vestigial sink takes it), and `buildCombatLog.test.ts`'s "keeps the
+            // drained rider grants when the parent row is suppressed" already asserts three
+            // promoted `buff` entries landing in `currentTurn.entries`. A promoted `buff` reaction
+            // keeps its `targets: [{ targetId }]`, so those three are ALREADY inside `setHp`'s
+            // top-level reverse fallback scan (above, :315-324) — the exact stale-`resultingHpPct`
+            // hazard the `buff-applied` handler's own comment flags for that shape. A later
+            // `hp-changed` for that actor can stamp a promoted grant instead of the row that was
+            // actually meant.
+            // WHY IT IS NOT FIXED HERE: the field is a rendered HP percentage on a log row and
+            // nothing downstream computes from it — no damage, no accounting, no test. The
+            // mis-stamp is also self-limiting: the scan takes the most recent matching target, so
+            // it can only mis-stamp when a promoted grant is the LAST entry naming that actor.
+            // The pre-existing hazard on `buff` rows is unchanged in kind by this arm; it is
+            // recorded rather than papered over, and behaviour is deliberately left alone.
             if (
                 ctx.openAttackEntry &&
                 ctx.openAttackEntry.kind === 'attack' &&
                 ctx.openAttackEntry.targets.length === 0 &&
                 ctx.openAttackAbilityDidHit !== false &&
-                ctx.openAttackEntry.reactions.length === 0
+                (ctx.openAttackEntry.reactions.length === 0 ||
+                    ctx.openAttackAbilityTargetId === undefined ||
+                    !ctx.rosterIds.has(ctx.openAttackAbilityTargetId))
             ) {
                 const entries = ctx.currentTurn?.entries;
                 if (entries) {
                     const idx = entries.indexOf(ctx.openAttackEntry);
-                    if (idx !== -1) entries.splice(idx, 1);
+                    if (idx !== -1) entries.splice(idx, 1, ...ctx.openAttackEntry.reactions);
                 }
             }
         },

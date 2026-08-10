@@ -330,15 +330,21 @@ describe('Bloodthirst damage-dealt basis (PR7)', () => {
  * NOTHING to the damage-dealt basis — this is the only one of the five locked rules that shipped
  * with no assertion anywhere. Pre-PR7, `triggerDamage` was `e.damage` (the pre-funnel
  * `directDamage`), which INCLUDED the transformed portion, so a fully-transformed sub-attack still
- * healed; post-PR7 it reads `deliveredDamage`, which nets the transform out, so it heals 0.
+ * healed; post-PR7 it reads `deliveredDamage`, which nets the transform out, so its basis is 0.
  *
  * `Hit Mitigation` is the vehicle (as in perSubAttackEvents.integration.test.ts's funnel-diversion
  * case): a one-shot that blocks the NEXT direct hit, converting it wholesale into a DoT, so exactly
  * sub-attack 0 of a 3-hit cast is diverted and sub-attacks 1-2 land normally — the asymmetry that
- * makes a zero heal observable against non-zero siblings in the SAME run, rather than needing a
- * separate control run.
+ * makes the diverted sub-attack's silence observable against non-zero siblings in the SAME run.
+ *
+ * PR6 UPDATE (this file's assertion moved with it): a repair whose gross is 0 no longer emits
+ * `reactive-heal-performed` at all, because a repair that repaired nothing must not open a
+ * combat-log row (`triggers.ts`, symmetric with the shield branch's `shieldRecipientIds.length > 0`).
+ * So rule 2's observable is now the ABSENCE of the diverted sub-attack's event, not an `amount: 0`
+ * event. Absence alone would also be satisfied by a lost sub-attack, so the undiverted CONTROL below
+ * pins that the same cast emits three when nothing is diverted — the missing one is the diverted one.
  */
-describe('Bloodthirst heals 0 off a DoT-transformed sub-attack (locked rule 2, PR7)', () => {
+describe('Bloodthirst emits no repair off a DoT-transformed sub-attack (locked rule 2, PR7/PR6)', () => {
     afterEach(() => resetRateGateRng());
 
     /** 'anchor' self-casts a long Hit Mitigation from its ACTIVE slot and acts first (speed 999
@@ -375,7 +381,7 @@ describe('Bloodthirst heals 0 off a DoT-transformed sub-attack (locked rule 2, P
             },
         }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-    it('the diverted sub-attack heals 0 while its siblings heal normally', () => {
+    it('the diverted sub-attack emits no repair at all while its siblings repair normally', () => {
         idc = 0;
         alwaysFire();
         const input: CombatEngineInput = {
@@ -386,12 +392,23 @@ describe('Bloodthirst heals 0 off a DoT-transformed sub-attack (locked rule 2, P
 
         const heals = healAmounts(input);
 
-        expect(heals).toHaveLength(3);
-        // THE rule-2 assertion: the diverted sub-attack (index 0) contributes NOTHING.
-        expect(heals[0]).toBe(0);
-        // Its siblings are unaffected — same pct of the same undiverted delivered damage.
+        // THE rule-2 assertion: the diverted sub-attack contributes NOTHING — and since PR6 a
+        // nothing-repair opens no log row, so only its two siblings are here.
+        expect(heals).toHaveLength(2);
+        // Both survivors are real repairs — same pct of the same undiverted delivered damage.
+        expect(heals[0]).toBeGreaterThan(0);
         expect(heals[1]).toBeGreaterThan(0);
-        expect(heals[2]).toBeGreaterThan(0);
-        expect(heals[2]).toBeCloseTo(heals[1], 6);
+        expect(heals[1]).toBeCloseTo(heals[0], 6);
+    });
+
+    it('CONTROL: the same 3-hit cast with NOTHING diverted emits three repairs', () => {
+        // Without this, the length-2 assertion above would also be satisfied by a sub-attack that
+        // never fired the reactive at all, rather than one correctly suppressed for repairing 0.
+        idc = 0;
+        alwaysFire();
+        const heals = healAmounts(focusCast([attackSkill(3), bloodthirstPassive()], basePattern()));
+
+        expect(heals).toHaveLength(3);
+        for (const amount of heals) expect(amount).toBeGreaterThan(0);
     });
 });

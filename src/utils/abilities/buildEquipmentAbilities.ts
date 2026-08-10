@@ -98,9 +98,11 @@ const GEAR_SET_ABILITIES: Partial<
     // `on-cast` is NOT a LIVE_TRIGGER — passive-slot on-cast DoTs are never applied by the
     // engine (the cast path only gathers DoTs from the FIRED skill, and the reactive executor
     // only runs for LIVE_TRIGGERS). So Burner rides `on-deal-damage` (a LIVE_TRIGGER that fires
-    // once per turn the owner deals direct damage), draining through the reactive DoT executor
+    // once per SUB-ATTACK that DELIVERED direct damage — the multi-hit full-walk epic made a
+    // `hits: N` skill N consecutive attacks in PR2/PR5, and PR6 moved the guard onto the delivered
+    // amount; it was once per TURN before that), draining through the reactive DoT executor
     // (triggers.ts) which pushes the inferno entry to the attack target (ctx.enemy.id) with
-    // sourceId = owner. Re-applies each attacking turn (refreshes the 2-turn duration).
+    // sourceId = owner. Re-applies on each such sub-attack (refreshes the 2-turn duration).
     BURNER: () => ({
         type: 'dot',
         target: 'enemy',

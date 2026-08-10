@@ -254,7 +254,8 @@ describe('Gear-set DoT pair — Burner applies Inferno on attack (real registry)
             })
         );
 
-        // Burner fires once per attacking turn → at least one inferno application, attributed to
+        // Burner fires once per damage-delivering SUB-ATTACK (once per turn for the single-hit
+        // cast this fixture drives) → at least one inferno application, attributed to
         // the Burner ship ('attacker') and landing on the attack target ('enemy').
         expect(infernoApplied.length).toBeGreaterThan(0);
         for (const ev of infernoApplied) {
