@@ -5056,7 +5056,11 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
-            // 'Exposed' is consumed by the hit it amplified ("removed after taking direct damage").
+            // ONE stack of 'Exposed' is consumed by the hit it amplified ("removed after taking
+            // direct damage"). A hit reads ALL of the victim's stacks (+100% each) and spends
+            // exactly one, so Amartya's 2 stacks amplify two consecutive hits — +200%, then +100%
+            // (owner ruling, 2026-08-10). WHICH hits spend is unchanged by that ruling: the guard
+            // below is untouched and still governs.
             // Placed at the funnel's landing exit so BOTH directions consume identically — and AFTER
             // the caller computed this hit's damage off the amplified modifier, so the hit that pays
             // for the status is the one that benefits from it.
@@ -5589,15 +5593,16 @@ export function runCombat(input: CombatEngineInput): {
         ): { enemyDefenseModifier: number; incomingDamageModifier: number } => {
             const victimDebuffs = victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup);
             const enemy = toEnemyModifiers(victimDebuffs);
-            // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — it arms only the
-            // NEXT direct hit and is consumed by it (see exposedStatus.ts for why it cannot ride
-            // parsedEffects.incomingDamage). Folded into the same percentage channel as Inc. Damage
-            // Up. Direct damage only, like every other term here — DoT ticks and bombs never read
-            // this channel. `defenseProfileOf` calls this per HIT, so the consumption below
-            // (applyVictimDamage) makes hit 2 of a multi-hit cast read a store with the status
-            // already gone. It re-reads the status engine rather than folding off `victimDebuffs`
-            // above: a one-shot must be read from exactly the channel its removal can spend, which
-            // is narrower than the three-channel list `toEnemyModifiers` needs.
+            // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — each stack arms
+            // ONE direct hit, which reads every stack the victim holds and spends one of them (see
+            // exposedStatus.ts for why it cannot ride parsedEffects.incomingDamage). Folded into the
+            // same percentage channel as Inc. Damage Up. Direct damage only, like every other term
+            // here — DoT ticks and bombs never read this channel. `defenseProfileOf` calls this per
+            // HIT, so the consumption below (applyVictimDamage) makes hit 2 of a multi-hit cast read
+            // a store one stack lighter (and, at one stack, empty). It re-reads the status engine
+            // rather than folding off `victimDebuffs` above: a one-shot must be read from exactly
+            // the channel its removal can spend, which is narrower than the three-channel list
+            // `toEnemyModifiers` needs.
             const exposed = exposedIncomingPct(statusEngine, victimId);
             // D-PR12: friendly-side incoming-DIRECT-damage buffs on the victim's OWN 'self' store
             // (Inc. Damage Down/Up — Makoli/Salvation/Shelter/Refine/Battlecry). Summed into the SAME

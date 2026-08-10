@@ -112,6 +112,16 @@ export type RegisteredAbilityStatus =
            *  ticks out, still removable) — see the TOXIC_OVERFLOW_DURATION precedent. Absent →
            *  the turn lifecycle alone governs, byte-identical. */
           hits?: number;
+          /** Cap for the LIVE stack count when a stackable timed status is re-applied onto a
+           *  victim that still holds it (see applyTimedAbilityStatus's stack-accumulation rule).
+           *  Only consulted on that add-and-cap branch — a first application always stores the
+           *  declared `payload.stacks`, uncapped, exactly as before. Absent → uncapped.
+           *  NOTE: no production registration site populates this yet (the two corpus Exposed
+           *  appliers both carry `isStackable` falsy, so they REFRESH rather than add); it exists
+           *  so the accumulation rule has a bound to obey the moment one does, and the
+           *  statusEngine unit test is what holds that bound. Same shape as `hits` before
+           *  Quixilver R2 gave it a caller. */
+          maxStacks?: number;
       })
     | (AbilityStatusBase & { kind: 'aura' })
     | (AbilityStatusBase & {
@@ -206,6 +216,13 @@ export interface StatusEngine {
      *  A 'permanent'/'recurring' entry is left untouched. Lazy-empty / unknown id / unknown name →
      *  safe no-op. */
     reduceTimedEnemyStatus(targetId: string, buffName: string): void;
+    /** Spend ONE STACK of a SINGLE named timed enemy status on `targetId`, deleting the entry only
+     *  when the last stack goes. Used by Exposed's consumption (a hit reads every stack and spends
+     *  exactly one). Targeted like removeTimedEnemyStatus/reduceTimedEnemyStatus, and note that
+     *  this moves the STACKS axis while reduceTimedEnemyStatus moves the TURNS axis — same store,
+     *  two independent axes. An entry carrying no live stack count is treated as its last stack.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    consumeTimedEnemyStatusStack(targetId: string, buffName: string): void;
     /** Remove a named buff family from ALL of `actorId`'s self stores (timed selfMaps,
      *  accumulating accumSelfMaps, persistent persistentSelfMaps). Lazy-empty / unknown id /
      *  unknown name → safe no-op. */
@@ -384,6 +401,15 @@ interface BuffState {
     /** Remaining hit charges for a hit-counted status (see RegisteredAbilityStatus.hits).
      *  Undefined = turn-duration-governed; consumeStatusHit is a no-op on such an entry. */
     hitsRemaining?: number;
+    /** LIVE stack count, seeded from `payload.stacks` at every applyTimedAbilityStatus write and
+     *  spent one at a time by consumeTimedEnemyStatusStack (Exposed). The reason this exists at
+     *  all: `payload` is stored BY REFERENCE to the registered ability's own config object, shared
+     *  across every victim and every application, so decrementing `payload.stacks` would corrupt
+     *  the ability definition globally. This is the per-entry copy that CAN move.
+     *  Undefined on entries written by `upsertBuff` (the scheduled channel, which has no stack
+     *  model); every read treats undefined as "one stack, the declared count", so those entries
+     *  behave exactly as they did before this field existed. */
+    stacks?: number;
 }
 
 interface AccumulatingState {
@@ -1106,6 +1132,28 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (s.turnsRemaining <= 0) map.delete(key);
     };
 
+    /** Spend ONE stack of the named timed enemy status on `targetId`, deleting the entry only when
+     *  the last stack goes (Exposed: a hit reads all of a victim's stacks and spends exactly one,
+     *  owner ruling 2026-08-10). Same targeting and same store as removeTimedEnemyStatus, but on
+     *  the STACKS axis — orthogonal to reduceTimedEnemyStatus, which moves the TURNS axis. Do not
+     *  conflate the two.
+     *  An entry with no live `stacks` (written by upsertBuff, which has no stack model) counts as
+     *  its last stack and is deleted — byte-identical to removeTimedEnemyStatus for such entries.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    const consumeTimedEnemyStatusStack = (targetId: string, buffName: string): void => {
+        const map = enemyMaps.get(targetId);
+        if (!map) return;
+        const key = deriveFamilyKey(buffName).familyKey;
+        const s = map.get(key);
+        if (!s) return;
+        const live = s.stacks ?? 1;
+        if (live <= 1) {
+            map.delete(key);
+            return;
+        }
+        s.stacks = live - 1;
+    };
+
     /** Remove a named buff family from ALL of `actorId`'s self stores. The three self-side
      *  doors a buff can arrive through each use a different key:
      *   - timed `selfMaps` are keyed by `deriveFamilyKey(buffName).familyKey`,
@@ -1357,6 +1405,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // would otherwise become permanent, unspendable damage immunity in the thief's
                 // hands — consumeStatusHit can only spend an entry that actually carries this.
                 hitsRemaining: s.hitsRemaining,
+                // The LIVE stack count travels with the theft too — this site RE-ENUMERATES
+                // BuffState's fields rather than spreading it, so a new field that is not restated
+                // here is silently dropped. Inert on today's corpus (only the enemy store's
+                // Exposed can diverge from its declared count, and buff steal reads self stores),
+                // but a dropped `stacks` would make a stolen partly-spent status read as full.
+                stacks: s.stacks,
             };
         });
         for (const recipientId of recipientIds) {
@@ -1377,6 +1431,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     // governed (a no-op), leaving the thief permanently immune until it expires
                     // (never, since it also carries turnsRemaining: Infinity).
                     hitsRemaining: st.hitsRemaining,
+                    // REMAINING stack count travels intact, same rule as hitsRemaining above.
+                    stacks: st.stacks,
                     appliedSeq: nextAppliedSeq(),
                     // Own-turn reprieve (Finding 2): a buff granted to the actor whose turn is
                     // executing is protected from that same turn's Post-Turn decrement — its
@@ -1507,12 +1563,34 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // hook), so a blocked application is NOT recorded as resisted — the stronger/longer
         // buff simply persists and this entry never enters the timed-ability folding.
         if (!familyApplicationWins(existing, tier, duration)) return;
+        // LIVE stack count for this entry (see BuffState.stacks). Re-application semantics
+        // (owner ruling 2026-08-10):
+        //  - a stackable status landing on a victim that still holds it ADDS the incoming stacks,
+        //    capped at maxStacks — the same "add a stack (capped)" rule the persistent-stacking
+        //    door above already applies (addPersistentStack), so the two doors agree;
+        //  - anything else REFRESHES to the incoming declared count. That covers the first
+        //    application (no `existing`) and every non-stackable re-application, which is what
+        //    both corpus Exposed appliers are: Amartya's reactive payload comes from
+        //    payloadFromConfig, which does not even carry isStackable, and Nayra's cast config
+        //    declares isStackable: false. So on today's corpus this is always the refresh branch,
+        //    and refresh-to-declared is exactly the value the entry has always held implicitly.
+        // The DURATION refresh is untouched — `existing` reaches here only because
+        // familyApplicationWins already ruled on it.
+        const declaredStacks = status.payload.stacks ?? 1;
+        const liveStacks =
+            existing !== undefined && status.payload.isStackable === true
+                ? Math.min(
+                      (existing.stacks ?? declaredStacks) + declaredStacks,
+                      status.maxStacks ?? Infinity
+                  )
+                : declaredStacks;
         map.set(familyKey, {
             buffName: status.payload.buffName,
             turnsRemaining: duration,
             tier,
             payload: status.payload,
             casterId: status.casterId,
+            stacks: liveStacks,
             appliedSeq: nextAppliedSeq(),
             // Own-turn reprieve. Self-side: any timed self-buff applied while its carrier is the
             // active actor. Enemy-side: ONLY an opt-in reprieve status (on-destroyed Martyrdom
@@ -1604,17 +1682,36 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // enemyTargetId). The `ownerId` param is ignored for enemy-side; `enemyTargetId`
         // is ignored for self-side — matching the pre-Task-1 behavior where enemy maps were
         // singular and ownerId was never consulted for them.
-        // NOTE: like the aura branch, this finite-duration branch does not surface `active.stacks`.
-        // No corpus ship pairs a stackable status with a finite duration today; if one appears,
-        // apply the same isStackable-gated stacks spread used in the aura branch above.
+        // LIVE stack count. This branch surfaces `BuffState.stacks` — the per-entry copy a
+        // consume-one-stack API can move (Exposed) — the same way the aura and persistent branches
+        // surface theirs: spread over the payload so `payload.stacks` reads the live value without
+        // anyone mutating the shared, by-reference registered payload.
+        //
+        // GATED ON DIVERGENCE, deliberately not on `payload.isStackable`. Divergence is the only
+        // gate that is both (a) byte-identical for every status nothing has spent from — which is
+        // every status in the corpus except a partly-spent Exposed — and (b) actually reachable by
+        // the mechanic it exists for: NEITHER corpus Exposed applier sets isStackable (Amartya's
+        // reactive payload is built by payloadFromConfig, which drops the flag entirely; Nayra's
+        // cast config declares it false), so an isStackable gate would leave `payload.stacks` stuck
+        // at the declared count and Exposed would re-read its full amplification forever.
+        // Only consumeTimedEnemyStatusStack can make `stacks` diverge, so nothing else moves.
         const map = side === 'self' ? selfMaps.get(ownerId) : enemyMaps.get(enemyTargetId);
         const out: ActiveAbilityStatus[] = [];
         if (map) {
             for (const s of map.values()) {
                 if (!s.payload) continue;
+                const live = s.stacks;
+                const spent = live !== undefined && live !== s.payload.stacks;
                 out.push({
-                    payload: s.payload,
-                    active: { buffName: s.buffName, turnsRemaining: s.turnsRemaining },
+                    payload: spent ? { ...s.payload, stacks: live } : s.payload,
+                    active: {
+                        buffName: s.buffName,
+                        turnsRemaining: s.turnsRemaining,
+                        // Kept in lockstep with the payload above: a partly-spent entry reporting
+                        // a live payload count but no `active.stacks` (which readers default to 1)
+                        // would have the two halves of one entry disagreeing.
+                        ...(spent ? { stacks: live } : {}),
+                    },
                     casterId: s.casterId,
                 });
             }
@@ -1654,6 +1751,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         clearRemovable,
         removeTimedEnemyStatus,
         reduceTimedEnemyStatus,
+        consumeTimedEnemyStatusStack,
         removeSelfBuffByName,
         consumeStatusHit,
         cleanse,

@@ -1,8 +1,12 @@
 /**
- * `Exposed` amplifies the next direct hit and is consumed by it.
+ * `Exposed` amplifies the next direct hit and one stack of it is consumed by that hit.
  *
  * Game text (constants/buffs.ts): "Increases the incoming damage of the next direct hit by 100%,
  * removed after taking direct damage or at the end of the round."
+ *
+ * LOCKED game rule (owner ruling, 2026-08-10): a hit READS every stack the victim holds (+100%
+ * each) and SPENDS EXACTLY ONE, leaving the rest armed. Each stack therefore arms its own hit, and
+ * Amartya's 2 stacks amplify two consecutive hits (+200%, then +100%) rather than one (+200%).
  *
  * Two corpus appliers — Amartya's reactive "inflicts 2 stacks of Exposed on that defender"
  * (on-enemy-taunt-gained) and Nayra's charged skill. It built as a name-only debuff (empty
@@ -26,16 +30,20 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 
 const HITS = 2;
 
-/** A 2-hit attack. `multiplier` already includes the hit count (victimDamage's contract), so each
- *  hit lands attack × 1.0 — making the per-hit amplification readable straight off the totals. */
-const twoHitAttack = (): Ability => ({
+/** An N-hit attack. `multiplier` already includes the hit count (victimDamage's contract), so each
+ *  hit lands attack × 1.0 — making the per-hit amplification readable straight off the totals: a
+ *  run's total is simply the sum of each hit's `1 + amplification`, in "half-shares" of the cast. */
+const nHitAttack = (hits: number): Ability => ({
     id: 'atk',
     type: 'damage',
     target: 'enemy',
     trigger: 'on-cast',
     conditions: [],
-    config: { type: 'damage', multiplier: 100 * HITS, hits: HITS },
+    config: { type: 'damage', multiplier: 100 * hits, hits },
 });
+
+/** The default 2-hit attack. */
+const twoHitAttack = (): Ability => nHitAttack(HITS);
 
 const noopAttack = (): Ability => ({
     id: 'noop',
@@ -48,7 +56,7 @@ const noopAttack = (): Ability => ({
 
 /** Nayra's shape — the OTHER corpus applier: a plain on-cast enemy debuff, which lands through
  *  playerTurn's per-victim `applyTimedAbilityStatus` rather than the reactive executor's. */
-const castStatus = (buffName: string): Ability => ({
+const castStatus = (buffName: string, stacks = 1): Ability => ({
     id: `cast-${buffName}`,
     type: 'debuff',
     target: 'enemy',
@@ -58,7 +66,10 @@ const castStatus = (buffName: string): Ability => ({
         type: 'debuff',
         buffName,
         parsedEffects: {},
-        stacks: 1,
+        stacks,
+        // Matches BOTH corpus appliers: Nayra's parsed config declares isStackable false, and
+        // Amartya's reactive payload does not carry the flag at all. So a multi-stack Exposed here
+        // is faithful to the real thing — the live stack count must not depend on that flag.
         isStackable: false,
         duration: 5,
         application: 'apply',
@@ -101,20 +112,25 @@ const stats = (attack: number, speed: number) => ({
  *
  * `applier: 'cast'` swaps that for Nayra's shape — the status rides the focus actor's own cast,
  * alongside the attack, exercising playerTurn's application path instead of the reactive executor's.
+ *
+ * `hits` widens the focus actor's attack beyond the default 2, so a multi-stack run can be watched
+ * decaying over more hits than it has stacks.
  */
 function playerHitsExposedEnemy(
     statusName: string,
     stacks = 1,
-    applier: 'reactive' | 'cast' | 'scheduled' = 'reactive'
+    applier: 'reactive' | 'cast' | 'scheduled' = 'reactive',
+    hits = HITS
 ): number {
+    const attack = nHitAttack(hits);
     const focusSkills: ShipSkills =
         applier === 'cast'
-            ? { slots: [{ slot: 'active', abilities: [castStatus(statusName), twoHitAttack()] }] }
+            ? { slots: [{ slot: 'active', abilities: [castStatus(statusName), attack] }] }
             : applier === 'scheduled'
-              ? { slots: [{ slot: 'active', abilities: [twoHitAttack()] }] }
+              ? { slots: [{ slot: 'active', abilities: [attack] }] }
               : {
                     slots: [
-                        { slot: 'active', abilities: [twoHitAttack()] },
+                        { slot: 'active', abilities: [attack] },
                         { slot: 'passive', abilities: [reactiveStatus(statusName, stacks)] },
                     ],
                 };
@@ -245,7 +261,7 @@ function enemyHitsExposedPlayer(statusName: string): number {
 // isolates the 'Exposed' name and nothing else about the fixture.
 const CONTROL = 'Inert Marker';
 
-describe('Exposed — +100% on the next direct hit, then consumed', () => {
+describe('Exposed — +100% per stack on the next direct hit, one stack spent per hit', () => {
     it('doubles the FIRST hit against an enemy and leaves the second unamplified', () => {
         const control = playerHitsExposedEnemy(CONTROL);
         const exposed = playerHitsExposedEnemy('Exposed');
@@ -255,15 +271,49 @@ describe('Exposed — +100% on the next direct hit, then consumed', () => {
         expect(exposed / control).toBeCloseTo(1.5, 5);
     });
 
-    // Amartya's real shape: "inflicts 2 stacks of Exposed on that defender". Stacks scale the
-    // amplification and are spent TOGETHER on one hit (see exposedIncomingPct's open game-rule
-    // note): hit 1 lands at +200% (3 half-shares), hit 2 plain → 4 vs the control's 2.
-    it('scales with stacks — 2 stacks triple the first hit, still consumed in one go', () => {
+    // Amartya's real shape: "inflicts 2 stacks of Exposed on that defender". LOCKED game rule
+    // (owner ruling 2026-08-10): a hit READS all the stacks and SPENDS exactly one, so each stack
+    // arms its own hit.
+    //
+    // Derivation over the 2-hit attack, in half-shares (each hit's base slice = 1):
+    //   control  : 1 + 1                     = 2
+    //   spend-one: (1 + 2.00) + (1 + 1.00)   = 5   → ratio 2.5   ← the rule
+    //   spend-all: (1 + 2.00) + 1            = 4   → ratio 2.0
+    //   spend-none:(1 + 2.00) + (1 + 2.00)   = 6   → ratio 3.0
+    // The three ratios are distinct, so this assertion cannot be satisfied by the wrong rule.
+    it('scales with stacks — 2 stacks amplify the first hit by 200%, and the second by 100%', () => {
         const control = playerHitsExposedEnemy(CONTROL, 2);
         const exposed = playerHitsExposedEnemy('Exposed', 2);
 
         expect(control).toBeGreaterThan(0);
+        expect(exposed / control).toBeCloseTo(2.5, 5);
+    });
+
+    // The three-STEP decay, over a 3-hit attack — the assertion that pins the whole rule, because
+    // it needs one more hit than there are stacks and so also fixes where the decay STOPS.
+    //   control  : 1 + 1 + 1                            = 3
+    //   spend-one: (1 + 2.00) + (1 + 1.00) + 1          = 6   → ratio 2.0     ← the rule
+    //   spend-all: (1 + 2.00) + 1 + 1                    = 5   → ratio 1.666…
+    //   spend-none:(1 + 2.00) + (1 + 2.00) + (1 + 2.00) = 9   → ratio 3.0
+    it('2 stacks decay in three steps — +200%, then +100%, then unamplified', () => {
+        const control = playerHitsExposedEnemy(CONTROL, 2, 'reactive', 3);
+        const exposed = playerHitsExposedEnemy('Exposed', 2, 'reactive', 3);
+
+        expect(control).toBeGreaterThan(0);
         expect(exposed / control).toBeCloseTo(2, 5);
+    });
+
+    // The regression fence for the common case (Nayra, Amartya R2): ONE stack must behave exactly
+    // as it did before stacks became spendable one at a time — a single amplified hit, then nothing.
+    // Same shape as the first test in this block but stated as an explicit 1-stack invariant, since
+    // the spend-one change reaches this path too (it now walks 1 → 0 rather than deleting outright).
+    //   control: 1 + 1 + 1 = 3;  one stack: (1 + 1.00) + 1 + 1 = 4  → ratio 4/3.
+    it('1 stack still amplifies exactly one hit and nothing after it', () => {
+        const control = playerHitsExposedEnemy(CONTROL, 1, 'reactive', 3);
+        const exposed = playerHitsExposedEnemy('Exposed', 1, 'reactive', 3);
+
+        expect(control).toBeGreaterThan(0);
+        expect(exposed / control).toBeCloseTo(4 / 3, 5);
     });
 
     // The second corpus applier (Nayra's charged skill) lands Exposed through playerTurn's cast
@@ -361,9 +411,9 @@ const counterAbility = (): Ability => ({
  * it. Counter damage is a per-round constant, so comparing the round2−round1 DELTA against the
  * counter-free run cancels it out exactly.
  */
-function foeDamagePerRound(withCounter: boolean): { r1: number; r2: number } {
+function foeDamagePerRound(withCounter: boolean, stacks = 1): { r1: number; r2: number } {
     const focusSlots: ShipSkills['slots'] = [
-        { slot: 'active', abilities: [twoHitAttack(), castStatus('Exposed')] },
+        { slot: 'active', abilities: [twoHitAttack(), castStatus('Exposed', stacks)] },
     ];
     if (withCounter) focusSlots.push({ slot: 'passive', abilities: [counterAbility()] });
 
@@ -435,6 +485,43 @@ describe('Exposed is not spent by hit types that never amplified it', () => {
         // With the counter in play the round-over-round GAIN must be identical: the counter lands on
         // the Exposed holder first, but it is not an amplified hit, so it must not consume it.
         const countered = foeDamagePerRound(true);
+        expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
+    });
+
+    // The same exclusion where the applier lands TWO stacks — which is where "spends nothing" and
+    // "spends one" finally part company: at one stack a hit either consumes the whole status or
+    // leaves it whole, so the test above cannot tell a stack-spend from a no-op. Here it can, because
+    // a partially spent Exposed reads +100% rather than +200% and the totals say which.
+    //
+    // What survives a round is ONE stack, not two — the counter's job is to leave that one alone.
+    // Round 1's attack 1 spends one of the two, and its own post-damage clause cannot top the entry
+    // back up: `familyApplicationWins` only overwrites a same-tier family when the incoming duration
+    // EXCEEDS what is standing, and 5 is not > the 5 attack 0 just wrote, so the re-application is
+    // silently absorbed. (Round 2's attack 0 CAN re-land, because its spend takes the last stack and
+    // deletes the entry outright.) That gate long predates both this ruling and PR8 — see the
+    // same-family overwrite rule in statusEngine — so the carried-over single stack is the honest
+    // starting state for round 2, and it is what the counter must not touch.
+    it('a counterattack spends none of the Exposed stack a 2-stack applier leaves standing', () => {
+        const plain = foeDamagePerRound(false, 2);
+        expect(plain.r1).toBeGreaterThan(0);
+        // Premise: round 2 IS amplified by the stack round 1 left standing.
+        //
+        // The ratio is 5/4, not the pre-PR8 2.5, because since PR8 each of the cast's 2 hits is a
+        // full attack landing its own post-damage 2 stacks:
+        //   round 1 = plain + tripled  (attack 0 lands 2, attack 1 reads both at +100% each and
+        //             spends one; its own clause is family-blocked)          = 1 + 3 = 4 half-shares,
+        //   round 2 = doubled + tripled (attack 0 reads the ONE stack left standing and spends it,
+        //             which empties the entry so its clause lands a fresh 2; attack 1 reads both
+        //             and spends one)                                       = 2 + 3 = 5 half-shares.
+        // Spending ALL stacks per hit would instead read +200% on all three amplified hits → 4 then
+        // 6, a ratio of 1.5, so this pin is what distinguishes the ruling from its predecessor.
+        expect(plain.r2 / plain.r1).toBeCloseTo(5 / 4, 5);
+
+        // With the counter in play the round-over-round GAIN must be identical. Had the counter spent
+        // round 1's leftover stack, round 2 would open plain: 1 + 3 = 4 half-shares, the same as
+        // round 1 → delta 0, against the counter-free run's delta of 1. The counter's own damage is a
+        // per-round constant, so the delta comparison cancels it exactly.
+        const countered = foeDamagePerRound(true, 2);
         expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
     });
 });

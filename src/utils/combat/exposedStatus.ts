@@ -26,33 +26,31 @@ export const EXPOSED_INCOMING_PCT = 100;
  * `victimIncomingModifiers`).
  *
  * Stack scaling matches the repo-wide convention for status effects (`value * stacks`, see
- * dpsBuffHelpers' `toEnemyModifiers`): Amartya's 2 stacks amplify the next hit by +200%. SETTLED
- * (owner ruling, in-game observation): this read side is correct as written — stacks sum onto the
- * one hit they amplify, not one stack arming its own separate hit. What was genuinely open was
- * CONSUMPTION, and the owner's ruling there is the alternative reading: the amplified hit spends
- * only ONE stack, leaving the rest standing for the next hit (2 stacks → that hit reads +200%, the
- * next reads +100% off the 1 left over). {@link consumeExposed} does not implement that yet — it
- * calls `removeTimedEnemyStatus`, which deletes every stack the victim holds rather than
- * decrementing by one. Fixing consumption to spend a single stack per hit is tracked separately and
- * is deliberately NOT part of this PR. The divergence is invisible in this PR's own fixtures: every
- * corpus applier here lands exactly one stack per sub-attack and the very next hit spends it, so two
- * stacks are never simultaneously held.
+ * dpsBuffHelpers' `toEnemyModifiers`): Amartya's 2 stacks amplify the next hit by 200%.
+ *
+ * SETTLED GAME RULE (owner ruling, 2026-08-10 — LOCKED): a hit READS ALL of the victim's stacks but
+ * SPENDS EXACTLY ONE, so each stack arms its own hit. 2 stacks → +200% on the first hit, then
+ * +100% on the second, then nothing. This function is the READ half and is unchanged by that
+ * ruling; {@link consumeExposed} is the SPEND half, and it spends one stack via the status engine's
+ * stack axis. The live count arrives through `payload.stacks` because `timedAbilityStatuses`
+ * spreads the entry's own live count over the shared registered payload — there is no second store
+ * of stack counts to fall out of step with expiry or victim death.
  *
  * Reads the victim's TIMED per-victim enemy store directly rather than the caller's assembled
- * three-channel debuff list, because that is exactly the channel {@link consumeExposed} can delete
- * — amplify and consume must see the same set or the status stops being one-shot. The dropped
+ * three-channel debuff list, because that is exactly the channel {@link consumeExposed} can spend
+ * from — amplify and consume must see the same set or the status stops being one-shot. The dropped
  * channels are the SCHEDULED store (keyed to the global `__enemy__` sentinel, so a per-victim
  * removal can never reach it) and the aura/accumulating ability channel (`recurring`, living in
- * maps `removeTimedEnemyStatus` never visits). A manually selected DPS-mode `Exposed` arrives
+ * maps `consumeTimedEnemyStatusStack` never visits). A manually selected DPS-mode `Exposed` arrives
  * always-active on the scheduled channel and used to amplify EVERY direct hit of the battle by
  * +100%, which contradicts the status's own text; it is now INERT instead — the faithful rendering,
  * since "the next direct hit" has no standing value to model, the same reason the status is
  * name-keyed rather than a `parsedEffects` entry. Both corpus appliers (Amartya's reaction,
  * Nayra's cast) land on the timed channel via `applyTimedAbilityStatus`, so nothing real is lost.
  *
- * (`timedAbilityStatuses` also surfaces the persistent-stacking store, which the removal likewise
- * cannot reach — unreachable for Exposed, which is not a `PERSISTENT_STACKING_BUFFS` member and so
- * is never routed there.)
+ * (`timedAbilityStatuses` also surfaces the persistent-stacking store, which the stack spend
+ * likewise cannot reach — unreachable for Exposed, which is not a `PERSISTENT_STACKING_BUFFS`
+ * member and so is never routed there.)
  */
 export function exposedIncomingPct(statusEngine: StatusEngine, victimId: string): number {
     return statusEngine
@@ -67,11 +65,18 @@ export function exposedIncomingPct(statusEngine: StatusEngine, victimId: string)
 }
 
 /**
- * Consume the victim's Exposed after a direct hit ("removed after taking direct damage").
+ * Consume ONE of the victim's Exposed stacks after a direct hit ("removed after taking direct
+ * damage"). The remaining stacks stay armed for the next hit — a hit reads every stack but spends
+ * exactly one (owner ruling, 2026-08-10; see {@link exposedIncomingPct} for the read half).
  *
  * Targets the per-victim enemy-side store `applyTimedAbilityStatus` writes — the channel both
  * corpus appliers land in — mirroring the §4.5 direct-damage Stasis break's use of the same
- * targeted API. A no-op when the victim carries no Exposed, so it is safe to call on every hit.
+ * targeted API, but on the STACKS axis (`consumeTimedEnemyStatusStack`) rather than the turns axis
+ * that break uses. The entry is deleted only when its last stack goes. A no-op when the victim
+ * carries no Exposed, so it is safe to call on every hit.
+ *
+ * WHAT THIS RULING DID NOT CHANGE: WHEN a stack is spent. Every consumption guard below stands
+ * exactly as it was — this is about how much is spent, never about whether.
  *
  * The governing rule is a single premise — NOTHING LANDED AT THAT INSTANT — and it covers both of
  * the funnel's damage-cancelling mechanics identically (owner ruling, 2026-08-03):
@@ -103,5 +108,5 @@ export function exposedIncomingPct(statusEngine: StatusEngine, victimId: string)
  * silent asymmetry, {@link exposedIncomingPct} does not READ that channel either — see its doc.
  */
 export function consumeExposed(statusEngine: StatusEngine, victimId: string): void {
-    statusEngine.removeTimedEnemyStatus(victimId, EXPOSED);
+    statusEngine.consumeTimedEnemyStatusStack(victimId, EXPOSED);
 }
