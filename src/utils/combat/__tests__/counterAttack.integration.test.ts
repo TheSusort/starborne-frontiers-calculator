@@ -27,6 +27,7 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
+import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 
 /** A Ship carrying Stalwart's first-passive (30%) counterattack skill text.
  *  Parsed through the real registry → an on-attacked `counter` ability
@@ -386,5 +387,97 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
             })
         );
         expect(totalPerTargetDamage(result, 'foe')).toBe(0);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Multi-hit epic residual R4 — Centurion multi-VICTIM double-retaliation.
+//
+// Centurion's ONE passive clause is synthesized into TWO counter abilities (self `on-attacked` +
+// adjacent-ally `on-ally-attacked`). The executor's dedupe guard is keyed
+// `ownerId:abilityId:subAttackIndex`, so the two abilities land in DIFFERENT buckets. Since
+// per-victim `attacked` emission landed, a single AoE sub-attack that covers Centurion AND an
+// adjacent ally wakes BOTH abilities → Centurion retaliates TWICE for one incoming attack.
+//
+// One incoming attack must draw ONE retaliation. This is a multi-VICTIM defect, not a multi-HIT
+// one: it reproduces at `hits: 1`, and PR6's sub-attack token neither caused nor fixes it.
+//
+// Geometry (board.ts): M4 is the player-side FRONT column; neighbors('M4') = M3,T3,T4,B3,B4. A
+// Line-Range-1 footprint anchored on M4 covers M4 + M3, so the focus (Centurion, M4) and its
+// adjacent ally (M3) are hit by the SAME sub-attack.
+//
+// Read mechanism: count `reactive-damage-performed` rows sourced at the focus. That counts
+// RETALIATIONS directly, where a damage total would conflate "two counters" with "one bigger
+// counter" — the co-located "gains 750 attack per adjacent ally" buff makes the magnitude
+// position-dependent, so a magnitude assertion here would be reading the wrong signal.
+// ───────────────────────────────────────────────────────────────────────────
+
+const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
+    raw: selection,
+    side: 'enemy',
+    selection,
+});
+
+/** AoE footprint: origin + one covered cell one step toward back (Pattern-Line-Range-1). */
+const lineRange1Pattern = (): ParsedPattern => ({
+    raw: 'line-range-1',
+    shape: 'line',
+    range: 1,
+    modifiers: {},
+});
+
+/** A no-passive single-hit basic-attack active slot (100% multiplier, 1 hit). */
+const basicAttackSlot = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        {
+            id: 'r4-basic',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 100 },
+        },
+    ],
+});
+
+/** A positioned enemy that fires `front` with an AoE footprint covering two player cells. */
+const aoeEnemyAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 3_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 50 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget('front'),
+        pattern,
+        shipSkills: { slots: [basicAttackSlot()] },
+    }) as EnemyAttacker;
+
+describe('R4 — one incoming attack draws ONE Centurion retaliation, not one per ability', () => {
+    it('AoE covering Centurion AND an adjacent ally retaliates ONCE per sub-attack', () => {
+        const skills = buildShipAbilities(centurionShip(CENTURION_P2));
+
+        const bus = createEventBus();
+        const reactive: CombatEvent[] = [];
+        bus.on('reactive-damage-performed', (e) => reactive.push(e as CombatEvent));
+
+        runCombat(
+            counterBase(skills, {
+                bus,
+                numRounds: 1,
+                position: 'M4', // front column → the enemy's `front` selection anchors here
+                teamActors: [ally('ally-M3', 'M3')], // adjacent to M4, inside the footprint
+                healTargetId: 'attacker',
+                enemyAttackers: [aoeEnemyAt('foe', 'M4', lineRange1Pattern())],
+            })
+        );
+
+        const retaliations = reactive.filter(
+            (e) => e.type === 'reactive-damage-performed' && e.sourceId === 'attacker'
+        );
+        // Both victims are covered by ONE sub-attack, so both the self and the adjacent-ally
+        // counter wake — but Centurion retaliates against that attack exactly once.
+        expect(retaliations).toHaveLength(1);
     });
 });

@@ -1309,24 +1309,30 @@ function abilitiesFromText(
     // gate). The per-ability guard collapses the per-HIT fan-out within one sub-attack; since the
     // multi-hit epic's PR6 it does NOT collapse across sub-attacks, so a `hits: N` cast draws N
     // retaliations — correct, since R1 makes that N separate attacks. Self/ally were also
-    // mutually exclusive per attack back when the `attacked` emit was single-focus. NOTE: per-
-    // victim `attacked` emission HAS since landed, so an AoE covering both this unit and an
-    // adjacent ally can now wake both abilities in one sub-attack; deduping across the two would
-    // need the executor guard keyed on `${ownerId}` rather than the ability id. Untouched by PR6
-    // (that is a multi-VICTIM question, not a multi-HIT one) and tracked separately. The
-    // co-located "start of combat … attack per adjacent ally" buff parses independently and is
-    // unaffected.
+    // mutually exclusive per attack back when the `attacked` emit was single-focus. Per-victim
+    // `attacked` emission HAS since landed, so an AoE covering both this unit and an adjacent ally
+    // wakes both abilities in one sub-attack — one incoming attack, two retaliations. Both now
+    // carry the SAME `counterGroupId` so the executor guard collapses them back into one. Keying
+    // the guard on `${ownerId}` instead would have worked here but would also collapse two
+    // genuinely independent counters on some future ship; the group id says exactly what is true,
+    // that these two abilities are one clause. This is a multi-VICTIM defect, not a multi-HIT one
+    // (it reproduces at `hits: 1`), which is why PR6 neither caused nor fixed it. The co-located
+    // "start of combat … attack per adjacent ally" buff parses independently and is unaffected.
     if (slot === 'passive' && counter && counter.allySubject) {
         const hits = parseHitCount(text);
+        // The self ability's own id doubles as the group id — stable, unique, and no extra id
+        // burned out of the shared sequence.
+        const selfCounterId = nextId();
         const counterConfig = {
             type: 'counter' as const,
             multiplier: counter.multiplier,
             ...(hits !== undefined ? { hits } : {}),
+            counterGroupId: selfCounterId,
         };
         const pos = damagePos >= 0 ? damagePos : MAX_POS;
         out.push({
             ability: {
-                id: nextId(),
+                id: selfCounterId,
                 type: 'counter',
                 target: 'enemy',
                 trigger: 'on-attacked',
