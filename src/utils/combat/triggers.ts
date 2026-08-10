@@ -3656,7 +3656,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // index there since it passes the whole cast in one call) — and matters only to a hand-built
         // fixture whose intent carries no `eventCtx`, where it reproduces the old turn-scoped
         // collapse.
-        const key = `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+        //
+        // R4: the identity component is `counterGroupId ?? ability.id`. Centurion's one passive
+        // clause synthesizes a self `on-attacked` AND an adjacent-ally `on-ally-attacked` ability;
+        // per-victim `attacked` emission lets an AoE covering the owner and an adjacent ally wake
+        // both inside ONE sub-attack, which is two retaliations for one incoming attack. The two
+        // share a group id, so they collapse here. Counters with no group id keep deduping on
+        // their own ability id, so unrelated counters on one ship stay independent.
+        const counterIdentity = cfg.counterGroupId ?? intent.ability.id;
+        const key = `${intent.ownerId}:${counterIdentity}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
         if (ctx.counterFiredThisTurn?.has(key)) return;
         // Consuming gates LAST (see ordering note above).
         if (!passesProcChanceGate(intent, ctx)) return;

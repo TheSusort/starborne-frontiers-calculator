@@ -692,6 +692,14 @@ export type AbilityConfig =
           requirePrimaryTarget?: boolean;
           /** Nyxen (PR2): fire only when the hit reduced the shield pool. Plumbed in PR2. */
           requireShieldHit?: boolean;
+          /** Multi-hit epic residual R4: marks several abilities as ONE retaliation mechanic for
+           *  the executor's dedupe guard, which is otherwise keyed on the ability id. Centurion's
+           *  single passive clause is synthesized into a self `on-attacked` PLUS an adjacent-ally
+           *  `on-ally-attacked` ability; an AoE covering the owner and an adjacent ally wakes both
+           *  in ONE sub-attack, and without a shared key that is two retaliations for one incoming
+           *  attack. Absent → the ability dedupes on its own id, so two genuinely independent
+           *  counters on one ship still fire independently. */
+          counterGroupId?: string;
       }
     | { type: 'additional-damage'; stat: 'hp' | 'defense' | 'shield'; pct: number }
     | {

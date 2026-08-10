@@ -406,7 +406,21 @@ describe('Overload lifecycle — engine fixtures', () => {
                 enemyAttackers: [
                     {
                         id: 'repairer',
-                        stats: { attack: 100, crit: 0, critDamage: 0, speed: 50 },
+                        // `hp` is LOAD-BEARING. The skill repairs "30% of their Max HP", so without
+                        // it the repair resolved to exactly 0 — and this fixture used to pass only
+                        // because a zero repair still counted as a repair (the cast path emitted
+                        // `heal-performed` on recipient count alone). R5(ii) closed that, matching
+                        // the gate the reactive path has had since PR6, so the healer now needs a
+                        // real Max HP to perform a real repair. The mechanic under test — one
+                        // Overload stack per enemy repair — is unchanged.
+                        stats: {
+                            attack: 100,
+                            crit: 0,
+                            critDamage: 0,
+                            defence: 0,
+                            hp: 1_000_000,
+                            speed: 50,
+                        },
                         chargeCount: 0,
                         startCharged: false,
                         shipSkills: skillsFor(healer),

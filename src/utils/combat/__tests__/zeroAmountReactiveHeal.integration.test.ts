@@ -379,3 +379,107 @@ describe('PR6 — a reactive repair that repaired nothing opens no log row — E
         for (const amount of heals) expect(amount).toBeGreaterThan(0);
     });
 });
+
+// ── Multi-hit epic residual R5(ii) — the CAST path's zero gate, closing the known asymmetry ────
+//
+// PR6 gated the REACTIVE path on `healSum > 0` and deliberately left the CAST path gated on
+// "resolved to at least one recipient" — so a cast repair that restored nothing still emitted
+// `heal-performed`, still opened a "repaired 0" combat-log row, and still counted as a repair for
+// the `on-enemy-repaired` riders (Ruiner's Bomb, Overload, Zosimos's charge removal, Amartya's
+// Defense Shred). The playerTurn comment named that asymmetry and priced it ("a behaviour change
+// with golden movement, not a cleanup"). This block is the paid invoice.
+//
+// The zero is reachable on the cast path for the same reason it is on the reactive one: a
+// `basis:'damage-dealt'` heal is a CAST RIDER on the active/charged slots (types/abilities.ts), so
+// a cast whose damage was fully deferred into a DoT transform resolves its repair to exactly 0.
+// Same Voron fixture, same anti-vacuity discipline, same paired control as the reactive blocks
+// above — only the slot and the event name change.
+//
+// ROUTING: `heal-performed` (the CAST event), not `reactive-heal-performed`. Both key `casterId`.
+
+/** A cast rider repairing the caster for a share of the damage the cast deals — the `damage-dealt`
+ *  basis on an ACTIVE slot, which types/abilities.ts documents as the cast-rider form. */
+const attackWithCastHealRider = (hits: number): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        ab({
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            config: { type: 'damage', multiplier: 100, ...(hits > 1 ? { hits } : {}) },
+        }),
+        ab({
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cast',
+            config: { type: 'heal', pct: HEAL_PCT, basis: 'damage-dealt' },
+        }),
+    ],
+});
+
+/** The same cast rider with NO damage component — the cast deals nothing, so the repair is 0. */
+const castHealRiderOnly = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        ab({
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cast',
+            config: { type: 'heal', pct: HEAL_PCT, basis: 'damage-dealt' },
+        }),
+    ],
+});
+
+/** The cast-path twin of `observe`: `heal-performed` amounts plus both damage bases. */
+const observeCast = (
+    input: CombatEngineInput,
+    attackerId: string
+): { heals: number[]; display: (number | undefined)[]; delivered: (number | undefined)[] } => {
+    const bus = createEventBus();
+    const heals: number[] = [];
+    const display: (number | undefined)[] = [];
+    const delivered: (number | undefined)[] = [];
+    bus.on('heal-performed', (e) => {
+        if (e.type === 'heal-performed' && e.casterId === attackerId) heals.push(e.amount);
+    });
+    bus.on('ability-performed', (e: AbilityPerformed) => {
+        if (e.actorId === attackerId && e.abilityType === 'damage') {
+            display.push(e.damage);
+            delivered.push(e.deliveredDamage);
+        }
+    });
+    runCombat({ ...input, bus });
+    return { heals, display, delivered };
+};
+
+describe('R5(ii) — a CAST repair that repaired nothing opens no log row either', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('a cast repair that resolved to zero emits NO heal-performed', () => {
+        // A support cast carrying a `damage-dealt` repair rider and NO damage component: the cast
+        // deals nothing, so the repair scales to exactly 0 while still resolving to a recipient —
+        // which is precisely the state the cast gate ("at least one recipient") let through.
+        const { heals, display } = observeCast(
+            focusCast([castHealRiderOnly()], [enemyAt('victim', 'M4')]),
+            'attacker'
+        );
+        // FIXTURE GUARD: the cast dealt nothing, so the repair has nothing to scale off. (No
+        // `deliveredDamage` to assert here — with no damage component there is no positional apply
+        // to produce one, which is itself the reason the basis is zero.)
+        expect(display).toEqual([0]);
+        // Pre-fix: [0] — a row reporting a repair that never happened.
+        expect(heals).toEqual([]);
+    });
+
+    it('CONTROL: the same rider on a cast that DOES deal damage repairs a POSITIVE amount', () => {
+        // Without this, "no heal-performed" is also satisfied by the rider never firing at all.
+        const { heals, display, delivered } = observeCast(
+            focusCast([attackWithCastHealRider(3)], [enemyAt('victim', 'M4')]),
+            'attacker'
+        );
+        expect(display).toEqual([SLICE, SLICE, SLICE]);
+        expect(delivered).toEqual([SLICE, SLICE, SLICE]);
+        expect(heals).toHaveLength(1);
+        expect(heals[0]).toBeGreaterThan(0);
+    });
+});

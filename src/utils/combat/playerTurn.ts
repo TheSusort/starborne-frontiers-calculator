@@ -246,6 +246,16 @@ export interface PlayerTurnResult {
         sub: { index: number; anchorId: string; victimIds: string[] },
         phase: 'before-damage' | 'after-damage'
     ) => DeferredEnemyApplication[];
+    /** Present ONLY when this cast deferred its heal/shield/cleanse pass because it carries a
+     *  firing-slot `damage-dealt` rider, whose basis is the damage the cast DELIVERED and so is
+     *  unknowable until the engine's per-victim funnel has run.
+     *
+     *  The engine MUST call this after the funnel, with the cast's delivered total (the sum of its
+     *  sub-attacks' `deliveredDamage`). It is not optional cleanup: while it is pending, none of
+     *  the cast's repairs, shields or cleanses have happened and none of their events have been
+     *  emitted. It is set under exactly the same condition that defers `ability-performed` to the
+     *  engine, so any site that emits the one must invoke the other. */
+    resolveCastSupport?: (deliveredTotal: number) => void;
     directDamage: number;
     secondaryDamage: number;
     conditionalDamage: number;
@@ -3258,6 +3268,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // order; heals draw the SEPARATE per-actor heal crit gate (never the damage
     // crit gate). HoT (hotHeal) ticking is Task 7 — not produced here.
     // ====================================================================
+    // The cast's DELIVERED total, filled in only when the support pass is deferred to the engine
+    // (see `deferCastSupport` below). Undefined on every inline path, where `directDamage` remains
+    // the basis — which is what keeps the healing calculator and every non-positional fixture
+    // byte-identical.
+    let castDeliveredDamage: number | undefined;
+    /** Set only when the support pass deferred; the engine invokes it after the funnel with the
+     *  cast's delivered total. Surfaced on the result as `resolveCastSupport`. */
+    let deferredCastSupport: ((deliveredTotal: number) => void) | undefined;
     if (args.healing) {
         const healing = args.healing;
         const healCritGate = action === 'charged' ? chargedHealCritGate : activeHealCritGate;
@@ -3352,14 +3370,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     return effectiveDefence;
                 case 'target-hp':
                     return healing.recipientMaxHp(rid);
-                // Cast rider (active/charged 'damage-dealt'): this turn's own cast damage —
-                // the local directDamage (incl. secondary/conditional sub-buckets and the
-                // passive hit; detonation excluded by spec). The slot-partition guard below
-                // keeps passive-slot 'damage-dealt' and all 'damage-taken' abilities off the
-                // cast path, so basisValue only sees 'damage-dealt' for active/charged riders;
-                // 'damage-taken' never reaches here.
+                // Cast rider (active/charged 'damage-dealt'): the damage this cast actually
+                // DELIVERED, summed over its whole footprint — the locked "% of damage dealt"
+                // rule (a Protection redirect counts, a DoT transform does not). That number is
+                // produced by the engine's per-victim funnel, which runs AFTER this turn returns,
+                // so a cast carrying such a rider defers its whole support pass and the engine
+                // fills `castDeliveredDamage` before invoking it.
+                //
+                // The `directDamage` fallback is not a safety net, it is the correct answer for
+                // every path that does not defer: no positional apply runs there, so there is no
+                // funnel for the two figures to disagree across. It is the local pre-funnel cast
+                // damage (incl. secondary/conditional sub-buckets and the passive hit; detonation
+                // excluded by spec), computed against the bound anchor.
+                //
+                // The slot-partition guard below keeps passive-slot 'damage-dealt' and all
+                // 'damage-taken' abilities off the cast path, so basisValue only sees
+                // 'damage-dealt' for active/charged riders; 'damage-taken' never reaches here.
                 case 'damage-dealt':
-                    return directDamage;
+                    return castDeliveredDamage ?? directDamage;
                 case 'damage-taken':
                     throw new Error(
                         'basisValue: damage-taken must not reach the cast path (slot-partition guard owns it)'
@@ -3514,14 +3542,66 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             didCrit?: boolean;
         }[] = [];
 
-        for (const { ability, fromPassive } of healAbilities) {
-            const cfg = ability.config;
-            if (cfg.type === 'heal') {
-                const recipients = recipientsFor(ability, fromPassive);
-                if (healEventOnly) {
-                    // E5 §4.1: enemy heals restore each recipient's OWN currentHp (via the
-                    // per-victim pool), fire repairedThisRound, and emit heal-performed — but
-                    // contribute NOTHING to the player healing buckets (no healing.credit).
+        // ── The support pass, as a unit ────────────────────────────────────────────────────
+        // Wrapped in a closure so it can run either INLINE (the default, unchanged) or DEFERRED
+        // until after the engine's per-victim funnel. Deferral exists for one reason: a cast
+        // `damage-dealt` rider must scale off what the cast DELIVERED, and that number does not
+        // exist yet at this point in the turn.
+        //
+        // ALL-OR-NOTHING, deliberately. When any cast heal/shield in this cast carries the rider
+        // basis, the WHOLE pass defers — not just the rider. Splitting it would resolve some of
+        // the cast's support before the attack and some after, and would emit TWO
+        // `heal-performed` rows for one cast, which doubles the `on-enemy-repaired` riders
+        // (Ruiner's Bomb, Overload) that key off it. Corpus-inert either way: all seven cast
+        // riders are the ONLY heal/shield on their slot, so nothing is dragged along today.
+        const runSupportPass = () => {
+            for (const { ability, fromPassive } of healAbilities) {
+                const cfg = ability.config;
+                if (cfg.type === 'heal') {
+                    const recipients = recipientsFor(ability, fromPassive);
+                    if (healEventOnly) {
+                        // E5 §4.1: enemy heals restore each recipient's OWN currentHp (via the
+                        // per-victim pool), fire repairedThisRound, and emit heal-performed — but
+                        // contribute NOTHING to the player healing buckets (no healing.credit).
+                        const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
+                        if (didCrit) healCritCount += 1;
+                        for (const rid of recipients) {
+                            const basis = basisValue(cfg.basis, rid);
+                            let raw =
+                                basis *
+                                (cfg.pct / 100) *
+                                (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
+                                (1 + healModifier / 100) *
+                                (1 + dmgStats.totals.outgoingHealBuff / 100) *
+                                (1 + incomingPctFor(rid) / 100);
+                            // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
+                            raw *= 1 + healAmpPctFor(rid) / 100;
+                            // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
+                            // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+                            raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
+                            const recipientActor = healing.recipientActor(rid);
+                            // Capture the clipped over-repair per recipient (team symmetry with the
+                            // player path): surfaces on heal-performed.perTarget so an enemy healer's
+                            // Abundant Renewal shields its over-repaired allies too.
+                            let perTargetOverheal: number | undefined;
+                            if (recipientActor) {
+                                const { overheal } = healing.applyHealToTarget(raw, recipientActor);
+                                if (overheal > 0) perTargetOverheal = overheal;
+                            }
+                            healTargets.push(rid);
+                            healRawSum += raw;
+                            healPerTarget.push({
+                                targetId: rid,
+                                amount: raw,
+                                ...(perTargetOverheal !== undefined
+                                    ? { overheal: perTargetOverheal }
+                                    : {}),
+                                ...(didCrit ? { didCrit: true } : {}),
+                            });
+                        }
+                        continue;
+                    }
+                    // ONE crit draw per heal ability (not per recipient).
                     const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
                     if (didCrit) healCritCount += 1;
                     for (const rid of recipients) {
@@ -3538,13 +3618,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
                         // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
-                        const recipientActor = healing.recipientActor(rid);
-                        // Capture the clipped over-repair per recipient (team symmetry with the
-                        // player path): surfaces on heal-performed.perTarget so an enemy healer's
-                        // Abundant Renewal shields its over-repaired allies too.
+                        healing.credit(actor.id, 'directHeal', raw);
                         let perTargetOverheal: number | undefined;
-                        if (recipientActor) {
-                            const { overheal } = healing.applyHealToTarget(raw, recipientActor);
+                        // Positional team battle: apply HP + capture the clipped over-repair on EACH
+                        // recipient's OWN actor (mirrors the enemy event-only path), so an AoE heal
+                        // restores every ally's real HP and each over-repaired ally's overheal is
+                        // surfaced per-target (drives Abundant Renewal's per-ally shield). The healing
+                        // calculator (teamBattle off) keeps single-target accounting on healing.targetId.
+                        const perRecipientActor = healing.teamBattle
+                            ? healing.recipientActor(rid)
+                            : undefined;
+                        if (perRecipientActor || rid === healing.targetId) {
+                            // applyHealToTarget defaults victim to the heal target when
+                            // perRecipientActor is undefined (healing-calculator single-target path).
+                            const { consumed, overheal } = healing.applyHealToTarget(
+                                raw,
+                                perRecipientActor
+                            );
+                            healing.credit(actor.id, 'effectiveHeal', consumed);
+                            healing.credit(actor.id, 'overheal', overheal);
+                            overhealSum += overheal;
                             if (overheal > 0) perTargetOverheal = overheal;
                         }
                         healTargets.push(rid);
@@ -3558,69 +3651,58 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             ...(didCrit ? { didCrit: true } : {}),
                         });
                     }
-                    continue;
-                }
-                // ONE crit draw per heal ability (not per recipient).
-                const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
-                if (didCrit) healCritCount += 1;
-                for (const rid of recipients) {
-                    const basis = basisValue(cfg.basis, rid);
-                    let raw =
-                        basis *
-                        (cfg.pct / 100) *
-                        (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
-                        (1 + healModifier / 100) *
-                        (1 + dmgStats.totals.outgoingHealBuff / 100) *
-                        (1 + incomingPctFor(rid) / 100);
-                    // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
-                    raw *= 1 + healAmpPctFor(rid) / 100;
-                    // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
-                    // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
-                    raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
-                    healing.credit(actor.id, 'directHeal', raw);
-                    let perTargetOverheal: number | undefined;
-                    // Positional team battle: apply HP + capture the clipped over-repair on EACH
-                    // recipient's OWN actor (mirrors the enemy event-only path), so an AoE heal
-                    // restores every ally's real HP and each over-repaired ally's overheal is
-                    // surfaced per-target (drives Abundant Renewal's per-ally shield). The healing
-                    // calculator (teamBattle off) keeps single-target accounting on healing.targetId.
-                    const perRecipientActor = healing.teamBattle
-                        ? healing.recipientActor(rid)
-                        : undefined;
-                    if (perRecipientActor || rid === healing.targetId) {
-                        // applyHealToTarget defaults victim to the heal target when
-                        // perRecipientActor is undefined (healing-calculator single-target path).
-                        const { consumed, overheal } = healing.applyHealToTarget(
-                            raw,
-                            perRecipientActor
-                        );
-                        healing.credit(actor.id, 'effectiveHeal', consumed);
-                        healing.credit(actor.id, 'overheal', overheal);
-                        overhealSum += overheal;
-                        if (overheal > 0) perTargetOverheal = overheal;
+                } else if (cfg.type === 'shield') {
+                    if (healEventOnly) {
+                        // Enemy shields grant a real pool to each enemy recipient and emit
+                        // shield-applied, but credit NO player bucket — the symmetric counterpart to
+                        // the E5 enemy-heal lift above. Routing/cap/absorb are already side-agnostic
+                        // (recipientsFor, grantShieldToTarget caps at recipientMaxHp, the absorb path).
+                        // No crit / no modifiers (shields aren't repairs), matching the player branch.
+                        const recipients = recipientsFor(ability, fromPassive);
+                        const shieldRecipientIds: string[] = [];
+                        let shieldGrantedSum = 0;
+                        const shieldPerTarget: { targetId: string; amount: number }[] = [];
+                        for (const rid of recipients) {
+                            const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
+                            const recipientActor = healing.recipientActor(rid);
+                            if (recipientActor) {
+                                const granted = healing.grantShieldToTarget(raw, recipientActor);
+                                if (granted > 0) {
+                                    shieldRecipientIds.push(rid);
+                                    shieldGrantedSum += granted;
+                                    shieldPerTarget.push({ targetId: rid, amount: granted });
+                                }
+                            }
+                        }
+                        if (shieldRecipientIds.length > 0) {
+                            bus.emit({
+                                type: 'shield-applied',
+                                granterId: actor.id,
+                                recipientIds: shieldRecipientIds,
+                                round: r,
+                                amount: shieldGrantedSum,
+                                perTarget: shieldPerTarget,
+                            });
+                        }
+                        continue;
                     }
-                    healTargets.push(rid);
-                    healRawSum += raw;
-                    healPerTarget.push({
-                        targetId: rid,
-                        amount: raw,
-                        ...(perTargetOverheal !== undefined ? { overheal: perTargetOverheal } : {}),
-                        ...(didCrit ? { didCrit: true } : {}),
-                    });
-                }
-            } else if (cfg.type === 'shield') {
-                if (healEventOnly) {
-                    // Enemy shields grant a real pool to each enemy recipient and emit
-                    // shield-applied, but credit NO player bucket — the symmetric counterpart to
-                    // the E5 enemy-heal lift above. Routing/cap/absorb are already side-agnostic
-                    // (recipientsFor, grantShieldToTarget caps at recipientMaxHp, the absorb path).
-                    // No crit / no modifiers (shields aren't repairs), matching the player branch.
+                    // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
+                    // outgoingHeal/incomingHeal channels — raw = basis × pct.
                     const recipients = recipientsFor(ability, fromPassive);
+                    // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied
+                    // per cast (NOT per recipient) carrying only recipients that actually gained pool.
                     const shieldRecipientIds: string[] = [];
                     let shieldGrantedSum = 0;
                     const shieldPerTarget: { targetId: string; amount: number }[] = [];
                     for (const rid of recipients) {
                         const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
+                        healing.credit(actor.id, 'shield', raw);
+                        // H1 Task 5: route the pool to EACH targeted ally's own actor (mirrors the
+                        // event-only heal branch's recipientActor routing) — not just the heal
+                        // target. The absorb side already works per-actor, so an `all-allies`/`ally`
+                        // shield must land a `shieldPool` on every targeted ally, not only the focus.
+                        // A recipient with no resolvable runtime actor is credited but not pool-applied
+                        // (mirrors the heal-recipient handling for an unwalked legacy team actor).
                         const recipientActor = healing.recipientActor(rid);
                         if (recipientActor) {
                             const granted = healing.grantShieldToTarget(raw, recipientActor);
@@ -3631,6 +3713,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             }
                         }
                     }
+                    // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing only
+                    // recipients whose pool actually grew (granted > 0). Drives Resonating Fury
+                    // (on-shield-applied). No recipient gained pool → no event. Mirrors the
+                    // heal-performed emit below. NOTE: enemy event-only shields now grant their OWN
+                    // pool and emit their OWN shield-applied from the lifted event-only sub-branch
+                    // above; this player-path emit is the non-event-only (player-side) path.
                     if (shieldRecipientIds.length > 0) {
                         bus.emit({
                             type: 'shield-applied',
@@ -3641,114 +3729,93 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             perTarget: shieldPerTarget,
                         });
                     }
-                    continue;
-                }
-                // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
-                // outgoingHeal/incomingHeal channels — raw = basis × pct.
-                const recipients = recipientsFor(ability, fromPassive);
-                // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied
-                // per cast (NOT per recipient) carrying only recipients that actually gained pool.
-                const shieldRecipientIds: string[] = [];
-                let shieldGrantedSum = 0;
-                const shieldPerTarget: { targetId: string; amount: number }[] = [];
-                for (const rid of recipients) {
-                    const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
-                    healing.credit(actor.id, 'shield', raw);
-                    // H1 Task 5: route the pool to EACH targeted ally's own actor (mirrors the
-                    // event-only heal branch's recipientActor routing) — not just the heal
-                    // target. The absorb side already works per-actor, so an `all-allies`/`ally`
-                    // shield must land a `shieldPool` on every targeted ally, not only the focus.
-                    // A recipient with no resolvable runtime actor is credited but not pool-applied
-                    // (mirrors the heal-recipient handling for an unwalked legacy team actor).
-                    const recipientActor = healing.recipientActor(rid);
-                    if (recipientActor) {
-                        const granted = healing.grantShieldToTarget(raw, recipientActor);
-                        if (granted > 0) {
-                            shieldRecipientIds.push(rid);
-                            shieldGrantedSum += granted;
-                            shieldPerTarget.push({ targetId: rid, amount: granted });
-                        }
+                } else if (cfg.type === 'cleanse') {
+                    // Team-symmetric removal: BOTH the player path and the enemy (event-only) path
+                    // remove real debuffs via the side-agnostic statusEngine.cleanse over the
+                    // side-aware recipientsFor recipients (self/ally/all-allies). cleansePerformedCount
+                    // reflects the ACTUAL removed count on both sides, so the cleanse-performed emit
+                    // (guarded `> 0`) now fires only on real removal — symmetric to the E5 heal lift and
+                    // the #166 shield lift. The ONLY side-difference is the player-facing cleanseCount
+                    // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
+                    let removed = 0;
+                    for (const rid of recipientsFor(ability, fromPassive)) {
+                        const removedForRid = statusEngine.cleanse(rid, cfg.count);
+                        removed += removedForRid;
+                        // Phase 3 PR-H: only recipients with a REAL removal are on-own-cleanse's
+                        // ally-routing candidates (mirrors shieldRecipientIds' granted>0 gate) — a
+                        // targeted-but-untouched ally (e.g. an all-allies cleanse hitting a debuff-free
+                        // ally) must not appear in cleanse-performed.targets.
+                        if (removedForRid > 0) cleansedRecipientIds.push(rid);
                     }
+                    cleansePerformedCount += removed;
+                    if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', removed);
                 }
-                // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing only
-                // recipients whose pool actually grew (granted > 0). Drives Resonating Fury
-                // (on-shield-applied). No recipient gained pool → no event. Mirrors the
-                // heal-performed emit below. NOTE: enemy event-only shields now grant their OWN
-                // pool and emit their OWN shield-applied from the lifted event-only sub-branch
-                // above; this player-path emit is the non-event-only (player-side) path.
-                if (shieldRecipientIds.length > 0) {
-                    bus.emit({
-                        type: 'shield-applied',
-                        granterId: actor.id,
-                        recipientIds: shieldRecipientIds,
-                        round: r,
-                        amount: shieldGrantedSum,
-                        perTarget: shieldPerTarget,
-                    });
-                }
-            } else if (cfg.type === 'cleanse') {
-                // Team-symmetric removal: BOTH the player path and the enemy (event-only) path
-                // remove real debuffs via the side-agnostic statusEngine.cleanse over the
-                // side-aware recipientsFor recipients (self/ally/all-allies). cleansePerformedCount
-                // reflects the ACTUAL removed count on both sides, so the cleanse-performed emit
-                // (guarded `> 0`) now fires only on real removal — symmetric to the E5 heal lift and
-                // the #166 shield lift. The ONLY side-difference is the player-facing cleanseCount
-                // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
-                let removed = 0;
-                for (const rid of recipientsFor(ability, fromPassive)) {
-                    const removedForRid = statusEngine.cleanse(rid, cfg.count);
-                    removed += removedForRid;
-                    // Phase 3 PR-H: only recipients with a REAL removal are on-own-cleanse's
-                    // ally-routing candidates (mirrors shieldRecipientIds' granted>0 gate) — a
-                    // targeted-but-untouched ally (e.g. an all-allies cleanse hitting a debuff-free
-                    // ally) must not appear in cleanse-performed.targets.
-                    if (removedForRid > 0) cleansedRecipientIds.push(rid);
-                }
-                cleansePerformedCount += removed;
-                if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', removed);
             }
-        }
 
-        // ONE heal-performed per cast that healed at least one recipient. critHits is the
-        // number of heal abilities that crit (present-only-when-positive). In event-only
-        // (enemy) mode E5 §4.1 now computes the numeric, so amount/critHits reflect the real
-        // enemy heal (the player healing buckets stay uncredited — see the healEventOnly note above).
+            // ONE heal-performed per cast that healed at least one recipient. critHits is the
+            // number of heal abilities that crit (present-only-when-positive). In event-only
+            // (enemy) mode E5 §4.1 now computes the numeric, so amount/critHits reflect the real
+            // enemy heal (the player healing buckets stay uncredited — see the healEventOnly note above).
+            //
+            // The gate is "resolved to at least one recipient AND restored something". The second
+            // term closed the asymmetry PR6 knowingly opened: PR6 gated the REACTIVE path on
+            // `healSum > 0` (triggers.ts heal branch) and left this one on recipients alone, so a CAST
+            // repair that restored nothing still emitted, still opened a "repaired 0" combat-log row,
+            // and still counted as a repair for the `on-enemy-repaired` riders (Ruiner's Bomb,
+            // Overload, Zosimos's charge removal, Amartya's Defense Shred). The two paths now agree.
+            //
+            // `healRawSum` is the GROSS across recipients — the same basis the reactive gate uses — so
+            // an over-repair that is entirely clipped still emits. That is deliberate: the repair DID
+            // happen, the recipient was simply already full, and `overheal` carries that. Only a
+            // repair that resolved to nothing at all is silenced.
+            if (healTargets.length > 0 && healRawSum > 0) {
+                bus.emit({
+                    type: 'heal-performed',
+                    casterId: actor.id,
+                    targets: healTargets,
+                    round: r,
+                    amount: healRawSum,
+                    ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
+                    ...(overhealSum > 0 ? { overheal: overhealSum } : {}),
+                    perTarget: healPerTarget,
+                });
+            }
+
+            // ONE cleanse-performed per cast that cleansed (BOTH modes — the on-enemy-cleansed AND
+            // on-own-cleanse listeners filter by side/owner, so an inert emit is harmless without a
+            // matching reactor).
+            if (cleansePerformedCount > 0) {
+                bus.emit({
+                    type: 'cleanse-performed',
+                    casterId: actor.id,
+                    count: cleansePerformedCount,
+                    round: r,
+                    targets: cleansedRecipientIds,
+                });
+            }
+        };
+
+        // Defer iff the cast carries a `damage-dealt` rider AND the engine will resolve this cast
+        // positionally. Pinned to `deferAbilityPerformed` — the SAME condition that already hands
+        // `ability-performed` to the engine — so the two can never disagree about whether a cast
+        // is engine-resolved, and the engine has exactly one place to invoke both.
         //
-        // ASYMMETRY, KNOWN AND DELIBERATE (multi-hit full-walk epic, PR6). The gate is
-        // "resolved to at least one recipient", NOT "restored a positive amount" — so a CAST heal
-        // that resolves to zero still emits, still opens a "repaired 0" combat-log row, and still
-        // counts as a repair for the `on-enemy-repaired` riders (Ruiner's Bomb, Overload, Zosimos's
-        // charge removal, Amartya's Defense Shred). PR6 added exactly that amount gate to the
-        // REACTIVE path (`healSum > 0` on `reactive-heal-performed`, triggers.ts heal branch) and
-        // left this one alone: the reactive path is where a zero-gross repair is actually
-        // reachable in the corpus (a `damage-dealt` basis on a sub-attack that delivered nothing),
-        // and widening the change to the cast path was out of scope for that PR. So the two paths
-        // now disagree on the zero case. If you are here to make them agree, that is a behaviour
-        // change with golden movement, not a cleanup.
-        if (healTargets.length > 0) {
-            bus.emit({
-                type: 'heal-performed',
-                casterId: actor.id,
-                targets: healTargets,
-                round: r,
-                amount: healRawSum,
-                ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
-                ...(overhealSum > 0 ? { overheal: overhealSum } : {}),
-                perTarget: healPerTarget,
-            });
-        }
-
-        // ONE cleanse-performed per cast that cleansed (BOTH modes — the on-enemy-cleansed AND
-        // on-own-cleanse listeners filter by side/owner, so an inert emit is harmless without a
-        // matching reactor).
-        if (cleansePerformedCount > 0) {
-            bus.emit({
-                type: 'cleanse-performed',
-                casterId: actor.id,
-                count: cleansePerformedCount,
-                round: r,
-                targets: cleansedRecipientIds,
-            });
+        // A cast rider is FIRING-SLOT only: a passive-slot `damage-dealt` heal is a standing leech
+        // that `isHookOwned` already routed away from `healAbilities`, and it is procced per victim
+        // by the engine on its own post-funnel path.
+        const hasCastDamageDealtRider = healAbilities.some(
+            ({ ability, fromPassive }) =>
+                !fromPassive &&
+                (ability.config.type === 'heal' || ability.config.type === 'shield') &&
+                ability.config.basis === 'damage-dealt'
+        );
+        if (deferAbilityPerformed && hasCastDamageDealtRider) {
+            deferredCastSupport = (deliveredTotal: number) => {
+                castDeliveredDamage = deliveredTotal;
+                runSupportPass();
+            };
+        } else {
+            runSupportPass();
         }
     }
 
@@ -3834,6 +3901,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             positionalLanding && perSubAttackDebuffRecipes.length > 0
                 ? applyDebuffsForSubAttack
                 : undefined,
+        // Set ONLY when this cast's support pass deferred (a firing-slot `damage-dealt` rider on an
+        // engine-resolved cast). The engine MUST invoke it after the funnel — the repair/shield has
+        // not happened yet. Undefined on every other path, where the pass already ran inline.
+        resolveCastSupport: deferredCastSupport,
         directDamage,
         secondaryDamage,
         conditionalDamage,
