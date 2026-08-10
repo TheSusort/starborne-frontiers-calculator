@@ -222,7 +222,7 @@ describe('intra-cast clause order — a debuff clause AFTER the damage clause mi
         expect(debuffFirst / plain).toBeCloseTo(2, 5);
     });
 
-    it('the same rule governs the stat channels — Inc. Damage Up after damage misses it', () => {
+    it('the same rule governs the stat channels — Inc. Damage Up after damage misses the sub-attack it follows', () => {
         const plain = focusCast([twoHitAttack()]).damageTo('foe');
         const damageFirst = focusCast([
             twoHitAttack(),
@@ -247,7 +247,9 @@ describe('intra-cast clause order — a debuff clause AFTER the damage clause mi
 
         // It was really applied, not dropped.
         expect(events.filter((e) => e.type === 'debuff-applied')).not.toHaveLength(0);
-        // Round 1 unamplified; round 2's first hit rides the Exposed round 1 left behind.
+        // Round 1 already reads 1.5x (attack 0 plain, attack 1 rides and spends what attack 0
+        // applied, then reapplies a fresh Exposed after its own damage). That leftover carries into
+        // round 2, so BOTH of round 2's hits ride and reapply it in turn — round 2 reads 2.0x.
         expect(damageTo('foe')).toBeGreaterThan(plain);
     });
 

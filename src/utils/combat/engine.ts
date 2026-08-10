@@ -8524,6 +8524,9 @@ export function runCombat(input: CombatEngineInput): {
                                     : undefined,
                             });
                             if (teamTurnStasisHitVictims.size > 0) {
+                                // KNOWN LIMITATION — see the focus site's note above its own
+                                // `reInflictedStasis` read (~line 8256) for the full explanation;
+                                // this read has the same pre-positional-drive ordering.
                                 const reInflictedStasis = teamTurn.inflictedEnemyDebuffs.some(
                                     (ab) => isStasis(ab.buffName)
                                 );
@@ -9041,6 +9044,9 @@ export function runCombat(input: CombatEngineInput): {
                                 });
                                 // §4.5: resolve Stasis break for player victims hit by this enemy.
                                 if (enemyTurnStasisHitVictims.size > 0) {
+                                    // KNOWN LIMITATION — see the focus site's note above its own
+                                    // `reInflictedStasis` read (~line 8256) for the full explanation;
+                                    // this read has the same pre-positional-drive ordering.
                                     const reInflictedStasis = enemyTurn.inflictedEnemyDebuffs.some(
                                         (ab) => isStasis(ab.buffName)
                                     );
