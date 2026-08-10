@@ -270,16 +270,23 @@ describe('Exposed — +100% on the next direct hit, then consumed', () => {
     // path rather than the reactive executor's — a different application site into the same
     // per-victim store, so it needs its own guard.
     //
-    // Note the ratio is 1.5, not 1.0: a debuff applied by a cast is in the store by the time that
-    // same cast's damage resolves, so it amplifies the cast's own first hit. That is INHERITED
-    // ordering, not something Exposed introduces — a cast-applied `Inc. Damage Up II` on the same
-    // fixture amplifies both of its own hits (ratio 2.0) through the identical channel.
+    // The ratio here is 2.0, not 1.5: this `applier: 'cast'` shape puts the Exposed clause BEFORE
+    // the damage clause in the same slot, so each of the cast's sub-attacks applies its own Exposed,
+    // rides it into its own hit, and spends it — see the inline comment below for the full
+    // breakdown of why that differs from the REACTIVE (pre-planted, non-reapplying) fixture above.
     it('works when applied by a cast (Nayra) as well as by a reaction (Amartya)', () => {
         const control = playerHitsExposedEnemy(CONTROL, 1, 'cast');
         const exposed = playerHitsExposedEnemy('Exposed', 1, 'cast');
 
         expect(control).toBeGreaterThan(0);
-        expect(exposed / control).toBeCloseTo(1.5, 5);
+        // 2.0, not the 1.5 the REACTIVE fixture above reads, and the difference is the point.
+        // This `applier: 'cast'` shape puts the Exposed clause BEFORE the damage clause in the same
+        // slot, and since PR8 (multi-hit full-walk epic) a 2-hit cast is two full attacks that each
+        // run the whole pipeline — so each attack applies its own Exposed and then spends it on its
+        // own hit. The reactive fixture plants ONE Exposed before the cast with nothing re-applying
+        // it, so only its first hit is amplified: that pair is what shows the doubling here comes
+        // from per-sub-attack re-application rather than from a blanket always-on amplification.
+        expect(exposed / control).toBeCloseTo(2, 5);
     });
 
     it('is team-symmetric — an enemy-applied Exposed amplifies a PLAYER victim identically', () => {
@@ -344,13 +351,15 @@ const counterAbility = (): Ability => ({
 });
 
 /**
- * Per-round damage dealt to the foe over two rounds. The player casts damage-then-Exposed (that
- * order, so the cast never self-amplifies the status it applies), and is SLOWER than the foe, so
- * each round runs: foe attacks → player's counter lands on the foe → player casts.
+ * Per-round damage dealt to the foe over two rounds. The player casts damage-then-Exposed (a
+ * post-damage clause), and is SLOWER than the foe, so each round runs: foe attacks → player's
+ * counter lands on the foe → player casts.
  *
- * Round 1's cast is unamplified (no Exposed yet). Round 2's rides the Exposed applied in round 1 —
- * unless a hit in between wrongly spent it. Counter damage is a per-round constant, so comparing
- * the round2−round1 DELTA against the counter-free run cancels it out exactly.
+ * The cast is two full sub-attacks, so round 1 already self-amplifies: attack 0 lands plain and
+ * applies Exposed, attack 1 rides and spends that stack (then reapplies its own, left standing).
+ * Round 2's first hit rides the Exposed round 1 left behind — unless a hit in between wrongly spent
+ * it. Counter damage is a per-round constant, so comparing the round2−round1 DELTA against the
+ * counter-free run cancels it out exactly.
  */
 function foeDamagePerRound(withCounter: boolean): { r1: number; r2: number } {
     const focusSlots: ShipSkills['slots'] = [
@@ -412,8 +421,16 @@ describe('Exposed is not spent by hit types that never amplified it', () => {
     it("a counterattack leaves the victim's Exposed intact for the next real cast", () => {
         const plain = foeDamagePerRound(false);
         expect(plain.r1).toBeGreaterThan(0);
-        // Premise: round 2 IS amplified by round 1's Exposed (first hit doubled, second plain).
-        expect(plain.r2 / plain.r1).toBeCloseTo(1.5, 5);
+        // Premise: round 2 IS amplified by the Exposed round 1 left standing.
+        //
+        // The ratio is 4/3, not the pre-PR8 1.5, because since PR8 (multi-hit full-walk epic) each
+        // of the cast's 2 hits is a full attack that lands its own post-damage Exposed:
+        //   round 1 = plain + doubled  (attack 0 lands it, attack 1 spends it) = 3 half-shares,
+        //   round 2 = doubled + doubled (attack 0 spends the one left standing and re-lands it,
+        //             attack 1 spends that)                                    = 4 half-shares.
+        // Still strictly greater than 1, which is all this premise needs to set up the invariant
+        // below — the ratio itself is pinned only to catch a silent change in the fixture's shape.
+        expect(plain.r2 / plain.r1).toBeCloseTo(4 / 3, 5);
 
         // With the counter in play the round-over-round GAIN must be identical: the counter lands on
         // the Exposed holder first, but it is not an amplified hit, so it must not consume it.

@@ -297,6 +297,23 @@ export function applyPositionalDamage(args: {
      * Unsupplied → every victim uses hitCrits[h] → byte-identical.
      */
     rollVictimCrit?: (victim: CombatActor, subAttackIndex?: number) => boolean;
+    /**
+     * Boundary hooks for ONE sub-attack (multi-hit full-walk epic, PR8 Task 2). `onSubAttackStart`
+     * runs after the anchor resolves and BEFORE any of that sub-attack's damage; `onSubAttackEnd`
+     * runs after ALL of it. A WHIFF (no living anchor) calls neither — there is no attack to hang a
+     * clause on — but still consumes its loop index, so `subAttacks[h]` stays aligned.
+     *
+     * They exist so a direct debuff clause can land per sub-attack, in written clause order
+     * relative to that sub-attack's own damage, and be visible to the NEXT sub-attack's
+     * `defenseProfileOf` read. Both optional: an unsupplied hook makes the loop byte-identical.
+     *
+     * `victimIds` is this sub-attack's footprint in hit order — the anchor plus every covered
+     * cell — and is the set PR8 re-rolls the landing against. Overkill retargeting is correct for
+     * free: the anchor is re-resolved against the live roster at the top of every iteration, so a
+     * victim killed on an earlier sub-attack simply is not here.
+     */
+    onSubAttackStart?: (sub: { index: number; anchorId: string; victimIds: string[] }) => void;
+    onSubAttackEnd?: (sub: { index: number; anchorId: string; victimIds: string[] }) => void;
 }): {
     anyCrit: boolean;
     critPairs: number;
@@ -319,6 +336,8 @@ export function applyPositionalDamage(args: {
         incomingReductionFor,
         outgoingAmplificationFor,
         rollVictimCrit,
+        onSubAttackStart,
+        onSubAttackEnd,
     } = args;
 
     let anyCrit = false;
@@ -363,11 +382,14 @@ export function applyPositionalDamage(args: {
         const subVictimIds: string[] = [];
         const subCritVictimIds: string[] = [];
 
-        for (const { victim, roleScale } of footprintVictims(
-            pattern,
-            anchorActor.position,
-            opposingLiving
-        )) {
+        const footprint = footprintVictims(pattern, anchorActor.position, opposingLiving);
+        const subVictimIdsForHooks = footprint.map((f) => f.victim.id);
+        onSubAttackStart?.({
+            index: h,
+            anchorId: anchorActor.id,
+            victimIds: subVictimIdsForHooks,
+        });
+        for (const { victim, roleScale } of footprint) {
             // Anchor reuses the pre-rolled hitCrits[h]; covered victims resolve via callback.
             const isAnchor = victim.id === anchorActor.id;
             const didCrit = isAnchor ? anchorCrit : (rollVictimCrit?.(victim, h) ?? anchorCrit);
@@ -410,6 +432,12 @@ export function applyPositionalDamage(args: {
             subDelivered += booked + (outcome.protectionRedirected ?? 0);
             subVictimIds.push(victim.id);
         }
+
+        onSubAttackEnd?.({
+            index: h,
+            anchorId: anchorActor.id,
+            victimIds: subVictimIdsForHooks,
+        });
 
         subAttacks.push({
             index: h,

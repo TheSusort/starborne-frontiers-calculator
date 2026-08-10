@@ -311,7 +311,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    Exception: the two CAST-SCOPED fallback emits (engine.ts's nothing-landed and enemy
  *    0-damage sites) publish `e.damage` as the cast total (`dap.damage`), not a share — harmless
  *    today since both carry 0, but not "already a share" like the rest.
- *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
+ *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`.
+ *    Cardinality follows the LANDING, which since PR8 (multi-hit full-walk epic) is once per
+ *    SUB-ATTACK for a direct debuff clause, not once per cast: an N-hit cast that lands its clause
+ *    every hit enqueues N times. Unchanged at N=1, which is the whole ship corpus today.
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
  *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
  *    PLAYER's infliction; for the ENEMY registration this is any other enemy actor's infliction.

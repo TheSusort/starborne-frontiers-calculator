@@ -26,11 +26,17 @@ export const EXPOSED_INCOMING_PCT = 100;
  * `victimIncomingModifiers`).
  *
  * Stack scaling matches the repo-wide convention for status effects (`value * stacks`, see
- * dpsBuffHelpers' `toEnemyModifiers`): Amartya's 2 stacks amplify the next hit by 200%, consumed
- * together. OPEN GAME-RULE QUESTION: the alternative reading is that each stack arms its OWN hit
- * (2 stacks → two consecutive hits at +100%). The game text's single "removed after taking direct
- * damage" — not "removes one stack" — is what tips this to all-at-once; revisit if in-game
- * observation says otherwise.
+ * dpsBuffHelpers' `toEnemyModifiers`): Amartya's 2 stacks amplify the next hit by +200%. SETTLED
+ * (owner ruling, in-game observation): this read side is correct as written — stacks sum onto the
+ * one hit they amplify, not one stack arming its own separate hit. What was genuinely open was
+ * CONSUMPTION, and the owner's ruling there is the alternative reading: the amplified hit spends
+ * only ONE stack, leaving the rest standing for the next hit (2 stacks → that hit reads +200%, the
+ * next reads +100% off the 1 left over). {@link consumeExposed} does not implement that yet — it
+ * calls `removeTimedEnemyStatus`, which deletes every stack the victim holds rather than
+ * decrementing by one. Fixing consumption to spend a single stack per hit is tracked separately and
+ * is deliberately NOT part of this PR. The divergence is invisible in this PR's own fixtures: every
+ * corpus applier here lands exactly one stack per sub-attack and the very next hit spends it, so two
+ * stacks are never simultaneously held.
  *
  * Reads the victim's TIMED per-victim enemy store directly rather than the caller's assembled
  * three-channel debuff list, because that is exactly the channel {@link consumeExposed} can delete
