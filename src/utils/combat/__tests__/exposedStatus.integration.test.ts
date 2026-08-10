@@ -488,21 +488,39 @@ describe('Exposed is not spent by hit types that never amplified it', () => {
         expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
     });
 
-    // The same exclusion at TWO stacks, which is where "spends nothing" and "spends one" finally
-    // part company: at one stack both readings leave the victim with a status that amplifies the
-    // next hit either fully or not at all, so the test above cannot tell a stack-spend from a
-    // no-op. Here it can — the counter must leave the victim holding 2, not 1.
+    // The same exclusion where the applier lands TWO stacks — which is where "spends nothing" and
+    // "spends one" finally part company: at one stack a hit either consumes the whole status or
+    // leaves it whole, so the test above cannot tell a stack-spend from a no-op. Here it can, because
+    // a partially spent Exposed reads +100% rather than +200% and the totals say which.
     //
-    // In half-shares of the round-2 cast (each of its 2 hits has base slice 1):
-    //   holding 2 (correct)      : (1 + 2.00) + (1 + 1.00) = 5, vs round 1's unamplified 2 → delta 3
-    //   holding 1 (counter spent): (1 + 1.00) + 1          = 3                            → delta 1
-    // The counter-free run supplies the expected delta, so the counter's own constant damage cancels.
-    it('a counterattack leaves BOTH of a 2-stack victim’s Exposed stacks intact', () => {
+    // What survives a round is ONE stack, not two — the counter's job is to leave that one alone.
+    // Round 1's attack 1 spends one of the two, and its own post-damage clause cannot top the entry
+    // back up: `familyApplicationWins` only overwrites a same-tier family when the incoming duration
+    // EXCEEDS what is standing, and 5 is not > the 5 attack 0 just wrote, so the re-application is
+    // silently absorbed. (Round 2's attack 0 CAN re-land, because its spend takes the last stack and
+    // deletes the entry outright.) That gate long predates both this ruling and PR8 — see the
+    // same-family overwrite rule in statusEngine — so the carried-over single stack is the honest
+    // starting state for round 2, and it is what the counter must not touch.
+    it('a counterattack spends none of the Exposed stack a 2-stack applier leaves standing', () => {
         const plain = foeDamagePerRound(false, 2);
         expect(plain.r1).toBeGreaterThan(0);
-        // Premise: round 2 reads +200% then +100% off round 1's two stacks → 5 vs 2.
-        expect(plain.r2 / plain.r1).toBeCloseTo(2.5, 5);
+        // Premise: round 2 IS amplified by the stack round 1 left standing.
+        //
+        // The ratio is 5/4, not the pre-PR8 2.5, because since PR8 each of the cast's 2 hits is a
+        // full attack landing its own post-damage 2 stacks:
+        //   round 1 = plain + tripled  (attack 0 lands 2, attack 1 reads both at +100% each and
+        //             spends one; its own clause is family-blocked)          = 1 + 3 = 4 half-shares,
+        //   round 2 = doubled + tripled (attack 0 reads the ONE stack left standing and spends it,
+        //             which empties the entry so its clause lands a fresh 2; attack 1 reads both
+        //             and spends one)                                       = 2 + 3 = 5 half-shares.
+        // Spending ALL stacks per hit would instead read +200% on all three amplified hits → 4 then
+        // 6, a ratio of 1.5, so this pin is what distinguishes the ruling from its predecessor.
+        expect(plain.r2 / plain.r1).toBeCloseTo(5 / 4, 5);
 
+        // With the counter in play the round-over-round GAIN must be identical. Had the counter spent
+        // round 1's leftover stack, round 2 would open plain: 1 + 3 = 4 half-shares, the same as
+        // round 1 → delta 0, against the counter-free run's delta of 1. The counter's own damage is a
+        // per-round constant, so the delta comparison cancels it exactly.
         const countered = foeDamagePerRound(true, 2);
         expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
     });
