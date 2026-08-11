@@ -29,6 +29,7 @@ import { ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { dealtBySource } from '../__testutils__/perTargetDealt';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -216,16 +217,7 @@ function runScenario(input: CombatEngineInput) {
                 creditedDirect.set(id, (creditedDirect.get(id) ?? 0) + amount);
         },
     });
-    const dealt = new Map<string, number>();
-    rounds.forEach((rd) =>
-        Object.entries(rd.perTargetDealt ?? {}).forEach(([sourceId, byVictim]) =>
-            dealt.set(
-                sourceId,
-                (dealt.get(sourceId) ?? 0) + Object.values(byVictim).reduce((a, b) => a + b, 0)
-            )
-        )
-    );
-    return { events, creditedDirect, dealt };
+    return { events, creditedDirect, dealt: dealtBySource(rounds) };
 }
 
 describe('Paracelsus on-destroyed retaliation + ally-buff — player side', () => {

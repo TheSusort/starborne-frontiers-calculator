@@ -24,6 +24,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { StatusEngine } from '../statusEngine';
+import { dealtEntries } from '../__testutils__/perTargetDealt';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -554,15 +555,13 @@ function runSentinel(input: CombatEngineInput) {
     // books its intake per-victim (creditDealt → RoundData.perTargetDealt) instead of onto the
     // credit-only `credits` channel above — see engine.ts's applyReactiveDamage gate. Both are
     // returned so each assertion can name the channel it means.
-    const dealt: { sourceId: string; victimId: string; amount: number }[] = [];
-    result.rounds.forEach((rd) =>
-        Object.entries(rd.perTargetDealt ?? {}).forEach(([sourceId, byVictim]) =>
-            Object.entries(byVictim).forEach(([victimId, amount]) =>
-                dealt.push({ sourceId, victimId, amount })
-            )
-        )
-    );
-    return { result, credits, dealt, reactiveDamage, reactiveHeals };
+    return {
+        result,
+        credits,
+        dealt: dealtEntries(result.rounds),
+        reactiveDamage,
+        reactiveHeals,
+    };
 }
 
 /** Total reactive repair the healing accounting credited to `ownerId` across all rounds. A
