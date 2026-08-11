@@ -77,7 +77,23 @@ special-casing at all.
    retirable.
 3. **Default enemy = a skill-less real ship carrying today's scalar stats,** so an existing saved
    page loads with the same stats. Its behaviour still changes (see risk below).
-4. **Non-positional.** No board, no placement — exactly the healing calculator's shape.
+4. **Positional, with auto-placement.** *(Corrected 2026-08-11 — an earlier draft said
+   "non-positional, exactly the healing calculator's shape". That is unworkable, see below.)* The
+   enemy is auto-placed in a fixed documented slot; each attacker config carries a configurable
+   slot. Team ships stay auto-placed for now.
+
+   **Why the healing calculator's shape does not transfer.** `isPositional`
+   (`positionalBinding.ts:20-25`) requires the acting actor to have a position AND at least one
+   opposing actor to have one; otherwise `selectTurnTarget` (`engine.ts:6380`) falls back to
+   `tb.legacyVictim` — the dummy. The healing calculator survives non-positionally because its
+   enemies only ever need to DEAL damage; the healer never has to damage them. A DPS calculator
+   inverts that requirement exactly, so without positions the focus would keep hitting the dummy
+   while real enemies attacked it back and never took a scratch.
+
+   `Position` is a slot label `'T1'`–`'B4'` (`types/encounters.ts:1`). Both
+   `CombatEngineInput.position` (focus, `engine.ts:1288`) and `enemyAttackers[].position`
+   (`engine.ts:1240`) already exist. **Column 4 is the FRONT** — see
+   `reference_sim_test_harness_traps`; pick placement slots deliberately and document the choice.
 
 ## Architecture
 
@@ -103,10 +119,21 @@ parallel one.
 
 ## The metric re-derivation
 
-This is the load-bearing change. Today `cumulativeDamage` is a scalar accumulated by a post-round
-aggregate gated on `dpsEnemyTarget` (`engine.ts:~7931`, ~9729): a single
-`applyVictimDamage(totalRoundDamage + teamRoundDamage)` against the dummy. With a real enemy that
-gate is false, so the aggregate never fires and the scalar would read zero.
+This is the load-bearing change. **The reason is the POSITIONAL gate, not the `dpsEnemyTarget`
+gate — an earlier draft of this spec named the wrong one.** Getting this right matters because the
+two gates suggest different fixes.
+
+`cumulativeDamage += totalRoundDamage` (`engine.ts:9702`) is itself **ungated**, and
+`totalRoundDamage` is built from the focus actor's own channel accumulators. But those accumulators
+are fed by `creditDamage(actor.id, 'direct', turn.directDamage)`, which sits inside
+`if (!positional)` (`engine.ts:8430`). The comment there is explicit: in positional mode the
+firing-hit damage lands per-victim via `applyPositionalDamage`, so crediting it again "would
+double-count it."
+
+So once SP-1 makes the run positional, `focus.direct` stops accumulating and
+`rawTotals.cumulative` — the DPS metric — reads approximately zero. (Separately, the
+`dpsEnemyTarget` false branch at `engine.ts:9753` keeps the dummy as a shadow HP tracker so its
+HP%-gates still resolve; it is not the cause of the metric loss.)
 
 Damage instead flows through the normal per-victim funnel into `RoundData.perTargetDealt`
 (attacker id → victim id → dealt). `cumulativeDamage` and `totalRoundDamage` are re-derived from it
@@ -126,6 +153,8 @@ Do not invent a new accounting path. Mirror the proven one.
   `buildDefaultShipSkills` for a blank enemy, mirroring the attacker path.
 - New `EnemyConfigCard.tsx` — ship-select, stat inputs, and `SkillSlotList`, mirroring
   `HealerConfigCard.tsx:217` and `ShipConfigCard.tsx:275`.
+- Placement: a slot `Select` on each attacker config; the enemy's slot is fixed and not
+  user-editable. Both are threaded to `runCombat` as `position` / `enemyAttackers[].position`.
 - `DocumentationPage.tsx` and `changelog.ts` (`UNRELEASED_CHANGES`) per CLAUDE.md.
 
 ## Risk and golden discipline
@@ -262,7 +291,9 @@ at implementation time and remove it if still unreferenced; if a caller has appe
 
 ## Non-goals
 
-- Positional/board play in the DPS calculator. Non-positional, as today.
+- A placement **UI** in the DPS calculator. The run is positional (it must be — see SP-1 locked
+  decision 4), but placement is auto-assigned: a slot dropdown per attacker config, a fixed slot for
+  the enemy, no board. Team-ship slots are not user-configurable in this epic.
 - Removing the dummy scaffolding from the engine. SP-1 stops the DPS page from *exercising* it in
   production, which is the prerequisite; actual removal is separate work.
 - Changing `liveGateConditions` or any live-gating semantics. This epic changes what is displayed
