@@ -234,6 +234,28 @@ export interface DefenseBuffTotals {
     securityBuff: number;
 }
 
+/** The DPS calculator's real, positioned opponent — replaces the loose enemy scalars.
+ *  A blank `shipSkills` still ACTS: the engine synthesizes one basic attack per turn when a
+ *  walked actor carries no abilities, so a skill-less enemy is a fighting enemy, not a dummy. */
+export interface EnemyShipConfig {
+    shipId?: string;
+    name: string;
+    hp: number;
+    defense: number;
+    security: number;
+    attack: number;
+    crit: number;
+    critDamage: number;
+    speed: number;
+    shipSkills: ShipSkills;
+}
+
+/** The numeric fields of `EnemyShipConfig` — everything a stat input may edit. */
+export type EnemyShipConfigNumericField = Exclude<
+    keyof EnemyShipConfig,
+    'shipId' | 'name' | 'shipSkills'
+>;
+
 export interface DefenseShipConfig {
     id: string;
     shipId?: string;
