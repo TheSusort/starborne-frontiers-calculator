@@ -105,6 +105,52 @@ describe('DPS calculator with a real positioned enemy', () => {
         expect(actors).not.toContain('enemy');
     });
 
+    it('reports a damage total that reconciles with perTargetDealt', () => {
+        const result = simulateDPS({
+            ...baseInput(),
+            position: DEFAULT_ATTACKER_SLOT,
+            enemyAttackers: realEnemy(),
+        });
+
+        const expected = result.rounds.reduce(
+            (sum, r) =>
+                sum +
+                Object.values(r.perTargetDealt?.['attacker'] ?? {}).reduce((s, n) => s + n, 0),
+            0
+        );
+
+        // Deliberately NOT asserted against any pre-change number: adding an actor shifts every
+        // RNG draw (the rate gate keys on ownerId), so digit-parity with the scalar path is not a
+        // valid acceptance test. Reconciliation against perTargetDealt is.
+        expect(expected).toBeGreaterThan(0);
+        expect(result.summary.totalDamage).toBe(Math.round(expected));
+    });
+
+    it('keeps each row consistent with the re-derived total', () => {
+        const result = simulateDPS({
+            ...baseInput(),
+            position: DEFAULT_ATTACKER_SLOT,
+            enemyAttackers: realEnemy(),
+        });
+
+        // The charts read these row fields, so they must agree with the summary.
+        let running = 0;
+        result.rounds.forEach((r) => {
+            const rowDealt = Object.values(r.perTargetDealt?.['attacker'] ?? {}).reduce(
+                (s, n) => s + n,
+                0
+            );
+            expect(r.totalRoundDamage).toBe(rowDealt);
+            running += rowDealt;
+            expect(r.cumulativeDamage).toBe(running);
+        });
+    });
+
+    it('keeps the scalar path intact when no real enemy is supplied', () => {
+        const result = simulateDPS(baseInput());
+        expect(result.summary.totalDamage).toBeGreaterThan(0);
+    });
+
     it('honours an explicitly supplied target instead of the default', () => {
         const result = simulateDPS({
             ...baseInput(),

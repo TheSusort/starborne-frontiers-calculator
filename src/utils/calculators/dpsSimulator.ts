@@ -21,6 +21,10 @@ import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
 import { DEFAULT_FRONT_ENEMY_TARGET, DEFAULT_BASE_PATTERN } from './dpsEnemyPlacement';
+import { focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
+
+/** The engine's focus-actor id (engine.ts:1781 `const focusActorId = 'attacker'`). */
+const FOCUS_ACTOR_ID = 'attacker';
 
 // Re-exported so existing importers (e.g. RoundData consumers) keep a single home.
 export type { ActiveBuff } from '../combat/statusEngine';
@@ -409,7 +413,28 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_BASE_PATTERN : undefined),
     });
 
-    const totalDamage = Math.round(rawTotals.cumulative);
+    // A positional run (a real enemy is present) suppresses the engine's
+    // `creditDamage(actor,'direct',…)` fold — `if (!positional)` at engine.ts:8430, because the
+    // firing hit lands per-victim via applyPositionalDamage and crediting again would double-count.
+    // So `rawTotals.cumulative` reads ~0 here and the per-victim map is the only honest source.
+    // Mirrors how battleSimulator derives ShipRoundState.damageDealt from the same map (SP-F F1).
+    const hasRealEnemy = (input.enemyAttackers?.length ?? 0) > 0;
+    const perRoundFocusDamage = hasRealEnemy ? focusDamagePerRound(rounds, FOCUS_ACTOR_ID) : null;
+    const totalDamage = hasRealEnemy
+        ? Math.round(focusDamageTotal(rounds, FOCUS_ACTOR_ID))
+        : Math.round(rawTotals.cumulative);
+
+    // Keep the per-round rows consistent with the re-derived total — DPSRoundChart and the
+    // summary must not disagree. Index-aligned with `rounds` by construction (a round with no
+    // entry contributes 0 and keeps its slot).
+    if (perRoundFocusDamage) {
+        let running = 0;
+        rounds.forEach((r, i) => {
+            r.totalRoundDamage = perRoundFocusDamage[i];
+            running += perRoundFocusDamage[i];
+            r.cumulativeDamage = running;
+        });
+    }
 
     return {
         rounds,
@@ -420,7 +445,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             // `rounds` is trimmed to that length — dividing by numRounds under-reports the
             // per-round pace of a fast kill. Survived runs are unaffected (rounds.length ===
             // numRounds there).
-            avgDamagePerRound: Math.round(rawTotals.cumulative / rounds.length),
+            avgDamagePerRound: Math.round(totalDamage / rounds.length),
             // SP-U U5: rounds-to-kill adapter. The engine drives a real, destructible enemy; when
             // it dies within the window the run terminates on that round and `enemyOutcome` reports
             // it. Wiped → roundsToKill = death round, survived false, finalHpPct 0; else survived
