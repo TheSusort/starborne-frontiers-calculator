@@ -58,13 +58,14 @@ describe('DPSBuffPanel end-of-round chips', () => {
             row({
                 enemyStatuses: {
                     'enemy-1': { buffNames: [], debuffNames: ['Attack Down', 'Slow'] },
-                    'enemy-2': { buffNames: [], debuffNames: ['Attack Down'] },
+                    'enemy-2': { buffNames: [], debuffNames: ['Attack Down', 'Stasis'] },
                 },
             })
         );
 
         expect(screen.getAllByText('Attack Down')).toHaveLength(1);
         expect(screen.getByText('Slow')).toBeInTheDocument();
+        expect(screen.getByText('Stasis')).toBeInTheDocument();
     });
 
     it('renders no End of Round section when the round carries no snapshot', () => {
@@ -100,5 +101,18 @@ describe('DPSBuffPanel end-of-round chips — both directions', () => {
         );
 
         expect(screen.getByText('Shield Up')).toBeInTheDocument();
+    });
+
+    it('labels each row so a same-named status on both sides is identifiable by direction', () => {
+        renderPanel(
+            row({
+                focusStatuses: { buffNames: [], debuffNames: ['Attack Down'] },
+                enemyStatuses: { 'enemy-1': { buffNames: [], debuffNames: ['Attack Down'] } },
+            })
+        );
+
+        expect(screen.getByText('On You')).toBeInTheDocument();
+        expect(screen.getByText('On Enemy')).toBeInTheDocument();
+        expect(screen.getAllByText('Attack Down')).toHaveLength(2);
     });
 });

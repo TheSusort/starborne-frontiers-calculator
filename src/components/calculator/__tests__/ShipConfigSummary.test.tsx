@@ -127,4 +127,22 @@ describe('ShipConfigSummary buffed stats', () => {
         expect(screen.getByText('1.75x')).toBeInTheDocument();
         expect(screen.queryByText(/Avg Buffed/)).not.toBeInTheDocument();
     });
+
+    it('clamps each turn before averaging crit, not the average after the fact', () => {
+        // Turns at crit 70 and crit 140, both at critDamage 200.
+        // Clamp-per-turn (correct): (min(100,70) + min(100,140)) / 2 = (70 + 100) / 2 = 85.
+        //   calculateCritMultiplier: 1 + (85/100 * 200)/100 = 1 + 1.7 = 2.70x.
+        // Clamp-after-average (the old, wrong behaviour): raw average (70 + 140)/2 = 105 →
+        //   clamp to 100 → 1 + (100/100 * 200)/100 = 1 + 2 = 3.00x.
+        // The two disagree, so which one renders proves which averaging strategy is live.
+        renderSummary(
+            simResult([
+                snapshot({ crit: 70, critDamage: 200 }),
+                snapshot({ crit: 140, critDamage: 200 }),
+            ])
+        );
+
+        expect(screen.getByText('2.70x')).toBeInTheDocument();
+        expect(screen.queryByText('3.00x')).not.toBeInTheDocument();
+    });
 });

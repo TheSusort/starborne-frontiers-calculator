@@ -233,9 +233,8 @@ export interface RoundData {
     >;
     /** SP-2: every focus-actor `stats-snapshot` of this round, in turn order — 2+ entries when an
      *  extra action gave the focus a second turn, which is exactly what makes the summary's
-     *  turn-weighted average expressible. Each reading is taken at TURN START, so it describes the
-     *  stats that turn's damage was dealt under; round 1 therefore reads PRE-cast (an on-cast
-     *  self-buff first appears in the next snapshot). Populated only under
+     *  turn-weighted average expressible. Each reading is taken AT TURN START; round 1 therefore
+     *  reads PRE-cast (an on-cast self-buff first appears in the next snapshot). Populated only under
      *  `collectStatusTimeline` — display-only, never read by the sim. */
     focusStatsSnapshots?: RoundStatsSnapshot[];
     /** SP-2: the focus actor's ROUND-TAIL status names — what it still carries after every

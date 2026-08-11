@@ -1,7 +1,7 @@
 import React from 'react';
 import { DPSShipConfig } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
-import { averageFocusStats } from '../../utils/calculators/roundStatsAverage';
+import { averageFocusStats, averageEffectiveCrit } from '../../utils/calculators/roundStatsAverage';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
 import { orderByTurnPriority } from '../../utils/combat/state';
@@ -61,11 +61,14 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     // the run was simulated without the timeline; then the config's unbuffed base stats are the
     // honest fallback.
     const avgStats = averageFocusStats(simResult.rounds);
+    // The per-turn clamp lives in `averageEffectiveCrit`, not here: clamping the AVERAGE instead of
+    // each turn over-reports (a turn folded to 120 still crits at 100, but averaging the raw folds
+    // first can push the mean above what any turn actually rolled). See its doc for the worked
+    // example.
+    const avgCrit = averageEffectiveCrit(simResult.rounds);
     const critMultiplier = calculateCritMultiplier({
         attack: avgStats?.attack ?? config.attack,
-        // The engine's fold can exceed 100 (the affinity cap is applied at the hit, not in the
-        // fold), so keep clamping for display as this line always has.
-        crit: Math.min(100, avgStats?.crit ?? config.crit),
+        crit: avgCrit ?? Math.min(100, config.crit),
         critDamage: avgStats?.critDamage ?? config.critDamage,
         hp: 0,
         defence: 0,
@@ -133,8 +136,8 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                         Avg Buffed Attack / Crit / Crit DMG:
                     </span>
                     <span>
-                        {Math.round(avgStats.attack).toLocaleString()} / {Math.round(avgStats.crit)}
-                        % / {Math.round(avgStats.critDamage)}%
+                        {Math.round(avgStats.attack).toLocaleString()} /{' '}
+                        {Math.round(avgCrit ?? avgStats.crit)}% / {Math.round(avgStats.critDamage)}%
                     </span>
                 </div>
             )}

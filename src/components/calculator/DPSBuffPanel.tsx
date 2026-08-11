@@ -18,7 +18,7 @@ interface DPSBuffPanelProps {
  *  name-list surfaces in the DPS calculator look like one thing. */
 const StatusChip: React.FC<{ name: string; tone: 'self' | 'enemy' }> = ({ name, tone }) => (
     <span
-        className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-dark-lighter ${
+        className={`inline-flex items-center px-2 py-0.5 rounded text-xs bg-dark-lighter ${
             tone === 'enemy' ? 'text-red-400' : 'text-theme-text-primary'
         }`}
     >
@@ -148,29 +148,46 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
                 <>
                     <div className="text-xs text-theme-text-secondary mt-2 mb-1">End of Round</div>
                     {[
-                        { items: endOfRoundSelfBuffs, prefix: 'self', tone: 'self' as const },
-                        { items: endOfRoundEnemyDebuffs, prefix: 'enemy', tone: 'enemy' as const },
+                        {
+                            items: endOfRoundSelfBuffs,
+                            prefix: 'self',
+                            tone: 'self' as const,
+                            label: 'Your Buffs',
+                        },
+                        {
+                            items: endOfRoundEnemyDebuffs,
+                            prefix: 'enemy',
+                            tone: 'enemy' as const,
+                            label: 'On Enemy',
+                        },
                         {
                             items: endOfRoundSelfDebuffs,
                             prefix: 'self-debuff',
                             tone: 'enemy' as const,
+                            label: 'On You',
                         },
                         {
                             items: endOfRoundEnemyBuffs,
                             prefix: 'enemy-buff',
                             tone: 'enemy' as const,
+                            label: 'Enemy Buffs',
                         },
-                    ].map(({ items, prefix, tone }) =>
+                    ].map(({ items, prefix, tone, label }) =>
                         items.length > 0 ? (
-                            <div key={prefix} className="flex flex-wrap gap-1 mb-1">
-                                {items.map((name) => (
-                                    <StatusChip
-                                        key={`eor-${prefix}-${name}`}
-                                        name={name}
-                                        tone={tone}
-                                    />
-                                ))}
-                            </div>
+                            <React.Fragment key={prefix}>
+                                <div className="text-xs text-theme-text-secondary mb-1">
+                                    {label}
+                                </div>
+                                <div className="flex flex-wrap gap-1 mb-1">
+                                    {items.map((name) => (
+                                        <StatusChip
+                                            key={`eor-${prefix}-${name}`}
+                                            name={name}
+                                            tone={tone}
+                                        />
+                                    ))}
+                                </div>
+                            </React.Fragment>
                         ) : null
                     )}
                 </>

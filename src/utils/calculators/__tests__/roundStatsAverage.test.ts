@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { averageFocusStats } from '../roundStatsAverage';
+import { averageFocusStats, averageEffectiveCrit } from '../roundStatsAverage';
 import type { RoundData, RoundStatsSnapshot } from '../dpsSimulator';
 
 const snapshot = (over: Partial<RoundStatsSnapshot> = {}): RoundStatsSnapshot => ({
@@ -94,5 +94,35 @@ describe('averageFocusStats', () => {
         const avg = averageFocusStats([row([snapshot({ attack: 10000 })]), row(), row()]);
 
         expect(avg!.attack).toBe(10000);
+    });
+});
+
+describe('averageEffectiveCrit', () => {
+    it('clamps each turn to 100 BEFORE averaging, not the average after the fact', () => {
+        // Turns at 70, 120, 120, 120, 120. Clamp-per-turn (correct): (70+100+100+100+100)/5 = 94.
+        // Clamp-after-average (the old, wrong behaviour): (70+120+120+120+120)/5 = 110 → clamp 100.
+        const avg = averageEffectiveCrit([
+            row([snapshot({ crit: 70 })]),
+            row([snapshot({ crit: 120 })]),
+            row([snapshot({ crit: 120 })]),
+            row([snapshot({ crit: 120 })]),
+            row([snapshot({ crit: 120 })]),
+        ]);
+
+        expect(avg).toBeCloseTo(94, 6);
+        expect(avg).not.toBeCloseTo(100, 6);
+    });
+
+    it('returns undefined when no round carries a snapshot', () => {
+        expect(averageEffectiveCrit([row(), row()])).toBeUndefined();
+    });
+
+    it('leaves already-under-cap values unaffected', () => {
+        const avg = averageEffectiveCrit([
+            row([snapshot({ crit: 40 })]),
+            row([snapshot({ crit: 60 })]),
+        ]);
+
+        expect(avg).toBe(50);
     });
 });
