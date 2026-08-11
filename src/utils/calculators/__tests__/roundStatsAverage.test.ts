@@ -1,0 +1,98 @@
+import { describe, it, expect } from 'vitest';
+import { averageFocusStats } from '../roundStatsAverage';
+import type { RoundData, RoundStatsSnapshot } from '../dpsSimulator';
+
+const snapshot = (over: Partial<RoundStatsSnapshot> = {}): RoundStatsSnapshot => ({
+    attack: 10000,
+    defence: 1000,
+    crit: 50,
+    critDamage: 150,
+    defensePenetration: 0,
+    speed: 100,
+    hacking: 200,
+    security: 100,
+    currentHp: 300000,
+    maxHp: 300000,
+    shieldPool: 0,
+    ...over,
+});
+
+/** Minimal RoundData row — only the fields the average reads matter. */
+const row = (snapshots?: RoundStatsSnapshot[]): RoundData =>
+    ({
+        round: 1,
+        action: 'active',
+        charges: 0,
+        chargeCount: 0,
+        didCrit: false,
+        enemyHpPct: 100,
+        directDamage: 0,
+        corrosionDamage: 0,
+        infernoDamage: 0,
+        detonationDamage: 0,
+        totalRoundDamage: 0,
+        cumulativeDamage: 0,
+        activeCorrosionStacks: 0,
+        activeInfernoStacks: 0,
+        activeBombCount: 0,
+        activeSelfBuffs: [],
+        activeEnemyDebuffs: [],
+        resistedEnemyDebuffs: [],
+        appliedDoTs: [],
+        dotsLanded: true,
+        activeDoTStates: [],
+        ...(snapshots ? { focusStatsSnapshots: snapshots } : {}),
+    }) satisfies RoundData;
+
+describe('averageFocusStats', () => {
+    it('returns undefined when no round carries a snapshot', () => {
+        expect(averageFocusStats([row(), row()])).toBeUndefined();
+    });
+
+    it('returns undefined for an empty run', () => {
+        expect(averageFocusStats([])).toBeUndefined();
+    });
+
+    it('averages a buff that lands mid-run to strictly between the two values', () => {
+        const avg = averageFocusStats([
+            row([snapshot({ attack: 10000 })]),
+            row([snapshot({ attack: 13000 })]),
+            row([snapshot({ attack: 13000 })]),
+        ]);
+
+        expect(avg!.attack).toBeCloseTo(12000, 6);
+        expect(avg!.attack).toBeGreaterThan(10000);
+        expect(avg!.attack).toBeLessThan(13000);
+    });
+
+    it('weights each TURN equally, so an extra action counts twice', () => {
+        // Round 1: one turn at 10000. Round 2: two turns at 13000 (extra action).
+        // Turn-weighted = (10000 + 13000 + 13000) / 3 = 12000.
+        // Round-weighted would have been (10000 + 13000) / 2 = 11500 — the number this must NOT be.
+        const avg = averageFocusStats([
+            row([snapshot({ attack: 10000 })]),
+            row([snapshot({ attack: 13000 }), snapshot({ attack: 13000 })]),
+        ]);
+
+        expect(avg!.attack).toBeCloseTo(12000, 6);
+        expect(avg!.attack).not.toBeCloseTo(11500, 6);
+    });
+
+    it('averages every stat on the snapshot, not just attack', () => {
+        const avg = averageFocusStats([
+            row([snapshot({ crit: 0, critDamage: 100, defence: 0, shieldPool: 0 })]),
+            row([snapshot({ crit: 100, critDamage: 200, defence: 2000, shieldPool: 5000 })]),
+        ]);
+
+        expect(avg!.crit).toBe(50);
+        expect(avg!.critDamage).toBe(150);
+        expect(avg!.defence).toBe(1000);
+        expect(avg!.shieldPool).toBe(2500);
+    });
+
+    it('ignores rounds with no snapshot rather than counting them as zero', () => {
+        const avg = averageFocusStats([row([snapshot({ attack: 10000 })]), row(), row()]);
+
+        expect(avg!.attack).toBe(10000);
+    });
+});
