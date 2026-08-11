@@ -8,11 +8,7 @@ import {
     DEFAULT_ATTACKER_SLOT,
 } from '../../utils/calculators/dpsEnemyPlacement';
 import type { Position } from '../../types/encounters';
-import {
-    DPSShipConfig,
-    DPSShipConfigUpdateableField,
-    AttackerBuffTotals,
-} from '../../types/calculator';
+import { DPSShipConfig, DPSShipConfigUpdateableField } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -35,7 +31,6 @@ interface ShipConfigCardProps {
     bestTotalDamage: number | undefined;
     bestVsSecondLabel: string | null;
     rounds: number;
-    attackerBuffTotals: AttackerBuffTotals;
     onRemove: () => void;
     onUpdate: (field: DPSShipConfigUpdateableField, value: string | number | undefined) => void;
     onSelectShip: (ship: Ship) => void;
@@ -76,7 +71,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     bestTotalDamage,
     bestVsSecondLabel,
     rounds,
-    attackerBuffTotals,
     onRemove,
     onUpdate,
     onSelectShip,
@@ -308,7 +302,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         isBest={isBest}
                         isComparing={isComparing}
                         rounds={rounds}
-                        attackerBuffTotals={attackerBuffTotals}
                         bestTotalDamage={bestTotalDamage}
                         bestVsSecondLabel={bestVsSecondLabel}
                         teamActors={teamActors}

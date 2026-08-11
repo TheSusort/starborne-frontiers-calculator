@@ -1,6 +1,7 @@
 import React from 'react';
-import { DPSShipConfig, AttackerBuffTotals } from '../../types/calculator';
+import { DPSShipConfig } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import { averageFocusStats } from '../../utils/calculators/roundStatsAverage';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
 import { orderByTurnPriority } from '../../utils/combat/state';
@@ -22,7 +23,6 @@ interface ShipConfigSummaryProps {
     isBest: boolean;
     isComparing: boolean;
     rounds: number;
-    attackerBuffTotals: AttackerBuffTotals;
     bestTotalDamage: number | undefined;
     /** Ranking-aware label describing best's advantage over #2 (SP-U U6). Null → no badge. */
     bestVsSecondLabel: string | null;
@@ -36,7 +36,6 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     isBest,
     isComparing,
     rounds,
-    attackerBuffTotals,
     bestTotalDamage,
     bestVsSecondLabel,
     teamActors,
@@ -56,10 +55,18 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
         simResult.summary.totalInfernoDamage > 0 ||
         simResult.summary.totalDetonationDamage > 0;
 
+    // SP-2: the buffed stats behind these numbers come from the engine's own per-turn
+    // `stats-snapshot` readings, turn-weighted across the run — one authority, not a second static
+    // conversion that could disagree with the damage number printed beside it. Undefined only when
+    // the run was simulated without the timeline; then the config's unbuffed base stats are the
+    // honest fallback.
+    const avgStats = averageFocusStats(simResult.rounds);
     const critMultiplier = calculateCritMultiplier({
-        attack: config.attack * (1 + attackerBuffTotals.attackBuff / 100),
-        crit: Math.min(100, config.crit + attackerBuffTotals.critBuff),
-        critDamage: config.critDamage + attackerBuffTotals.critDamageBuff,
+        attack: avgStats?.attack ?? config.attack,
+        // The engine's fold can exceed 100 (the affinity cap is applied at the hit, not in the
+        // fold), so keep clamping for display as this line always has.
+        crit: Math.min(100, avgStats?.crit ?? config.crit),
+        critDamage: avgStats?.critDamage ?? config.critDamage,
         hp: 0,
         defence: 0,
         hacking: 0,
@@ -120,6 +127,17 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                 <span className="text-theme-text-secondary">Crit Multiplier:</span>
                 <span>{critMultiplier.toFixed(2)}x</span>
             </div>
+            {avgStats && (
+                <div className="flex justify-between mb-2">
+                    <span className="text-theme-text-secondary">
+                        Avg Buffed Attack / Crit / Crit DMG:
+                    </span>
+                    <span>
+                        {Math.round(avgStats.attack).toLocaleString()} / {Math.round(avgStats.crit)}
+                        % / {Math.round(avgStats.critDamage)}%
+                    </span>
+                </div>
+            )}
             <div className="flex justify-between mb-2">
                 <span className="text-theme-text-secondary">Avg Damage / Round:</span>
                 <span className={isBest ? 'text-primary font-bold' : ''}>
