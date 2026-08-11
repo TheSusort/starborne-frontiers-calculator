@@ -85,3 +85,20 @@ describe('DPSBuffPanel end-of-round chips', () => {
         expect(screen.getByText('Round Tail Only')).toBeInTheDocument();
     });
 });
+
+describe('DPSBuffPanel end-of-round chips — both directions', () => {
+    it('lists debuffs the enemy put on YOU', () => {
+        renderPanel(row({ focusStatuses: { buffNames: [], debuffNames: ['Attack Down'] } }));
+
+        expect(screen.getByText('End of Round')).toBeInTheDocument();
+        expect(screen.getByText('Attack Down')).toBeInTheDocument();
+    });
+
+    it('lists the enemy own buffs', () => {
+        renderPanel(
+            row({ enemyStatuses: { 'enemy-1': { buffNames: ['Shield Up'], debuffNames: [] } } })
+        );
+
+        expect(screen.getByText('Shield Up')).toBeInTheDocument();
+    });
+});

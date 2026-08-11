@@ -47,7 +47,17 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
     const endOfRoundEnemyDebuffs = [
         ...new Set(Object.values(roundData?.enemyStatuses ?? {}).flatMap((s) => s.debuffNames)),
     ];
-    const hasEndOfRound = endOfRoundSelfBuffs.length > 0 || endOfRoundEnemyDebuffs.length > 0;
+    // SP-1 made the enemy a real actor that takes turns, so it can now debuff YOU — and a picked
+    // enemy ship's own kit can buff itself. Neither state had any surface in this calculator before.
+    const endOfRoundSelfDebuffs = roundData?.focusStatuses?.debuffNames ?? [];
+    const endOfRoundEnemyBuffs = [
+        ...new Set(Object.values(roundData?.enemyStatuses ?? {}).flatMap((s) => s.buffNames)),
+    ];
+    const hasEndOfRound =
+        endOfRoundSelfBuffs.length > 0 ||
+        endOfRoundEnemyDebuffs.length > 0 ||
+        endOfRoundSelfDebuffs.length > 0 ||
+        endOfRoundEnemyBuffs.length > 0;
 
     const hasDebuffs = enemyDebuffs.length > 0 || resistedEnemyDebuffs.length > 0;
     const hasDoTs = appliedDoTs.length > 0;
@@ -148,6 +158,28 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
                         <div className="flex flex-wrap gap-1 mb-1">
                             {endOfRoundEnemyDebuffs.map((name) => (
                                 <StatusChip key={`eor-enemy-${name}`} name={name} tone="enemy" />
+                            ))}
+                        </div>
+                    )}
+                    {endOfRoundSelfDebuffs.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1">
+                            {endOfRoundSelfDebuffs.map((name) => (
+                                <StatusChip
+                                    key={`eor-self-debuff-${name}`}
+                                    name={name}
+                                    tone="enemy"
+                                />
+                            ))}
+                        </div>
+                    )}
+                    {endOfRoundEnemyBuffs.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1">
+                            {endOfRoundEnemyBuffs.map((name) => (
+                                <StatusChip
+                                    key={`eor-enemy-buff-${name}`}
+                                    name={name}
+                                    tone="enemy"
+                                />
                             ))}
                         </div>
                     )}
