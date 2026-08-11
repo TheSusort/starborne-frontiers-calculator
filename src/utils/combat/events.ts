@@ -487,9 +487,12 @@ export type CombatEvent =
     /** LOG-ONLY: a per-turn snapshot of the ACTING actor's live modelled stats, emitted
      *  immediately after `turn-started`. This is an on-turn snapshot, never a reaction — it
      *  carries NO `ReactiveStamp` and NO combat listener subscribes to it (mirrors the
-     *  `reactive-damage-performed`/`reactive-heal-performed` log-only contract). Exists SOLELY
-     *  so `buildCombatLog` can attach a `statsSnapshot` to the turn view-model; folding it into
-     *  any subscribed/aggregated path would be a bug. `stats` reflects the same
+     *  `reactive-damage-performed`/`reactive-heal-performed` log-only contract). Two
+     *  display-only consumers: `buildCombatLog` attaches it to the turn view-model, and
+     *  `simulateDPS`'s emit-only collector turn-weights it into the DPS summary's buffed-stat
+     *  average (SP-2). Aggregating it for DISPLAY is fine. What would be a bug is subscribing a
+     *  combat listener to it, or letting a consumer feed anything back into combat state — the
+     *  log-only contract is about influence, not about arithmetic. `stats` reflects the same
      *  `effectiveStatsOf(statusEngine, selfBuffLookup, actor)` fold every other live-stat read
      *  in the engine uses, plus the actor's current HP/shield pool. */
     | {
@@ -519,7 +522,11 @@ export type CombatEvent =
      *  `buff-applied`/`debuff-applied`/`dot-applied`. That has no removal path, so a cleansed,
      *  purged, stolen or expired status stayed listed for the rest of the battle. This snapshot is
      *  authoritative for the actors it names — the assembler prefers it over accumulation — so
-     *  removal is reflected without needing a name-carrying event on every removal seam. */
+     *  removal is reflected without needing a name-carrying event on every removal seam.
+     *
+     *  `simulateDPS` reads the same event for the DPS calculator's per-round chips (SP-2), filtered to
+     *  the focus actor and the REAL enemy roster — the vestigial dummy also emits here, but it keys its
+     *  debuffs under the `__enemy__` sentinel rather than its actor id, so its lists are always empty. */
     | {
           type: 'status-snapshot';
           actorId: string;
