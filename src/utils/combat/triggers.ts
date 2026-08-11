@@ -1494,9 +1494,10 @@ export interface IntentExecContext {
      *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
      *  on-enemy-cleansed, FrontLine's on-enemy-charged-cast). `abilityId` keys the dedicated
      *  reactive-damage crit gate; `noCrit` (Grif/Rhodium "cannot critically hit") skips the roll
-     *  entirely. Mirrors `applyCounterAttack`'s mitigated/crit walk but credits the owner's round
-     *  damage-dealt bucket (creditDamage) instead of applying real HP damage — this executor
-     *  never mutated a specific victim's HP (was credit-only pre-fix). Absent → the damage
+     *  entirely. Mirrors `applyCounterAttack`'s mitigated/crit walk. Against a real positioned
+     *  victim it reduces that victim's HP and books the intake per-victim; otherwise it credits the
+     *  owner's round damage-dealt bucket (creditDamage) without touching HP — see the gate in
+     *  engine.ts's applyReactiveDamage, which owns that choice. Absent → the damage
      *  branch is inert (unit fixtures / DPS mode w/o delegate). `allowDeadOwner` (PR-B1,
      *  Paracelsus) lets an on-destroyed retaliation fire even though its owner is already
      *  stamped destroyedRound — the reaction is BORN of that same death. Ship-kit W5 Task C3

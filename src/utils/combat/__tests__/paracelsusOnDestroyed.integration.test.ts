@@ -7,10 +7,11 @@
  *
  * Model-completeness triage locked the ability SHAPE (modelCompletenessTriage.test.ts, SP-B).
  * These are the ENGINE-level integration tests proving the shapes actually EXECUTE:
- *   - the retaliation credits real (mitigated) damage against the actor that landed the killing
- *     DIRECT blow (the same credit-only reactive-damage executor Vindicator's on-resist proc
- *     uses — see vindicatorOnResistDamage.integration.test.ts for the precedent: this executor
- *     never mutates a victim's live HP, it credits the owner's round damage-dealt bucket),
+ *   - the retaliation deals real (mitigated) damage to the actor that landed the killing DIRECT
+ *     blow (the same reactive-damage executor Vindicator's on-resist proc uses — see
+ *     vindicatorOnResistDamage.integration.test.ts for the precedent: against a POSITIONED victim,
+ *     as here, it reduces that victim's HP and books the intake per-victim; with no positioned
+ *     roster it stays credit-only on the owner's round damage-dealt bucket),
  *   - the buff lands on every LIVING ally,
  *   - and BOTH hold identically whether Paracelsus is a PLAYER-side team actor or an
  *     ENEMY-side attacker (team symmetry) — mirroring the Battlecry/Last Wish on-destroyed
@@ -28,6 +29,7 @@ import { ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { dealtBySource } from '../__testutils__/perTargetDealt';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -194,15 +196,20 @@ const playerScenarioInput = (paracelsusSlots: ShipSkills['slots']): CombatEngine
     enemyAttackers: [offensiveEnemyAt('killer', 'M1', 1_000_000_000)],
 });
 
-/** Runs a scenario input, collecting ship-destroyed/buff-applied events + credited direct
- *  damage per source id. */
+/** Runs a scenario input, collecting ship-destroyed/buff-applied events, credited direct damage per
+ *  source id, and the PER-VICTIM dealt credit per source id.
+ *
+ *  These scenarios position both rosters, so the retaliation reduces the killer's real HP through
+ *  applyVictimDamage and books its intake into `perTargetDealt` (`dealt`) rather than onto the
+ *  credit-only `creditDamage` channel (`creditedDirect`) — see engine.ts's applyReactiveDamage gate.
+ *  Both are collected so each assertion can name the channel it means. */
 function runScenario(input: CombatEngineInput) {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     bus.on('ship-destroyed', (e) => events.push(e as CombatEvent));
     bus.on('buff-applied', (e) => events.push(e as CombatEvent));
     const creditedDirect = new Map<string, number>();
-    runCombat({
+    const { rounds } = runCombat({
         ...input,
         bus,
         __testTapCreditDamage: (id, channel, amount) => {
@@ -210,12 +217,14 @@ function runScenario(input: CombatEngineInput) {
                 creditedDirect.set(id, (creditedDirect.get(id) ?? 0) + amount);
         },
     });
-    return { events, creditedDirect };
+    return { events, creditedDirect, dealt: dealtBySource(rounds) };
 }
 
 describe('Paracelsus on-destroyed retaliation + ally-buff — player side', () => {
     it('Paracelsus killed by direct damage: retaliation credits ~50% of its max HP; allies get Everliving Regeneration II', () => {
-        const { events, creditedDirect } = runScenario(playerScenarioInput(buildParacelsusSlots()));
+        const { events, creditedDirect, dealt } = runScenario(
+            playerScenarioInput(buildParacelsusSlots())
+        );
 
         // Sanity: Paracelsus actually died to a DIRECT hit.
         const destroyed = events.filter(
@@ -224,10 +233,12 @@ describe('Paracelsus on-destroyed retaliation + ally-buff — player side', () =
         expect(destroyed.length).toBeGreaterThanOrEqual(1);
         expect(destroyed.some((e) => e.type === 'ship-destroyed' && e.byDirectDamage)).toBe(true);
 
-        // (a) Retaliation: the dying Paracelsus's death credits ~50% of its own max HP as
-        // 'direct' damage (defence 0, crit 0, same-affinity → no mitigation/bonus, so the raw
-        // credited amount equals the basis exactly — mirrors the Vindicator on-resist pin).
-        expect(creditedDirect.get('paracelsus') ?? 0).toBeCloseTo(EXPECTED_RETALIATION, 0);
+        // (a) Retaliation: the dying Paracelsus's death deals ~50% of its own max HP to the killer
+        // (defence 0, crit 0, same-affinity → no mitigation/bonus, so the booked amount equals the
+        // basis exactly — mirrors the Vindicator on-resist pin), attributed to Paracelsus against
+        // the killer specifically. Credit-only stays empty: the two channels are mutually exclusive.
+        expect(dealt.get('paracelsus') ?? 0).toBeCloseTo(EXPECTED_RETALIATION, 0);
+        expect(creditedDirect.get('paracelsus') ?? 0).toBe(0);
 
         // (b) Ally-buff: the surviving ally 'attacker' receives Everliving Regeneration II
         // for its full 4-turn duration.
@@ -242,13 +253,15 @@ describe('Paracelsus on-destroyed retaliation + ally-buff — player side', () =
     });
 
     it('CONTROL — Paracelsus with no passive: dying credits nothing and grants no buff', () => {
-        const { events, creditedDirect } = runScenario(playerScenarioInput(controlSlots()));
+        const { events, creditedDirect, dealt } = runScenario(playerScenarioInput(controlSlots()));
 
         const destroyed = events.filter(
             (e) => e.type === 'ship-destroyed' && e.actorId === 'paracelsus'
         );
         expect(destroyed.length).toBeGreaterThanOrEqual(1); // still dies (same lethal hit)
 
+        // Neither channel: no passive, no retaliation, on the per-victim path or the credit-only one.
+        expect(dealt.get('paracelsus') ?? 0).toBe(0);
         expect(creditedDirect.get('paracelsus') ?? 0).toBe(0);
         expect(
             events.filter((e) => e.type === 'buff-applied' && e.buffName === REGEN_BUFF)
@@ -335,7 +348,7 @@ const playerLethalAttackSlots: ShipSkills['slots'] = [
 
 describe('Paracelsus on-destroyed retaliation + ally-buff — enemy side (team symmetry)', () => {
     it('An enemy Paracelsus killed by direct damage: retaliation credits ~50% of its max HP against the killer; enemy allies get Everliving Regeneration II', () => {
-        const { events, creditedDirect } = runScenario({
+        const { events, creditedDirect, dealt } = runScenario({
             ...enemyScenarioInput(buildParacelsusSlots()),
             shipSkills: { slots: playerLethalAttackSlots },
         });
@@ -346,9 +359,11 @@ describe('Paracelsus on-destroyed retaliation + ally-buff — enemy side (team s
         expect(destroyed.length).toBeGreaterThanOrEqual(1);
         expect(destroyed.some((e) => e.type === 'ship-destroyed' && e.byDirectDamage)).toBe(true);
 
-        // (a) Retaliation: credited against the dying enemy Paracelsus's own bucket, routed at
-        // the player 'attacker' (the killer) — same magnitude as the player-side scenario.
-        expect(creditedDirect.get('paracelsus-e') ?? 0).toBeCloseTo(EXPECTED_RETALIATION, 0);
+        // (a) Retaliation: booked against the dying enemy Paracelsus's own bucket, routed at the
+        // player 'attacker' (the killer) — same magnitude AND same channel as the player-side
+        // scenario, which is the team-symmetry claim.
+        expect(dealt.get('paracelsus-e') ?? 0).toBeCloseTo(EXPECTED_RETALIATION, 0);
+        expect(creditedDirect.get('paracelsus-e') ?? 0).toBe(0);
 
         // (b) Ally-buff: the surviving enemy ally receives Everliving Regeneration II.
         const regen = events.filter(
@@ -362,7 +377,7 @@ describe('Paracelsus on-destroyed retaliation + ally-buff — enemy side (team s
     });
 
     it('CONTROL — enemy Paracelsus with no passive: dying credits nothing and grants no buff', () => {
-        const { events, creditedDirect } = runScenario({
+        const { events, creditedDirect, dealt } = runScenario({
             ...enemyScenarioInput(controlSlots()),
             shipSkills: { slots: playerLethalAttackSlots },
         });
@@ -372,6 +387,8 @@ describe('Paracelsus on-destroyed retaliation + ally-buff — enemy side (team s
         );
         expect(destroyed.length).toBeGreaterThanOrEqual(1);
 
+        // Neither channel (mirrors the player-side control).
+        expect(dealt.get('paracelsus-e') ?? 0).toBe(0);
         expect(creditedDirect.get('paracelsus-e') ?? 0).toBe(0);
         expect(
             events.filter((e) => e.type === 'buff-applied' && e.buffName === REGEN_BUFF)

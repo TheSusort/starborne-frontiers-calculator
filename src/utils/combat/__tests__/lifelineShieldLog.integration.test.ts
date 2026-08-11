@@ -130,8 +130,9 @@ const inflictDebuff = (): Ability => ({
 });
 
 /** Same board as INPUT(), but the focus carries the reactive proc and its cast inflicts the
- *  debuff that triggers it. `positionalTeamBattle` is required for a reactive proc to reduce the
- *  victim's real HP (the engine's own gate) rather than being credit-only. */
+ *  debuff that triggers it. A reactive proc only reduces the victim's real HP against a POSITIONED
+ *  enemy roster (the engine's own gate in applyReactiveDamage) rather than being credit-only; this
+ *  board is positioned, and `positionalTeamBattle` additionally makes it a two-team run. */
 const REACTIVE_INPUT = (): CombatEngineInput => ({
     ...INPUT(),
     positionalTeamBattle: true,

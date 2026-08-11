@@ -3,6 +3,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -115,6 +116,13 @@ const creditedDirectFor = (sourceId: string, input: CombatEngineInput): number =
     });
     return total;
 };
+
+// Sums the PER-VICTIM dealt credit attributed to `sourceId` across the run. Against a real,
+// positioned opposing roster a reactive proc reduces the victim's real HP through applyVictimDamage
+// and books its intake there (creditDealt → RoundData.perTargetDealt) instead of on the credit-only
+// `creditDamage` channel above — see engine.ts's applyReactiveDamage gate.
+const dealtFor = (sourceId: string, input: CombatEngineInput): number =>
+    dealtBy(runCombat(input).rounds, sourceId);
 
 describe('Vindicator on-resist HP damage — engine integration', () => {
     it('deals ~30% of the carrier max HP to the resisted enemy (defence-0, mitigation ~none)', () => {
@@ -265,8 +273,15 @@ describe('Vindicator on-resist HP damage — team symmetry (enemy-owned)', () =>
                 } as EnemyAttacker,
             ],
         };
-        const credited = creditedDirectFor('enemy-vindi', input);
-        expect(credited).toBeGreaterThan(0);
-        expect(credited).toBeCloseTo(ENEMY_HP * 0.3, 0);
+        // This fixture positions BOTH sides (it must, to route the player's debuff at the real
+        // enemy Vindicator), so the retaliation reduces the player's real HP and books its intake
+        // per-victim rather than on the credit-only `creditDamage` channel the non-positional
+        // fixtures above read. Same magnitude, different channel.
+        const dealt = dealtFor('enemy-vindi', input);
+        expect(dealt).toBeGreaterThan(0);
+        expect(dealt).toBeCloseTo(ENEMY_HP * 0.3, 0);
+        // And nothing lands on the credit-only channel — the two are mutually exclusive by
+        // construction, so a regression that silently reverted the routing would fail here.
+        expect(creditedDirectFor('enemy-vindi', input)).toBe(0);
     });
 });

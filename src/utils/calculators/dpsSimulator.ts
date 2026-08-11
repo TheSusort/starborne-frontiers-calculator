@@ -359,13 +359,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // `survived: true` / `roundsToKill: undefined` forever. Capture the REAL enemies' deaths off an
     // emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same remedy.
     const realEnemyIds = new Set((input.enemyAttackers ?? []).map((e) => e.id));
-    /** The PRIMARY real enemy — the first supplied. `finalHpPct` is a single number, so with a
-     *  multi-enemy roster it reports this one rather than inventing an aggregate. */
-    const primaryRealEnemyId = input.enemyAttackers?.[0]?.id;
     const realEnemyDeathRound = new Map<string, number>();
-    /** Last `hp-changed` percentage seen for the primary real enemy. Integer-granular and only
-     *  emitted on change, so "no event" legitimately means "untouched" → 100. */
-    let primaryRealEnemyHpPct: number | undefined;
+    /** Last `hp-changed` percentage seen per real enemy. Integer-granular and only emitted on
+     *  change, so a missing entry legitimately means "untouched" → 100. */
+    const realEnemyHpPct = new Map<string, number>();
     const collectingBus: CombatEventBus | undefined =
         realEnemyIds.size > 0
             ? {
@@ -378,8 +375,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
                       ) {
                           realEnemyDeathRound.set(e.actorId, e.round);
                       }
-                      if (e.type === 'hp-changed' && e.targetId === primaryRealEnemyId) {
-                          primaryRealEnemyHpPct = e.newPct;
+                      if (e.type === 'hp-changed' && realEnemyIds.has(e.targetId)) {
+                          realEnemyHpPct.set(e.targetId, e.newPct);
                       }
                       input.bus?.emit(e);
                   },
@@ -465,6 +462,29 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         ? Math.max(...realEnemyDeathRound.values())
         : undefined;
 
+    /**
+     * HP-weighted remainder across the WHOLE real roster: how much of the enemy team's HP pool is
+     * still standing. `finalHpPct` is a single number, and reading `enemyAttackers[0]` made that
+     * number describe one member — so a run that wiped one of two enemies reported either 0 or 100
+     * depending only on listing order, and `rankDpsConfigs` (which sorts surviving configs by
+     * "closer to death wins") ranked on it. Weighted by max HP rather than a mean of percentages so
+     * a big enemy counts for more, which is what "closer to killing the roster" means.
+     *
+     * A destroyed enemy contributes 0 from the `ship-destroyed` tap, not from `hp-changed` — a
+     * lethal hit does not reliably leave a final 0% `hp-changed` behind it.
+     */
+    const weightedRealEnemyHpPct = (): number => {
+        const roster = input.enemyAttackers ?? [];
+        const totalMaxHp = roster.reduce((sum, e) => sum + (e.stats.hp ?? 0), 0);
+        // No HP anywhere to lose (all-zero or unspecified maxima) → nothing was taken off it.
+        if (totalMaxHp <= 0) return 100;
+        const remaining = roster.reduce((sum, e) => {
+            const pct = realEnemyDeathRound.has(e.id) ? 0 : (realEnemyHpPct.get(e.id) ?? 100);
+            return sum + (pct / 100) * (e.stats.hp ?? 0);
+        }, 0);
+        return (remaining / totalMaxHp) * 100;
+    };
+
     // End the reported run AT the kill, dropping the zero-damage rounds the engine still simulated
     // afterwards. The engine's own early exit (engine.ts:10159) is gated on `dpsEnemyTarget`, which
     // is false once a real enemy is supplied, and `battleSimulator` derives its outcome post-hoc
@@ -523,14 +543,16 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
                 : enemyOutcome.roundsToKill !== undefined
                   ? { roundsToKill: enemyOutcome.roundsToKill }
                   : {}),
-            // A killed real enemy is at 0%; a living one reports its own last `hp-changed`
-            // percentage (100 when never damaged). The engine's `enemyOutcome.finalHpPct` reads the
-            // DUMMY here, so it is not a reading of the real enemy at all.
+            // A fully wiped roster is at 0%; otherwise the HP-weighted remainder across every real
+            // enemy (see weightedRealEnemyHpPct — with the single enemy the UI ships, that is just
+            // its own last `hp-changed` percentage, 100 when never damaged). The engine's
+            // `enemyOutcome.finalHpPct` reads the DUMMY here, so it is not a reading of the real
+            // enemy at all.
             finalHpPct:
                 realEnemyIds.size > 0
                     ? allRealEnemiesDead
                         ? 0
-                        : (primaryRealEnemyHpPct ?? 100)
+                        : weightedRealEnemyHpPct()
                     : enemyOutcome.finalHpPct,
             totalDirectDamage: Math.round(rawTotals.direct),
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
