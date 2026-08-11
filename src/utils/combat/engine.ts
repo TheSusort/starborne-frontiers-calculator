@@ -2279,6 +2279,14 @@ export function runCombat(input: CombatEngineInput): {
     // lowest-HP living ally via `lowestHpAllyId` (the `teamBattle` path), NOT this anchor.
     const healTarget = explicitHealTarget ?? (input.positionalTeamBattle ? attacker : undefined);
     const healingMode = !!healTarget;
+    /**
+     * A DPS MEASUREMENT run: one focus attacker whose output is the whole point, as opposed to a
+     * two-team battle (`positionalTeamBattle`) or a healing report (`healingMode`). Named because
+     * the distinction is load-bearing for the focus-death exit: only here does the focus dying mean
+     * there is nothing left to report. Both other modes legitimately continue past it and pin that
+     * behaviour in tests.
+     */
+    const isDpsMeasurementRun = !input.positionalTeamBattle && !healingMode;
 
     // Enemy attackers. Offense actors that bombard the player side (healing/sim mode). The enemy
     // roster is built purely from their presence (SP-U U5): no `healTargetId` is required — sim
@@ -5516,6 +5524,20 @@ export function runCombat(input: CombatEngineInput): {
             // victim.id !== enemy.id: defensive backstop keeping the HP path off the vestigial dummy
             // (a proc whose target resolved to ctx.enemy — e.g. an AoE with an empty living roster —
             // stays credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim.
+            // ⚠️ KNOWN GAP (SP-1, deferred to its own PR): this gate is too strict for a DPS run.
+            // The DPS calculator supplies a real positioned enemy but does NOT set
+            // positionalTeamBattle, so every reactive-damage proc falls to the credit-only branch
+            // below — it reduces no real HP and never reaches `perTargetDealt`, meaning the proc
+            // fires and accomplishes NOTHING there (Judge/Incinerator/Rhodium/Chakara fire on the
+            // focus's own turn, so this is not gated behind an attacking enemy).
+            //
+            // The fix is to widen this to `(input.positionalTeamBattle || hasPositionedEnemyRoster)`,
+            // mirroring SP-M M1's own correction one gate over ("positionalTeamBattle is too strict;
+            // hasPositionedEnemyRoster is the narrowest correct signal"). Measured blast radius: 6
+            // assertions across 4 files (allyCritReactivePromotion ×2, paracelsusOnDestroyed ×2,
+            // enemyCleanse, vindicatorOnResistDamage) whose credited amounts migrate from
+            // `creditDamage` to `applyVictimDamage`/`creditDealt` — each needs its expected value
+            // re-derived on the new channel, so it is split out rather than rushed alongside SP-1.
             if (input.positionalTeamBattle && victim.id !== enemy.id) {
                 // Buffer this application's log-only consequence twins (Lifeline shield grant,
                 // shield destroyed, cheat death) so they print UNDER this proc's own attack row —
@@ -9647,12 +9669,19 @@ export function runCombat(input: CombatEngineInput): {
             // attacker before its first turn, so "zero focus turns" is no longer impossible — the
             // original invariant below held only while the focus was effectively immortal.
             //
-            // The run is over. Break BEFORE pushing a row: there is no `lastAttackerTurn` to supply
-            // this row's attacker provenance (action / roundCrit / enemyHpPct), and no later round
-            // can produce one either. `roundData` therefore ends at the last round the focus
-            // actually acted, mirroring how the enemy-death exit ends AT the kill round. The turn
-            // loop's `finally` above has already reset `inTurnLoop`, so this early exit is safe.
-            if (attacker.destroyedRound !== undefined) break;
+            // Synthesize a zero-damage skip turn rather than breaking out here. Breaking BEFORE the
+            // row was assembled discarded the round's per-round maps (`roundDamage`,
+            // `roundPerTargetDealt`, `roundPerTargetDamage`), so a TEAM actor that acted earlier in
+            // this same round — faster than the enemy, which was faster than the dying attacker —
+            // had its damage silently dropped from `cumulativeDamage`, `rawTotals` and
+            // `perTargetDealt`, even though it had already reduced the enemy's real HP. The
+            // synthesized turn supplies the row's attacker provenance so post-round assembly still
+            // runs and credits that damage; the run then terminates just after the row is pushed
+            // (see the focus-death exit beside the enemy-death one below), mirroring how the
+            // enemy-death path ends AT the kill round rather than before it.
+            if (attacker.destroyedRound !== undefined) pushSynthesizedFocusSkipTurn();
+        }
+        if (!focusTurns.length) {
             // Still genuinely impossible: a LIVING focus actor is always queued.
             throw new Error(
                 `combat round ${r} produced no focus actor turn (Phase-3+ seam: extra turns append, zero turns impossible while the focus actor is alive and always queued)`
@@ -10169,6 +10198,20 @@ export function runCombat(input: CombatEngineInput): {
         // never dies) never cuts a real battle short. The turn-loop finally already reset
         // inTurnLoop, so this early exit is safe (see that finally's rationale).
         if (dpsEnemyTarget && enemy.destroyedRound !== undefined) break;
+        // Focus-death exit, sibling of the enemy-death one above. The focus attacker can now be
+        // killed (a real positioned enemy attacks back), and in a DPS-style run it never acts again —
+        // there is nothing left to measure, so every later round would be an empty skip row.
+        // Terminate here, AFTER this round's row is pushed, so the round it died in is reported
+        // (including any team damage dealt earlier in that round) rather than discarded.
+        //
+        // MUST NOT fire in the other two modes, both of which legitimately continue past the focus's
+        // death and both of which pin it:
+        //  - two-team battle: the rest of the squad keeps fighting (`twoTeamBattle.test.ts` —
+        //    "a supporter keeps granting its buff + shield in rounds AFTER the focus dies");
+        //  - healing mode: the healer dying does not end the report (`healingGoldenParity` —
+        //    "lethal pressure (target dies mid-run, flatline + post-death overheal)").
+        // Only a DPS measurement run has nothing left to say once its one attacker is gone.
+        if (isDpsMeasurementRun && attacker.destroyedRound !== undefined) break;
     }
 
     // The heal target's death round comes from its per-actor `destroyedRound` field (stamped by

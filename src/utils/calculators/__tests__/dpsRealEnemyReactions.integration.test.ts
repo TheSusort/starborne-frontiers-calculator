@@ -155,4 +155,49 @@ describe('a real DPS enemy acts', () => {
 
         expect(result.rounds.length).toBeLessThan(10);
     });
+
+    it('still reports the round the focus died in, so team damage is not dropped', () => {
+        // CodeRabbit #317: breaking BEFORE row assembly discarded that round's per-round maps, so a
+        // team actor that acted earlier in the same round (faster than the enemy, which was faster
+        // than the dying attacker) lost its damage from the totals — even though it had already
+        // reduced the enemy's real HP. The row is now pushed via a synthesized skip turn.
+        const teamStats = {
+            attack: 30000,
+            crit: 0,
+            critDamage: 150,
+            defensePenetration: 0,
+            hacking: 200,
+            security: 100,
+            defence: 0,
+            hp: 100000,
+            healModifier: 0,
+            speed: 20000, // acts before the enemy, which outspeeds the doomed focus
+        };
+
+        const result = simulateDPS({
+            ...input(),
+            hp: 1,
+            rounds: 10,
+            teamActors: [
+                {
+                    id: 'team-1',
+                    speed: teamStats.speed,
+                    chargeCount: 0,
+                    startCharged: false,
+                    selfBuffs: [],
+                    enemyDebuffs: [],
+                    shipSkills: plainDamageKit(),
+                    stats: teamStats,
+                    position: 'M3',
+                },
+            ],
+            enemyAttackers: enemy({ attack: 500000, speed: 9999, hp: 10_000_000 }),
+        });
+
+        // The death round is reported rather than discarded...
+        expect(result.rounds.length).toBeGreaterThan(0);
+        // ...and the team's damage from it is credited (teamDamage is the non-focus channel).
+        const teamTotal = result.rounds.reduce((sum, r) => sum + (r.teamDamage ?? 0), 0);
+        expect(teamTotal).toBeGreaterThan(0);
+    });
 });

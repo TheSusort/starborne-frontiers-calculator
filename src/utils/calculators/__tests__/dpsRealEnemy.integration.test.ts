@@ -151,6 +151,24 @@ describe('DPS calculator with a real positioned enemy', () => {
         expect(result.summary.totalDamage).toBeGreaterThan(0);
     });
 
+    it('defaults the focus position, so an enemy roster alone never reports zero', () => {
+        // CodeRabbit #317: `target` and `pattern` were defaulted but `position` was not, so a
+        // caller supplying only `enemyAttackers` got isPositional=false → dummy → empty
+        // perTargetDealt → a re-derived metric of ZERO, rather than a fallback to the scalar path.
+        const result = simulateDPS({
+            ...baseInput(),
+            // position deliberately omitted
+            enemyAttackers: realEnemy(),
+        });
+
+        expect(result.summary.totalDamage).toBeGreaterThan(0);
+        const dealt = result.rounds.reduce(
+            (sum, r) => sum + (r.perTargetDealt?.['attacker']?.['enemy-1'] ?? 0),
+            0
+        );
+        expect(dealt).toBeGreaterThan(0);
+    });
+
     it('honours an explicitly supplied target instead of the default', () => {
         const result = simulateDPS({
             ...baseInput(),

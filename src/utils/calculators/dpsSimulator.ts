@@ -20,7 +20,11 @@ import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
-import { DEFAULT_FRONT_ENEMY_TARGET, DEFAULT_BASE_PATTERN } from './dpsEnemyPlacement';
+import {
+    DEFAULT_FRONT_ENEMY_TARGET,
+    DEFAULT_BASE_PATTERN,
+    DEFAULT_ATTACKER_SLOT,
+} from './dpsEnemyPlacement';
 import { focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
 
 /** The engine's focus-actor id (engine.ts:1781 `const focusActorId = 'attacker'`). */
@@ -426,7 +430,12 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
         })),
         // Focus attacker's board slot — `isPositional` needs this AND an opposing position.
-        position: input.position,
+        // Defaulted alongside target/pattern for the same reason: without it the run resolves to the
+        // dummy, `perTargetDealt` stays empty, and the re-derived metric below reports ZERO damage
+        // rather than falling back to the legacy scalar. Silent, so it is closed here.
+        position:
+            input.position ??
+            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_ATTACKER_SLOT : undefined),
         // Position alone does NOT route the cast: `selectTurnTarget` requires
         // `isPositional(...) && target`, so without a ParsedTarget it short-circuits to the dummy
         // `legacyVictim` and the real enemy is never touched. Defaulted (rather than left to the

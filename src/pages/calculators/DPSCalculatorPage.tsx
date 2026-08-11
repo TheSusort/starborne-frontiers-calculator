@@ -36,6 +36,7 @@ import {
     DEFAULT_ATTACKER_SLOT,
     DEFAULT_ENEMY_SLOT,
     defaultTeamSlot,
+    resolvePlayerSlots,
 } from '../../utils/calculators/dpsEnemyPlacement';
 import type { Position } from '../../types/encounters';
 import { TeamPanel } from '../../components/calculator/TeamPanel';
@@ -255,6 +256,8 @@ const DPSCalculatorPage: React.FC = () => {
                 affinity: t.affinity,
                 // Board slot — forwarded to the engine by deriveTeamEngineActors' spread. Defaults
                 // walk BACK from the front so team ships never start stacked on the attacker's slot.
+                // Collisions WITH the attacker are resolved per-config below (each config may sit on
+                // a different slot, so it cannot be settled here).
                 position: t.position ?? defaultTeamSlot(i),
             })),
         [teamShips]
@@ -328,6 +331,20 @@ const DPSCalculatorPage: React.FC = () => {
                 config.affinity,
                 enemyAffinity
             );
+            // Two player-side ships on one cell is not a cosmetic clash: the positional resolvers
+            // index actors into a Map<Position, CombatActor> and the enemy's bindings receive
+            // `[attacker, ...teamActors]`, so a colliding team ship would OVERWRITE the attacker and
+            // the enemy would stop targeting it entirely. Resolved per config, since each config may
+            // occupy a different slot. The attacker (index 0) keeps its slot; collisions move.
+            const attackerSlot = config.slot ?? DEFAULT_ATTACKER_SLOT;
+            const [resolvedAttackerSlot, ...resolvedTeamSlots] = resolvePlayerSlots([
+                attackerSlot,
+                ...teamActors.map((t) => t.position ?? DEFAULT_ATTACKER_SLOT),
+            ]);
+            const positionedTeamActors = teamActors.map((t, i) => ({
+                ...t,
+                position: resolvedTeamSlots[i],
+            }));
             map.set(
                 config.id,
                 simulateDPS({
@@ -345,7 +362,7 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyHp,
                     enemySecurity,
                     enemySpeed,
-                    teamActors,
+                    teamActors: positionedTeamActors,
                     rounds,
                     enemyAffinity,
                     selfBuffs: attackerBuffs,
@@ -359,7 +376,7 @@ const DPSCalculatorPage: React.FC = () => {
                     // The real, positioned opponent. Supplying it flips the engine's
                     // `dpsEnemyTarget` false, so damage lands per-victim on this actor instead of
                     // the vestigial dummy — and the enemy takes its own turns and fights back.
-                    position: config.slot ?? DEFAULT_ATTACKER_SLOT,
+                    position: resolvedAttackerSlot,
                     enemyAttackers: [
                         {
                             id: 'enemy-1',

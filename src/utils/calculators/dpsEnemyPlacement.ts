@@ -80,3 +80,31 @@ export const ATTACKER_SLOT_OPTIONS: readonly Position[] = [
     'B3',
     'B4',
 ] as const;
+
+/**
+ * Resolve a player-side roster so no two ships share a cell.
+ *
+ * Load-bearing, not tidiness: `resolvePositionalTarget` and `footprintVictims` both index actors
+ * into a `Map<Position, CombatActor>` (positionalBinding.ts, positionalApply.ts) and the enemy's
+ * bindings receive `[attacker, ...teamActors]`. On a collision the LATER entry wins, so a team ship
+ * sharing the attacker's slot silently ERASES the attacker from that cell — the enemy stops
+ * targeting it and area damage skips it.
+ *
+ * `slots[0]` is the attacker and keeps its slot; each later ship that collides is pushed to the
+ * first free slot in `ATTACKER_SLOT_OPTIONS` order. Returns a same-length array.
+ */
+export function resolvePlayerSlots(slots: ReadonlyArray<Position>): Position[] {
+    const taken = new Set<Position>();
+    return slots.map((wanted) => {
+        if (!taken.has(wanted)) {
+            taken.add(wanted);
+            return wanted;
+        }
+        const free = ATTACKER_SLOT_OPTIONS.find((p) => !taken.has(p));
+        // 12 slots vs at most 5 player ships (1 attacker + 4 team), so `free` always exists; the
+        // fallback keeps the return type honest rather than asserting.
+        const resolved = free ?? wanted;
+        taken.add(resolved);
+        return resolved;
+    });
+}
