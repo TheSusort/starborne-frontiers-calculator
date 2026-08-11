@@ -1,6 +1,7 @@
 import type { ShipTypeName } from '../constants/shipTypes';
 import { AffinityName } from './ship';
 import type { Condition, ShipSkills } from './abilities';
+import type { Position } from './encounters';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
@@ -207,6 +208,9 @@ export interface DPSShipConfig {
     startCharged: boolean;
     allyChargePerRound?: number;
     shipSkills: ShipSkills;
+    /** Board slot this config fights from. The DPS run is positional (the enemy must be a real,
+     *  targetable actor), so every player-side ship needs one. Absent → DEFAULT_ATTACKER_SLOT. */
+    slot?: Position;
 }
 
 export type DPSShipConfigUpdateableField =
@@ -220,7 +224,8 @@ export type DPSShipConfigUpdateableField =
     | 'chargeCount'
     | 'defence'
     | 'hp'
-    | 'speed';
+    | 'speed'
+    | 'slot';
 
 export interface AttackerBuffTotals {
     attackBuff: number;
@@ -335,6 +340,8 @@ export interface TeamShipConfig {
     startCharged: boolean; // auto-filled via detectFullyCharged; user-editable
     speed: number; // turn-order speed; auto-filled from ship stats
     chargeCount: number; // charge threshold; auto-filled from skill rows
+    /** Board slot this team ship fights from. Player-side slots must be unique. */
+    position?: Position;
     /** Walked skills for this team actor (auto-filled on ship pick; editable per slot). */
     shipSkills?: ShipSkills;
     /** Combat stats for the walked team actor (auto-filled from the ship; editable). */

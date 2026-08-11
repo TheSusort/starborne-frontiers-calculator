@@ -14,6 +14,10 @@ interface EnemyConfigCardProps {
      *  synthesized basic attack per turn). */
     onShipSkillsChange?: (shipSkills: ShipSkills) => void;
     selectedShip?: Ship | null;
+    /** Which stats to render. Omit for all of them. The DPS page passes only the offensive stats,
+     *  because EnemySettingsPanel already renders defense/hp/security/speed alongside this card —
+     *  rendering both would give the same stat two inputs. */
+    fields?: ReadonlyArray<EnemyShipConfigNumericField>;
 }
 
 const STAT_FIELDS: ReadonlyArray<{
@@ -41,23 +45,26 @@ export const EnemyConfigCard: React.FC<EnemyConfigCardProps> = ({
     onSelectShip,
     onShipSkillsChange,
     selectedShip,
+    fields,
 }) => (
     <div className="card space-y-4">
         <ShipSelector selected={selectedShip ?? null} onSelect={onSelectShip} variant="compact" />
 
         <div className="grid grid-cols-2 gap-3">
-            {STAT_FIELDS.map(({ field, label, helpLabel }) => (
-                <Input
-                    key={field}
-                    type="number"
-                    label={label}
-                    value={config[field]}
-                    // `|| 0` also catches a cleared input (parseInt('') === NaN), which would
-                    // otherwise reach the engine's stat maths as NaN and poison every derived value.
-                    onChange={(e) => onUpdate(field, parseInt(e.target.value, 10) || 0)}
-                    {...(helpLabel ? { helpLabel } : {})}
-                />
-            ))}
+            {(fields ? STAT_FIELDS.filter((s) => fields.includes(s.field)) : STAT_FIELDS).map(
+                ({ field, label, helpLabel }) => (
+                    <Input
+                        key={field}
+                        type="number"
+                        label={label}
+                        value={config[field]}
+                        // `|| 0` also catches a cleared input (parseInt('') === NaN), which would
+                        // otherwise reach the engine's stat maths as NaN and poison every derived value.
+                        onChange={(e) => onUpdate(field, parseInt(e.target.value, 10) || 0)}
+                        {...(helpLabel ? { helpLabel } : {})}
+                    />
+                )
+            )}
         </div>
 
         {onShipSkillsChange && (
