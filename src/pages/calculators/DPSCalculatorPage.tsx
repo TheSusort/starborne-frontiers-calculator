@@ -9,6 +9,8 @@ import {
     SelectedGameBuff,
     TeamShipConfig,
     EnemyBaseClass,
+    EnemyShipConfig,
+    EnemyShipConfigNumericField,
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { detectFullyCharged } from '../../utils/skillTextParser';
@@ -29,6 +31,14 @@ import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
 import { EnemySettingsPanel } from '../../components/calculator/EnemySettingsPanel';
+import { EnemyConfigCard } from '../../components/calculator/EnemyConfigCard';
+import {
+    DEFAULT_ATTACKER_SLOT,
+    DEFAULT_ENEMY_SLOT,
+    defaultTeamSlot,
+    resolvePlayerSlots,
+} from '../../utils/calculators/dpsEnemyPlacement';
+import type { Position } from '../../types/encounters';
 import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { ShipConfigCard } from '../../components/calculator/ShipConfigCard';
 import Seo from '../../components/seo/Seo';
@@ -104,10 +114,57 @@ const DPSCalculatorPage: React.FC = () => {
     const [initialState] = useState(getInitialConfig);
     const [configs, setConfigs] = useState<DPSShipConfig[]>(initialState.configs);
     const [nextId, setNextId] = useState(initialState.nextId);
-    const [enemyDefense, setEnemyDefense] = useState(10000);
-    const [enemyHp, setEnemyHp] = useState(500000);
-    const [enemySecurity, setEnemySecurity] = useState(100);
-    const [enemySpeed, setEnemySpeed] = useState(50);
+    // The opponent is a REAL ship now: it takes turns, fights back, and can be killed. Its four
+    // original scalars live on here as its stats, so every existing read site is unchanged (see the
+    // destructure below) — only the setters and the new fields (attack/crit/critDamage/skills) are
+    // new. A blank `shipSkills` still acts: the engine synthesizes one basic attack per turn.
+    const [enemyConfig, setEnemyConfig] = useState<EnemyShipConfig>({
+        name: 'Enemy',
+        hp: 500000,
+        defense: 10000,
+        security: 100,
+        speed: 50,
+        // Attack defaults to 0 so a DPS comparison stays a clean measure of output: the attacker
+        // cannot be worn down or killed, and every config faces identical conditions.
+        //
+        // VERIFIED TRADE-OFF: a 0-attack enemy emits NO `attacked` events at all (a zero-damage
+        // hit is skipped, not emitted as a 0), so on-attacked / counter / reflect reactions do NOT
+        // fire at this default. The reaction-kit fidelity this sub-project unlocked is therefore
+        // OPT-IN — raise the enemy's attack to see those kits contribute.
+        attack: 0,
+        crit: 0,
+        critDamage: 150,
+        shipSkills: buildDefaultShipSkills(),
+    });
+    const [enemyShip, setEnemyShip] = useState<Ship | null>(null);
+    const updateEnemy = (field: EnemyShipConfigNumericField, value: number) =>
+        setEnemyConfig((prev) => ({ ...prev, [field]: value }));
+    /** Picking a ship for the enemy fills its stats and kit from real ship data, exactly as the
+     *  attacker configs do — so the opponent can be an actual ship you expect to face. */
+    const selectEnemyShip = (ship: Ship) => {
+        setEnemyShip(ship);
+        const stats = combatStatsFromShip(shipFinalStats(ship, statsDeps));
+        setEnemyConfig((prev) => ({
+            ...prev,
+            shipId: ship.id,
+            name: ship.name,
+            hp: stats.hp,
+            defense: stats.defence,
+            security: stats.security,
+            speed: stats.speed,
+            attack: stats.attack,
+            crit: stats.crit,
+            critDamage: stats.critDamage,
+            shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
+        }));
+    };
+    // Read-site aliases: keeps the pre-existing call sites and JSX untouched.
+    const {
+        defense: enemyDefense,
+        hp: enemyHp,
+        security: enemySecurity,
+        speed: enemySpeed,
+    } = enemyConfig;
     const [enemyType, setEnemyType] = useState<EnemyBaseClass | undefined>(undefined);
     const [rounds, setRounds] = useState(20);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
@@ -138,6 +195,33 @@ const DPSCalculatorPage: React.FC = () => {
 
     const teamAttackerBuffs = useMemo(() => teamShips.flatMap((t) => t.buffs), [teamShips]);
 
+    /** This team ship's slot, falling back to its index-derived default. */
+    const teamShipSlot = (id: string, index: number): Position =>
+        teamShips.find((t) => t.id === id)?.position ?? defaultTeamSlot(index);
+
+    /**
+     * Move a team ship to a slot, SWAPPING with whichever team ship already holds it.
+     *
+     * Scoped to team ships deliberately. Two attacker CONFIGS may share a slot without conflict:
+     * each config is simulated in its own run (they are alternatives being compared, not
+     * squadmates), so they never occupy one board together. Only team ships share a run.
+     */
+    const changeTeamShipSlot = (id: string, slot: Position) =>
+        setTeamShips((prev) => {
+            const moving = prev.find((t) => t.id === id);
+            if (!moving) return prev;
+            const from = moving.position ?? defaultTeamSlot(prev.indexOf(moving));
+            if (from === slot) return prev;
+            const occupantIndex = prev.findIndex(
+                (t, i) => t.id !== id && (t.position ?? defaultTeamSlot(i)) === slot
+            );
+            return prev.map((t, i) => {
+                if (t.id === id) return { ...t, position: slot };
+                if (i === occupantIndex) return { ...t, position: from };
+                return t;
+            });
+        });
+
     // Display-ready team actors for the per-config turn-order strip: resolved ship name
     // (fallback "Team N") + turn-order speed. Listed in team order so the shared
     // orderByTurnPriority tiebreak resolves team → attacker → enemy at equal speeds.
@@ -160,7 +244,7 @@ const DPSCalculatorPage: React.FC = () => {
 
     const teamActors = useMemo(
         () =>
-            teamShips.map((t) => ({
+            teamShips.map((t, i) => ({
                 id: t.id,
                 speed: t.speed,
                 chargeCount: t.chargeCount,
@@ -170,6 +254,11 @@ const DPSCalculatorPage: React.FC = () => {
                 shipSkills: t.shipSkills,
                 stats: t.stats,
                 affinity: t.affinity,
+                // Board slot — forwarded to the engine by deriveTeamEngineActors' spread. Defaults
+                // walk BACK from the front so team ships never start stacked on the attacker's slot.
+                // Collisions WITH the attacker are resolved per-config below (each config may sit on
+                // a different slot, so it cannot be settled here).
+                position: t.position ?? defaultTeamSlot(i),
             })),
         [teamShips]
     );
@@ -242,6 +331,20 @@ const DPSCalculatorPage: React.FC = () => {
                 config.affinity,
                 enemyAffinity
             );
+            // Two player-side ships on one cell is not a cosmetic clash: the positional resolvers
+            // index actors into a Map<Position, CombatActor> and the enemy's bindings receive
+            // `[attacker, ...teamActors]`, so a colliding team ship would OVERWRITE the attacker and
+            // the enemy would stop targeting it entirely. Resolved per config, since each config may
+            // occupy a different slot. The attacker (index 0) keeps its slot; collisions move.
+            const attackerSlot = config.slot ?? DEFAULT_ATTACKER_SLOT;
+            const [resolvedAttackerSlot, ...resolvedTeamSlots] = resolvePlayerSlots([
+                attackerSlot,
+                ...teamActors.map((t) => t.position ?? DEFAULT_ATTACKER_SLOT),
+            ]);
+            const positionedTeamActors = teamActors.map((t, i) => ({
+                ...t,
+                position: resolvedTeamSlots[i],
+            }));
             map.set(
                 config.id,
                 simulateDPS({
@@ -259,7 +362,7 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyHp,
                     enemySecurity,
                     enemySpeed,
-                    teamActors,
+                    teamActors: positionedTeamActors,
                     rounds,
                     enemyAffinity,
                     selfBuffs: attackerBuffs,
@@ -270,12 +373,37 @@ const DPSCalculatorPage: React.FC = () => {
                     affinityCritPenalty: critPenalty,
                     allyChargePerRound: config.allyChargePerRound,
                     enemyType,
+                    // The real, positioned opponent. Supplying it flips the engine's
+                    // `dpsEnemyTarget` false, so damage lands per-victim on this actor instead of
+                    // the vestigial dummy — and the enemy takes its own turns and fights back.
+                    position: resolvedAttackerSlot,
+                    enemyAttackers: [
+                        {
+                            id: 'enemy-1',
+                            stats: {
+                                attack: enemyConfig.attack,
+                                crit: enemyConfig.crit,
+                                critDamage: enemyConfig.critDamage,
+                                speed: enemyConfig.speed,
+                                defence: enemyConfig.defense,
+                                hp: enemyConfig.hp,
+                                security: enemyConfig.security,
+                            },
+                            chargeCount: 0,
+                            startCharged: false,
+                            shipSkills: enemyConfig.shipSkills,
+                            position: DEFAULT_ENEMY_SLOT,
+                        },
+                    ],
                 })
             );
         });
         return map;
     }, [
         configs,
+        // The whole enemy config (its offensive stats and kit feed the sim too, not just the
+        // four scalars that used to live here).
+        enemyConfig,
         enemyDefense,
         enemyHp,
         enemySecurity,
@@ -498,9 +626,9 @@ const DPSCalculatorPage: React.FC = () => {
                         isOpen={enemySettingsOpen}
                         onToggle={() => setEnemySettingsOpen((v) => !v)}
                         enemyDefense={enemyDefense}
-                        onEnemyDefenseChange={setEnemyDefense}
+                        onEnemyDefenseChange={(v) => updateEnemy('defense', v)}
                         enemyHp={enemyHp}
-                        onEnemyHpChange={setEnemyHp}
+                        onEnemyHpChange={(v) => updateEnemy('hp', v)}
                         rounds={rounds}
                         onRoundsChange={setRounds}
                         enemyBuffs={enemyBuffs}
@@ -508,12 +636,25 @@ const DPSCalculatorPage: React.FC = () => {
                         enemyAffinity={enemyAffinity}
                         onEnemyAffinityChange={setEnemyAffinity}
                         enemySecurity={enemySecurity}
-                        onEnemySecurityChange={setEnemySecurity}
+                        onEnemySecurityChange={(v) => updateEnemy('security', v)}
                         enemySpeed={enemySpeed}
-                        onEnemySpeedChange={setEnemySpeed}
+                        onEnemySpeedChange={(v) => updateEnemy('speed', v)}
                         enemyType={enemyType}
                         onEnemyTypeChange={setEnemyType}
-                    />
+                    >
+                        {/* The enemy's offensive stats + kit — only meaningful now that it acts. */}
+                        <EnemyConfigCard
+                            config={enemyConfig}
+                            onUpdate={updateEnemy}
+                            // Defense/HP/Security/Speed already have inputs in the grid above.
+                            fields={['attack', 'crit', 'critDamage']}
+                            onSelectShip={selectEnemyShip}
+                            onShipSkillsChange={(shipSkills) =>
+                                setEnemyConfig((prev) => ({ ...prev, shipSkills }))
+                            }
+                            selectedShip={enemyShip}
+                        />
+                    </EnemySettingsPanel>
 
                     <TeamPanel
                         isOpen={teamOpen}
@@ -543,6 +684,8 @@ const DPSCalculatorPage: React.FC = () => {
                         onTeamShipShipSkillsChange={(id, shipSkills) =>
                             updateTeamShip(id, { shipSkills })
                         }
+                        teamShipSlot={teamShipSlot}
+                        onTeamShipSlotChange={changeTeamShipSlot}
                     />
 
                     <div

@@ -27,6 +27,9 @@ interface EnemySettingsPanelProps {
     onEnemyAffinityChange: (v: AffinityName) => void;
     enemyType?: EnemyBaseClass;
     onEnemyTypeChange: (v: EnemyBaseClass | undefined) => void;
+    /** Rendered below the stat grid — the DPS page supplies the enemy ship's offensive stats
+     *  and kit editor here, so the whole opponent is configured in one place. */
+    children?: React.ReactNode;
 }
 
 export const EnemySettingsPanel: React.FC<EnemySettingsPanelProps> = ({
@@ -44,6 +47,7 @@ export const EnemySettingsPanel: React.FC<EnemySettingsPanelProps> = ({
     onRoundsChange,
     enemyBuffs,
     onEnemyBuffsChange,
+    children,
     enemyAffinity,
     onEnemyAffinityChange,
     enemyType,
@@ -147,6 +151,7 @@ export const EnemySettingsPanel: React.FC<EnemySettingsPanelProps> = ({
                     value={enemyBuffs}
                     onChange={onEnemyBuffsChange}
                 />
+                {children}
             </div>
         </CollapsibleForm>
     </div>

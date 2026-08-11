@@ -1,6 +1,7 @@
 import type { ShipTypeName } from '../constants/shipTypes';
 import { AffinityName } from './ship';
 import type { Condition, ShipSkills } from './abilities';
+import type { Position } from './encounters';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
@@ -207,6 +208,9 @@ export interface DPSShipConfig {
     startCharged: boolean;
     allyChargePerRound?: number;
     shipSkills: ShipSkills;
+    /** Board slot this config fights from. The DPS run is positional (the enemy must be a real,
+     *  targetable actor), so every player-side ship needs one. Absent → DEFAULT_ATTACKER_SLOT. */
+    slot?: Position;
 }
 
 export type DPSShipConfigUpdateableField =
@@ -220,7 +224,8 @@ export type DPSShipConfigUpdateableField =
     | 'chargeCount'
     | 'defence'
     | 'hp'
-    | 'speed';
+    | 'speed'
+    | 'slot';
 
 export interface AttackerBuffTotals {
     attackBuff: number;
@@ -233,6 +238,28 @@ export interface DefenseBuffTotals {
     incomingDamageBuff: number;
     securityBuff: number;
 }
+
+/** The DPS calculator's real, positioned opponent — replaces the loose enemy scalars.
+ *  A blank `shipSkills` still ACTS: the engine synthesizes one basic attack per turn when a
+ *  walked actor carries no abilities, so a skill-less enemy is a fighting enemy, not a dummy. */
+export interface EnemyShipConfig {
+    shipId?: string;
+    name: string;
+    hp: number;
+    defense: number;
+    security: number;
+    attack: number;
+    crit: number;
+    critDamage: number;
+    speed: number;
+    shipSkills: ShipSkills;
+}
+
+/** The numeric fields of `EnemyShipConfig` — everything a stat input may edit. */
+export type EnemyShipConfigNumericField = Exclude<
+    keyof EnemyShipConfig,
+    'shipId' | 'name' | 'shipSkills'
+>;
 
 export interface DefenseShipConfig {
     id: string;
@@ -313,6 +340,8 @@ export interface TeamShipConfig {
     startCharged: boolean; // auto-filled via detectFullyCharged; user-editable
     speed: number; // turn-order speed; auto-filled from ship stats
     chargeCount: number; // charge threshold; auto-filled from skill rows
+    /** Board slot this team ship fights from. Player-side slots must be unique. */
+    position?: Position;
     /** Walked skills for this team actor (auto-filled on ship pick; editable per slot). */
     shipSkills?: ShipSkills;
     /** Combat stats for the walked team actor (auto-filled from the ship; editable). */
@@ -347,6 +376,9 @@ export interface TeamActorInput {
     /** Affinity for a walked team actor — vs the enemy affinity yields its own damage/crit
      *  modifiers (computeAffinityModifiers). Absent → neutral defaults. */
     affinity?: AffinityName;
+    /** Board slot for this team actor. Forwarded to the engine's `teamActors[].position` by
+     *  `deriveTeamEngineActors`'s spread, driving positional target selection + footprint apply. */
+    position?: Position;
     /** Ship role (Ship.type) for role-filtered ally-damage reactions (Graphite).
      *  Auto-filled from ship data on the healing page; absent for manual actors →
      *  role-filtered reactions never fire for them (conservative). */

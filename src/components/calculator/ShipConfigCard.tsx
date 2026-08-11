@@ -4,6 +4,11 @@ import { Select } from '../ui/Select';
 import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
 import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import {
+    ATTACKER_SLOT_OPTIONS,
+    DEFAULT_ATTACKER_SLOT,
+} from '../../utils/calculators/dpsEnemyPlacement';
+import type { Position } from '../../types/encounters';
+import {
     DPSShipConfig,
     DPSShipConfigUpdateableField,
     AttackerBuffTotals,
@@ -192,6 +197,20 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 }
                                 options={AFFINITY_OPTIONS}
                                 className="w-full"
+                            />
+                        </Section>
+
+                        <Section title="Board Slot">
+                            <Select
+                                label="Fights from"
+                                value={config.slot ?? DEFAULT_ATTACKER_SLOT}
+                                onChange={(v) => onUpdate('slot', v as Position)}
+                                options={ATTACKER_SLOT_OPTIONS.map((p) => ({
+                                    value: p,
+                                    label: p,
+                                }))}
+                                className="w-full"
+                                helpLabel="Column 4 is the front. Affects targeting patterns and adjacency."
                             />
                         </Section>
 

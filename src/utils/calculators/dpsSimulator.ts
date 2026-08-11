@@ -12,12 +12,23 @@ import {
 import { ShipSkills } from '../../types/abilities';
 import { AffinityName } from '../../types/ship';
 import type { ActiveBuff } from '../combat/statusEngine';
-import { runCombat, TeamActorEngineInput } from '../combat/engine';
+import { runCombat, TeamActorEngineInput, CombatEngineInput } from '../combat/engine';
+import type { Position } from '../../types/encounters';
+import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import type { CombatEventBus } from '../combat/events';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
+import {
+    DEFAULT_FRONT_ENEMY_TARGET,
+    DEFAULT_BASE_PATTERN,
+    DEFAULT_ATTACKER_SLOT,
+} from './dpsEnemyPlacement';
+import { focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
+
+/** The engine's focus-actor id (engine.ts:1781 `const focusActorId = 'attacker'`). */
+const FOCUS_ACTOR_ID = 'attacker';
 
 // Re-exported so existing importers (e.g. RoundData consumers) keep a single home.
 export type { ActiveBuff } from '../combat/statusEngine';
@@ -93,6 +104,23 @@ export interface DPSSimulationInput {
     /** Optional emit-only event tap forwarded to the combat engine. Listeners must not
      *  read or mutate combat state (Phase 3 contract). */
     bus?: CombatEventBus;
+    /** Real, positioned enemy ships. A non-empty array flips the engine's `dpsEnemyTarget`
+     *  false, so the focus's damage lands per-victim on THESE actors instead of the vestigial
+     *  dummy. Reuses the engine's own shape — deliberately not a parallel type. */
+    enemyAttackers?: NonNullable<CombatEngineInput['enemyAttackers']>;
+    /** Board slot of the focus attacker. Required for `isPositional` to resolve a real target:
+     *  it needs BOTH this and an opposing actor's position, otherwise `selectTurnTarget` falls
+     *  back to the dummy and the focus never damages the real enemy. */
+    position?: Position;
+    /** Pre-parsed targeting preference for the focus attacker. Position alone is NOT enough:
+     *  `selectTurnTarget` requires `isPositional(...) && target`, so with no ParsedTarget it
+     *  short-circuits to `legacyVictim` (the dummy) however well-positioned the roster is.
+     *  Also required for `dummyEnemyIsVestigial` (which checks `t?.side === 'enemy'`) to drop
+     *  the dummy from the turn order. */
+    target?: ParsedTarget;
+    /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
+     *  positional apply site. A single-target 1v1 wants shape 'base'. */
+    pattern?: ParsedPattern;
 }
 
 export interface RoundData {
@@ -326,6 +354,38 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     const engineTeamActors = deriveTeamEngineActors(teamActors, input.enemyAffinity);
     const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
 
+    // `enemyOutcome` is derived from the vestigial DUMMY (`enemy.destroyedRound`, engine.ts:10192),
+    // which has billions of HP and never dies. Against a real enemy it therefore reports
+    // `survived: true` / `roundsToKill: undefined` forever. Capture the REAL enemies' deaths off an
+    // emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same remedy.
+    const realEnemyIds = new Set((input.enemyAttackers ?? []).map((e) => e.id));
+    /** The PRIMARY real enemy — the first supplied. `finalHpPct` is a single number, so with a
+     *  multi-enemy roster it reports this one rather than inventing an aggregate. */
+    const primaryRealEnemyId = input.enemyAttackers?.[0]?.id;
+    const realEnemyDeathRound = new Map<string, number>();
+    /** Last `hp-changed` percentage seen for the primary real enemy. Integer-granular and only
+     *  emitted on change, so "no event" legitimately means "untouched" → 100. */
+    let primaryRealEnemyHpPct: number | undefined;
+    const collectingBus: CombatEventBus | undefined =
+        realEnemyIds.size > 0
+            ? {
+                  on: () => {},
+                  emit: (e) => {
+                      if (
+                          e.type === 'ship-destroyed' &&
+                          realEnemyIds.has(e.actorId) &&
+                          !realEnemyDeathRound.has(e.actorId)
+                      ) {
+                          realEnemyDeathRound.set(e.actorId, e.round);
+                      }
+                      if (e.type === 'hp-changed' && e.targetId === primaryRealEnemyId) {
+                          primaryRealEnemyHpPct = e.newPct;
+                      }
+                      input.bus?.emit(e);
+                  },
+              }
+            : input.bus;
+
     const { rounds, rawTotals, enemyOutcome } = runCombat({
         attack,
         crit,
@@ -360,13 +420,86 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         speed,
         enemySpeed,
         teamActors: engineTeamActors,
-        bus: input.bus,
+        bus: collectingBus,
+        // Real positioned enemy roster. Non-empty → the engine's `dpsEnemyTarget` goes false and
+        // the focus's damage lands per-victim on these actors rather than the dummy sink. Each
+        // enemy gets a default ParsedTarget so it actually attacks (see below).
+        enemyAttackers: input.enemyAttackers?.map((e) => ({
+            ...e,
+            target: e.target ?? DEFAULT_FRONT_ENEMY_TARGET,
+            pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
+        })),
+        // Focus attacker's board slot — `isPositional` needs this AND an opposing position.
+        // Defaulted alongside target/pattern for the same reason: without it the run resolves to the
+        // dummy, `perTargetDealt` stays empty, and the re-derived metric below reports ZERO damage
+        // rather than falling back to the legacy scalar. Silent, so it is closed here.
+        position:
+            input.position ??
+            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_ATTACKER_SLOT : undefined),
+        // Position alone does NOT route the cast: `selectTurnTarget` requires
+        // `isPositional(...) && target`, so without a ParsedTarget it short-circuits to the dummy
+        // `legacyVictim` and the real enemy is never touched. Defaulted (rather than left to the
+        // caller) so "supply a real enemy" is sufficient on its own — omitting the target was a
+        // silent fallback to the dummy, not an error, which is a footgun worth closing here.
+        // Only applies when a real enemy is present, so callers on the scalar path are untouched.
+        target:
+            input.target ??
+            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_FRONT_ENEMY_TARGET : undefined),
+        // `pattern` is required by the SAME positional-apply gate as `target` (engine.ts:8344).
+        // Omitting it resolves onto the real enemy and still credits cumulativeDamage via the
+        // legacy sink, but skips the per-victim apply — so `perTargetDealt` comes back empty and
+        // the re-derived metric reads zero. Silent, hence defaulted alongside the target.
+        pattern:
+            input.pattern ??
+            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_BASE_PATTERN : undefined),
     });
 
-    const totalDamage = Math.round(rawTotals.cumulative);
+    const hasRealEnemy = (input.enemyAttackers?.length ?? 0) > 0;
+
+    // Real-enemy outcome, re-derived from the `ship-destroyed` tap. "Killed" means EVERY real enemy
+    // is down (with one enemy — the common case — that is just it); `roundsToKill` is the round the
+    // last of them fell.
+    const allRealEnemiesDead =
+        realEnemyIds.size > 0 && realEnemyDeathRound.size === realEnemyIds.size;
+    const realRoundsToKill = allRealEnemiesDead
+        ? Math.max(...realEnemyDeathRound.values())
+        : undefined;
+
+    // End the reported run AT the kill, dropping the zero-damage rounds the engine still simulated
+    // afterwards. The engine's own early exit (engine.ts:10159) is gated on `dpsEnemyTarget`, which
+    // is false once a real enemy is supplied, and `battleSimulator` derives its outcome post-hoc
+    // rather than breaking the loop — so the trim belongs here. Matches the documented
+    // `dpsEnemyTarget` semantics ("roundData ends AT the kill, no zero-damage rounds past it") and
+    // keeps `avgDamagePerRound` dividing by the rounds that actually happened.
+    const reportedRounds =
+        realRoundsToKill !== undefined ? rounds.filter((r) => r.round <= realRoundsToKill) : rounds;
+
+    // A positional run (a real enemy is present) suppresses the engine's
+    // `creditDamage(actor,'direct',…)` fold — `if (!positional)` at engine.ts:8430, because the
+    // firing hit lands per-victim via applyPositionalDamage and crediting again would double-count.
+    // So `rawTotals.cumulative` reads ~0 here and the per-victim map is the only honest source.
+    // Mirrors how battleSimulator derives ShipRoundState.damageDealt from the same map (SP-F F1).
+    const perRoundFocusDamage = hasRealEnemy
+        ? focusDamagePerRound(reportedRounds, FOCUS_ACTOR_ID)
+        : null;
+    const totalDamage = hasRealEnemy
+        ? Math.round(focusDamageTotal(reportedRounds, FOCUS_ACTOR_ID))
+        : Math.round(rawTotals.cumulative);
+
+    // Keep the per-round rows consistent with the re-derived total — DPSRoundChart and the
+    // summary must not disagree. Index-aligned with `rounds` by construction (a round with no
+    // entry contributes 0 and keeps its slot).
+    if (perRoundFocusDamage) {
+        let running = 0;
+        reportedRounds.forEach((r, i) => {
+            r.totalRoundDamage = perRoundFocusDamage[i];
+            running += perRoundFocusDamage[i];
+            r.cumulativeDamage = running;
+        });
+    }
 
     return {
-        rounds,
+        rounds: reportedRounds,
         summary: {
             totalDamage,
             // SP-U U6: divide by the ELAPSED rounds (rounds.length), not the configured window
@@ -374,16 +507,31 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             // `rounds` is trimmed to that length — dividing by numRounds under-reports the
             // per-round pace of a fast kill. Survived runs are unaffected (rounds.length ===
             // numRounds there).
-            avgDamagePerRound: Math.round(rawTotals.cumulative / rounds.length),
+            avgDamagePerRound: Math.round(totalDamage / reportedRounds.length),
             // SP-U U5: rounds-to-kill adapter. The engine drives a real, destructible enemy; when
             // it dies within the window the run terminates on that round and `enemyOutcome` reports
             // it. Wiped → roundsToKill = death round, survived false, finalHpPct 0; else survived
             // true, roundsToKill undefined, finalHpPct = end-of-window enemy HP%.
-            survived: enemyOutcome.survived,
-            ...(enemyOutcome.roundsToKill !== undefined
-                ? { roundsToKill: enemyOutcome.roundsToKill }
-                : {}),
-            finalHpPct: enemyOutcome.finalHpPct,
+            //
+            // Against a REAL enemy those engine fields read the dummy and are meaningless (it never
+            // dies), so they are replaced by the `ship-destroyed`-derived values above.
+            survived: realEnemyIds.size > 0 ? !allRealEnemiesDead : enemyOutcome.survived,
+            ...(realEnemyIds.size > 0
+                ? realRoundsToKill !== undefined
+                    ? { roundsToKill: realRoundsToKill }
+                    : {}
+                : enemyOutcome.roundsToKill !== undefined
+                  ? { roundsToKill: enemyOutcome.roundsToKill }
+                  : {}),
+            // A killed real enemy is at 0%; a living one reports its own last `hp-changed`
+            // percentage (100 when never damaged). The engine's `enemyOutcome.finalHpPct` reads the
+            // DUMMY here, so it is not a reading of the real enemy at all.
+            finalHpPct:
+                realEnemyIds.size > 0
+                    ? allRealEnemiesDead
+                        ? 0
+                        : (primaryRealEnemyHpPct ?? 100)
+                    : enemyOutcome.finalHpPct,
             totalDirectDamage: Math.round(rawTotals.direct),
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
             totalInfernoDamage: Math.round(rawTotals.inferno),
