@@ -12,12 +12,15 @@ import {
 import { ShipSkills } from '../../types/abilities';
 import { AffinityName } from '../../types/ship';
 import type { ActiveBuff } from '../combat/statusEngine';
-import { runCombat, TeamActorEngineInput } from '../combat/engine';
+import { runCombat, TeamActorEngineInput, CombatEngineInput } from '../combat/engine';
+import type { Position } from '../../types/encounters';
+import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import type { CombatEventBus } from '../combat/events';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
+import { DEFAULT_FRONT_ENEMY_TARGET, DEFAULT_BASE_PATTERN } from './dpsEnemyPlacement';
 
 // Re-exported so existing importers (e.g. RoundData consumers) keep a single home.
 export type { ActiveBuff } from '../combat/statusEngine';
@@ -93,6 +96,23 @@ export interface DPSSimulationInput {
     /** Optional emit-only event tap forwarded to the combat engine. Listeners must not
      *  read or mutate combat state (Phase 3 contract). */
     bus?: CombatEventBus;
+    /** Real, positioned enemy ships. A non-empty array flips the engine's `dpsEnemyTarget`
+     *  false, so the focus's damage lands per-victim on THESE actors instead of the vestigial
+     *  dummy. Reuses the engine's own shape — deliberately not a parallel type. */
+    enemyAttackers?: NonNullable<CombatEngineInput['enemyAttackers']>;
+    /** Board slot of the focus attacker. Required for `isPositional` to resolve a real target:
+     *  it needs BOTH this and an opposing actor's position, otherwise `selectTurnTarget` falls
+     *  back to the dummy and the focus never damages the real enemy. */
+    position?: Position;
+    /** Pre-parsed targeting preference for the focus attacker. Position alone is NOT enough:
+     *  `selectTurnTarget` requires `isPositional(...) && target`, so with no ParsedTarget it
+     *  short-circuits to `legacyVictim` (the dummy) however well-positioned the roster is.
+     *  Also required for `dummyEnemyIsVestigial` (which checks `t?.side === 'enemy'`) to drop
+     *  the dummy from the turn order. */
+    target?: ParsedTarget;
+    /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
+     *  positional apply site. A single-target 1v1 wants shape 'base'. */
+    pattern?: ParsedPattern;
 }
 
 export interface RoundData {
@@ -361,6 +381,32 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemySpeed,
         teamActors: engineTeamActors,
         bus: input.bus,
+        // Real positioned enemy roster. Non-empty → the engine's `dpsEnemyTarget` goes false and
+        // the focus's damage lands per-victim on these actors rather than the dummy sink. Each
+        // enemy gets a default ParsedTarget so it actually attacks (see below).
+        enemyAttackers: input.enemyAttackers?.map((e) => ({
+            ...e,
+            target: e.target ?? DEFAULT_FRONT_ENEMY_TARGET,
+            pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
+        })),
+        // Focus attacker's board slot — `isPositional` needs this AND an opposing position.
+        position: input.position,
+        // Position alone does NOT route the cast: `selectTurnTarget` requires
+        // `isPositional(...) && target`, so without a ParsedTarget it short-circuits to the dummy
+        // `legacyVictim` and the real enemy is never touched. Defaulted (rather than left to the
+        // caller) so "supply a real enemy" is sufficient on its own — omitting the target was a
+        // silent fallback to the dummy, not an error, which is a footgun worth closing here.
+        // Only applies when a real enemy is present, so callers on the scalar path are untouched.
+        target:
+            input.target ??
+            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_FRONT_ENEMY_TARGET : undefined),
+        // `pattern` is required by the SAME positional-apply gate as `target` (engine.ts:8344).
+        // Omitting it resolves onto the real enemy and still credits cumulativeDamage via the
+        // legacy sink, but skips the per-victim apply — so `perTargetDealt` comes back empty and
+        // the re-derived metric reads zero. Silent, hence defaulted alongside the target.
+        pattern:
+            input.pattern ??
+            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_BASE_PATTERN : undefined),
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);
