@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { SelectedGameBuff, TeamShipConfig, CombatStatBlock } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { AffinityName, Ship } from '../../types/ship';
+import type { Position } from '../../types/encounters';
 import { GameBuffPicker } from './GameBuffPicker';
 import { TeamShipRow } from './TeamShipRow';
 
@@ -28,6 +29,11 @@ interface TeamPanelProps {
     onTeamShipStatsChange: (id: string, stats: CombatStatBlock) => void;
     onTeamShipAffinityChange: (id: string, affinity: AffinityName) => void;
     onTeamShipShipSkillsChange: (id: string, shipSkills: ShipSkills) => void;
+    /** Board slot per team ship. Two team ships may not share one — the page swaps them.
+     *  OPTIONAL: the healing calculator shares this panel and is not positional yet (SP-3).
+     *  Omitting both hides the slot control entirely. */
+    teamShipSlot?: (id: string, index: number) => Position;
+    onTeamShipSlotChange?: (id: string, slot: Position) => void;
 }
 
 export const TeamPanel: React.FC<TeamPanelProps> = ({
@@ -49,6 +55,8 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
     onTeamShipStatsChange,
     onTeamShipAffinityChange,
     onTeamShipShipSkillsChange,
+    teamShipSlot,
+    onTeamShipSlotChange,
 }) => (
     <div className="card space-y-2">
         <Button
@@ -94,7 +102,7 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
                         Team ships contribute their buffs and debuffs to all ship comparisons
                     </p>
                     <div className="space-y-2">
-                        {teamShips.map((ts) => (
+                        {teamShips.map((ts, i) => (
                             <TeamShipRow
                                 key={ts.id}
                                 config={ts}
@@ -119,6 +127,13 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
                                 onShipSkillsChange={(shipSkills) =>
                                     onTeamShipShipSkillsChange(ts.id, shipSkills)
                                 }
+                                {...(teamShipSlot && onTeamShipSlotChange
+                                    ? {
+                                          slot: teamShipSlot(ts.id, i),
+                                          onSlotChange: (slot: Position) =>
+                                              onTeamShipSlotChange(ts.id, slot),
+                                      }
+                                    : {})}
                             />
                         ))}
                         {teamShips.length < 4 && (

@@ -35,7 +35,9 @@ import { EnemyConfigCard } from '../../components/calculator/EnemyConfigCard';
 import {
     DEFAULT_ATTACKER_SLOT,
     DEFAULT_ENEMY_SLOT,
+    defaultTeamSlot,
 } from '../../utils/calculators/dpsEnemyPlacement';
+import type { Position } from '../../types/encounters';
 import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { ShipConfigCard } from '../../components/calculator/ShipConfigCard';
 import Seo from '../../components/seo/Seo';
@@ -185,6 +187,33 @@ const DPSCalculatorPage: React.FC = () => {
 
     const teamAttackerBuffs = useMemo(() => teamShips.flatMap((t) => t.buffs), [teamShips]);
 
+    /** This team ship's slot, falling back to its index-derived default. */
+    const teamShipSlot = (id: string, index: number): Position =>
+        teamShips.find((t) => t.id === id)?.position ?? defaultTeamSlot(index);
+
+    /**
+     * Move a team ship to a slot, SWAPPING with whichever team ship already holds it.
+     *
+     * Scoped to team ships deliberately. Two attacker CONFIGS may share a slot without conflict:
+     * each config is simulated in its own run (they are alternatives being compared, not
+     * squadmates), so they never occupy one board together. Only team ships share a run.
+     */
+    const changeTeamShipSlot = (id: string, slot: Position) =>
+        setTeamShips((prev) => {
+            const moving = prev.find((t) => t.id === id);
+            if (!moving) return prev;
+            const from = moving.position ?? defaultTeamSlot(prev.indexOf(moving));
+            if (from === slot) return prev;
+            const occupantIndex = prev.findIndex(
+                (t, i) => t.id !== id && (t.position ?? defaultTeamSlot(i)) === slot
+            );
+            return prev.map((t, i) => {
+                if (t.id === id) return { ...t, position: slot };
+                if (i === occupantIndex) return { ...t, position: from };
+                return t;
+            });
+        });
+
     // Display-ready team actors for the per-config turn-order strip: resolved ship name
     // (fallback "Team N") + turn-order speed. Listed in team order so the shared
     // orderByTurnPriority tiebreak resolves team → attacker → enemy at equal speeds.
@@ -207,7 +236,7 @@ const DPSCalculatorPage: React.FC = () => {
 
     const teamActors = useMemo(
         () =>
-            teamShips.map((t) => ({
+            teamShips.map((t, i) => ({
                 id: t.id,
                 speed: t.speed,
                 chargeCount: t.chargeCount,
@@ -217,6 +246,9 @@ const DPSCalculatorPage: React.FC = () => {
                 shipSkills: t.shipSkills,
                 stats: t.stats,
                 affinity: t.affinity,
+                // Board slot — forwarded to the engine by deriveTeamEngineActors' spread. Defaults
+                // walk BACK from the front so team ships never start stacked on the attacker's slot.
+                position: t.position ?? defaultTeamSlot(i),
             })),
         [teamShips]
     );
@@ -628,6 +660,8 @@ const DPSCalculatorPage: React.FC = () => {
                         onTeamShipShipSkillsChange={(id, shipSkills) =>
                             updateTeamShip(id, { shipSkills })
                         }
+                        teamShipSlot={teamShipSlot}
+                        onTeamShipSlotChange={changeTeamShipSlot}
                     />
 
                     <div

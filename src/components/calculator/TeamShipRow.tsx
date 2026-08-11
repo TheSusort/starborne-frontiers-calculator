@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { TeamShipConfig, SelectedGameBuff, CombatStatBlock } from '../../types/calculator';
+import { ATTACKER_SLOT_OPTIONS } from '../../utils/calculators/dpsEnemyPlacement';
+import type { Position } from '../../types/encounters';
 import { ShipSkills } from '../../types/abilities';
 import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import { Button } from '../ui/Button';
@@ -33,6 +35,10 @@ interface TeamShipRowProps {
     onStatsChange: (stats: TeamShipStats) => void;
     onAffinityChange: (affinity: AffinityName) => void;
     onShipSkillsChange: (shipSkills: ShipSkills) => void;
+    /** Board slot this team ship fights from. Absent → no slot control (the healing calculator
+     *  shares this row and is not positional yet). */
+    slot?: Position;
+    onSlotChange?: (slot: Position) => void;
 }
 
 export const TeamShipRow: React.FC<TeamShipRowProps> = ({
@@ -47,6 +53,8 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
     onEnemyDebuffsChange,
     onStatsChange,
     onAffinityChange,
+    slot,
+    onSlotChange,
     onShipSkillsChange,
 }) => {
     const [expanded, setExpanded] = useState(false);
@@ -126,6 +134,17 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                                 </div>
                             </CollapsibleForm>
                         </>
+                    )}
+
+                    {slot && onSlotChange && (
+                        <Select
+                            label="Board slot"
+                            value={slot}
+                            onChange={(v) => onSlotChange(v as Position)}
+                            options={ATTACKER_SLOT_OPTIONS.map((p) => ({ value: p, label: p }))}
+                            className="w-full"
+                            helpLabel="Column 4 is the front. Two team ships cannot share a slot."
+                        />
                     )}
 
                     {/* Combat stats */}

@@ -52,6 +52,19 @@ export const DEFAULT_BASE_PATTERN: ParsedPattern = {
     modifiers: {},
 };
 
+/**
+ * Default slot for the Nth team ship, walking BACK from the front along the middle row and then
+ * spilling to the other rows — so team ships never start stacked on `DEFAULT_ATTACKER_SLOT`.
+ *
+ * Note attacker CONFIGS cannot collide with each other: each config is simulated in its OWN run
+ * (they are alternatives being compared, not squadmates), so only a config-vs-team-ship overlap
+ * puts two actors on one slot in a single simulation.
+ */
+export function defaultTeamSlot(index: number): Position {
+    const order: readonly Position[] = ['M3', 'M2', 'M1', 'T4', 'T3', 'T2', 'T1', 'B4', 'B3', 'B2'];
+    return order[index % order.length];
+}
+
 /** Every slot a player-side ship (attacker config or team ship) may occupy. */
 export const ATTACKER_SLOT_OPTIONS: readonly Position[] = [
     'T1',

@@ -376,6 +376,9 @@ export interface TeamActorInput {
     /** Affinity for a walked team actor — vs the enemy affinity yields its own damage/crit
      *  modifiers (computeAffinityModifiers). Absent → neutral defaults. */
     affinity?: AffinityName;
+    /** Board slot for this team actor. Forwarded to the engine's `teamActors[].position` by
+     *  `deriveTeamEngineActors`'s spread, driving positional target selection + footprint apply. */
+    position?: Position;
     /** Ship role (Ship.type) for role-filtered ally-damage reactions (Graphite).
      *  Auto-filled from ship data on the healing page; absent for manual actors →
      *  role-filtered reactions never fire for them (conservative). */
