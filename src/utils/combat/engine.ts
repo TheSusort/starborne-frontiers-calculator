@@ -4912,8 +4912,9 @@ export function runCombat(input: CombatEngineInput): {
                 // NIT 2 (reactive paths do not over-fire): a Nosorog taking REACTIVE damage does NOT
                 // reflect, by construction — (a) counterattacks reach applyVictimDamage with
                 // isCounter:true, which the `!cause?.isCounter` guard above skips entirely; and (b) the
-                // reactive-damage executor (applyReactiveDamage) is credit-only (creditDamage), never
-                // calling applyVictimDamage, so it never reaches this reflect block at all. Detonation/
+                // reactive-damage executor (applyReactiveDamage) reaches applyVictimDamage under that
+                // SAME isCounter:true flag when it has a real positioned victim, and is credit-only
+                // (creditDamage, never reaching this block at all) otherwise. Detonation/
                 // bomb reactive hits pass bombPortion===total → directFraction 0 → reflectBasis 0 (no
                 // reflect); DoT ticks pass byDirectDamage:false (guard above). So no reactive path
                 // leaves isPrimaryTarget undefined in a way that could wrongly reflect — no code change
@@ -5357,12 +5358,13 @@ export function runCombat(input: CombatEngineInput): {
         // Chakara/Incinerator/Rhodium start-of-round/end-of-round passives. Mirrors
         // applyCounterAttack's mitigated/crit walk (SAME victimHitDamage call, SAME documented
         // approximations: no outgoing-damage buff, no per-victim incoming-damage modifier,
-        // base-only defense penetration, no shield penetration) but CREDITS the owner's round
-        // damage-dealt bucket (creditDamage) instead of applying real HP damage via
-        // applyVictimDamage — this executor never mutated a specific victim's HP before this fix
-        // either (`ctx.creditReactiveDamage` was credit-only), so that contract is UNCHANGED; only
-        // the CREDITED NUMBER's formula changes (now mitigated + crit-eligible instead of a flat
-        // effectiveAttack × multiplier fold with no defense and no crit).
+        // base-only defense penetration, no shield penetration). PR4b changed only the NUMBER's
+        // formula (now mitigated + crit-eligible instead of a flat effectiveAttack × multiplier fold
+        // with no defense and no crit); SP-M M1 then split WHERE it lands, and the two destinations
+        // are mutually exclusive per proc (see the gate in the body): with a real positioned victim
+        // it reduces that victim's HP via applyVictimDamage and books per-victim (creditDealt),
+        // otherwise it stays credit-only against the owner's round damage-dealt bucket
+        // (creditDamage), which is the pre-SP-M contract.
         //
         // Victim resolution is the caller's job (triggers.ts resolves `counterTargetId ?? ctx.
         // enemy.id`, the SAME idiom every sibling target:'enemy' reactive branch already uses) —
@@ -5509,36 +5511,36 @@ export function runCombat(input: CombatEngineInput): {
                 return;
             }
             reactiveDealtByOwner.set(ownerId, raw);
-            // SP-M M1: in a positioned two-team battle (simulateBattle sets input.positionalTeamBattle)
-            // a reactive proc REDUCES the resolved victim's real HP through the SAME shared funnel
-            // counters use (applyVictimDamage) — surfacing on the victim's HP curve
-            // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
-            // perTargetDealt → damageDealt). Mirrors applyCounterAttack EXACTLY (isCounter:true → a
-            // reactive hit is never itself reflected and never Protection-redirected; no shield
-            // penetration) and deliberately does NOT creditDamage: positionalTeamBattle is never
-            // dpsEnemyTarget, so the DPS-mode post-round aggregate (engine.ts:7931) never fires here
-            // — cumulativeDamage only reports + declines the vestigial dummy, never a real victim, so
-            // folding the reactive into it would double-count exactly like the per-victim DoT/
-            // detonation split documented at engine.ts:7898.
+            // SP-M M1: against a real, positioned opposing roster a reactive proc REDUCES the
+            // resolved victim's real HP through the SAME shared funnel counters use
+            // (applyVictimDamage) — surfacing on the victim's HP curve (roundPerTargetDamage →
+            // damageTaken) and attributed to the owner (creditDealt → perTargetDealt → damageDealt).
+            // Mirrors applyCounterAttack EXACTLY (isCounter:true → a reactive hit is never itself
+            // reflected and never Protection-redirected; no shield penetration) and deliberately
+            // does NOT creditDamage: a positioned enemy roster is never `dpsEnemyTarget` (which is
+            // `enemyAttackerInputs.length === 0`), so the DPS-mode post-round aggregate
+            // (engine.ts:7931) never fires here — cumulativeDamage only reports + declines the
+            // vestigial dummy, never a real victim, so folding the reactive into it would
+            // double-count exactly like the per-victim DoT/detonation split documented at
+            // engine.ts:7898. The DPS calculator reads the per-victim map instead
+            // (dpsSimulator.ts's focusDamageTotal), which this branch is what feeds.
             //
             // victim.id !== enemy.id: defensive backstop keeping the HP path off the vestigial dummy
             // (a proc whose target resolved to ctx.enemy — e.g. an AoE with an empty living roster —
             // stays credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim.
-            // ⚠️ KNOWN GAP (SP-1, deferred to its own PR): this gate is too strict for a DPS run.
-            // The DPS calculator supplies a real positioned enemy but does NOT set
-            // positionalTeamBattle, so every reactive-damage proc falls to the credit-only branch
-            // below — it reduces no real HP and never reaches `perTargetDealt`, meaning the proc
-            // fires and accomplishes NOTHING there (Judge/Incinerator/Rhodium/Chakara fire on the
-            // focus's own turn, so this is not gated behind an attacking enemy).
             //
-            // The fix is to widen this to `(input.positionalTeamBattle || hasPositionedEnemyRoster)`,
-            // mirroring SP-M M1's own correction one gate over ("positionalTeamBattle is too strict;
-            // hasPositionedEnemyRoster is the narrowest correct signal"). Measured blast radius: 6
-            // assertions across 4 files (allyCritReactivePromotion ×2, paracelsusOnDestroyed ×2,
-            // enemyCleanse, vindicatorOnResistDamage) whose credited amounts migrate from
-            // `creditDamage` to `applyVictimDamage`/`creditDealt` — each needs its expected value
-            // re-derived on the new channel, so it is split out rather than rushed alongside SP-1.
-            if (input.positionalTeamBattle && victim.id !== enemy.id) {
+            // SP-1 follow-up: gated on `hasPositionedEnemyRoster`, NOT `input.positionalTeamBattle`
+            // — the same correction SP-M M1 made one gate over (engine.ts:2375, "positionalTeamBattle
+            // is too strict; hasPositionedEnemyRoster is the narrowest correct signal"). Only
+            // simulateBattle sets positionalTeamBattle, yet the DPS calculator also supplies a real,
+            // positioned enemy roster; under the old flag every reactive-damage proc there fell to
+            // the credit-only branch below, reducing no real HP and never reaching `perTargetDealt`
+            // — which, since SP-1 re-derives the DPS metric FROM that map, meant the proc fired and
+            // contributed exactly nothing (Judge/Incinerator/Rhodium/Chakara fire on the focus's own
+            // turn, so it was not hidden behind the enemy-attack-0 default either).
+            // Runs with no positioned enemy (scalar DPS, the healing calculator's bare enemies) keep
+            // the credit-only path by construction — there is no real victim to reduce.
+            if (hasPositionedEnemyRoster && victim.id !== enemy.id) {
                 // Buffer this application's log-only consequence twins (Lifeline shield grant,
                 // shield destroyed, cheat death) so they print UNDER this proc's own attack row —
                 // which triggers.ts emits only after this call returns. Restored in a `finally`
@@ -5560,10 +5562,10 @@ export function runCombat(input: CombatEngineInput): {
                 }
                 // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
                 // documented as its exact mirror, so booking `raw` here would re-create the
-                // double-count for the eight reactive-damage ships). No fixture reaches this branch
-                // — it needs `positionalTeamBattle` plus a reactive `damage` proc onto a
-                // block-holding victim — so it is kept correct by construction with its sibling
-                // rather than pinned.
+                // double-count for the eight reactive-damage ships). No fixture reaches the case
+                // where the two DIVERGE — that needs a reactive `damage` proc onto a block-holding
+                // victim — so it is kept correct by construction with its sibling rather than
+                // pinned. (The branch itself is well covered; only the raw≠booked split is not.)
                 const procBooked = procOutcome?.incomingBooked ?? 0;
                 if (procBooked > 1e-9) {
                     roundPerTargetDamage.set(

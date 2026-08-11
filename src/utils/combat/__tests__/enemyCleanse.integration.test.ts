@@ -192,12 +192,27 @@ describe('enemy on-cast cleanse: drives a focus on-enemy-cleansed (Grif) proc on
         ]);
         // Inject the Grif passive alongside the player's debuff active.
         input.shipSkills = { slots: [damageThenDebuff(), grifPassive()] };
+        const bus = createEventBus();
+        const procs: number[] = [];
+        bus.on('reactive-damage-performed', (e) => {
+            if (e.type === 'reactive-damage-performed' && e.targetId === 'foe')
+                procs.push(e.amount);
+        });
+        input.bus = bus;
         const result = runCombat(input);
-        // The Grif on-enemy-cleansed reactive credits the 'direct' bucket (creditReactiveDamage →
-        // creditDamage(_, 'direct', _)). The player's OWN attack credits perTargetDamage, so
-        // directDamage isolates the proc. Real removal happened → proc fired → directDamage > 0.
-        const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
-        expect(grifDamage).toBeGreaterThan(0);
+
+        // This is a positioned two-team run, so the Grif on-enemy-cleansed reactive reduces the
+        // foe's real HP and books its intake per-victim (perTargetDealt) alongside the player's own
+        // attack — it does NOT land on the credit-only `directDamage` bucket this assertion used to
+        // read. Both amounts are exact here (crit 0, defence 0, no shields, single round): the
+        // active is attack × 100% = 10_000 and the proc is attack × 200% = 20_000, against a
+        // 40_000-HP foe so nothing clamps.
+        expect(procs).toEqual([20_000]);
+        const dealtToFoe = result.rounds.reduce(
+            (sum, rd) => sum + (rd.perTargetDealt?.attacker?.foe ?? 0),
+            0
+        );
+        expect(dealtToFoe).toBe(30_000);
     });
 });
 
