@@ -117,8 +117,30 @@ git commit -m "feat(dps): default board slots for the real DPS enemy"
 - Consumes: `DEFAULT_ATTACKER_SLOT` / `DEFAULT_ENEMY_SLOT` (Task 1).
 - Produces: `DPSSimulationInput.enemyAttackers?: NonNullable<CombatEngineInput['enemyAttackers']>` and `DPSSimulationInput.position?: Position`. Later tasks pass these from the page.
 
+**⚠️ AMENDED DURING EXECUTION (2026-08-11) — positions alone do NOT work.** The original task said
+to thread `enemyAttackers` + `position`. That is insufficient, in two stages, and the second stage
+fails *silently*:
+
+1. `selectTurnTarget` (`engine.ts:6380`) requires `isPositional(...) && target`. With no
+   `ParsedTarget` it short-circuits to `tb.legacyVictim` — the dummy. The same missing target also
+   keeps the dummy in the turn order, since `dummyEnemyIsVestigial` checks `t?.side === 'enemy'`.
+2. The positional **apply** gate (`engine.ts:8344`) additionally requires `pattern != null`. With a
+   target but no pattern, the cast resolves onto the real enemy and still credits
+   `cumulativeDamage` through the legacy sink — but never runs the per-victim apply, so
+   `creditDealt` never fires and `RoundData.perTargetDealt` comes back **empty** while the damage
+   number looks entirely plausible.
+
+Both are now defaulted inside `simulateDPS` (`DEFAULT_FRONT_ENEMY_TARGET`, `DEFAULT_BASE_PATTERN`)
+so "supply a real enemy" is sufficient on its own. `DEFAULT_BASE_PATTERN` uses `range: 0` — the
+signature is `"base|0|"` → `[ORIGIN]`; `"base|1|"` has no offset table and `resolveCells` throws.
+
+**Consequence for Task 7:** the defaults make the page *work*, but a real ship should pass its own
+parsed targeting so an AoE kit hits its real footprint instead of collapsing to single-target. Take
+`target`/`pattern` from the ship's `SkillTargeting` the way `battleSimulator.ts:1048` does
+(`withStealthBypass(focus.targeting?.target, …)`), falling back to the defaults for a blank config.
+
 **Context the implementer needs:**
-- `runCombat`'s enemy shape is `CombatEngineInput['enemyAttackers']` (`engine.ts:1212`) — reuse that type, do NOT define a parallel one. It already carries `position`, `shipSkills`, `chargeCount`, `startCharged`, `stats`.
+- `runCombat`'s enemy shape is `CombatEngineInput['enemyAttackers']` (`engine.ts:1212`) — reuse that type, do NOT define a parallel one. It already carries `position`, `shipSkills`, `chargeCount`, `startCharged`, `stats`, `target`, `pattern`.
 - `dpsEnemyTarget = enemyAttackerInputs.length === 0` (`engine.ts:2294`) flips false automatically once you pass a non-empty array. You do not set it.
 - The focus attacker's own slot is `CombatEngineInput.position` (`engine.ts:1288`).
 - Wiring template: the `runCombat({…})` call in `healingEngineAdapter.ts:222-258`, which passes `enemyAttackers: engineEnemyAttackers`.
