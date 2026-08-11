@@ -69,7 +69,13 @@ describe('DPSCalculatorPage supplies a real positioned enemy', () => {
         expect(input?.enemyAttackers?.[0]?.position).toBeDefined();
         // The enemy carries a real HP/defence so it is a genuine damage target, not a sink.
         expect(input?.enemyAttackers?.[0]?.stats.hp).toBeGreaterThan(0);
-        expect(input?.enemyAttackers?.[0]?.stats.attack).toBeGreaterThan(0);
+
+        // Attack defaults to 0 so the attacker takes no damage out of the box and every config
+        // faces identical conditions. Note the trade-off this locks in: a 0-attack enemy emits no
+        // `attacked` events at all, so on-attacked / counter / reflect kits do NOT fire until the
+        // user raises this. Changing the default flips that behaviour for everyone — deliberate
+        // decision required, hence the assertion.
+        expect(input?.enemyAttackers?.[0]?.stats.attack).toBe(0);
 
         spy.mockRestore();
     });

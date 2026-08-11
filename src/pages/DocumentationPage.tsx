@@ -2271,13 +2271,17 @@ const DocumentationPage: React.FC = () => {
                                         reaches 0 the fight ends on that round.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        <span className="text-primary">The enemy fights back:</span>{' '}
-                                        it takes its own turns and attacks you, so ships whose kits
-                                        react to being hit &mdash; counterattacks, reflects, and
-                                        on-hit triggers &mdash; finally show their real output here.
-                                        Previously nothing ever struck your ship, so those effects
-                                        never fired and their damage was understated. Your ship can
-                                        now die too, which ends the run.
+                                        <span className="text-primary">
+                                            The enemy can fight back:
+                                        </span>{' '}
+                                        it takes its own turns, and its attack defaults to 0 so a
+                                        comparison stays a clean measure of your output &mdash; your
+                                        ship cannot be worn down or killed. Give the enemy an attack
+                                        value and it starts hitting you, which is what lets ships
+                                        built around being hit &mdash; counterattacks, reflects and
+                                        on-hit triggers &mdash; contribute their real damage. Those
+                                        effects cannot fire while its attack is 0, and your ship can
+                                        be destroyed once it is not, which ends the run.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Board slots:</span> each

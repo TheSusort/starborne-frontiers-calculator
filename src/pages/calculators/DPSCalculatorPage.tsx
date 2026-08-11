@@ -123,7 +123,14 @@ const DPSCalculatorPage: React.FC = () => {
         defense: 10000,
         security: 100,
         speed: 50,
-        attack: 8000,
+        // Attack defaults to 0 so a DPS comparison stays a clean measure of output: the attacker
+        // cannot be worn down or killed, and every config faces identical conditions.
+        //
+        // VERIFIED TRADE-OFF: a 0-attack enemy emits NO `attacked` events at all (a zero-damage
+        // hit is skipped, not emitted as a 0), so on-attacked / counter / reflect reactions do NOT
+        // fire at this default. The reaction-kit fidelity this sub-project unlocked is therefore
+        // OPT-IN — raise the enemy's attack to see those kits contribute.
+        attack: 0,
         crit: 0,
         critDamage: 150,
         shipSkills: buildDefaultShipSkills(),
