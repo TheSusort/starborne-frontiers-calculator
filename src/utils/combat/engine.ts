@@ -9642,8 +9642,20 @@ export function runCombat(input: CombatEngineInput): {
         // seam: reactive triggers may APPEND extra focus turns (read the last), but a
         // round with ZERO focus turns is impossible while the focus actor is always queued.
         if (!focusTurns.length) {
+            // The focus attacker DIED before acting this round. Reachable since the DPS calculator
+            // gained a real, positioned enemy that attacks back: a faster enemy can kill a fragile
+            // attacker before its first turn, so "zero focus turns" is no longer impossible — the
+            // original invariant below held only while the focus was effectively immortal.
+            //
+            // The run is over. Break BEFORE pushing a row: there is no `lastAttackerTurn` to supply
+            // this row's attacker provenance (action / roundCrit / enemyHpPct), and no later round
+            // can produce one either. `roundData` therefore ends at the last round the focus
+            // actually acted, mirroring how the enemy-death exit ends AT the kill round. The turn
+            // loop's `finally` above has already reset `inTurnLoop`, so this early exit is safe.
+            if (attacker.destroyedRound !== undefined) break;
+            // Still genuinely impossible: a LIVING focus actor is always queued.
             throw new Error(
-                `combat round ${r} produced no focus actor turn (Phase-3+ seam: extra turns append, zero turns impossible while the focus actor is always queued)`
+                `combat round ${r} produced no focus actor turn (Phase-3+ seam: extra turns append, zero turns impossible while the focus actor is alive and always queued)`
             );
         }
         const lastAttackerTurn = focusTurns[focusTurns.length - 1];
