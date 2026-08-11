@@ -2262,12 +2262,30 @@ const DocumentationPage: React.FC = () => {
                                     </h4>
                                     <p className="text-theme-text mb-2">
                                         A time-to-kill tool: simulate one or more ship
-                                        configurations against a configurable enemy target,
-                                        factoring in attack, crit rate, crit damage, and defense
-                                        penetration. The target is a real, destructible ship &mdash;
-                                        set its stats manually under Enemy Target (defense, HP,
-                                        security, speed, affinity, type, buffs/debuffs). Once its HP
+                                        configurations against a real enemy ship, factoring in
+                                        attack, crit rate, crit damage, and defense penetration.
+                                        Under Enemy Target you can pick an actual ship &mdash;
+                                        filling its stats and skills from game data &mdash; or set
+                                        them by hand (defense, HP, security, speed, attack, crit,
+                                        crit damage, affinity, type, buffs/debuffs). Once its HP
                                         reaches 0 the fight ends on that round.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">The enemy fights back:</span>{' '}
+                                        it takes its own turns and attacks you, so ships whose kits
+                                        react to being hit &mdash; counterattacks, reflects, and
+                                        on-hit triggers &mdash; finally show their real output here.
+                                        Previously nothing ever struck your ship, so those effects
+                                        never fired and their damage was understated. Your ship can
+                                        now die too, which ends the run.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Board slots:</span> each
+                                        config and each team ship picks the slot it fights from
+                                        (column 4 is the front), which affects targeting patterns
+                                        and adjacency. Two team ships cannot share a slot &mdash;
+                                        choosing an occupied one swaps them. Separate configs may
+                                        share a slot, since each is simulated on its own.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
