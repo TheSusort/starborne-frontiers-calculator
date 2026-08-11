@@ -15,7 +15,7 @@ import type { ActiveBuff } from '../combat/statusEngine';
 import { runCombat, TeamActorEngineInput, CombatEngineInput } from '../combat/engine';
 import type { Position } from '../../types/encounters';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
-import type { CombatEventBus } from '../combat/events';
+import type { CombatEventBus, CombatEvent } from '../combat/events';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
@@ -104,6 +104,12 @@ export interface DPSSimulationInput {
     /** Optional emit-only event tap forwarded to the combat engine. Listeners must not
      *  read or mutate combat state (Phase 3 contract). */
     bus?: CombatEventBus;
+    /** SP-2: opt in to the display-only status timeline (`focusStatsSnapshots`, `focusStatuses`,
+     *  `enemyStatuses` on each RoundData row). OFF by default and deliberately so: a focus stats
+     *  snapshot exists in every round of every run, so attaching it unconditionally would rewrite
+     *  the whole 8900-line `dpsGoldenParity` snapshot with display payload. Collection is a pure
+     *  emit-only tap — no sim number depends on it, in either position. */
+    collectStatusTimeline?: boolean;
     /** Real, positioned enemy ships. A non-empty array flips the engine's `dpsEnemyTarget`
      *  false, so the focus's damage lands per-victim on THESE actors instead of the vestigial
      *  dummy. Reuses the engine's own shape — deliberately not a parallel type. */
@@ -121,6 +127,16 @@ export interface DPSSimulationInput {
     /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
      *  positional apply site. A single-target 1v1 wants shape 'base'. */
     pattern?: ParsedPattern;
+}
+
+/** SP-2: one focus-actor turn-start stat reading. Derived from the engine's `stats-snapshot`
+ *  payload rather than redeclared, so a stat added to the event cannot silently go missing here. */
+export type RoundStatsSnapshot = Extract<CombatEvent, { type: 'stats-snapshot' }>['stats'];
+
+/** SP-2: one actor's ROUND-TAIL status names (post decrement + drain). */
+export interface RoundActorStatuses {
+    buffNames: string[];
+    debuffNames: string[];
 }
 
 export interface RoundData {
@@ -215,6 +231,25 @@ export interface RoundData {
             convertedToShield: number;
         }
     >;
+    /** SP-2: every focus-actor `stats-snapshot` of this round, in turn order — 2+ entries when an
+     *  extra action gave the focus a second turn, which is exactly what makes the summary's
+     *  turn-weighted average expressible. Each reading is taken at TURN START, so it describes the
+     *  stats that turn's damage was dealt under; round 1 therefore reads PRE-cast (an on-cast
+     *  self-buff first appears in the next snapshot). Populated only under
+     *  `collectStatusTimeline` — display-only, never read by the sim. */
+    focusStatsSnapshots?: RoundStatsSnapshot[];
+    /** SP-2: the focus actor's ROUND-TAIL status names — what it still carries after every
+     *  decrement and drain. Distinct from `activeSelfBuffs`, which is the focus's own TURN-time
+     *  view: a self-buff granted on the focus's own turn shows in both, but one that expires at
+     *  the round tail shows only in the turn-time list. Populated only under
+     *  `collectStatusTimeline`, and only when at least one name is present. */
+    focusStatuses?: RoundActorStatuses;
+    /** SP-2: round-tail status names per REAL enemy actor id (the vestigial dummy is filtered out —
+     *  it keys its debuffs under the `__enemy__` sentinel and always reports empty). Keyed by id
+     *  rather than collapsed to one entry: a roster is not its first member (the defect #318 fixed
+     *  in `finalHpPct`). Populated only under `collectStatusTimeline`, and only for actors carrying
+     *  at least one name. */
+    enemyStatuses?: Record<string, RoundActorStatuses>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
@@ -363,25 +398,51 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     /** Last `hp-changed` percentage seen per real enemy. Integer-granular and only emitted on
      *  change, so a missing entry legitimately means "untouched" → 100. */
     const realEnemyHpPct = new Map<string, number>();
-    const collectingBus: CombatEventBus | undefined =
-        realEnemyIds.size > 0
-            ? {
-                  on: () => {},
-                  emit: (e) => {
-                      if (
-                          e.type === 'ship-destroyed' &&
-                          realEnemyIds.has(e.actorId) &&
-                          !realEnemyDeathRound.has(e.actorId)
-                      ) {
-                          realEnemyDeathRound.set(e.actorId, e.round);
-                      }
-                      if (e.type === 'hp-changed' && realEnemyIds.has(e.targetId)) {
-                          realEnemyHpPct.set(e.targetId, e.newPct);
-                      }
-                      input.bus?.emit(e);
-                  },
-              }
-            : input.bus;
+
+    // SP-2 display timeline, keyed by round. Collected only under the opt-in flag so the goldens
+    // (whole-result snapshots) stay byte-identical for every existing caller.
+    const collectTimeline = input.collectStatusTimeline === true;
+    const focusStatsByRound = new Map<number, RoundStatsSnapshot[]>();
+    const focusStatusByRound = new Map<number, RoundActorStatuses>();
+    const enemyStatusByRound = new Map<number, Record<string, RoundActorStatuses>>();
+
+    // Always a wrapper now (SP-1 built it only when a real enemy was present). `runCombat` treats
+    // an external bus as a WRITE-ONLY tap that fans out before its own reactive listeners
+    // (engine.ts:1695-1709), so wrapping is observation, never mutation — and forwarding to
+    // `input.bus` last preserves the caller's view of the stream.
+    const collectingBus: CombatEventBus = {
+        on: () => {},
+        emit: (e) => {
+            if (
+                e.type === 'ship-destroyed' &&
+                realEnemyIds.has(e.actorId) &&
+                !realEnemyDeathRound.has(e.actorId)
+            ) {
+                realEnemyDeathRound.set(e.actorId, e.round);
+            }
+            if (e.type === 'hp-changed' && realEnemyIds.has(e.targetId)) {
+                realEnemyHpPct.set(e.targetId, e.newPct);
+            }
+            if (collectTimeline) {
+                if (e.type === 'stats-snapshot' && e.actorId === FOCUS_ACTOR_ID) {
+                    const forRound = focusStatsByRound.get(e.round);
+                    if (forRound) forRound.push(e.stats);
+                    else focusStatsByRound.set(e.round, [e.stats]);
+                }
+                if (e.type === 'status-snapshot') {
+                    const statuses = { buffNames: e.buffNames, debuffNames: e.debuffNames };
+                    if (e.actorId === FOCUS_ACTOR_ID) {
+                        focusStatusByRound.set(e.round, statuses);
+                    } else if (realEnemyIds.has(e.actorId)) {
+                        const byId = enemyStatusByRound.get(e.round) ?? {};
+                        byId[e.actorId] = statuses;
+                        enemyStatusByRound.set(e.round, byId);
+                    }
+                }
+            }
+            input.bus?.emit(e);
+        },
+    };
 
     const { rounds, rawTotals, enemyOutcome } = runCombat({
         attack,
@@ -516,6 +577,29 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             running += perRoundFocusDamage[i];
             r.cumulativeDamage = running;
         });
+    }
+
+    // Hang the display timeline on the REPORTED rows (post-kill-trim) — a round the run never
+    // reported gets nothing, and each field stays absent when it has nothing to say, so a caller
+    // that renders `?? []` shows an empty section rather than an empty-object artifact.
+    if (collectTimeline) {
+        for (const row of reportedRounds) {
+            const stats = focusStatsByRound.get(row.round);
+            if (stats && stats.length > 0) row.focusStatsSnapshots = stats;
+
+            const focus = focusStatusByRound.get(row.round);
+            if (focus && (focus.buffNames.length > 0 || focus.debuffNames.length > 0)) {
+                row.focusStatuses = focus;
+            }
+
+            const enemies = enemyStatusByRound.get(row.round);
+            if (enemies) {
+                const carrying = Object.entries(enemies).filter(
+                    ([, s]) => s.buffNames.length > 0 || s.debuffNames.length > 0
+                );
+                if (carrying.length > 0) row.enemyStatuses = Object.fromEntries(carrying);
+            }
+        }
     }
 
     return {
