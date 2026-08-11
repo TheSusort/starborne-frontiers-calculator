@@ -56,6 +56,47 @@ alongside the existing scalars. And the engine has the escape hatch built in:
 `dpsEnemyTarget = enemyAttackerInputs.length === 0` (`engine.ts:2294`). Supplying a real enemy
 attacker switches the dummy path off by itself.
 
+## Epic end-goal (owner, 2026-08-11)
+
+**Simplify the engine so there are no dummy ships and everything is positional.** SP-1 and SP-2 are
+the first two steps toward that, not the whole of it.
+
+### Why this is coherent despite SP-F F7
+
+SP-F F7 concluded the dummy is "NOT removable — load-bearing scaffolding" (`allActors`,
+`TurnBindings.legacyVictim`, the `isDummyEnemy` turn-skip, `resolvePositionalTarget`'s null
+fallback, and the `cumulativeDamage` scalar being the DPS-mode metric). That finding stands, but it
+was **conditional**: every one of those props exists to serve a NON-POSITIONAL mode. The dummy is
+load-bearing *because* DPS and healing run without a board. Put both on a board and each prop loses
+its reason to exist:
+
+| F7's prop | Dissolved by |
+| --- | --- |
+| `cumulativeDamage` scalar IS the DPS metric | SP-1 re-derives it from `perTargetDealt` |
+| `resolvePositionalTarget` null-fallback to `legacyVictim` | a real positioned enemy always resolves |
+| `isDummyEnemy` turn-skip | no dummy in the roster |
+| `TurnBindings.legacyVictim` | no legacy victim to bind |
+
+So the order matters: **the dummy cannot be removed first.** It is removed *last*, once nothing
+depends on it.
+
+### Roadmap
+
+- **SP-1** — DPS calculator: real positional enemy. *(planned:
+  `docs/superpowers/plans/2026-08-11-dps-real-full-walk-enemy.md`)*
+- **SP-2** — the truthful buff timeline. *(specced below)*
+- **SP-3** — Healing calculator: real positional enemy. Not yet specced. Note F7's second finding —
+  `healingEngineAdapter`'s dummy is independently load-bearing because a healer casting `damage` at
+  `target:'enemy'` feeds `basis:'damage-dealt'` heal/shield riders, so those riders need a real
+  victim before the dummy can go.
+- **SP-4** — Retire the dummy and the non-positional code paths from the engine. Only viable once
+  SP-1 and SP-3 have removed every production caller. Expect this to delete, not add: the ~25
+  `isDummyEnemy` / `dpsEnemyTarget` / `dummyEnemyIsVestigial` branches, the `!positional` credit
+  forks (`engine.ts:8430`), and `dummyEnemyIsVestigial`'s turn-order gate.
+
+**Standing rule for the whole epic: no new dummy branches.** If a task seems to need one, that is a
+signal the sub-project ordering is wrong, not that the branch is warranted.
+
 ## Decomposition
 
 **SP-1 — real full-walk enemy in the DPS calculator.** Must come first: it is what removes any
@@ -79,8 +120,9 @@ special-casing at all.
    page loads with the same stats. Its behaviour still changes (see risk below).
 4. **Positional, with auto-placement.** *(Corrected 2026-08-11 — an earlier draft said
    "non-positional, exactly the healing calculator's shape". That is unworkable, see below.)* The
-   enemy is auto-placed in a fixed documented slot; each attacker config carries a configurable
-   slot. Team ships stay auto-placed for now.
+   enemy is auto-placed in a fixed documented slot; each attacker config **and each team ship**
+   carries a configurable slot (owner, 2026-08-11). Player-side slots must be unique — a pick that
+   collides swaps the two occupants rather than being rejected.
 
    **Why the healing calculator's shape does not transfer.** `isPositional`
    (`positionalBinding.ts:20-25`) requires the acting actor to have a position AND at least one
@@ -291,11 +333,12 @@ at implementation time and remove it if still unreferenced; if a caller has appe
 
 ## Non-goals
 
-- A placement **UI** in the DPS calculator. The run is positional (it must be — see SP-1 locked
-  decision 4), but placement is auto-assigned: a slot dropdown per attacker config, a fixed slot for
-  the enemy, no board. Team-ship slots are not user-configurable in this epic.
-- Removing the dummy scaffolding from the engine. SP-1 stops the DPS page from *exercising* it in
-  production, which is the prerequisite; actual removal is separate work.
+- A placement **UI** (a board) in the DPS calculator. The run is positional — it must be, see SP-1
+  locked decision 4 — but placement is chosen through slot dropdowns, not a board: one per attacker
+  config and one per team ship, with the enemy on a fixed slot.
+- Removing the dummy scaffolding from the engine **within SP-1/SP-2**. That is the epic's end-goal
+  (see "Epic end-goal" above) but it lands in SP-4, after SP-3 removes the healing calculator's
+  dependency too. SP-1 stops the DPS page from *exercising* the dummy, which is the prerequisite.
 - Changing `liveGateConditions` or any live-gating semantics. This epic changes what is displayed
   and who the enemy is, never how conditions gate.
 - Rebasing the DPS calculator onto `simulateBattle`. Considered and rejected for this epic: it

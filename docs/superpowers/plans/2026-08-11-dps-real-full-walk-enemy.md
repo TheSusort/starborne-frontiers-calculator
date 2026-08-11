@@ -886,6 +886,28 @@ Keep `enemyType`, `enemyAffinity` and `enemyBuffs` as they are — they are not 
 
 Add `slot: Position` to `DPSShipConfig` (in `src/types/calculator.ts`), defaulted to `DEFAULT_ATTACKER_SLOT` wherever a config is created. In `ShipConfigCard.tsx`, render a `Select` labelled "Board slot" over `ATTACKER_SLOT_OPTIONS`, reporting through the existing `onUpdate` prop.
 
+- [ ] **Step 4b: Add a slot to each TEAM ship too**
+
+Team ships are configurable-slot as well. Three edits:
+
+1. `src/types/calculator.ts` — add to `TeamActorInput` (`:329`):
+
+```ts
+    /** Board slot of this team actor. Threaded to the engine's teamActors[].position, which
+     *  already exists (engine.ts:1098) and drives positional target selection + footprint apply. */
+    position?: Position;
+```
+
+2. `deriveTeamEngineActors` (in `src/utils/calculators/dpsSimulator.ts`) — forward `position` onto
+   the engine actor bundle it builds. It is currently dropped; without this the `Select` is inert.
+
+3. `src/components/calculator/TeamShipRow.tsx` — render the same "Board slot" `Select` over
+   `ATTACKER_SLOT_OPTIONS`, next to the existing `SkillSlotList` at `:281`.
+
+**Slot-collision rule:** two player-side ships must not share a slot. Default each new team ship to
+the first slot not already taken by the attacker configs or other team ships, and if the user picks
+a taken slot, swap the two occupants rather than rejecting the choice. Add a unit test for the swap.
+
 - [ ] **Step 5: Pass both to `simulateDPS`**
 
 In the `simulateDPS({…})` call, replace the scalar enemy args and add:
@@ -939,8 +961,8 @@ Expected: **DPS-related goldens move.** This is the deliberate change. For each 
 
 ```bash
 npm run lint
-git add src/pages/calculators/DPSCalculatorPage.tsx src/components/calculator/ShipConfigCard.tsx src/types/calculator.ts src/pages/calculators/__tests__/DPSCalculatorPage.realEnemy.test.tsx
-git commit -m "feat(dps): real full-walk enemy and configurable attacker slot on the DPS page"
+git add src/pages/calculators/DPSCalculatorPage.tsx src/components/calculator/ShipConfigCard.tsx src/components/calculator/TeamShipRow.tsx src/utils/calculators/dpsSimulator.ts src/types/calculator.ts src/pages/calculators/__tests__/DPSCalculatorPage.realEnemy.test.tsx
+git commit -m "feat(dps): real full-walk enemy and configurable attacker/team slots"
 ```
 
 ---
