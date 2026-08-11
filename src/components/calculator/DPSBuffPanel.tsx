@@ -147,41 +147,31 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
             {hasEndOfRound && (
                 <>
                     <div className="text-xs text-theme-text-secondary mt-2 mb-1">End of Round</div>
-                    {endOfRoundSelfBuffs.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-1">
-                            {endOfRoundSelfBuffs.map((name) => (
-                                <StatusChip key={`eor-self-${name}`} name={name} tone="self" />
-                            ))}
-                        </div>
-                    )}
-                    {endOfRoundEnemyDebuffs.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-1">
-                            {endOfRoundEnemyDebuffs.map((name) => (
-                                <StatusChip key={`eor-enemy-${name}`} name={name} tone="enemy" />
-                            ))}
-                        </div>
-                    )}
-                    {endOfRoundSelfDebuffs.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-1">
-                            {endOfRoundSelfDebuffs.map((name) => (
-                                <StatusChip
-                                    key={`eor-self-debuff-${name}`}
-                                    name={name}
-                                    tone="enemy"
-                                />
-                            ))}
-                        </div>
-                    )}
-                    {endOfRoundEnemyBuffs.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-1">
-                            {endOfRoundEnemyBuffs.map((name) => (
-                                <StatusChip
-                                    key={`eor-enemy-buff-${name}`}
-                                    name={name}
-                                    tone="enemy"
-                                />
-                            ))}
-                        </div>
+                    {[
+                        { items: endOfRoundSelfBuffs, prefix: 'self', tone: 'self' as const },
+                        { items: endOfRoundEnemyDebuffs, prefix: 'enemy', tone: 'enemy' as const },
+                        {
+                            items: endOfRoundSelfDebuffs,
+                            prefix: 'self-debuff',
+                            tone: 'enemy' as const,
+                        },
+                        {
+                            items: endOfRoundEnemyBuffs,
+                            prefix: 'enemy-buff',
+                            tone: 'enemy' as const,
+                        },
+                    ].map(({ items, prefix, tone }) =>
+                        items.length > 0 ? (
+                            <div key={prefix} className="flex flex-wrap gap-1 mb-1">
+                                {items.map((name) => (
+                                    <StatusChip
+                                        key={`eor-${prefix}-${name}`}
+                                        name={name}
+                                        tone={tone}
+                                    />
+                                ))}
+                            </div>
+                        ) : null
                     )}
                 </>
             )}
