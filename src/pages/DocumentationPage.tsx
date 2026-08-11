@@ -2292,6 +2292,17 @@ const DocumentationPage: React.FC = () => {
                                         share a slot, since each is simulated on its own.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Buffed stats:</span> the crit
+                                        multiplier and the average buffed attack/crit shown for each
+                                        config are read from the simulation itself, averaged over
+                                        every turn your ship takes &mdash; so a buff that only lands
+                                        halfway through the fight counts for the part of the fight
+                                        it was up, and an extra action counts as the extra turn it
+                                        is. Hovering a round in the chart also lists what each side
+                                        still carries at the end of that round, which is what makes
+                                        an expired or cleansed effect visibly disappear.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">
                                             Rounds to Kill & Ranking:
                                         </span>{' '}
