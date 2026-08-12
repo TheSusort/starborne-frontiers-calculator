@@ -19,6 +19,7 @@ import {
 import {
     DEFAULT_HEALER_SLOT,
     defaultEnemySlot,
+    defaultHealTargetSlot,
     defaultHealingTeamSlot,
     resolveEnemySlots,
 } from './healingPlacement';
@@ -58,8 +59,12 @@ export interface EnemyAttackerInput {
          *  it and every `basis:'damage-dealt'` rider silently pays out zero. */
         hp?: number;
         /** Enemy's own security — resists the HEALER's outbound debuffs. Absent → the pre-SP-3
-         *  fixed 100; the engine's own default is 0, which would make debuffs land strictly more
-         *  often than they ever did. */
+         *  fixed 100, which is also what the engine's LANDING path would have used on its own:
+         *  `debuffLandingChance` reads `defender.stats.security ?? 100` (effectiveStats.ts:137).
+         *  (`effectiveStatsOf`'s `?? 0` exists but has no landing reader.) So the default is a
+         *  belt-and-braces no-op here, kept explicit so the sink's numbers all live in one place —
+         *  unlike `hp`/`defence` above, whose engine defaults genuinely ARE 0
+         *  (engine.ts:668,718). */
         security?: number;
     };
     chargeCount: number;
@@ -201,21 +206,40 @@ const FOCUS_ID = 'attacker';
  * healTargetAffinity) (the enemy is the attacker, the heal target the defender) — producing
  * each enemy's affinityDamageModifier / affinityCritCap / affinityCritPenalty. Absent enemy
  * or target affinity → neutral (modifier 0, cap 100, penalty 0). The HEALER's own offense still
- * passes affinityDamageModifier 0 / cap 100 / penalty 0, and the team walk is derived with no
- * enemy affinity.
+ * passes the pre-resolved affinityDamageModifier 0 / cap 100 / penalty 0, and the team walk is
+ * derived with no enemy affinity.
+ *
+ * ⚠️ AFFINITY ASYMMETRY, deliberate. `healTargetAffinity` is threaded as the RAW `affinity` of
+ * whichever actor IS the heal target, because the positional path re-resolves every matchup from
+ * raw affinities per victim and ignores the pre-resolved scalars. When the healer self-heals, that
+ * raw affinity lands on the FOCUS actor, where the engine also reads it as `attackerAffinity`
+ * (engine.ts:2088) — so the healer's OWN offensive matchup vs each enemy goes live, and its damage
+ * cast (and any `damage-dealt` rider off it) swings ±25%. When healing an ALLY the focus carries no
+ * affinity at all, so the healer's offence stays neutral. The clean long-term shape is a dedicated
+ * `healerAffinity` input rather than borrowing `healTargetAffinity` for two jobs; until then the
+ * self-heal case is the more faithful of the two and the ally case the more conservative.
  *
  * POSITIONAL (SP-3). Both rosters are placed on the board and both sides fight for real: every
  * player ship and every enemy gets a cell (`resolvePlayerSlots` / `resolveEnemySlots`, so no two
  * same-side actors share one — a collision silently ERASES the earlier actor from that cell), and
- * every actor carries a ParsedTarget + ParsedPattern. Consequences the pre-SP-3 dummy run did not
- * have: the healer's damage cast lands per-victim on a real enemy (so `basis:'damage-dealt'` riders
- * scale off that enemy's own defence), enemies can be KILLED and stop bombarding, and heals reach
- * exactly the allies the caster's support footprint covers (`perRecipientHealApply`). An off-
- * footprint heal target receives nothing at all; that is game-faithful and deliberately not
- * softened — correct default placement (`healingPlacement.ts`) is the mitigation.
+ * every actor on BOTH sides — focus, team actors, enemies — carries a ParsedTarget + ParsedPattern,
+ * defaulted to front/base when the caller supplies none. That default is load-bearing, not tidiness:
+ * a team actor's axes are sourced exclusively from `teamTargetById`/`teamPatternById`
+ * (engine.ts:1869-1885), so an actor missing them has `selectTurnTarget` short-circuit to
+ * `legacyVictim` — the dummy — and its `basis:'damage-dealt'` riders then scale off the sink's
+ * 10,000 defence instead of the real enemy's.
  *
- * The vestigial dummy is only still the opponent when `enemies` is EMPTY, which production never
- * does (the page seeds one enemy and offers no delete). See the LEGACY_SINK_* comment below.
+ * Consequences the pre-SP-3 dummy run did not have: every player cast lands per-victim on a real
+ * enemy (so `basis:'damage-dealt'` riders scale off that enemy's own defence), enemies can be
+ * KILLED and stop bombarding, and heals reach exactly the allies the caster's support footprint
+ * covers (`perRecipientHealApply`). An off-footprint heal target receives nothing at all; that is
+ * game-faithful and deliberately not softened — correct default placement (`healingPlacement.ts`,
+ * via `defaultHealTargetSlot`) is the only mitigation.
+ *
+ * The vestigial dummy is the opponent only where positional resolution yields nothing: when
+ * `enemies` is EMPTY (a test-only shape — the page seeds one enemy and offers no delete), or when a
+ * placed actor's target/pattern resolves to no victim at all, since `selectTurnTarget` ends in
+ * `selected ?? legacyVictim` (engine.ts:6465). See the LEGACY_SINK_* comment below.
  *
  * Rounding: every healing number is rounded with Math.round (mirroring RoundData's damage
  * rounding). Raws are accumulated UNROUNDED and rounded LAST — per-row summed buckets and the
@@ -250,10 +274,13 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     //     collects attack/crit/critDamage/speed/hacking. Defaulting matters, and NOT to the
     //     engine's own zeros: `hp ?? 0` makes an enemy that already sits at 0 HP, so the healer's
     //     cast delivers NOTHING to it and every `basis:'damage-dealt'` rider silently pays out
-    //     zero (measured: scenario 12's shield went 1258 → 0), while `security ?? 0` lets the
-    //     healer's debuffs land strictly more often than they ever did. So an unspecified enemy
-    //     keeps behaving exactly like the pre-SP-3 punching bag — just positioned, and killable
-    //     the moment a caller gives it real numbers.
+    //     zero (measured: scenario 12's shield went 1258 → 0). `LEGACY_SINK_SECURITY` is the odd
+    //     one out: it is a NO-OP, not a bug-preventer, because the engine's landing path already
+    //     defaults an absent target security to 100 (`defender.stats.security ?? 100`,
+    //     effectiveStats.ts:137 — `effectiveStatsOf`'s `?? 0` has no landing reader). It stays
+    //     explicit only so the sink's three numbers live together. So an unspecified enemy keeps
+    //     behaving exactly like the pre-SP-3 punching bag — just positioned, and killable the
+    //     moment a caller gives it real numbers.
     //
     // SP-4 retires the dummy outright; until then these keep their pre-SP-3 values.
     const LEGACY_SINK_DEFENCE = 10000;
@@ -277,9 +304,23 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // Player-side slots (SP-3). resolvePlayerSlots is load-bearing, not tidiness: the positional
     // maps are keyed by cell, so on a collision the LATER actor silently ERASES the earlier one
     // from that cell. slots[0] is the healer and keeps its slot.
+    const healerSlot = input.healerPosition ?? DEFAULT_HEALER_SLOT;
+    const healerActivePattern = input.healerTargeting?.active?.pattern;
     const playerWanted: Position[] = [
-        input.healerPosition ?? DEFAULT_HEALER_SLOT,
-        ...(teamActors ?? []).map((t, i) => t.position ?? defaultHealingTeamSlot(i)),
+        healerSlot,
+        ...(teamActors ?? []).map((t, i) => {
+            if (t.position) return t.position;
+            // The HEAL TARGET's default is coverage-aware, and that is load-bearing: heals apply
+            // only to the recipients the caster's support footprint covers, and an off-footprint
+            // heal target receives NOTHING (measured: directHeal 0 / totalHealing 0 under
+            // `Pattern-Line-Support-Range-1` with the target on the generic team slot). The zero is
+            // game-faithful and deliberately not softened, so the DEFAULT must simply not walk into
+            // it — `defaultHealTargetSlot` seeds a cell the healer's own footprint covers (and
+            // returns the neutral mid-board slot when there is no support pattern to reason about).
+            return t.id === healTargetId
+                ? defaultHealTargetSlot(healerSlot, healerActivePattern)
+                : defaultHealingTeamSlot(i);
+        }),
     ];
     const playerSlots = resolvePlayerSlots(playerWanted);
     // SP-3, load-bearing: on the POSITIONAL path the pre-resolved `affinityDamageModifier` scalars
@@ -288,10 +329,23 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // target therefore has to actually CARRY `healTargetAffinity`, or every enemy's matchup
     // collapses to neutral and the documented ±25% swing silently disappears. Threaded onto
     // whichever actor IS the heal target; an actor's own `affinity` always wins.
+    // The parsed axes mirror the enemy branch below EXACTLY, and for the same reason: a team
+    // actor's target/pattern are sourced ONLY from `teamTargetById`/`teamPatternById`
+    // (engine.ts:1869-1885, read at :6134-6142), which are populated only from `t.target`/
+    // `t.pattern`. With neither, `selectTurnTarget` short-circuits to `legacyVictim` — the dummy —
+    // however well-positioned the roster is, and the actor's `basis:'damage-dealt'` riders then
+    // compute against the sink's 10,000 defence instead of the real enemy's (measured 2579 vs 7753
+    // on a walked ally with attack 10,000 vs an enemy at defence 1,000 — a ~3× error that surfaces
+    // as `teamHealing`). It bites the DEFAULT production config, whose heal target walks
+    // `buildDefaultShipSkills()` — a kit that carries a damage ability.
     const positionedTeamActors = (teamActors ?? []).map((t, i) => ({
         ...t,
         position: playerSlots[i + 1],
         affinity: t.affinity ?? (t.id === healTargetId ? healTargetAffinity : undefined),
+        target: t.target ?? DEFAULT_FRONT_ENEMY_TARGET,
+        pattern: t.pattern ?? DEFAULT_BASE_PATTERN,
+        chargedTarget: t.chargedTarget,
+        chargedPattern: t.chargedPattern,
     }));
     /** The focus actor is the HEALER, so it is the heal target only in the self-heal case. */
     const focusAffinity = healTargetId === FOCUS_ID ? healTargetAffinity : undefined;

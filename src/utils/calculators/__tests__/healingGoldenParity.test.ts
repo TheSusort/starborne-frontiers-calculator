@@ -512,9 +512,12 @@ describe('healingGoldenParity', () => {
     // path (healModifier + outgoing + incoming, crit gated — here all 0/noCrit). A team actor
     // t1 is present and is the heal target (healer ≠ heal target), so all-allies routing is
     // exercised across both player ids (['attacker','t1']). The rider credits the FOCUS bucket
-    // for every recipient (per-recipient directHeal credit), while consumption (applyHealToTarget)
-    // routes only to t1. No enemies → t1 stays full → all overheal. Spot-checked for plausibility
-    // (routed-cast heal-conservation; no NaN; cumulative monotonic).
+    // for every recipient (per-recipient directHeal credit). CONSUMPTION now fans out as well:
+    // the adapter passes `perRecipientHealApply: true`, so every recipient the caster reaches
+    // (here BOTH 'attacker' and t1) absorbs its own share — it no longer spends the whole heal on
+    // the single configured heal target, and that widening is why this snapshot moved. No enemies →
+    // everyone stays full → all overheal. Spot-checked for plausibility (routed-cast
+    // heal-conservation; no NaN; cumulative monotonic).
     snap('Tithonus/Pallas shape (all-allies noCrit cast rider, routed to a team target)', () => {
         const team: TeamActorInput = {
             id: 't1',

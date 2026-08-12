@@ -17,6 +17,8 @@
 import { describe, it, expect } from 'vitest';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import type { TeamActorInput } from '../../../types/calculator';
+import { createEventBus } from '../../combat/events';
 import { parsePattern, parseTarget } from '../../targetingParser';
 
 /** The engine keys the focus actor as `'attacker'`, never the page's ship id. */
@@ -123,10 +125,18 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
                 security: 100,
             },
         };
-        const result = simulateHealing(BASE({ rounds: 3, enemies: [glassCannon] }));
+        // Tap `ship-destroyed` so the test asserts the CAUSE (the enemy died), not just the
+        // symptom (incoming stopped). Without this, "no incoming after round 1" would also pass
+        // if the enemy merely stopped resolving a target for some unrelated reason.
+        const bus = createEventBus();
+        const destroyed: string[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e.actorId));
+        const result = simulateHealing(BASE({ rounds: 3, enemies: [glassCannon], bus }));
 
         // Precondition: it DID hit in round 1. Without this the assertion below is vacuous.
         expect(result.rounds[0].incomingDamage).toBeGreaterThan(0);
+        // It actually DIED — the cause of the silence below.
+        expect(destroyed).toContain('enemy-1');
         // And it died, so rounds 2-3 take nothing.
         const laterIncoming = result.rounds.slice(1).reduce((n, r) => n + r.incomingDamage, 0);
         expect(laterIncoming).toBe(0);
@@ -141,5 +151,210 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         const dealt = result.rounds[0].perTargetDealt;
         expect(dealt).toBeDefined();
         expect(Object.keys(dealt![FOCUS_ID_IN_ENGINE] ?? {})).toContain('enemy-1');
+    });
+
+    // ── A TEAM actor's cast lands on the real enemy too, not the sink ────────────────
+    //
+    // A team actor's parsed axes are sourced ONLY from `teamTargetById`/`teamPatternById`
+    // (engine.ts:1869-1885), so `position` alone is not enough: without target AND pattern the
+    // actor's cast falls back to `legacyVictim` — the 10,000-defence sink — and every
+    // `basis:'damage-dealt'` rider it owns computes off THAT defence (measured 2579 vs 7753 here,
+    // a ~3× error surfacing as `teamHealing`). NO golden fixture covers this (every golden team
+    // actor carries an empty or heal-only kit), so this is the only guard for it.
+    it("a walked team actor's damage credits the REAL enemy, not the legacy sink", () => {
+        idc = 0;
+        const allyDamage: TeamActorInput = {
+            id: 'ally',
+            speed: 50,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position: 'M1',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            stats: {
+                attack: 10_000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1_000,
+                hp: 50_000,
+            },
+        };
+        const result = simulateHealing(
+            BASE({
+                // The focus contributes nothing, so the only cast measured is the team actor's.
+                shipSkills: { slots: [] },
+                teamActors: [allyDamage],
+                enemies: [enemy('enemy-1', 1_000, 500_000)],
+            })
+        );
+        // Per-victim credit keyed by the REAL enemy id is the positional-apply proof: the sink path
+        // credits a plausible cumulative number while leaving this map empty.
+        expect(result.rounds[0].perTargetDealt?.ally).toBeDefined();
+        expect(Object.keys(result.rounds[0].perTargetDealt!.ally)).toEqual(['enemy-1']);
+        expect(result.rounds[0].perTargetDealt!.ally['enemy-1']).toBeGreaterThan(0);
+    });
+
+    // ── The support footprint gates which allies a heal reaches ──────────────────────
+    //
+    // ⚠️ THE ZERO BELOW IS INTENDED BEHAVIOUR (owner ruling, 2026-08-12). `resolveSupportRecipients`
+    // FILTERS the recipient list by the caster's support footprint and never expands it, so a heal
+    // target standing off that footprint receives NOTHING AT ALL. Do NOT "fix" this by adding a
+    // fallback recipient, widening the filter, or falling back to the configured target — it is
+    // game-faithful. Correct DEFAULT placement (`defaultHealTargetSlot`) is the only permitted
+    // mitigation, which is exactly what the third leg pins.
+    it('a support pattern gates heal recipients; the DEFAULT slot lands inside the footprint', () => {
+        const tank = (position?: 'M1' | 'M3'): TeamActorInput => ({
+            id: 'tank',
+            speed: 10,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            ...(position ? { position } : {}),
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 200_000,
+            },
+        });
+        /** Heals the configured ally for 40% of the CASTER's hp → 50,000 × 40% = 20,000. */
+        const allyHeal = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'heal',
+                            target: 'ally',
+                            config: { type: 'heal', pct: 40, basis: 'hp' },
+                        }),
+                    ],
+                },
+            ],
+        });
+        const run = (position?: 'M1' | 'M3') => {
+            idc = 0;
+            return simulateHealing(
+                BASE({
+                    shipSkills: allyHeal(),
+                    healTargetId: 'tank',
+                    teamActors: [tank(position)],
+                    healerPosition: 'M2',
+                    healerTargeting: {
+                        active: {
+                            target: parseTarget('front'),
+                            // A real SUPPORT pattern — the whole point. Every other healing fixture
+                            // uses a non-support pattern, which never filters ally recipients at all
+                            // (`supportFootprintAllyIds` returns undefined), so none of them can
+                            // observe this.
+                            pattern: parsePattern('Pattern-Line-Support-Range-1'),
+                        },
+                    },
+                })
+            );
+        };
+
+        // ANTI-VACUITY ANCHOR: on-footprint the heal is real, so the zero below is about coverage
+        // and not about a kit that simply never heals.
+        expect(run('M3').summary.totalHealing).toBeGreaterThan(0);
+        // Off-footprint: nothing lands. INTENDED — see the block comment above.
+        expect(run('M1').summary.totalHealing).toBe(0);
+        // The DEFAULT (no explicit position anywhere) must land INSIDE the footprint, or the
+        // out-of-the-box page reports zero healing. This is the regression guard for wiring
+        // `defaultHealTargetSlot` into the adapter's player-slot resolution.
+        expect(run().summary.totalHealing).toBeGreaterThan(0);
+    });
+
+    // ── healTargetAffinity reaches a TEAM heal target, not just the focus ────────────
+    //
+    // The adapter threads `healTargetAffinity` onto whichever actor IS the heal target. Every other
+    // affinity fixture in the repo uses `healTargetId: 'healer'`, so they only ever exercise the
+    // FOCUS branch (`focusAffinity`). This pins the TEAM branch — the page's non-self-heal path.
+    //
+    // ⚠️ TRAP: the raw affinity reaches the engine actor via `t.walk?.affinity`, so a team actor
+    // with no `shipSkills`/`stats` (hence no walk) silently drops it and this fixture would measure
+    // neutral in both legs. Both actors below therefore walk a kit.
+    it('healTargetAffinity applies when the heal target is a TEAM actor, and only to it', () => {
+        const walked = (id: string, position: 'M3' | 'M4'): TeamActorInput => ({
+            id,
+            speed: 10,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position,
+            // A walk bundle is REQUIRED for the raw affinity to reach the engine actor (see above).
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 200_000,
+            },
+        });
+        /** thermal enemy at speed 999 (acts first), hitting the FRONT cell — the tank at M4. */
+        const thermalEnemy = {
+            id: 'enemy-1',
+            stats: {
+                attack: 4_000,
+                crit: 0,
+                critDamage: 0,
+                speed: 999,
+                defence: 0,
+                hp: 1_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            affinity: 'thermal' as const,
+            position: 'M4' as const,
+            target: parseTarget('front'),
+            pattern: parsePattern('Pattern-Base'),
+        };
+        const run = (healTargetId: 'tank' | 'ally') => {
+            idc = 0;
+            return simulateHealing(
+                BASE({
+                    shipSkills: { slots: [] },
+                    healTargetId,
+                    // chemical LOSES to thermal → +25% for the enemy vs whoever carries it.
+                    healTargetAffinity: 'chemical',
+                    teamActors: [walked('tank', 'M4'), walked('ally', 'M3')],
+                    enemies: [thermalEnemy],
+                    healerPosition: 'M2',
+                })
+            );
+        };
+        // Same board, same victim (the tank at the front) in both legs — the ONLY difference is
+        // whether the tank is the heal target and therefore carries `healTargetAffinity`.
+        const tankIsTarget = run('tank').rounds[0].perTargetDealt?.['enemy-1']?.tank;
+        const allyIsTarget = run('ally').rounds[0].perTargetDealt?.['enemy-1']?.tank;
+
+        // Positive leg: the team heal target carries chemical → thermal's +25% advantage lands.
+        expect(tankIsTarget).toBe(5_000);
+        // Negative leg: the SAME actor, now merely an ally and not the heal target, stays neutral.
+        expect(allyIsTarget).toBe(4_000);
     });
 });
