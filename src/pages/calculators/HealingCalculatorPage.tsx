@@ -249,6 +249,16 @@ const HealingCalculatorPage: React.FC = () => {
         { id: '1', name: 'Enemy 1', ...defaultEnemyStats(0) },
     ]);
 
+    // ⚠️ NO `position` HERE, DELIBERATELY. `position` on a team ship means "the user picked this
+    // cell": `resolveHealingPlayerPlacement` reads its presence as an EXPLICIT placement and lets it
+    // outrank the heal target's coverage-aware default. Seeding the index-derived default into state
+    // made every untouched team ship look deliberate, so `contestedByExplicit` fired against a
+    // *default*, the heal target lost its nomination and was evicted to the first free cell in
+    // `ATTACKER_SLOT_OPTIONS` order — chosen with no knowledge of coverage. Measured on the default
+    // board with Volk (`Pattern-Line-Support-from-centre-Range-1`, covering {M2, M1, M3} from M2):
+    // the moment a separate heal target was chosen, the untouched team ship's "explicit" M1 took the
+    // heal target's only covered cell and the page reported 0 healing — no placement edit involved.
+    // The default is a DISPLAY value only, supplied by `teamShipSlot` below.
     const [teamShips, setTeamShips] = useState<TeamShipConfig[]>([
         {
             id: 'team-1',
@@ -257,7 +267,6 @@ const HealingCalculatorPage: React.FC = () => {
             startCharged: false,
             speed: 100,
             chargeCount: 0,
-            position: defaultHealingTeamSlot(0),
         },
     ]);
 
@@ -401,6 +410,10 @@ const HealingCalculatorPage: React.FC = () => {
     const addTeamShip = () => {
         if (teamShips.length >= 4) return;
         const id = `team-${nextTeamIdRef.current++}`;
+        // Again NO `position`: an added ship the user has not placed must stay a DEFAULT, or it
+        // outranks the heal target's coverage-aware cell (see the state initialiser above).
+        // `teamShipSlot(id, index)` shows `defaultHealingTeamSlot(index)` for it, which is the very
+        // cell the adapter will resolve for it.
         setTeamShips((prev) => [
             ...prev,
             {
@@ -410,10 +423,6 @@ const HealingCalculatorPage: React.FC = () => {
                 startCharged: false,
                 speed: 100,
                 chargeCount: 0,
-                position: firstFreeSlot(
-                    defaultHealingTeamSlot(prev.length),
-                    prev.map((t) => t.position)
-                ),
             },
         ]);
     };
@@ -429,7 +438,9 @@ const HealingCalculatorPage: React.FC = () => {
                         startCharged: false,
                         speed: 100,
                         chargeCount: 0,
-                        position: prev[0].position ?? defaultHealingTeamSlot(0),
+                        // Carried through as-is, `undefined` included: an untouched ship must not
+                        // gain an explicit cell just because the roster shrank to one.
+                        position: prev[0].position,
                     },
                 ];
             return prev.filter((t) => t.id !== id);
@@ -502,7 +513,7 @@ const HealingCalculatorPage: React.FC = () => {
     // ---- Derived sim inputs ----
     const teamActors = useMemo<TeamActorInput[]>(
         () =>
-            teamShips.map((t, i) => ({
+            teamShips.map((t) => ({
                 id: t.id,
                 speed: t.speed,
                 chargeCount: t.chargeCount,
@@ -513,9 +524,13 @@ const HealingCalculatorPage: React.FC = () => {
                 stats: t.stats,
                 affinity: t.affinity,
                 role: t.role,
-                // Board cell. Required for a positional run: the engine needs BOTH this and an
-                // opposing actor's cell, and heals only reach allies inside the caster's footprint.
-                position: t.position ?? defaultHealingTeamSlot(i),
+                // Board cell, ONLY when the user actually picked one — the same shape `targetActor`
+                // uses below, and for the same reason. Left absent, the adapter applies
+                // `defaultHealingTeamSlot(index)` itself (identical to what `teamShipSlot` displays)
+                // and, crucially, treats the ship as UNPLACED, so it cannot outrank the heal
+                // target's coverage-aware default. Sending the default here made every untouched
+                // team ship look deliberate and could evict the heal target off its covered cell.
+                ...(t.position ? { position: t.position } : {}),
             })),
         [teamShips]
     );
@@ -691,9 +706,12 @@ const HealingCalculatorPage: React.FC = () => {
     // the adapter — a named follow-up, not an oversight.
     const placementWarnings = useMemo(() => {
         const allies = [
+            // `position` stays `undefined` for an unplaced ship — `resolveHealingPlayerPlacement`
+            // must see the SAME explicit/default split the sim sees, or the warning reasons about a
+            // different board than the one being simulated.
             ...teamShips.map((t, i) => ({
                 id: t.id,
-                position: t.position ?? defaultHealingTeamSlot(i),
+                position: t.position,
                 name: (t.shipId && getShipById(t.shipId)?.name) || `Team ${i + 1}`,
             })),
             ...(target.useHealerAsTarget

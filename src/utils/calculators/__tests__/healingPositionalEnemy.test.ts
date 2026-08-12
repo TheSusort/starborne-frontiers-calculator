@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { TeamActorInput } from '../../../types/calculator';
+import type { Position } from '../../../types/encounters';
 import { createEventBus } from '../../combat/events';
 import { parsePattern, parseTarget } from '../../targetingParser';
 
@@ -306,14 +307,18 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
     // team slots), never a widened footprint or a fallback recipient — the off-footprint zero itself
     // stays intact (pinned by the fixture above).
     it('a crowded board does not evict the heal target off its covered cell', () => {
-        const filler = (id: string): TeamActorInput => ({
+        const filler = (id: string, position?: Position): TeamActorInput => ({
             id,
             speed: 10,
             chargeCount: 0,
             startCharged: false,
             selfBuffs: [],
             enemyDebuffs: [],
-            // Deliberately UNPOSITIONED — this is what makes them compete for default cells.
+            // UNPOSITIONED by default — that is what makes these allies compete for the
+            // index-derived default cells, and it is the shape the page sends for a ship the user has
+            // not placed. The third leg below passes EXPLICIT cells instead, which is a different
+            // ruling entirely (the user wins, and the heal target may be left healing nobody).
+            ...(position ? { position } : {}),
             stats: {
                 attack: 0,
                 crit: 0,
@@ -340,14 +345,14 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
                 },
             ],
         });
-        const run = (crowded: boolean) => {
+        const run = (allies: TeamActorInput[]) => {
             idc = 0;
             return simulateHealing(
                 BASE({
                     shipSkills: allyHeal(),
                     healTargetId: 'tank',
-                    // The page's own shape: generic allies first, heal target LAST.
-                    teamActors: crowded ? [filler('a0'), filler('a1'), filler('a2'), tank] : [tank],
+                    // Generic allies first, heal target LAST — the order the page appends in.
+                    teamActors: allies,
                     healerPosition: 'M2',
                     healerTargeting: {
                         active: {
@@ -360,13 +365,105 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
             );
         };
 
-        // Both legs pin the VALUE, not a floor. `toBeGreaterThan(0)` would stay green if a partial
+        // Every leg pins the VALUE, not a floor. `toBeGreaterThan(0)` would stay green if a partial
         // regression evicted the heal target onto a DIFFERENT covered cell and the heal landed on
         // some other recipient instead — 20,000 is the caster's hp 50,000 x 40%, i.e. the full cast
         // landing on the heal target and nobody else.
-        expect(run(false).summary.totalHealing).toBe(20_000);
-        // Crowded: the same heal must still land — the heal target keeps its covered cell.
-        expect(run(true).summary.totalHealing).toBe(20_000);
+        expect(run([tank]).summary.totalHealing).toBe(20_000);
+        // Crowded, allies UNPOSITIONED: they compete for the index-derived defaults, and the heal
+        // target's coverage-aware default still wins T2.
+        expect(run([filler('a0'), filler('a1'), filler('a2'), tank]).summary.totalHealing).toBe(
+            20_000
+        );
+        // ⚠️ THE OTHER DIRECTION, AND IT IS A ZERO — pinned deliberately, and NOT a bug to fix here.
+        // Same board, but the allies now carry EXPLICIT cells, one of them (T2) the very cell the
+        // heal target's coverage-aware default wants. `contestedByExplicit` therefore drops the heal
+        // target's nomination, the explicit ally keeps T2 (as `healingPlacement.test.ts` pins), and
+        // the heal target lands on T1 — outside the cone → nothing lands. Owner-ruled game-faithful:
+        // the user's placement is authoritative and the off-footprint zero is never softened.
+        //
+        // It is pinned because it is the CONSEQUENCE a caller must not manufacture. The healing page
+        // used to send exactly this shape for allies the user had never touched — it seeded
+        // `defaultHealingTeamSlot(index)` straight into team-ship state, so an untouched ship was
+        // indistinguishable from a deliberate placement and a freshly-configured page reported 0.
+        // The page-side guard is in `HealingCalculatorPage.test.tsx` ('a default team ship does not
+        // evict the heal target off its covered cell'); this leg is why that guard has to exist.
+        expect(
+            run([filler('a0', 'M1'), filler('a1', 'T2'), filler('a2', 'T3'), tank]).summary
+                .totalHealing
+        ).toBe(0);
+    });
+
+    // ── The measured Volk board: one team ship, unplaced heal target ─────────────────
+    //
+    // The narrowest board the healing page can present — a single team ship and a heal target the
+    // user has not placed — and the one where seeding display defaults into state cost EVERYTHING.
+    // Volk's active pattern is `Pattern-Line-Support-from-centre-Range-1`, which from M2 covers
+    // {M2, M1, M3}, so the heal target's coverage-aware default is M1 — and `defaultHealingTeamSlot(0)`
+    // is ALSO M1. The two legs below differ ONLY in whether that team ship's M1 is presented as a
+    // deliberate placement, and they differ by the whole cast.
+    //
+    // The cone fixture above cannot substitute: its covered set starts T2, which only collides with
+    // `defaultHealingTeamSlot(1)`, so it needs a crowded board to reach the contest at all. This
+    // pattern collides on the FIRST team ship, which is why a default page hit it.
+    it('a single default team ship leaves the heal target covered; an explicit one takes its cell', () => {
+        const ally = (position?: Position): TeamActorInput => ({
+            id: 'a0',
+            speed: 10,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            ...(position ? { position } : {}),
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 200_000,
+            },
+        });
+        const tank: TeamActorInput = { ...ally(), id: 'tank', shipSkills: { slots: [] } };
+        const run = (allyPosition?: Position) => {
+            idc = 0;
+            return simulateHealing(
+                BASE({
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'heal',
+                                        target: 'ally',
+                                        config: { type: 'heal', pct: 40, basis: 'hp' },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                    healTargetId: 'tank',
+                    teamActors: [ally(allyPosition), tank],
+                    healerPosition: 'M2',
+                    healerTargeting: {
+                        active: {
+                            target: parseTarget('front'),
+                            pattern: parsePattern('Pattern-Line-Support-from-centre-Range-1'),
+                        },
+                    },
+                })
+            );
+        };
+
+        // The shape the page sends: the team ship is UNPLACED, so the heal target's coverage-aware
+        // default claims M1 and the generic ally is the one that gives way. Full cast lands.
+        expect(run().summary.totalHealing).toBe(20_000);
+        // The shape the page used to send for a ship the user had never touched. The explicit M1 wins
+        // (correctly — owner ruling), the heal target is pushed to T1, and the heal reaches nobody.
+        // This measured 0 on a freshly configured page; it must only ever be reachable on purpose.
+        expect(run('M1').summary.totalHealing).toBe(0);
     });
 
     // ── healTargetAffinity reaches a TEAM heal target, not just the focus ────────────

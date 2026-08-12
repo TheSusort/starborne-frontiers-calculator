@@ -237,6 +237,15 @@ describe('EnemyAttackersPanel', () => {
 
         fireEvent.change(screen.getByLabelText('HP'), { target: { value: '1' } });
         expect(onUpdate).toHaveBeenCalledWith('1', { hp: 1 });
+        // HP clamps to 1, not 0. Clearing the field is the reachable path to 0 (parseInt('') is NaN),
+        // and 0 is the one value the field must never emit: a 0-HP enemy starts the run already
+        // destroyed, so the healer's cast delivers nothing to it and every damage-dealt rider pays
+        // out zero. A typed 0 must not get through either.
+        fireEvent.change(screen.getByLabelText('HP'), { target: { value: '' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { hp: 1 });
+        fireEvent.change(screen.getByLabelText('HP'), { target: { value: '0' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { hp: 1 });
+        expect(onUpdate).not.toHaveBeenCalledWith('1', { hp: 0 });
         fireEvent.change(screen.getByLabelText('Defence'), { target: { value: '9000' } });
         expect(onUpdate).toHaveBeenCalledWith('1', { defence: 9000 });
         fireEvent.change(screen.getByLabelText('Security'), { target: { value: '250' } });

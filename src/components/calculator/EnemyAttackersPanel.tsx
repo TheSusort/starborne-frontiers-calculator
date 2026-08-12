@@ -34,9 +34,9 @@ export interface EnemyAttackerConfig {
     shipSkills?: ShipSkills;
     /** Board slot. Column 4 is the FRONT. Seeded by defaultEnemySlot(index). */
     position: Position;
-    /** Enemy's own max HP — it can now be destroyed. Never default this to 0: a 0-HP enemy is
+    /** Enemy's own max HP — it can now be destroyed. Never 0, defaulted OR entered: a 0-HP enemy is
      *  already dead, so the healer's cast delivers nothing to it and every `damage-dealt` rider
-     *  silently pays out zero. */
+     *  silently pays out zero. The HP field clamps to 1 for exactly this reason. */
     hp: number;
     /** Enemy's own defence — the basis for the healer's damage-dealt riders. */
     defence: number;
@@ -125,10 +125,15 @@ const EnemyCard: React.FC<{
                 <Input
                     label="HP"
                     type="number"
-                    min="0"
+                    // Clamped to 1, NOT 0 — the one value `EnemyAttackerConfig.hp` documents as
+                    // unreachable. A 0-HP enemy enters the run already destroyed: the healer's cast
+                    // delivers nothing to it and every `basis:'damage-dealt'` heal or shield rider
+                    // silently pays out zero. Clearing the field yields NaN, so the `|| 1` fallback
+                    // matters as much as the clamp does.
+                    min="1"
                     value={enemy.hp}
-                    onChange={(e) => onUpdate({ hp: Math.max(0, parseInt(e.target.value) || 0) })}
-                    helpLabel="The enemy's own max HP. It can be destroyed, and a destroyed enemy stops attacking."
+                    onChange={(e) => onUpdate({ hp: Math.max(1, parseInt(e.target.value) || 1) })}
+                    helpLabel="The enemy's own max HP. It can be destroyed, and a destroyed enemy stops attacking. Minimum 1 — an enemy with 0 HP would start the fight already destroyed."
                 />
                 <Input
                     label="Defence"
