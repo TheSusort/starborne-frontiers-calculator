@@ -27,7 +27,7 @@ const allyTarget = (): ParsedTarget => ({ raw: 'allies', side: 'ally', selection
 
 // ⚠️ CRITICAL MECHANIC — read before touching these fixtures.
 // `resolveSupportRecipients` (supportRecipients.ts:15-19) FILTERS `baseRecipients` by the
-// footprint; it NEVER expands it. And `recipientsFor` (playerTurn.ts:3342-3352) builds that base as:
+// footprint; it NEVER expands it. And `recipientsFor` (playerTurn.ts:3347-3362) builds that base as:
 //   'self'                          → [actor.id]
 //   'all-allies'                    → playerIds        ← the only MULTI-element base
 //   single 'ally', teamBattle ON    → [lowestHpAllyId(playerIds)]
@@ -225,13 +225,13 @@ describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
         //
         // NOTE — this test is deliberately INSENSITIVE to `perRecipientHealApply` itself: with
         // `positionalTeamBattle` absent, `healing.teamBattle` is false, so `recipientsFor`
-        // (playerTurn.ts:3354) takes the single-element `else base = [healing.targetId]` branch —
+        // (playerTurn.ts:3361) takes the single-element `else base = [healing.targetId]` branch —
         // there is no second candidate for the flag to include or exclude, and
-        // `applyHealToTarget`'s `victim` default (engine.ts:2984) already resolves to the same
+        // `applyHealToTarget`'s `victim` default (engine.ts:3005) already resolves to the same
         // actor either way. That is the point, not a gap: the fence's job here is to prove the
         // flag does NOT leak into routing, which this asserts by construction (flag on, routing
         // unchanged from the no-flag case below). Its discriminating power is against the
-        // OPPOSITE regression — someone gating `playerTurn.ts:3353` on `perRecipientHealApply`
+        // OPPOSITE regression — someone gating `playerTurn.ts:3360` on `perRecipientHealApply`
         // instead of `teamBattle` — which would heal the low-HP ally here and fail this test.
         expect(target!.currentHp).toBeGreaterThan(45_000);
         expect(low!.currentHp).toBe(10_000);

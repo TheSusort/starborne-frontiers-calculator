@@ -27,7 +27,7 @@ const allyTarget = (): ParsedTarget => ({ raw: 'allies', side: 'ally', selection
 
 // ⚠️ CRITICAL MECHANIC — read before touching these fixtures.
 // `resolveSupportRecipients` (supportRecipients.ts:15-19) FILTERS `baseRecipients` by the
-// footprint; it NEVER expands it. And `recipientsFor` (playerTurn.ts:3342-3352) builds that base as:
+// footprint; it NEVER expands it. And `recipientsFor` (playerTurn.ts:3347-3362) builds that base as:
 //   'self'                          → [actor.id]
 //   'all-allies'                    → playerIds        ← the only MULTI-element base
 //   single 'ally', teamBattle ON    → [lowestHpAllyId(playerIds)]
