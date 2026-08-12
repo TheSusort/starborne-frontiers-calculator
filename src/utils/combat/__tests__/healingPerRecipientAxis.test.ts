@@ -113,10 +113,21 @@ const BASE = (): CombatEngineInput => ({
     ],
 });
 
-/** Damage both allies to 50% so every heal has headroom (no all-overheal vacuity). */
+/** Damage both allies to 50% so every heal has headroom (no all-overheal vacuity).
+ *
+ *  This tap DELIBERATELY DIVERGES from its counterpart in
+ *  `healingPerRecipientApply.test.ts` (a copied fixture kept intentionally out of sync — do
+ *  NOT "fix" this by re-syncing the two files) by ALSO damaging the FOCUS healer
+ *  (`FOCUS_ID`/'attacker'). Without that, the healer casts `all-allies` at full HP, so its own
+ *  share of the heal is 100% overheal and its `perRecipient` entry is zero — leaving exactly
+ *  ONE non-zero recipient (the on-pattern ally). A sum over a single non-zero term is
+ *  invariant to which key holds it, so the "recipient axis sums to source axis" test would
+ *  pass even if the whole total were misattributed to the wrong recipient. Damaging the
+ *  healer too gives it heal headroom, producing a SECOND non-zero recipient and making the
+ *  sum assertion actually exercise addition across recipients. */
 const halveAllyHp = (actors: CombatActor[]): void => {
     for (const a of actors) {
-        if (a.id === ON_FOOTPRINT_ID || a.id === OFF_FOOTPRINT_ID) {
+        if (a.id === ON_FOOTPRINT_ID || a.id === OFF_FOOTPRINT_ID || a.id === FOCUS_ID) {
             a.currentHp = Math.floor(a.stats.hp / 2);
         }
     }
@@ -161,6 +172,19 @@ describe('SP-3a: recipient-keyed healing aggregate', () => {
         // Anti-vacuity: both sides must be non-zero, or the identity is trivially true.
         expect(bySource).toBeGreaterThan(0);
         expect(byRecipient).toBeCloseTo(bySource, 6);
+
+        // Anti-vacuity (recipient COUNT): a sum is invariant to which key holds the value, so
+        // "sum matches" is only a real test of addition if at least TWO recipients contribute a
+        // non-zero effectiveHeal. The healer is now damaged (see `halveAllyHp`'s comment above)
+        // so its own self-heal share has headroom, giving it a non-zero entry alongside the
+        // on-pattern ally's — proving the total is actually built by adding across recipients,
+        // not just echoing a single source's value under a single recipient key.
+        const focusEntry = round.perRecipient.get(FOCUS_ID);
+        const onPatternEntry = round.perRecipient.get(ON_FOOTPRINT_ID);
+        expect(focusEntry).toBeDefined();
+        expect(focusEntry!.effectiveHeal).toBeGreaterThan(0);
+        expect(onPatternEntry).toBeDefined();
+        expect(onPatternEntry!.effectiveHeal).toBeGreaterThan(0);
     });
 
     it('without the flag the recipient map stays EMPTY (additive proof)', () => {
