@@ -47,9 +47,22 @@ export function defaultHealTargetSlot(
 ): Position {
     if (!healerPattern?.modifiers.support) return NEUTRAL_HEAL_TARGET_SLOT;
 
-    const covered = resolveCells(healerPattern, healerSlot)
-        .map((c) => c.position)
-        .filter((p) => p !== healerSlot);
+    // `resolveCells` THROWS for a pattern signature with no offset table (resolvePattern.ts:40) —
+    // and this helper now sits on `simulateHealing`'s hot path, so an unguarded throw would surface
+    // as a React render crash once the UI threads real ship targeting. The corpus is currently safe
+    // (`docs/ship-targeting.csv`: none of its 14 support patterns throws today), so this is a guard
+    // against a FUTURE offset-table gap, not a bug being papered over — e.g. the parseable-but-
+    // tableless `Pattern-Line-Support-Range-2` (signature `line|2|support`) throws right now if a
+    // ship ever ships it. An unknown footprint tells us nothing about coverage, so fall back to the
+    // neutral slot exactly as an absent/non-support pattern does.
+    let coveredCells: ReturnType<typeof resolveCells>;
+    try {
+        coveredCells = resolveCells(healerPattern, healerSlot);
+    } catch {
+        return NEUTRAL_HEAL_TARGET_SLOT;
+    }
+
+    const covered = coveredCells.map((c) => c.position).filter((p) => p !== healerSlot);
 
     return covered.find((p) => !p.endsWith('4')) ?? covered[0] ?? NEUTRAL_HEAL_TARGET_SLOT;
 }

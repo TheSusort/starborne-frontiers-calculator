@@ -95,6 +95,18 @@ describe('defaultHealTargetSlot — minimal autoplace (decision 9)', () => {
         );
     });
 
+    it('falls back to the neutral default instead of THROWING on a tableless pattern', () => {
+        // `Pattern-Line-Support-Range-2` parses cleanly to signature `line|2|support`, which has NO
+        // offset table, so `resolveCells` throws (resolvePattern.ts:40) — and this helper is on
+        // `simulateHealing`'s hot path, so an unguarded throw becomes a React render crash once the
+        // UI threads real ship targeting. No ship in `docs/ship-targeting.csv` currently uses it, so
+        // this is a tripwire for a future offset-table gap, not a live bug.
+        const pattern = parsePattern('Pattern-Line-Support-Range-2');
+        // Precondition: the underlying call really does throw, or this test guards nothing.
+        expect(() => resolveCells(pattern, 'M2')).toThrow();
+        expect(defaultHealTargetSlot('M2', pattern)).toBe('M3');
+    });
+
     it('prefers a non-front covered cell over the naive first match', () => {
         // Every other case in this file uses a forward-LINE pattern, where traversal order always
         // places the column-4 cell last in `covered` — so "prefer non-front" and "take the first

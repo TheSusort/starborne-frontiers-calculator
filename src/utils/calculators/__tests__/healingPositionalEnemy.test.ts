@@ -227,6 +227,12 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
             selfBuffs: [],
             enemyDebuffs: [],
             ...(position ? { position } : {}),
+            // A walk bundle is REQUIRED for `stats` to reach the engine: `deriveTeamEngineActors`
+            // classifies an actor with no `shipSkills` as LEGACY (`!t.shipSkills || !t.stats`) and
+            // gives it hp 1 / defence 0, leaving the 200,000 below inert. Harmless for the raw
+            // totals asserted here, but one edit from vacuity if anyone asserts on `targetHpPct` or
+            // `overheal` — same reason the affinity fixture below walks a kit.
+            shipSkills: { slots: [] },
             stats: {
                 attack: 0,
                 crit: 0,
@@ -283,6 +289,81 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         // out-of-the-box page reports zero healing. This is the regression guard for wiring
         // `defaultHealTargetSlot` into the adapter's player-slot resolution.
         expect(run().summary.totalHealing).toBeGreaterThan(0);
+    });
+
+    // ── The heal target's covered cell SURVIVES a crowded board ──────────────────────
+    //
+    // `defaultHealTargetSlot` picks a cell the healer's support footprint covers, but that cell is
+    // often one `defaultHealingTeamSlot` also hands out (its order starts 'M1','T2','T3','B2'). The
+    // page appends the heal target LAST (`[...teamActors, targetActor]`), so without a priority pass
+    // an earlier generic ally claims the cell first and the heal target gets EVICTED to the first
+    // free cell in `ATTACKER_SLOT_OPTIONS` order — a cell chosen with no knowledge of coverage.
+    // Measured before the fix, healer @ M2 with `Pattern-Cone-Support-Range-1`: a0→M1, a1→T2,
+    // a2→T3, tank→T2 collides → evicted to T1, which is OUTSIDE the cone's covered set
+    // {M2,T2,M3,B2} → totalHealing 0 where the same board alone yields 20,000.
+    //
+    // The fix is placement PRIORITY (the heal target's wanted cell is reserved before the generic
+    // team slots), never a widened footprint or a fallback recipient — the off-footprint zero itself
+    // stays intact (pinned by the fixture above).
+    it('a crowded board does not evict the heal target off its covered cell', () => {
+        const filler = (id: string): TeamActorInput => ({
+            id,
+            speed: 10,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            // Deliberately UNPOSITIONED — this is what makes them compete for default cells.
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 200_000,
+            },
+        });
+        const tank: TeamActorInput = { ...filler('tank'), shipSkills: { slots: [] } };
+        /** Heals the configured ally for 40% of the CASTER's hp → 50,000 × 40% = 20,000. */
+        const allyHeal = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'heal',
+                            target: 'ally',
+                            config: { type: 'heal', pct: 40, basis: 'hp' },
+                        }),
+                    ],
+                },
+            ],
+        });
+        const run = (crowded: boolean) => {
+            idc = 0;
+            return simulateHealing(
+                BASE({
+                    shipSkills: allyHeal(),
+                    healTargetId: 'tank',
+                    // The page's own shape: generic allies first, heal target LAST.
+                    teamActors: crowded ? [filler('a0'), filler('a1'), filler('a2'), tank] : [tank],
+                    healerPosition: 'M2',
+                    healerTargeting: {
+                        active: {
+                            target: parseTarget('front'),
+                            // Cone @ M2 covers {M2,T2,M3,B2}; T2 is also defaultHealingTeamSlot(1).
+                            pattern: parsePattern('Pattern-Cone-Support-Range-1'),
+                        },
+                    },
+                })
+            );
+        };
+
+        // ANTI-VACUITY CONTRAST: alone, the default placement already lands on a covered cell.
+        expect(run(false).summary.totalHealing).toBeGreaterThan(0);
+        // Crowded: the same heal must still land — the heal target keeps its covered cell.
+        expect(run(true).summary.totalHealing).toBeGreaterThan(0);
     });
 
     // ── healTargetAffinity reaches a TEAM heal target, not just the focus ────────────

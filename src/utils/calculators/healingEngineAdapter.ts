@@ -322,7 +322,23 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
                 : defaultHealingTeamSlot(i);
         }),
     ];
-    const playerSlots = resolvePlayerSlots(playerWanted);
+    // The heal target's wanted cell gets placement PRIORITY over the generic team defaults.
+    // Load-bearing, not tidiness: `defaultHealTargetSlot` returns a cell the healer's support
+    // footprint COVERS, but that cell is frequently one `defaultHealingTeamSlot` also hands out
+    // (both draw from the same small pool — e.g. T2 is both the Cone-Support pick from M2 and
+    // `defaultHealingTeamSlot(1)`), and the page appends the heal target LAST
+    // (`[...teamActors, targetActor]`). Without priority the earlier generic ally claims the cell
+    // and the heal target is evicted to the first free `ATTACKER_SLOT_OPTIONS` cell — chosen with NO
+    // knowledge of coverage — putting it back off-footprint for exactly zero healing (measured 20000
+    // → 0 on a 4-ally board under Cone-Support / Forward-Circle / Line-Support). Priority is the
+    // only permitted mitigation shape: the off-footprint zero itself is game-faithful and is never
+    // softened by widening the footprint or falling back to another recipient.
+    // `+ 1` because `playerWanted[0]` is the healer; index 0 already outranks everything.
+    const healTargetTeamIndex = (teamActors ?? []).findIndex((t) => t.id === healTargetId);
+    const playerSlots = resolvePlayerSlots(
+        playerWanted,
+        healTargetTeamIndex >= 0 ? [healTargetTeamIndex + 1] : []
+    );
     // SP-3, load-bearing: on the POSITIONAL path the pre-resolved `affinityDamageModifier` scalars
     // below are BYPASSED — `victimHitDamage` recomputes each matchup from the attacker's RAW
     // affinity against the VICTIM's own `CombatActor.affinity` (playerTurn.ts:1250). The heal
