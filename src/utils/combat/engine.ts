@@ -1541,6 +1541,12 @@ export interface HealingRoundEngine {
      *  load-bearing: the healing report's `effectiveHealing`/`overheal` read this axis, so a source
      *  that credited only `perActor` would silently vanish from the reported consumption.
      *
+     *  `creditLandedRepair` is a `runCombat`-local closure, not an export — `tickHot`
+     *  (playerTurn.ts) and the reactive executor (triggers.ts) live in OTHER modules and cannot
+     *  reach it, so each duplicates the `perRecipientApply` gate check inline instead of calling
+     *  through. A future (seventh) cross-module credit site has nothing to reach for either — it
+     *  must add its own inline gate, the same way those two do.
+     *
      *  `shield` and `cleanseCount` are still SOURCE-ONLY and deliberately so — the shield pool lands
      *  per-recipient via `grantShieldToTarget`, but no recipient-side shield TOTAL is computed, and
      *  the healing report keeps both source-keyed to match.

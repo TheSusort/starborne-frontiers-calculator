@@ -193,7 +193,21 @@ export interface HealingRoundData {
      *
      *  Every repair whose pool application succeeded is on this axis — cast repairs, HoT ticks,
      *  leeches and reactive repairs (SP-3b Task 7). `shield`/`cleanseCount` are NOT: they have no
-     *  recipient-side total, which is exactly why the row keeps them source-keyed. */
+     *  recipient-side total, which is exactly why the row keeps them source-keyed.
+     *
+     *  ⚠️ FOR THE PER-ALLY TABLE (Task 9) THAT READS THIS: two invariants people expect from the
+     *  legacy source-only report do NOT hold once you sum across this map.
+     *    1. `Σ perRecipient[*].directHeal` is ≤ the row's own `directHeal` — NOT equal to it. Only
+     *       LANDED repairs are mirrored here (an `all-allies` leech credits the source's raw for
+     *       every ally but only mirrors the one(s) it actually repaired), so the per-recipient
+     *       rows never sum back up to the source row.
+     *    2. The row-level `effectiveHealing + overheal <= totalRoundHealing` invariant, true on
+     *       the OLD single-axis report, no longer holds once `effectiveHealing`/`overheal` are
+     *       recipient-axis and `totalRoundHealing` stays source-axis. E.g. the role-filtered
+     *       regeneration scenario legitimately shows `effectiveHealing: 1000, overheal: 1500,
+     *       totalRoundHealing: 0` (the repairs came from an ally, not the focus healer). Do not
+     *       "fix" a table that renders numbers like that — it is the two axes disagreeing by
+     *       design, not a bug. */
     perRecipient?: Record<
         string,
         { directHeal: number; hotHeal: number; effectiveHealing: number; overheal: number }
@@ -537,7 +551,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // cast-only axis silently DELETED every non-cast repair from the report (measured on the
         // healing goldens: Magnolia's standing-leech overheal 1258 → 0, the HoT scenario's 2000 →
         // 500, Isha's reactive effectiveHealing 15000 → 0 — all repairs that genuinely landed on
-        // the heal target). SP-3b Task 7 therefore completed the axis at the five non-cast
+        // the heal target). SP-3b Task 7 therefore completed the axis at the six non-cast
         // consumption sites (engine.ts `creditLandedRepair` ×4, playerTurn.ts `tickHot`,
         // triggers.ts's reactive executor). If a future source applies a repair without mirroring
         // it, this row silently under-reports again — see `HealingRoundEngine.perRecipient`.

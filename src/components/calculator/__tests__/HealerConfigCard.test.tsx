@@ -97,10 +97,55 @@ describe('HealerConfigCard', () => {
         expect(screen.getByLabelText('Heal Modifier (%)')).toHaveValue(20);
         expect(screen.getByText('Effective Healing')).toBeInTheDocument();
         expect(screen.getByText('Shield Absorbed')).toBeInTheDocument();
-        // Overheal with % of raw: 1000 / 6000 = 17%
-        expect(screen.getByText(/1,000 \(17% of raw\)/)).toBeInTheDocument();
+        // Overheal % of LANDED (recipient axis): totalOverheal / (totalEffectiveHealing +
+        // totalOverheal) = 1000 / (5000 + 1000) = 17%. This fixture's totalHealing (6000)
+        // happens to equal totalEffectiveHealing + totalOverheal too, so the number is
+        // unchanged from the pre-fix "of raw" reading — the mixed-axis regression test below is
+        // what actually distinguishes the two computations.
+        expect(screen.getByText(/1,000 \(17% of landed\)/)).toBeInTheDocument();
         // The conditional "Barrier Absorbed" card is ABSENT when totalBarrierAbsorbed === 0.
         expect(screen.queryByText('Barrier Absorbed')).not.toBeInTheDocument();
+    });
+
+    // Review fix (SP-3b Task 7): `totalOverheal` is RECIPIENT-axis while `totalHealing` stayed
+    // SOURCE-axis, so dividing overheal by totalHealing mixes the two — e.g. the role-filtered
+    // regeneration scenario ends with totalOverheal: 4500, totalHealing: 0 (repairs came from an
+    // ally, not the focus healer), which rendered "4,500 (0% of raw)" under the old formula.
+    // The fixed ratio uses two recipient-axis numbers: totalOverheal / (totalEffectiveHealing +
+    // totalOverheal) = 4500 / (3000 + 4500) = 60%.
+    it('computes the overheal percentage from same-axis (recipient) numbers, not source throughput', () => {
+        const mixedAxisResult: HealingSimulationResult = {
+            rounds: [],
+            summary: {
+                totalHealing: 0, // SOURCE-axis: the focus healer cast nothing itself.
+                totalDirectHeal: 0,
+                totalHotHeal: 0,
+                totalShield: 0,
+                totalCleanses: 0,
+                totalEffectiveHealing: 3000, // RECIPIENT-axis: landed on the heal target via an ally.
+                totalOverheal: 4500, // RECIPIENT-axis.
+                totalShieldAbsorbed: 0,
+                totalBarrierAbsorbed: 0,
+                totalIncomingDamage: 0,
+                avgHealingPerRound: 0,
+            },
+        };
+        render(
+            <HealerConfigCard
+                config={config}
+                isBest
+                isComparing={false}
+                simResult={mixedAxisResult}
+                bestEffectiveHealing={3000}
+                onRemove={noop}
+                onUpdate={noop}
+                onSelectShip={noop}
+                onStartChargedChange={noop}
+                onShipSkillsChange={noop}
+            />
+        );
+        expect(screen.getByText(/4,500 \(60% of landed\)/)).toBeInTheDocument();
+        expect(screen.queryByText(/0% of raw/)).not.toBeInTheDocument();
     });
 
     it('renders the Barrier Absorbed card when totalBarrierAbsorbed > 0', () => {

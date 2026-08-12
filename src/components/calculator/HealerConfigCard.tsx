@@ -68,9 +68,17 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
         (selectedShip ? !!getSkillRowForSlot(selectedShip, 'passive') : false);
 
     const summary = simResult?.summary;
-    const overhealPctOfRaw =
-        summary && summary.totalHealing > 0
-            ? Math.round((summary.totalOverheal / summary.totalHealing) * 100)
+    // RECIPIENT-axis ratio (SP-3b Task 7 review fix): `totalOverheal` is recipient-axis (the
+    // heal target's OWN clipped over-repair), so it must be divided by another recipient-axis
+    // number, not the SOURCE-axis `totalHealing` (the healer's raw throughput — mixing axes
+    // produced nonsensical percentages, e.g. "4,500 (0% of raw)" when the repairs came from an
+    // ally rather than the focus healer). `totalEffectiveHealing + totalOverheal` IS the raw
+    // amount that landed on the heal target (both are recipient-axis), so that sum is the
+    // correct same-axis denominator.
+    const totalLandedOnTarget = summary ? summary.totalEffectiveHealing + summary.totalOverheal : 0;
+    const overhealPctOfLanded =
+        summary && totalLandedOnTarget > 0
+            ? Math.round((summary.totalOverheal / totalLandedOnTarget) * 100)
             : 0;
     const vsBest =
         isComparing && !isBest && bestEffectiveHealing && summary
@@ -252,7 +260,7 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
 
                         <SummaryRow
                             label="Overheal"
-                            value={`${summary.totalOverheal.toLocaleString()} (${overhealPctOfRaw}% of raw)`}
+                            value={`${summary.totalOverheal.toLocaleString()} (${overhealPctOfLanded}% of landed)`}
                         />
                         <SummaryRow
                             label="Survival"

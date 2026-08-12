@@ -193,3 +193,102 @@ describe('SP-3a: recipient-keyed healing aggregate', () => {
         expect(result.healing!.rounds[0].perRecipient.size).toBe(0);
     });
 });
+
+// ── Review fix (SP-3b Task 7): the flag-off fence must cover EVERY credit site ─────────────
+// `perRecipient` must stay EMPTY when per-recipient application is off — every legacy healing
+// golden's byte-identity depends on that emptiness. Six sites credit the axis: the direct
+// cast-repair site (already exercised by the `BASE()` fixture above, an `all-allies` heal),
+// four via `creditLandedRepair` (engine.ts, one shared early-return gate), and two inline
+// gates that CANNOT reach `creditLandedRepair` — it is a `runCombat`-local closure, not an
+// export — so they duplicate the gate check themselves: playerTurn.ts's HoT tick
+// (`if (healing.perRecipientApply)`, ~:3474) and triggers.ts's reactive executor
+// (`if (ctx.healing.perRecipientApply)`, ~:3441). The `BASE()` fixture above is cast-only (one
+// `all-allies` heal, no HoT/leech/reactive), so deleting either inline gate — or the shared
+// `creditLandedRepair` early return — left the WHOLE suite green. This fixture is deliberately
+// NON-positional (no position/target/pattern), mirroring `healing.test.ts`'s BASE: the
+// HoT/leech/reactive gates below need no positional resolution, and adding it would entangle
+// with the pattern-routing semantics the fixture above already exists to test.
+describe('SP-3b Task 7 (review fix): flag-off fence covers HoT + leech + reactive sites', () => {
+    const damageAb = (): Ability =>
+        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } });
+
+    // Passive-slot standing leech (basis damage-dealt, self) — procs through engine.ts's
+    // `procStandingLeeches`, which calls the shared `creditLandedRepair` closure.
+    const standingLeechAb = (): Ability =>
+        ab({
+            type: 'heal',
+            target: 'self',
+            config: { type: 'heal', pct: 20, basis: 'damage-dealt', leechScope: 'all' },
+        });
+
+    // Passive-slot reactive start-of-round self-heal — fires through triggers.ts's reactive
+    // executor every round (registerReactiveListeners), independent of the cast path.
+    const reactiveHealAb = (): Ability =>
+        ab({
+            type: 'heal',
+            target: 'self',
+            trigger: 'start-of-round',
+            config: { type: 'heal', pct: 10, basis: 'hp' },
+        });
+
+    const HOT_LEECH_REACTIVE_BASE = (): CombatEngineInput => ({
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        enemyDefense: 0,
+        enemyHp: 10_000_000,
+        numRounds: 1,
+        // A scheduled (no-caster) HoT on the focus/heal target — ticks every turn via
+        // playerTurn.ts's `tickHot`, holder === target branch (the gate under review).
+        selfBuffs: [
+            {
+                id: 'sched-hot',
+                buffName: 'Repair Over Time I',
+                stacks: 1,
+                isStackable: false,
+                parsedEffects: { hotPct: 10 },
+            },
+        ],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 2000,
+        hp: 10000,
+        healTargetId: FOCUS_ID,
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [damageAb()] },
+                { slot: 'passive', abilities: [standingLeechAb(), reactiveHealAb()] },
+            ],
+        },
+    });
+
+    it('flag off: perRecipient stays EMPTY with a HoT tick + standing leech + reactive heal all firing', () => {
+        idc = 0;
+        const result = runCombat(HOT_LEECH_REACTIVE_BASE());
+        const round = result.healing!.rounds[0];
+
+        // Anti-vacuity: each source actually produced something this round — otherwise an
+        // empty map would be trivially true regardless of whether the gates exist at all.
+        const focus = round.perActor.get(FOCUS_ID)!;
+        expect(focus.hotHeal).toBeGreaterThan(0); // the scheduled HoT ticked
+        expect(focus.directHeal).toBeGreaterThan(0); // standing leech + reactive heal both credit directHeal
+
+        expect(round.perRecipient.size).toBe(0);
+    });
+
+    it('flag on: the SAME fixture DOES populate perRecipient (positive control)', () => {
+        idc = 0;
+        const result = runCombat({ ...HOT_LEECH_REACTIVE_BASE(), perRecipientHealApply: true });
+        const round = result.healing!.rounds[0];
+        expect(round.perRecipient.size).toBeGreaterThan(0);
+        expect(round.perRecipient.get(FOCUS_ID)?.hotHeal ?? 0).toBeGreaterThan(0);
+    });
+});
