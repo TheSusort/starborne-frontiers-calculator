@@ -137,6 +137,53 @@ should behave that way. That looks like a latent battle-sim defect. **SP-3 does 
 changing it would move sim goldens for reasons unrelated to this sub-project. File it as follow-up
 work.
 
+### 3.2 Findings earned during PR 3a — read before starting 3b
+
+**A single-`ally` heal can now be filtered to EMPTY.** `resolveSupportRecipients`
+(`supportRecipients.ts:15-19`) **filters** `baseRecipients` by the footprint and never expands it,
+and `recipientsFor` (`playerTurn.ts:3346-3357`) builds that base as `[healing.targetId]` for a
+single-`ally` heal. So once the run is positional, if the configured heal target stands OFF the
+caster's support footprint, the heal reaches **nobody at all**. Previously inert, because with no
+positions `footprintAllyIdsFor` returns `undefined` and the filter is skipped.
+⚠️ Consequence for §2 decision 6: twelve slot dropdowns do not make a footprint visible, so a user
+can silently configure a zero-healing board. Worth revisiting whether the UI must show the footprint.
+
+**Multi-ally pattern healing comes ONLY from `all-allies` abilities** — a single-`ally` ability has
+exactly one base recipient, so the pattern can only remove it, never spread it.
+
+**Per-recipient application covers ONE of four apply sites.** `triggers.ts:3433` (reactive /
+on-destroyed heals), `playerTurn.ts:3465` (HoT ticks) and `engine.ts:3532` (`procStandingLeeches`)
+all still apply only when `rid === healing.targetId` and ignore `perRecipientApply`. PR 3a keeps exact
+parity with the battle sim, which has the identical gap, so this is correctly scoped — **but after 3b a
+HoT or reactive heal aimed at an ally still restores nothing on that ally while the source axis credits
+its gross amount.** PR 3c must not promise a complete per-ally picture. Likewise **shields, HoT ticks,
+leeches and reactive heals are not on the `perRecipient` axis** — only direct cast repairs are.
+⚠️ If shields are ever added to the axis, the grant site (`playerTurn.ts:3730-3738`) has **no flag
+gate** — it routes per-recipient unconditionally — so the credit **must** be gated on
+`perRecipientApply`, or the map becomes non-empty on legacy runs and the byte-identical guarantee dies.
+
+**PR 3b needs a FOURTH allowed golden cause.** Beyond *enemy now acts* / *enemy can die* / *heals now
+land on a footprint*: flipping the flag makes each ally's clipped over-repair appear on
+`heal-performed.perTarget[].overheal` → `overhealByAlly` (`triggers.ts:696-709`), which fans **new
+per-ally Abundant Renewal shield grants** (`triggers.ts:3375-3383`). Expected, not defects.
+
+**PR 3b must repoint the summary, not merely accept the movement.**
+`healingEngineAdapter.ts:278-284` derives `effectiveHealing` / `overheal` from
+`perActor.get(FOCUS_ID)` — the SOURCE axis. With the flag on, that bucket starts including repairs
+that landed on other allies, so the reported "effective healing" silently changes meaning from *onto
+the tank* to *onto anyone*. Task 7 must read the heal target's row from
+`perRecipient.get(healTargetId)`. This is precisely why the axis was added.
+
+**Expect large healing-golden movement in 3b from the flag ALONE.** With no positions wired yet,
+`footprintAllyIdsFor` returns `undefined`, so an `all-allies` heal is unfiltered and lands on every
+ally. PR 3a's zero-movement gate proves additivity but says nothing about blast radius, because no
+production caller sets the flag.
+
+**Accepted spec deviation:** the recipient axis is NOT behind a separate opt-in collector flag (SP-2's
+`collectStatusTimeline` pattern, as §5 PR 3a proposed). It rides `perRecipientApply`, so the battle sim
+populates it too. Harmless — nothing reads it and the legacy emptiness invariant still holds — and
+simpler than a second flag.
+
 ### The one genuinely new engine piece
 
 The healing report is keyed by **source**, not recipient:
