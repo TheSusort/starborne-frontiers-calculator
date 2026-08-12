@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import HealingCalculatorPage from '../HealingCalculatorPage';
 import type { Ship } from '../../../types/ship';
@@ -193,6 +193,48 @@ describe('HealingCalculatorPage', () => {
                 "Team 1 is outside Centre Medic's support pattern and will receive no healing from it."
             )
         ).toBeInTheDocument();
+    });
+
+    // ── Task 9: the per-ally breakdown ──────────────────────────────────────────
+    //
+    // The point of the table is that a heal now reaches whoever the caster's support footprint
+    // covers, so "how much did the ship I am keeping alive actually receive" is a RECIPIENT-axis
+    // question the healer's own throughput cannot answer. The table must name the receiving ship
+    // and mark the configured heal target as the primary row.
+    it('breaks the reported healing down per receiving ally', () => {
+        mockGetShipById.mockImplementation((id) =>
+            id === centreSupportHealer.id ? centreSupportHealer : undefined
+        );
+        render(
+            <MemoryRouter initialEntries={[`/healing?shipId=${centreSupportHealer.id}`]}>
+                <HealingCalculatorPage />
+            </MemoryRouter>
+        );
+        // A separate heal target puts a second ally on the board — with the healer self-healing
+        // there is only ever one recipient and the table proves nothing about the axis.
+        fireEvent.click(screen.getByLabelText('Use healer as target (heal self)'));
+
+        const table = screen.getByRole('region', { name: 'Healing by ally' });
+        // The heal target's row, found BY the primary mark: the same 40% x 40,000 x 20 rounds =
+        // 320,000 the source-axis guard above pins, seen from the recipient side. Every point is
+        // overheal (the target sits behind the healer and takes no fire), which is precisely the
+        // pair of numbers the source row cannot distinguish.
+        const rows = within(table).getAllByRole('row');
+        const primary = rows.filter((r) => r.textContent?.includes('Primary'));
+        expect(primary).toHaveLength(1);
+        expect(primary[0]).toHaveTextContent('Heal Target');
+        expect(primary[0]).toHaveTextContent('320,000');
+    });
+
+    it('shows no per-ally breakdown when nothing landed on anyone', () => {
+        // ANTI-VACUITY CONTRAST: the default manual healer has no parseable repair at all, so the
+        // recipient axis is empty and the table must stay away rather than render an empty shell.
+        render(
+            <MemoryRouter>
+                <HealingCalculatorPage />
+            </MemoryRouter>
+        );
+        expect(screen.queryByRole('region', { name: 'Healing by ally' })).not.toBeInTheDocument();
     });
 
     it('survives a ship whose targeting strings do not parse', () => {

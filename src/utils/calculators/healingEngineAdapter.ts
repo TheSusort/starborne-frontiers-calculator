@@ -238,8 +238,14 @@ export interface HealingSimulationResult {
     };
 }
 
-/** The engine's internal focus actor id. */
-const FOCUS_ID = 'attacker';
+/**
+ * The engine's internal focus actor id — i.e. the HEALER.
+ *
+ * Exported because the RECIPIENT-axis maps (`HealingRoundData.perRecipient` and its summary
+ * counterpart) are keyed by ENGINE actor id, and the healer's key is this one, not the public
+ * `healTargetId: 'healer'` the input takes. A UI that labels those rows therefore has to know it.
+ */
+export const FOCUS_ID = 'attacker';
 
 /**
  * Thin adapter over the combat engine (`src/utils/combat/engine.ts`) running in HEALING

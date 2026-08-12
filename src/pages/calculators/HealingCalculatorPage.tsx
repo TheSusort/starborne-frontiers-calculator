@@ -26,6 +26,8 @@ import {
     simulateHealing,
     HealingSimulationResult,
     EnemyAttackerInput,
+    // The engine's focus-actor id — the key the RECIPIENT-axis map uses for the healer itself.
+    FOCUS_ID as HEALER_ACTOR_ID,
 } from '../../utils/calculators/healingEngineAdapter';
 import {
     DEFAULT_HEALER_SLOT,
@@ -49,6 +51,10 @@ import {
 import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
 import { HealingCumulativeChart } from '../../components/calculator/HealingCumulativeChart';
+import {
+    HealingRecipientBreakdown,
+    RecipientRow,
+} from '../../components/calculator/HealingRecipientBreakdown';
 import { HealingTimelineChart } from '../../components/calculator/HealingTimelineChart';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
@@ -784,6 +790,41 @@ const HealingCalculatorPage: React.FC = () => {
         .totalEffectiveHealing;
     const bestResult = bestConfig ? simResults.get(bestConfig.id) : undefined;
 
+    /**
+     * A RECIPIENT-axis row's engine actor id → the name the user picked it by.
+     *
+     * The map is keyed by ENGINE ids, which are not the ids this page hands out: the healer is the
+     * engine's focus actor (`HEALER_ACTOR_ID`), the heal target keeps `HEAL_TARGET_ID`, and a team
+     * ship keeps its own `team-N`. An unknown id falls through to itself rather than being hidden —
+     * a row that appears with a raw id is a wiring bug worth seeing, not one worth swallowing.
+     */
+    const recipientName = (id: string): string => {
+        if (id === HEALER_ACTOR_ID) return bestConfig?.name ?? 'Healer';
+        if (id === HEAL_TARGET_ID) {
+            return (target.shipId && getShipById(target.shipId)?.name) || 'Heal Target';
+        }
+        const index = teamShips.findIndex((t) => t.id === id);
+        if (index >= 0) {
+            const t = teamShips[index];
+            return (t.shipId && getShipById(t.shipId)?.name) || `Team ${index + 1}`;
+        }
+        return id;
+    };
+
+    /**
+     * The best config's per-ally rows. `summary.perRecipient` is "absent when empty" and OMITS
+     * all-zero recipients, so this is the set of allies a repair actually LANDED on — never "every
+     * ally the healer reaches". The two are different, and the gap is what the placement warning
+     * above exists to explain.
+     */
+    const recipientRows: RecipientRow[] = Object.entries(
+        bestResult?.summary.perRecipient ?? {}
+    ).map(([id, r]) => ({
+        id,
+        effectiveHealing: r.totalEffectiveHealing,
+        overheal: r.totalOverheal,
+    }));
+
     return (
         <>
             <Seo {...SEO_CONFIG.healing} />
@@ -1006,6 +1047,18 @@ const HealingCalculatorPage: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    {/* Per-ally breakdown for the best config. Configs are alternatives simulated
+                        on separate boards, so the rows belong to exactly one of them — named in a
+                        subtitle whenever there is more than one to choose between. */}
+                    <HealingRecipientBreakdown
+                        recipients={recipientRows}
+                        healTargetId={target.useHealerAsTarget ? HEALER_ACTOR_ID : HEAL_TARGET_ID}
+                        nameFor={recipientName}
+                        {...(configs.length > 1 && bestConfig
+                            ? { configName: bestConfig.name }
+                            : {})}
+                    />
 
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">About the Simulation</h2>
