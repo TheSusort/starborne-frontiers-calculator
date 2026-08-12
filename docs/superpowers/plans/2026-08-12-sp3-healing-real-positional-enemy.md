@@ -94,12 +94,32 @@ const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => 
 
 const allyTarget = (): ParsedTarget => ({ raw: 'allies', side: 'ally', selection: 'all' });
 
-/** A single-`ally` repair for a flat 5000 (10% of the 50000 hp basis). */
-const allyHeal = (): Ability =>
+// ⚠️ CRITICAL MECHANIC — read before touching these fixtures.
+// `resolveSupportRecipients` (supportRecipients.ts:15-19) FILTERS `baseRecipients` by the
+// footprint; it NEVER expands it. And `recipientsFor` (playerTurn.ts:3342-3352) builds that base as:
+//   'self'                          → [actor.id]
+//   'all-allies'                    → playerIds        ← the only MULTI-element base
+//   single 'ally', teamBattle ON    → [lowestHpAllyId(playerIds)]
+//   single 'ally', teamBattle OFF   → [healing.targetId]
+// So a single-`ally` heal has exactly ONE base recipient and the pattern can only REMOVE it.
+// Multi-ally pattern healing therefore comes only from `all-allies` abilities. Fixture A uses
+// `all-allies` to exercise the application half; Fixture B uses single-`ally` to exercise the
+// routing fence, because that is the only shape that reaches `lowestHpAllyId` at all.
+
+/** `all-allies` repair for 10% of the caster's 50000 hp basis → 5000 raw per recipient. */
+const allAlliesHeal = (): Ability =>
+    ab({ type: 'heal', target: 'all-allies', config: { type: 'heal', pct: 10, basis: 'hp' } });
+
+/** Single-`ally` repair — the ONLY shape that reaches the lowest-HP routing branch. */
+const singleAllyHeal = (): Ability =>
     ab({ type: 'heal', target: 'ally', config: { type: 'heal', pct: 10, basis: 'hp' } });
 
 const healerSkills = (): ShipSkills => ({
-    slots: [{ slot: 'active', abilities: [allyHeal()] }],
+    slots: [{ slot: 'active', abilities: [allAlliesHeal()] }],
+});
+
+const singleAllyHealerSkills = (): ShipSkills => ({
+    slots: [{ slot: 'active', abilities: [singleAllyHeal()] }],
 });
 
 // ⚠️ A DIRECT-ENGINE test MUST supply the `walk` bundle itself.
@@ -163,10 +183,11 @@ const BASE = (): CombatEngineInput => ({
     target: allyTarget(),
     pattern: parsePattern('Pattern-Line-Support-Range-1'),
     teamActors: [
-        // ON the footprint (M4), starts damaged so a heal has room to land.
+        // ON the footprint (M4). Same max HP as the off-footprint ally so the ONLY difference
+        // between them is which cell they stand on.
         teamAlly(ON_FOOTPRINT_ID, 'M4', 50_000),
-        // OFF the footprint (M1), far lower max HP => far lower current HP.
-        teamAlly(OFF_FOOTPRINT_ID, 'M1', 10_000),
+        // OFF the footprint (M1) — the support pattern from M3 covers only {M3, M4}.
+        teamAlly(OFF_FOOTPRINT_ID, 'M1', 50_000),
     ],
 });
 
@@ -224,9 +245,9 @@ describe('SP-3a: per-recipient heal application is separable from lowest-HP rout
             },
         });
         expect(offFootprint).toBeDefined();
-        // Decision 7: heals follow the PATTERN, never lowest HP. This ally is the lowest-HP
-        // actor on the board and sits OFF the footprint, so it must receive nothing.
-        expect(offFootprint!.currentHp).toBe(5_000);
+        // Decision 7: heals follow the PATTERN. This ally is identical to the on-footprint one in
+        // every way EXCEPT its cell, so its receiving nothing isolates the pattern as the cause.
+        expect(offFootprint!.currentHp).toBe(25_000);
     });
 });
 ```
@@ -235,9 +256,11 @@ describe('SP-3a: per-recipient heal application is separable from lowest-HP rout
 
 Run: `npx vitest run src/utils/combat/__tests__/healingPerRecipientApply.test.ts`
 
-Expected: the first test PASSES (it pins today's behaviour). The second FAILS — `expected 25000 to be greater than 25000`. The third may pass incidentally; it becomes load-bearing once the flag works.
+Expected: tests 1 and 3 PASS (they pin today's behaviour — heals reach only `healTargetId`, which is
+the focus, so neither ally is touched). Test 2 FAILS with `expected 25000 to be greater than 25000`.
 
-If the *first* test fails, stop and investigate: the fixture is not reproducing current behaviour and every later assertion is untrustworthy.
+If test 1 or 3 fails, **stop and report** — the fixture is not reproducing current behaviour and
+every later assertion is untrustworthy. Do not adjust the fixture to make them pass.
 
 - [ ] **Step 3: Add the input flag**
 
@@ -303,29 +326,85 @@ Leave `:3350`'s `else if (healing.teamBattle) base = [lowestHpAllyId(healing.pla
 Run: `npx vitest run src/utils/combat/__tests__/healingPerRecipientApply.test.ts`
 Expected: all three PASS.
 
+⚠️ If test 2 still fails here, check whether the heal is reaching the ally as a RECIPIENT at all
+before suspecting the flag: subscribe to `heal-performed` and inspect its targets. `recipientsFor`
+must produce `ON_FOOTPRINT_ID`, which requires the ability to target `all-allies` — a single-`ally`
+ability collapses to `[healing.targetId]` and no flag can widen it.
+
 - [ ] **Step 8: Fence the gate in the OTHER direction**
 
 Add to the same file:
 
+This needs a SECOND fixture (B). Fixture A's heal is `all-allies`, which never reaches
+`lowestHpAllyId` at all — only a single-`ally` heal does. Both candidate allies sit ON the footprint
+here, so the footprint filter cannot mask the routing difference, and they carry **distinct HP
+fractions** because `lowestHpAllyId` compares `currentHp / maxHp`, not absolute HP (`playerTurn.ts:3333-3336`)
+— equal fractions would tie and resolve by iteration order, proving nothing.
+
 ```ts
+// ── Fixture B: the routing fence ────────────────────────────────────────────
+// Pattern-Line-Support-Range-3 @ M1 covers {M1, M2, M3, M4} (resolvePattern.test.ts:91-95),
+// so BOTH allies are on-footprint and only the ROUTING rule can distinguish them.
+const HIGH_HP_TARGET_ID = 'ally-high-hp-is-the-heal-target';
+const LOW_HP_ID = 'ally-low-hp';
+
+const FENCE = (): CombatEngineInput => ({
+    ...BASE(),
+    shipSkills: singleAllyHealerSkills(),
+    position: 'M1',
+    pattern: parsePattern('Pattern-Line-Support-Range-3'),
+    // The configured heal target is the HIGHER-HP ally, so "routed to the heal target" and
+    // "routed to the lowest-HP ally" predict DIFFERENT recipients.
+    healTargetId: HIGH_HP_TARGET_ID,
+    teamActors: [teamAlly(HIGH_HP_TARGET_ID, 'M2', 50_000), teamAlly(LOW_HP_ID, 'M3', 50_000)],
+});
+
+/** 90% for the heal target, 20% for the other — distinct FRACTIONS, no tie. */
+const setFenceHp = (actors: CombatActor[]): void => {
+    for (const a of actors) {
+        if (a.id === HIGH_HP_TARGET_ID) a.currentHp = 45_000;
+        if (a.id === LOW_HP_ID) a.currentHp = 10_000;
+    }
+};
+
 describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
-    it('positionalTeamBattle STILL routes a single-`ally` heal by lowest HP', () => {
+    it('perRecipientHealApply routes a single-`ally` heal to the HEAL TARGET, not lowest HP', () => {
         idc = 0;
-        let offFootprint: CombatActor | undefined;
+        let target: CombatActor | undefined;
+        let low: CombatActor | undefined;
         runCombat({
-            ...BASE(),
-            positionalTeamBattle: true,
+            ...FENCE(),
+            perRecipientHealApply: true,
             __testTapActors: (actors) => {
-                halveAllyHp(actors);
-                offFootprint = actors.find((a) => a.id === OFF_FOOTPRINT_ID);
+                setFenceHp(actors);
+                target = actors.find((a) => a.id === HIGH_HP_TARGET_ID);
+                low = actors.find((a) => a.id === LOW_HP_ID);
             },
         });
-        expect(offFootprint).toBeDefined();
-        // Under teamBattle the lowest-HP ally IS chosen, even off-pattern. This is the battle
-        // sim's shipped behaviour and PR 3a must not change it. Together with the previous
-        // test (same fixture, perRecipientHealApply instead) this proves the two flags drive
-        // DIFFERENT routing — the widened side alone would prove nothing about strictness.
-        expect(offFootprint!.currentHp).toBeGreaterThan(5_000);
+        // Decision 7: NOT lowest HP. The 20%-HP ally is on-pattern and still gets nothing.
+        expect(target!.currentHp).toBeGreaterThan(45_000);
+        expect(low!.currentHp).toBe(10_000);
+    });
+
+    it('positionalTeamBattle STILL routes that same heal by lowest HP', () => {
+        idc = 0;
+        let target: CombatActor | undefined;
+        let low: CombatActor | undefined;
+        runCombat({
+            ...FENCE(),
+            positionalTeamBattle: true,
+            __testTapActors: (actors) => {
+                setFenceHp(actors);
+                target = actors.find((a) => a.id === HIGH_HP_TARGET_ID);
+                low = actors.find((a) => a.id === LOW_HP_ID);
+            },
+        });
+        // The battle sim's shipped behaviour, unchanged by this PR: the 20% ally is chosen and the
+        // configured heal target gets nothing. Exactly inverted from the test above on the SAME
+        // fixture — which is what proves the two flags drive different routing. Asserting only the
+        // widened side would prove nothing about strictness.
+        expect(low!.currentHp).toBeGreaterThan(10_000);
+        expect(target!.currentHp).toBe(45_000);
     });
 });
 ```
@@ -333,9 +412,11 @@ describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
 - [ ] **Step 9: Run the fence test**
 
 Run: `npx vitest run src/utils/combat/__tests__/healingPerRecipientApply.test.ts`
-Expected: all four PASS.
+Expected: **all FIVE pass** — three in Fixture A, two in the fence.
 
-If the fence test fails, `perRecipientApply` has been wired in place of `teamBattle` at `:3350` rather than only at `:3628`. Re-read Step 6.
+If the SECOND fence test fails (`positionalTeamBattle` no longer routes by lowest HP),
+`perRecipientApply` has been wired in place of `teamBattle` at `:3350` rather than only at `:3628`.
+Re-read Step 6 — `:3350` must be untouched.
 
 - [ ] **Step 10: Run the full suite and confirm ZERO snapshot movement**
 
