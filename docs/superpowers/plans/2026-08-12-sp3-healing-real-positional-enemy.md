@@ -74,7 +74,6 @@ import { parsePattern } from '../../targetingParser';
 import type { ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
-import type { TeamActorInput } from '../../../types/calculator';
 
 // Pattern-Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
 // So: healer at M3, ON-footprint ally at M4, OFF-footprint ally at M1.
@@ -103,24 +102,38 @@ const healerSkills = (): ShipSkills => ({
     slots: [{ slot: 'active', abilities: [allyHeal()] }],
 });
 
-const teamAlly = (id: string, position: Position, hp: number): TeamActorInput => ({
+// ⚠️ A DIRECT-ENGINE test MUST supply the `walk` bundle itself.
+// `normalizeTeamActorsToWalked` (teamActorWalk.ts:47) synthesizes NEUTRAL_WALK_STATS with
+// **hp: 1** for any team actor arriving without one, silently DISCARDING a bare `stats.hp` —
+// so a fixture that sets `stats: { hp: 50_000 }` and no `walk` gets a 1-HP ally that dies
+// instantly. Only the ADAPTER builds walk bundles (`deriveTeamEngineActors`); `runCombat` does
+// not. Established pattern: `healing.test.ts:388-405`.
+const teamAlly = (id: string, position: Position, hp: number) => ({
     id,
     speed: 10,
     chargeCount: 0,
     startCharged: false,
     selfBuffs: [],
     enemyDebuffs: [],
-    shipSkills: { slots: [] },
-    stats: {
-        attack: 0,
-        crit: 0,
-        critDamage: 0,
-        defensePenetration: 0,
-        hacking: 200,
-        defence: 0,
-        hp,
-    },
     position,
+    walk: {
+        shipSkills: { slots: [] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
+            defence: 0,
+            hp,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
 });
 
 const BASE = (): CombatEngineInput => ({
