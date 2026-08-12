@@ -1577,10 +1577,22 @@ describe('healingGoldenParity', () => {
         // sub-streams under the fixed test seed, which instead give R1/R3 2-of-3 crit (15000)
         // and R2/R4 1-of-3 crit (12000) — same alternating two-value shape, phase-shifted.
         const seq = [
-            0.99, 0.1, 0.99, 0.99, // R1: 1 crit
-            0.99, 0.1, 0.1, 0.99, // R2: 2 crits
-            0.99, 0.1, 0.99, 0.99, // R3: 1 crit
-            0.99, 0.1, 0.1, 0.99, // R4: 2 crits
+            0.99,
+            0.1,
+            0.99,
+            0.99, // R1: 1 crit
+            0.99,
+            0.1,
+            0.1,
+            0.99, // R2: 2 crits
+            0.99,
+            0.1,
+            0.99,
+            0.99, // R3: 1 crit
+            0.99,
+            0.1,
+            0.1,
+            0.99, // R4: 2 crits
         ];
         let drawIdx = 0;
         setRateGateRng(() => {
@@ -1840,6 +1852,13 @@ describe('healingGoldenParity', () => {
     const scenario24Input = () => {
         const tank: TeamActorInput = {
             id: 'tank',
+            // SP-3 (positional): the enemy now picks its OWN target through its parsed targeting
+            // — 'front enemy' = the front-most PLAYER cell (column 4 is the front). Without an
+            // explicit slot the tank defaults behind the healer, the enemy bombards the HEALER
+            // instead, and this scenario's whole premise ("the tank is the one taking hits")
+            // evaporates: the reaction routes nowhere and directHeal reads 0. Front-most placement
+            // is how the fixture now states "the tank is the one under fire".
+            position: 'M4',
             speed: 80, // acts after the healer (100), before the enemy (50)
             chargeCount: 0,
             startCharged: false,
@@ -1994,6 +2013,10 @@ describe('healingGoldenParity', () => {
         };
         const tank: TeamActorInput = {
             id: 'tank',
+            // Front-most so the enemy's positional 'front enemy' selection lands on the TANK, not
+            // on the healer — see scenario 24's note. "A bare enemy hits it once per round" is now
+            // a placement statement.
+            position: 'M4',
             speed: 80,
             chargeCount: 0,
             startCharged: false,
@@ -2239,6 +2262,9 @@ describe('healingGoldenParity', () => {
     const scenario27Input = () => {
         const tank: TeamActorInput = {
             id: 'tank',
+            // Front-most so the enemy's positional 'front enemy' selection lands on the TANK — see
+            // scenario 24's note. The lethal-hit premise depends on the tank taking the 7000.
+            position: 'M4',
             speed: 10, // acts last → takes the enemy hit before the healer's (speed 30) turn
             chargeCount: 0,
             startCharged: false,
