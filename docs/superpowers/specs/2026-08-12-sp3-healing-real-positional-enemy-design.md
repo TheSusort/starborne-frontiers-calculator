@@ -139,14 +139,43 @@ work.
 
 ### 3.2 Findings earned during PR 3a — read before starting 3b
 
-**A single-`ally` heal can now be filtered to EMPTY.** `resolveSupportRecipients`
-(`supportRecipients.ts:15-19`) **filters** `baseRecipients` by the footprint and never expands it,
-and `recipientsFor` (`playerTurn.ts:3346-3357`) builds that base as `[healing.targetId]` for a
-single-`ally` heal. So once the run is positional, if the configured heal target stands OFF the
-caster's support footprint, the heal reaches **nobody at all**. Previously inert, because with no
-positions `footprintAllyIdsFor` returns `undefined` and the filter is skipped.
-⚠️ Consequence for §2 decision 6: twelve slot dropdowns do not make a footprint visible, so a user
-can silently configure a zero-healing board. Worth revisiting whether the UI must show the footprint.
+**A single-`ally` heal can now be filtered to EMPTY — ✅ WORKING AS INTENDED (owner, 2026-08-12).**
+`resolveSupportRecipients` (`supportRecipients.ts:15-19`) **filters** `baseRecipients` by the footprint
+and never expands it, and `recipientsFor` (`playerTurn.ts:3346-3357`) builds that base as
+`[healing.targetId]` for a single-`ally` heal. So once the run is positional, if the configured heal
+target stands OFF the caster's support footprint, the heal reaches **nobody at all**. Previously inert,
+because with no positions `footprintAllyIdsFor` returns `undefined` and the filter is skipped.
+
+**This is game-faithful and must NOT be softened.** Do not add a fallback recipient, do not widen the
+filter, do not "rescue" an off-footprint heal target. The zero is correct.
+
+**Instead, the UI must make it visible (owner ruling — decision 8):**
+
+8. **Warn on placement not supported by the chosen supporters.** When an ally — the heal target
+   especially — stands on a cell no chosen supporter's footprint covers, the placement UI must say so.
+   A silent zero is the failure mode being designed against, not the zero itself.
+   Belongs in **PR 3c** alongside the slot dropdowns.
+
+9. **Autoplace the heal target into a supported cell** (owner, tentative — "might want to"). Seed its
+   default slot so it starts covered by the chosen supporters' footprints rather than at an arbitrary
+   neutral cell.
+   **This does NOT contradict decision 2's "no front bias"**: that ruling was about not biasing the heal
+   target toward *enemy fire* (column 4). Biasing toward *ally support coverage* is an independent axis,
+   so both hold simultaneously.
+   ⚠️ Design note: coverage is circular — each supporter's footprint depends on where that supporter
+   stands, which the user also controls. Compute against the supporters' current/default slots, and
+   handle an EMPTY intersection (no cell covered by all) by maximising the number of covering
+   supporters rather than failing.
+
+   **SCOPE RULED (owner, 2026-08-12): minimal now, full version later.**
+   - **In SP-3 (Task 5 seeding + Task 8 wiring):** seed the heal target into a cell covered by the
+     **HEALER's own** default footprint. Nearly free — the healer's slot and parsed pattern are both
+     already known at seeding time. Fixes the common single-healer case.
+   - **Deferred to a follow-up:** the full multi-supporter footprint intersection, including
+     re-seeding when any supporter moves or is added. Revisit once decision 8's warning is live and
+     it is clear how often the uncovered case actually arises.
+   - Decision 8's warning is the safety net for everything minimal autoplace misses, which is why
+     shipping the warning matters more than shipping full autoplacement.
 
 **Multi-ally pattern healing comes ONLY from `all-allies` abilities** — a single-`ally` ability has
 exactly one base recipient, so the pattern can only remove it, never spread it.
