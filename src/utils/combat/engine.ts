@@ -1205,6 +1205,13 @@ export interface CombatEngineInput {
      *  the lowest-HP living player ally (team-symmetric with the enemy side) instead of the
      *  vestigial `healTargetId` focus. See HealingRuntimeCtx.teamBattle. Default false. */
     positionalTeamBattle?: boolean;
+    /** Apply heals to EACH recipient's own actor (per-recipient application), WITHOUT adopting
+     *  `positionalTeamBattle`'s lowest-HP single-`ally` routing. The healing calculator sets this
+     *  once it runs positionally: its heals must follow the caster's support PATTERN, which is the
+     *  game's rule for every ship (Volk's lowest-HP repair is its PASSIVE, not a pattern effect).
+     *  `positionalTeamBattle` implies this behaviour too, so the battle sim is unaffected.
+     *  Absent/false → heals apply only to `healTargetId` (legacy single-target accounting). */
+    perRecipientHealApply?: boolean;
     /** Enemy attackers (healing mode): offense-only queue actors bombarding the heal
      *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier.
      *  `defence` and `hp` are optional now (default 0 for bare-stat legacy path); Task 9
@@ -2958,6 +2965,8 @@ export function runCombat(input: CombatEngineInput): {
         ? {
               targetId: healTarget.id,
               teamBattle: input.positionalTeamBattle ?? false,
+              perRecipientApply:
+                  (input.perRecipientHealApply ?? false) || (input.positionalTeamBattle ?? false),
               credit: (actorId, bucket, amount) => {
                   healFor(actorId)[bucket] += amount;
               },

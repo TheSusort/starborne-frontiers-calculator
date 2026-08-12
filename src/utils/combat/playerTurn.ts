@@ -170,6 +170,9 @@ export interface HealingRuntimeCtx {
      *  caster's support footprint) drops the recipient entirely. Absent/false → the healing
      *  calculator's fixed-target routing (heals measured onto the chosen tank). */
     teamBattle?: boolean;
+    /** Apply heals to each recipient's own actor without `teamBattle`'s lowest-HP routing.
+     *  `teamBattle` implies this; this flag alone does NOT imply lowest-HP routing. */
+    perRecipientApply?: boolean;
 }
 
 /**
@@ -3625,7 +3628,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // restores every ally's real HP and each over-repaired ally's overheal is
                         // surfaced per-target (drives Abundant Renewal's per-ally shield). The healing
                         // calculator (teamBattle off) keeps single-target accounting on healing.targetId.
-                        const perRecipientActor = healing.teamBattle
+                        // Per-recipient application is gated on `perRecipientApply`, NOT
+                        // `teamBattle` — the healing calculator needs the application half without
+                        // teamBattle's lowest-HP single-`ally` routing (:3350), which is not the
+                        // game's rule. `perRecipientApply` is set by BOTH positionalTeamBattle and
+                        // the healing calculator's own perRecipientHealApply, so the battle sim's
+                        // behaviour is unchanged.
+                        const perRecipientActor = healing.perRecipientApply
                             ? healing.recipientActor(rid)
                             : undefined;
                         if (perRecipientActor || rid === healing.targetId) {
