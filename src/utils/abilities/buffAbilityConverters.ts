@@ -1,47 +1,13 @@
-import { Ability, Condition, ShipSkills, AbilityTarget, SkillSlot } from '../../types/abilities';
-import { SelectedGameBuff, EnemyBaseClass } from '../../types/calculator';
-import { conditionsMet, ConditionContext } from './evaluateConditions';
+import { Ability, AbilityTarget } from '../../types/abilities';
+import { SelectedGameBuff } from '../../types/calculator';
 
-// Sim-scheduling fields are RECONSTRUCTED here (not dropped): skillSource is derived from
-// the ability's slot (active→'active', charged→'charge', passive→'passive1') and skillDuration
-// from the buff/debuff config's `duration`. Without these, computeBuffTimeline's isAlwaysActive
-// would treat every converted timed buff as permanent and over-count it.
-// sourceChargeCount/sourceStartCharged are still NOT carried (they aren't on the config) — fine
-// for single-attacker DPS, where the timeline falls back to the attacker's own charged set.
-// The emitted id is derived from the (stable) source ability id so repeated calls on the
-// same ShipSkills produce identical ids — avoids React remount churn when the page memoizes
-// or uses the id as a list key (GameBuffPicker keys on SelectedGameBuff.id).
-export function abilityToSelectedBuff(ability: Ability, slot: SkillSlot): SelectedGameBuff | null {
-    const c = ability.config;
-    if (c.type !== 'buff' && c.type !== 'debuff') return null;
-    const skillSource: SelectedGameBuff['skillSource'] =
-        slot === 'charged' ? 'charge' : slot === 'passive' ? 'passive1' : 'active';
-    return {
-        id: `buff-${ability.id}`,
-        buffName: c.buffName,
-        stacks: c.stacks,
-        parsedEffects: c.parsedEffects,
-        isStackable: c.isStackable,
-        maxStacks: c.maxStacks,
-        stackTrigger: c.stackTrigger,
-        autoFilled: ability.autoFilled,
-        skillSource,
-        skillDuration: c.duration,
-        ...(c.type === 'debuff' ? { application: c.application } : {}),
-        ...(c.clearAllOnRedirect ? { clearAllOnRedirect: true } : {}),
-    };
-}
-
-// Shared enemy-target classifier — used by BOTH selectedBuffToAbility and
-// buffAbilitiesToSelectedBuffs so the two conversion directions can't drift apart on which
-// AbilityTarget values count as "enemy-side". Wave 5 (Task A2): the two enemy-adjacency scopes
-// are enemy-side debuffs too (Vindicator's Provoke, Asphyxiator's Stasis) — without them a
-// buff/debuff round-trip would fall through to the 'buff' branch and lose the debuff config
-// (application verb, resistibility). Ship-kit W8 (Task 5): 'enemy-highest-attack' is likewise an
-// enemy-side selector (Selenite's round-start Concentrate Fire) — same failure mode if omitted.
-// Ship-kit W8 (review fix): previously only selectedBuffToAbility had this full set;
-// buffAbilitiesToSelectedBuffs used a narrower inline check and misclassified
-// 'enemy-highest-attack' as a self-buff in the DPS preview panel.
+// Enemy-target classifier for selectedBuffToAbility: which AbilityTarget values are enemy-side, so
+// a manual buff pick converted for an enemy-facing slot produces a debuff config (application verb,
+// resistibility) instead of falling through to the 'buff' branch. Wave 5 (Task A2): the two
+// enemy-adjacency scopes are enemy-side debuffs too (Vindicator's Provoke, Asphyxiator's Stasis) —
+// without them a buff/debuff round-trip would fall through to the 'buff' branch and lose the debuff
+// config (application verb, resistibility). Ship-kit W8 (Task 5): 'enemy-highest-attack' is likewise
+// an enemy-side selector (Selenite's round-start Concentrate Fire) — same failure mode if omitted.
 // Ship-kit W8 (CodeRabbit round): 'enemy-most-buffs' and 'enemy-highest-speed' are likewise
 // enemy-side highest/most selectors (see AbilityTarget in src/types/abilities.ts) — same
 // misclassification risk if a buff/debuff config is ever retargeted to them.
@@ -97,79 +63,4 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
                   duration,
               },
     };
-}
-
-// Static context for the include/exclude gate. This gate now serves ONLY the page preview
-// path (configShipSkillsToSimInputs → DPS page buff-totals display); in the sim,
-// buff/debuff abilities are gated dynamically per round by the combat engine
-// (src/utils/combat/abilityStatusGating.ts:liveGateConditions). Derivable-dynamic counts
-// default to "satisfiable" so only enemy-type mismatch or a manual toggle (count 0) excludes
-// a buff. (An enemy-buff-BY-NAME condition evaluates to 0 here, so mark such conditions
-// non-derivable/manual in the editor to gate them — documented limitation.)
-export function buildStaticBuffContext(opts: { enemyType?: EnemyBaseClass }): ConditionContext {
-    return {
-        selfBuffNames: [],
-        selfDebuffNames: [],
-        enemyBuffNames: [],
-        enemyDebuffCount: 1,
-        enemyType: opts.enemyType,
-        effectiveCritRate: 100,
-        adjacentAllyCount: 1,
-        enemyAdjacentCount: 1,
-        enemyDestroyedCount: 1,
-        selfHpPct: 100,
-        enemyHpPct: 100,
-        // The preview is always for a single attacker ship, so it is trivially the slowest
-        // "ally" — matching the live engine's lone-actor default (buildRoundContext `?? true`).
-        // Without this a `lowest-speed-ally`-gated buff (Chakara) would be excluded from the
-        // preview panel while the sim correctly includes it.
-        isLowestSpeedAlly: true,
-    };
-}
-
-// For the page-preview include/exclude gate, a DERIVABLE count-threshold gate is
-// satisfiable in principle (some real per-round count meets it), so it shouldn't be
-// excluded by the placeholder sentinel counts in buildStaticBuffContext. Neutralize
-// it to an "always" condition for this check. Manual (non-derivable) thresholds keep
-// literal gating. In the sim this static gate is superseded by liveGateConditions
-// (src/utils/combat/abilityStatusGating.ts), which neutralizes a wider set of
-// non-derivable subjects and evaluates dynamically per round.
-function staticGateConditions(conditions: Condition[]): Condition[] {
-    return conditions.map((c) =>
-        c.derivable && c.countComparator != null
-            ? { subject: 'always' as const, derivable: true, ...(c.anyOf ? { anyOf: true } : {}) }
-            : c
-    );
-}
-
-export function buffAbilitiesToSelectedBuffs(
-    shipSkills: ShipSkills,
-    staticCtx: ConditionContext
-): { selfBuffs: SelectedGameBuff[]; enemyDebuffs: SelectedGameBuff[] } {
-    const selfBuffs: SelectedGameBuff[] = [];
-    const enemyDebuffs: SelectedGameBuff[] = [];
-    for (const slot of shipSkills.slots) {
-        for (const ability of slot.abilities) {
-            if (ability.config.type !== 'buff' && ability.config.type !== 'debuff') continue;
-            if (!conditionsMet(staticGateConditions(ability.conditions), staticCtx)) continue;
-            const sb = abilityToSelectedBuff(ability, slot.slot);
-            if (!sb) continue;
-            if (isEnemyTarget(ability.target)) {
-                enemyDebuffs.push(sb);
-            } else {
-                selfBuffs.push(sb);
-            }
-        }
-    }
-    return { selfBuffs, enemyDebuffs };
-}
-
-export function selectedBuffsToBuffAbilities(
-    selfBuffs: SelectedGameBuff[],
-    enemyDebuffs: SelectedGameBuff[]
-): Ability[] {
-    return [
-        ...selfBuffs.map((b) => selectedBuffToAbility(b, 'self')),
-        ...enemyDebuffs.map((b) => selectedBuffToAbility(b, 'enemy')),
-    ];
 }

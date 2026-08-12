@@ -14,6 +14,18 @@ interface DPSBuffPanelProps {
     hoveredRound: number | null;
 }
 
+/** Plain status-name chip. Mirrors the turn-order chip in ShipConfigSummary so the two
+ *  name-list surfaces in the DPS calculator look like one thing. */
+const StatusChip: React.FC<{ name: string; tone: 'self' | 'enemy' }> = ({ name, tone }) => (
+    <span
+        className={`inline-flex items-center px-2 py-0.5 rounded text-xs bg-dark-lighter ${
+            tone === 'enemy' ? 'text-red-400' : 'text-theme-text-primary'
+        }`}
+    >
+        {name}
+    </span>
+);
+
 const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData | null }> = ({
     name,
     color,
@@ -26,10 +38,35 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
     const dotsLanded = roundData?.dotsLanded ?? true;
     const activeDoTStates = roundData?.activeDoTStates ?? [];
 
+    // SP-2: the ROUND-TAIL view — what each side still carries after every decrement and drain.
+    // The lists above are the focus's TURN-time view; a status that expired at the round tail
+    // legitimately appears there and not here.
+    const endOfRoundSelfBuffs = roundData?.focusStatuses?.buffNames ?? [];
+    // Merged across the enemy roster and de-duplicated: with the single enemy the page ships this
+    // is just that enemy's list, and reading only the first entry is the shape #318 had to fix.
+    const endOfRoundEnemyDebuffs = [
+        ...new Set(Object.values(roundData?.enemyStatuses ?? {}).flatMap((s) => s.debuffNames)),
+    ];
+    // SP-1 made the enemy a real actor that takes turns, so it can now debuff YOU — and a picked
+    // enemy ship's own kit can buff itself. Neither state had any surface in this calculator before.
+    const endOfRoundSelfDebuffs = roundData?.focusStatuses?.debuffNames ?? [];
+    const endOfRoundEnemyBuffs = [
+        ...new Set(Object.values(roundData?.enemyStatuses ?? {}).flatMap((s) => s.buffNames)),
+    ];
+    const hasEndOfRound =
+        endOfRoundSelfBuffs.length > 0 ||
+        endOfRoundEnemyDebuffs.length > 0 ||
+        endOfRoundSelfDebuffs.length > 0 ||
+        endOfRoundEnemyBuffs.length > 0;
+
     const hasDebuffs = enemyDebuffs.length > 0 || resistedEnemyDebuffs.length > 0;
     const hasDoTs = appliedDoTs.length > 0;
     const isEmpty =
-        selfBuffs.length === 0 && !hasDebuffs && !hasDoTs && activeDoTStates.length === 0;
+        selfBuffs.length === 0 &&
+        !hasDebuffs &&
+        !hasDoTs &&
+        activeDoTStates.length === 0 &&
+        !hasEndOfRound;
 
     return (
         <div className="px-2.5 py-2 border-b border-dark-border last:border-b-0">
@@ -105,6 +142,54 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
                             </span>
                         </div>
                     ))}
+                </>
+            )}
+            {hasEndOfRound && (
+                <>
+                    <div className="text-xs text-theme-text-secondary mt-2 mb-1">End of Round</div>
+                    {[
+                        {
+                            items: endOfRoundSelfBuffs,
+                            prefix: 'self',
+                            tone: 'self' as const,
+                            label: 'Your Buffs',
+                        },
+                        {
+                            items: endOfRoundEnemyDebuffs,
+                            prefix: 'enemy',
+                            tone: 'enemy' as const,
+                            label: 'On Enemy',
+                        },
+                        {
+                            items: endOfRoundSelfDebuffs,
+                            prefix: 'self-debuff',
+                            tone: 'enemy' as const,
+                            label: 'On You',
+                        },
+                        {
+                            items: endOfRoundEnemyBuffs,
+                            prefix: 'enemy-buff',
+                            tone: 'enemy' as const,
+                            label: 'Enemy Buffs',
+                        },
+                    ].map(({ items, prefix, tone, label }) =>
+                        items.length > 0 ? (
+                            <React.Fragment key={prefix}>
+                                <div className="text-xs text-theme-text-secondary mb-1">
+                                    {label}
+                                </div>
+                                <div className="flex flex-wrap gap-1 mb-1">
+                                    {items.map((name) => (
+                                        <StatusChip
+                                            key={`eor-${prefix}-${name}`}
+                                            name={name}
+                                            tone={tone}
+                                        />
+                                    ))}
+                                </div>
+                            </React.Fragment>
+                        ) : null
+                    )}
                 </>
             )}
             {isEmpty && <p className="text-xs text-dark-border italic">Nothing active</p>}

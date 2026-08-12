@@ -1,6 +1,7 @@
 import React from 'react';
-import { DPSShipConfig, AttackerBuffTotals } from '../../types/calculator';
+import { DPSShipConfig } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import { averageFocusStats, averageEffectiveCrit } from '../../utils/calculators/roundStatsAverage';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
 import { orderByTurnPriority } from '../../utils/combat/state';
@@ -22,12 +23,15 @@ interface ShipConfigSummaryProps {
     isBest: boolean;
     isComparing: boolean;
     rounds: number;
-    attackerBuffTotals: AttackerBuffTotals;
     bestTotalDamage: number | undefined;
     /** Ranking-aware label describing best's advantage over #2 (SP-U U6). Null → no badge. */
     bestVsSecondLabel: string | null;
     teamActors: TurnOrderTeamActor[];
     enemySpeed: number;
+    /** This config's real affinity-vs-enemy modifiers (from `computeAffinityModifiers`), used to
+     *  resolve the displayed effective crit rate the same way the engine resolves the real roll. */
+    critCap: number;
+    critPenalty: number;
 }
 
 export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
@@ -36,11 +40,12 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     isBest,
     isComparing,
     rounds,
-    attackerBuffTotals,
     bestTotalDamage,
     bestVsSecondLabel,
     teamActors,
     enemySpeed,
+    critCap,
+    critPenalty,
 }) => {
     // Build the round's actor order with the engine's exact tiebreak rule. Input order
     // mirrors buildTurnQueue's caller contract: team actors, then the attacker, then the
@@ -56,10 +61,22 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
         simResult.summary.totalInfernoDamage > 0 ||
         simResult.summary.totalDetonationDamage > 0;
 
+    // SP-2: the buffed stats behind these numbers come from the engine's own per-turn
+    // `stats-snapshot` readings, turn-weighted across the run — one authority, not a second static
+    // conversion that could disagree with the damage number printed beside it. Undefined only when
+    // the run was simulated without the timeline; then the config's unbuffed base stats are the
+    // honest fallback.
+    const avgStats = averageFocusStats(simResult.rounds);
+    // The per-turn clamp lives in `averageEffectiveCrit`, not here: clamping the AVERAGE instead of
+    // each turn over-reports (a turn folded to 120 still crits at 100, but averaging the raw folds
+    // first can push the mean above what any turn actually rolled). See its doc for the worked
+    // example. `critCap`/`critPenalty` are this config's real affinity-vs-enemy modifiers, so the
+    // displayed rate agrees with what the engine actually rolls on a disadvantaged matchup.
+    const avgCrit = averageEffectiveCrit(simResult.rounds, { critCap, critPenalty });
     const critMultiplier = calculateCritMultiplier({
-        attack: config.attack * (1 + attackerBuffTotals.attackBuff / 100),
-        crit: Math.min(100, config.crit + attackerBuffTotals.critBuff),
-        critDamage: config.critDamage + attackerBuffTotals.critDamageBuff,
+        attack: avgStats?.attack ?? config.attack,
+        crit: avgCrit ?? Math.min(critCap, Math.max(0, config.crit - critPenalty)),
+        critDamage: avgStats?.critDamage ?? config.critDamage,
         hp: 0,
         defence: 0,
         hacking: 0,
@@ -120,6 +137,17 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                 <span className="text-theme-text-secondary">Crit Multiplier:</span>
                 <span>{critMultiplier.toFixed(2)}x</span>
             </div>
+            {avgStats && (
+                <div className="flex justify-between mb-2">
+                    <span className="text-theme-text-secondary">
+                        Avg Buffed Attack / Crit / Crit DMG:
+                    </span>
+                    <span>
+                        {Math.round(avgStats.attack).toLocaleString()} /{' '}
+                        {Math.round(avgCrit ?? avgStats.crit)}% / {Math.round(avgStats.critDamage)}%
+                    </span>
+                </div>
+            )}
             <div className="flex justify-between mb-2">
                 <span className="text-theme-text-secondary">Avg Damage / Round:</span>
                 <span className={isBest ? 'text-primary font-bold' : ''}>

@@ -15,10 +15,7 @@ import {
 import { ShipSkills } from '../../types/abilities';
 import { detectFullyCharged } from '../../utils/skillTextParser';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
-import {
-    buildDefaultShipSkills,
-    configShipSkillsToSimInputs,
-} from '../../utils/abilities/configToSimInputs';
+import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { shipFinalStats, combatStatsFromShip } from '../../utils/ship/combatStats';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { rankDpsConfigs, describeBestVsSecond } from '../../utils/calculators/rankDpsConfigs';
@@ -193,8 +190,6 @@ const DPSCalculatorPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    const teamAttackerBuffs = useMemo(() => teamShips.flatMap((t) => t.buffs), [teamShips]);
-
     /** This team ship's slot, falling back to its index-derived default. */
     const teamShipSlot = (id: string, index: number): Position =>
         teamShips.find((t) => t.id === id)?.position ?? defaultTeamSlot(index);
@@ -263,67 +258,6 @@ const DPSCalculatorPage: React.FC = () => {
         [teamShips]
     );
 
-    const globalAttackerBuffTotals = useMemo(() => {
-        const allGlobal = [...attackerBuffs, ...teamAttackerBuffs];
-        return {
-            attackBuff: allGlobal.reduce(
-                (sum, s) => sum + (s.parsedEffects.attack ?? 0) * s.stacks,
-                0
-            ),
-            critBuff: allGlobal.reduce((sum, s) => sum + (s.parsedEffects.crit ?? 0) * s.stacks, 0),
-            critDamageBuff: allGlobal.reduce(
-                (sum, s) => sum + (s.parsedEffects.critDamage ?? 0) * s.stacks,
-                0
-            ),
-        };
-    }, [attackerBuffs, teamAttackerBuffs]);
-
-    // Convert each config's editor abilities (buff/debuff) into SelectedGameBuff form for
-    // the display-only buff-totals preview (mergedAttackerBuffTotals below). The sim itself
-    // no longer consumes these — the combat engine reads buff/debuff abilities from
-    // shipSkills directly with live condition gating (no double-count). Memoized off
-    // configs + enemyType so it never runs in render.
-    const convertedMap = useMemo(
-        () =>
-            new Map(
-                configs.map((c) => [c.id, configShipSkillsToSimInputs(c.shipSkills, enemyType)])
-            ),
-        [configs, enemyType]
-    );
-
-    const mergedAttackerBuffTotals = useMemo(
-        () =>
-            new Map(
-                configs.map((c) => {
-                    const selfBuffs = convertedMap.get(c.id)?.selfBuffs ?? [];
-                    return [
-                        c.id,
-                        {
-                            attackBuff:
-                                globalAttackerBuffTotals.attackBuff +
-                                selfBuffs.reduce(
-                                    (sum, b) => sum + (b.parsedEffects.attack ?? 0) * b.stacks,
-                                    0
-                                ),
-                            critBuff:
-                                globalAttackerBuffTotals.critBuff +
-                                selfBuffs.reduce(
-                                    (sum, b) => sum + (b.parsedEffects.crit ?? 0) * b.stacks,
-                                    0
-                                ),
-                            critDamageBuff:
-                                globalAttackerBuffTotals.critDamageBuff +
-                                selfBuffs.reduce(
-                                    (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
-                                    0
-                                ),
-                        },
-                    ];
-                })
-            ),
-        [configs, convertedMap, globalAttackerBuffTotals]
-    );
-
     const simResults = useMemo(() => {
         const map = new Map<string, DPSSimulationResult>();
         configs.forEach((config) => {
@@ -373,6 +307,9 @@ const DPSCalculatorPage: React.FC = () => {
                     affinityCritPenalty: critPenalty,
                     allyChargePerRound: config.allyChargePerRound,
                     enemyType,
+                    // SP-2: opt into the display-only status timeline — the summary's buffed stats
+                    // and the per-round chips both read it. Off by default so goldens stay clean.
+                    collectStatusTimeline: true,
                     // The real, positioned opponent. Supplying it flips the engine's
                     // `dpsEnemyTarget` false, so damage lands per-victim on this actor instead of
                     // the vestigial dummy — and the enemy takes its own turns and fights back.
@@ -691,39 +628,54 @@ const DPSCalculatorPage: React.FC = () => {
                     <div
                         className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 ${configs.length >= 4 ? '2xl:w-[calc(100vw-256px-2rem)] 2xl:ml-[calc((-100vw/2)+768px+1rem)] 2xl:[grid-template-columns:repeat(auto-fit,minmax(370px,500px))] 2xl:justify-center' : ''}`}
                     >
-                        {configs.map((config) => (
-                            <ShipConfigCard
-                                key={config.id}
-                                config={config}
-                                isBest={bestConfig?.id === config.id}
-                                enemyAffinity={enemyAffinity}
-                                enemySecurity={enemySecurity}
-                                teamActors={teamTurnOrderActors}
-                                enemySpeed={enemySpeed}
-                                isComparing={configs.length > 1}
-                                simResult={simResults.get(config.id)}
-                                bestTotalDamage={bestTotalDamage}
-                                bestVsSecondLabel={bestVsSecondLabel}
-                                rounds={rounds}
-                                attackerBuffTotals={mergedAttackerBuffTotals.get(config.id)!}
-                                onRemove={() => removeConfig(config.id)}
-                                onUpdate={(field, value) => updateConfig(config.id, field, value)}
-                                onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
-                                onStartChargedChange={(checked) =>
-                                    setConfigs((prev) =>
-                                        prev.map((c) =>
-                                            c.id === config.id ? { ...c, startCharged: checked } : c
+                        {configs.map((config) => {
+                            // Same real affinity-vs-enemy modifiers the sim itself used for this
+                            // config (see `simResults` above) — threaded down so the summary's
+                            // displayed effective crit rate agrees with what the engine actually
+                            // rolled, instead of the plain 100 cap it used to hard-code.
+                            const { critCap, critPenalty } = computeAffinityModifiers(
+                                config.affinity,
+                                enemyAffinity
+                            );
+                            return (
+                                <ShipConfigCard
+                                    key={config.id}
+                                    config={config}
+                                    isBest={bestConfig?.id === config.id}
+                                    enemyAffinity={enemyAffinity}
+                                    enemySecurity={enemySecurity}
+                                    teamActors={teamTurnOrderActors}
+                                    enemySpeed={enemySpeed}
+                                    critCap={critCap}
+                                    critPenalty={critPenalty}
+                                    isComparing={configs.length > 1}
+                                    simResult={simResults.get(config.id)}
+                                    bestTotalDamage={bestTotalDamage}
+                                    bestVsSecondLabel={bestVsSecondLabel}
+                                    rounds={rounds}
+                                    onRemove={() => removeConfig(config.id)}
+                                    onUpdate={(field, value) =>
+                                        updateConfig(config.id, field, value)
+                                    }
+                                    onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
+                                    onStartChargedChange={(checked) =>
+                                        setConfigs((prev) =>
+                                            prev.map((c) =>
+                                                c.id === config.id
+                                                    ? { ...c, startCharged: checked }
+                                                    : c
+                                            )
                                         )
-                                    )
-                                }
-                                onShipSkillsChange={(shipSkills) =>
-                                    updateConfigShipSkills(config.id, shipSkills)
-                                }
-                                onAllyChargeChange={(value) =>
-                                    updateConfigAllyCharge(config.id, value)
-                                }
-                            />
-                        ))}
+                                    }
+                                    onShipSkillsChange={(shipSkills) =>
+                                        updateConfigShipSkills(config.id, shipSkills)
+                                    }
+                                    onAllyChargeChange={(value) =>
+                                        updateConfigAllyCharge(config.id, value)
+                                    }
+                                />
+                            );
+                        })}
                     </div>
 
                     <div className="card">

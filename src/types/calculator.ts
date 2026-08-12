@@ -227,12 +227,6 @@ export type DPSShipConfigUpdateableField =
     | 'speed'
     | 'slot';
 
-export interface AttackerBuffTotals {
-    attackBuff: number;
-    critBuff: number;
-    critDamageBuff: number;
-}
-
 export interface DefenseBuffTotals {
     defenseBuff: number;
     incomingDamageBuff: number;
