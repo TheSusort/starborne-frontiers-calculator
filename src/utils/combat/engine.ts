@@ -1205,6 +1205,13 @@ export interface CombatEngineInput {
      *  the lowest-HP living player ally (team-symmetric with the enemy side) instead of the
      *  vestigial `healTargetId` focus. See HealingRuntimeCtx.teamBattle. Default false. */
     positionalTeamBattle?: boolean;
+    /** Apply heals to EACH recipient's own actor (per-recipient application), WITHOUT adopting
+     *  `positionalTeamBattle`'s lowest-HP single-`ally` routing. The healing calculator sets this
+     *  once it runs positionally: its heals must follow the caster's support PATTERN, which is the
+     *  game's rule for every ship (Volk's lowest-HP repair is its PASSIVE, not a pattern effect).
+     *  `positionalTeamBattle` implies this behaviour too, so the battle sim is unaffected.
+     *  Absent/false → heals apply only to `healTargetId` (legacy single-target accounting). */
+    perRecipientHealApply?: boolean;
     /** Enemy attackers (healing mode): offense-only queue actors bombarding the heal
      *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier.
      *  `defence` and `hp` are optional now (default 0 for bare-stat legacy path); Task 9
@@ -1522,6 +1529,20 @@ export interface HealingRoundEngine {
      *  the legacy per-round scalars it replaced were removed in the same change. Keyed by victim
      *  actor id. */
     perActorIncoming: Map<string, ActorIntake>;
+    /** Per-RECIPIENT healing accounting, keyed by the actor the DIRECT CAST REPAIR landed on —
+     *  the counterpart to `perActor`, which is keyed by the SOURCE that cast it. Only the direct
+     *  cast-heal site credits this axis today (playerTurn.ts:3660-3662); `shield`, `hotHeal`,
+     *  standing-leech and reactive-heal buckets are NOT on this axis yet, and each of those still
+     *  applies only when the recipient is `healing.targetId` (the legacy single-target path).
+     *  Populated only when `perRecipientApply` (or `positionalTeamBattle`) is set; **empty
+     *  otherwise**, which is what keeps every legacy healing result byte-identical.
+     *
+     *  ⚠️ For whoever extends this next: the shield-grant site (playerTurn.ts:3730-3738) has NO
+     *  flag gate — it calls `healing.recipientActor(rid)` and routes per-recipient
+     *  unconditionally. Adding `creditRecipient(rid, 'shield', …)` there MUST be gated on
+     *  `perRecipientApply` (mirroring the directHeal site), or the map becomes non-empty on
+     *  legacy runs and the byte-identical guarantee above breaks. */
+    perRecipient: Map<string, ActorHealing>;
     /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
      *  for the UI's enemy-effects round overview, grouped/attributed by the source enemy ship.
@@ -2742,6 +2763,17 @@ export function runCombat(input: CombatEngineInput): {
         }
         return h;
     };
+    // Recipient-keyed companion to `currentRoundHealing` (which is source-keyed). Rebound per
+    // round in the same place, for the same reason.
+    let currentRoundRecipientHealing = new Map<string, ActorHealing>();
+    const recipientHealFor = (id: string): ActorHealing => {
+        let h = currentRoundRecipientHealing.get(id);
+        if (!h) {
+            h = emptyActorHealing();
+            currentRoundRecipientHealing.set(id, h);
+        }
+        return h;
+    };
     // H1 Task 6: per-round shield-granted accumulator (recipient actor id → total shield
     // actually added to its pool THIS round, post-cap delta). Mirrors `currentRoundHealing`'s
     // lifecycle: declared once here, captured by grantShieldToTarget's live closure, and rebound
@@ -2958,8 +2990,13 @@ export function runCombat(input: CombatEngineInput): {
         ? {
               targetId: healTarget.id,
               teamBattle: input.positionalTeamBattle ?? false,
+              perRecipientApply:
+                  (input.perRecipientHealApply ?? false) || (input.positionalTeamBattle ?? false),
               credit: (actorId, bucket, amount) => {
                   healFor(actorId)[bucket] += amount;
+              },
+              creditRecipient: (recipientId, bucket, amount) => {
+                  recipientHealFor(recipientId)[bucket] += amount;
               },
               recipientMaxHp,
               recipientIncomingHealPct,
@@ -7146,6 +7183,7 @@ export function runCombat(input: CombatEngineInput): {
         perActorDot = new Map();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
+            currentRoundRecipientHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
             // Clamp to [0, 100]: a shrunk effectiveMaxHp (expired max-HP buff) can leave
             // currentHp > targetMaxHp, pushing the ratio above 100 — cap it so the reported
@@ -10150,6 +10188,7 @@ export function runCombat(input: CombatEngineInput): {
             const healTargetIntake = perActorIncoming.get(healTarget.id);
             healingRounds.push({
                 perActor: currentRoundHealing,
+                perRecipient: currentRoundRecipientHealing,
                 targetHpPctStart,
                 targetShieldStart,
                 incomingDamage: healTargetIntake?.incoming ?? 0,
