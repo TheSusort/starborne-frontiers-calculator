@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { parsePattern } from '../../targetingParser';
 import type { ParsedTarget } from '../../targetingParser';
@@ -59,7 +59,7 @@ const singleAllyHealerSkills = (): ShipSkills => ({
 // so a fixture that sets `stats: { hp: 50_000 }` and no `walk` gets a 1-HP ally that dies
 // instantly. Only the ADAPTER builds walk bundles (`deriveTeamEngineActors`); `runCombat` does
 // not. Established pattern: `healing.test.ts:388-405`.
-const teamAlly = (id: string, position: Position, hp: number) => ({
+const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
     id,
     speed: 10,
     chargeCount: 0,

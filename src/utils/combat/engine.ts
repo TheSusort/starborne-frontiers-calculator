@@ -1529,12 +1529,19 @@ export interface HealingRoundEngine {
      *  the legacy per-round scalars it replaced were removed in the same change. Keyed by victim
      *  actor id. */
     perActorIncoming: Map<string, ActorIntake>;
-    /** Per-RECIPIENT healing accounting, keyed by the actor the repair/shield LANDED ON —
-     *  the counterpart to `perActor`, which is keyed by the SOURCE that cast it. Populated only
-     *  when `perRecipientHealApply` (or `positionalTeamBattle`) is set; **empty otherwise**, which
-     *  is what keeps every legacy healing result byte-identical. Drives the healing calculator's
-     *  per-ally breakdown: a pattern heal covering three allies produces three entries here while
-     *  `perActor` still shows one healer. */
+    /** Per-RECIPIENT healing accounting, keyed by the actor the DIRECT CAST REPAIR landed on —
+     *  the counterpart to `perActor`, which is keyed by the SOURCE that cast it. Only the direct
+     *  cast-heal site credits this axis today (playerTurn.ts:3660-3662); `shield`, `hotHeal`,
+     *  standing-leech and reactive-heal buckets are NOT on this axis yet, and each of those still
+     *  applies only when the recipient is `healing.targetId` (the legacy single-target path).
+     *  Populated only when `perRecipientApply` (or `positionalTeamBattle`) is set; **empty
+     *  otherwise**, which is what keeps every legacy healing result byte-identical.
+     *
+     *  ⚠️ For whoever extends this next: the shield-grant site (playerTurn.ts:3730-3738) has NO
+     *  flag gate — it calls `healing.recipientActor(rid)` and routes per-recipient
+     *  unconditionally. Adding `creditRecipient(rid, 'shield', …)` there MUST be gated on
+     *  `perRecipientApply` (mirroring the directHeal site), or the map becomes non-empty on
+     *  legacy runs and the byte-identical guarantee above breaks. */
     perRecipient: Map<string, ActorHealing>;
     /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
