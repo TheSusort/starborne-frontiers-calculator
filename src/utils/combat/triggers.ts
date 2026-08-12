@@ -3434,6 +3434,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     const { consumed, overheal } = ctx.healing.applyHealToTarget(raw);
                     ctx.healing.credit(intent.ownerId, 'effectiveHeal', consumed);
                     ctx.healing.credit(intent.ownerId, 'overheal', overheal);
+                    // Recipient axis (SP-3b Task 7): a reactive repair only APPLIES to the heal
+                    // target (the gross directHeal above is credited for every recipient, but no
+                    // other recipient's pool is touched), so only this branch may mirror. Gated on
+                    // `perRecipientApply` to keep a legacy run's `perRecipient` empty.
+                    if (ctx.healing.perRecipientApply) {
+                        ctx.healing.creditRecipient?.(rid, 'directHeal', raw);
+                        ctx.healing.creditRecipient?.(rid, 'effectiveHeal', consumed);
+                        ctx.healing.creditRecipient?.(rid, 'overheal', overheal);
+                    }
                 }
             } else {
                 ctx.healing.credit(intent.ownerId, 'shield', raw);

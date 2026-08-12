@@ -132,8 +132,9 @@ export interface PlayerRoundCtx {
 export interface HealingRuntimeCtx {
     targetId: string;
     credit: (actorId: string, bucket: keyof ActorHealing, amount: number) => void;
-    /** Credit a bucket against the RECIPIENT the repair/shield landed on (the `perRecipient`
-     *  axis). No-op unless per-recipient application is active. */
+    /** Credit a bucket against the RECIPIENT the repair landed on (the `perRecipient` axis).
+     *  ⚠️ Call ONLY under `perRecipientApply` and ONLY where the pool application actually
+     *  succeeded — see `HealingRoundEngine.perRecipient` for the full contract. */
     creditRecipient?: (recipientId: string, bucket: keyof ActorHealing, amount: number) => void;
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
@@ -3466,6 +3467,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 const { consumed, overheal } = healing.applyHealToTarget(raw);
                 healing.credit(creditId, 'effectiveHeal', consumed);
                 healing.credit(creditId, 'overheal', overheal);
+                // Recipient axis (SP-3b Task 7): the tick lands on the HOLDER (this acting actor),
+                // whoever applied it — so the raw goes to the holder's `hotHeal` bucket while the
+                // source axis keeps crediting the APPLIER. Gated on `perRecipientApply` so a legacy
+                // single-target run still leaves `perRecipient` empty.
+                if (healing.perRecipientApply) {
+                    healing.creditRecipient?.(actor.id, 'hotHeal', raw);
+                    healing.creditRecipient?.(actor.id, 'effectiveHeal', consumed);
+                    healing.creditRecipient?.(actor.id, 'overheal', overheal);
+                }
             }
         };
         // Event-only (enemy) mode: HoT ticking must not credit or apply to the player healing map.

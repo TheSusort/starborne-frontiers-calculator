@@ -137,9 +137,25 @@ export interface HealingRoundData {
     didCrit: boolean;
     directHeal: number;
     hotHeal: number;
+    /** SOURCE-axis: shield RAW cast by the healer. There is no recipient-axis shield credit
+     *  (`credit(actor.id, 'shield', raw)` is source-keyed and the pool lands per-recipient via
+     *  `grantShieldToTarget`), so this — like `cleanseCount` — deliberately stays source-keyed. */
     shield: number;
     cleanseCount: number;
+    /** RECIPIENT-axis (SP-3b Task 7): the HEAL TARGET's OWN share of the repairs that landed on
+     *  it, read from `HealingRoundEngine.perRecipient[healTargetId]` — NOT the healer's whole
+     *  output. Since per-recipient application went live, the source-axis bucket
+     *  (`perActor[FOCUS_ID]`) aggregates repairs that landed on OTHER allies too, so reading it
+     *  here silently answered "everything the healer produced, wherever it went" instead of "how
+     *  much actually landed on the ship I am keeping alive". The throughput fields
+     *  (directHeal/hotHeal/totalRoundHealing/cumulativeHealing) stay on the source axis.
+     *
+     *  Every repair whose pool application succeeds is mirrored onto the recipient axis (cast, HoT,
+     *  leech, reactive) — see `HealingRoundEngine.perRecipient`. A future source that forgets to
+     *  mirror would silently under-report here, which is why that contract is spelled out there. */
     effectiveHealing: number;
+    /** RECIPIENT-axis (SP-3b Task 7) — the heal target's OWN clipped over-repair. Same axis and
+     *  the same known gap as `effectiveHealing`. */
     overheal: number;
     incomingDamage: number;
     shieldAbsorbed: number;
@@ -169,6 +185,19 @@ export interface HealingRoundData {
      *  with a target but no pattern the cast still resolves onto the real enemy and still produces a
      *  plausible damage number, while `perTargetDealt` comes back EMPTY (engine.ts:8344). */
     perTargetDealt?: Record<string, Record<string, number>>;
+    /** Per-recipient breakdown (SP-3b Task 7): keyed by the ally a repair LANDED ON, forwarded from
+     *  `HealingRoundEngine.perRecipient` — the counterpart to the source-keyed `perActor` the
+     *  throughput fields read. Follows the "absent when empty" convention of
+     *  perActorShield/perActorIncoming, so a run with no per-recipient data keeps the legacy row
+     *  shape byte-identical.
+     *
+     *  Every repair whose pool application succeeded is on this axis — cast repairs, HoT ticks,
+     *  leeches and reactive repairs (SP-3b Task 7). `shield`/`cleanseCount` are NOT: they have no
+     *  recipient-side total, which is exactly why the row keeps them source-keyed. */
+    perRecipient?: Record<
+        string,
+        { directHeal: number; hotHeal: number; effectiveHealing: number; overheal: number }
+    >;
 }
 
 export interface HealingSimulationResult {
@@ -179,7 +208,12 @@ export interface HealingSimulationResult {
         totalHotHeal: number;
         totalShield: number;
         totalCleanses: number;
+        /** RECIPIENT-axis (SP-3b Task 7): Σ over rounds of the HEAL TARGET's OWN landed share —
+         *  identically `perRecipient[healTargetId].totalEffectiveHealing`. NOT the team-wide sum:
+         *  the per-recipient totals sum to MORE than this whenever the caster's support footprint
+         *  reaches another ally. */
         totalEffectiveHealing: number;
+        /** RECIPIENT-axis (SP-3b Task 7) — the heal target's OWN over-repair. See above. */
         totalOverheal: number;
         totalShieldAbsorbed: number;
         totalBarrierAbsorbed: number;
@@ -188,6 +222,11 @@ export interface HealingSimulationResult {
         avgHealingPerRound: number;
         destroyedRound?: number; // present only if the target died
         teamTotalHealing?: number;
+        /** Window totals on the RECIPIENT axis (SP-3b Task 7), keyed by the ally a repair landed
+         *  on. `perRecipient[healTargetId].totalEffectiveHealing === totalEffectiveHealing` by
+         *  construction — the top-level number IS the heal target's row. "Absent when empty",
+         *  mirroring the per-round field. */
+        perRecipient?: Record<string, { totalEffectiveHealing: number; totalOverheal: number }>;
     };
 }
 
@@ -475,6 +514,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     let totalBarrierAbsorbedRaw = 0;
     let totalIncomingRaw = 0;
     let totalTeamRaw = 0;
+    /** RECIPIENT-axis window totals, raw. Folded per round from `hr.perRecipient`, rounded LAST. */
+    const perRecipientRaw = new Map<string, { effective: number; overheal: number }>();
 
     const rows: HealingRoundData[] = engineRounds.map((rd, i) => {
         const hr = healingRounds[i];
@@ -483,8 +524,26 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         const hotHealRaw = focus?.hotHeal ?? 0;
         const shieldRaw = focus?.shield ?? 0;
         const cleanseRaw = focus?.cleanseCount ?? 0;
-        const effectiveRaw = focus?.effectiveHeal ?? 0;
-        const overhealRaw = focus?.overheal ?? 0;
+        // RECIPIENT axis (SP-3b Task 7) for the consumption split ONLY. `perActor` is keyed by the
+        // actor that CAST the repair, so with per-recipient application live its
+        // effectiveHeal/overheal aggregate everything the healer produced — including repairs that
+        // landed on OTHER allies. The report's `effectiveHealing`/`overheal` must answer "how much
+        // landed on the ship I am keeping alive", so they read the heal target's OWN entry.
+        // Keyed by `healTargetId` (the RESOLVED id — FOCUS_ID only in the self-heal case), never
+        // by FOCUS_ID, which would report the healer's own share when healing an ally.
+        //
+        // ⚠️ This read REQUIRES a COMPLETE recipient axis, and it was not complete when SP-3a
+        // Task 2 introduced it — only the direct cast-repair site credited it. Repointing onto a
+        // cast-only axis silently DELETED every non-cast repair from the report (measured on the
+        // healing goldens: Magnolia's standing-leech overheal 1258 → 0, the HoT scenario's 2000 →
+        // 500, Isha's reactive effectiveHealing 15000 → 0 — all repairs that genuinely landed on
+        // the heal target). SP-3b Task 7 therefore completed the axis at the five non-cast
+        // consumption sites (engine.ts `creditLandedRepair` ×4, playerTurn.ts `tickHot`,
+        // triggers.ts's reactive executor). If a future source applies a repair without mirroring
+        // it, this row silently under-reports again — see `HealingRoundEngine.perRecipient`.
+        const recipient = hr?.perRecipient.get(healTargetId);
+        const effectiveRaw = recipient?.effectiveHeal ?? 0;
+        const overhealRaw = recipient?.overheal ?? 0;
         const incomingRaw = hr?.incomingDamage ?? 0;
         const shieldAbsorbedRaw = hr?.shieldAbsorbed ?? 0;
         const barrierAbsorbedRaw = hr?.barrierAbsorbed ?? 0;
@@ -496,6 +555,17 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             for (const [id, h] of hr.perActor) {
                 if (id === FOCUS_ID) continue;
                 teamRoundRaw += h.directHeal + h.hotHeal;
+            }
+        }
+
+        // Fold this round's recipient-axis entries into the window totals. RAW (unrounded) —
+        // rounded once at presentation, like every other accumulator here.
+        if (hr) {
+            for (const [id, h] of hr.perRecipient) {
+                const acc = perRecipientRaw.get(id) ?? { effective: 0, overheal: 0 };
+                acc.effective += h.effectiveHeal;
+                acc.overheal += h.overheal;
+                perRecipientRaw.set(id, acc);
             }
         }
 
@@ -545,6 +615,37 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             enemyEffects: hr?.enemyEffects ?? [],
             ...(rd.extraTurns !== undefined ? { extraTurns: rd.extraTurns } : {}),
             ...(rd.perTargetDealt !== undefined ? { perTargetDealt: rd.perTargetDealt } : {}),
+            // Per-recipient breakdown (SP-3b Task 7): keyed by the ally a repair LANDED ON. Follows
+            // the "absent when empty" convention of perActorShield/perActorIncoming so a run with no
+            // per-recipient data keeps the legacy row shape byte-identical.
+            ...(() => {
+                const out: Record<
+                    string,
+                    {
+                        directHeal: number;
+                        hotHeal: number;
+                        effectiveHealing: number;
+                        overheal: number;
+                    }
+                > = {};
+                for (const [id, h] of hr?.perRecipient ?? []) {
+                    if (
+                        h.directHeal === 0 &&
+                        h.hotHeal === 0 &&
+                        h.effectiveHeal === 0 &&
+                        h.overheal === 0
+                    ) {
+                        continue;
+                    }
+                    out[id] = {
+                        directHeal: Math.round(h.directHeal),
+                        hotHeal: Math.round(h.hotHeal),
+                        effectiveHealing: Math.round(h.effectiveHeal),
+                        overheal: Math.round(h.overheal),
+                    };
+                }
+                return Object.keys(out).length > 0 ? { perRecipient: out } : {};
+            })(),
         };
     });
 
@@ -567,6 +668,22 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
                 ? { destroyedRound: healing.destroyedRound }
                 : {}),
             ...(hasTeamActors ? { teamTotalHealing: Math.round(totalTeamRaw) } : {}),
+            // Recipient-axis window totals, rounded LAST from the raw accumulator. "Absent when
+            // empty", mirroring the per-round field.
+            ...(() => {
+                const out: Record<
+                    string,
+                    { totalEffectiveHealing: number; totalOverheal: number }
+                > = {};
+                for (const [id, acc] of perRecipientRaw) {
+                    if (acc.effective === 0 && acc.overheal === 0) continue;
+                    out[id] = {
+                        totalEffectiveHealing: Math.round(acc.effective),
+                        totalOverheal: Math.round(acc.overheal),
+                    };
+                }
+                return Object.keys(out).length > 0 ? { perRecipient: out } : {};
+            })(),
         },
     };
 }

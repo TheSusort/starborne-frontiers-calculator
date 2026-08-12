@@ -29,6 +29,14 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "hotHeal": 0,
       "incomingDamage": 12000,
       "overheal": 3000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 3000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 12000,
@@ -57,6 +65,14 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 3000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 3000,
@@ -85,6 +101,14 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 3000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 3000,
@@ -113,6 +137,14 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 3000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 3000,
@@ -141,6 +173,14 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 3000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 3000,
@@ -169,6 +209,14 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 3000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 3000,
@@ -184,6 +232,12 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
   ],
   "summary": {
     "avgHealingPerRound": 3000,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 15000,
+        "totalOverheal": 3000,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 18000,
@@ -472,6 +526,14 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
       "hotHeal": 0,
       "incomingDamage": 7000,
       "overheal": 0,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 6000,
+          "effectiveHealing": 6000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 7000,
@@ -551,6 +613,12 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
   ],
   "summary": {
     "avgHealingPerRound": 2000,
+    "perRecipient": {
+      "tank": {
+        "totalEffectiveHealing": 6000,
+        "totalOverheal": 0,
+      },
+    },
     "teamTotalHealing": 0,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
@@ -595,6 +663,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 1,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -628,6 +704,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 2,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -661,6 +745,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -694,6 +786,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 4,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -727,6 +827,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 5,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -760,6 +868,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 6,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -793,6 +909,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 7,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -826,6 +950,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 8,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -859,6 +991,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 9,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -892,6 +1032,14 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "hotHeal": 1500,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 1500,
+          "overheal": 2000,
+        },
+      },
       "round": 10,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -902,6 +1050,12 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
   ],
   "summary": {
     "avgHealingPerRound": 2000,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 20000,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 5000,
@@ -935,6 +1089,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 1,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -958,6 +1120,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 2,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -981,6 +1151,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1004,6 +1182,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 4,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1027,6 +1213,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 5,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1050,6 +1244,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 6,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1073,6 +1275,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 7,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1096,6 +1306,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 8,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1119,6 +1337,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 9,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1142,6 +1368,14 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1258,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1258,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1258,
+        },
+      },
       "round": 10,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1152,6 +1386,12 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
   ],
   "summary": {
     "avgHealingPerRound": 1258,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 12579,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 12579,
@@ -1467,7 +1707,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 1,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1491,7 +1745,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 2,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1515,7 +1783,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1539,7 +1821,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 4,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1563,7 +1859,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 5,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1587,7 +1897,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 6,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1611,7 +1935,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 7,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1635,7 +1973,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 8,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1659,7 +2011,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 9,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1683,7 +2049,21 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
-      "overheal": 181,
+      "overheal": 90,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+        "t1": {
+          "directHeal": 90,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 90,
+        },
+      },
       "round": 10,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1695,6 +2075,16 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
   ],
   "summary": {
     "avgHealingPerRound": 181,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 903,
+      },
+      "t1": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 903,
+      },
+    },
     "teamTotalHealing": 0,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
@@ -1703,7 +2093,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     "totalHealing": 1806,
     "totalHotHeal": 0,
     "totalIncomingDamage": 0,
-    "totalOverheal": 1806,
+    "totalOverheal": 903,
     "totalShield": 0,
     "totalShieldAbsorbed": 0,
   },
@@ -1775,6 +2165,14 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 129,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 129,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 129,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -1808,6 +2206,12 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
   ],
   "summary": {
     "avgHealingPerRound": 32,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 129,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 129,
@@ -2217,6 +2621,14 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 0,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 1600,
+          "effectiveHealing": 1600,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 4000,
@@ -2246,6 +2658,14 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 0,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 1600,
+          "effectiveHealing": 1600,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 4000,
@@ -2275,6 +2695,14 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 0,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 1600,
+          "effectiveHealing": 1600,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 4000,
@@ -2304,6 +2732,14 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 0,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 1600,
+          "effectiveHealing": 1600,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 4000,
@@ -2333,6 +2769,14 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 0,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 1600,
+          "effectiveHealing": 1600,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 4000,
@@ -2362,6 +2806,14 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 0,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 1600,
+          "effectiveHealing": 1600,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 4000,
@@ -2378,6 +2830,12 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
   ],
   "summary": {
     "avgHealingPerRound": 1600,
+    "perRecipient": {
+      "tank": {
+        "totalEffectiveHealing": 9600,
+        "totalOverheal": 0,
+      },
+    },
     "teamTotalHealing": 0,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
@@ -2412,6 +2870,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 1,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2435,6 +2901,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 2,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2458,6 +2932,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 3000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 3000,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2481,6 +2963,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 4,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2504,6 +2994,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 5,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2527,6 +3025,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 3000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 3000,
+        },
+      },
       "round": 6,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2550,6 +3056,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 7,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2573,6 +3087,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 8,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2596,6 +3118,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 3000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 3000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 3000,
+        },
+      },
       "round": 9,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2619,6 +3149,14 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 10,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -2629,6 +3167,12 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
   ],
   "summary": {
     "avgHealingPerRound": 1600,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 16000,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 16000,
@@ -2931,6 +3475,14 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "hotHeal": 0,
       "incomingDamage": 6000,
       "overheal": 5000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 5000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -2984,6 +3536,14 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "hotHeal": 0,
       "incomingDamage": 12000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 5000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3037,6 +3597,14 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "hotHeal": 0,
       "incomingDamage": 18000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 5000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3090,6 +3658,14 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "hotHeal": 0,
       "incomingDamage": 24000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 5000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3143,6 +3719,14 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "hotHeal": 0,
       "incomingDamage": 24000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 5000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3196,6 +3780,14 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "hotHeal": 0,
       "incomingDamage": 24000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 5000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3211,6 +3803,12 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
   ],
   "summary": {
     "avgHealingPerRound": 5000,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 25000,
+        "totalOverheal": 5000,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 30000,
@@ -3300,6 +3898,14 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "hotHeal": 0,
       "incomingDamage": 6000,
       "overheal": 4000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 10000,
+          "effectiveHealing": 6000,
+          "hotHeal": 0,
+          "overheal": 4000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3342,6 +3948,14 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "hotHeal": 0,
       "incomingDamage": 6000,
       "overheal": 4000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 10000,
+          "effectiveHealing": 6000,
+          "hotHeal": 0,
+          "overheal": 4000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3384,6 +3998,14 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "hotHeal": 0,
       "incomingDamage": 6000,
       "overheal": 4000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 10000,
+          "effectiveHealing": 6000,
+          "hotHeal": 0,
+          "overheal": 4000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3426,6 +4048,14 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "hotHeal": 0,
       "incomingDamage": 6000,
       "overheal": 4000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 10000,
+          "effectiveHealing": 6000,
+          "hotHeal": 0,
+          "overheal": 4000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3468,6 +4098,14 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "hotHeal": 0,
       "incomingDamage": 6000,
       "overheal": 4000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 10000,
+          "effectiveHealing": 6000,
+          "hotHeal": 0,
+          "overheal": 4000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6000,
@@ -3483,6 +4121,12 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
   ],
   "summary": {
     "avgHealingPerRound": 8333,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 30000,
+        "totalOverheal": 20000,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 50000,
@@ -3600,6 +4244,14 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "hotHeal": 0,
       "incomingDamage": 2000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 2000,
+          "effectiveHealing": 2000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 2000,
@@ -3628,6 +4280,14 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "hotHeal": 0,
       "incomingDamage": 2000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 2000,
+          "effectiveHealing": 2000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 2000,
@@ -3656,6 +4316,14 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "hotHeal": 0,
       "incomingDamage": 2000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 2000,
+          "effectiveHealing": 2000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 2000,
@@ -3671,6 +4339,12 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
   ],
   "summary": {
     "avgHealingPerRound": 1000,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 6000,
+        "totalOverheal": 0,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 6000,
@@ -3704,6 +4378,14 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 500,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 500,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 3000,
@@ -3732,6 +4414,14 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 500,
+          "effectiveHealing": 500,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 3000,
@@ -3840,6 +4530,12 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
   "summary": {
     "avgHealingPerRound": 167,
     "destroyedRound": 2,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 500,
+        "totalOverheal": 500,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 1000,
@@ -4061,6 +4757,14 @@ exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE
       "hotHeal": 0,
       "incomingDamage": 6500,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 4550,
+          "effectiveHealing": 4550,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6500,
@@ -4099,6 +4803,14 @@ exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE
       "hotHeal": 0,
       "incomingDamage": 6500,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 4550,
+          "effectiveHealing": 4550,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 6500,
@@ -4114,6 +4826,12 @@ exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE
   ],
   "summary": {
     "avgHealingPerRound": 4550,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 9100,
+        "totalOverheal": 0,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 9100,
@@ -4147,6 +4865,14 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "hotHeal": 0,
       "incomingDamage": 20000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 15000,
+          "effectiveHealing": 15000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 20000,
@@ -4175,6 +4901,14 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "hotHeal": 0,
       "incomingDamage": 16000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 12000,
+          "effectiveHealing": 12000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 16000,
@@ -4203,6 +4937,14 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "hotHeal": 0,
       "incomingDamage": 20000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 15000,
+          "effectiveHealing": 15000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 20000,
@@ -4231,6 +4973,14 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "hotHeal": 0,
       "incomingDamage": 16000,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 12000,
+          "effectiveHealing": 12000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 16000,
@@ -4246,6 +4996,12 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
   ],
   "summary": {
     "avgHealingPerRound": 13500,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 54000,
+        "totalOverheal": 0,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 54000,
@@ -4279,6 +5035,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 1,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4302,6 +5066,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 2,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4325,6 +5097,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4348,6 +5128,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 4,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4371,6 +5159,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 5,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4394,6 +5190,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 6,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4417,6 +5221,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 7,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4440,6 +5252,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 8,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4463,6 +5283,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 9,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4486,6 +5314,14 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 10,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4496,6 +5332,12 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
   ],
   "summary": {
     "avgHealingPerRound": 1000,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 10000,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 10000,
@@ -4529,6 +5371,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 5000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 5000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4557,6 +5407,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4585,6 +5443,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4613,6 +5479,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4641,6 +5515,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4669,6 +5551,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4697,6 +5587,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4725,6 +5623,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4753,6 +5659,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4781,6 +5695,14 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "hotHeal": 0,
       "incomingDamage": 4000,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 5000,
+          "effectiveHealing": 4000,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 4000,
@@ -4796,6 +5718,12 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
   ],
   "summary": {
     "avgHealingPerRound": 5000,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 36000,
+        "totalOverheal": 14000,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 50000,
@@ -4829,6 +5757,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 1,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4853,6 +5789,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 2000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 2000,
+        },
+      },
       "round": 2,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4877,6 +5821,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4901,6 +5853,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 2000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 2000,
+        },
+      },
       "round": 4,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4925,6 +5885,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 2000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 2000,
+        },
+      },
       "round": 5,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4949,6 +5917,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 6,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4973,6 +5949,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 7,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -4997,6 +5981,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 8,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -5021,6 +6013,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 2000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 2000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 2000,
+        },
+      },
       "round": 9,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -5045,6 +6045,14 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "t1": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+      },
       "round": 10,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -5056,6 +6064,12 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
   ],
   "summary": {
     "avgHealingPerRound": 1400,
+    "perRecipient": {
+      "t1": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 14000,
+      },
+    },
     "teamTotalHealing": 0,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
@@ -5250,7 +6264,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
-      "effectiveHealing": 0,
+      "effectiveHealing": 1000,
       "enemyEffects": [],
       "healTargetBuffs": [
         {
@@ -5260,7 +6274,15 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
-      "overheal": 0,
+      "overheal": 1500,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 0,
+          "effectiveHealing": 1000,
+          "hotHeal": 2500,
+          "overheal": 1500,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 1000,
@@ -5284,7 +6306,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
-      "effectiveHealing": 0,
+      "effectiveHealing": 1000,
       "enemyEffects": [],
       "healTargetBuffs": [
         {
@@ -5294,7 +6316,15 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
-      "overheal": 0,
+      "overheal": 1500,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 0,
+          "effectiveHealing": 1000,
+          "hotHeal": 2500,
+          "overheal": 1500,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 1000,
@@ -5318,7 +6348,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
-      "effectiveHealing": 0,
+      "effectiveHealing": 1000,
       "enemyEffects": [],
       "healTargetBuffs": [
         {
@@ -5328,7 +6358,15 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
-      "overheal": 0,
+      "overheal": 1500,
+      "perRecipient": {
+        "tank": {
+          "directHeal": 0,
+          "effectiveHealing": 1000,
+          "hotHeal": 2500,
+          "overheal": 1500,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "tank": 1000,
@@ -5345,15 +6383,21 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
   ],
   "summary": {
     "avgHealingPerRound": 0,
+    "perRecipient": {
+      "tank": {
+        "totalEffectiveHealing": 3000,
+        "totalOverheal": 4500,
+      },
+    },
     "teamTotalHealing": 7500,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
-    "totalEffectiveHealing": 0,
+    "totalEffectiveHealing": 3000,
     "totalHealing": 0,
     "totalHotHeal": 0,
     "totalIncomingDamage": 4000,
-    "totalOverheal": 0,
+    "totalOverheal": 4500,
     "totalShield": 0,
     "totalShieldAbsorbed": 0,
   },
@@ -5519,6 +6563,14 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "hotHeal": 0,
       "incomingDamage": 1500,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 1000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 1500,
@@ -5547,6 +6599,14 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "hotHeal": 0,
       "incomingDamage": 1500,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 1000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 1500,
@@ -5575,6 +6635,14 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "hotHeal": 0,
       "incomingDamage": 1500,
       "overheal": 0,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 1000,
+          "hotHeal": 0,
+          "overheal": 0,
+        },
+      },
       "perTargetDealt": {
         "e1": {
           "attacker": 1500,
@@ -5590,6 +6658,12 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
   ],
   "summary": {
     "avgHealingPerRound": 375,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 3000,
+        "totalOverheal": 0,
+      },
+    },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 3000,
@@ -5895,6 +6969,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 1,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -5919,6 +7007,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 2,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -5943,6 +7045,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 3,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -5967,6 +7083,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 4,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -5991,6 +7121,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 5,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -6015,6 +7159,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 6,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -6039,6 +7197,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 7,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -6063,6 +7235,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 8,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -6087,6 +7273,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 9,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -6111,6 +7311,20 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 1000,
+      "perRecipient": {
+        "attacker": {
+          "directHeal": 1000,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1000,
+        },
+        "t1": {
+          "directHeal": 1200,
+          "effectiveHealing": 0,
+          "hotHeal": 0,
+          "overheal": 1200,
+        },
+      },
       "round": 10,
       "shield": 0,
       "shieldAbsorbed": 0,
@@ -6122,6 +7336,16 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
   ],
   "summary": {
     "avgHealingPerRound": 1000,
+    "perRecipient": {
+      "attacker": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 10000,
+      },
+      "t1": {
+        "totalEffectiveHealing": 0,
+        "totalOverheal": 12000,
+      },
+    },
     "teamTotalHealing": 12000,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
