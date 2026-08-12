@@ -132,6 +132,9 @@ export interface PlayerRoundCtx {
 export interface HealingRuntimeCtx {
     targetId: string;
     credit: (actorId: string, bucket: keyof ActorHealing, amount: number) => void;
+    /** Credit a bucket against the RECIPIENT the repair/shield landed on (the `perRecipient`
+     *  axis). No-op unless per-recipient application is active. */
+    creditRecipient?: (recipientId: string, bucket: keyof ActorHealing, amount: number) => void;
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
     recipientIncomingHealPct: (actorId: string) => number;
@@ -3646,6 +3649,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             );
                             healing.credit(actor.id, 'effectiveHeal', consumed);
                             healing.credit(actor.id, 'overheal', overheal);
+                            // Recipient axis (SP-3a Task 2): credit the actor the repair LANDED
+                            // ON. Gated on perRecipientActor so a legacy single-target run leaves
+                            // the map empty and every existing golden stays byte-identical.
+                            if (perRecipientActor) {
+                                healing.creditRecipient?.(rid, 'directHeal', raw);
+                                healing.creditRecipient?.(rid, 'effectiveHeal', consumed);
+                                healing.creditRecipient?.(rid, 'overheal', overheal);
+                            }
                             overhealSum += overheal;
                             if (overheal > 0) perTargetOverheal = overheal;
                         }
