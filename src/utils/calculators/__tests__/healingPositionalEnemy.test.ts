@@ -466,6 +466,139 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         expect(run('M1').summary.totalHealing).toBe(0);
     });
 
+    // ── An ALLY-SIDE active target must not bind the dummy ───────────────────────────
+    //
+    // ⚠️ THE MAJORITY PRODUCTION CONFIG, and it silently delivered ZERO.
+    // `resolvePositionalTarget` returns `null` for `target.side === 'ally'`
+    // (positionalBinding.ts:66-68), so `selectTurnTarget` falls back to `tb.legacyVictim` — the
+    // vestigial dummy. But `willApplyPositionally` (engine.ts:8388) checks only
+    // `isPositional && target != null && pattern != null` and NEVER the target's side, so it stays
+    // TRUE while the bound victim is the position-less dummy; the positional apply then resolves
+    // footprint victims from `tgt.position === undefined`, finds none, and delivers nothing.
+    //
+    // `docs/ship-targeting.csv` has 20 ships with an ally-side `active_target` — AEGIS, Chimei,
+    // Cultivator, Flamel, Graphite, Grif, Harvester, Hayyan, Heliodor, Hermes, Howler, Makoli,
+    // Meatshield, Nyxen, Oleander, Paracelsus, Salvation, Sentinel, Shelter, Volk — i.e. the whole
+    // healer roster this calculator exists for, and the page passes each one's REAL parsed targeting.
+    // Corpus-inert today only because all 20 wrap a repair/shield percentage in `<unit-damage>` rather
+    // than carrying a real damage clause, so nothing pins it but the headline "nothing reaches the
+    // dummy" claim. The adapter substitutes `DEFAULT_FRONT_ENEMY_TARGET` for the ally-side axis; the
+    // support footprint rides `pattern`, which is threaded separately and untouched (proved by the
+    // footprint fixtures above, which keep their ally-side `allies` targeting).
+    it('an ally-side ACTIVE target still binds a real enemy: the rider tracks enemy defence', () => {
+        /** The Volk shape: ally-side active target + a real support pattern. */
+        const allyActive = (defence: number) =>
+            simulateHealing(
+                BASE({
+                    enemies: [enemy('enemy-1', defence, 500_000)],
+                    healerPosition: 'M2',
+                    healerTargeting: {
+                        active: {
+                            target: parseTarget('allies'),
+                            pattern: parsePattern('Pattern-Cone-Support-Range-1'),
+                        },
+                    },
+                })
+            );
+
+        idc = 0;
+        const low = allyActive(1_000);
+        idc = 0;
+        const high = allyActive(9_000);
+
+        // THE TRIPWIRE: the `damage-dealt` rider must be SENSITIVE to the enemy's defence. Before the
+        // substitution both legs were 0 — no sensitivity, and `toBeGreaterThan(0)` alone would not
+        // have caught it either, which is why the pair is asserted and not just one leg.
+        expect(low.summary.totalDirectHeal).toBeGreaterThan(0);
+        expect(high.summary.totalDirectHeal).toBeGreaterThan(0);
+        expect(low.summary.totalDirectHeal).toBeGreaterThan(high.summary.totalDirectHeal);
+        // And the per-victim apply really ran against the REAL enemy — the only non-silent proof
+        // (the dummy path credits a plausible number while leaving this map empty/undefined).
+        expect(Object.keys(low.rounds[0].perTargetDealt?.[FOCUS_ID_IN_ENGINE] ?? {})).toContain(
+            'enemy-1'
+        );
+    });
+
+    // ── An enemy's OWN parsed pattern drives its footprint ───────────────────────────
+    //
+    // The axis the healing page fills from `targetingOf(getShipById(e.shipId))` since the SP-3b review
+    // (spec decision 4: targeting comes from EVERY actor's parsed skill targeting, not just the
+    // healer's). Before that, `enemyInputs` supplied `position` but never `target`/`pattern`, so every
+    // enemy — including a real ship the user picked — defaulted to single-target FRONT and an enemy AoE
+    // attacker hit exactly ONE player ship. That understates incoming pressure on a spread board and
+    // makes defensive placement inert against the enemy side.
+    it("an enemy's own AoE pattern hits its real footprint, not one ship", () => {
+        const walked = (id: string, position: Position): TeamActorInput => ({
+            id,
+            speed: 10,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position,
+            // A walk bundle is REQUIRED for `stats` to reach the engine (`deriveTeamEngineActors`
+            // classifies a bundle-less actor as LEGACY and hands it hp 1 / defence 0), so without it
+            // both legs would kill the allies outright and observe nothing.
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 200_000,
+            },
+        });
+        /** Speed 999 so the enemy acts; `front` anchors on the player's front-most cell (col 4 = front,
+         *  so among {M1, M2, M3} that is M3 — the healer). */
+        const aoeEnemy = (pattern: 'Pattern-Base' | 'Pattern-Circle-Range-1') => ({
+            id: 'enemy-1',
+            stats: {
+                attack: 5_000,
+                crit: 0,
+                critDamage: 0,
+                speed: 999,
+                defence: 0,
+                hp: 1_000_000,
+                security: 100,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4' as const,
+            target: parseTarget('front'),
+            pattern: parsePattern(pattern),
+        });
+        const run = (pattern: 'Pattern-Base' | 'Pattern-Circle-Range-1') => {
+            idc = 0;
+            return simulateHealing(
+                BASE({
+                    rounds: 1,
+                    shipSkills: { slots: [] },
+                    healTargetId: 'ally-mid',
+                    teamActors: [walked('ally-mid', 'M2'), walked('ally-back', 'M1')],
+                    enemies: [aoeEnemy(pattern)],
+                    healerPosition: 'M3',
+                })
+            );
+        };
+
+        // Single-target: only the anchor (the healer at M3) is hit.
+        const single = run('Pattern-Base');
+        expect(Object.keys(single.rounds[0].perTargetDealt?.['enemy-1'] ?? {})).toEqual([
+            FOCUS_ID_IN_ENGINE,
+        ]);
+        // Circle-Range-1 from M3 also covers M2 — the ally the healer is keeping alive. The
+        // difference between these two legs is exactly what the page's missing `pattern` erased.
+        const aoe = run('Pattern-Circle-Range-1');
+        const victims = Object.keys(aoe.rounds[0].perTargetDealt?.['enemy-1'] ?? {});
+        expect(victims).toContain(FOCUS_ID_IN_ENGINE);
+        expect(victims).toContain('ally-mid');
+        // And it shows up where the user reads it: the heal target now takes incoming damage.
+        expect(single.summary.totalIncomingDamage).toBe(0);
+        expect(aoe.summary.totalIncomingDamage).toBeGreaterThan(0);
+    });
+
     // ── healTargetAffinity reaches a TEAM heal target, not just the focus ────────────
     //
     // The adapter threads `healTargetAffinity` onto whichever actor IS the heal target. Every other

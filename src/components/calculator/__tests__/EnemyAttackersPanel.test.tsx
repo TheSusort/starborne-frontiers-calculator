@@ -176,9 +176,48 @@ describe('EnemyAttackersPanel', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', { affinity: 'electric' });
     });
 
-    it('propagates manual edits and removal', () => {
+    it('propagates manual edits', () => {
         const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        fireEvent.change(screen.getByLabelText('Attack'), { target: { value: '8000' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
+    });
+
+    // ⚠️ The remove control is WITHHELD from the last remaining enemy. An empty roster leaves the
+    // healing run with no positioned opponent, so the engine falls back to its vestigial dummy (a
+    // fixed 10,000-defence / 1,000,000-HP sink that never dies) and every `basis:'damage-dealt'`
+    // rider silently rebases off that 10,000 — measured as totalDirectHeal 3,876 → 1,290.
+    it('propagates removal, but never for the last remaining enemy', () => {
         const onRemove = vi.fn();
+        const two = [manual, { ...manual, id: '2', name: 'Enemy 2', position: 'M3' as const }];
+        const { unmount } = render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={two}
+                onAdd={noop}
+                onRemove={onRemove}
+                onSelectShip={noop}
+                onUpdate={noop}
+            />
+        );
+        const buttons = screen.getAllByLabelText('Remove enemy');
+        expect(buttons).toHaveLength(2);
+        fireEvent.click(buttons[1]);
+        expect(onRemove).toHaveBeenCalledWith('2');
+        unmount();
+
+        // The floor: one enemy left → no control at all.
         render(
             <EnemyAttackersPanel
                 isOpen
@@ -187,13 +226,10 @@ describe('EnemyAttackersPanel', () => {
                 onAdd={noop}
                 onRemove={onRemove}
                 onSelectShip={noop}
-                onUpdate={onUpdate}
+                onUpdate={noop}
             />
         );
-        fireEvent.change(screen.getByLabelText('Attack'), { target: { value: '8000' } });
-        expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
-        fireEvent.click(screen.getByLabelText('Remove enemy'));
-        expect(onRemove).toHaveBeenCalledWith('1');
+        expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
     });
 
     it('renders the hacking field and propagates edits', () => {

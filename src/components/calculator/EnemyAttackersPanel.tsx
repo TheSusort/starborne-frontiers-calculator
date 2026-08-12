@@ -59,10 +59,12 @@ const EnemyCard: React.FC<{
     /** Cells the OTHER enemies hold — annotated in the dropdown so a collision is visible before it
      *  happens. Sides are independent boards, so only enemy cells count here. */
     takenSlots: readonly Position[];
+    /** False for the LAST remaining enemy — the roster is floored at one, see the panel below. */
+    canRemove: boolean;
     onRemove: () => void;
     onSelectShip: (ship: Ship) => void;
     onUpdate: (updates: Partial<EnemyAttackerConfig>) => void;
-}> = ({ enemy, takenSlots, onRemove, onSelectShip, onUpdate }) => {
+}> = ({ enemy, takenSlots, canRemove, onRemove, onSelectShip, onUpdate }) => {
     const { getShipById } = useShips();
     const selectedShip = enemy.shipId ? getShipById(enemy.shipId) : undefined;
 
@@ -76,9 +78,11 @@ const EnemyCard: React.FC<{
                         variant="compact"
                     />
                 </div>
-                <Button variant="danger" onClick={onRemove} aria-label="Remove enemy">
-                    <CloseIcon />
-                </Button>
+                {canRemove && (
+                    <Button variant="danger" onClick={onRemove} aria-label="Remove enemy">
+                        <CloseIcon />
+                    </Button>
+                )}
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <Input
@@ -231,6 +235,16 @@ export const EnemyAttackersPanel: React.FC<EnemyAttackersPanelProps> = ({
                             takenSlots={enemies
                                 .filter((other) => other.id !== enemy.id)
                                 .map((other) => other.position)}
+                            // ⚠️ THE ROSTER IS FLOORED AT ONE, and the floor is not cosmetic. With
+                            // `enemies: []` the healing run has no positioned opponent at all, so
+                            // `selectTurnTarget` falls back to the engine's vestigial DUMMY — a fixed
+                            // 10,000-defence / 1,000,000-HP sink that never dies. Every
+                            // `basis:'damage-dealt'` heal or shield rider then scales off that 10,000
+                            // instead of the real enemy's defence (measured: totalDirectHeal 3,876 →
+                            // 1,290 against one enemy at defence 1,000, with `perTargetDealt` going
+                            // undefined — a silent 3x move from one click). The page's `removeEnemy`
+                            // floors it too; this is the half the user can see.
+                            canRemove={enemies.length > 1}
                             onRemove={() => onRemove(enemy.id)}
                             onSelectShip={(ship) => onSelectShip(enemy.id, ship)}
                             onUpdate={(updates) => onUpdate(enemy.id, updates)}

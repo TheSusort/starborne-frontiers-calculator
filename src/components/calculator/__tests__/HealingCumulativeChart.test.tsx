@@ -190,5 +190,56 @@ describe('HealingCumulativeChart', () => {
             expect(screen.getByText(/Target HP 60%/)).toBeInTheDocument();
             expect(screen.getByText(/Target HP 40%/)).toBeInTheDocument();
         });
+
+        it('names the two axes, because this tooltip shows both at once', () => {
+            renderTooltip(1);
+            // Direct/HoT/Shield are SOURCE-axis (healer throughput); Effective/Overheal are
+            // RECIPIENT-axis (what landed on the heal target). They can disagree by design, and this
+            // is the only surface that puts them side by side.
+            expect(screen.getByText(/Direct\/HoT\/Shield/)).toBeInTheDocument();
+            expect(screen.getByText(/Effective\/Overheal/)).toBeInTheDocument();
+        });
+    });
+
+    // ⚠️ The empty-state gate enumerates the metrics by hand, and it MISSED the recipient axis:
+    // `effectiveHealing`/`overheal` changed axis mid-branch and were never added, so a round where the
+    // healer produced nothing while an ALLY's cast landed on the heal target printed "No healer output
+    // this round" on top of numbers it was hiding.
+    it('does not claim an empty round when only the RECIPIENT axis is non-zero', () => {
+        const allyLanded: HealingSimulationResult = {
+            // Zero healer throughput (no direct/HoT/shield/cleanse), but a repair from elsewhere
+            // landed on the heal target — the role-filtered-regeneration shape.
+            rounds: [row({ round: 1, effectiveHealing: 1000, overheal: 1500 })],
+            summary: summary(),
+        };
+        const only = [{ id: 'a', name: 'Ally Fed', result: allyLanded }];
+        render(<HealingCumulativeChart healers={only} rounds={1} enemyName={enemyName} />);
+        const Tooltip = capturedTooltip!.type as React.FC<{
+            active?: boolean;
+            label?: number;
+            healers: typeof only;
+        }>;
+        render(<Tooltip active label={1} healers={only} />);
+
+        expect(screen.queryByText('No healer output this round')).not.toBeInTheDocument();
+        expect(screen.getByText('1,000')).toBeInTheDocument();
+        expect(screen.getByText('1,500')).toBeInTheDocument();
+    });
+
+    it('still claims an empty round when EVERY metric is zero', () => {
+        // ANTI-VACUITY CONTRAST: the empty state is not simply gone.
+        const nothing: HealingSimulationResult = {
+            rounds: [row({ round: 1 })],
+            summary: summary(),
+        };
+        const only = [{ id: 'a', name: 'Idle', result: nothing }];
+        render(<HealingCumulativeChart healers={only} rounds={1} enemyName={enemyName} />);
+        const Tooltip = capturedTooltip!.type as React.FC<{
+            active?: boolean;
+            label?: number;
+            healers: typeof only;
+        }>;
+        render(<Tooltip active label={1} healers={only} />);
+        expect(screen.getByText('No healer output this round')).toBeInTheDocument();
     });
 });

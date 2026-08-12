@@ -2686,12 +2686,18 @@ const DocumentationPage: React.FC = () => {
                                         damage each round — and buff themselves and their team with
                                         their own abilities) or quick manual attack/defense lines.
                                         Each enemy has an affinity selector matched against the
-                                        target&apos;s affinity to scale their incoming damage. A
-                                        hover-gated round status panel beside the Healing Over Time
-                                        chart shows, for the hovered round and grouped per healer
-                                        config, the healer&apos;s own active buffs as well as which
-                                        self-buffs are active on each enemy and which debuffs or
-                                        DoTs they have landed on the target.
+                                        target&apos;s affinity to scale their incoming damage. An
+                                        enemy you pick from your ships also attacks with its own
+                                        targeting and pattern, so an area attacker hits every cell
+                                        its pattern covers rather than a single ship. There is
+                                        always at least one enemy: the last one cannot be removed,
+                                        because with nobody to fight, damage-scaled repairs would
+                                        have no real Defense to measure against. A hover-gated round
+                                        status panel beside the Healing Over Time chart shows, for
+                                        the hovered round and grouped per healer config, the
+                                        healer&apos;s own active buffs as well as which self-buffs
+                                        are active on each enemy and which debuffs or DoTs they have
+                                        landed on the target.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Board slots:</span> the
@@ -2734,7 +2740,10 @@ const DocumentationPage: React.FC = () => {
                                         itself produced none, because a team-mate&apos;s repair
                                         landed. An ally missing from the table received nothing.
                                         Shields and cleanses have no per-ally figure and stay on the
-                                        healer&apos;s summary.
+                                        healer&apos;s summary. Only your own ships are listed: an
+                                        enemy that repairs itself off its own damage still does so
+                                        in the fight, but it is never counted as healing for your
+                                        team (neither here nor in Team Healing).
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

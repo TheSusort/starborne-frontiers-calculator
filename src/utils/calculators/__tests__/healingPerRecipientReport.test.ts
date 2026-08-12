@@ -15,6 +15,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
+import { deriveTeamEngineActors } from '../dpsSimulator';
+import { runCombat } from '../../combat/engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { TeamActorInput } from '../../../types/calculator';
 import { parsePattern, parseTarget } from '../../targetingParser';
@@ -243,5 +245,122 @@ describe('SP-3b: per-recipient healing report', () => {
         // The healer is at full HP for the first tick, so the split shows up as over-repair.
         expect(ticked.effectiveHealing + ticked.overheal).toBe(ticked.hotHeal);
         expect(result.summary.totalOverheal).toBeGreaterThan(0);
+    });
+
+    // ── The recipient axis is SIDE-AGNOSTIC in the engine; the report must not be ─────
+    //
+    // ⚠️ THIS IS A DISPLAY-CORRECTNESS GUARD FOR "Healing by ally". `creditLandedRepair`
+    // (engine.ts) has no side check, and an ENEMY reaches two of its call sites:
+    //   - `procStandingLeechesPerVictim`'s `self` branch resolves `recipients = [sourceId]`, which is
+    //     the ENEMY's own id when the enemy is the attacker — the shape below;
+    //   - `procTakenLeechesPerVictim`, because `takenLeechesByOwner` is built from BOTH runtime maps
+    //     and the player→enemy attack sites call `procLeechesForVictim` (a `basis:'damage-taken'`
+    //     enemy passive).
+    // The kit below is Magnolia's REAL passive shape (`heal`, `basis:'damage-dealt'`,
+    // `target:'self'` — Valerian's too), and the enemy panel explicitly invites the user to pick
+    // such a ship, so this is production-reachable rather than theoretical. Unfiltered, the page's
+    // per-ally table rendered `enemy-1` as a healed ALLY (measured: one row `enemy-1 | 0 | 18,606`
+    // with the real heal target absent entirely, under a heading promising allies).
+    it('an ENEMY that repairs itself never appears on the recipient axis', () => {
+        /** Enemy kit: a real attack plus Magnolia's passive self-leech off the damage it deals. */
+        const leechEnemy = () => ({
+            ...enemy(),
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                        ],
+                    },
+                    {
+                        // PASSIVE slot is load-bearing: `standingLeeches` is scanned from
+                        // `slot.slot === 'passive'` only — an active-slot copy of this ability
+                        // never enters the leech map and the fixture would observe nothing.
+                        slot: 'passive' as const,
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                config: { type: 'heal', pct: 50, basis: 'damage-dealt' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        });
+
+        idc = 0;
+        const result = simulateHealing(BASE({ enemies: [leechEnemy()] }));
+
+        // The enemy is absent from the window totals...
+        expect(Object.keys(result.summary.perRecipient!)).not.toContain('enemy-1');
+        // ...and from every per-round row (the table reads the summary, the tooltip the rows).
+        for (const row of result.rounds) {
+            if (row.perRecipient === undefined) continue;
+            expect(Object.keys(row.perRecipient)).not.toContain('enemy-1');
+        }
+        // The SOURCE axis is side-agnostic in the engine too — an enemy leech credits
+        // `credit(sourceId, 'directHeal', …)` under the ENEMY's id — so "every non-focus key"
+        // reported the enemy's self-repair as TEAM healing. Measured on this exact fixture:
+        // 15,000/round, 45,000 over the window, vs 0 with the leech passive removed. Neither ally
+        // here casts anything, so the only legitimate value is 0.
+        expect(result.summary.teamTotalHealing).toBe(0);
+        // ANTI-VACUITY 1 — the run really did produce a player-side recipient axis, so the absence
+        // above is about the enemy and not about a fixture where nothing healed at all.
+        expect(result.summary.perRecipient![HEAL_TARGET_ID].totalEffectiveHealing).toBeGreaterThan(
+            0
+        );
+
+        // ANTI-VACUITY 2 — and the ENEMY genuinely DID self-repair on this exact board. Asserted
+        // against the ENGINE's own recipient map (which is side-agnostic by design and stays that
+        // way), so this leg cannot be satisfied by the adapter's filter: without it the enemy key
+        // flows straight through to the report.
+        const engineRun = runCombat({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: allyHealSkills(),
+            enemyDefense: 10_000,
+            enemyHp: 1_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: HEALER.hp,
+            speed: HEALER.speed,
+            enemySecurity: 100,
+            enemySpeed: 0,
+            healModifier: 0,
+            healTargetId: HEAL_TARGET_ID,
+            position: 'M2',
+            target: parseTarget('allies'),
+            pattern: parsePattern('Pattern-Line-Support-Range-3'),
+            perRecipientHealApply: true,
+            enemyAttackers: [leechEnemy()],
+            // Walk bundles are the ADAPTER's job, so a direct-engine call must supply them or
+            // `normalizeTeamActorsToWalked` hands the ally hp 1 and it dies instantly.
+            teamActors: deriveTeamEngineActors(
+                [ally(HEAL_TARGET_ID, 'M3'), ally(SECOND_ALLY_ID, 'M4')],
+                undefined
+            ),
+        });
+        const enemyCredited = (engineRun.healing?.rounds ?? []).some((hr) =>
+            hr.perRecipient.has('enemy-1')
+        );
+        expect(enemyCredited).toBe(true);
     });
 });

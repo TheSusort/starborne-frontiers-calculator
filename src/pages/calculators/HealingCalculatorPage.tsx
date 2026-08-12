@@ -375,8 +375,15 @@ const HealingCalculatorPage: React.FC = () => {
         ]);
     };
 
+    // ⚠️ FLOORED AT ONE ENEMY, same shape as `removeTeamShip` below — and for a bigger reason than
+    // tidiness. An EMPTY roster has no positioned opponent, so `selectTurnTarget` falls back to the
+    // engine's vestigial DUMMY (a fixed 10,000-defence / 1,000,000-HP sink that never dies): every
+    // `basis:'damage-dealt'` rider silently rebases off that 10,000 and `perTargetDealt` disappears
+    // (measured: totalDirectHeal 3,876 with one real enemy at defence 1,000 → 1,290 with none — a 3x
+    // move from a single click on a fresh page). The remove button is also hidden for the last enemy,
+    // so this guard is the belt to that braces.
     const removeEnemy = (id: string) => {
-        setEnemies((prev) => prev.filter((e) => e.id !== id));
+        setEnemies((prev) => (prev.length <= 1 ? prev : prev.filter((e) => e.id !== id)));
     };
 
     const selectEnemyShip = (id: string, ship: Ship) => {
@@ -588,28 +595,42 @@ const HealingCalculatorPage: React.FC = () => {
 
     const enemyInputs = useMemo<EnemyAttackerInput[]>(
         () =>
-            enemies.map((e) => ({
-                id: e.id,
-                stats: {
-                    attack: e.attack,
-                    crit: e.crit,
-                    critDamage: e.critDamage,
-                    speed: e.speed,
-                    // The enemy's OWN numbers, no longer the adapter's legacy-sink fallbacks: its
-                    // defence is the basis for the healer's damage-dealt riders, its HP decides
-                    // whether it can be destroyed, and its security resists the healer's debuffs.
-                    hp: e.hp,
-                    defence: e.defence,
-                    security: e.security,
-                },
-                hacking: e.hacking,
-                chargeCount: e.chargeCount,
-                startCharged: e.startCharged,
-                shipSkills: e.shipSkills,
-                affinity: e.affinity,
-                position: e.position,
-            })),
-        [enemies]
+            enemies.map((e) => {
+                // The enemy's OWN parsed targeting, exactly as the healer gets its own (decision 4:
+                // targeting comes from every ACTOR's parsed skill targeting, not just the healer's).
+                // Without it every enemy defaulted to single-target FRONT, so an enemy AoE attacker hit
+                // exactly one player ship instead of its real footprint — understating incoming
+                // pressure on a spread board and making defensive placement inert against the enemy
+                // side. Undefined for a manual enemy (or an unparseable kit), and the adapter's
+                // synthetic front/base fallback then applies.
+                const targeting = targetingOf(e.shipId ? getShipById(e.shipId) : undefined);
+                return {
+                    id: e.id,
+                    stats: {
+                        attack: e.attack,
+                        crit: e.crit,
+                        critDamage: e.critDamage,
+                        speed: e.speed,
+                        // The enemy's OWN numbers, no longer the adapter's legacy-sink fallbacks: its
+                        // defence is the basis for the healer's damage-dealt riders, its HP decides
+                        // whether it can be destroyed, and its security resists the healer's debuffs.
+                        hp: e.hp,
+                        defence: e.defence,
+                        security: e.security,
+                    },
+                    hacking: e.hacking,
+                    chargeCount: e.chargeCount,
+                    startCharged: e.startCharged,
+                    shipSkills: e.shipSkills,
+                    affinity: e.affinity,
+                    position: e.position,
+                    target: targeting?.active?.target,
+                    pattern: targeting?.active?.pattern,
+                    chargedTarget: targeting?.charged?.target,
+                    chargedPattern: targeting?.charged?.pattern,
+                };
+            }),
+        [enemies, getShipById]
     );
 
     const simResults = useMemo(() => {

@@ -109,18 +109,35 @@ describe('HealingCalculatorPage', () => {
         expect(screen.getByText('About the Simulation')).toBeInTheDocument();
     });
 
-    it('removeEnemy: clicking X on the only enemy attacker reduces the count to 0', () => {
+    // ── The enemy roster is FLOORED AT ONE ──────────────────────────────────────
+    //
+    // ⚠️ THIS TEST USED TO PIN THE OPPOSITE ('…reduces the count to 0'), which is how the regression
+    // stayed invisible. An EMPTY roster leaves the healing run with no positioned opponent, so
+    // `selectTurnTarget` falls back to the engine's vestigial DUMMY — the fixed 10,000-defence /
+    // 1,000,000-HP sink that never dies — and every `basis:'damage-dealt'` rider silently rebases off
+    // that 10,000 while `perTargetDealt` disappears (measured: totalDirectHeal 3,876 against one real
+    // enemy at defence 1,000 → 1,290 with none). One click on a fresh page was enough, which also
+    // falsified the adapter's documented claim that the dummy is unreachable from the app.
+    it('the enemy roster is floored at one: the last enemy has no remove button', () => {
         render(
             <MemoryRouter>
                 <HealingCalculatorPage />
             </MemoryRouter>
         );
-        // Initially one enemy → count shows (1).
+        // One seeded enemy, and NO way to delete it.
         expect(screen.getByText(/Enemy Team \(1\)/)).toBeInTheDocument();
-        // Click the remove button for the first (and only) enemy attacker.
-        fireEvent.click(screen.getByLabelText('Remove enemy'));
-        // Guard removed → count now shows (0).
-        expect(screen.getByText(/Enemy Team \(0\)/)).toBeInTheDocument();
+        expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
+
+        // ANTI-VACUITY: the button is conditional, not simply missing. Add a second enemy and both
+        // cards gain one — otherwise this test would stay green if the control were deleted outright.
+        fireEvent.click(screen.getByText('+ Add enemy'));
+        expect(screen.getByText(/Enemy Team \(2\)/)).toBeInTheDocument();
+        expect(screen.getAllByLabelText('Remove enemy')).toHaveLength(2);
+
+        // Removing gets back to one — and the floor closes the door again.
+        fireEvent.click(screen.getAllByLabelText('Remove enemy')[1]);
+        expect(screen.getByText(/Enemy Team \(1\)/)).toBeInTheDocument();
+        expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
     });
 
     // ── Decision 8: the uncovered-placement warning ─────────────────────────────

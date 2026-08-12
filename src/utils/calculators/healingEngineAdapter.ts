@@ -290,9 +290,21 @@ export const FOCUS_ID = 'attacker';
  * via `defaultHealTargetSlot`) is the only mitigation.
  *
  * The vestigial dummy is the opponent only where positional resolution yields nothing: when
- * `enemies` is EMPTY (a test-only shape — the page seeds one enemy and offers no delete), or when a
- * placed actor's target/pattern resolves to no victim at all, since `selectTurnTarget` ends in
- * `selected ?? legacyVictim` (engine.ts:6465). See the LEGACY_SINK_* comment below.
+ * `enemies` is EMPTY, or when a placed actor's target/pattern resolves to no victim at all, since
+ * `selectTurnTarget` ends in `selected ?? legacyVictim` (engine.ts:6465). See the LEGACY_SINK_*
+ * comment below.
+ *
+ * `enemies: []` is a TEST-ONLY shape, and that is now ENFORCED rather than merely asserted: the page
+ * seeds one enemy and FLOORS the roster at one (`removeEnemy` refuses to empty it and the last card's
+ * remove button is withheld — `HealingCalculatorPage.tsx` / `EnemyAttackersPanel.tsx`). It was not
+ * enforced when this comment first claimed it: every card carried an unconditional remove button, so
+ * one click on a fresh page emptied the roster and handed the run to the dummy — totalDirectHeal
+ * 3,876 → 1,290 (the sink's 10,000 defence rebasing a `damage-dealt` rider), with `perTargetDealt`
+ * going undefined. If a future page control can empty the roster again, the claim in this paragraph
+ * is what breaks first.
+ *
+ * The ally-side substitution below is the other half of the same claim: a support healer's ACTIVE
+ * target is ally-side, which resolves to no opposing victim at all.
  *
  * Rounding: every healing number is rounded with Math.round (mirroring RoundData's damage
  * rounding). Raws are accumulated UNROUNDED and rounded LAST — per-row summed buckets and the
@@ -313,8 +325,13 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // SP-3: the healer's `damage` cast now lands on a REAL positioned enemy whenever an enemy
     // roster is supplied, which is exactly what F7's `basis:'damage-dealt'` riders needed — that
     // finding was conditional on the run being non-positional, not permanent. Production always
-    // supplies at least one enemy (HealingCalculatorPage seeds one and offers no delete), so the
-    // dummy punching bag is unreachable from the app.
+    // supplies at least one enemy: `HealingCalculatorPage` seeds one and FLOORS the roster at one
+    // (`removeEnemy` refuses to empty it and the last card's remove button is withheld), so the dummy
+    // punching bag is unreachable from the app. That floor is load-bearing for this paragraph, and it
+    // did not exist when the paragraph was first written — the last enemy carried a live remove
+    // button, and one click rebased every `damage-dealt` rider onto the sink's 10,000 defence
+    // (measured totalDirectHeal 3,876 → 1,290). The ally-side target substitution further down is the
+    // other half of the same claim.
     //
     // These scalars are the LEGACY SINK, and they now do DOUBLE duty:
     //
@@ -353,6 +370,39 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // Heal-target id mapping: 'healer' → the engine's focus id; otherwise pass through (must be
     // a team actor id — the engine throws on an unknown id, which we let propagate).
     const healTargetId = input.healTargetId === 'healer' ? FOCUS_ID : input.healTargetId;
+
+    /**
+     * The actor-level `target` axis exists to bind the OFFENSIVE cast — which opposing cell this
+     * actor's damage anchors on. An ALLY-side target cannot do that job and must not be forwarded.
+     *
+     * ⚠️ NOT a normalisation nicety. `resolvePositionalTarget` returns `null` for
+     * `target.side === 'ally'` (positionalBinding.ts:66-68), so `selectTurnTarget` falls back to
+     * `tb.legacyVictim` — the vestigial DUMMY. Worse, `willApplyPositionally` (engine.ts:8388) tests
+     * only `isPositional && target != null && pattern != null` and never the target's SIDE, so it
+     * stays TRUE while the bound victim is the position-less dummy: the positional apply then resolves
+     * footprint victims from `tgt.position === undefined`, finds none, and delivers ZERO. Measured on
+     * a Volk-shaped `allies` target with `Pattern-Cone-Support-Range-1` over a `damage` + 50%
+     * `damage-dealt` rider kit: `perTargetDealt` undefined and the rider heal 0 at enemy defence 1,000
+     * AND at 9,000 — no sensitivity at all — where the same kit with `front` targeting pays 3,876.
+     *
+     * This is the MAJORITY production config, not an edge case: `docs/ship-targeting.csv` lists 20
+     * ships with an ally-side `active_target` (AEGIS, Chimei, Cultivator, Flamel, Graphite, Grif,
+     * Harvester, Hayyan, Heliodor, Hermes, Howler, Makoli, Meatshield, Nyxen, Oleander, Paracelsus,
+     * Salvation, Sentinel, Shelter, Volk) — i.e. the entire healer roster this calculator exists for,
+     * plus any of them picked as an ENEMY. No shipped ship reports a wrong number today only because
+     * all 20 wrap a repair/shield percentage in `<unit-damage>` and none carries a real damage clause.
+     *
+     * The SUPPORT footprint is unaffected: `supportFootprintAllyIds` derives it from `pattern`
+     * (playerTurn.ts:1143) which is threaded separately, and `resolveSupportRecipients` never reads
+     * this axis. Substituting here therefore costs the support side nothing.
+     */
+    const offensiveTarget = (t: ParsedTarget | undefined): ParsedTarget =>
+        t !== undefined && t.side !== 'ally' ? t : DEFAULT_FRONT_ENEMY_TARGET;
+    /** Same rule for the charged axis — but `undefined` must STAY undefined, because the engine's
+     *  own fallback is "charged axis absent ⇒ reuse the active one". Substituting a default here
+     *  would silently override a charged-target-less actor's active binding. */
+    const chargedOffensiveTarget = (t: ParsedTarget | undefined): ParsedTarget | undefined =>
+        t === undefined ? undefined : offensiveTarget(t);
 
     // Player-side slots (SP-3), resolved by the SHARED helper the page's placement warning also
     // calls — so the warning reasons about the cells this run really uses. Collision resolution is
@@ -394,9 +444,12 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         ...t,
         position: playerAllySlots[i],
         affinity: t.affinity ?? (t.id === healTargetId ? healTargetAffinity : undefined),
-        target: t.target ?? DEFAULT_FRONT_ENEMY_TARGET,
+        // Ally-side axes are substituted, not forwarded — see `offensiveTarget`. A team actor with an
+        // ally-side active target would otherwise bind the dummy and deliver zero, exactly as the
+        // focus did.
+        target: offensiveTarget(t.target),
         pattern: t.pattern ?? DEFAULT_BASE_PATTERN,
-        chargedTarget: t.chargedTarget,
+        chargedTarget: chargedOffensiveTarget(t.chargedTarget),
         chargedPattern: t.chargedPattern,
     }));
     /** The focus actor is the HEALER, so it is the heal target only in the self-heal case. */
@@ -436,10 +489,14 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             position: enemySlots[i],
             // A kitless/manual enemy has no parsed targeting, so it would have NO ParsedTarget and
             // fall back to `legacyVictim` — the dummy — leaving SP-4 blocked. The synthetic
-            // fallback keeps every enemy resolving onto a real player actor.
-            target: e.target ?? DEFAULT_FRONT_ENEMY_TARGET,
+            // fallback keeps every enemy resolving onto a real player actor. An ALLY-side parsed
+            // target is substituted for the same default rather than forwarded (see
+            // `offensiveTarget`): since the page now feeds every enemy its REAL parsed targeting, a
+            // support ship picked as an enemy — 20 of them have an ally-side active target — would
+            // otherwise bind the dummy and deliver nothing.
+            target: offensiveTarget(e.target),
             pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
-            chargedTarget: e.chargedTarget,
+            chargedTarget: chargedOffensiveTarget(e.chargedTarget),
             chargedPattern: e.chargedPattern,
         };
     });
@@ -487,9 +544,13 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // target but no pattern the cast resolves onto the real enemy yet skips the per-victim
         // apply, so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
         position: resolvedHealerSlot,
-        target: input.healerTargeting?.active?.target ?? DEFAULT_FRONT_ENEMY_TARGET,
+        // A support healer's parsed ACTIVE target is ALLY-side for 20 of the roster's ships, and an
+        // ally-side target binds the DUMMY while still passing the positional-apply gate — so any
+        // offensive clause in the cast delivers exactly zero. Substituted here; the support footprint
+        // rides `pattern` below and is untouched. See `offensiveTarget` for the measurements.
+        target: offensiveTarget(input.healerTargeting?.active?.target),
         pattern: input.healerTargeting?.active?.pattern ?? DEFAULT_BASE_PATTERN,
-        chargedTarget: input.healerTargeting?.charged?.target,
+        chargedTarget: chargedOffensiveTarget(input.healerTargeting?.charged?.target),
         chargedPattern: input.healerTargeting?.charged?.pattern,
         // Heals apply to each recipient the caster's support pattern covers — WITHOUT
         // teamBattle's lowest-HP routing, which is not the game's rule (only Volk's passive is).
@@ -498,6 +559,36 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
 
     // healing is always present (healTargetId is always set in this adapter), but guard anyway.
     const healingRounds = healing?.rounds ?? [];
+
+    /**
+     * The PLAYER-side recipient axis — every id a repair may legitimately be REPORTED against.
+     *
+     * ⚠️ NOT defensive tidiness: the engine's recipient axis is side-AGNOSTIC and enemy actors
+     * genuinely land on it. `creditLandedRepair` (engine.ts) carries no side check, and two of its
+     * call sites are reachable by an enemy owner:
+     *   - `procTakenLeechesPerVictim(victim, …)` — `takenLeechesByOwner` is built from BOTH runtime
+     *     maps, and the player→enemy attack sites call `procLeechesForVictim`, so an ENEMY victim
+     *     with a `basis:'damage-taken'` repair passive credits itself as the "recipient";
+     *   - `procStandingLeechesPerVictim` — its `self` branch resolves `recipients = [sourceId]`,
+     *     which is the enemy's own id when the enemy is the attacker. Magnolia's real passive shape
+     *     (`heal`, `basis:'damage-dealt'`, `target:'self'` — Valerian's too) hits exactly this, and
+     *     the enemy panel explicitly invites the user to pick such a ship.
+     *
+     * Left unfiltered, the page's "Healing by ally" table renders that enemy as a healed ALLY
+     * (measured: a single row `enemy-1 | 0 | 18,606` under a heading promising allies, with the real
+     * heal target absent entirely). Filtered HERE rather than in the engine on purpose: an
+     * `isEnemySide` guard inside `creditLandedRepair` is the more principled home but touches the
+     * engine's enemy-side symmetry work, and the adapter is the layer that actually knows the whole
+     * player id set — the focus, the resolved heal target, and every team actor.
+     *
+     * This drops enemy keys from the REPORT only; the engine still applies the enemy's own repair to
+     * the enemy, so its survival is unaffected.
+     */
+    const playerRecipientIds = new Set<string>([
+        FOCUS_ID,
+        healTargetId,
+        ...(teamActors ?? []).map((t) => t.id),
+    ]);
 
     // Raw (unrounded) accumulators — rounded once at presentation (per row / summary).
     let cumulativeRaw = 0;
@@ -545,20 +636,31 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         const shieldAbsorbedRaw = hr?.shieldAbsorbed ?? 0;
         const barrierAbsorbedRaw = hr?.barrierAbsorbed ?? 0;
 
-        // teamHealing = Σ non-focus entries' raw (direct + HoT). Team shield contributes to the
-        // pool mechanically (the engine consumes it) but is NOT separately reported here.
+        // teamHealing = Σ non-focus PLAYER entries' raw (direct + HoT). Team shield contributes to
+        // the pool mechanically (the engine consumes it) but is NOT separately reported here.
+        //
+        // ⚠️ The SOURCE axis is side-agnostic too, for the same reason the recipient axis is: an
+        // enemy's own leech calls `healingCtx.credit(sourceId, 'directHeal', raw)` with the ENEMY's
+        // id. "Every non-focus key" therefore counted enemy self-repair as TEAM healing — measured
+        // on a Magnolia-shaped enemy passive: `teamHealing` 15,000/round (45,000 over the window)
+        // that drops to 0 the moment the leech passive is removed, surfaced in the chart tooltip as
+        // "Team Heal". Same `playerRecipientIds` gate as the recipient axis below.
         let teamRoundRaw = 0;
         if (hr) {
             for (const [id, h] of hr.perActor) {
                 if (id === FOCUS_ID) continue;
+                if (!playerRecipientIds.has(id)) continue;
                 teamRoundRaw += h.directHeal + h.hotHeal;
             }
         }
 
         // Fold this round's recipient-axis entries into the window totals. RAW (unrounded) —
-        // rounded once at presentation, like every other accumulator here.
+        // rounded once at presentation, like every other accumulator here. ENEMY-side keys are
+        // dropped (see `playerRecipientIds`): the engine's axis is side-agnostic, so an enemy that
+        // self-repairs off its own leech lands on it and would otherwise be reported as an ally.
         if (hr) {
             for (const [id, h] of hr.perRecipient) {
+                if (!playerRecipientIds.has(id)) continue;
                 const acc = perRecipientRaw.get(id) ?? { effective: 0, overheal: 0 };
                 acc.effective += h.effectiveHeal;
                 acc.overheal += h.overheal;
@@ -626,6 +728,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
                     }
                 > = {};
                 for (const [id, h] of hr?.perRecipient ?? []) {
+                    // Enemy-side keys never reach the report — see `playerRecipientIds`.
+                    if (!playerRecipientIds.has(id)) continue;
                     if (
                         h.directHeal === 0 &&
                         h.hotHeal === 0 &&
