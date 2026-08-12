@@ -1139,17 +1139,29 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
 
     it('a killable enemy stops contributing incoming damage', () => {
         idc = 0;
-        // Window kept TIGHT: over a long window the healer kills everything and the premise
-        // evaporates (SP-1's earned lesson).
-        const result = simulateHealing(
-            BASE({
-                rounds: 3,
-                enemies: [
-                    { ...enemy('enemy-1', 0, 1), stats: { ...enemy('enemy-1', 0, 1).stats, attack: 5_000 } },
-                ],
-            })
-        );
-        // The 1-HP enemy dies in round 1, so rounds 2-3 take no incoming damage from it.
+        // ⚠️ ANTI-VACUITY, load-bearing. The enemy must land at least one hit BEFORE dying, or
+        // "no incoming damage after round 1" is trivially true and the test observes nothing.
+        // Turn order is speed-driven, so the enemy is given speed 999 (> the healer's 300) to act
+        // FIRST in round 1; it then dies to the healer's cast in that same round.
+        // Window kept TIGHT (3 rounds): over a long window the focus kills everything and the
+        // premise evaporates — SP-1's earned lesson.
+        const glassCannon = {
+            ...enemy('enemy-1', 0, 1),
+            stats: {
+                attack: 5_000,
+                crit: 0,
+                critDamage: 0,
+                speed: 999,
+                defence: 0,
+                hp: 1,
+                security: 100,
+            },
+        };
+        const result = simulateHealing(BASE({ rounds: 3, enemies: [glassCannon] }));
+
+        // Precondition: it DID hit in round 1. Without this the assertion below is vacuous.
+        expect(result.rounds[0].incomingDamage).toBeGreaterThan(0);
+        // And it died, so rounds 2-3 take nothing.
         const laterIncoming = result.rounds.slice(1).reduce((n, r) => n + r.incomingDamage, 0);
         expect(laterIncoming).toBe(0);
     });
@@ -1196,13 +1208,9 @@ Then, in the `runCombat` call:
         enemyHp: LEGACY_SINK_HP,
 ```
 
-Replace `enemySecurity: ENEMY_SECURITY,` and `enemySpeed: 0,` — each enemy now carries its own `security` and `speed`. Check whether the engine still requires those two top-level fields:
-
-```bash
-grep -n "enemySecurity\|enemySpeed" src/utils/combat/engine.ts | head
-```
-
-If they are required, pass `enemySecurity: 100` and `enemySpeed: 0` with a comment noting they describe the unreached legacy sink. If optional, drop them.
+**Delete `enemySecurity: ENEMY_SECURITY,` and `enemySpeed: 0,` outright** — each enemy now carries its
+own `security` and `speed`. ✅ **VERIFIED: both are OPTIONAL** on `CombatEngineInput`
+(`engine.ts:1180`, `:1186`), so dropping them compiles. Do not pass legacy-sink placeholders.
 
 - [ ] **Step 5: Thread positions, targeting, and the new flag**
 
