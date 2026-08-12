@@ -32,7 +32,7 @@ The spec is `docs/superpowers/specs/2026-08-11-dps-real-enemy-and-buff-timeline-
 
 Run against `simulateDPS` with a real positioned enemy, an active damage kit that also applies `Attack Down` (enemy) and `Attack Up` (self):
 
-```
+```text
 STATS  [{attacker,r1,20000},{enemy-1,r1,5000},{attacker,r2,26000},{enemy-1,r2,5000},{attacker,r3,26000},...]
 STATUS [{attacker,r1,buffs:["Attack Up"],debuffs:[]},{enemy,r1,[],[]},{enemy-1,r1,[],debuffs:["Attack Down"]}, ...]
 ```
@@ -961,14 +961,14 @@ In `src/utils/abilities/__tests__/buffAbilityConverters.test.ts`: delete the `de
 
 In `src/utils/combat/events.ts`, in the `stats-snapshot` doc comment (~`:487-493`), replace the sentence:
 
-```
+```text
  *  Exists SOLELY so `buildCombatLog` can attach a `statsSnapshot` to the turn view-model; folding
  *  it into any subscribed/aggregated path would be a bug.
 ```
 
 with:
 
-```
+```text
  *  Two display-only consumers: `buildCombatLog` attaches it to the turn view-model, and
  *  `simulateDPS`'s emit-only collector turn-weights it into the DPS summary's buffed-stat average
  *  (SP-2). Aggregating it for DISPLAY is fine. What would be a bug is subscribing a combat
@@ -978,7 +978,7 @@ with:
 
 In the `status-snapshot` doc comment (~`:513-522`), append after "the assembler prefers it over accumulation":
 
-```
+```text
  *  `simulateDPS` reads the same event for the DPS calculator's per-round chips (SP-2), filtered to
  *  the focus actor and the REAL enemy roster — the vestigial dummy also emits here, but it keys its
  *  debuffs under the `__enemy__` sentinel rather than its actor id, so its lists are always empty.

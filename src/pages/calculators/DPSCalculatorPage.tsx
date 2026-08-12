@@ -628,38 +628,54 @@ const DPSCalculatorPage: React.FC = () => {
                     <div
                         className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 ${configs.length >= 4 ? '2xl:w-[calc(100vw-256px-2rem)] 2xl:ml-[calc((-100vw/2)+768px+1rem)] 2xl:[grid-template-columns:repeat(auto-fit,minmax(370px,500px))] 2xl:justify-center' : ''}`}
                     >
-                        {configs.map((config) => (
-                            <ShipConfigCard
-                                key={config.id}
-                                config={config}
-                                isBest={bestConfig?.id === config.id}
-                                enemyAffinity={enemyAffinity}
-                                enemySecurity={enemySecurity}
-                                teamActors={teamTurnOrderActors}
-                                enemySpeed={enemySpeed}
-                                isComparing={configs.length > 1}
-                                simResult={simResults.get(config.id)}
-                                bestTotalDamage={bestTotalDamage}
-                                bestVsSecondLabel={bestVsSecondLabel}
-                                rounds={rounds}
-                                onRemove={() => removeConfig(config.id)}
-                                onUpdate={(field, value) => updateConfig(config.id, field, value)}
-                                onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
-                                onStartChargedChange={(checked) =>
-                                    setConfigs((prev) =>
-                                        prev.map((c) =>
-                                            c.id === config.id ? { ...c, startCharged: checked } : c
+                        {configs.map((config) => {
+                            // Same real affinity-vs-enemy modifiers the sim itself used for this
+                            // config (see `simResults` above) — threaded down so the summary's
+                            // displayed effective crit rate agrees with what the engine actually
+                            // rolled, instead of the plain 100 cap it used to hard-code.
+                            const { critCap, critPenalty } = computeAffinityModifiers(
+                                config.affinity,
+                                enemyAffinity
+                            );
+                            return (
+                                <ShipConfigCard
+                                    key={config.id}
+                                    config={config}
+                                    isBest={bestConfig?.id === config.id}
+                                    enemyAffinity={enemyAffinity}
+                                    enemySecurity={enemySecurity}
+                                    teamActors={teamTurnOrderActors}
+                                    enemySpeed={enemySpeed}
+                                    critCap={critCap}
+                                    critPenalty={critPenalty}
+                                    isComparing={configs.length > 1}
+                                    simResult={simResults.get(config.id)}
+                                    bestTotalDamage={bestTotalDamage}
+                                    bestVsSecondLabel={bestVsSecondLabel}
+                                    rounds={rounds}
+                                    onRemove={() => removeConfig(config.id)}
+                                    onUpdate={(field, value) =>
+                                        updateConfig(config.id, field, value)
+                                    }
+                                    onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
+                                    onStartChargedChange={(checked) =>
+                                        setConfigs((prev) =>
+                                            prev.map((c) =>
+                                                c.id === config.id
+                                                    ? { ...c, startCharged: checked }
+                                                    : c
+                                            )
                                         )
-                                    )
-                                }
-                                onShipSkillsChange={(shipSkills) =>
-                                    updateConfigShipSkills(config.id, shipSkills)
-                                }
-                                onAllyChargeChange={(value) =>
-                                    updateConfigAllyCharge(config.id, value)
-                                }
-                            />
-                        ))}
+                                    }
+                                    onShipSkillsChange={(shipSkills) =>
+                                        updateConfigShipSkills(config.id, shipSkills)
+                                    }
+                                    onAllyChargeChange={(value) =>
+                                        updateConfigAllyCharge(config.id, value)
+                                    }
+                                />
+                            );
+                        })}
                     </div>
 
                     <div className="card">

@@ -125,4 +125,45 @@ describe('averageEffectiveCrit', () => {
 
         expect(avg).toBe(50);
     });
+
+    it('honours a disadvantaged-matchup cap/penalty, resolved per turn before averaging', () => {
+        // Disadvantage modifiers (computeAffinityModifiers): critCap 75, critPenalty 25.
+        // Each turn: min(75, max(0, 100 - 25)) = min(75, 75) = 75. Both turns agree, so the
+        // average is just 75 — proving the penalty (not just the cap) is applied per turn.
+        const avg = averageEffectiveCrit(
+            [row([snapshot({ crit: 100 })]), row([snapshot({ crit: 100 })])],
+            { critCap: 75, critPenalty: 25 }
+        );
+
+        expect(avg).toBe(75);
+    });
+
+    it('applies the penalty per turn BEFORE the cap and before averaging', () => {
+        // Disadvantage modifiers: critCap 75, critPenalty 25.
+        // Turn 1: min(75, max(0, 60 - 25)) = min(75, 35) = 35.
+        // Turn 2: min(75, max(0, 100 - 25)) = min(75, 75) = 75.
+        // Turn-weighted average: (35 + 75) / 2 = 55.
+        // A cap-only (no-penalty) implementation would instead read min(75,60)=60 and
+        // min(75,100)=75 → (60+75)/2 = 67.5, so this discriminates the penalty specifically.
+        const avg = averageEffectiveCrit(
+            [row([snapshot({ crit: 60 })]), row([snapshot({ crit: 100 })])],
+            { critCap: 75, critPenalty: 25 }
+        );
+
+        expect(avg).toBe(55);
+    });
+
+    it('omitting the affinity argument behaves exactly as the plain 100/no-penalty default', () => {
+        // Same fixture as the "clamps each turn to 100" test above, called with no second
+        // argument at all — the default parameter must reproduce today's behaviour byte-for-byte.
+        const avg = averageEffectiveCrit([
+            row([snapshot({ crit: 70 })]),
+            row([snapshot({ crit: 120 })]),
+            row([snapshot({ crit: 120 })]),
+            row([snapshot({ crit: 120 })]),
+            row([snapshot({ crit: 120 })]),
+        ]);
+
+        expect(avg).toBeCloseTo(94, 6);
+    });
 });

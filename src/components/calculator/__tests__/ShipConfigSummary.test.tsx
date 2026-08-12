@@ -89,7 +89,10 @@ const simResult = (snapshots?: RoundStatsSnapshot[]): DPSSimulationResult => ({
     },
 });
 
-const renderSummary = (result: DPSSimulationResult) =>
+const renderSummary = (
+    result: DPSSimulationResult,
+    affinity: { critCap: number; critPenalty: number } = { critCap: 100, critPenalty: 0 }
+) =>
     render(
         <ShipConfigSummary
             config={config()}
@@ -101,6 +104,8 @@ const renderSummary = (result: DPSSimulationResult) =>
             bestVsSecondLabel={null}
             teamActors={[]}
             enemySpeed={50}
+            critCap={affinity.critCap}
+            critPenalty={affinity.critPenalty}
         />
     );
 
@@ -143,6 +148,22 @@ describe('ShipConfigSummary buffed stats', () => {
         );
 
         expect(screen.getByText('2.70x')).toBeInTheDocument();
+        expect(screen.queryByText('3.00x')).not.toBeInTheDocument();
+    });
+
+    it('honours a disadvantaged-matchup crit cap AND penalty, not the plain 100 cap', () => {
+        // Disadvantage modifiers (computeAffinityModifiers): critCap 75, critPenalty 25.
+        // Snapshot crit 100, critDamage 200: min(75, max(0, 100 - 25)) = min(75, 75) = 75%.
+        // calculateCritMultiplier: 1 + (75/100 * 200)/100 = 1 + 1.5 = 2.50x.
+        // A cap-only (no-penalty) reading would show 100% and 1 + (100/100*200)/100 = 3.00x —
+        // the two disagree, so which one renders proves the penalty is applied, not just the cap.
+        renderSummary(simResult([snapshot({ crit: 100, critDamage: 200 })]), {
+            critCap: 75,
+            critPenalty: 25,
+        });
+
+        expect(screen.getByText(/75% \/ 200%/)).toBeInTheDocument();
+        expect(screen.getByText('2.50x')).toBeInTheDocument();
         expect(screen.queryByText('3.00x')).not.toBeInTheDocument();
     });
 });

@@ -2298,9 +2298,9 @@ const DocumentationPage: React.FC = () => {
                                         every turn your ship takes &mdash; so a buff that only lands
                                         halfway through the fight counts for the part of the fight
                                         it was up, and an extra action counts as the extra turn it
-                                        is. Hovering a round in the chart also lists what each side
-                                        still carries at the end of that round, which is what makes
-                                        an expired or cleansed effect visibly disappear.
+                                        is. Hovering a simulated round in the chart also lists what
+                                        each side still carries at the end of that round, which is
+                                        what makes an expired or cleansed effect visibly disappear.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

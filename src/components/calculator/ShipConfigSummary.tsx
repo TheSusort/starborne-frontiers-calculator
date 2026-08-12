@@ -28,6 +28,10 @@ interface ShipConfigSummaryProps {
     bestVsSecondLabel: string | null;
     teamActors: TurnOrderTeamActor[];
     enemySpeed: number;
+    /** This config's real affinity-vs-enemy modifiers (from `computeAffinityModifiers`), used to
+     *  resolve the displayed effective crit rate the same way the engine resolves the real roll. */
+    critCap: number;
+    critPenalty: number;
 }
 
 export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
@@ -40,6 +44,8 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     bestVsSecondLabel,
     teamActors,
     enemySpeed,
+    critCap,
+    critPenalty,
 }) => {
     // Build the round's actor order with the engine's exact tiebreak rule. Input order
     // mirrors buildTurnQueue's caller contract: team actors, then the attacker, then the
@@ -64,11 +70,12 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     // The per-turn clamp lives in `averageEffectiveCrit`, not here: clamping the AVERAGE instead of
     // each turn over-reports (a turn folded to 120 still crits at 100, but averaging the raw folds
     // first can push the mean above what any turn actually rolled). See its doc for the worked
-    // example.
-    const avgCrit = averageEffectiveCrit(simResult.rounds);
+    // example. `critCap`/`critPenalty` are this config's real affinity-vs-enemy modifiers, so the
+    // displayed rate agrees with what the engine actually rolls on a disadvantaged matchup.
+    const avgCrit = averageEffectiveCrit(simResult.rounds, { critCap, critPenalty });
     const critMultiplier = calculateCritMultiplier({
         attack: avgStats?.attack ?? config.attack,
-        crit: avgCrit ?? Math.min(100, config.crit),
+        crit: avgCrit ?? Math.min(critCap, Math.max(0, config.crit - critPenalty)),
         critDamage: avgStats?.critDamage ?? config.critDamage,
         hp: 0,
         defence: 0,

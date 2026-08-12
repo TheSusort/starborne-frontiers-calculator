@@ -41,6 +41,11 @@ interface ShipConfigCardProps {
     enemySecurity: number;
     teamActors: TurnOrderTeamActor[];
     enemySpeed: number;
+    /** This config's real affinity-vs-enemy modifiers (from `computeAffinityModifiers`), threaded
+     *  down to `ShipConfigSummary` so its displayed effective crit rate honours the same cap/penalty
+     *  the engine resolves the real roll with. */
+    critCap: number;
+    critPenalty: number;
 }
 
 /**
@@ -81,6 +86,8 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     enemySecurity,
     teamActors,
     enemySpeed,
+    critCap,
+    critPenalty,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const { getShipById } = useShips();
@@ -306,6 +313,8 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         bestVsSecondLabel={bestVsSecondLabel}
                         teamActors={teamActors}
                         enemySpeed={enemySpeed}
+                        critCap={critCap}
+                        critPenalty={critPenalty}
                     />
                 )}
             </div>
