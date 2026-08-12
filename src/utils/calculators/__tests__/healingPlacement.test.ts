@@ -7,6 +7,7 @@ import {
     resolveEnemySlots,
 } from '../healingPlacement';
 import { parsePattern } from '../../targetingParser';
+import { resolveCells } from '../../targeting/resolvePattern';
 
 describe('healing calculator default placement', () => {
     it('the healer, heal target, and team ships never share a default slot', () => {
@@ -21,6 +22,12 @@ describe('healing calculator default placement', () => {
     it('gives the heal target NO front bias (decision 2)', () => {
         // Column 4 is the FRONT. The heal target must not be seeded there just to keep taking
         // damage — the owner ruled placement is explicit.
+        //
+        // NOTE: called with no arguments, this only exercises the unconditional
+        // `!healerPattern?.modifiers.support` neutral-fallback early return — it never reaches the
+        // `covered.find((p) => !p.endsWith('4'))` front-avoidance line below. That line's actual
+        // front-column *priority* is covered by 'prefers a non-front covered cell over the naive
+        // first match' in the decision-9 describe block below.
         expect(defaultHealTargetSlot().endsWith('4')).toBe(false);
     });
 
@@ -86,5 +93,26 @@ describe('defaultHealTargetSlot — minimal autoplace (decision 9)', () => {
         expect(defaultHealTargetSlot('M4', parsePattern('Pattern-Line-Support-Range-1'))).toBe(
             'M3'
         );
+    });
+
+    it('prefers a non-front covered cell over the naive first match', () => {
+        // Every other case in this file uses a forward-LINE pattern, where traversal order always
+        // places the column-4 cell last in `covered` — so "prefer non-front" and "take the first
+        // covered cell" coincide and neither this describe block nor the top-level no-front-bias
+        // test can distinguish `covered.find((p) => !p.endsWith('4'))` from a naive `covered[0]`.
+        // Pickaxe breaks that coincidence: its traversal visits the front cell FIRST.
+        const pattern = parsePattern('Pattern-Support-Double-Pickaxe-Range-0');
+        const covered = resolveCells(pattern, 'M3')
+            .map((c) => c.position)
+            .filter((p) => p !== 'M3');
+
+        // Precondition: the naive-first choice really is a front-column cell. This is what makes
+        // the test load-bearing — it guarantees the assertion below actually exercises
+        // front-avoidance rather than agreeing with it by coincidence. If a future change to the
+        // pickaxe offset table makes this false, this assertion is the tripwire: it will fail
+        // first and say so, instead of the test silently stopping protecting anything.
+        expect(covered[0].endsWith('4')).toBe(true);
+
+        expect(defaultHealTargetSlot('M3', pattern)).toBe('M2');
     });
 });
