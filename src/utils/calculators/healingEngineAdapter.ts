@@ -2,10 +2,12 @@ import { ShipSkills } from '../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import { AffinityName } from '../../types/ship';
 import type { ShipTypeName } from '../../constants/shipTypes';
+import type { Position } from '../../types/encounters';
 import type { ActiveBuff } from '../combat/statusEngine';
 import type { CombatEventBus } from '../combat/events';
 import { runCombat, EnemyRoundEffects } from '../combat/engine';
 import { selectFiringSkill } from '../abilities/applyAbilities';
+import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { computeAffinityModifiers } from './affinityUtils';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { deriveTeamEngineActors } from './dpsSimulator';
@@ -35,6 +37,16 @@ export interface EnemyAttackerInput {
         /** Shield penetration (H1 Task 2). Optional — threaded onto the engine enemy actor's
          *  stats.shieldPenetration. No production reader until H1 Task 4. */
         shieldPenetration?: number;
+        /** Enemy's own defence. Load-bearing since SP-3: the healer's damage cast now lands on
+         *  this enemy, and that number is the basis for `damage-dealt` heal/shield riders. */
+        defence?: number;
+        /** Enemy's own max HP. Load-bearing since SP-3: enemies can now be killed, which reduces
+         *  incoming pressure over the window. */
+        hp?: number;
+        /** Enemy's own security — resists the HEALER's outbound debuffs. Must be supplied: the
+         *  engine defaults an absent security to 0, so omitting it makes debuffs land strictly
+         *  more often than the pre-SP-3 fixed ENEMY_SECURITY of 100 did. */
+        security?: number;
     };
     chargeCount: number;
     startCharged: boolean;
@@ -48,6 +60,19 @@ export interface EnemyAttackerInput {
      *  live per-turn landing recompute (hacking vs heal-target security) drives inbound debuff
      *  landing. Absent → engine defaults hacking to 200 (100% landing at neutral security). */
     hacking?: number;
+    /** Board slot. Required for `isPositional` to resolve a real target: it needs BOTH this and
+     *  an opposing actor's position, or `selectTurnTarget` falls back to the vestigial dummy. */
+    position?: Position;
+    /** Parsed target selection. Position alone does NOT route a cast — with no ParsedTarget,
+     *  `selectTurnTarget` short-circuits to `legacyVictim` however well-positioned the roster. */
+    target?: ParsedTarget;
+    /** Parsed pattern. Required by the SAME positional-apply gate as `target`: with a target but
+     *  no pattern the cast resolves onto the real enemy yet skips the per-victim apply, leaving
+     *  `perTargetDealt` empty while the damage number still looks plausible. */
+    pattern?: ParsedPattern;
+    /** Charged-axis targeting when it differs from active. Falls back to `target` / `pattern`. */
+    chargedTarget?: ParsedTarget;
+    chargedPattern?: ParsedPattern;
 }
 
 export interface HealingSimulationInput {
