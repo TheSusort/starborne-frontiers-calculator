@@ -208,7 +208,7 @@ const setFenceHp = (actors: CombatActor[]): void => {
 };
 
 describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
-    it('perRecipientHealApply routes a single-`ally` heal to the HEAL TARGET, not lowest HP', () => {
+    it('enabling perRecipientHealApply does NOT switch routing to lowest HP', () => {
         idc = 0;
         let target: CombatActor | undefined;
         let low: CombatActor | undefined;
@@ -222,6 +222,37 @@ describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
             },
         });
         // Decision 7: NOT lowest HP. The 20%-HP ally is on-pattern and still gets nothing.
+        //
+        // NOTE — this test is deliberately INSENSITIVE to `perRecipientHealApply` itself: with
+        // `positionalTeamBattle` absent, `healing.teamBattle` is false, so `recipientsFor`
+        // (playerTurn.ts:3354) takes the single-element `else base = [healing.targetId]` branch —
+        // there is no second candidate for the flag to include or exclude, and
+        // `applyHealToTarget`'s `victim` default (engine.ts:2984) already resolves to the same
+        // actor either way. That is the point, not a gap: the fence's job here is to prove the
+        // flag does NOT leak into routing, which this asserts by construction (flag on, routing
+        // unchanged from the no-flag case below). Its discriminating power is against the
+        // OPPOSITE regression — someone gating `playerTurn.ts:3353` on `perRecipientHealApply`
+        // instead of `teamBattle` — which would heal the low-HP ally here and fail this test.
+        expect(target!.currentHp).toBeGreaterThan(45_000);
+        expect(low!.currentHp).toBe(10_000);
+    });
+
+    it('routing is identical with the flag absent — perRecipientHealApply is routing-neutral', () => {
+        idc = 0;
+        let target: CombatActor | undefined;
+        let low: CombatActor | undefined;
+        runCombat({
+            ...FENCE(),
+            __testTapActors: (actors) => {
+                setFenceHp(actors);
+                target = actors.find((a) => a.id === HIGH_HP_TARGET_ID);
+                low = actors.find((a) => a.id === LOW_HP_ID);
+            },
+        });
+        // Same fixture, same assertions, NO flags at all. This test and the flag-on test above
+        // asserting the SAME outcome is the invariant being pinned: `perRecipientHealApply` must
+        // never change single-`ally` routing. If a future change ever makes these two diverge,
+        // the flag has leaked into routing.
         expect(target!.currentHp).toBeGreaterThan(45_000);
         expect(low!.currentHp).toBe(10_000);
     });
