@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import { HealerShipConfig, HealerShipConfigUpdateableField } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
+import type { Position } from '../../types/encounters';
 import { HealingSimulationResult } from '../../utils/calculators/healingEngineAdapter';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon, StatCard } from '../ui';
@@ -13,6 +14,7 @@ import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
 import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
+import { SlotSelect } from './SlotSelect';
 
 interface HealerConfigCardProps {
     config: HealerShipConfig;
@@ -25,6 +27,12 @@ interface HealerConfigCardProps {
     onSelectShip: (ship: Ship) => void;
     onStartChargedChange: (checked: boolean) => void;
     onShipSkillsChange: (shipSkills: ShipSkills) => void;
+    /** The cell this healer casts from, already defaulted by the page. */
+    slot: Position;
+    onSlotChange: (slot: Position) => void;
+    /** Cells the heal target and the team ships hold. Healer CONFIGS are compared in separate runs,
+     *  so other configs' cells are deliberately not included — they never share a board. */
+    takenSlots: readonly Position[];
 }
 
 /** Compact labelled group inside the config card; children are evenly spaced. */
@@ -59,6 +67,9 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
     onSelectShip,
     onStartChargedChange,
     onShipSkillsChange,
+    slot,
+    onSlotChange,
+    takenSlots,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const { getShipById } = useShips();
@@ -150,6 +161,15 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
                             }
                         />
                     </div>
+                </Section>
+
+                <Section title="Board Slot">
+                    <SlotSelect
+                        value={slot}
+                        onChange={onSlotChange}
+                        taken={takenSlots}
+                        helpLabel="Column 4 is the front of the board. The healer's support pattern is anchored on this cell — allies outside it receive no healing."
+                    />
                 </Section>
 
                 <Button

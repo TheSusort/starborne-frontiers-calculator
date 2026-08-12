@@ -34,6 +34,9 @@ interface TeamPanelProps {
      *  Omitting both hides the slot control entirely. */
     teamShipSlot?: (id: string, index: number) => Position;
     onTeamShipSlotChange?: (id: string, slot: Position) => void;
+    /** Cells held by NON-team player-side actors (the attacker/healer config, the heal target).
+     *  Merged with the other team ships' cells and annotated in each slot dropdown. */
+    otherTakenSlots?: readonly Position[];
 }
 
 export const TeamPanel: React.FC<TeamPanelProps> = ({
@@ -57,6 +60,7 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
     onTeamShipShipSkillsChange,
     teamShipSlot,
     onTeamShipSlotChange,
+    otherTakenSlots = [],
 }) => (
     <div className="card space-y-2">
         <Button
@@ -132,6 +136,12 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
                                           slot: teamShipSlot(ts.id, i),
                                           onSlotChange: (slot: Position) =>
                                               onTeamShipSlotChange(ts.id, slot),
+                                          takenSlots: [
+                                              ...otherTakenSlots,
+                                              ...teamShips
+                                                  .map((other, j) => teamShipSlot(other.id, j))
+                                                  .filter((_, j) => j !== i),
+                                          ],
                                       }
                                     : {})}
                             />

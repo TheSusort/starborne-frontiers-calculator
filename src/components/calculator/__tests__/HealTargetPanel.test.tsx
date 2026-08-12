@@ -31,6 +31,9 @@ describe('HealTargetPanel', () => {
                 onDefenceChange={noop}
                 onSpeedChange={noop}
                 onSecurityChange={noop}
+                slot="M3"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         expect(screen.getByLabelText('Use healer as target (heal self)')).toBeChecked();
@@ -49,6 +52,9 @@ describe('HealTargetPanel', () => {
                 onDefenceChange={noop}
                 onSpeedChange={noop}
                 onSecurityChange={noop}
+                slot="M3"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         expect(screen.getByLabelText('Target HP')).toHaveValue(40000);
@@ -69,6 +75,9 @@ describe('HealTargetPanel', () => {
                 onDefenceChange={noop}
                 onSpeedChange={noop}
                 onSecurityChange={onSecurity}
+                slot="M3"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         fireEvent.change(screen.getByLabelText('Target Security'), { target: { value: '75' } });
@@ -88,6 +97,9 @@ describe('HealTargetPanel', () => {
                 onDefenceChange={noop}
                 onSpeedChange={noop}
                 onSecurityChange={noop}
+                slot="M3"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         fireEvent.click(screen.getByLabelText('Use healer as target (heal self)'));

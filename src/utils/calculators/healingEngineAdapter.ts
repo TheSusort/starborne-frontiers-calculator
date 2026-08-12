@@ -11,17 +11,11 @@ import type { ParsedTarget, ParsedPattern, ShipTargeting } from '../targetingPar
 import { computeAffinityModifiers } from './affinityUtils';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { deriveTeamEngineActors } from './dpsSimulator';
+import { DEFAULT_BASE_PATTERN, DEFAULT_FRONT_ENEMY_TARGET } from './dpsEnemyPlacement';
 import {
-    DEFAULT_BASE_PATTERN,
-    DEFAULT_FRONT_ENEMY_TARGET,
-    resolvePlayerSlots,
-} from './dpsEnemyPlacement';
-import {
-    DEFAULT_HEALER_SLOT,
     defaultEnemySlot,
-    defaultHealTargetSlot,
-    defaultHealingTeamSlot,
     resolveEnemySlots,
+    resolveHealingPlayerPlacement,
 } from './healingPlacement';
 
 export interface HealerStats {
@@ -354,44 +348,27 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // a team actor id — the engine throws on an unknown id, which we let propagate).
     const healTargetId = input.healTargetId === 'healer' ? FOCUS_ID : input.healTargetId;
 
-    // Player-side slots (SP-3). resolvePlayerSlots is load-bearing, not tidiness: the positional
-    // maps are keyed by cell, so on a collision the LATER actor silently ERASES the earlier one
-    // from that cell. slots[0] is the healer and keeps its slot.
-    const healerSlot = input.healerPosition ?? DEFAULT_HEALER_SLOT;
-    const healerActivePattern = input.healerTargeting?.active?.pattern;
-    const playerWanted: Position[] = [
-        healerSlot,
-        ...(teamActors ?? []).map((t, i) => {
-            if (t.position) return t.position;
-            // The HEAL TARGET's default is coverage-aware, and that is load-bearing: heals apply
-            // only to the recipients the caster's support footprint covers, and an off-footprint
-            // heal target receives NOTHING (measured: directHeal 0 / totalHealing 0 under
-            // `Pattern-Line-Support-Range-1` with the target on the generic team slot). The zero is
-            // game-faithful and deliberately not softened, so the DEFAULT must simply not walk into
-            // it — `defaultHealTargetSlot` seeds a cell the healer's own footprint covers (and
-            // returns the neutral mid-board slot when there is no support pattern to reason about).
-            return t.id === healTargetId
-                ? defaultHealTargetSlot(healerSlot, healerActivePattern)
-                : defaultHealingTeamSlot(i);
-        }),
-    ];
-    // The heal target's wanted cell gets placement PRIORITY over the generic team defaults.
-    // Load-bearing, not tidiness: `defaultHealTargetSlot` returns a cell the healer's support
-    // footprint COVERS, but that cell is frequently one `defaultHealingTeamSlot` also hands out
-    // (both draw from the same small pool — e.g. T2 is both the Cone-Support pick from M2 and
-    // `defaultHealingTeamSlot(1)`), and the page appends the heal target LAST
-    // (`[...teamActors, targetActor]`). Without priority the earlier generic ally claims the cell
-    // and the heal target is evicted to the first free `ATTACKER_SLOT_OPTIONS` cell — chosen with NO
-    // knowledge of coverage — putting it back off-footprint for exactly zero healing (measured 20000
-    // → 0 on a 4-ally board under Cone-Support / Forward-Circle / Line-Support). Priority is the
-    // only permitted mitigation shape: the off-footprint zero itself is game-faithful and is never
-    // softened by widening the footprint or falling back to another recipient.
-    // `+ 1` because `playerWanted[0]` is the healer; index 0 already outranks everything.
-    const healTargetTeamIndex = (teamActors ?? []).findIndex((t) => t.id === healTargetId);
-    const playerSlots = resolvePlayerSlots(
-        playerWanted,
-        healTargetTeamIndex >= 0 ? [healTargetTeamIndex + 1] : []
-    );
+    // Player-side slots (SP-3), resolved by the SHARED helper the page's placement warning also
+    // calls — so the warning reasons about the cells this run really uses. Collision resolution is
+    // load-bearing, not tidiness: the positional maps are keyed by cell, so on a collision the LATER
+    // actor silently ERASES the earlier one from that cell. The healer never moves.
+    //
+    // Two rules the helper owns (see `resolveHealingPlayerPlacement` for the measurements):
+    //  - an unplaced HEAL TARGET gets the COVERAGE-AWARE default, because heals apply only to the
+    //    recipients the caster's support footprint covers and an off-footprint heal target receives
+    //    NOTHING. That zero is game-faithful and deliberately not softened — the default simply must
+    //    not walk into it;
+    //  - that default is nominated for collision PRIORITY over the generic team defaults (which draw
+    //    from the same small pool, e.g. T2 is both the Cone-Support pick from M2 and
+    //    `defaultHealingTeamSlot(1)`) — but only while it IS a default: an explicit user placement
+    //    never loses its cell to another actor's default.
+    const { healerSlot: resolvedHealerSlot, allySlots: playerAllySlots } =
+        resolveHealingPlayerPlacement({
+            healerSlot: input.healerPosition,
+            healerPattern: input.healerTargeting?.active?.pattern,
+            healTargetId,
+            allies: teamActors ?? [],
+        });
     // SP-3, load-bearing: on the POSITIONAL path the pre-resolved `affinityDamageModifier` scalars
     // below are BYPASSED — `victimHitDamage` recomputes each matchup from the attacker's RAW
     // affinity against the VICTIM's own `CombatActor.affinity` (playerTurn.ts:1250). The heal
@@ -409,7 +386,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // `buildDefaultShipSkills()` — a kit that carries a damage ability.
     const positionedTeamActors = (teamActors ?? []).map((t, i) => ({
         ...t,
-        position: playerSlots[i + 1],
+        position: playerAllySlots[i],
         affinity: t.affinity ?? (t.id === healTargetId ? healTargetAffinity : undefined),
         target: t.target ?? DEFAULT_FRONT_ENEMY_TARGET,
         pattern: t.pattern ?? DEFAULT_BASE_PATTERN,
@@ -503,7 +480,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // Positional plumbing (SP-3). Both position AND target AND pattern are required: with a
         // target but no pattern the cast resolves onto the real enemy yet skips the per-victim
         // apply, so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
-        position: playerSlots[0],
+        position: resolvedHealerSlot,
         target: input.healerTargeting?.active?.target ?? DEFAULT_FRONT_ENEMY_TARGET,
         pattern: input.healerTargeting?.active?.pattern ?? DEFAULT_BASE_PATTERN,
         chargedTarget: input.healerTargeting?.charged?.target,

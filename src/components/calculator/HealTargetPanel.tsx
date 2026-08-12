@@ -5,8 +5,10 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
 import { Ship } from '../../types/ship';
+import type { Position } from '../../types/encounters';
 import { ShipSelector } from '../ship/ShipSelector';
 import { useShips } from '../../contexts/ShipsContext';
+import { SlotSelect } from './SlotSelect';
 
 export interface HealTargetState {
     /** When true, the healer heals itself (healTargetId 'healer') and no extra actor enters. */
@@ -16,6 +18,9 @@ export interface HealTargetState {
     defence: number;
     speed: number;
     security: number;
+    /** Board slot, ABSENT until the user picks one — the adapter's coverage-aware
+     *  `defaultHealTargetSlot` owns the default, and an explicit value here overrides it. */
+    position?: Position;
 }
 
 interface HealTargetPanelProps {
@@ -28,6 +33,13 @@ interface HealTargetPanelProps {
     onDefenceChange: (v: number) => void;
     onSpeedChange: (v: number) => void;
     onSecurityChange: (v: number) => void;
+    /** The cell the target will actually fight from: its own `position` when set, otherwise the
+     *  coverage-aware default the adapter would pick. Resolved by the page, which is the only place
+     *  that knows the healer's slot and support pattern. */
+    slot: Position;
+    onSlotChange: (slot: Position) => void;
+    /** Cells the healer and the team ships hold. */
+    takenSlots: readonly Position[];
 }
 
 export const HealTargetPanel: React.FC<HealTargetPanelProps> = ({
@@ -40,6 +52,9 @@ export const HealTargetPanel: React.FC<HealTargetPanelProps> = ({
     onDefenceChange,
     onSpeedChange,
     onSecurityChange,
+    slot,
+    onSlotChange,
+    takenSlots,
 }) => {
     const { getShipById } = useShips();
     const selectedShip = target.shipId ? getShipById(target.shipId) : undefined;
@@ -76,6 +91,12 @@ export const HealTargetPanel: React.FC<HealTargetPanelProps> = ({
                                 selected={selectedShip ?? null}
                                 onSelect={onSelectShip}
                                 variant="compact"
+                            />
+                            <SlotSelect
+                                value={slot}
+                                onChange={onSlotChange}
+                                taken={takenSlots}
+                                helpLabel="Column 4 is the front of the board. A heal only reaches allies inside the caster's support pattern, so this cell decides whether the target is healed at all."
                             />
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <Input

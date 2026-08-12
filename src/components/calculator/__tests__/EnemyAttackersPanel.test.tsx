@@ -48,6 +48,12 @@ const manual: EnemyAttackerConfig = {
     hacking: 0,
     chargeCount: 0,
     startCharged: false,
+    // SP-3b Task 8: an enemy is a real, placed, killable actor. `hp: 0` would mean an
+    // already-destroyed enemy, so these are the page's real defaults rather than zeros.
+    position: 'M4',
+    hp: 40000,
+    defence: 5000,
+    security: 100,
 };
 
 const noop = () => {};
@@ -111,7 +117,13 @@ describe('EnemyAttackersPanel', () => {
         fireEvent.click(screen.getByText('+ Add enemy'));
         expect(onAdd).toHaveBeenCalled();
 
-        const five = [1, 2, 3, 4, 5].map((n) => ({ ...manual, id: `${n}`, name: `Enemy ${n}` }));
+        const slots = ['M4', 'T4', 'B4', 'M3', 'T3'] as const;
+        const five = [1, 2, 3, 4, 5].map((n) => ({
+            ...manual,
+            id: `${n}`,
+            name: `Enemy ${n}`,
+            position: slots[n - 1],
+        }));
         rerender(
             <EnemyAttackersPanel
                 isOpen
@@ -200,6 +212,73 @@ describe('EnemyAttackersPanel', () => {
         expect(screen.getByLabelText('Hacking')).toHaveValue(250);
         fireEvent.change(screen.getByLabelText('Hacking'), { target: { value: '300' } });
         expect(onUpdate).toHaveBeenCalledWith('1', { hacking: 300 });
+    });
+
+    // ── SP-3b Task 8: the enemy is a real, placed, killable actor ───────────────
+    it("renders the enemy's OWN hp/defence/security and propagates edits", () => {
+        const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        // The defaults must not be zeros: hp 0 is an already-destroyed enemy (every damage-dealt
+        // rider then pays out nothing) and security 0 makes the healer's debuffs land strictly more
+        // often than they did before the run became positional.
+        expect(screen.getByLabelText('HP')).toHaveValue(40000);
+        expect(screen.getByLabelText('Defence')).toHaveValue(5000);
+        expect(screen.getByLabelText('Security')).toHaveValue(100);
+
+        fireEvent.change(screen.getByLabelText('HP'), { target: { value: '1' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { hp: 1 });
+        fireEvent.change(screen.getByLabelText('Defence'), { target: { value: '9000' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { defence: 9000 });
+        fireEvent.change(screen.getByLabelText('Security'), { target: { value: '250' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { security: 250 });
+    });
+
+    it('renders a board-slot dropdown and reports the chosen cell', () => {
+        const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        // Column 4 is the FRONT — annotated, because there is no board to read it off.
+        expect(screen.getByText('M4 (front)')).toBeInTheDocument();
+        // `Select` is portal-based, not a native <select>: open it, then click the option.
+        fireEvent.click(screen.getByLabelText('Board slot'));
+        fireEvent.click(screen.getByText('T1'));
+        expect(onUpdate).toHaveBeenCalledWith('1', { position: 'T1' });
+    });
+
+    it("annotates another enemy's cell as taken", () => {
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual, { ...manual, id: '2', name: 'Enemy 2', position: 'T1' }]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={noop}
+            />
+        );
+        // Open the FIRST enemy's dropdown (M4) — T1 belongs to the second enemy.
+        fireEvent.click(screen.getAllByLabelText('Board slot')[0]);
+        expect(screen.getByText('T1 (taken)')).toBeInTheDocument();
     });
 
     it('renders correctly with zero enemies and still shows the Add button', () => {

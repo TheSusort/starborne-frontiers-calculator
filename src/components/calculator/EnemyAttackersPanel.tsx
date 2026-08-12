@@ -7,10 +7,12 @@ import { Checkbox } from '../ui/Checkbox';
 import { Select } from '../ui/Select';
 import { Ship, AffinityName } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
+import type { Position } from '../../types/encounters';
 import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
+import { SlotSelect } from './SlotSelect';
 
 /** UI state for one enemy attacker card. Maps to EnemyAttackerInput at sim time. */
 export interface EnemyAttackerConfig {
@@ -30,6 +32,16 @@ export interface EnemyAttackerConfig {
     affinity?: AffinityName;
     /** Walked basics for the damage walk; present only when a ship is picked. */
     shipSkills?: ShipSkills;
+    /** Board slot. Column 4 is the FRONT. Seeded by defaultEnemySlot(index). */
+    position: Position;
+    /** Enemy's own max HP — it can now be destroyed. Never default this to 0: a 0-HP enemy is
+     *  already dead, so the healer's cast delivers nothing to it and every `damage-dealt` rider
+     *  silently pays out zero. */
+    hp: number;
+    /** Enemy's own defence — the basis for the healer's damage-dealt riders. */
+    defence: number;
+    /** Enemy's own security — resists the healer's outbound debuffs. */
+    security: number;
 }
 
 interface EnemyAttackersPanelProps {
@@ -44,10 +56,13 @@ interface EnemyAttackersPanelProps {
 
 const EnemyCard: React.FC<{
     enemy: EnemyAttackerConfig;
+    /** Cells the OTHER enemies hold — annotated in the dropdown so a collision is visible before it
+     *  happens. Sides are independent boards, so only enemy cells count here. */
+    takenSlots: readonly Position[];
     onRemove: () => void;
     onSelectShip: (ship: Ship) => void;
     onUpdate: (updates: Partial<EnemyAttackerConfig>) => void;
-}> = ({ enemy, onRemove, onSelectShip, onUpdate }) => {
+}> = ({ enemy, takenSlots, onRemove, onSelectShip, onUpdate }) => {
     const { getShipById } = useShips();
     const selectedShip = enemy.shipId ? getShipById(enemy.shipId) : undefined;
 
@@ -108,6 +123,34 @@ const EnemyCard: React.FC<{
                     helpLabel="The enemy's hacking stat. Landing chance for its debuffs = (enemy hacking − heal-target security), clamped to 0–100%."
                 />
                 <Input
+                    label="HP"
+                    type="number"
+                    min="0"
+                    value={enemy.hp}
+                    onChange={(e) => onUpdate({ hp: Math.max(0, parseInt(e.target.value) || 0) })}
+                    helpLabel="The enemy's own max HP. It can be destroyed, and a destroyed enemy stops attacking."
+                />
+                <Input
+                    label="Defence"
+                    type="number"
+                    min="0"
+                    value={enemy.defence}
+                    onChange={(e) =>
+                        onUpdate({ defence: Math.max(0, parseInt(e.target.value) || 0) })
+                    }
+                    helpLabel="The enemy's own defence — it reduces the damage your healer deals to it, which is the basis for heals and shields scaled off damage dealt."
+                />
+                <Input
+                    label="Security"
+                    type="number"
+                    min="0"
+                    value={enemy.security}
+                    onChange={(e) =>
+                        onUpdate({ security: Math.max(0, parseInt(e.target.value) || 0) })
+                    }
+                    helpLabel="Resists debuffs your healer applies."
+                />
+                <Input
                     label="Charge Count"
                     type="number"
                     min="0"
@@ -123,6 +166,12 @@ const EnemyCard: React.FC<{
                     />
                 </div>
             </div>
+            <SlotSelect
+                value={enemy.position}
+                onChange={(position) => onUpdate({ position })}
+                taken={takenSlots}
+                helpLabel="Column 4 is the front of the board. Two enemies cannot share a cell — a collision moves the later one."
+            />
             <Select
                 label="Affinity"
                 value={enemy.affinity ?? 'antimatter'}
@@ -174,6 +223,9 @@ export const EnemyAttackersPanel: React.FC<EnemyAttackersPanelProps> = ({
                         <EnemyCard
                             key={enemy.id}
                             enemy={enemy}
+                            takenSlots={enemies
+                                .filter((other) => other.id !== enemy.id)
+                                .map((other) => other.position)}
                             onRemove={() => onRemove(enemy.id)}
                             onSelectShip={(ship) => onSelectShip(enemy.id, ship)}
                             onUpdate={(updates) => onUpdate(enemy.id, updates)}

@@ -360,10 +360,13 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
             );
         };
 
-        // ANTI-VACUITY CONTRAST: alone, the default placement already lands on a covered cell.
-        expect(run(false).summary.totalHealing).toBeGreaterThan(0);
+        // Both legs pin the VALUE, not a floor. `toBeGreaterThan(0)` would stay green if a partial
+        // regression evicted the heal target onto a DIFFERENT covered cell and the heal landed on
+        // some other recipient instead — 20,000 is the caster's hp 50,000 x 40%, i.e. the full cast
+        // landing on the heal target and nobody else.
+        expect(run(false).summary.totalHealing).toBe(20_000);
         // Crowded: the same heal must still land — the heal target keeps its covered cell.
-        expect(run(true).summary.totalHealing).toBeGreaterThan(0);
+        expect(run(true).summary.totalHealing).toBe(20_000);
     });
 
     // ── healTargetAffinity reaches a TEAM heal target, not just the focus ────────────

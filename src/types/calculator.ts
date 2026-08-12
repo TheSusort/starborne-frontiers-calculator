@@ -287,6 +287,10 @@ export interface HealerShipConfig {
     chargeCount: number;
     startCharged: boolean;
     shipSkills: ShipSkills;
+    /** Board slot this healer casts from. The healing run is positional: the healer's cell anchors
+     *  its support footprint, and an ally outside that footprint receives NO healing at all.
+     *  Healer configs are alternatives compared in SEPARATE runs, so two configs may share a cell. */
+    position?: Position;
 }
 
 export type HealerShipConfigUpdateableField =

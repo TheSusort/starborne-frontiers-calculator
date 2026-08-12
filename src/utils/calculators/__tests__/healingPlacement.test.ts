@@ -5,6 +5,8 @@ import {
     defaultHealingTeamSlot,
     defaultEnemySlot,
     resolveEnemySlots,
+    resolveHealingPlayerPlacement,
+    uncoveredAllyIds,
 } from '../healingPlacement';
 import { parsePattern } from '../../targetingParser';
 import { resolveCells } from '../../targeting/resolvePattern';
@@ -126,5 +128,142 @@ describe('defaultHealTargetSlot — minimal autoplace (decision 9)', () => {
         expect(covered[0].endsWith('4')).toBe(true);
 
         expect(defaultHealTargetSlot('M3', pattern)).toBe('M2');
+    });
+});
+
+// ── resolveHealingPlayerPlacement: explicit beats default, both directions ──
+// The shared resolver `simulateHealing` and the page's placement warning both call. Losing a
+// collision silently MOVES a ship, which can change which ship is front-most and therefore who the
+// enemy shoots — so which placement wins is behaviour, not cosmetics.
+describe('resolveHealingPlayerPlacement', () => {
+    // Cone-Support-Range-1 @ M2 covers {M2,T2,M3,B2}; the heal target's coverage-aware default is
+    // therefore T2 — which is ALSO defaultHealingTeamSlot(1). That overlap is what makes these
+    // collisions reachable at all.
+    const cone = parsePattern('Pattern-Cone-Support-Range-1');
+    const place = (allies: ReadonlyArray<{ id: string; position?: 'T2' | 'M1' }>) =>
+        resolveHealingPlayerPlacement({
+            healerSlot: 'M2',
+            healerPattern: cone,
+            healTargetId: 'tank',
+            allies,
+        });
+
+    it('the coverage-aware default really is the contested cell (precondition)', () => {
+        expect(defaultHealTargetSlot('M2', cone)).toBe('T2');
+        expect(defaultHealingTeamSlot(1)).toBe('T2');
+    });
+
+    it("an EXPLICIT ally keeps its cell against the heal target's DEFAULT", () => {
+        // Before this fence: the ally was evicted to T1 to make room for a default pick.
+        const { allySlots } = place([{ id: 'a1', position: 'T2' }, { id: 'tank' }]);
+        expect(allySlots[0]).toBe('T2');
+        expect(allySlots[1]).not.toBe('T2');
+    });
+
+    it("the heal target's DEFAULT still outranks a generic ally's DEFAULT", () => {
+        // The crowded-board guard: both cells are defaults, so the coverage-aware one must win or
+        // the heal target is evicted to a cell chosen with no knowledge of coverage.
+        const { allySlots } = place([{ id: 'a0' }, { id: 'a1' }, { id: 'tank' }]);
+        expect(allySlots[2]).toBe('T2');
+        expect(allySlots[1]).not.toBe('T2');
+    });
+
+    it("an EXPLICIT heal target keeps its cell against a generic ally's DEFAULT", () => {
+        // The other direction: the heal target is appended LAST, so without nominating explicit
+        // placements the earlier ally's default would win on index order alone.
+        const { allySlots } = place([{ id: 'a0' }, { id: 'a1' }, { id: 'tank', position: 'T2' }]);
+        expect(allySlots[2]).toBe('T2');
+        expect(allySlots[1]).not.toBe('T2');
+    });
+
+    it('leaves the healer cell untouched and returns one cell per ally', () => {
+        const { healerSlot, allySlots } = place([{ id: 'a0' }, { id: 'tank' }]);
+        expect(healerSlot).toBe('M2');
+        expect(allySlots).toHaveLength(2);
+        expect(new Set([healerSlot, ...allySlots]).size).toBe(3);
+    });
+});
+
+// ── Decision 8: the uncovered-placement warning ─────────────────────────────
+// An ally on a cell no supporter's footprint covers receives EXACTLY ZERO healing —
+// `resolveSupportRecipients` filters recipients by the caster's footprint and never expands it.
+// That zero is owner-ruled game-faithful and is never softened; making it VISIBLE is the only
+// permitted mitigation, and this helper is what the UI warning reads.
+describe('uncoveredAllyIds (decision 8)', () => {
+    const line1 = parsePattern('Pattern-Line-Support-Range-1'); // @M2 covers {M2, M3}
+
+    // Preconditions for every expectation below, verified against `resolveCells` itself rather
+    // than trusted from a comment — if an offset table ever moves, THIS fails first and says so
+    // instead of the assertions silently drifting into agreeing by coincidence.
+    it('footprint preconditions hold', () => {
+        expect(resolveCells(line1, 'M2').map((c) => c.position)).toEqual(['M2', 'M3']);
+        // @M4 the forward cell clips off-board → the CASTER-ONLY footprint.
+        expect(resolveCells(line1, 'M4').map((c) => c.position)).toEqual(['M4']);
+        expect(resolveCells(line1, 'B1').map((c) => c.position)).toEqual(['B1', 'B2']);
+    });
+
+    it('flags an ally off every supporter footprint', () => {
+        expect(
+            uncoveredAllyIds([
+                { id: 'healer', position: 'M2', pattern: line1 },
+                { id: 'covered', position: 'M3' },
+                { id: 'stranded', position: 'B1' },
+            ])
+        ).toEqual(['stranded']);
+    });
+
+    it('flags the ally when the caster-only footprint covers nobody else', () => {
+        // Line-Support-Range-1 @ M4 clips forward off-board → covers only {M4}. The caster itself
+        // still stands on a covered cell (its own), so it is NOT flagged — the stranded ally is.
+        const ids = uncoveredAllyIds([
+            { id: 'healer', position: 'M4', pattern: line1 },
+            { id: 'stranded', position: 'M1' },
+        ]);
+        expect(ids).toEqual(['stranded']);
+    });
+
+    it('unions coverage across MULTIPLE supporters', () => {
+        // A second supporter at B1 covers B2, rescuing an ally the healer cannot reach.
+        expect(
+            uncoveredAllyIds([
+                { id: 'healer', position: 'M2', pattern: line1 },
+                { id: 'support2', position: 'B1', pattern: line1 },
+                { id: 'rescued', position: 'B2' },
+            ])
+        ).toEqual([]);
+    });
+
+    it('returns EMPTY when no ship has a support pattern (damage-only team)', () => {
+        expect(
+            uncoveredAllyIds([
+                { id: 'a', position: 'M2' },
+                { id: 'b', position: 'B1' },
+            ])
+        ).toEqual([]);
+    });
+
+    it('treats a NON-support pattern as contributing no coverage', () => {
+        expect(
+            uncoveredAllyIds([
+                { id: 'a', position: 'M2', pattern: parsePattern('Pattern-Cone-Range-1') },
+                { id: 'b', position: 'B1' },
+            ])
+        ).toEqual([]);
+    });
+
+    it('does not THROW on a tableless support pattern — it contributes no coverage', () => {
+        // Same guard as `defaultHealTargetSlot`: `line|2|support` parses but has no offset table,
+        // and this helper runs on every render of the healing page.
+        const tableless = parsePattern('Pattern-Line-Support-Range-2');
+        // Precondition: the underlying call really does throw, or this test guards nothing.
+        expect(() => resolveCells(tableless, 'M2')).toThrow();
+        // The only supporter contributes nothing, so every ally — including the caster — sits
+        // outside the (empty) covered set.
+        expect(
+            uncoveredAllyIds([
+                { id: 'healer', position: 'M2', pattern: tableless },
+                { id: 'ally', position: 'M3' },
+            ])
+        ).toEqual(['healer', 'ally']);
     });
 });

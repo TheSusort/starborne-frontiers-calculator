@@ -95,4 +95,110 @@ export function resolveEnemySlots(slots: ReadonlyArray<Position>): Position[] {
     return resolvePlayerSlots(slots);
 }
 
+/**
+ * Resolve the whole PLAYER-side board for a healing run: the healer's cell plus one cell per ally,
+ * with no two actors sharing a cell.
+ *
+ * Shared by `simulateHealing` and the page's placement warning deliberately — the warning must
+ * reason about the cells the SIM actually uses, and those are not the wanted cells: an unplaced
+ * ally takes an index-derived default, and a collision MOVES someone. A second, independent
+ * derivation on the UI side would drift and warn about a cell nobody occupies.
+ *
+ * Two rules live here:
+ *
+ *  1. an unplaced HEAL TARGET gets the coverage-aware `defaultHealTargetSlot` (an off-footprint heal
+ *     target receives exactly zero — see that function), and every other unplaced ally gets
+ *     `defaultHealingTeamSlot(index)`;
+ *
+ *  2. **EXPLICIT beats DEFAULT, in both directions.** Every explicitly-placed ally is nominated for
+ *     collision priority, and the heal target's coverage-aware default is nominated too — except
+ *     when an explicitly-placed ally wants that same cell. Losing a collision is not cosmetic: the
+ *     loser is silently MOVED, which can change which ship is front-most and therefore who the enemy
+ *     shoots.
+ *
+ *     Both directions need fencing, and one nomination flag cannot express both because
+ *     `resolvePlayerSlots` orders its priority group by INDEX, not by tier:
+ *       - nominating unconditionally let a *default* evict a deliberate placement — measured
+ *         `resolvePlayerSlots(['M2','T2','T2'], [2])` → `['M2','T1','T2']`, i.e. the ally the user
+ *         parked on T2 was moved to make room for the heal target's default pick;
+ *       - dropping the nomination whenever the heal target is explicit would flip the error over:
+ *         a generic ally's *default* would then evict the heal target's deliberate placement,
+ *         because the page appends the heal target LAST and the lower index wins.
+ *
+ *     When an explicit ally does win the contested cell the heal target may land off-footprint and
+ *     heal for zero. That is intended: the zero is game-faithful, the user's placement is
+ *     authoritative, and `uncoveredAllyIds` below is what makes the consequence visible.
+ */
+export function resolveHealingPlayerPlacement(args: {
+    /** The healer's cell. Index 0 never moves, so this is returned unchanged. */
+    healerSlot?: Position;
+    /** The healer's parsed ACTIVE pattern — drives the heal target's coverage-aware default. */
+    healerPattern?: ParsedPattern;
+    /** Which ally id IS the heal target. No match (e.g. self-heal) → no nomination. */
+    healTargetId: string;
+    /** Allies in the SAME order the caller passes them to the engine; `position` absent = unplaced. */
+    allies: ReadonlyArray<{ id: string; position?: Position }>;
+}): { healerSlot: Position; allySlots: Position[] } {
+    const healerSlot = args.healerSlot ?? DEFAULT_HEALER_SLOT;
+    const wanted: Position[] = [
+        healerSlot,
+        ...args.allies.map((a, i) =>
+            a.position
+                ? a.position
+                : a.id === args.healTargetId
+                  ? defaultHealTargetSlot(healerSlot, args.healerPattern)
+                  : defaultHealingTeamSlot(i)
+        ),
+    ];
+    const healTargetIndex = args.allies.findIndex((a) => a.id === args.healTargetId);
+    // `+ 1` throughout because `wanted[0]` is the healer; index 0 already outranks everything.
+    const priority = args.allies.flatMap((a, i) => (a.position ? [i + 1] : []));
+    const healTargetIsDefault = healTargetIndex >= 0 && !args.allies[healTargetIndex].position;
+    const contestedByExplicit =
+        healTargetIsDefault &&
+        args.allies.some(
+            (a, i) => i !== healTargetIndex && a.position === wanted[healTargetIndex + 1]
+        );
+    if (healTargetIsDefault && !contestedByExplicit) priority.push(healTargetIndex + 1);
+    const resolved = resolvePlayerSlots(wanted, priority);
+    return { healerSlot: resolved[0], allySlots: resolved.slice(1) };
+}
+
+/**
+ * Player-side ally ids standing on a cell that NO supporter's footprint covers.
+ *
+ * A support cast anchors on the caster's own cell and `resolveSupportRecipients` FILTERS recipients
+ * by that footprint, so an uncovered ally receives exactly zero. That zero is intended (owner ruling)
+ * — this helper exists to make it VISIBLE, never to change it. No caller may use it to widen a
+ * footprint, pick a fallback recipient, or move a ship on the user's behalf.
+ *
+ * A supporter is any player ship whose parsed ACTIVE pattern carries `modifiers.support`. Ships with
+ * no resolvable support pattern contribute no coverage. When there is NO supporter at all, returns an
+ * empty array: nothing is "uncovered" if nothing was ever going to cover it, and warning on every
+ * ally in a damage-only team would be noise.
+ *
+ * The caster is itself a candidate: a support footprint always includes the anchor cell, so a
+ * supporter standing on its own cell is covered — but a supporter whose pattern cannot be resolved
+ * at all (see the guard below) is reported like any other uncovered ally.
+ */
+export function uncoveredAllyIds(
+    allies: ReadonlyArray<{ id: string; position: Position; pattern?: ParsedPattern }>
+): string[] {
+    const covered = new Set<Position>();
+    let sawSupporter = false;
+    for (const a of allies) {
+        if (!a.pattern?.modifiers.support) continue;
+        sawSupporter = true;
+        try {
+            for (const c of resolveCells(a.pattern, a.position)) covered.add(c.position);
+        } catch {
+            // Unknown pattern signature (no offset table) — contributes no coverage rather than
+            // throwing. Same guard as defaultHealTargetSlot; see its comment. This helper runs on
+            // every render of the healing page, so an unguarded throw is a React render crash.
+        }
+    }
+    if (!sawSupporter) return [];
+    return allies.filter((a) => !covered.has(a.position)).map((a) => a.id);
+}
+
 export { ATTACKER_SLOT_OPTIONS as HEALING_SLOT_OPTIONS };

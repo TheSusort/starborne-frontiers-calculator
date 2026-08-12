@@ -90,6 +90,9 @@ describe('HealerConfigCard', () => {
                 onSelectShip={noop}
                 onStartChargedChange={noop}
                 onShipSkillsChange={noop}
+                slot="M2"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         expect(screen.getByDisplayValue('Healer 1')).toBeInTheDocument();
@@ -142,6 +145,9 @@ describe('HealerConfigCard', () => {
                 onSelectShip={noop}
                 onStartChargedChange={noop}
                 onShipSkillsChange={noop}
+                slot="M2"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         expect(screen.getByText(/4,500 \(60% of landed\)/)).toBeInTheDocument();
@@ -161,6 +167,9 @@ describe('HealerConfigCard', () => {
                 onSelectShip={noop}
                 onStartChargedChange={noop}
                 onShipSkillsChange={noop}
+                slot="M2"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         expect(screen.getByText('Barrier Absorbed')).toBeInTheDocument();
@@ -180,6 +189,9 @@ describe('HealerConfigCard', () => {
                 onSelectShip={noop}
                 onStartChargedChange={noop}
                 onShipSkillsChange={noop}
+                slot="M2"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         expect(screen.getByText('Survived 1 round')).toBeInTheDocument();
@@ -198,6 +210,9 @@ describe('HealerConfigCard', () => {
                 onSelectShip={noop}
                 onStartChargedChange={noop}
                 onShipSkillsChange={noop}
+                slot="M2"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         expect(screen.getByText('Destroyed round 7')).toBeInTheDocument();
@@ -217,6 +232,9 @@ describe('HealerConfigCard', () => {
                 onSelectShip={noop}
                 onStartChargedChange={noop}
                 onShipSkillsChange={noop}
+                slot="M2"
+                onSlotChange={noop}
+                takenSlots={[]}
             />
         );
         fireEvent.change(screen.getByLabelText('HP'), { target: { value: '55000' } });
