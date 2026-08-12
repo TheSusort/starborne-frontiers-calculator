@@ -871,7 +871,56 @@ describe('healing calculator default placement', () => {
         expect(resolveEnemySlots(['M4', 'M4', 'M4'])).toHaveLength(3);
     });
 });
+
+// ── Decision 9: minimal autoplace ───────────────────────────────────────────
+// Seed the heal target into a cell the HEALER's own support footprint covers, so a default board
+// does not silently produce zero healing. Only SUPPORT patterns filter ally recipients
+// (`supportFootprintAllyIds` returns undefined otherwise), so a non-support pattern needs no
+// autoplace at all.
+describe('defaultHealTargetSlot — minimal autoplace (decision 9)', () => {
+    it('seeds a cell the healer support footprint covers', () => {
+        // Pattern-Line-Support-Range-1 @ M2 covers {M2, M3} (resolvePattern.test.ts:83-87 shows the
+        // M3 anchor case; from M2 the forward cell is M3). M2 is the healer's own cell, so the heal
+        // target must land on M3.
+        expect(defaultHealTargetSlot('M2', parsePattern('Pattern-Line-Support-Range-1'))).toBe('M3');
+    });
+
+    it('never returns the healer own cell', () => {
+        const slot = defaultHealTargetSlot('M2', parsePattern('Pattern-Line-Support-Range-3'));
+        expect(slot).not.toBe('M2');
+    });
+
+    it('still respects decision 2 — no front bias when an alternative exists', () => {
+        // Range-3 @ M1 covers {M1, M2, M3, M4}. M4 is the FRONT column and must not be preferred
+        // while M2/M3 are available.
+        const slot = defaultHealTargetSlot('M1', parsePattern('Pattern-Line-Support-Range-3'));
+        expect(slot).not.toBe('M4');
+        expect(['M2', 'M3']).toContain(slot);
+    });
+
+    it('falls back to the neutral default when no pattern is known (manual entry)', () => {
+        expect(defaultHealTargetSlot('M2', undefined)).toBe('M3');
+    });
+
+    it('falls back to the neutral default for a NON-support pattern', () => {
+        // A non-support pattern never filters ally recipients, so coverage is irrelevant.
+        expect(defaultHealTargetSlot('M2', parsePattern('Pattern-Cone-Range-1'))).toBe('M3');
+    });
+
+    it('falls back gracefully when the footprint covers only the healer own cell', () => {
+        // Line-Support-Range-1 @ M4: the forward cell clips off-board, leaving {M4} — the healer's
+        // own cell. No covered cell is available for the heal target, so take the neutral default
+        // rather than returning M4 (two actors cannot share a cell).
+        expect(defaultHealTargetSlot('M4', parsePattern('Pattern-Line-Support-Range-1'))).toBe('M3');
+    });
+});
 ```
+
+⚠️ Add `import { parsePattern } from '../../targetingParser';` to the test file.
+
+⚠️ **Verify each expected footprint before trusting these assertions.** If a case differs, confirm
+the real footprint with `resolveCells(parsePattern('<pattern>'), '<anchor>')` and fix the **test's**
+expectation — never the offset table. Report any divergence rather than silently adjusting.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -884,6 +933,8 @@ Create `src/utils/calculators/healingPlacement.ts`:
 
 ```ts
 import type { Position } from '../../types/encounters';
+import type { ParsedPattern } from '../targetingParser';
+import { resolveCells } from '../targeting/resolvePattern';
 import { ATTACKER_SLOT_OPTIONS, resolvePlayerSlots } from './dpsEnemyPlacement';
 
 /**
@@ -900,9 +951,43 @@ import { ATTACKER_SLOT_OPTIONS, resolvePlayerSlots } from './dpsEnemyPlacement';
  */
 export const DEFAULT_HEALER_SLOT: Position = 'M2';
 
-/** The heal target's default slot — mid-board, NOT the front column. */
-export function defaultHealTargetSlot(): Position {
-    return 'M3';
+/** The neutral fallback when coverage cannot be computed — mid-board, NOT the front column. */
+const NEUTRAL_HEAL_TARGET_SLOT: Position = 'M3';
+
+/**
+ * The heal target's default slot — **minimal autoplace** (owner decision 9, 2026-08-12).
+ *
+ * Seeds a cell the HEALER's own support footprint covers, because an off-footprint heal target
+ * receives **nothing at all**: `resolveSupportRecipients` FILTERS the recipient list by the footprint
+ * and never expands it, and a single-`ally` heal's base is just `[healTargetId]`. That zero is
+ * game-faithful and deliberately not softened — so the defaults must simply not walk into it.
+ *
+ * Selection order:
+ *   1. a covered cell that is neither the healer's own cell nor the FRONT column (decision 2's
+ *      no-front-bias still holds — it is about enemy fire, an independent axis from ally coverage);
+ *   2. any covered cell that is not the healer's own cell;
+ *   3. `NEUTRAL_HEAL_TARGET_SLOT`.
+ *
+ * Returns the neutral default when `healerPattern` is absent (manual entry, no ship picked) or is
+ * NOT a support pattern — a non-support pattern never filters ally recipients
+ * (`supportFootprintAllyIds` returns `undefined`), so coverage is irrelevant there.
+ *
+ * DEFERRED (follow-up): the full multi-supporter footprint intersection. This considers the healer
+ * only. Decision 8's placement warning is the safety net for everything this misses.
+ */
+export function defaultHealTargetSlot(
+    healerSlot: Position = DEFAULT_HEALER_SLOT,
+    healerPattern?: ParsedPattern
+): Position {
+    if (!healerPattern?.modifiers.support) return NEUTRAL_HEAL_TARGET_SLOT;
+
+    const covered = resolveCells(healerPattern, healerSlot)
+        .map((c) => c.position)
+        .filter((p) => p !== healerSlot);
+
+    return (
+        covered.find((p) => !p.endsWith('4')) ?? covered[0] ?? NEUTRAL_HEAL_TARGET_SLOT
+    );
 }
 
 /**
