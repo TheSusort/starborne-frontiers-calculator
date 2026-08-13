@@ -189,7 +189,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     position: 'M1',
     target: parsedTarget('front'),
     pattern: basePattern(),
-    positionalTeamBattle: true,
+    mode: 'battle',
     ...overrides,
 });
 

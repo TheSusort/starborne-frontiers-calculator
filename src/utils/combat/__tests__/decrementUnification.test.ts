@@ -156,6 +156,7 @@ const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput 
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput =>
     dpsBase({
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 
@@ -654,6 +655,7 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         // Heal target sits at M3; victim at M4 is closer to the enemy 'front'.
         position: 'M3' as Position,
         target: parsedTarget('front'),

@@ -139,6 +139,7 @@ describe('Ship-kit W8 Task 13: Meiying Stasis-on-kill — player-side caster', (
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: frontTarget(),
         pattern: basePattern(),
@@ -239,6 +240,7 @@ describe('Ship-kit W8 Task 13: team symmetry — an enemy-side Meiying gates ide
         defence: 0,
         hp: 100, // low HP — the focus is the victim, dies to the enemy Meiying's lethal hit
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         teamActors: [
             teamNeighbour('nbrA', 'M3', 1_000_000_000),

@@ -118,6 +118,7 @@ const buildPlayerOwnerInput = (opts: {
     hp: 1_000_000_000,
     speed: 200, // focus acts first
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [opts.enemy],
 });
 
@@ -272,6 +273,7 @@ describe('PR4b: reactive damage executor — team-symmetric mitigation (enemy-ow
         hp: 1_000_000_000,
         speed: 200, // focus acts first so its charged cast fires before the enemy would act
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers: [
             {
                 id: 'e1',

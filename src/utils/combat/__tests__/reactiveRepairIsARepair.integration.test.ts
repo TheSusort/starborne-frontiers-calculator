@@ -157,6 +157,7 @@ function runRuinerVsHeliodor() {
         speed: 500,
         hacking: 100_000, // debuff landing is not what this test is about — never resist
         healTargetId: 'attacker', // healing mode on, so reactive repairs actually resolve
+        mode: 'healing',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),

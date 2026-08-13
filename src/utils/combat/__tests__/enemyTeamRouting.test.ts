@@ -178,6 +178,7 @@ const BASE = (enemyAttacker: EnemyAttacker): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000, // huge tank HP so it survives both rounds and incoming damage is observable
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [enemyAttacker],
 });
 

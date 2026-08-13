@@ -217,6 +217,7 @@ describe('D-PR13 Task 2 — Disable turn-skip: (i) disabled enemy skips its acti
             hp: 1_000_000_000,
             hacking: 200,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -300,6 +301,7 @@ describe('D-PR13 Task 2 — Disable turn-skip: (ii) Disable(2) decrements on ski
             hp: 1_000_000_000,
             hacking: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -385,6 +387,7 @@ describe('D-PR13 Task 2 — Disable turn-skip: (iii) Disable does NOT break on a
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -543,6 +546,7 @@ describe('D-PR13 Task 3 — reactive suppression: (iv) on-attacked self-buff sup
             hacking: 0, // focus cannot inflict anything
             speed: 50, // SLOWER than all enemies → enemies always act before focus
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS, // M4 = front-most player
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -645,6 +649,7 @@ describe('D-PR13 Task 3 — reactive suppression: (v) incoming DoT still ticks o
             hacking: 0,
             speed: 50, // focus slower → enemy always acts first
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [
                 {
                     id: 'dot-disable-enemy',
@@ -819,6 +824,7 @@ describe('D-PR13 Task 4 — cleanse-resume: a cleansed Disable restores the focu
             hacking: 0,
             speed: 100, // focus is the slowest → acts LAST every round
             healTargetId: 'attacker', // focus is the disabled unit → player-side cleanse reaches it
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),

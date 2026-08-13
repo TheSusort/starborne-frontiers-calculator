@@ -267,7 +267,7 @@ describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes o
 
 /**
  * DPS invariance: the DPS calculator's single-dummy mode calls `runCombat` DIRECTLY with no
- * `position`/`pattern`/`enemyAttackers`/`positionalTeamBattle` — the vestigial `enemy` sink
+ * `position`/`pattern`/`enemyAttackers`/`mode: 'battle'` — the vestigial `enemy` sink
  * actor is the sole opponent, `targetId` is never threaded, and `adjacentEnemyIdsFor` is never
  * supplied. The splash fan-out's own guard (`targetId !== undefined && adjacentEnemyIdsFor`)
  * means it can never fire here — so a `target-and-adjacent-enemies` Inferno DoT must produce

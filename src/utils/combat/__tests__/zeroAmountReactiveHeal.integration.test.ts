@@ -42,7 +42,7 @@
  *
  * SURFACE. This reaches the healing/sim surfaces ONLY: the executor's first line bails on
  * `!ctx.healing`, and `runCombat` builds `healingCtx` only under an explicit `healTargetId` or
- * `positionalTeamBattle`. `simulateDPS` sets neither, so the DPS calculator never reaches this branch.
+ * `mode: 'battle'`. `simulateDPS` sets neither, so the DPS calculator never reaches this branch.
  *
  * TURN ORDER (inherited from `transformIncomingToDot.test.ts`): the transform carrier outruns its
  * attacker so its own turn-start DoT tick runs BEFORE the incoming hit, and no tick from an entry the
@@ -173,7 +173,7 @@ const focusCast = (slots: ShipSkills['slots'], enemies: EnemyAttacker[]): Combat
     position: 'M1',
     target: parsedTarget('front'),
     pattern: basePattern(),
-    positionalTeamBattle: true,
+    mode: 'battle',
     enemyAttackers: enemies,
 });
 
@@ -270,7 +270,7 @@ const enemyDrivenBattle = (team: TeamActor[], enemies: EnemyAttacker[]): CombatE
     hp: HP,
     healTargetId: 'attacker',
     position: 'M1',
-    positionalTeamBattle: true,
+    mode: 'battle',
     teamActors: team,
     enemyAttackers: enemies,
 });

@@ -226,6 +226,7 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
             hp: 1_000_000_000,
             // Healing mode: required to unlock the positioned enemy roster.
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             // Focus fires at 'front' → anchor is enemy-front at M4.
             target: parsedTarget('front'),

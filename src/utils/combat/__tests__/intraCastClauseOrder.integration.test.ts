@@ -123,7 +123,7 @@ function focusCast(
         speed: 900,
         hacking: 100_000,
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),
@@ -177,7 +177,7 @@ function enemyCast(abilities: Ability[]): number {
         speed: 900, // focus acts first with its no-op, then the enemy casts
         hacking: 100_000,
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),

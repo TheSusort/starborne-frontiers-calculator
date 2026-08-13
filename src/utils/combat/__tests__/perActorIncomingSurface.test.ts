@@ -128,6 +128,7 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M1',
     target: parsedTarget('front'),
     pattern: basePattern(),

@@ -131,6 +131,7 @@ const BASE = (
     hp: 10_000, // max HP → 25% threshold = 2500
     speed: 1, // slower than the enemy → the enemy attacks the carrier each round before it acts
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

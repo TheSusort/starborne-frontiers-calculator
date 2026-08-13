@@ -1572,6 +1572,7 @@ const healBase = (): CombatEngineInput => ({
     defence: 0,
     hp: 100_000, // huge so the target survives both enemy attacks
     healTargetId: 'attacker',
+    mode: 'healing',
 });
 
 describe('Phase 4c Task 3 — per-hit attacked emission', () => {
@@ -1851,6 +1852,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
             defence: 2000,
             hp: 10000,
             healTargetId: 'attacker',
+            mode: 'healing',
             teamActors: [
                 idleAlly('t1', 50, 8000), // raw = 800 (8000 × 10%)
                 idleAlly('t2', 40, 12000), // raw = 1200 (12000 × 10%)
@@ -1927,6 +1929,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
             defence: 2000,
             hp: 10000,
             healTargetId: 'attacker',
+            mode: 'healing',
             bus,
         });
 
@@ -1986,6 +1989,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
             defence: 2000,
             hp: 10000,
             healTargetId: 'attacker',
+            mode: 'healing',
             teamActors: [idleAlly('t1', 50, 8000), idleAlly('t2', 40, 12000)],
             bus,
         });
@@ -2070,6 +2074,7 @@ describe('reactive stamp — reactive emissions carry duringTurnOf', () => {
             defence: 0,
             hp: 1_000_000,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [basicEnemy('foe', 3_000)],
             bus,
         });
@@ -2170,6 +2175,7 @@ describe('start-of-round reactive stamp — duringTurnOf is undefined (turn-less
             defence: 0,
             hp: 1_000_000,
             healTargetId: 'attacker',
+            mode: 'healing',
             // Enemy speed=20 (low) → goes LAST in every round; sets actingActorId='foe'
             // at end of round 1. Without the reset fix, round 2's start-of-round drain
             // would stamp duringTurnOf:'foe' instead of undefined.

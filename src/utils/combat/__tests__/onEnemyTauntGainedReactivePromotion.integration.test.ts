@@ -173,6 +173,7 @@ describe('Amartya (player-side) — Exposed lands on the SPECIFIC opposing actor
         hp: 1_000_000_000,
         speed: 1,
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers: [enemyTauntGainer(), enemyBystander()],
     });
 
@@ -262,6 +263,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
             hp: 1_000_000_000,
             speed: 500,
             healTargetId: 'attacker',
+            mode: 'healing',
             teamActors: [tauntGainingAlly],
             enemyAttackers: [enemyAmartya],
         };

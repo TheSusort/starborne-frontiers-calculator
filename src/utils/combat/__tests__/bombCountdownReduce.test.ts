@@ -398,6 +398,7 @@ const REGRESSION_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     hp: 1_000_000_000,
     hacking: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedFrontTarget(),
     pattern: singleTargetPattern(),

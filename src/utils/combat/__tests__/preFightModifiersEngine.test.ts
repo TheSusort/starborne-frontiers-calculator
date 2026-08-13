@@ -193,6 +193,7 @@ const healAmounts = (args: {
         BASE_INPUT({
             numRounds: 2,
             healTargetId: 'attacker',
+            mode: 'healing',
             teamActors: engineTeam,
             ...(args.focusPreFight ? { preFight: args.focusPreFight } : {}),
             bus,
@@ -250,6 +251,7 @@ const focusDamageTaken = (args: {
     runCombat(
         BASE_INPUT({
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [bareEnemy(args.enemyCrit, args.enemyPreFight)],
             ...(args.focusPreFight ? { preFight: args.focusPreFight } : {}),
             __testTapActors: (actors) => {

@@ -1,8 +1,9 @@
 /**
  * SP-M M1: reactive-damage procs REDUCE the resolved victim's real HP in a positioned two-team
- * battle (simulateBattle → input.positionalTeamBattle), surface on the victim's damageTaken, and
+ * battle (simulateBattle → mode: 'battle'), surface on the victim's damageTaken, and
  * are attributed to the owner via damageDealt (perTargetDealt). DPS/healing credit-only behaviour
- * is unchanged (guards: enemyChargedCast / reactiveDamageMitigation, which lack positionalTeamBattle).
+ * is unchanged (guards: enemyChargedCast / reactiveDamageMitigation, whose fixtures supply no
+ * positioned enemy roster — no `position:` on any enemy actor — so `hasPositionedEnemyRoster` stays false).
  */
 import { describe, it, expect } from 'vitest';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
@@ -114,8 +115,9 @@ describe('SP-M M1: FrontLine reactive damage reduces the charging enemy HP (posi
 
 /**
  * SP-M Task 3: the hpBasisPct reactive-damage path (Vindicator on-resist, Paracelsus
- * on-destroyed) shares the SAME applyReactiveDamage executor tail Task 2 gated on
- * `input.positionalTeamBattle` — no production change is expected here. These fixtures verify
+ * on-destroyed) shares the SAME applyReactiveDamage executor tail Task 2 gated on the
+ * then-named `positionalTeamBattle` input field — since replaced by the derived
+ * `hasPositionedEnemyRoster` check (per the SP-1 follow-up) — no production change is expected here. These fixtures verify
  * that shared branch actually covers the hpBasisPct callers (real HP drop + damageDealt credit),
  * not just the flat-multiplier callers (FrontLine, above).
  */
@@ -940,16 +942,17 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
  * EVERY player actor's parsed target to be enemy-side — false the instant the player team
  * includes an ally-targeting ship (e.g. a healer), even in a fully positional `simulateBattle`.
  * The three reactive resolvers (`enemyWithMostBuffs`, `enemyWithHighestSpeed`,
- * `livingOpposingActorIds`) previously gated on that flag instead of `input.positionalTeamBattle`,
- * so a healer on the roster silently misrouted Judge/Incinerator/Chakara/Rhodium's reactive damage
+ * `livingOpposingActorIds`) previously gated on that flag instead of the then-named
+ * `positionalTeamBattle` input field, since replaced by the derived `hasPositionedEnemyRoster`
+ * check (per the SP-1 follow-up), so a healer on the roster silently misrouted Judge/Incinerator/Chakara/Rhodium's reactive damage
  * onto the vestigial dummy `enemy` instead of the real enemy roster — defeating M1 for the (very
  * common) healer-inclusive team composition. These fixtures add a plain ally-targeting healer
  * (`This Unit repairs 5% of its Max HP.`, `activeTarget: 'allies'` — the same ally-heal idiom this
  * file's `frontline` fixture already uses) alongside a reactive-damage ship and assert the real
  * enemy(ies) still lose HP. Pre-fix (`dummyEnemyIsVestigial`-gated): RED — the healer flips the
  * gate false, the resolver falls back to the dummy, and the matching enemy(ies) take 0 real HP.
- * Post-fix (`input.positionalTeamBattle`-gated): GREEN — real enemy HP drops exactly as it does
- * without the healer.
+ * Post-fix (then `positionalTeamBattle`-gated, now `hasPositionedEnemyRoster`-gated): GREEN
+ * — real enemy HP drops exactly as it does without the healer.
  */
 
 // Plain ally-targeting healer — the ONLY thing needed to flip dummyEnemyIsVestigial's second

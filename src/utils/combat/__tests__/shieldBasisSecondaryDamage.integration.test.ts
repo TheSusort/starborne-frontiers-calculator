@@ -112,6 +112,7 @@ describe('PR9a: shield-basis additional damage reads the LIVE caster shieldPool 
             shipSkills,
             numRounds: 2,
             healTargetId: 'attacker', // self-heal-target: activates the self-shield-grant block
+            mode: 'healing',
         } as CombatEngineInput);
         // Round 1: shieldPool is 0 before any grant → base only.
         expect(result.rounds[0].directDamage).toBe(10000);
@@ -134,6 +135,7 @@ describe('PR9a: shield-basis additional damage reads the LIVE caster shieldPool 
             shipSkills,
             numRounds: 3,
             healTargetId: 'attacker',
+            mode: 'healing',
         } as CombatEngineInput);
         expect(result.rounds.map((r) => r.directDamage)).toEqual([10000, 10000, 10000]);
     });
@@ -179,6 +181,7 @@ describe('PR9a: team symmetry — an ENEMY-sourced shield-basis additional-damag
             shipSkills: punchingBagSkills,
             numRounds: 2,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [makeEnemy(includeSelfShield)],
             __testTapActors: (actors) => {
                 captured = actors;
@@ -197,6 +200,7 @@ describe('PR9a: team symmetry — an ENEMY-sourced shield-basis additional-damag
             shipSkills: punchingBagSkills,
             numRounds: 2,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [makeEnemy(true)],
             __testTapActors: (actors) => {
                 captured = actors;

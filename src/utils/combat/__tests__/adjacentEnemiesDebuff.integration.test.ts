@@ -242,11 +242,11 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
 
 /**
  * DPS invariance: the DPS calculator's single-dummy mode calls `runCombat` DIRECTLY with no
- * `position`/`pattern`/`enemyAttackers`/`positionalTeamBattle` — the vestigial `enemy` sink actor
+ * `position`/`pattern`/`enemyAttackers`/`mode: 'battle'` — the vestigial `enemy` sink actor
  * (engine.ts's `createActor({ id: 'enemy', ... })`) is the sole opponent, and `targetId` is never
  * threaded onto the turn args (buildTurnArgs's player-side guard: `tgt.id !== enemy.id`). This is
  * the DPS page's real non-positional shape (dpsSimulator.ts calls `runCombat` the same way), NOT
- * `simulateBattle` (which always sets `positionalTeamBattle: true` and gives every enemy a real
+ * `simulateBattle` (which always sets `mode: 'battle'` and gives every enemy a real
  * position). Today's plain `enemy`-target debuff still lands on the dummy in this mode (the
  * legacy `targetId === undefined && !positionalLanding → [undefined]` fallback resolves the dummy
  * itself as victim) — `target-and-adjacent-enemies` must match that (dummy only, no neighbours to

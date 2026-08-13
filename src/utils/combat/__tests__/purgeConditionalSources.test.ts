@@ -148,6 +148,7 @@ describe('C2b-2 T1 Integration: Iridium on-attacked reactive purge', () => {
         defence: 0,
         hp: 1_000_000_000, // Iridium immortal for the test
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 100,
         position: 'M4',
         target: parsedTarget('front'),
@@ -237,6 +238,7 @@ describe('C2b-2 T2: round-ended event fires once per round', () => {
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 100,
         position: 'M4',
         target: parsedTargetLocal('front'),
@@ -552,6 +554,7 @@ describe('C2b-2 T4 Integration: Rhodium end-of-round most-buffs purge', () => {
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 100,
         position: 'M4',
         target: parsedTarget('front'),
@@ -701,6 +704,7 @@ describe('C2b-2 T5: ship-destroyed killerId + byDirectDamage', () => {
         defence: 0,
         hp: 10_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -890,6 +894,7 @@ describe('C2b-2 T6 Integration: Faust on-destroyed killer-targeted purge', () =>
         defence: 0,
         hp: 10_000, // Faust dies to the killer's 1_000_000 attack
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 100, // slower than the killer (200) → killer acts + buffs + kills first
         position: 'M4',
         target: parsedTarget('front'),

@@ -109,6 +109,7 @@ describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 
         hp: 100_000,
         speed: 100,
         healTargetId: 'attacker', // activates the cast-path self-shield-grant block
+        mode: 'healing',
     });
 
     // Counts the `control-applied` reaction event (effect:'disable') fired by APEX's charged
@@ -189,6 +190,7 @@ describe('APEX charged Disable — team symmetry (ENEMY-side APEX gates the SAME
         hp: 1_000_000_000,
         speed: 200, // focus acts first each round
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers: [apex],
     });
 

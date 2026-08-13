@@ -146,6 +146,7 @@ const BASE: CombatEngineInput = {
     // Laika's own Max HP — the self-shield's basis (30% × 1,000,000 = 300,000).
     hp: 1_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),
@@ -240,6 +241,7 @@ describe('Laika (enemy-side) — team symmetry: an enemy Laika reacts to its OWN
             hp: 100_000,
             preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: 50 },
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),

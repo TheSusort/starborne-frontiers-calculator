@@ -88,6 +88,7 @@ function runAndCaptureResists() {
             hp: 1_000_000,
             defence: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [infernoEnemy()],
             shipSkills: { slots: [] },
             bus,

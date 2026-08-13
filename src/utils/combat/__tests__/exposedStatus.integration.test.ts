@@ -172,7 +172,7 @@ function playerHitsExposedEnemy(
         speed: 100, // slower than foe → foe hits first, waking the reaction
         hacking: 100_000,
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),
@@ -228,7 +228,7 @@ function enemyHitsExposedPlayer(statusName: string): number {
         speed: 900, // faster than foe → the focus hits first, waking FOE's reaction
         hacking: 100_000,
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),
@@ -441,7 +441,7 @@ function foeDamagePerRound(withCounter: boolean, stacks = 1): { r1: number; r2: 
         speed: 100, // slower than the foe → the foe attacks first, waking the counter
         hacking: 100_000,
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),

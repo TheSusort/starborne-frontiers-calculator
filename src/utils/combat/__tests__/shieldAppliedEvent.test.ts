@@ -63,6 +63,7 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     defence: 0,
     hp: 40_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

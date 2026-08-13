@@ -117,6 +117,7 @@ const blockDebuffEngineBase = (overrides: Partial<CombatEngineInput> = {}): Comb
     defence: 0,
     hp: 1_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

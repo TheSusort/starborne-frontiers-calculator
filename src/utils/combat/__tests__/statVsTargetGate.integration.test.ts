@@ -120,6 +120,7 @@ describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () =
             hp: playerHp,
             speed: 200, // focus acts first so it has a last-turn ctx before the enemy's cast
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [
                 {
                     id: 'e1',

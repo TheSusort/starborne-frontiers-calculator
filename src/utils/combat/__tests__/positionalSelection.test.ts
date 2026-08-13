@@ -87,6 +87,7 @@ const BASE = (selection: ParsedTarget['selection']): CombatEngineInput => ({
     hp: 1_000_000_000,
     // Healing mode — required for the positioned enemy roster to be built.
     healTargetId: 'attacker',
+    mode: 'healing',
     // Focus attacker board position + parsed positional target.
     position: 'M4',
     target: parsedTarget(selection),
@@ -288,6 +289,7 @@ describe('Task C3 — enemy attacker positional target selection (side-symmetric
             // Focus attacker should NOT itself attack the player team — it has its own enemy
             // target; we only care about the enemy's incoming routing. Keep its basic attack.
             healTargetId: 'team-1',
+            mode: 'healing',
             teamActors: [teamActorAt('team-1', 'M1', 'front')],
             enemyAttackers: [damagingEnemyAt('enemy-atk', 'M4', 'front')],
         };
@@ -541,6 +543,7 @@ describe('Phase 3 (Task 7) — reactive Provoke redirects the enemy attacker to 
         ...BASE('front'),
         numRounds: 2,
         healTargetId: 'attacker',
+        mode: 'healing',
         teamActors: [reactiveProvokerTeamActorAt('team-1', 'M1', provoke)],
         enemyAttackers: [damagingEnemyAt('enemy-atk', 'M4', 'front')],
     });

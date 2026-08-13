@@ -91,6 +91,7 @@ const positionalKillBase = (
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: frontTarget(),
     pattern: basePattern(),
@@ -409,6 +410,7 @@ describe('reactive death-triggered bridge', () => {
             hp: 100000,
             speed: 50, // focus acts after atk1 (100) but before t1 (10)
             healTargetId: 't1',
+            mode: 'healing',
             teamActors: [teamWalk('t1', 3000)],
             enemyAttackers: [
                 {

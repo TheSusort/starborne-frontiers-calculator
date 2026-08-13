@@ -140,6 +140,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     defence: 0,
     hp: HP,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

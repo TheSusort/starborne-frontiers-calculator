@@ -138,6 +138,7 @@ const nyxenFocusBattle = (
     hp: 40_000,
     speed: 200, // acts BEFORE the enemy (speed 50) so the shield is live when the hit arrives
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),
@@ -260,6 +261,7 @@ const playerAttacksEnemy = (
     hp: 1_000_000_000, // immortal player attacker so enemy counters never kill it
     speed: 200, // player acts first → its hit wakes the enemy reactive each round
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),

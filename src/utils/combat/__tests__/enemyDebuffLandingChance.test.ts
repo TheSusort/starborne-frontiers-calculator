@@ -105,6 +105,7 @@ const countDotApplied = (hacking: number | undefined, numRounds: number): number
             hp: 1_000_000,
             defence: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             bus,
             enemyAttackers: [dotEnemy(hacking)],
             shipSkills: { slots: [] },

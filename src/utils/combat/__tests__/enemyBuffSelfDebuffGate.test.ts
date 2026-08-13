@@ -253,6 +253,7 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     defence: 2000,
     hp: 1_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -396,6 +397,7 @@ describe('status-grant gate path — LIVE self-debuff/Provoke positive (Task 6)'
                 shipSkills: grantGatedSelfBuffSkill(cond),
                 enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [provokeEnemy()],
             })
         );
@@ -473,6 +475,7 @@ describe('status-grant gate path — LIVE enemy-buff/Taunt positive (item 11)', 
                 shipSkills: grantGatedSelfBuffSkill(cond),
                 enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [tauntEnemy()],
             })
         );
@@ -565,6 +568,7 @@ describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Ta
                 shipSkills: grantGatedSelfBuffSkill(cond),
                 enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [enemy],
             })
         );

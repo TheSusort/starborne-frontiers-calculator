@@ -198,7 +198,7 @@ const focusCast = (slots: ShipSkills['slots'], enemies: EnemyAttacker[]): Combat
     position: 'M1',
     target: parsedTarget('front'),
     pattern: basePattern(),
-    positionalTeamBattle: true,
+    mode: 'battle',
     enemyAttackers: enemies,
 });
 
@@ -291,7 +291,7 @@ const enemyDrivenBattle = (team: TeamActor[], enemies: EnemyAttacker[]): CombatE
     hp: HP,
     healTargetId: 'attacker',
     position: 'M1',
-    positionalTeamBattle: true,
+    mode: 'battle',
     teamActors: team,
     enemyAttackers: enemies,
 });

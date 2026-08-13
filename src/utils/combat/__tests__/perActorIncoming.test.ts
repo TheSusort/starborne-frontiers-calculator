@@ -86,6 +86,7 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     defence: 0,
     hp: 10_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -105,6 +106,7 @@ describe('PR5a — per-actor incoming bucket == heal-target scalar (byte-identic
                 numRounds: 3,
                 hp: 10_000,
                 healTargetId: targetId,
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 2500)],
             })
         );
@@ -140,6 +142,7 @@ describe('PR5a — per-actor incoming bucket == heal-target scalar (byte-identic
                 numRounds: 3,
                 hp: 10_000,
                 healTargetId: targetId,
+                mode: 'healing',
                 // Shield self ability — grants 2500 pool on round 1 (25% of 10000)
                 shipSkills: { slots: [{ slot: 'active', abilities: [shieldSelf(25)] }] },
                 enemyAttackers: [manualEnemy('shieldAtk', 2000)],
@@ -177,6 +180,7 @@ describe('PR5a — per-actor incoming bucket == heal-target scalar (byte-identic
                 numRounds: 3,
                 hp: 10_000,
                 healTargetId: targetId,
+                mode: 'healing',
                 selfBuffs: [barrierBuff()],
                 enemyAttackers: [manualEnemy('barrierAtk', 3000)],
             })

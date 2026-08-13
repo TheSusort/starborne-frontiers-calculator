@@ -168,6 +168,7 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
     defence: PROTECTOR_DEFENCE, // the focus (protector) defence — drives the redirected chunk's mit.
     hp: 1_000_000_000,
     healTargetId: 'ally-1',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -670,6 +671,7 @@ describe('Protection transfer — enemy-side symmetry (protector + victim on the
             // healTargetId so the enemy attacks resolve against a real (healing-mode) heal target —
             // the same setup every test above already carries via `healTargetId`.
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTargetFront,
             pattern: basePattern,
@@ -822,6 +824,7 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
             defence: 0,
             hp: 1_000_000_000,
             healTargetId: 'ally-1',
+            mode: 'healing',
             teamActors: [
                 {
                     id: 'ally-1', // direct-hit victim — front column (M4), the kill-switch reflector.
@@ -947,6 +950,7 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
             // the enemy attacker is in the player-side test above.
             hp: 1,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: targetFront,
             pattern: basicPattern,
@@ -1021,7 +1025,7 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
 // Positional (not the file's default non-positional shape) because `emitHit` — the site that books
 // the victim's own row — exists only on the positional path. In non-positional mode the victim gets
 // no `perTargetDamage` entry at all, which is a separate pre-existing gap that never reaches the
-// battle simulator (`simulateBattle` always sets `positionalTeamBattle`).
+// battle simulator (`simulateBattle` always sets `mode: 'battle'`).
 // ───────────────────────────────────────────────────────────────────────────────────────
 
 /** A positioned enemy that fires one real 100% hit at the FRONT-most player (M4 in this harness's
@@ -1115,7 +1119,7 @@ describe('per-victim damage accounting under a Protection redirect (positional)'
         BASE_INPUT({
             selfBuffs: [], // the focus is inert here — the protector is a team actor
             defence: 0,
-            positionalTeamBattle: true,
+            mode: 'battle',
             teamActors: [
                 { ...teamActor('ally-1', 0), position: 'M4' },
                 {

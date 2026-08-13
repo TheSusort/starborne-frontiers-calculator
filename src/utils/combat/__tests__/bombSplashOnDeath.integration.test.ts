@@ -108,6 +108,7 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),
@@ -260,6 +261,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             defence: 0,
             hp: 1_000_000_000,
             healTargetId: 'attacker',
+            mode: 'healing',
             // NO position on the attacker, and NO enemyAttackers (no positions at all).
         };
 

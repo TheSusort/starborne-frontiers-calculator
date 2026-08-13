@@ -538,6 +538,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         role: input.healerRole,
         healTargetId,
         enemyAttackers: engineEnemyAttackers,
+        mode: 'healing',
         teamActors: engineTeamActors,
         bus: input.bus,
         // Positional plumbing (SP-3). Both position AND target AND pattern are required: with a

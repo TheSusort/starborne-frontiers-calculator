@@ -186,6 +186,7 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
         hacking: 1000, // Corrosion always lands (vs enemy security 0)
         enemySecurity: 0,
         healTargetId: 'attacker', // healing mode unlocks the positioned enemy roster
+        mode: 'healing',
         position: 'M2',
         target: pt('all'),
         pattern: allPattern(),
@@ -311,6 +312,7 @@ describe('Pestilence (player-side) — a same-side (ally) cleanse does NOT trigg
             hacking: 1000,
             enemySecurity: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M3',
             target: pt('front'),
             pattern: basePattern(),
@@ -411,6 +413,7 @@ describe('Pestilence (enemy-side) — team symmetry: reacts to a PLAYER actor cl
             hacking: 0,
             enemySecurity: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M3',
             target: pt('front'),
             pattern: basePattern(),

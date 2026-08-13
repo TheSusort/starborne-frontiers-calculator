@@ -176,6 +176,7 @@ describe('C2b-1 T6 Step 1: Salvation heals the purged ally (on-ally-purged)', ()
         defence: 0,
         hp: 1_000_000_000, // focus immortal
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 100,
         position: 'M4',
         target: parsedTarget('front'),
@@ -200,7 +201,7 @@ describe('C2b-1 T6 Step 1: Salvation heals the purged ally (on-ally-purged)', ()
         //   R1: focus buffs (Attack Up), salvation no-ops, enemy purges → 1 event → 1000 heal.
         //   R2: focus buffs (stack replaces), salvation no-ops, enemy purges again → 1000 more.
         // Total Salvation directHeal across 2 rounds = 2000.
-        expect(totalSalvationHeal).toBe(2 * (SALVATION_HP * SALVATION_HEAL_PCT / 100));
+        expect(totalSalvationHeal).toBe(2 * ((SALVATION_HP * SALVATION_HEAL_PCT) / 100));
     });
 
     it('the heal routes to the purge VICTIM (attacker = the ally whose buff was taken), not Salvation itself', () => {
@@ -356,6 +357,7 @@ describe('C2b-1 T6 Step 2: Sefuba chain purge + self-heal (on-enemy-purged, dept
         defence: 0,
         hp: SEFUBA_HP,
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 100,
         position: 'M4',
         target: parsedTarget('front'),
@@ -392,7 +394,7 @@ describe('C2b-1 T6 Step 2: Sefuba chain purge + self-heal (on-enemy-purged, dept
             (sum, rd) => sum + (rd.perActor.get('attacker')?.directHeal ?? 0),
             0
         );
-        const expectedHeal = SEFUBA_HP * SEFUBA_HEAL_PCT / 100; // 1200
+        const expectedHeal = (SEFUBA_HP * SEFUBA_HEAL_PCT) / 100; // 1200
         expect(sefubaHeal).toBe(expectedHeal);
     });
 
@@ -449,7 +451,12 @@ describe('C2b-1 T6 Step 3: depth guard — chain purge removes a buff but emits 
             slots: [
                 {
                     slot: 'active' as const,
-                    abilities: [selfBuff('Attack Up'), selfBuff('Defence Up'), selfBuff('Speed Up'), hit()],
+                    abilities: [
+                        selfBuff('Attack Up'),
+                        selfBuff('Defence Up'),
+                        selfBuff('Speed Up'),
+                        hit(),
+                    ],
                 },
             ],
         },
@@ -507,6 +514,7 @@ describe('C2b-1 T6 Step 3: depth guard — chain purge removes a buff but emits 
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 100,
         position: 'M4',
         target: parsedTarget('front'),
@@ -536,11 +544,11 @@ describe('C2b-1 T6 Step 3: depth guard — chain purge removes a buff but emits 
         runCombat({
             ...BASE_MULTI(),
             numRounds: 1,
-            __testTapStatusEngine: (e) => { engine = e; },
+            __testTapStatusEngine: (e) => {
+                engine = e;
+            },
         });
-        const remainingAfterR1 = engine!
-            .timedAbilityStatuses('self', 'enemy-front')
-            .length;
+        const remainingAfterR1 = engine!.timedAbilityStatuses('self', 'enemy-front').length;
         expect(remainingAfterR1).toBe(1); // 3 applied - 2 removed = 1 surviving
     });
 });

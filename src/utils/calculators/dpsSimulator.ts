@@ -453,6 +453,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         shipSkills,
         enemyDefense,
         enemyHp,
+        mode: 'dps',
         numRounds,
         selfBuffs,
         enemyDebuffs,

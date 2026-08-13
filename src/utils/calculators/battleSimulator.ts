@@ -799,8 +799,8 @@ const withStealthBypass = (t: ParsedTarget | undefined, on: boolean): ParsedTarg
  *                  rates), position, target, pattern.
  *   - enemyTeam  → `enemyAttackers`, each with stats + shipSkills + position/target/pattern.
  *
- * The battle is driven by positions on both sides. `positionalTeamBattle: true` is the single
- * signal the engine keys on (SP-U U5 R6 decouple): it builds the positioned enemy roster from the
+ * The battle is driven by positions on both sides. `mode: 'battle'` is the single signal the
+ * engine keys on (SP-U U5 R6 decouple): it builds the positioned enemy roster from the
  * enemyAttackers presence, lets enemies fire on players, and runs the real-vs-real heal/shield
  * pipeline (heals route to the lowest-HP living ally) — no `healTargetId` is passed.
  *
@@ -1068,11 +1068,13 @@ export function simulateBattle(
         // enemyAttackers branches.
         ignoresStealth: focus.shipSkills.ignoresStealth,
         ...preFightModifiersFor(focus.id),
-        // Positional team battle: the engine builds the positioned enemy roster from the
-        // enemyAttackers presence and runs the heal/shield pipeline off this flag (SP-U U5 R6
-        // decouple — no vestigial `healTargetId` needed). A player single-`ally` heal/shield
-        // resolves the lowest-HP living player ally (team-symmetric with the enemy side).
-        positionalTeamBattle: true,
+        // Positional team battle: the positioned enemy roster comes from the `enemyAttackers`
+        // presence below (SP-U U5), not from `mode`. `mode: 'battle'` is the run-kind, not a
+        // flag the pipeline is switched on by — it anchors `healTarget` to the focus actor
+        // (engine.ts) so the heal/shield pipeline stays active with no vestigial `healTargetId`
+        // needed. A player single-`ally` heal/shield resolves the lowest-HP living player ally
+        // (team-symmetric with the enemy side).
+        mode: 'battle',
         teamActors,
         enemyAttackers,
         __testTapActors: input.__testTapActors,

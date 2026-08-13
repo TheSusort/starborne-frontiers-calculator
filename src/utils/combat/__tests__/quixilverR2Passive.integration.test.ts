@@ -187,6 +187,7 @@ const quixilverFixture = (opts: {
     defence: 0,
     hp: HP,
     healTargetId: 'attacker',
+    mode: 'healing',
     teamActors: [ally('ally-front', 'M4'), ally('ally-back', 'M3')],
     enemyAttackers: [offensiveEnemy(opts.enemyAbilities ?? [noopDamage()])],
     __testTapActors: (actors: CombatActor[]) => {

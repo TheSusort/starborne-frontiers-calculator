@@ -107,6 +107,7 @@ describe('dummy enemy turn gate', () => {
         const count = enemyTurnStartedCount(
             BASE({
                 healTargetId: 'attacker',
+                mode: 'healing',
                 position: 'M4',
                 target: parsedTarget('front'),
                 pattern: basePattern(),

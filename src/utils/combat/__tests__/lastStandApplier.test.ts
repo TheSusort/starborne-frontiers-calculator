@@ -227,6 +227,7 @@ describe('D-PR16 Last Stand (last-standing → self Barrier + Block Debuff co-gr
         const input = BASE({
             teamActors: [ally('ally-T2', 'T2', 3_000)],
             healTargetId: 'ally-T2',
+            mode: 'healing',
             enemyAttackers: [enemyHitter('enemy-atk', 5_000)],
         });
 
@@ -244,6 +245,7 @@ describe('D-PR16 Last Stand (last-standing → self Barrier + Block Debuff co-gr
         const input = BASE({
             teamActors: [ally('ally-T2', 'T2', 3_000), ally('ally-M3', 'M3', 1_000_000_000)],
             healTargetId: 'ally-T2',
+            mode: 'healing',
             enemyAttackers: [enemyHitter('enemy-atk', 5_000)],
         });
 
@@ -307,6 +309,7 @@ describe('D-PR16 Last Stand (last-standing → self Barrier + Block Debuff co-gr
             target: parsedTarget('front'),
             pattern: basePattern(),
             healTargetId: 'attacker', // required when enemyAttackers are present
+            mode: 'healing',
             teamActors: [], // no positional player ally needed
             enemyAttackers: [frontEnemy, enemyCarrier],
             numRounds: 2,

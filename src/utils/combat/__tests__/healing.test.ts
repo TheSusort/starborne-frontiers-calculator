@@ -102,6 +102,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             BASE({
                 numRounds: 3,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     ab({
                         type: 'heal',
@@ -126,6 +127,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             BASE({
                 attack: 5000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     ab({
                         type: 'heal',
@@ -144,6 +146,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             BASE({
                 defence: 2000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     ab({
                         type: 'heal',
@@ -162,6 +165,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             BASE({
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     ab({
                         type: 'heal',
@@ -185,6 +189,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 crit: 100,
                 critDamage: 50,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 shipSkills: healSkills([
                     ab({
@@ -212,6 +217,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 crit: 0,
                 critDamage: 50,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 shipSkills: healSkills([
                     ab({
@@ -241,6 +247,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 crit: 50,
                 critDamage: 100,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     // noCrit heal: base 1000, must not draw/advance the gate.
                     ab({
@@ -274,6 +281,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             BASE({
                 healModifier: 20,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 // A recurring self-buff carrying outgoingHeal 15 + incomingHeal 20.
                 selfBuffs: [
                     {
@@ -305,6 +313,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 numRounds: 6,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     ab({
                         type: 'shield',
@@ -332,6 +341,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 healModifier: 50,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [
                     {
                         id: 'b',
@@ -366,6 +376,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             BASE({
                 numRounds: 3,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     ab({ type: 'cleanse', config: { type: 'cleanse', count: 2 } }),
                 ]),
@@ -416,6 +427,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 critDamage: 0,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 // Attacker (speed 200) acts first; team actors slower so they don't heal here.
                 speed: 200,
                 teamActors: [teamWalk('t1', 40), teamWalk('t2', 30)],
@@ -481,6 +493,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 hp: 10000,
                 speed: 40, // focus acts after the team healer
                 healTargetId: 't1',
+                mode: 'healing',
                 teamActors: engineTeamActors,
                 shipSkills: { slots: [] }, // focus actor is inert
             })
@@ -517,6 +530,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 numRounds: 2,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 shipSkills: healSkills([
                     ab({
@@ -545,6 +559,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             runCombat(
                 BASE({
                     healTargetId: 'nope',
+                    mode: 'healing',
                     shipSkills: healSkills([
                         ab({
                             type: 'heal',
@@ -570,6 +585,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             BASE({
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     // target-hp 200% → raw 20000 > max HP 10000; at full HP deficit 0 →
                     // consumed 0, overheal 20000, but directHeal still counts the full 20000.
@@ -640,6 +656,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 hp: 10000,
                 speed: 200, // attacker acts before the target every round
                 healTargetId: 't1',
+                mode: 'healing',
                 teamActors: [teamWalk('t1', 40, 8000)],
                 shipSkills: healSkills([
                     ab({
@@ -681,6 +698,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 numRounds: 1,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [
                     {
                         id: 'hp-hot',
@@ -718,6 +736,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 hp: 10000,
                 speed: 200,
                 healTargetId: 't1',
+                mode: 'healing',
                 teamActors: [teamWalk('t1', 40, 8000), teamWalk('t2', 30, 6000)],
                 shipSkills: healSkills([
                     ab({
@@ -753,6 +772,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 numRounds: 3,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [
                     {
                         id: 'sched-hot',
@@ -783,6 +803,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 healModifier: 50,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [
                     {
                         id: 'h',
@@ -804,6 +825,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 numRounds: 1,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [
                     {
                         id: 'h',
@@ -827,6 +849,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 numRounds: 1,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 // A scheduled HoT with stacks 2 (isStackable false → static 2× stack override).
                 selfBuffs: [
                     {
@@ -913,6 +936,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 10000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 2000)],
                 shipSkills: healSkills([
                     ab({
@@ -951,6 +975,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 10000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 4000)],
                 shipSkills: healSkills([
                     ab({
@@ -987,6 +1012,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 speed: 200, // attacker fast, but it does nothing damaging
                 hp: 10000,
                 healTargetId: 't1',
+                mode: 'healing',
                 // t1 walk defence 0 so intake = enemy attack (no reduction): exactly 3000/round.
                 teamActors: [
                     teamWalk('t1', 40, 5000, {
@@ -1054,6 +1080,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 100_000, // never dies
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'atk1',
@@ -1082,6 +1109,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                     hp: 5000,
                     defence: 0,
                     healTargetId: 'attacker', // focus IS the target
+                    mode: 'healing',
                     enemyAttackers: [manualEnemy('atk1', 3000)],
                     shipSkills: { slots: [] },
                 })
@@ -1127,6 +1155,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 5000, // R2 turn-start inferno tick (5000) is exactly lethal
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [], // no Cheat Death
                 enemyAttackers: [
                     manualEnemy('dotEnemy', 5000, 50, {
@@ -1185,6 +1214,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                     numRounds: 1,
                     hp: 1_000_000,
                     healTargetId: 'attacker',
+                    mode: 'healing',
                     enemyAttackers: [manualEnemy('dup', 2000), manualEnemy('dup', 3000)],
                     shipSkills: { slots: [] },
                 })
@@ -1200,6 +1230,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                     numRounds: 1,
                     hp: 1_000_000,
                     healTargetId: 'attacker',
+                    mode: 'healing',
                     enemyAttackers: [manualEnemy('enemy', 2000)],
                     shipSkills: { slots: [] },
                 })
@@ -1215,6 +1246,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                     numRounds: 1,
                     hp: 1_000_000,
                     healTargetId: 'attacker',
+                    mode: 'healing',
                     teamActors: [teamWalk('t1', 50, 8000)],
                     enemyAttackers: [manualEnemy('t1', 2000)],
                     shipSkills: { slots: [] },
@@ -1233,6 +1265,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 1_000_000,
                 defence: 2000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 5000)],
                 shipSkills: { slots: [] },
             })
@@ -1244,6 +1277,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 5000)],
                 shipSkills: { slots: [] },
             })
@@ -1264,6 +1298,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 numRounds: 2,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     ab({
                         type: 'heal',
@@ -1338,6 +1373,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 100_000, // never dies — isolates the DoT bleed
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 enemyAttackers: [
                     manualEnemy('atk1', 5000, 50, {
@@ -1423,6 +1459,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 hp: 1_000_000, // never dies
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'atk1',
@@ -1720,6 +1757,7 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
                 crit: 100,
                 critDamage: 100, // would double a crit-heal — proves the executor never crits
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 shipSkills: {
                     slots: [
@@ -1783,6 +1821,7 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
                 numRounds: 1,
                 hp: 10000, // focus max HP
                 healTargetId: 'attacker',
+                mode: 'healing',
                 speed: 200, // focus acts first
                 teamActors: [teamWalk('t1', 20000), teamWalk('t2', 30000)],
                 shipSkills: {
@@ -1814,6 +1853,7 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
                 numRounds: 2,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         {
@@ -1847,6 +1887,7 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
             BASE({
                 numRounds: 3,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'enemy1',
@@ -1989,6 +2030,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
                 critDamage: 0,
                 speed: 200,
                 healTargetId: 't1', // a non-self ally is the heal target (and the cleanse recipient)
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'enemy1',
@@ -2089,6 +2131,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
                 critDamage: 0,
                 speed: 200,
                 healTargetId: 't1',
+                mode: 'healing',
                 teamActors: [
                     {
                         id: 't1',
@@ -2162,6 +2205,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
                 hasChargedSkill: false,
                 speed: 5, // focus acts AFTER the team ally so the charge is observable
                 healTargetId: 'attacker',
+                mode: 'healing',
                 teamActors: [critTeamWalk('t1', 200, 2)],
                 shipSkills: {
                     slots: [
@@ -2219,6 +2263,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 numRounds: 1,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     damageAb(100),
                     ab({
@@ -2242,6 +2287,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 hp: 10000,
                 healModifier: 50,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     damageAb(100),
                     ab({
@@ -2267,6 +2313,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 healModifier: 50,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     damageAb(100),
                     ab({
@@ -2292,6 +2339,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 numRounds: 1,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         { slot: 'active', abilities: [damageAb(100)] },
@@ -2326,6 +2374,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 numRounds: 1,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         {
@@ -2368,6 +2417,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 critDamage: 50,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     damageAb(100),
                     ab({
@@ -2391,6 +2441,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 critDamage: 50,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: healSkills([
                     damageAb(100),
                     ab({
@@ -2419,6 +2470,7 @@ describe('healing — Defiant shield-on-Stasis (control-applied → on-stasis-ap
                 numRounds: 5,
                 hp: 10000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 hasChargedSkill: true,
                 chargeCount: 1,
                 startCharged: true,
@@ -2523,6 +2575,7 @@ describe('healing — emission scoping: enemy crit does not trigger player on-al
                 crit: 0, // focus never crits
                 critDamage: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [crittingEnemy('atk1')],
                 shipSkills: onAllyCritShield(),
             })
@@ -2584,6 +2637,7 @@ describe('healing — emission scoping: enemy crit does not trigger player on-al
                 critDamage: 0,
                 speed: 100, // focus acts after the ally (200) so the ally's crit lands first
                 healTargetId: 'attacker',
+                mode: 'healing',
                 teamActors: [crittingAlly],
                 shipSkills: onAllyCritShield(),
             })
@@ -2640,6 +2694,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // enemy hits for 3000 → lethal in one hit
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [cheatDeathBuff()],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -2703,6 +2758,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // enemy hits for 3000 → lethal in one hit
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [], // NOT seeded via input — the kit grants it
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -2745,6 +2801,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // enemy hits for 3000 → lethal in one hit, drop to 1 HP
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 // Cheat Death is granted by the parsed kit (recurring self-buff ability),
                 // NOT seeded as a top-level input selfBuff.
@@ -2791,6 +2848,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // enemy hits for 3000 → lethal in one hit, drop to 1 HP
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -2820,6 +2878,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // 3000/round → lethal each round
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [cheatDeathBuff()],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -2883,6 +2942,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // enemy 3000 → lethal in one hit
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 chargeCount: 1,
                 startCharged: true,
                 hasChargedSkill: true,
@@ -2941,6 +3001,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // enemy 3000 → lethal in one hit
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [], // granted by the parsed kit, NOT seeded as a top-level input buff
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -3000,6 +3061,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // enemy 3000 → lethal in one hit
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [cheatDeathBuff()],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -3034,6 +3096,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [], // no Cheat Death
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -3089,6 +3152,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 2000, // killEnemy 3000 → lethal in one hit
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [cheatDeathBuff()],
                 enemyAttackers: [
@@ -3130,6 +3194,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 hp: 1_000_000, // never dies, no Cheat Death — isolates the DoT bleed
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 selfBuffs: [], // no Cheat Death
                 enemyAttackers: [
@@ -3219,6 +3284,7 @@ describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', 
                 hp: 2000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 speed: 100,
                 bus: createEventBus(),
                 selfBuffs: [],
@@ -3234,6 +3300,7 @@ describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', 
                 hp: 2000, // enemy hits for 3000 → lethal in one hit (no Cheat Death)
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 speed: 100, // focus would act first, but it dies on the enemy turn this round
                 bus,
                 selfBuffs: [],

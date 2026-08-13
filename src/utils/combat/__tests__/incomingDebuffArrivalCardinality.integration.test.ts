@@ -180,7 +180,7 @@ const focusCast = (slots: ShipSkills['slots'], enemies: EnemyAttacker[]): Combat
     position: 'M1',
     target: parsedTarget('front'),
     pattern: basePattern(),
-    positionalTeamBattle: true,
+    mode: 'battle',
     enemyAttackers: enemies,
 });
 

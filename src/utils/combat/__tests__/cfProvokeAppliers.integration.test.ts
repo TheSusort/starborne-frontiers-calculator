@@ -213,6 +213,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
             BASE({
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
                 healTargetId: 'ally-T2',
+                mode: 'healing',
                 enemyAttackers: [enemyHitter('enemy-atk')],
             }),
             'Provoke'
@@ -233,6 +234,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
             BASE({
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
                 healTargetId: 'ally-B4',
+                mode: 'healing',
                 enemyAttackers: [enemyHitter('enemy-atk')],
             }),
             'Provoke'
@@ -252,6 +254,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
                 position: 'M2',
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-M3', 'M3')],
                 healTargetId: 'ally-T2',
+                mode: 'healing',
                 // Two enemies both hit the adjacent heal target T2 in the same round → two
                 // `attacked` events on an adjacent ally, so the listener enqueues twice.
                 enemyAttackers: [enemyHitter('enemy-1'), enemyHitter('enemy-2')],
@@ -297,6 +300,7 @@ describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of r
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 
@@ -431,6 +435,7 @@ describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of r
                 speed: 100, // slower than the enemy Doomsayer (5000) → enemy is first activator
                 teamActors: [highAttackAlly],
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [doomEnemy],
             }),
             CF

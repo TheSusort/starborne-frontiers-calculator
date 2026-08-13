@@ -77,6 +77,7 @@ describe('Warden Out. Damage Down II — self-inflicted-debuff reactive (Ship-ki
         speed: 100,
         hacking: 999, // >> enemy security so the reactive Out. Damage Down II lands
         healTargetId: 'attacker',
+        mode: 'healing',
     });
 
     it('player-side: Out. Damage Down II lands (was never dispatched) and does NOT self-chain', () => {
@@ -136,6 +137,7 @@ describe('Warden Out. Damage Down II — team symmetry (enemy-side Warden inflic
         hp: 1_000_000_000,
         speed: 200, // focus acts first; the enemy Warden acts after and inflicts on the focus
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers: [enemyWarden()],
     });
 

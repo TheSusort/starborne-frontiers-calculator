@@ -205,6 +205,7 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     // clamp((200-100)/100) = 1.0 — the focus's Scorching Radiation inflict always lands.
     hacking: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

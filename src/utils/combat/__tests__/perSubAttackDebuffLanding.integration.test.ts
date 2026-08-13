@@ -323,7 +323,7 @@ const focusCast = (
     speed: 500,
     target: parsedTarget('front'),
     pattern,
-    positionalTeamBattle: true,
+    mode: 'battle',
     enemyAttackers: enemies,
     ...(team.length > 0 ? { teamActors: team } : {}),
 });

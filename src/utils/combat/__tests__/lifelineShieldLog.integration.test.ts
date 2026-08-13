@@ -94,6 +94,7 @@ const INPUT = (): CombatEngineInput => ({
     hp: 1_000_000_000,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget(),
     pattern: lineRange1Pattern(),
@@ -132,10 +133,10 @@ const inflictDebuff = (): Ability => ({
 /** Same board as INPUT(), but the focus carries the reactive proc and its cast inflicts the
  *  debuff that triggers it. A reactive proc only reduces the victim's real HP against a POSITIONED
  *  enemy roster (the engine's own gate in applyReactiveDamage) rather than being credit-only; this
- *  board is positioned, and `positionalTeamBattle` additionally makes it a two-team run. */
+ *  board is positioned, and `mode: 'battle'` additionally makes it a two-team run. */
 const REACTIVE_INPUT = (): CombatEngineInput => ({
     ...INPUT(),
-    positionalTeamBattle: true,
+    mode: 'battle',
     hacking: 10_000, // the debuff must land for the proc to trigger
     // 40_000 HP: the main 8_000 hit leaves it at 80% (no crossing), so the ONLY thing that can
     // arm Lifeline is the 24_000 proc — which is what makes the ordering assertion meaningful.
@@ -163,7 +164,7 @@ const counter = (multiplier: number): Ability => ({
 
 const COUNTER_INPUT = (): CombatEngineInput => ({
     ...INPUT(),
-    positionalTeamBattle: true,
+    mode: 'battle',
     // The FOCUS is the Lifeline carrier here: 40_000 max HP, 12_000 threshold. It attacks for
     // 8_000; the counter comes back for 300% of the counter-owner's 10_000 attack = 30_000, which
     // crosses the focus below 30% in one blow and arms its Lifeline.

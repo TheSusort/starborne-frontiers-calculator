@@ -2720,7 +2720,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     field to 0 and pins it there (see WHICH SIGNAL above). Never-dies is the property
         //     this guard relies on; never-at-zero-HP is false and must not be substituted for it.
         //   • The general reactive-proc funnel (engine.ts:5523, `applyVictimDamage` for a proc
-        //     victim) is explicitly gated `positionalTeamBattle && victim.id !== enemy.id`.
+        //     victim) is explicitly gated `hasPositionedEnemyRoster && victim.id !== enemy.id`.
         //   • The remaining mid-round `applyVictimDamage` sites do NOT share one gate. An earlier
         //     draft of this comment claimed they were all "gated on `victim.position !== undefined`
         //     or on the victim carrying an ability/kit"; that is WRONG for two of them. The real
@@ -3648,7 +3648,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // needs the application half without teamBattle's lowest-HP single-`ally`
                         // routing (:3360), which is not the game's rule. Absent `perRecipientApply`,
                         // the healing calculator keeps single-target accounting on healing.targetId.
-                        // `perRecipientApply` is set by BOTH positionalTeamBattle and the healing
+                        // `perRecipientApply` is set by BOTH `mode: 'battle'` and the healing
                         // calculator's own perRecipientHealApply, so the battle sim's behaviour is
                         // unchanged.
                         const perRecipientActor = healing.perRecipientApply

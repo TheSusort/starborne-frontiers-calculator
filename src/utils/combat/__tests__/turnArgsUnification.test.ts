@@ -136,6 +136,7 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     defence: 0,
     hp: 1_000_000_000, // huge tank HP → survives both rounds, incoming damage observable
     healTargetId: 'attacker',
+    mode: 'healing',
     speed: 100,
     ...overrides,
 });

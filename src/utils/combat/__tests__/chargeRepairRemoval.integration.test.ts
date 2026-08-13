@@ -147,6 +147,7 @@ const buildZosimosInput = (
     hp: 1_000_000_000,
     speed: 200, // Zosimos fast (acts before the enemies); irrelevant to the listener.
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: enemies,
 });
 

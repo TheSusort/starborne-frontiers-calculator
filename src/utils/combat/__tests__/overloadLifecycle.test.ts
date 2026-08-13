@@ -403,6 +403,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             dpsBase(skillsFor(ruiner), {
                 numRounds: 4,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'repairer',
@@ -451,6 +452,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             dpsBase(skillsFor(ruiner), {
                 numRounds: 4,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'striker',

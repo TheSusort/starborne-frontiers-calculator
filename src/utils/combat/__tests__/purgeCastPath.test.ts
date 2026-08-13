@@ -113,6 +113,7 @@ describe('C2a Task 3: cast-path purge removes enemy self-buffs', () => {
         hp: 1_000_000_000, // focus immortal so the battle runs all rounds
         // Healing mode + position + target unlock the enemy roster and positional targeting.
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -238,6 +239,7 @@ describe('C2a follow-up: cast-path purge is side-symmetric (enemy purges player)
         defence: 0,
         hp: 1_000_000_000, // focus immortal so the battle runs all rounds
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -357,6 +359,7 @@ describe("C2a follow-up: count:'all' purge strips removables but spares unremova
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),

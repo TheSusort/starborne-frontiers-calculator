@@ -98,6 +98,7 @@ const blockBuffEngineBase = (overrides: Partial<CombatEngineInput> = {}): Combat
     defence: 0,
     hp: 1_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

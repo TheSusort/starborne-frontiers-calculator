@@ -225,6 +225,7 @@ describe('Ruiner (player-side) — Bomb routes to the REPAIRER, capped once per 
         // (no last-turn ctx to snapshot). Keep it that way: it is the harder path.
         speed: 1,
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers: [enemyX(), enemyY()],
     });
 
@@ -273,6 +274,7 @@ describe('Ruiner (enemy-side) — team symmetry: an enemy Ruiner reacts to a PLA
             hp: 1_000_000_000,
             speed: 200, // player acts first — its self-repair wakes the enemy reactive same round
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyRuiner],
         };
 
@@ -370,6 +372,7 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
         hp: 1_000_000_000,
         speed: 1,
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers: [enemyHealer(twice), enemyDefender()],
     });
 
@@ -504,6 +507,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
             hp: 1_000_000_000,
             speed: 200, // player acts first — its repair-to-ally wakes the enemy reactive same round
             healTargetId: 'ally-recipient',
+            mode: 'healing',
             teamActors: [recipientAlly],
             enemyAttackers: [enemyAmartya],
         };

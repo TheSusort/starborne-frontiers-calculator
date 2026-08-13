@@ -168,7 +168,7 @@ const focus = (): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000,
     speed: 2,
-    positionalTeamBattle: true,
+    mode: 'battle',
     // Focus sits BEHIND AEGIS (lower column) so the enemy 'front' target is AEGIS, not the focus.
     position: 'M1',
     target: parsedTarget('front'),

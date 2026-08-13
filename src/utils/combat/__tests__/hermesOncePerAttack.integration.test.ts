@@ -213,6 +213,7 @@ function runHermes() {
         hp: 1_000_000_000,
         speed: 500, // acts before Hermes
         healTargetId: 'hermes',
+        mode: 'healing',
         position: 'M1',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -302,6 +303,7 @@ function runHermesAoe() {
         hp: 1_000_000_000,
         speed: 500,
         healTargetId: 'hermes',
+        mode: 'healing',
         position: 'M1',
         target: parsedTarget('front'),
         // Whole-roster footprint: one attack, two victims, both critting.
@@ -431,6 +433,7 @@ function runAllyTargetRider() {
         hp: 1_000_000_000,
         speed: 500,
         healTargetId: 'howler',
+        mode: 'healing',
         position: 'M1',
         target: parsedTarget('front'),
         pattern: basePattern(),

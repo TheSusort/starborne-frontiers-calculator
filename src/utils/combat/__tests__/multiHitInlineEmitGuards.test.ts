@@ -215,7 +215,7 @@ const inertEnemyAt = (id: string, position: Position): EnemyAttackerInput =>
     }) as EnemyAttackerInput;
 
 /**
- * A NON-POSITIONAL focus (no `position`, no `positionalTeamBattle`) firing `hits` sub-attacks per
+ * A NON-POSITIONAL focus (no `position`, no `mode: 'battle'`) firing `hits` sub-attacks per
  * round for `numRounds` rounds. `crit: 100, critDamage: 100` doubles every hit, so attack 100,000
  * against a 100% multiplier delivers 200,000 per round — five rounds to exhaust `enemyHp`.
  */
@@ -258,6 +258,7 @@ const nonPositionalFocus = (hits: number, numRounds: number): CombatEngineInput 
     defence: 0,
     hp: 10_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [inertEnemyAt('inert', 'M4')],
 });
 

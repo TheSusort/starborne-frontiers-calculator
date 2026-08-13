@@ -126,6 +126,7 @@ const enemyHealBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngine
     defence: 0,
     hp: 10_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -215,6 +216,7 @@ const playerHealBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngin
     defence: 0,
     hp: 2000, // enemy hits for 3000 → lethal in one hit → intercepted at 1 HP
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

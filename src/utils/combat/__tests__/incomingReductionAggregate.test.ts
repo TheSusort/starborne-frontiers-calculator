@@ -119,6 +119,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker', // the focus actor is the bound tank
+    mode: 'healing',
     ...overrides,
 });
 

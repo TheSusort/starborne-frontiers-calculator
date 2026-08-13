@@ -107,6 +107,7 @@ const buildInput = (
     hp: 1_000_000_000,
     speed: 100,
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: enemies,
 });
 

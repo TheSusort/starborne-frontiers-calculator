@@ -116,6 +116,7 @@ function baseInput(
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         // 'all' pattern hits every living enemy-side actor.
         target: { raw: 'front', side: 'enemy', selection: 'front' },
         pattern: { raw: 'all', shape: 'all', range: 'all', modifiers: {} },

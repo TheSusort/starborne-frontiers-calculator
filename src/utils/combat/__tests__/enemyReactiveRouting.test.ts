@@ -327,6 +327,7 @@ const liberatorBattle = (withPassive: boolean): CombatEngineInput => {
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M3',
         target: e2eParsedTarget('back'),
         pattern: e2eBasePattern(),

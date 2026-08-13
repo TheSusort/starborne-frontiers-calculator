@@ -104,6 +104,7 @@ const runPositionalRound = (shipSkills: ShipSkills, enemyAttackers: EnemyAttacke
         hp: 10_000_000,
         hacking: 200,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: lineRange3Pattern(),

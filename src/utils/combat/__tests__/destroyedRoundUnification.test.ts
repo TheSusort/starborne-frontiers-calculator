@@ -78,6 +78,7 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     defence: 0,
     hp: 10_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -96,6 +97,7 @@ describe('PR5c Task 1 — heal-target destroyedRound characterization', () => {
                 numRounds: 3,
                 hp: 1_000_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('weak', 1000)],
             })
         );
@@ -110,6 +112,7 @@ describe('PR5c Task 1 — heal-target destroyedRound characterization', () => {
                 numRounds: 3,
                 hp: 1000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 // Enemy hits for far more than the target's HP on its round-1 turn.
                 enemyAttackers: [manualEnemy('bigHit', 1_000_000)],
             })
@@ -134,6 +137,7 @@ describe('PR5c Task 1 — heal-target destroyedRound characterization', () => {
                 hp: 5000, // R2 turn-start inferno tick (5000) is exactly lethal
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [], // no Cheat Death
                 enemyAttackers: [
                     manualEnemy('dotEnemy', 5000, 50, {
@@ -159,6 +163,7 @@ describe('PR5c Task 1 — heal-target destroyedRound characterization', () => {
                 hp: 5000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 selfBuffs: [],
                 enemyAttackers: [
                     manualEnemy('dotEnemy', 5000, 50, {
@@ -228,6 +233,7 @@ describe('PR5c Task 1 — backstop reachability probe (OUTCOME B: REACHABLE)', (
                 hp: 1000,
                 numRounds: 3,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('bigHit', 1_000_000)],
             }),
             bus,

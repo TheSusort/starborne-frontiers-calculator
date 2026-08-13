@@ -189,6 +189,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker', // healing mode → positioned enemy roster is built
+    mode: 'healing',
     ...overrides,
 });
 
@@ -290,6 +291,7 @@ const playerAttackerBase = (speed: number): Partial<CombatEngineInput> => ({
     enemyHp: 1_000_000_000,
     numRounds: 1,
     healTargetId: 'attacker',
+    mode: 'healing',
 });
 
 /**

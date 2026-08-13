@@ -199,7 +199,7 @@ const buildInput = (
         defence: 0,
         hp: SUBJECT_HP,
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: subjectOnPlayer ? 'M1' : 'M4',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),

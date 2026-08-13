@@ -150,6 +150,7 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     hp: 1_000_000_000,
     healModifier: 0,
     healTargetId: 'attacker', // healing mode → positioned roster is built
+    mode: 'healing',
     position: 'M4',
     ...overrides,
 });

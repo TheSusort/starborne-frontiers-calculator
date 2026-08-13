@@ -69,6 +69,7 @@ const BASE = (): CombatEngineInput => ({
     hp: 1_000_000,
     speed: 300,
     healTargetId: FOCUS_ID,
+    mode: 'healing',
     position: 'M1',
     target: parsedTarget('front'),
     pattern: basePattern(),

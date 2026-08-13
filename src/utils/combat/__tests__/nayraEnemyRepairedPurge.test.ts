@@ -160,6 +160,7 @@ describe('E5 Task 2: player-Nayra purge gated on target-repaired-this-round vs a
         // same-round self-heal before its purge gate is evaluated.
         speed: 100,
         healTargetId: FOCUS_ID,
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),
