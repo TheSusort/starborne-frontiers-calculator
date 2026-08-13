@@ -16,11 +16,14 @@
 import {
     DEFAULT_ATTACKER_SLOT,
     DEFAULT_ENEMY_SLOT,
+    DEFAULT_BASE_PATTERN,
+    DEFAULT_FRONT_ENEMY_TARGET,
     defaultTeamSlot,
     resolvePlayerSlots,
 } from '../calculators/dpsEnemyPlacement';
 import { defaultEnemySlot, resolveEnemySlots } from '../calculators/healingPlacement';
 import type { Position } from '../../types/encounters';
+import type { ParsedPattern, ParsedTarget } from '../targetingParser';
 import type { CombatEngineInput } from './engine';
 
 /**
@@ -43,6 +46,32 @@ function placeSide(
 ): Position[] {
     const wanted = explicit.map((p, i) => p ?? (i === 0 ? anchor : walkBack(i - 1)));
     return resolve(wanted);
+}
+
+/**
+ * Fill the ACTIVE targeting axes when the caller supplied none.
+ *
+ * Both are load-bearing and independently required: `selectTurnTarget` needs
+ * `isPositional(...) && target` (no target → falls back to the dummy), and the positional APPLY
+ * gate additionally needs `pattern != null`. With a target but no pattern the cast resolves onto
+ * the real enemy and still credits `cumulativeDamage` through the legacy sink, but never runs the
+ * per-victim apply — so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
+ * That is why the two are filled independently rather than as a pair.
+ *
+ * FILL, never SUBSTITUTE. An ally-side target the caller supplied is kept: rewriting it to the
+ * front-enemy default is the healing adapter's matchup POLICY (`offensiveTarget`), not this
+ * boundary's business, and doing it here would stop a battle-sim support ship from healing.
+ *
+ * The CHARGED axes are deliberately untouched. `undefined` there is meaningful — the engine's
+ * fallback is "charged axis absent ⇒ reuse the active one" — so a default would silently override
+ * a charged-axis-less actor's active binding.
+ */
+function withTargeting<T extends { target?: ParsedTarget; pattern?: ParsedPattern }>(actor: T): T {
+    return {
+        ...actor,
+        target: actor.target ?? DEFAULT_FRONT_ENEMY_TARGET,
+        pattern: actor.pattern ?? DEFAULT_BASE_PATTERN,
+    };
 }
 
 export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInput {
@@ -69,15 +98,20 @@ export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInp
         : [];
 
     return {
-        ...input,
+        ...withTargeting(input),
         position: focusSlot,
         ...(input.teamActors
-            ? { teamActors: input.teamActors.map((t, i) => ({ ...t, position: teamSlots[i] })) }
+            ? {
+                  teamActors: input.teamActors.map((t, i) => ({
+                      ...withTargeting(t),
+                      position: teamSlots[i],
+                  })),
+              }
             : {}),
         ...(input.enemyAttackers
             ? {
                   enemyAttackers: input.enemyAttackers.map((e, i) => ({
-                      ...e,
+                      ...withTargeting(e),
                       position: enemySlots[i],
                   })),
               }

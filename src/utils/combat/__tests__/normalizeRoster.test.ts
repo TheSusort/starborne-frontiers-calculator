@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeCombatRoster } from '../normalizeRoster';
-import { DEFAULT_ATTACKER_SLOT, DEFAULT_ENEMY_SLOT } from '../../calculators/dpsEnemyPlacement';
+import {
+    DEFAULT_ATTACKER_SLOT,
+    DEFAULT_ENEMY_SLOT,
+    DEFAULT_FRONT_ENEMY_TARGET,
+    DEFAULT_BASE_PATTERN,
+} from '../../calculators/dpsEnemyPlacement';
 import type { CombatEngineInput } from '../engine';
 
 /** Minimal valid engine input. Fields the boundary never reads are set to inert values. */
@@ -101,5 +106,59 @@ describe('normalizeCombatRoster — auto-placement', () => {
         );
         // defaultEnemySlot order is ['M4','T4','B4',...]; index 0 takes the anchor.
         expect(out.enemyAttackers!.map((e) => e.position)).toEqual(['M4', 'T4', 'B4']);
+    });
+});
+
+describe('normalizeCombatRoster — targeting synthesis', () => {
+    it('gives a target-less focus the front-enemy default and the base pattern', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [enemyInput('e1')] }));
+        expect(out.target).toEqual(DEFAULT_FRONT_ENEMY_TARGET);
+        expect(out.pattern).toEqual(DEFAULT_BASE_PATTERN);
+    });
+
+    it('gives target-less enemies the same defaults (side is relative to the actor)', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [enemyInput('e1')] }));
+        expect(out.enemyAttackers?.[0].target).toEqual(DEFAULT_FRONT_ENEMY_TARGET);
+        expect(out.enemyAttackers?.[0].pattern).toEqual(DEFAULT_BASE_PATTERN);
+    });
+
+    it('synthesizes a pattern with range 0 — "base|1|" has no offset table and throws', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [enemyInput('e1')] }));
+        expect(out.pattern?.range).toBe(0);
+    });
+
+    it('NEVER substitutes a target the caller supplied, including an ally-side one', () => {
+        const allySide = { raw: 'lowest hp ally', side: 'ally', selection: 'lowest-hp' } as never;
+        const out = normalizeCombatRoster(
+            baseInput({ target: allySide, enemyAttackers: [enemyInput('e1')] })
+        );
+        // Substituting here is the healing ADAPTER's policy, not the boundary's. A battle-sim
+        // support ship must keep targeting allies.
+        expect(out.target).toBe(allySide);
+    });
+
+    it('NEVER synthesizes the charged axes — undefined there means "reuse the active axis"', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [enemyInput('e1')] }));
+        expect(out.enemyAttackers?.[0].chargedTarget).toBeUndefined();
+        expect(out.enemyAttackers?.[0].chargedPattern).toBeUndefined();
+    });
+
+    it('fills a missing pattern even when the target was supplied, and vice versa', () => {
+        const explicitTarget = { raw: 'back enemy', side: 'enemy', selection: 'back' } as never;
+        const out = normalizeCombatRoster(
+            baseInput({ target: explicitTarget, enemyAttackers: [enemyInput('e1')] })
+        );
+        // Both axes are independently required for a positional cast, and a missing PATTERN fails
+        // silently — perTargetDealt comes back empty while the damage number looks plausible.
+        expect(out.target).toBe(explicitTarget);
+        expect(out.pattern).toEqual(DEFAULT_BASE_PATTERN);
+    });
+
+    it('gives target-less team actors the defaults too', () => {
+        const out = normalizeCombatRoster(
+            baseInput({ enemyAttackers: [enemyInput('e1')], teamActors: [{ id: 't1' }] as never })
+        );
+        expect(out.teamActors?.[0].target).toEqual(DEFAULT_FRONT_ENEMY_TARGET);
+        expect(out.teamActors?.[0].pattern).toEqual(DEFAULT_BASE_PATTERN);
     });
 });
