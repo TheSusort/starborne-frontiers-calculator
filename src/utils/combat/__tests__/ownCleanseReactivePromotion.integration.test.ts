@@ -538,7 +538,7 @@ describe('Cultivator (player-side) — end-to-end: self-cast all-allies cleanse 
     });
 
     it('NEGATIVE control: no debuff anywhere → cleanse removes nothing → the reaction never fires', () => {
-        const result = runCombat(CULTIVATOR_BASE({ healTargetId: 'attacker' }));
+        const result = runCombat(CULTIVATOR_BASE({ healTargetId: 'attacker', mode: 'healing' }));
         expect(sumBucket(result, 'cultivator', 'directHeal')).toBe(0);
     });
 });
