@@ -1072,7 +1072,7 @@ export function simulateBattle(
         // enemyAttackers presence and runs the heal/shield pipeline off this flag (SP-U U5 R6
         // decouple — no vestigial `healTargetId` needed). A player single-`ally` heal/shield
         // resolves the lowest-HP living player ally (team-symmetric with the enemy side).
-        positionalTeamBattle: true,
+        mode: 'battle',
         teamActors,
         enemyAttackers,
         __testTapActors: input.__testTapActors,
