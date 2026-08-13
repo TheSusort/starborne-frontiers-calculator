@@ -107,6 +107,71 @@ describe('normalizeCombatRoster — auto-placement', () => {
         // defaultEnemySlot order is ['M4','T4','B4',...]; index 0 takes the anchor.
         expect(out.enemyAttackers!.map((e) => e.position)).toEqual(['M4', 'T4', 'B4']);
     });
+
+    describe('an invented slot yields to an explicit one', () => {
+        it('player: focus invented + team explicit on the anchor cell — the team actor keeps M4, the focus moves', () => {
+            const out = normalizeCombatRoster(
+                baseInput({
+                    enemyAttackers: [enemyInput('e1')],
+                    teamActors: [{ id: 't1', position: DEFAULT_ATTACKER_SLOT }] as never,
+                })
+            );
+            expect(out.teamActors?.[0].position).toBe(DEFAULT_ATTACKER_SLOT);
+            expect(out.position).not.toBe(DEFAULT_ATTACKER_SLOT);
+        });
+
+        it('player: focus explicit + team explicit on the same cell — index 0 (the anchor) wins, pre-existing behaviour', () => {
+            const out = normalizeCombatRoster(
+                baseInput({
+                    position: 'T2' as never,
+                    enemyAttackers: [enemyInput('e1')],
+                    teamActors: [{ id: 't1', position: 'T2' as never }] as never,
+                })
+            );
+            expect(out.position).toBe('T2');
+            expect(out.teamActors?.[0].position).not.toBe('T2');
+        });
+
+        it('player: focus explicit + team invented — the focus keeps its explicit slot', () => {
+            const out = normalizeCombatRoster(
+                baseInput({
+                    position: 'T2' as never,
+                    enemyAttackers: [enemyInput('e1')],
+                    teamActors: [{ id: 't1' }] as never,
+                })
+            );
+            expect(out.position).toBe('T2');
+        });
+
+        it('enemy: focus invented + a later enemy explicit on the anchor cell — the explicit enemy keeps M4, the focus enemy moves', () => {
+            const out = normalizeCombatRoster(
+                baseInput({
+                    enemyAttackers: [enemyInput('e1'), enemyInput('e2', DEFAULT_ENEMY_SLOT)],
+                })
+            );
+            expect(out.enemyAttackers?.[1].position).toBe(DEFAULT_ENEMY_SLOT);
+            expect(out.enemyAttackers?.[0].position).not.toBe(DEFAULT_ENEMY_SLOT);
+        });
+
+        it('enemy: focus explicit + a later enemy explicit on the same cell — index 0 (the anchor) wins, pre-existing behaviour', () => {
+            const out = normalizeCombatRoster(
+                baseInput({
+                    enemyAttackers: [enemyInput('e1', 'T2'), enemyInput('e2', 'T2')],
+                })
+            );
+            expect(out.enemyAttackers?.[0].position).toBe('T2');
+            expect(out.enemyAttackers?.[1].position).not.toBe('T2');
+        });
+
+        it('enemy: focus explicit + a later enemy invented — the focus enemy keeps its explicit slot', () => {
+            const out = normalizeCombatRoster(
+                baseInput({
+                    enemyAttackers: [enemyInput('e1', 'T2'), enemyInput('e2')],
+                })
+            );
+            expect(out.enemyAttackers?.[0].position).toBe('T2');
+        });
+    });
 });
 
 describe('normalizeCombatRoster — targeting synthesis', () => {

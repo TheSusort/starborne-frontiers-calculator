@@ -104,20 +104,43 @@ export const ATTACKER_SLOT_OPTIONS: readonly Position[] = [
  * no privileged ship) the reservation order is `[0, 1, 2, …]` — byte-identical to the original
  * single-pass behaviour. The returned array stays index-aligned with `slots` in both cases, so
  * callers' `slots[i + 1]` mappings are untouched.
+ *
+ * `anchorIsExplicit` (optional, defaults to `true` — every existing caller's byte-identical
+ * behaviour) governs where index 0 sits relative to the priority group. `true` keeps the original
+ * rule: the anchor is reserved before anything else, priority or not — correct when `slots[0]` is
+ * itself an explicit placement (or when the caller has no such concept, e.g. the DPS page's
+ * attacker-config slot). Pass `false` when `slots[0]` was ITSELF invented by auto-placement: an
+ * invented slot must yield to an explicit one (`normalizeRoster.ts`'s binding constraint), and
+ * `priorityIndices` alone cannot express that because index 0 is unconditionally exempt from it —
+ * see `isPriority` below. With `anchorIsExplicit: false`, index 0 is reserved right AFTER the
+ * priority group instead of before it, so a nominated explicit actor now wins the collision and the
+ * invented anchor gets pushed to the first free cell instead. `priorityIndices` empty still yields
+ * `[0, 1, 2, …]` either way, so this only changes behaviour when both a priority index AND
+ * `anchorIsExplicit: false` are passed together — never for a caller that omits the third argument.
  */
 export function resolvePlayerSlots(
     slots: ReadonlyArray<Position>,
-    priorityIndices: ReadonlyArray<number> = []
+    priorityIndices: ReadonlyArray<number> = [],
+    anchorIsExplicit: boolean = true
 ): Position[] {
     const isPriority = (i: number) => i !== 0 && priorityIndices.includes(i);
     const allIndices = slots.map((_, i) => i);
-    // Reservation order: the anchor (index 0), then the nominated indices, then the rest — each
-    // group in ascending index order. Assignment writes back by index, never by position in this
-    // order, so the result stays aligned with `slots`.
-    const order = [
-        ...allIndices.filter((i) => i === 0 || isPriority(i)),
-        ...allIndices.filter((i) => i !== 0 && !isPriority(i)),
-    ];
+    // Reservation order: each group in ascending index order. Assignment writes back by index,
+    // never by position in this order, so the result stays aligned with `slots`.
+    const order = anchorIsExplicit
+        ? // Original rule: the anchor (index 0), then the nominated indices, then the rest.
+          [
+              ...allIndices.filter((i) => i === 0 || isPriority(i)),
+              ...allIndices.filter((i) => i !== 0 && !isPriority(i)),
+          ]
+        : // The anchor's slot was invented: the nominated (explicit) indices reserve first, THEN
+          // the anchor, then the rest — so an explicit actor's cell survives even when the anchor
+          // wanted it too.
+          [
+              ...allIndices.filter(isPriority),
+              ...allIndices.filter((i) => i === 0),
+              ...allIndices.filter((i) => i !== 0 && !isPriority(i)),
+          ];
 
     const taken = new Set<Position>();
     const resolvedByIndex: Position[] = new Array(slots.length);

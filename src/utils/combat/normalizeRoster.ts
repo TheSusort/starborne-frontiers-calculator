@@ -29,23 +29,35 @@ import type { CombatEngineInput } from './engine';
 /**
  * Resolve one side's board.
  *
- * `wanted[0]` is the side's ANCHOR (the focus attacker, or the first enemy) and keeps its slot;
- * `resolvePlayerSlots` pushes any later colliding actor to the first free cell. The enemy side
- * goes through `resolveEnemySlots`, which delegates to the same resolver — sides are independent
- * coordinate spaces, which is exactly why both anchor on `M4` without conflicting.
+ * `wanted[0]` is the side's ANCHOR (the focus attacker, or the first enemy) and, when EXPLICIT,
+ * keeps its slot exactly as before. `resolvePlayerSlots` pushes any later colliding actor to the
+ * first free cell. The enemy side goes through `resolveEnemySlots`, which delegates to the same
+ * resolver — sides are independent coordinate spaces, which is exactly why both anchor on `M4`
+ * without conflicting.
  *
- * Explicit positions win: `explicit[i] ?? fallback(i)` is computed BEFORE collision resolution, so
- * an actor the caller placed only ever moves for the same reason it would have moved before this
- * module existed — another actor already holds its cell.
+ * Explicit positions win, including over an INVENTED anchor: `explicit[i] ?? fallback(i)` is
+ * computed BEFORE collision resolution, so an actor the caller placed only ever moves for the same
+ * reason it would have moved before this module existed — another actor's EXPLICIT cell, or the
+ * pre-existing anchor, already holds it. Every index the caller supplied a position for is nominated
+ * via `priorityIndices` so it survives a collision against everything invented; `anchorIsExplicit`
+ * additionally tells the resolver whether the anchor itself is one of those explicit actors —
+ * `false` means `wanted[0]` was invented and must yield to a nominated collider instead of
+ * unconditionally winning (see `resolvePlayerSlots`'s doc comment for why `priorityIndices` alone
+ * cannot express that: index 0 is exempt from it by design).
  */
 function placeSide(
     explicit: ReadonlyArray<Position | undefined>,
     anchor: Position,
     walkBack: (index: number) => Position,
-    resolve: (slots: ReadonlyArray<Position>) => Position[]
+    resolve: (
+        slots: ReadonlyArray<Position>,
+        priorityIndices?: ReadonlyArray<number>,
+        anchorIsExplicit?: boolean
+    ) => Position[]
 ): Position[] {
     const wanted = explicit.map((p, i) => p ?? (i === 0 ? anchor : walkBack(i - 1)));
-    return resolve(wanted);
+    const priorityIndices = explicit.flatMap((p, i) => (i !== 0 && p !== undefined ? [i] : []));
+    return resolve(wanted, priorityIndices, explicit[0] !== undefined);
 }
 
 /**
