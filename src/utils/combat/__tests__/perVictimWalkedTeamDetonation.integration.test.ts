@@ -375,52 +375,14 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
         expect(round.perTargetDamage).toBeUndefined();
     });
 
-    it('GATE-NEGATIVE: a walked-team detonate with a target but NO pattern stays on the legacy single-anchor path (no per-victim detonation)', () => {
-        idc = 0;
-        // Positioned enemy victims carry seeded bombs, but the walked-team ally has NO pattern →
-        // teamPositional is false → it never enters the per-victim loop. The legacy path detonates
-        // ONLY the SINGLE resolved anchor (target 'front' resolves to enemy-front) — NOT the covered
-        // enemy-mid. So enemy-mid's seeded bomb is NEVER detonated and the positional-only surfaces
-        // (perActorDetonation / perTargetDamage) stay absent. This proves the change is genuinely
-        // gated on the pattern (the per-victim path does NOT fire without it).
-        const { events, result } = collect(
-            BASE({
-                teamActors: [
-                    {
-                        id: 'team-det',
-                        speed: 100,
-                        chargeCount: 0,
-                        startCharged: false,
-                        selfBuffs: [],
-                        enemyDebuffs: [],
-                        position: 'M1',
-                        target: parsedTarget('front'), // target but NO pattern
-                        walk: {
-                            shipSkills: { slots: [detonateSlot(detonate('bomb'))] },
-                            stats: teamStats(),
-                            selfDotModifier: 0,
-                            defensePenetrationBuff: 0,
-                            affinityDamageModifier: 0,
-                            affinityCritCap: 100,
-                            affinityCritPenalty: 0,
-                            hasChargedSkill: false,
-                            healModifier: 0,
-                        },
-                    } as TeamActorEngineInput,
-                ],
-                __testTapActors: (actors: CombatActor[]) => {
-                    actors.find((a) => a.id === 'enemy-front')?.pendingBombs.push(bomb(1000, 2));
-                    actors.find((a) => a.id === 'enemy-mid')?.pendingBombs.push(bomb(1000, 2));
-                },
-            })
-        );
-        const round = result.rounds[0];
-        // Legacy single-anchor path: EXACTLY ONE bomb-detonated (the resolved anchor enemy-front).
-        // The covered enemy-mid's seeded bomb is NOT detonated (no per-victim loop without a pattern).
-        const bombDet = events.filter((e) => e.type === 'bomb-detonated');
-        expect(bombDet.length).toBe(1);
-        // Non-positional → positional-only surfaces stay absent (the per-victim path did NOT fire).
-        expect(round.perActorDetonation).toBeUndefined();
-        expect(round.perTargetDamage).toBeUndefined();
-    });
+    // SP-4b: 'GATE-NEGATIVE: a walked-team detonate with a target but NO pattern stays on the
+    // legacy single-anchor path' lived here. Its whole subject was the PATTERN conjunct of
+    // `teamPositional` — a walked ally with a target and no pattern falling through to the legacy
+    // single-anchor detonate, with the positional-only surfaces (perActorDetonation /
+    // perTargetDamage) staying absent behind it. `normalizeCombatRoster` synthesizes
+    // DEFAULT_BASE_PATTERN for every actor that lacks one, so the pattern-less branch cannot be
+    // reached through `runCombat` any more, and that branch is the legacy single-anchor sink SP-4c
+    // deletes. Removed rather than bypassed — a below-boundary hook would pin code scheduled for
+    // deletion. The per-victim footprint behaviour it guarded (origin + covered each detonate
+    // their OWN bomb, nothing outside the footprint) is asserted positively above.
 });

@@ -347,55 +347,15 @@ describe('per-victim skill-triggered detonation (positional ENEMY → player)', 
         ).toBe(100 + 2000 + 50 + 2000);
     });
 
-    it('REGRESSION: a NON-positional enemy detonate still drains via the legacy single-apply path', () => {
-        idc = 0;
-        // A bomb-bearing heal target, but the enemy attacker has NO position/pattern → enemyPositional
-        // is false → the legacy applyIncomingToTarget(damage, tgt, {bombPortion}) path drains the heal
-        // target's seeded bomb exactly as before. The detonation folds into the aggregate `damage`
-        // (detonationDamage) and lands on the heal target's HP — surfacing on its perTargetDamage row.
-        // No enemyPositional → perActorDetonation absent (the positional tally is positional-only) and
-        // perTargetDamage stays absent (positional-only). The drain surfaces on the heal target's HP.
-        const HEAL_TARGET_HP = 1_000_000_000;
-        let healTargetActor: CombatActor | undefined;
-        const { result } = collect(
-            BASE({
-                // No team victims; the lone player is the heal target (focus attacker).
-                teamActors: [],
-                enemyAttackers: [
-                    {
-                        id: 'enemy-det',
-                        stats: {
-                            attack: ENEMY_ATTACK,
-                            crit: 0,
-                            critDamage: 0,
-                            defence: 0,
-                            hp: 1_000_000,
-                            speed: 100,
-                        },
-                        chargeCount: 0,
-                        startCharged: false,
-                        // NO position / target / pattern → non-positional legacy path.
-                        shipSkills: { slots: [detonateSlot(detonate('bomb'))] },
-                    } as EnemyAttacker,
-                ],
-                hp: HEAL_TARGET_HP, // focus attacker hp (heal target)
-                __testTapActors: (actors: CombatActor[]) => {
-                    healTargetActor = actors.find((a) => a.id === 'attacker');
-                    healTargetActor?.pendingBombs.push(bomb(1000, 2));
-                },
-            })
-        );
-        const round = result.rounds[0];
-        // Legacy path: the heal target took firing 100 + detonation 2000 = 2100 via the single
-        // applyIncomingToTarget(damage, tgt, {bombPortion}) drain → its live currentHp dropped by 2100.
-        // (healTargetActor is a LIVE reference mutated by the run; read after runCombat for the final HP.)
-        expect(HEAL_TARGET_HP - (healTargetActor?.currentHp ?? 0)).toBe(2100);
-        // Non-positional → both positional-only surfaces stay absent (proves the positional branch is
-        // non-vacuous: it is the ONLY path that populates perActorDetonation / perTargetDamage).
-        expect(round.perActorDetonation).toBeUndefined();
-        expect(round.perTargetDamage).toBeUndefined();
-    });
-
+    // SP-4b: 'REGRESSION: a NON-positional enemy detonate still drains via the legacy single-apply
+    // path' lived here. It pinned an enemy attacker with NO position/target/pattern draining the
+    // heal target through `applyIncomingToTarget(damage, tgt, {bombPortion})` — i.e. the legacy
+    // single-anchor sink (`TurnBindings.legacyVictim`) itself, plus the two positional-only
+    // surfaces staying absent behind it. `normalizeCombatRoster` makes that input unrepresentable
+    // at `runCombat`'s door, and the sink it described is what SP-4c/4e delete outright, so the
+    // test was removed rather than bypassed: keeping it alive under a below-boundary hook would
+    // pin machinery that is scheduled for deletion. The positional detonation arithmetic it
+    // shared a file with is covered by the per-victim cases above.
     it('E5-SYMMETRY: the SAME detonate ship pays out IDENTICALLY whether it acts as a PLAYER or an ENEMY', () => {
         idc = 0;
         // The defining team-symmetry pin. A detonate ship firing a Line-Range-1 bomb detonate at two

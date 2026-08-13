@@ -32,8 +32,12 @@
  * landed damage with lethality brackets — size each enemy's HP just AT or just ABOVE the expected
  * damage and assert it dies / survives accordingly. `damageLandedInRange(victimId)` runs two
  * combats (HP = lo → must die; HP = hi → must survive) to bracket the firing-hit damage to
- * `[lo, hi)`. A NON-positional run lands NO enemy damage (the enemy actors are pure targets the
- * legacy path never touches), so the victim never dies regardless of HP.
+ * `[lo, hi)`.
+ *
+ * SP-4b: the two NON-positional counterparts this suite used to carry (a position-less focus
+ * landing NO enemy HP damage, and a pattern-less enemy leaving `perTargetDamage` absent) are gone —
+ * `normalizeCombatRoster` places and targets every actor at `runCombat`'s door, so neither premise
+ * is expressible any more. See the notes at each removal site.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -192,19 +196,14 @@ describe('Task 8b — positional AoE damage apply at the focus site', () => {
         expect(hi.has('enemy-mid')).toBe(false); // survives at 2501 → took < 2501 → exactly 2500 (half)
     });
 
-    it('byte-identical sanity: a NON-positional run lands NO enemy HP damage (legacy dummy sink)', () => {
-        idc = 0;
-        // No position on the focus → positional is false → legacy path. The enemy actors here are
-        // pure targets; the legacy path drains the dummy sink, never these enemies' HP. Even at
-        // HP=1 (trivially lethal if any damage landed) they survive.
-        const input = BASE({
-            position: undefined,
-            enemyAttackers: [enemyAt('enemy-front', 'M4', 1), enemyAt('enemy-back', 'M1', 1)],
-        });
-        const dead = destroyedIds(input);
-        expect(dead.has('enemy-front')).toBe(false);
-        expect(dead.has('enemy-back')).toBe(false);
-    });
+    // SP-4b: 'byte-identical sanity: a NON-positional run lands NO enemy HP damage (legacy dummy
+    // sink)' lived here. Its subject was the dummy sink itself — a position-less focus draining
+    // `TurnBindings.legacyVictim` while two HP-1 real enemies stayed untouched. That is exactly
+    // the actor SP-4c/4d delete, and `normalizeCombatRoster` already places the focus on
+    // `runCombat`'s first line, so the premise cannot be expressed through the public entry point.
+    // Deleted rather than bypassed: a below-boundary hook would keep the sink pinned alive.
+    // `dummyReachability.test.ts` now owns the surviving claim (nothing takes the legacy fallback
+    // once a real enemy roster is supplied).
 });
 
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -378,7 +377,13 @@ describe('Task 9 — positional AoE damage apply at the enemy site (enemy→play
         expect(hi.has('player-mid')).toBe(false);
     });
 
-    it('records perTargetDamage per victim: origin FULL (5000) + covered HALF (2500); non-positional run has it absent', () => {
+    // SP-4b: this case used to carry a second half — a pattern-less enemy re-run asserting
+    // `perTargetDamage` came back UNDEFINED on the legacy single-apply path. `normalizeCombatRoster`
+    // synthesizes DEFAULT_BASE_PATTERN, so that branch is unreachable through `runCombat` and the
+    // gate can no longer be closed; re-pinning it onto the positional map would have turned a
+    // deliberate negative control into a tautology. The half that survives — the per-victim
+    // accounting itself — is kept below unchanged.
+    it('records perTargetDamage per victim: origin FULL (5000) + covered HALF (2500)', () => {
         // AoE enemy at M1 fires Line-Range-1 `front` → origin = front player (heal target,
         // 5000 full), covered = M3 player (2500 half). Roster HP kept huge so nobody dies and
         // the per-round map records the actual landed damage rather than clamping at death.
@@ -397,26 +402,6 @@ describe('Task 9 — positional AoE damage apply at the enemy site (enemy→play
         expect(round.perTargetDamage).toBeDefined();
         expect(round.perTargetDamage?.['attacker']).toBe(5000); // origin = heal target, full
         expect(round.perTargetDamage?.['player-mid']).toBe(2500); // covered, half
-
-        // Non-positional run (no enemy pattern → legacy single-apply): no positional emitHit
-        // accumulation → perTargetDamage absent on every round.
-        const nonPositionalRun = BASE(
-            {
-                hp: 1_000_000_000,
-                teamActors: [passivePlayerAt('player-mid', 'M3', 1_000_000_000)],
-                enemyAttackers: [
-                    {
-                        ...offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern()),
-                        pattern: undefined,
-                    } as EnemyAttacker,
-                ],
-            },
-            undefined,
-            undefined
-        );
-        idc = 0;
-        const legacyResult = runCombat(nonPositionalRun);
-        expect(legacyResult.rounds[0].perTargetDamage).toBeUndefined();
     });
 
     it('byte-identical sanity: a NON-positional enemy (no pattern) hits only the heal target via the legacy single-apply', () => {

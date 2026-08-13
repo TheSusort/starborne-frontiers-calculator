@@ -40,6 +40,7 @@ import { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
+import { adjacentAllyIds } from '../adjacency';
 
 // ---------------------------------------------------------------------------
 // Shared test harness helpers
@@ -3628,39 +3629,33 @@ describe('D-PR11 integration — Fortifying Shroud: positional adjacent-allies b
         expect(buffGrantedTo.size).toBe(2);
     });
 
-    it('without board positions (non-positional): buff falls back to all same-side allies (all-allies)', () => {
-        // When no positions are wired, adjacentAllyIds falls back to all living same-side
-        // allies (owner excluded). The ability still fires (start-of-turn, no procChance),
-        // and all three team actors receive the buff.
-        const bus = createEventBus();
+    // SP-4b: this case used to drive `runCombat` with every actor's `position` stripped. That
+    // premise no longer exists — `normalizeCombatRoster` auto-places the whole roster on the
+    // engine's first line, so a position-less run cannot be expressed through the public entry
+    // point and the buff resolves through the POSITIONAL branch instead.
+    //
+    // The all-allies fallback itself is NOT dummy machinery: it lives in `adjacency.ts`, it is
+    // untouched by SP-4c/4d/4e, and it stays reachable for any caller that resolves recipients
+    // outside `runCombat`. So the case is kept, one layer DOWN — the boundary is bypassed by
+    // calling the recipient resolver the engine's `adjacentAllyIdsFor` delegate wraps
+    // (engine.ts: `adjacentAllyIdsFor: (ownerId) => adjacentAllyIds(ownerId, actors)`).
+    // The positional sibling above still proves the end-to-end grant wiring through `runCombat`.
+    it('without board positions (non-positional): recipients fall back to all same-side allies (all-allies)', () => {
+        // The same D-PR11 roster the integration case built, minus positions: the Fortifying
+        // Shroud owner ('attacker') plus three allies, none of them placed.
+        const roster = [
+            { id: 'attacker', position: undefined },
+            { id: 'ally-A', position: undefined },
+            { id: 'ally-B', position: undefined },
+            { id: 'ally-C', position: undefined },
+        ];
 
-        const buffGrantedTo = new Set<string>();
-        bus.on('buff-applied', (e) => {
-            if (e.buffName === 'Defense Up I') buffGrantedTo.add(e.actorId);
-        });
+        const recipients = adjacentAllyIds('attacker', roster);
 
-        // Team actors without position (non-positional path).
-        const teamActors: TeamActorEngineInput[] = [
-            makePositionedAlly('ally-A', 'T2'),
-            makePositionedAlly('ally-B', 'M3'),
-            makePositionedAlly('ally-C', 'B4'),
-        ].map((a) => ({ ...a, position: undefined }));
-
-        // Focus also without position.
-        const input: CombatEngineInput = {
-            ...makeShroudInput(bus, teamActors),
-            position: undefined,
-        };
-
-        runCombat(input);
-
-        // Without positions all three allies get the buff (all-allies fallback).
-        expect(buffGrantedTo.has('ally-A')).toBe(true);
-        expect(buffGrantedTo.has('ally-B')).toBe(true);
-        expect(buffGrantedTo.has('ally-C')).toBe(true);
-        // Owner still excluded (adjacentAllyIds always excludes the owner).
-        expect(buffGrantedTo.has('attacker')).toBe(false);
-        expect(buffGrantedTo.size).toBe(3);
+        // Without positions all three allies are recipients (all-allies fallback)...
+        expect([...recipients].sort()).toEqual(['ally-A', 'ally-B', 'ally-C']);
+        // ...and the owner is still excluded (adjacentAllyIds always excludes the owner).
+        expect(recipients).not.toContain('attacker');
     });
 });
 
