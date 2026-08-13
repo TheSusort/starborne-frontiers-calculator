@@ -19,7 +19,7 @@ export const DEFAULT_ENEMY_SLOT: Position = 'M4';
  * Fallback targeting for a positional DPS run.
  *
  * Position alone does NOT route a cast. `selectTurnTarget` requires
- * `isPositional(actor.position, opposingRoster) && target` — with no ParsedTarget it
+ * `resolvesPositionalVictim(actor.position, opposingRoster) && target` — with no ParsedTarget it
  * short-circuits to `legacyVictim` (the dummy), however well-positioned the roster is. The same
  * missing target also keeps the dummy in the turn order, because `dummyEnemyIsVestigial` checks
  * `t?.side === 'enemy'`.
@@ -37,7 +37,7 @@ export const DEFAULT_FRONT_ENEMY_TARGET: ParsedTarget = {
  * Fallback single-target footprint for a positional DPS run.
  *
  * ALSO load-bearing, not cosmetic. The positional apply gate is
- * `isPositional(...) && target != null && pattern != null && turn.positionalScalars != null`
+ * `resolvesPositionalVictim(...) && target != null && pattern != null && turn.positionalScalars != null`
  * (engine.ts:8344). With a target but no pattern the cast still RESOLVES onto the real enemy and
  * still credits `cumulativeDamage` via the legacy sink — but it never runs the per-victim apply, so
  * `creditDealt` never fires and `RoundData.perTargetDealt` comes back empty. That failure is silent:

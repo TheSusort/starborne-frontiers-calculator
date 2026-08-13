@@ -53,7 +53,12 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
-import { isPositional, resolvePositionalTarget } from './positionalBinding';
+import {
+    isPositional,
+    isTargetableRosterMember,
+    resolvePositionalTarget,
+    resolvesPositionalVictim,
+} from './positionalBinding';
 import {
     applyPositionalDamage,
     footprintVictims,
@@ -2489,7 +2494,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     // enemyAttackers roster WITHOUT ever setting that flag, so it was too strict a requirement for
     // "should the resolvers see the real roster". `hasPositionedEnemyRoster` is the narrowest
     // correct signal for both cases.
-    const hasPositionedEnemyRoster = enemyAttackerActors.some((a) => a.position != null);
+    //
+    // SP-4b-1 §4B: "positioned" here means positioned AND a viable target (`isTargetableRosterMember`
+    // — max hp > 0), the SAME predicate `isPositional` uses for the apply gate. A roster of 0-HP
+    // pressure sources can never absorb a cast, so the dummy is still the offense sink and MUST stay
+    // in the turn order — dropping it would strand every DoT/bomb routed into its containers, which
+    // is the same "credited to no channel" defect one layer down.
+    const hasPositionedEnemyRoster = enemyAttackerActors.some(isTargetableRosterMember);
     const dummyEnemyIsVestigial =
         hasPositionedEnemyRoster &&
         allPlayerActors.every((a) => {
@@ -6568,7 +6579,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             const tb = turnBindings(a.side);
             const target = willFireChargedFor(a) ? parsedChargedTargetFor(a) : parsedTargetFor(a);
             const selected =
-                isPositional(a.position, tb.opposingRoster) && target
+                resolvesPositionalVictim(a.position, tb.opposingRoster) && target
                     ? resolvePositionalTarget(
                           a.position!,
                           target,
@@ -8455,7 +8466,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // hold — so the suppression condition matches the `positional` gate
                             // EXACTLY. A non-damage cast keeps its inline emit (flag ignored).
                             const willApplyPositionally =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null;
                             // Sub-project I, PR I2: snapshot the opposing roster's enemy-status
@@ -8533,7 +8544,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // per-hit live re-resolution own the whiff. (Credit suppression below pairs with
                             // this: the per-victim apply is the ONLY damage path here.)
                             const positional =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null &&
                                 turn.positionalScalars != null;
@@ -8743,7 +8754,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // Task 5 (per-victim crit signal): predict positional apply (mirror of the
                             // focus site) so runPlayerTurn defers its inline ability-performed emit.
                             const teamWillApplyPositionally =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null;
                             // Sub-project I, PR I2: pre-turn snapshot (mirrors the focus site).
@@ -8785,7 +8796,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // position+target only, never a pattern, so it keeps the legacy single-sink
                             // credit and never enters this branch).
                             const teamPositional =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null &&
                                 teamTurn.positionalScalars != null;
@@ -9019,7 +9030,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // which would double-hit (HP already drained inside applyVictimDamage).
                         //
                         // GATE: only a POSITIONED enemy (enemy-site positional sense — the same
-                        // `isPositional(actor.position, allPlayerActors)` predicate the firing-hit
+                        // `resolvesPositionalVictim(actor.position, allPlayerActors)` predicate the firing-hit
                         // gate uses at `enemyPositional`/`:5011`) that actually carries timed
                         // entries. The non-empty guard makes this a STRICT no-op (byte-identical)
                         // for every existing fixture — none seed enemy-actor timed containers.
@@ -9195,7 +9206,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // defers its inline ability-performed emit. The opposing roster from the enemy's
                             // view is the PLAYER team (allPlayerActors).
                             const enemyWillApplyPositionally =
-                                isPositional(actor.position, allPlayerActors) &&
+                                resolvesPositionalVictim(actor.position, allPlayerActors) &&
                                 enemyTarget != null &&
                                 enemyPattern != null;
                             // §4.5: inject break hook into runPlayerTurn for the enemy turn (mirrors
@@ -9327,7 +9338,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // and the legacy single-apply is SUPPRESSED. No production caller threads
                                 // position+target+pattern for an enemy yet → false for every golden.
                                 enemyPositional =
-                                    isPositional(actor.position, allPlayerActors) &&
+                                    resolvesPositionalVictim(actor.position, allPlayerActors) &&
                                     enemyTarget != null &&
                                     enemyPattern != null &&
                                     enemyTurn.positionalScalars != null;

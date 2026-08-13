@@ -64,8 +64,8 @@ function placeSide(
  * Fill the ACTIVE targeting axes when the caller supplied none.
  *
  * Both are load-bearing and independently required: `selectTurnTarget` needs
- * `isPositional(...) && target` (no target → falls back to the dummy), and the positional APPLY
- * gate additionally needs `pattern != null`. With a target but no pattern the cast resolves onto
+ * `resolvesPositionalVictim(...) && target` (no target → falls back to the dummy), and the
+ * positional APPLY gate additionally needs `pattern != null`. With a target but no pattern the cast resolves onto
  * the real enemy and still credits `cumulativeDamage` through the legacy sink, but never runs the
  * per-victim apply — so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
  * That is why the two are filled independently rather than as a pair.
