@@ -706,4 +706,55 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         expect(round1.corrosionDamage).toBe(0);
         expect(round1.infernoDamage).toBe(0);
     });
+    // ── The own-HP tick's gate must stay `isPositional`, NOT `resolvesPositionalVictim` ──────
+    //
+    // SP-4b-1 §4B split one overloaded predicate into three and moved SEVEN cast/selection gates
+    // from `isPositional` to `resolvesPositionalVictim`. Two sites deliberately did NOT move,
+    // because they route the actor's OWN state and the opposing roster is only a MODE signal:
+    // `applyPositionedTimedBurst` (engine.ts ~:6530) and THIS tick (engine.ts ~:8300). Narrowing
+    // the burst site was caught by `barrier.test.ts › blocks a bomb detonation`; narrowing this one
+    // was caught by NOTHING — it survived as a mutant. This test closes that hole.
+    //
+    // The two predicates diverge on exactly one input class: the opposing roster is PLACED but has
+    // no member with `stats.hp > 0` (a roster of 0-max-HP pressure sources — the shape 54 fixture
+    // files and the pre-SP-3b healing calculator pass). So the enemies here are placed with max HP
+    // 0. `isPositional` is TRUE (they carry positions), `resolvesPositionalVictim` is FALSE (none is
+    // hittable) — and the ally's own corrosion MUST still tick against its own HP, because whether
+    // the ally can find a VICTIM has nothing to do with whether its own DoT containers burn it.
+    // Narrowing the gate strands the containers unticked: the same "state routed to nowhere" defect
+    // §4B fixed, one layer down.
+    it('GATE RETENTION: an ally ticks its OWN corrosion even when NO opposing actor is hittable (0-max-HP roster)', () => {
+        idc = 0;
+        // Identical to C.2's arithmetic — ally at M2, maxHp 10000, corrosion tier 5 / 1 stack →
+        // 0.05 × 10000 = 500 — with ONE difference: every enemy is a 0-max-HP pressure source.
+        // The applier is the focus (which really acts, so `lastTurnCtxByActor` has its ctx); a
+        // 0-max-HP enemy applier would have muddied the test with its own liveness question.
+        const { events, result } = collect(
+            POSITIONAL_BASE({
+                teamActors: [teamAlly('team-ally', 'M2', 10000)],
+                enemyAttackers: [enemyAt('enemy-front', 'M4', 0), enemyAt('enemy-mid', 'M3', 0)],
+                __testTapActors: (actors: CombatActor[]) => {
+                    actors
+                        .find((a) => a.id === 'team-ally')
+                        ?.corrosionEntries.push(corrosion(5, 1, 5, 'attacker'));
+                },
+            })
+        );
+
+        // ANTI-VACUITY, load-bearing: the roster really is in the divergence zone. Both enemies are
+        // placed (so `isPositional` is true) and neither is hittable (so `resolvesPositionalVictim`
+        // is false). If a future change gave them HP, this test would silently stop testing the
+        // retention, so the premise is asserted rather than assumed.
+        expect(result.rounds[0].perTargetDamage?.['enemy-front']).toBeUndefined();
+        expect(result.rounds[0].perTargetDamage?.['enemy-mid']).toBeUndefined();
+
+        // The tick fired: the ally's own HP drained 500 through the per-victim playerSink.
+        expect(result.rounds[1].perTargetDamage?.['team-ally']).toBe(500);
+        const ticks = events.filter(
+            (e) =>
+                e.type === 'dot-ticked' &&
+                (e as CombatEvent & { targetId: string }).targetId === 'team-ally'
+        );
+        expect(ticks.length).toBeGreaterThanOrEqual(1);
+    });
 });

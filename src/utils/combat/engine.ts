@@ -1670,8 +1670,28 @@ function convertHitToSelfDot(
 }
 /**
  * TEST-ONLY instrumentation for the SP-4 ladder. Counts how many times a turn resolved its victim
- * through `tb.legacyVictim` — the dummy fallback (cluster C, the keystone). SP-4c can only be pure
- * deletion once this is zero for every run, so the number is the ladder's gate, not a debug aid.
+ * through `tb.legacyVictim` — the dummy fallback (cluster C, the keystone). It is the ladder's gate,
+ * not a debug aid.
+ *
+ * WHAT IT MEASURES, precisely: that the fallback object was **CONSULTED** — `selectTurnTarget`
+ * returned `tb.legacyVictim` because no living positional victim resolved. That is strictly weaker
+ * than "the legacy sink was **CREDITED**", and the two come apart. A consultation is followed by a
+ * scalar credit only when the roster was never targetable (every placed opposing actor at max
+ * `hp === 0`) or empty. It is followed by **no credit at all** in the KNOWN NON-ZERO RESIDUE: the
+ * mid-run **whiff window** — a roster that WAS targetable and has since been killed, where the apply
+ * gate correctly goes positional, finds no anchor and books nothing, while the scalar credit is
+ * suppressed because the positional branch was taken. Measured on the shared bare roster, 4 rounds:
+ * an enemy at max hp 5 000 dies to the round-1 cast and rounds 2-4 each take the fallback with
+ * `rawTotals.cumulative === 0` — 3 takes, 0 credited. That whiff is deliberate, documented
+ * behaviour (see the focus cast site's "the correct behaviour is for the attacker to WHIFF" and
+ * `damageChannelAccounting.integration.test.ts`), not a defect to be fixed.
+ *
+ * CONSEQUENCE FOR SP-4c: do NOT treat "this counter is zero for every run" as the entry condition —
+ * zero is unreachable while the whiff window exists, and SP-4c is not deleting the whiff. Consulting
+ * is the right thing to count precisely BECAUSE it is what keeps `legacyVictim` reachable and
+ * therefore undeletable. SP-4c must handle that path explicitly — giving the whiff a non-dummy way
+ * to express "no living victim" — rather than expecting a zero here.
+ *
  * Module-level and NOT reset per run: `__resetLegacyVictimFallbackCount` is the test's job.
  */
 let legacyVictimFallbackCount = 0;

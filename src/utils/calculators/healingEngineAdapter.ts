@@ -469,7 +469,23 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // Absent enemy or target affinity → neutral (damageMod 0, cap 100, penalty 0):
     // byte-identical to prior behaviour for all fixtures that omit affinity.
     // Enemy-side slots are resolved separately — sides are independent boards.
-    const enemySlots = resolveEnemySlots(enemies.map((e, i) => e.position ?? defaultEnemySlot(i)));
+    //
+    // An INVENTED slot must yield to an EXPLICIT one — the same binding constraint
+    // `normalizeRoster.ts`'s `placeSide` obeys, for the same reason. `e.position ?? defaultEnemySlot(i)`
+    // collapses "the caller asked for this cell" and "we made this cell up" into one array, and
+    // `resolvePlayerSlots` reserves index 0 before everything else, so an unplaced enemy #0 used to
+    // claim its invented `defaultEnemySlot(0)` (M4) ahead of an enemy the caller had explicitly put
+    // there — silently evicting that explicit enemy to the first free cell. Restoring the distinction
+    // takes the two extra arguments commit 3952a6a0 added for exactly this: every explicitly-placed
+    // index is nominated so it survives a collision against anything invented, and `anchorIsExplicit`
+    // says whether index 0's own wanted cell was the caller's choice or ours. Both arguments are inert
+    // when every enemy is explicitly placed (nothing is invented to lose to) and when none is (there
+    // is no explicit cell to protect), so the common healing-page shapes are unchanged.
+    const enemySlots = resolveEnemySlots(
+        enemies.map((e, i) => e.position ?? defaultEnemySlot(i)),
+        enemies.flatMap((e, i) => (i !== 0 && e.position !== undefined ? [i] : [])),
+        enemies[0]?.position !== undefined
+    );
     const engineEnemyAttackers = enemies.map((e, i) => {
         const aff = computeAffinityModifiers(e.affinity, healTargetAffinity);
         return {

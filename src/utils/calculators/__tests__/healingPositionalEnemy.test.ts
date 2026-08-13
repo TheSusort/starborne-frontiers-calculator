@@ -671,4 +671,36 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         // Negative leg: the SAME actor, now merely an ally and not the heal target, stays neutral.
         expect(allyIsTarget).toBe(4_000);
     });
+    // ── An INVENTED enemy slot must yield to an EXPLICIT one (task 5d, Fix 4) ────────────
+    //
+    // `healingEngineAdapter` pre-resolved `e.position ?? defaultEnemySlot(i)` and handed the result
+    // to `resolveEnemySlots` as a SINGLE argument, discarding which cells the caller actually asked
+    // for. `resolvePlayerSlots` then reserved index 0 first unconditionally — so when enemy #0 is
+    // UNPLACED, its INVENTED default (`defaultEnemySlot(0)` === 'M4') claimed M4 ahead of an enemy
+    // the caller had EXPLICITLY put there, evicting that explicit enemy to the first free cell.
+    //
+    // This is the same defect class commit 3952a6a0 fixed inside the normalization boundary, one
+    // layer up and reachable from the healing page (a user who places one enemy and leaves another
+    // on "auto" hits it). The observable is WHICH enemy the healer's `front`-selecting cast lands on:
+    // column 4 is the front, so the M4 occupant takes the hit.
+    it('an UNPLACED enemy does not evict an explicitly-placed one from its cell', () => {
+        idc = 0;
+        // Identical stats so the two are distinguishable ONLY by id and by placement.
+        const auto = { ...enemy('enemy-auto', 1_000, 500_000) } as Record<string, unknown>;
+        delete auto.position; // caller left this one on auto → the adapter invents M4 for index 0
+        const explicitFront = enemy('enemy-explicit', 1_000, 500_000); // caller asked for M4
+
+        const result = simulateHealing(
+            BASE({
+                enemies: [auto, explicitFront] as HealingSimulationInput['enemies'],
+            })
+        );
+
+        const dealt = result.rounds[0].perTargetDealt?.[FOCUS_ID_IN_ENGINE] ?? {};
+        // The caller's explicit M4 must win the cell, so the front-selecting cast hits IT.
+        expect(Object.keys(dealt)).toEqual(['enemy-explicit']);
+        // Anti-vacuity: the run really did land a positional hit, so the assertion above is a
+        // statement about WHICH enemy, not about an empty map.
+        expect(dealt['enemy-explicit']).toBeGreaterThan(0);
+    });
 });
