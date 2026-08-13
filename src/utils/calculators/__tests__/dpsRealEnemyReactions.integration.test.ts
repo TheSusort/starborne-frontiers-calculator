@@ -199,17 +199,22 @@ describe('a real DPS enemy acts', () => {
         expect(result.rounds.length).toBeGreaterThan(0);
         // ...and the team's damage from it is credited.
         //
-        // SP-4b-1: the credit moved channel. The boundary places every actor and synthesizes the
-        // missing `target`/`pattern`, so the team actor's cast resolves positionally onto the real,
-        // placed enemy and books through `applyVictimDamage` → `creditDealt`
-        // (`RoundData.perTargetDealt`). `RoundData.teamDamage` sums the `roundDamage` scalar map,
-        // which only the legacy dummy-sink route wrote — exactly the asymmetry engine.ts already
-        // documents for the positional sim ("reactives route through applyVictimDamage + the
-        // per-victim maps ... NOT roundDamage"). So the non-focus channel to read here is the
-        // per-victim one, and the scalar is pinned empty because the two are mutually exclusive per
-        // cast: `dealt > 0` alone would still pass if a later change credited both.
+        // SP-4b-1: the ENGINE channel moved, the reported aggregate did not. The boundary places
+        // every actor and synthesizes the missing `target`/`pattern`, so the team actor's cast
+        // resolves positionally onto the real, placed enemy and books through `applyVictimDamage`
+        // → `creditDealt` (`RoundData.perTargetDealt`) instead of the scalar `roundDamage` map the
+        // engine's own `teamDamage` fold reads. `dpsSimulator` therefore re-derives `teamDamage`
+        // from the per-victim channel (mirroring what it already does for the focus's
+        // `totalRoundDamage`), so BOTH must be positive here — the display layer reads only
+        // `teamDamage`, and a run that reports 0 there loses the whole "with team" chart feature
+        // plus reports a late kill round. Asserting both channels keeps the pair honest: the
+        // per-victim read proves the damage happened, the aggregate proves it was reported.
         expect(dealtBy(result.rounds, 'team-1')).toBeGreaterThan(0);
         const teamTotal = result.rounds.reduce((sum, r) => sum + (r.teamDamage ?? 0), 0);
-        expect(teamTotal).toBe(0);
+        expect(teamTotal).toBeGreaterThan(0);
+        // Per-round rather than per-run so the equality is exact (rounding is applied per row).
+        result.rounds.forEach((r) => {
+            expect(r.teamDamage ?? 0).toBe(Math.round(dealtBy([r], 'team-1')));
+        });
     });
 });

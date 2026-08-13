@@ -16,8 +16,32 @@ import type { RoundData } from './dpsSimulator';
  * is index-aligned with `rounds` — callers zip it back onto the rows.
  */
 export function focusDamagePerRound(rounds: RoundData[], focusId: string): number[] {
+    return actorsDamagePerRound(rounds, [focusId]);
+}
+
+/**
+ * Per-round damage DEALT by a GROUP of attackers, summed over every victim each of them hit that
+ * round. The group form of `focusDamagePerRound`, for aggregates that are a sum over several
+ * actors rather than one — the walked TEAM actors behind `RoundData.teamDamage`.
+ *
+ * The engine folds `teamDamage` out of the scalar `roundDamage` map by taking "every entry that is
+ * not the focus". That subtraction is only safe on the map, which is player-credit-only; it is NOT
+ * safe on `perTargetDealt`, which is keyed by attacker across BOTH sides — "not the focus" there
+ * also means every enemy. So this takes an EXPLICIT id list (the walked team ids) rather than
+ * inverting a single id, and an actor that dealt nothing simply contributes 0.
+ *
+ * Index-aligned with `rounds` for the same reason `focusDamagePerRound` is.
+ */
+export function actorsDamagePerRound(
+    rounds: RoundData[],
+    attackerIds: readonly string[]
+): number[] {
     return rounds.map((r) =>
-        Object.values(r.perTargetDealt?.[focusId] ?? {}).reduce((sum, n) => sum + n, 0)
+        attackerIds.reduce(
+            (total, id) =>
+                total + Object.values(r.perTargetDealt?.[id] ?? {}).reduce((sum, n) => sum + n, 0),
+            0
+        )
     );
 }
 

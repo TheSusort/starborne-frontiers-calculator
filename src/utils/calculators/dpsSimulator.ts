@@ -20,7 +20,7 @@ import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
-import { focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
+import { actorsDamagePerRound, focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
 
 /** The engine's focus-actor id (engine.ts:1781 `const focusActorId = 'attacker'`). */
 const FOCUS_ACTOR_ID = 'attacker';
@@ -558,6 +558,43 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         });
     }
 
+    // SP-4b-1: the SAME re-derivation for the walked TEAM actors. `RoundData.teamDamage` /
+    // `teamTotalDamage` are folded by the engine out of the scalar `roundDamage` map, whose team
+    // writer is gated on `!teamPositional` (engine.ts:8891) exactly like the focus's — so the
+    // moment a walked team actor resolves positionally its credit is suppressed there and lands in
+    // `perTargetDealt` instead. That is now EVERY DPS-page run: the page always supplies a
+    // positioned `enemy-1`, and the normalization boundary places + targets every actor, including
+    // team actors the page itself never gave a target/pattern. Left on the scalar, `teamDamage`
+    // reads 0 and DPSRoundChart — whose team features are all `> 0`-guarded — silently drops the
+    // violet tooltip row, the dashed "with team" overlay and its legend entry, and `killRoundFor`
+    // falls back to focus-only and reports a LATER kill round than the sim produced.
+    //
+    // The group shape is NOT the focus's: an explicit list of walked team ids, because
+    // `perTargetDealt` is keyed by attacker across BOTH sides — the engine's "every non-focus
+    // entry" subtraction is only safe on the player-credit-only scalar map, and applied here it
+    // would fold the ENEMY's output into the player's team aggregate.
+    //
+    // Replacement (not addition), mirroring the focus: the two channels are mutually exclusive per
+    // cast — the `!teamPositional` gate above, `applyReactiveDamage`'s
+    // `hasPositionedEnemyRoster ? creditDealt : creditDamage` split (engine.ts:5738/5775), and the
+    // positional DoT/detonation sites which call `creditDealt` only. Legacy (no real enemy) runs
+    // keep the engine's scalar values untouched, so their goldens cannot move.
+    const walkedTeamIds = engineTeamActors?.filter((t) => t.walk).map((t) => t.id) ?? [];
+    const perRoundTeamDamage =
+        hasRealEnemy && walkedTeamIds.length > 0
+            ? actorsDamagePerRound(reportedRounds, walkedTeamIds)
+            : null;
+    if (perRoundTeamDamage) {
+        // Rounded per row, preserving the integer contract the engine's own
+        // `Math.round(teamRoundDamage)` gave this field (the chart prints it with toLocaleString).
+        reportedRounds.forEach((r, i) => {
+            r.teamDamage = Math.round(perRoundTeamDamage[i]);
+        });
+    }
+    const teamTotalDamage = perRoundTeamDamage
+        ? Math.round(perRoundTeamDamage.reduce((sum, n) => sum + n, 0))
+        : Math.round(rawTotals.teamTotal);
+
     // Hang the display timeline on the REPORTED rows (post-kill-trim) — a round the run never
     // reported gets nothing, and each field stays absent when it has nothing to say, so a caller
     // that renders `?? []` shows an empty section rather than an empty-object artifact.
@@ -624,7 +661,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             totalSecondaryDamage: Math.round(rawTotals.totalSecondary),
             totalConditionalDamage: Math.round(rawTotals.totalConditional),
             // Team total only when any walked team actor exists (legacy shape preserved).
-            ...(hasWalkedTeam ? { teamTotalDamage: Math.round(rawTotals.teamTotal) } : {}),
+            ...(hasWalkedTeam ? { teamTotalDamage } : {}),
         },
     };
 }
