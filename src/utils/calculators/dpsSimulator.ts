@@ -109,18 +109,21 @@ export interface DPSSimulationInput {
      *  false, so the focus's damage lands per-victim on THESE actors instead of the vestigial
      *  dummy. Reuses the engine's own shape — deliberately not a parallel type. */
     enemyAttackers?: NonNullable<CombatEngineInput['enemyAttackers']>;
-    /** Board slot of the focus attacker. Required for `isPositional` to resolve a real target:
-     *  it needs BOTH this and an opposing actor's position, otherwise `selectTurnTarget` falls
-     *  back to the dummy and the focus never damages the real enemy. */
+    /** Board slot of the focus attacker. Optional since SP-4b-1: `normalizeCombatRoster` — the
+     *  engine's accommodation boundary, `runCombat`'s first line — auto-places any actor that
+     *  arrives without one (`DEFAULT_ATTACKER_SLOT` for the focus). Supply it to CHOOSE the cell;
+     *  omitting it no longer sends the focus to the dummy. */
     position?: Position;
-    /** Pre-parsed targeting preference for the focus attacker. Position alone is NOT enough:
-     *  `selectTurnTarget` requires `isPositional(...) && target`, so with no ParsedTarget it
-     *  short-circuits to `legacyVictim` (the dummy) however well-positioned the roster is.
-     *  Also required for `dummyEnemyIsVestigial` (which checks `t?.side === 'enemy'`) to drop
-     *  the dummy from the turn order. */
+    /** Pre-parsed targeting preference for the focus attacker. Also optional since SP-4b-1 — the
+     *  boundary fills an absent one with `DEFAULT_FRONT_ENEMY_TARGET`. Without that fill,
+     *  `selectTurnTarget` (which requires `resolvesPositionalVictim(...) && target`) would
+     *  short-circuit to `legacyVictim` (the dummy) however well-positioned the roster is, and
+     *  `dummyEnemyIsVestigial` (which checks `t?.side === 'enemy'`) would keep the dummy in the
+     *  turn order — which is precisely why the boundary fills it. */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
-     *  positional apply site. A single-target 1v1 wants shape 'base'. */
+     *  positional apply site. A single-target 1v1 wants shape 'base', which is exactly what the
+     *  boundary's `DEFAULT_BASE_PATTERN` fill supplies when this is absent. */
     pattern?: ParsedPattern;
 }
 
@@ -483,8 +486,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         // called on `runCombat`'s first line) fills exactly these axes, so a second derivation at
         // this adapter is redundant. It also fills them UNCONDITIONALLY, where this adapter gated
         // on `enemyAttackers.length > 0`; the widened case is a scalar-path run, which has no
-        // opposing position for `isPositional` to match and is therefore unaffected by carrying a
-        // slot.
+        // TARGETABLE opposing roster for `resolvesPositionalVictim` to match (no enemy at all, or
+        // only 0-max-HP pressure sources) and is therefore unaffected by carrying a slot.
         enemyAttackers: input.enemyAttackers,
         position: input.position,
         target: input.target,

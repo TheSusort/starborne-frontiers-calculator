@@ -156,12 +156,15 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
 
     // ── A TEAM actor's cast lands on the real enemy too, not the sink ────────────────
     //
-    // A team actor's parsed axes are sourced ONLY from `teamTargetById`/`teamPatternById`
-    // (engine.ts:1869-1885), so `position` alone is not enough: without target AND pattern the
-    // actor's cast falls back to `legacyVictim` — the 10,000-defence sink — and every
-    // `basis:'damage-dealt'` rider it owns computes off THAT defence (measured 2579 vs 7753 here,
-    // a ~3× error surfacing as `teamHealing`). NO golden fixture covers this (every golden team
-    // actor carries an empty or heal-only kit), so this is the only guard for it.
+    // A team actor's parsed axes are sourced ONLY from `teamTargetById`/`teamPatternById`, so
+    // `position` alone was not enough: without target AND pattern the actor's cast fell back to
+    // `legacyVictim` — the 10,000-defence sink — and every `basis:'damage-dealt'` rider it owns
+    // computed off THAT defence (measured 2579 vs 7753 here, a ~3× error surfacing as
+    // `teamHealing`). NO golden fixture covers this (every golden team actor carries an empty or
+    // heal-only kit), so this is the only guard for it. SP-4b-1 note: the missing-axes premise is
+    // no longer reachable through `runCombat` — `normalizeCombatRoster` fills both — so what this
+    // test now guards is the ROUTING (a walked team actor's damage credits the real enemy), not
+    // the adapter's fill.
     it("a walked team actor's damage credits the REAL enemy, not the legacy sink", () => {
         idc = 0;
         const allyDamage: TeamActorInput = {
@@ -470,10 +473,10 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
     //
     // ⚠️ THE MAJORITY PRODUCTION CONFIG, and it silently delivered ZERO.
     // `resolvePositionalTarget` returns `null` for `target.side === 'ally'`
-    // (positionalBinding.ts:66-68), so `selectTurnTarget` falls back to `tb.legacyVictim` — the
-    // vestigial dummy. But `willApplyPositionally` (engine.ts:8388) checks only
-    // `isPositional && target != null && pattern != null` and NEVER the target's side, so it stays
-    // TRUE while the bound victim is the position-less dummy; the positional apply then resolves
+    // (positionalBinding.ts), so `selectTurnTarget` falls back to `tb.legacyVictim` — the
+    // vestigial dummy. But `willApplyPositionally` (the focus cast site in engine.ts) checks only
+    // `resolvesPositionalVictim && target != null && pattern != null` and NEVER the target's side,
+    // so it stays TRUE while the bound victim is the position-less dummy; the positional apply then resolves
     // footprint victims from `tgt.position === undefined`, finds none, and delivers nothing.
     //
     // `docs/ship-targeting.csv` has 20 ships with an ally-side `active_target` — AEGIS, Chimei,

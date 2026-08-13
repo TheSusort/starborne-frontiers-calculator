@@ -65,10 +65,15 @@ function placeSide(
  *
  * Both are load-bearing and independently required: `selectTurnTarget` needs
  * `resolvesPositionalVictim(...) && target` (no target → falls back to the dummy), and the
- * positional APPLY gate additionally needs `pattern != null`. With a target but no pattern the cast resolves onto
- * the real enemy and still credits `cumulativeDamage` through the legacy sink, but never runs the
+ * positional APPLY gate additionally needs `pattern != null`. With a target but no pattern the cast
+ * resolves onto the real enemy and still credits `cumulativeDamage` through the legacy single-apply
+ * (the credit is suppressed only when the POSITIONAL branch is taken), but never runs the
  * per-victim apply — so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
  * That is why the two are filled independently rather than as a pair.
+ *
+ * Both sentences describe what happens WITHOUT these fills. With them, neither state is reachable
+ * below this boundary — so where the engine and the calculators still describe the dummy fallback,
+ * they are stating the RATIONALE for this module, not behaviour a caller can still reach.
  *
  * FILL, never SUBSTITUTE. An ally-side target the caller supplied is kept: rewriting it to the
  * front-enemy default is the healing adapter's matchup POLICY (`offensiveTarget`), not this
