@@ -3,8 +3,8 @@
  * `perTargetDealt` in DPS mode, exactly as they already do in a positioned two-team battle.
  *
  * `applyReactiveDamage`'s HP+`creditDealt` branch (engine.ts) was gated on the then-named
- * `positionalTeamBattle` input field (now `hasPositionedEnemyRoster`), which only `simulateBattle`
- * set. The DPS calculator supplies a
+ * `positionalTeamBattle` input field — since replaced by the derived `hasPositionedEnemyRoster`
+ * check — which only `simulateBattle` set. The DPS calculator supplies a
  * real, positioned enemy roster but never that flag, so every reactive-damage proc fell to the
  * credit-only branch: it reduced NO real HP, never reached `perTargetDealt`, and therefore
  * contributed exactly 0 to the re-derived DPS metric (`focusDamageTotal`, dpsSimulator.ts) — the
