@@ -31,6 +31,22 @@
  * `...helper({ ..., healTargetId: 'attacker' })`), is also never edited — reported separately,
  * because the file it lives in usually gets OTHER automatic edits too and would otherwise never
  * surface in the residue list.
+ *
+ * FINDING 4 fix: a `healTargetId:` property line is NOT proof the enclosing object is
+ * `runCombat`'s `CombatEngineInput` — the healing CALCULATOR's `HealingSimulationInput`
+ * (`simulateHealing`) also has this field, but has no `mode`. Inserting `mode:` there is a type
+ * error (TS2353), confirmed by a full-corpus `tsc --noEmit` in a disposable worktree (48 errors,
+ * see task-3-report.md Fix wave 2). `classifyEnclosure` resolves, from evidence in the source
+ * text alone, whether the enclosing object literal is:
+ *   - 'ENGINE'    — CombatEngineInput (directly, via a `runCombat(` call, or via a same-file
+ *                   helper whose own signature names `CombatEngineInput`) -> gets `mode:`.
+ *   - 'HEALING'   — HealingSimulationInput (directly, via a `simulateHealing(` call, or via a
+ *                   same-file helper naming `HealingSimulationInput`) -> never gets `mode:`.
+ *   - null        — cannot be resolved from local evidence (e.g. a call to a function imported
+ *                   from another module, whose signature isn't visible in this file) -> the
+ *                   occurrence is excluded from edits and, if it's the file's only structural
+ *                   hit, the whole file falls to residue. Never guessed.
+ * See `classifyEnclosure`'s own comment for the climb-and-resolve algorithm.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -137,9 +153,105 @@ function enclosingAlreadyHasMode(lineIdx, lines, enclosures) {
     return false;
 }
 
+// Text immediately preceding the `{` that opens enclosure occurrence at `pushLine[occ]` — walks
+// back across earlier lines only when the opening line has nothing but whitespace before its own
+// `{` (e.g. a lone `? {` continuation), so a multi-line ternary/call still yields real context.
+function precedingContext(lines, pushLineIdx) {
+    let lineIdx = pushLineIdx;
+    const braceCol = lines[lineIdx].lastIndexOf('{');
+    let context = lines[lineIdx].slice(0, braceCol);
+    let steps = 0;
+    while (context.trim() === '' && lineIdx > 0 && steps < 5) {
+        lineIdx--;
+        context = `${lines[lineIdx]} ${context}`;
+        steps++;
+    }
+    return context.trim();
+}
+
+// Scans `ctx` right-to-left tracking paren balance to find the nearest UNMATCHED `(` — i.e. the
+// call this object literal is an argument of, even when other arguments/nested calls sit between
+// the call name and the object (`counterBase(skills, {`, `dpsBase(skillsFor(ruiner), {`). Returns
+// the identifier immediately before that `(`, or null if the context has no open call (a bare
+// `return`, a ternary `?`, a spread `...(`, or a variable/return type annotation).
+function findEnclosingCallName(ctx) {
+    let balance = 0;
+    for (let i = ctx.length - 1; i >= 0; i--) {
+        const ch = ctx[i];
+        if (ch === ')') {
+            balance++;
+        } else if (ch === '(') {
+            if (balance === 0) {
+                let j = i - 1;
+                while (j >= 0 && /\s/.test(ctx[j])) j--;
+                const end = j + 1;
+                while (j >= 0 && /[A-Za-z0-9_$]/.test(ctx[j])) j--;
+                const name = ctx.slice(j + 1, end);
+                return name || null;
+            }
+            balance--;
+        }
+    }
+    return null;
+}
+
+// Resolves a same-file helper's declaration (`const NAME = (...)`/`function NAME(`) and inspects
+// its own signature (declaration line + next 15 lines — every real signature in this corpus
+// names its type within a line or two) for CombatEngineInput / HealingSimulationInput. Returns
+// 'ENGINE' | 'HEALING' | null (no local declaration found, or found but names neither type —
+// e.g. `resolveHealingPlayerPlacement`, imported from healingPlacement.ts with an inline
+// unrelated arg type — never guessed at).
+function resolveLocalDeclaration(name, lines) {
+    const declRe = new RegExp(
+        `^\\s*(?:export\\s+)?(?:const|let)\\s+${name}\\s*[=:]|^\\s*(?:export\\s+)?function\\s+${name}\\s*\\(`
+    );
+    for (let i = 0; i < lines.length; i++) {
+        if (declRe.test(lines[i])) {
+            const windowText = lines.slice(i, Math.min(lines.length, i + 15)).join('\n');
+            if (windowText.includes('CombatEngineInput')) return 'ENGINE';
+            if (windowText.includes('HealingSimulationInput')) return 'HEALING';
+            return null;
+        }
+    }
+    return null;
+}
+
+// Classifies the object literal directly enclosing `lineIdx` as 'ENGINE' (CombatEngineInput —
+// gets `mode:`), 'HEALING' (HealingSimulationInput or any other non-engine shape — never gets
+// `mode:`), or null (unresolvable from local evidence — never guessed, becomes residue).
+//
+// Climbs through enclosing levels that carry no type information of their own — a bare `return`
+// object, a ternary `cond ? { ... }`, or a spread `...(cond ? { ... } : {})` folded into a larger
+// literal — until it reaches a level with either a visible type annotation (`): CombatEngineInput
+// => (`, `const X: HealingSimulationInput =`) or a call site (`runCombat(`, `simulateHealing(`,
+// or a same-file helper resolved via `resolveLocalDeclaration`). A call site is always terminal:
+// once the object is confirmed to be somebody's call ARGUMENT, that call's own parameter type
+// governs it — climbing past the call to whatever textually encloses the call EXPRESSION would
+// not describe this object's type at all.
+function classifyEnclosure(lineIdx, lines, enclosures) {
+    let occ = enclosures.enclosingOccOfLine[lineIdx];
+    let depth = 0;
+    while (occ !== -1 && depth < 20) {
+        const ctx = precedingContext(lines, enclosures.pushLine[occ]);
+        if (ctx.includes('CombatEngineInput')) return 'ENGINE';
+        if (ctx.includes('HealingSimulationInput')) return 'HEALING';
+        const callName = findEnclosingCallName(ctx);
+        if (callName) {
+            if (callName === 'runCombat') return 'ENGINE';
+            if (callName === 'simulateHealing') return 'HEALING';
+            return resolveLocalDeclaration(callName, lines); // terminal — ENGINE | HEALING | null
+        }
+        occ = enclosures.enclosingOccOfLine[enclosures.pushLine[occ]];
+        depth++;
+    }
+    return null;
+}
+
 const changed = [];
 const residue = [];
 const inlineOverrides = []; // { file, lines: [lineNo, ...] }
+const healingSkipped = []; // { file, line } — confidently classified as a healing-calc input
+const unresolvedSkipped = []; // { file, line } — could not classify; never guessed
 
 for (const file of files) {
     const src = readFileSync(file, 'utf8');
@@ -153,34 +265,53 @@ for (const file of files) {
     // Pass 1: positionalTeamBattle: true -> mode: 'battle',
     const pass1 = [];
     let edits = 0;
+    let structuralHits = 0; // HEAL_PROP/PTB_TRUE lines seen, regardless of what happens next
     for (const line of rawLines) {
         const ptb = line.match(PTB_TRUE);
         if (ptb) {
             pass1.push(`${ptb[1]}mode: 'battle',`);
             edits++;
+            structuralHits++;
         } else {
             pass1.push(line);
         }
     }
 
     // Pass 2: healTargetId: <value> -> mode: 'healing', inserted after it, UNLESS the enclosing
-    // object literal already has a mode: line (from pass 1, or pre-existing).
+    // object literal already has a mode: line (from pass 1, or pre-existing) OR the enclosing
+    // object literal is NOT a CombatEngineInput at all (FINDING 4 — e.g. the healing calculator's
+    // HealingSimulationInput, which also has `healTargetId` but no `mode`).
     const enclosures = computeEnclosures(pass1);
     const out = [];
+    let fileUnresolved = 0;
     for (let i = 0; i < pass1.length; i++) {
         const line = pass1[i];
         out.push(line);
         const heal = line.match(HEAL_PROP);
-        if (heal && !enclosingAlreadyHasMode(i, pass1, enclosures)) {
+        if (!heal) continue;
+        structuralHits++;
+        if (enclosingAlreadyHasMode(i, pass1, enclosures)) continue;
+        const classification = classifyEnclosure(i, pass1, enclosures);
+        if (classification === 'ENGINE') {
             out.push(`${heal[1]}mode: 'healing',`);
             edits++;
+        } else if (classification === 'HEALING') {
+            healingSkipped.push({ file, line: i + 1 });
+        } else {
+            unresolvedSkipped.push({ file, line: i + 1 });
+            fileUnresolved++;
         }
     }
 
     if (edits === 0) {
-        // The file mentions one of the symbols but exposes no migratable property line —
-        // a member access, a type, or a shape the codemod refuses to guess at.
-        residue.push(file);
+        if (structuralHits === 0 || fileUnresolved > 0) {
+            // Either the file mentions one of the symbols but exposes no migratable property
+            // line (a member access, a type, or a shape the codemod refuses to guess at), or it
+            // has a structural hit the classifier could not resolve (never guessed).
+            residue.push(file);
+        }
+        // Else: every structural hit resolved confidently to HEALING — this file's inputs are
+        // correctly typed already; nothing to do, and it's not residue either.
         continue;
     }
     changed.push(`${file}  (+${edits})`);
@@ -205,3 +336,15 @@ console.log(
 for (const { file, lines: ls } of inlineOverrides) {
     for (const ln of ls) console.log(`  ${file}:${ln}`);
 }
+
+console.log(
+    `\nHEALING-CALC SKIPPED (FINDING 4) — ${healingSkipped.length} healTargetId site(s) confidently ` +
+        `classified as a healing-calculator input (HealingSimulationInput or similar), never given mode:`
+);
+for (const { file, line } of healingSkipped) console.log(`  ${file}:${line}`);
+
+console.log(
+    `\nUNRESOLVED (FINDING 4) — ${unresolvedSkipped.length} healTargetId site(s) could not be classified ` +
+        `as engine or healing input from local evidence; never guessed, left for hand-migration (Task 5):`
+);
+for (const { file, line } of unresolvedSkipped) console.log(`  ${file}:${line}`);
