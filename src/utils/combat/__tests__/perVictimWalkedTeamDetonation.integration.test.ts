@@ -180,6 +180,7 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     hp: 1_000_000_000,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M1',
     teamActors: [teamDetonator('team-det', 'M1', [detonate('bomb')])],
     enemyAttackers: [

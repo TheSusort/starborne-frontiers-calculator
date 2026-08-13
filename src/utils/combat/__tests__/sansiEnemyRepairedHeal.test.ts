@@ -145,6 +145,7 @@ const playerSansiBase = (enemyAttackers: EnemyAttacker[]): CombatEngineInput => 
     hp: SANSI_HP,
     speed: 1, // slowest — every enemy repair lands before Sansi acts, waking the reactive
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers,
 });
 
@@ -301,6 +302,7 @@ describe('Sansi (enemy-side) — team symmetry: an enemy Sansi reacts to a PLAYE
             hp: 1_000_000,
             speed: 200, // player acts first — its repair wakes the enemy Sansi's reactive same round
             healTargetId: 'attacker',
+            mode: 'healing',
             teamActors: [otherAlly],
             enemyAttackers: [enemySansi],
         };

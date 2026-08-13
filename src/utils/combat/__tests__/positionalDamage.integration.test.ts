@@ -121,6 +121,7 @@ const BASE = (
     hp: 1_000_000_000,
     // Healing mode — required for the positioned enemy roster to be built.
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     ...(target ? { target } : {}),
     ...(pattern ? { pattern } : {}),

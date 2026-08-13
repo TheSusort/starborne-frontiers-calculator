@@ -194,6 +194,7 @@ function collectDotTicks(withVortexVeil: boolean, dotType: 'inferno' | 'corrosio
         defence: 0,
         hp: 1_000_000, // large enough to never die
         healTargetId: 'attacker',
+        mode: 'healing',
         bus,
         enemyAttackers: dotType === 'inferno' ? [infernoEnemy()] : [corrosionEnemy()],
     };

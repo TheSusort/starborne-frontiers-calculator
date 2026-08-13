@@ -264,6 +264,7 @@ describe('Howler (player-side) — cleanse + Blast land on the crit-ing ally, no
         hp: 1_000_000_000,
         speed: 500,
         healTargetId: 'ally-b', // deliberately the NON-critting ally (the fallback trap)
+        mode: 'healing',
         position: 'M1',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -424,6 +425,7 @@ describe('Howler (enemy-side) — team symmetry: an enemy Howler reacts to its O
             hp: 1_000_000_000,
             speed: 1000, // the player debuffs first, waking the enemy reactives the same round
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M1',
             target: parsedTarget('front'),
             pattern: allPattern(),
@@ -600,6 +602,7 @@ describe('Sentinel (player-side) — reactive heal + damage fire on ally crit, n
         hp: 1_000_000_000,
         speed: 500,
         healTargetId: 'ally-b', // deliberately the NON-critting ally (the fallback trap)
+        mode: 'healing',
         position: 'M1',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -712,6 +715,7 @@ describe('Sentinel (enemy-side) — team symmetry: an enemy Sentinel reacts to i
             hp: 1_000_000_000,
             speed: 1000,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M1',
             target: parsedTarget('front'),
             pattern: basePattern(),

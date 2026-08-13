@@ -106,6 +106,7 @@ const counterBase = (
     defence: 0,
     hp: 1_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [basicEnemy('foe', 3_000)],
     ...overrides,
 });

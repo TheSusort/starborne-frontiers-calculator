@@ -808,6 +808,7 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
             BASE({
                 numRounds: 3,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: grifSkills(),
                 bus,
                 enemyAttackers: [

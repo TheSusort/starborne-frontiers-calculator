@@ -234,6 +234,7 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     defence: 0,
     hp: HP,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -339,6 +340,7 @@ const BASE_ENEMY_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInp
     hp: HP,
     speed: 1, // focus attacker acts LAST — mirrors the player-side setup's turn order.
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),

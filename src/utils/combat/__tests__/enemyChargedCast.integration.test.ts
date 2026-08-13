@@ -247,6 +247,7 @@ const buildFocusInput = (opts: {
     // last-turn ctx populated (effectiveAttack) for the reactive shield/damage fold.
     speed: opts.focusSpeed ?? 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: opts.enemies,
 });
 

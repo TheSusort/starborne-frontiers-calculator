@@ -138,6 +138,7 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'ally-1',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -289,6 +290,7 @@ const ENEMY_SIDE_BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInp
     hp: 1_000_000_000,
     speed: 200,
     healTargetId: 'attacker', // required to unlock the positioned enemy roster.
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),

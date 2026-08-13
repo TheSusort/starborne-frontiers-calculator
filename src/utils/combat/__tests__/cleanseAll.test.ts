@@ -121,6 +121,7 @@ describe('C1 Task 5: "cleanse all" removes every removable debuff (player-side)'
             BASE({
                 numRounds: 1,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 shipSkills: cleanseAllSkills(),
                 enemyAttackers: [debuffEnemy(REMOVABLE)],

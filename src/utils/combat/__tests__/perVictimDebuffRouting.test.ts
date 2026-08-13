@@ -131,6 +131,7 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
             hp: 10_000_000,
             // Healing mode: required to unlock the positioned enemy roster.
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),

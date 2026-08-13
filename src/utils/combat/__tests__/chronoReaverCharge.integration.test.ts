@@ -178,6 +178,7 @@ const buildInput = (opts: {
         hp: 1_000_000_000,
         speed: 100,
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers: [dummySink()],
     };
 };
@@ -604,6 +605,7 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
         hp: 1_000_000_000,
         speed: 100,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: POS_FRONT,
         target: parsedFront,
         pattern: basePattern,

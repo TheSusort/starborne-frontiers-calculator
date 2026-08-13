@@ -125,6 +125,7 @@ const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     hp: 1_000_000_000,
     hacking: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedFrontTarget(),
     pattern: singleTargetPattern(),
@@ -248,6 +249,7 @@ describe('Lingshe Stealth-on-detonate — team symmetry (enemy-side Lingshe)', (
             security: 0, // player focus takes the forced burst without resisting the reduce
             speed: 1,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyLingshe()],
             __testTapActors: (actors) => {
                 // Seed a bomb on the PLAYER focus ('attacker') for the enemy Lingshe to detonate.

@@ -177,6 +177,7 @@ const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     enemySecurity: 0,
     // Healing mode unlocks the positioned enemy roster (the sim's team-vs-team path).
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),

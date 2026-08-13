@@ -143,6 +143,7 @@ const buildInput = (chargeAbilityUnderTest: Ability, enemy: EnemyAttacker): Comb
     hp: 1_000_000_000,
     speed: 100,
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [enemy],
 });
 
@@ -496,6 +497,7 @@ describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges dr
             hp: 1_000_000_000,
             speed: 40,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemy],
         };
 
@@ -549,6 +551,7 @@ describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges dr
             hp: 1_000_000_000,
             speed: 40,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemy],
         };
 

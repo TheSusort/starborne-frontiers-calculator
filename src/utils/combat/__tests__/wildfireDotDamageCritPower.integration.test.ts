@@ -103,6 +103,7 @@ const engineBase = (shipSkills: ShipSkills): CombatEngineInput => ({
     // hacking 200 vs enemy security 0 → inflict landing chance clamp((200-0)/100) = 1.0.
     hacking: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),
@@ -312,6 +313,7 @@ describe('Wildfire dotDamage crit-power scaling — I4b per-victim/per-tick gati
             hp: 1_000_000_000,
             hacking: 200,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),

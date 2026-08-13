@@ -115,6 +115,7 @@ describe('C1 Task 4: reactive-path cleanse removes debuffs (player-side)', () =>
             BASE({
                 numRounds: NUM_ROUNDS,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 shipSkills: reactiveCleanseSkills(1),
                 enemyAttackers: [debuffEnemy()],

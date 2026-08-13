@@ -139,7 +139,7 @@ function ruinerVsRepairingEnemy(numRounds: number, ruinerSpeed = 500) {
         speed: ruinerSpeed,
         hacking: 100_000, // land the DoT deterministically
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),

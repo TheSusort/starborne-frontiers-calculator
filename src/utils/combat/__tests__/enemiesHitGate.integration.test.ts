@@ -109,6 +109,7 @@ const focusBase = (enemyPositions: Position[]): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: allPattern(),
@@ -213,6 +214,7 @@ const enemyRageGranted = (playerPositions: Position[]): boolean => {
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: playerPositions[0],
         target: parsedTarget('front'),
         pattern: allPattern(),
@@ -292,6 +294,7 @@ const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
         ...(enemyPositions
             ? {
                   healTargetId: 'attacker',
+                  mode: 'healing',
                   position: 'M4' as Position,
                   target: parsedTarget('front'),
                   pattern: allPattern(),

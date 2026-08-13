@@ -453,6 +453,7 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     defence: 0,
     hp: HP,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

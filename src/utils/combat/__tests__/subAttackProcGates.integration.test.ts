@@ -115,6 +115,7 @@ const focusCast = (slots: ShipSkills['slots'], pattern: ParsedPattern): CombatEn
     hp: 1_000_000_000,
     hacking: 100_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M1',
     target: parsedTarget('front'),
     pattern,

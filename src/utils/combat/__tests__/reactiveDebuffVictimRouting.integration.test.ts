@@ -94,7 +94,7 @@ function runWardenFight(): Extract<CombatEvent, { type: 'debuff-applied' }>[] {
         speed: 500, // Warden acts first
         hacking: 100_000, // land every debuff deterministically
         healTargetId: 'attacker',
-        positionalTeamBattle: true,
+        mode: 'battle',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),

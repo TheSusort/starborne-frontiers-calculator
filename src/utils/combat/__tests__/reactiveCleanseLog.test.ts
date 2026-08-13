@@ -143,6 +143,7 @@ const shieldedAlly = (): CombatEngineInput => ({
     hp: SHIELD_HP,
     speed: 10,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),

@@ -142,6 +142,7 @@ const BASE_INPUT: CombatEngineInput = {
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'ally-1', // both manual enemies fire at this single shared victim.
+    mode: 'healing',
     teamActors: [
         teamActor('ally-1', 0), // the direct-hit victim (no Protection of its own).
         teamActor('lionheart', LIONHEART_DEFENCE, [lionheartProtectionPassive()]), // the protector.

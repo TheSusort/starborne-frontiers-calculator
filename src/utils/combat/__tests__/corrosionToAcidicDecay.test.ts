@@ -269,6 +269,7 @@ describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna convert
             hp: 1_000_000_000,
             speed: 1, // player acts last — the enemy ally's Corrosion lands before/independent of it
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyCorrosionAlly, enemyBelladonna],
         };
 

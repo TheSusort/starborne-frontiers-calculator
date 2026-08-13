@@ -258,6 +258,7 @@ const nonPositionalFocus = (hits: number, numRounds: number): CombatEngineInput 
     defence: 0,
     hp: 10_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [inertEnemyAt('inert', 'M4')],
 });
 

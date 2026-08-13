@@ -212,6 +212,7 @@ function runAoE(anchorAffinity: AffinityName = 'electric'): {
         speed: 500, // acts before Sentinel
         affinity: 'thermal', // electric holds advantage over thermal → disadvantaged vs the anchor
         healTargetId: 'sentinel',
+        mode: 'healing',
         position: 'M1',
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Line-Range-1'),

@@ -346,6 +346,7 @@ describe('SP-3b: per-recipient healing report', () => {
             enemySpeed: 0,
             healModifier: 0,
             healTargetId: HEAL_TARGET_ID,
+            mode: 'healing',
             position: 'M2',
             target: parseTarget('allies'),
             pattern: parsePattern('Pattern-Line-Support-Range-3'),

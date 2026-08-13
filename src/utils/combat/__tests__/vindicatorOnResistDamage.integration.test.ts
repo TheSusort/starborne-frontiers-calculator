@@ -102,6 +102,7 @@ const BASE = (
     hp: CARRIER_HP,
     speed: 100,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -251,6 +252,7 @@ describe('Vindicator on-resist HP damage — team symmetry (enemy-owned)', () =>
             hp: 1_000_000_000,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             hacking: 0,
             position: 'M4' as Position,
             target: parsedTarget('front'),

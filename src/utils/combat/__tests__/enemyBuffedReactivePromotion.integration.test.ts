@@ -135,7 +135,10 @@ function nuqtuCleanse(): Ability {
 
 function nuqtuBolsterGrant(): Ability {
     const grant = nuqtuPassiveAbilities().find(
-        (a) => a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Terran Bolster III'
+        (a) =>
+            a.type === 'buff' &&
+            a.config.type === 'buff' &&
+            a.config.buffName === 'Terran Bolster III'
     );
     if (!grant) throw new Error('mutation guard: Nuqtu Terran Bolster III grant not found');
     return grant;
@@ -192,14 +195,21 @@ describe('Nuqtu REFIT passive — self-cleanse + Terran Bolster III + Core Charg
         const cleanse = abilities.find((a) => a.type === 'cleanse');
         const bolster = abilities.find(
             (a) =>
-                a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Terran Bolster III'
+                a.type === 'buff' &&
+                a.config.type === 'buff' &&
+                a.config.buffName === 'Terran Bolster III'
         );
         const coreCharge = abilities.find(
-            (a) => a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Core Charge I'
+            (a) =>
+                a.type === 'buff' &&
+                a.config.type === 'buff' &&
+                a.config.buffName === 'Core Charge I'
         );
         if (!cleanse) throw new Error('mutation guard: Nuqtu refit self-cleanse not found');
-        if (!bolster) throw new Error('mutation guard: Nuqtu refit Terran Bolster III grant not found');
-        if (!coreCharge) throw new Error('mutation guard: Nuqtu refit Core Charge I stack grant not found');
+        if (!bolster)
+            throw new Error('mutation guard: Nuqtu refit Terran Bolster III grant not found');
+        if (!coreCharge)
+            throw new Error('mutation guard: Nuqtu refit Core Charge I stack grant not found');
 
         for (const ability of [cleanse, bolster, coreCharge]) {
             expect(ability.trigger).toBe('on-enemy-buffed');
@@ -224,10 +234,19 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
     const debuffEnemy = (id: string): EnemyAttacker =>
         ({
             id,
-            stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 1000,
+            },
             chargeCount: 0,
             startCharged: false,
-            shipSkills: { slots: [{ slot: 'active', abilities: [debuffOnCast('deb', 'Attack Down')] }] },
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [debuffOnCast('deb', 'Attack Down')] }],
+            },
         }) as EnemyAttacker;
 
     const buffEnemy = (id: string, speed: number, buffName = 'Damage Up I'): EnemyAttacker =>
@@ -236,7 +255,9 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
             chargeCount: 0,
             startCharged: false,
-            shipSkills: { slots: [{ slot: 'active', abilities: [selfBuffOnCast('buf', buffName)] }] },
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [selfBuffOnCast('buf', buffName)] }],
+            },
         }) as EnemyAttacker;
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
@@ -262,10 +283,11 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         hp: 1_000_000_000,
         speed: 1, // Nuqtu acts last — irrelevant to the reactive, which fires off the ENEMIES' turns
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 
-    it('an enemy self-buffing removes Nuqtu\'s pre-existing debuff and grants it Terran Bolster III', () => {
+    it("an enemy self-buffing removes Nuqtu's pre-existing debuff and grants it Terran Bolster III", () => {
         const { buffsApplied, result } = runAndCollectBuffs(
             BASE({ enemyAttackers: [debuffEnemy('enemy-deb'), buffEnemy('enemy-buf', 900)] })
         );
@@ -326,7 +348,12 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
                 enemyDebuffs: [],
                 walk: {
                     shipSkills: {
-                        slots: [{ slot: 'active', abilities: [selfBuffOnCast('ally-buf', 'Damage Up I')] }],
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [selfBuffOnCast('ally-buf', 'Damage Up I')],
+                            },
+                        ],
                     },
                     stats: {
                         attack: 0,
@@ -351,7 +378,9 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         );
         expect(cleanseCountFor(result, 'attacker')).toBe(0);
         expect(
-            buffsApplied.some((b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker')
+            buffsApplied.some(
+                (b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker'
+            )
         ).toBe(false);
     });
 
@@ -371,17 +400,26 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         // no opposing buff this round the cleanse never fires.
         expect(cleanseCountFor(result, 'attacker')).toBe(0);
         expect(
-            buffsApplied.some((b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker')
+            buffsApplied.some(
+                (b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker'
+            )
         ).toBe(false);
     });
 });
 
 describe('Nuqtu (enemy-side) — team symmetry: an enemy Nuqtu reacts to a PLAYER self-buff', () => {
-    it('a player self-buffing wakes the enemy Nuqtu\'s self-cleanse + Terran Bolster III grant', () => {
+    it("a player self-buffing wakes the enemy Nuqtu's self-cleanse + Terran Bolster III grant", () => {
         const enemyDebuffsAttacker = (id: string): EnemyAttacker =>
             ({
                 id,
-                stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 5 },
+                stats: {
+                    attack: 1,
+                    crit: 0,
+                    critDamage: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
+                    speed: 5,
+                },
                 chargeCount: 0,
                 startCharged: false,
                 shipSkills: { slots: [] } as ShipSkills,
@@ -406,7 +444,9 @@ describe('Nuqtu (enemy-side) — team symmetry: an enemy Nuqtu reacts to a PLAYE
             defensePenetration: 0,
             chargeCount: 0,
             // The player (attacker) self-buffs on cast — the triggering event for the enemy Nuqtu.
-            shipSkills: { slots: [{ slot: 'active', abilities: [selfBuffOnCast('atk-buf', 'Damage Up I')] }] },
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [selfBuffOnCast('atk-buf', 'Damage Up I')] }],
+            },
             enemyDefense: 0,
             enemyHp: 1_000_000_000,
             numRounds: 1,
@@ -423,6 +463,7 @@ describe('Nuqtu (enemy-side) — team symmetry: an enemy Nuqtu reacts to a PLAYE
             hp: 1_000_000_000,
             speed: 200, // player acts first — its self-buff wakes the enemy Nuqtu the same round
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyDebuffsAttacker('enemy-filler'), enemyNuqtu],
         };
 

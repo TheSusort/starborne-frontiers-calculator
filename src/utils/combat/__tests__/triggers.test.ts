@@ -2357,6 +2357,7 @@ describe('on-attacked engine integration (Task 8)', () => {
                 hp: 1_000_000, // large HP so target survives
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 numRounds: 3,
                 bus,
                 enemyAttackers: [flatEnemy()],
@@ -2397,6 +2398,7 @@ describe('on-attacked engine integration (Task 8)', () => {
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 numRounds: 3,
                 bus,
                 enemyAttackers: [flatEnemy()],
@@ -2428,6 +2430,7 @@ describe('on-attacked engine integration (Task 8)', () => {
                 hp: 1, // dies immediately
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 numRounds: 4,
                 bus,
                 enemyAttackers: [
@@ -3292,6 +3295,7 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'tank',
+                mode: 'healing',
                 numRounds: opts.numRounds ?? 3,
                 bus,
                 teamActors: [

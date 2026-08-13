@@ -179,6 +179,7 @@ describe('B2 Task 2 — isStasised: engine-local per-actor Stasis reader (tap on
             hacking: 200,
             // Positioned battle: focus at M4 fires front enemy.
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -231,6 +232,7 @@ describe('B2 Task 2 — isStasised: engine-local per-actor Stasis reader (tap on
             hp: 1_000_000_000,
             // Positioned battle: focus at M4 (front-most player = Stasis target).
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),

@@ -89,6 +89,7 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     defence: 0, // no reduction → intake = raw enemy attack
     hp: 10_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -603,6 +604,7 @@ const runCrossing = (opts: {
             numRounds: opts.numRounds,
             hp: opts.hp,
             healTargetId: opts.healTargetId ?? 'attacker',
+            mode: 'healing',
             selfBuffs: opts.selfBuffs ?? [],
             enemyAttackers: opts.enemyAttackers,
             shipSkills: {
@@ -891,6 +893,7 @@ const runCastPathCheatDeath = (opts: {
             startCharged: opts.startCharged,
             hasChargedSkill: opts.grantSlot === 'charged',
             healTargetId: 'tank',
+            mode: 'healing',
             teamActors: [tankActor('tank', opts.tankHp, opts.tankSpeed)],
             enemyAttackers: [opts.enemy],
             shipSkills: {
@@ -993,6 +996,7 @@ describe('Phase 4c PR 3 Task 5 — cast-path Cheat-Death grants (Hermes/Hayyan)'
                 hp: 10_000,
                 speed: 100,
                 healTargetId: 'tank',
+                mode: 'healing',
                 // PASSIVE slot → aura; tank carries Cheat Death from round 1.
                 shipSkills: {
                     slots: [{ slot: 'passive', abilities: [cheatDeathGrant({ target: 'ally' })] }],

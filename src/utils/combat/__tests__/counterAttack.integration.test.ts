@@ -87,6 +87,7 @@ const counterBase = (
     defence: 0,
     hp: 1_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [basicEnemy('foe', 3_000)],
     ...overrides,
 });
@@ -341,6 +342,7 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
             counterBase(skills, {
                 position: 'M2',
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [basicEnemy('foe', 3_000)],
             })
         );
@@ -362,6 +364,7 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
                 position: 'M2',
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
                 healTargetId: 'ally-T2',
+                mode: 'healing',
                 enemyAttackers: [basicEnemy('foe', 3_000)],
             })
         );
@@ -383,6 +386,7 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
                 position: 'M2',
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
                 healTargetId: 'ally-B4',
+                mode: 'healing',
                 enemyAttackers: [basicEnemy('foe', 3_000)],
             })
         );
@@ -469,6 +473,7 @@ describe('R4 — one incoming attack draws ONE Centurion retaliation, not one pe
                 position: 'M4', // front column → the enemy's `front` selection anchors here
                 teamActors: [ally('ally-M3', 'M3')], // adjacent to M4, inside the footprint
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [aoeEnemyAt('foe', 'M4', lineRange1Pattern())],
             })
         );

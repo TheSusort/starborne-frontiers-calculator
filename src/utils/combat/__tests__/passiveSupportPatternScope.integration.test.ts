@@ -115,7 +115,7 @@ const baseInput = (heal: Ability, bus: ReturnType<typeof createEventBus>): Comba
     defence: 0,
     hp: 40_000,
     healTargetId: 'attacker',
-    positionalTeamBattle: true,
+    mode: 'battle',
     position: 'M1',
     target: parseTarget('front'),
     pattern: parsePattern('Pattern-Base'),

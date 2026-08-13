@@ -20,9 +20,18 @@
  *
  * Limitation: brace counting strips ordinary `'...'`/`"..."` string bodies per line first, so a
  * `{`/`}` character living inside a quoted string isn't miscounted. Template-literal `${...}`
- * expression braces are NOT specially handled. None of the corpus needed this as of this
- * writing (verified via `--debug-print`, see task-3-report.md) — if a future file trips it, the
- * dry-run report is the safety net: inspect that file's transform by hand before trusting it.
+ * expression braces are balanced and harmless to this scan either way. The real unhandled hazard
+ * is an UNMATCHED literal `{` or `}` living inside a `//` or block comment, inside a template-literal
+ * BODY (not its `${...}` expressions), or inside a string with an unpaired quote on the line — any
+ * of these would desync the brace-depth stack for the rest of the file. None of the corpus tripped
+ * this as of this writing (verified via `--debug-print`, see task-3-report.md); a comment-dense
+ * test corpus makes a stray brace in a `//` comment the likeliest future trigger. The dry-run
+ * report is NOT a safety net for this — it only prints file names and `(+N)` edit counts, so a
+ * file whose brace-scan desynced (e.g. producing a duplicate `mode:` key) looks identical in the
+ * report to a correctly transformed file. The actual safety net is the `tsc --noEmit` gate run
+ * after `--apply`: a desynced scan reliably produces a type error (duplicate object key, or a
+ * `mode:` inserted into a type that has no such field) that the compiler catches even though
+ * neither `tsc` nor `eslint` cover this script itself.
  *
  * Deliberately conservative: it only matches an object-literal PROPERTY line, never a type
  * annotation (`healTargetId?: string`) and never a member access (`input.healTargetId`).

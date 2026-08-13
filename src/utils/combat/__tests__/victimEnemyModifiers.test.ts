@@ -213,6 +213,7 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
             hp: 10_000_000,
             // Positioned battle: focus at M4 fires front; healTargetId unlocks enemy roster.
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),

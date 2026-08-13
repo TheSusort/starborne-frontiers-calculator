@@ -126,6 +126,7 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     hp: 1_000_000,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: lineRange1Pattern(),
@@ -207,7 +208,10 @@ describe('E2 T3 — per-victim standing leech on the positional path', () => {
 describe('E2 T5 — per-victim taken leech on the positional enemy branch', () => {
     // A passive-slot damage-taken HEAL leech (taken-leech). `target` is 'self' → the victim
     // heals its OWN pool off the damage IT took.
-    const takenHeal = (pct: number, extra: { requiresHpDamage?: boolean; noCrit?: boolean } = {}): Ability =>
+    const takenHeal = (
+        pct: number,
+        extra: { requiresHpDamage?: boolean; noCrit?: boolean } = {}
+    ): Ability =>
         ab({
             type: 'heal',
             target: 'self',
@@ -266,7 +270,12 @@ describe('E2 T5 — per-victim taken leech on the positional enemy branch', () =
 
     // An OFFENSIVE enemy at M1 firing a Line-Range-1 AoE at `front`. Anchored at the front-most
     // player (focus at M4) it covers the M3 player — origin full, covered half.
-    const offensiveEnemyAt = (id: string, position: Position, attack: number, hp = 1_000_000_000): EnemyAttacker =>
+    const offensiveEnemyAt = (
+        id: string,
+        position: Position,
+        attack: number,
+        hp = 1_000_000_000
+    ): EnemyAttacker =>
         ({
             id,
             stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed: 10 },
@@ -281,14 +290,16 @@ describe('E2 T5 — per-victim taken leech on the positional enemy branch', () =
     // 1v(focus+team): the enemy AoE hits BOTH players. The focus ('attacker', M4) is the origin
     // victim (full damage); the M3 team player is the covered victim (half). HP huge so nobody
     // dies; the focus has a HP deficit so its own taken leech (when present) has room to consume.
-    const TAKEN_BASE = (overrides: {
-        focusSlots?: ShipSkills['slots'];
-        teamSlots?: ShipSkills['slots'];
-        enemyAttack?: number;
-        focusHp?: number;
-        teamSelfBuffs?: TeamActor['selfBuffs'];
-        focusSelfBuffs?: CombatEngineInput['selfBuffs'];
-    } = {}): CombatEngineInput => ({
+    const TAKEN_BASE = (
+        overrides: {
+            focusSlots?: ShipSkills['slots'];
+            teamSlots?: ShipSkills['slots'];
+            enemyAttack?: number;
+            focusHp?: number;
+            teamSelfBuffs?: TeamActor['selfBuffs'];
+            focusSelfBuffs?: CombatEngineInput['selfBuffs'];
+        } = {}
+    ): CombatEngineInput => ({
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -311,6 +322,7 @@ describe('E2 T5 — per-victim taken leech on the positional enemy branch', () =
         hp: overrides.focusHp ?? 1_000_000,
         healModifier: 0,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: lineRange1Pattern(),
@@ -376,8 +388,14 @@ describe('E2 T5 — per-victim taken leech on the positional enemy branch', () =
         // Both victims carry the gated leech → neither fires.
         const noShield = runCombat(
             TAKEN_BASE({
-                focusSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] }],
-                teamSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] }],
+                focusSlots: [
+                    basicAttack(),
+                    { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] },
+                ],
+                teamSlots: [
+                    basicAttack(),
+                    { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] },
+                ],
             })
         );
         expect(sumHeal(noShield, 'directHeal', 'attacker')).toBe(0);

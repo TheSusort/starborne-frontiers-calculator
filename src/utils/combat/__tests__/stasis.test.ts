@@ -254,6 +254,7 @@ describe('B2 Task 3 — Stasis turn-skip: (i) stasised enemy skips its action', 
             hp: 1_000_000_000,
             hacking: 200,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -345,6 +346,7 @@ describe('B2 Task 3 — Stasis turn-skip: (ii) DoTs still tick on a stasised act
             hacking: 200,
             speed: 50, // focus is SLOWER so enemy always acts first
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [
                 {
                     id: 'dot-stasis-enemy',
@@ -470,6 +472,7 @@ describe('B2 Task 3 — Stasis turn-skip: (iii) Stasis(2) decrements on skipped 
             hp: 1_000_000_000,
             hacking: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -569,6 +572,7 @@ describe('B2 Task 3 — Stasis turn-skip: (iv) other timed statuses still decrem
             hp: 1_000_000_000,
             hacking: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -660,6 +664,7 @@ describe('B2 Task 3 — Stasis turn-skip: (v) non-stasised actor fires normally 
             hp: 1_000_000_000,
             hacking: 200,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'), // focus Stasis-inflicts enemy-front
             pattern: basePattern(),
@@ -739,6 +744,7 @@ describe('B2 Task 3 — Stasis turn-skip: (vi) player stasised by enemy — roun
             defence: 0,
             hp: 1_000_000_000,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -938,6 +944,7 @@ describe('B3 Task 1 — reactive suppression: (a) on-attacked self-buff suppress
             hacking: 0, // focus cannot inflict anything
             speed: 50, // SLOWER than all enemies → enemies always act before focus
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS, // M4 = front-most player
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -1080,6 +1087,7 @@ describe('B3 Task 1 — reactive suppression: (b) start-of-round self-buff suppr
             hacking: 200, // ensures stasis landing chance = 1.0
             speed: 200, // focus is FASTEST → acts before the chakara-enemy
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'), // targets the front enemy = chakara-enemy
             pattern: basePattern(),
@@ -1170,6 +1178,7 @@ describe('B3 Task 1 — reactive suppression: (c) incoming DoT damage still tick
             hacking: 0,
             speed: 50, // focus slower → enemy acts first
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [
                 {
                     id: 'dot-stasis-enemy',
@@ -1276,6 +1285,7 @@ describe('B3 Task 1 — reactive suppression: (d) non-stasised focus — on-atta
             hacking: 0,
             speed: 50,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -1368,6 +1378,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -1479,6 +1490,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -1611,6 +1623,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hacking: 0,
             speed: 50,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -1704,6 +1717,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -1799,6 +1813,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -1907,6 +1922,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hp: 1_000_000_000,
             hacking: 200,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -2000,6 +2016,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -2149,6 +2166,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             hacking: 0,
             speed: 50, // SLOWER than all enemies → enemies act first
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('back'), // focus targets back (no real enemy there) — placeholder
             pattern: basePattern(),
@@ -2291,6 +2309,7 @@ describe("B3 Task 3 — Akula don't-break", () => {
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -2395,6 +2414,7 @@ describe("B3 Task 3 — Akula don't-break", () => {
             hacking: 0,
             speed: 100,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: POS_FOCUS,
             target: parsedTarget('front'),
             pattern: basePattern(),

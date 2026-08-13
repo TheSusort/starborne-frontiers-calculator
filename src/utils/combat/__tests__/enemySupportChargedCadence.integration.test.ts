@@ -165,6 +165,7 @@ const buildInput = (enemy: EnemyAttacker): CombatEngineInput => ({
     hp: 1_000_000_000,
     speed: 200, // focus acts first; irrelevant to the enemy's own cadence
     healTargetId: 'attacker',
+    mode: 'healing',
     enemyAttackers: [enemy],
 });
 

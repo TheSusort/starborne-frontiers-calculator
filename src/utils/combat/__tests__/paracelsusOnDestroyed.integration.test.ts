@@ -189,6 +189,7 @@ const playerScenarioInput = (paracelsusSlots: ShipSkills['slots']): CombatEngine
     hp: FOCUS_HP,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M3', // focus is the COVERED survivor
     target: parsedTargetFront(),
     pattern: lineRange1(),
@@ -319,6 +320,7 @@ const enemyScenarioInput = (paracelsusSlots: ShipSkills['slots']): CombatEngineI
     hp: 1_000_000_000,
     speed: 100, // fast — the player acts first each round
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M1',
     target: parsedTargetFront(),
     pattern: lineRange1(),

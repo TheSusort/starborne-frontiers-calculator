@@ -177,6 +177,7 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -242,6 +243,7 @@ const BASE_ENEMY_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInp
     hp: 1_000_000_000, // immortal player attacker — never dies, irrelevant to this test.
     speed: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),

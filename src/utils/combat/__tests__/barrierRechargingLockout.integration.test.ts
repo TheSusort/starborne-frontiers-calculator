@@ -340,6 +340,7 @@ describe('Barrier Recharging: the CAST-path gate (a charge-slot Barrier grant vs
         defence: 0,
         hp: HP,
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 

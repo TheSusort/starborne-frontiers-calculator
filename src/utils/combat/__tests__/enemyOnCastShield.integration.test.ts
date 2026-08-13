@@ -110,6 +110,7 @@ const playerAttacksEnemy = (
     hp: 1_000_000_000,
     speed: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),
@@ -177,16 +178,21 @@ describe('enemy on-cast self-shield: pool grant + shield-applied emission', () =
         bus.on('shield-applied', (e) => events.push(e));
         let captured: CombatActor[] = [];
         runCombat(
-            playerAttacksEnemy([enemyAt('foe', 'M4', selfShieldActiveSkills(0), 1_000, 40_000, 50)], {
-                bus,
-                __testTapActors: (actors) => {
-                    captured = actors;
-                },
-            })
+            playerAttacksEnemy(
+                [enemyAt('foe', 'M4', selfShieldActiveSkills(0), 1_000, 40_000, 50)],
+                {
+                    bus,
+                    __testTapActors: (actors) => {
+                        captured = actors;
+                    },
+                }
+            )
         );
         const foe = captured.find((a) => a.id === 'foe');
         expect(foe?.shieldPool ?? 0).toBe(0);
-        expect(events.filter((e) => e.type === 'shield-applied' && e.granterId === 'foe')).toHaveLength(0);
+        expect(
+            events.filter((e) => e.type === 'shield-applied' && e.granterId === 'foe')
+        ).toHaveLength(0);
     });
 });
 
@@ -229,7 +235,13 @@ describe('enemy on-cast self-shield: drives a downstream on-shield-applied react
             target: 'self',
             trigger: 'on-shield-applied',
             conditions: [],
-            config: { type: 'buff', buffName: 'Crit Power Up', stacks: 3, duration: 1, parsedEffects: {} },
+            config: {
+                type: 'buff',
+                buffName: 'Crit Power Up',
+                stacks: 3,
+                duration: 1,
+                parsedEffects: {},
+            },
         } as unknown as Ability;
         const bus = createEventBus();
         const buffEvents: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
@@ -238,12 +250,23 @@ describe('enemy on-cast self-shield: drives a downstream on-shield-applied react
         });
         runCombat(
             playerAttacksEnemy(
-                [enemyAt('foe', 'M4', selfShieldActiveSkills(50, resonatingFury), 1_000, 40_000, 50)],
+                [
+                    enemyAt(
+                        'foe',
+                        'M4',
+                        selfShieldActiveSkills(50, resonatingFury),
+                        1_000,
+                        40_000,
+                        50
+                    ),
+                ],
                 { bus }
             )
         );
         // buff-applied carries the carrier id on `actorId` (events.ts ~line 61) — NOT `targetId`.
         // Mirrors the sibling harness (enemySideAttacked.integration.test.ts ~472: e.actorId === 'foe').
-        expect(buffEvents.some((e) => e.actorId === 'foe' && e.buffName === 'Crit Power Up')).toBe(true);
+        expect(buffEvents.some((e) => e.actorId === 'foe' && e.buffName === 'Crit Power Up')).toBe(
+            true
+        );
     });
 });

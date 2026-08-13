@@ -97,6 +97,7 @@ const runWithEnemy = (hacking?: number) =>
             hp: 1_000_000,
             defence: 0,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [dotEnemy(hacking)],
             shipSkills: { slots: [] },
         })

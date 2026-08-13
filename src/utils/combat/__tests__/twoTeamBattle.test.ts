@@ -201,6 +201,7 @@ const battle = (opts: {
     hp: opts.playerHp,
     // Healing mode — required for the positioned enemy roster to be built.
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     // Focus fires on the front enemy (origin M4 from the enemy roster's front).
     target: parsedTarget('front'),
@@ -1303,6 +1304,7 @@ describe('Two-team battle — per-target debuff landing resolves against the ACT
         // POSITIONED enemy, so effectiveStatsOf(defender).security comes from that enemy actor).
         enemySecurity: 100,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -1933,6 +1935,7 @@ describe('SP-F F5: charged-skill footprint + target-selection fidelity', () => {
         hp: 1_000_000_000,
         // Healing mode — required for the positioned enemy roster to be built (mirrors `battle()`).
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M1',
         target: parsedTarget('front'),
         pattern: basePattern(),
@@ -2051,6 +2054,7 @@ describe('SP-F F5: charged-skill footprint + target-selection fidelity', () => {
             defence: 0,
             hp: 1_000_000_000,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -2135,6 +2139,7 @@ describe('SP-F F5: charged-skill footprint + target-selection fidelity', () => {
             defence: 0,
             hp: 1_000_000_000,
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),

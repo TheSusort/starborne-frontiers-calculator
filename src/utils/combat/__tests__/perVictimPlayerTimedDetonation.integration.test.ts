@@ -145,6 +145,7 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     hp: 1_000_000_000,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: lineRange1Pattern(),

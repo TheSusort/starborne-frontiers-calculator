@@ -197,6 +197,7 @@ const MORAO_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     hp: MORAO_HP,
     speed: 1, // slower than the debuff enemy → the debuff lands before Morao's own cleanse cast
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -314,6 +315,7 @@ describe('Morao (enemy-side) — team symmetry: an enemy Morao self-cleanses and
             target: parsedTarget('front'),
             pattern: basePattern(),
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyAt('foe', 'M4', foeSkills)],
         };
         const { buffsApplied } = runAndCollectBuffs(input);
@@ -524,6 +526,7 @@ describe('Cultivator (player-side) — end-to-end: self-cast all-allies cleanse 
         const result = runCombat(
             CULTIVATOR_BASE({
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [damageAndDebuffEnemy('enemy-deb')],
             })
         );
@@ -733,6 +736,7 @@ describe('Cultivator (enemy-side) — team symmetry: an enemy Cultivator repairs
             target: parsedTarget('front'),
             pattern: basePattern(),
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyAlly, enemyCultivator],
         };
 

@@ -172,6 +172,7 @@ describe('D-PR16 last-standing condition subject (engine wiring)', () => {
             BASE({
                 teamActors: [ally('ally-T2', 'T2', 3_000)],
                 healTargetId: 'ally-T2',
+                mode: 'healing',
                 enemyAttackers: [enemyHitter('enemy-atk', 5_000)],
             })
         );
@@ -188,6 +189,7 @@ describe('D-PR16 last-standing condition subject (engine wiring)', () => {
             BASE({
                 teamActors: [ally('ally-T2', 'T2', 3_000), ally('ally-M3', 'M3', 1_000_000_000)],
                 healTargetId: 'ally-T2',
+                mode: 'healing',
                 enemyAttackers: [enemyHitter('enemy-atk', 5_000)],
             })
         );

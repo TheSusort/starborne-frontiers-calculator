@@ -157,6 +157,7 @@ describe('C2b-3 Task 3: Nayra purge gated on target-repaired-this-round', () => 
         // a deficit each round for the self-heal to consume.
         hp: 1_000_000,
         healTargetId: FOCUS_ID,
+        mode: 'healing',
         position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),

@@ -110,6 +110,7 @@ const BASE = (): CombatEngineInput => ({
     hp: 50_000,
     speed: 300,
     healTargetId: FOCUS_ID,
+    mode: 'healing',
     position: 'M3',
     target: allyTarget(),
     pattern: parsePattern('Pattern-Line-Support-Range-1'),
@@ -196,6 +197,7 @@ const FENCE = (): CombatEngineInput => ({
     // The configured heal target is the HIGHER-HP ally, so "routed to the heal target" and
     // "routed to the lowest-HP ally" predict DIFFERENT recipients.
     healTargetId: HIGH_HP_TARGET_ID,
+    mode: 'healing',
     teamActors: [teamAlly(HIGH_HP_TARGET_ID, 'M2', 50_000), teamAlly(LOW_HP_ID, 'M3', 50_000)],
 });
 
@@ -263,7 +265,7 @@ describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
         let low: CombatActor | undefined;
         runCombat({
             ...FENCE(),
-            positionalTeamBattle: true,
+            mode: 'battle',
             __testTapActors: (actors) => {
                 setFenceHp(actors);
                 target = actors.find((a) => a.id === HIGH_HP_TARGET_ID);

@@ -115,6 +115,7 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     defence: 2000,
     hp: 10_000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -986,6 +987,7 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
         defence: 0,
         hp: ATTACKER_HP,
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 
@@ -1198,6 +1200,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         hp: HEALER_HP,
         speed: 10, // healer is slow → acts AFTER the enemy hit each round
         healTargetId: 'tank',
+        mode: 'healing',
         teamActors: [tankActor(20)], // tank also acts before the healer (inert)
         ...overrides,
     });
@@ -1391,6 +1394,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
         hp: SELF_HP,
         healModifier: 0,
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 
@@ -1728,6 +1732,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
         hp: FOCUS_HP,
         speed: 1, // focus is slow → the enemy acts (and kills it) first
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 
@@ -2068,6 +2073,7 @@ const POS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     hp: 1_000_000, // default focus pool; overridden per-test
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M3', // focus is the COVERED survivor
     target: parsedTargetFront(),
     pattern: lineRange1(),
@@ -2503,6 +2509,7 @@ describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-track
         defence: 0,
         hp: FOCUS_HP,
         healTargetId: 'attacker',
+        mode: 'healing',
         ...overrides,
     });
 
@@ -3539,6 +3546,7 @@ function makeShroudInput(
         hp: 1_000_000_000,
         // Healing mode is required to use team actors.
         healTargetId: 'attacker',
+        mode: 'healing',
         position: opts.focusPosition ?? 'M2',
         teamActors,
         bus,
@@ -3703,6 +3711,7 @@ describe('D-PR11 integration — Fortifying Shroud: enemy-side mirror (team-agno
             hp: 1_000_000_000,
             // Healing mode is required for enemy attackers to be populated.
             healTargetId: 'attacker',
+            mode: 'healing',
             speed: 100,
             bus,
             enemyAttackers: [
@@ -3899,6 +3908,7 @@ describe('D-PR reactive cleanse — Reactive Ward (on-attacked) cleanses 1 / 2-o
         defence: 0,
         hp: CARRIER_HP,
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 1,
         ...overrides,
     });
@@ -4058,6 +4068,7 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
         defence: 0,
         hp: CARRIER_HP,
         healTargetId: 'attacker',
+        mode: 'healing',
         speed: 1,
         ...overrides,
     });
@@ -4360,6 +4371,7 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         position: 'M4',
         speed: 50,
         ...overrides,
@@ -5035,6 +5047,7 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
                     defence: 0,
                     enemyHp: 1_000_000_000,
                     healTargetId: 'attacker',
+                    mode: 'healing',
                     shipSkills,
                     enemyAttackers: [enemyHitter()],
                 })
@@ -5085,6 +5098,7 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
                     defence: 0,
                     enemyHp: 1_000_000_000,
                     healTargetId: 'attacker',
+                    mode: 'healing',
                     shipSkills: {
                         slots: [
                             { slot: 'active', abilities: [noopActive] },
@@ -5267,6 +5281,7 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
                 speed: 10, // healer is slow → enemy + tank act first
                 enemyHp: 1_000_000_000,
                 healTargetId: 'tank', // the over-repaired ally is a team actor, NOT the focus
+                mode: 'healing',
                 teamActors: [tankActor(20)], // tank acts before the healer (inert)
                 shipSkills,
                 enemyAttackers: [enemyHitter()],
@@ -5587,6 +5602,7 @@ describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shiel
                 speed: 1, // focus acts AFTER the enemy hit so AP fires at round top
                 enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills,
                 enemyAttackers: [enemyHitter()],
             })
@@ -5783,6 +5799,7 @@ describe('Lifeline (incoming-shield-grant)', () => {
             speed: 1,
             enemyHp: 1_000_000_000,
             healTargetId: 'attacker',
+            mode: 'healing',
             ...overrides,
         });
 

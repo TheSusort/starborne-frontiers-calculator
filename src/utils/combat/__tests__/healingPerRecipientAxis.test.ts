@@ -101,6 +101,7 @@ const BASE = (): CombatEngineInput => ({
     hp: 50_000,
     speed: 300,
     healTargetId: FOCUS_ID,
+    mode: 'healing',
     position: 'M3',
     target: allyTarget(),
     pattern: parsePattern('Pattern-Line-Support-Range-1'),
@@ -262,6 +263,7 @@ describe('SP-3b Task 7 (review fix): flag-off fence covers HoT + leech + reactiv
         defence: 2000,
         hp: 10000,
         healTargetId: FOCUS_ID,
+        mode: 'healing',
         shipSkills: {
             slots: [
                 { slot: 'active', abilities: [damageAb()] },

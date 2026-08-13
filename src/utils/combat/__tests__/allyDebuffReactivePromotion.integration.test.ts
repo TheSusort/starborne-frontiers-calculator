@@ -157,7 +157,9 @@ describe('Oleander (player-side) — RoT routes to the inflicting ally, capped o
             selfBuffs: [],
             enemyDebuffs: [],
             walk: {
-                shipSkills: { slots: [{ slot: 'active', abilities: [debuffAbility('Speed Down')] }] },
+                shipSkills: {
+                    slots: [{ slot: 'active', abilities: [debuffAbility('Speed Down')] }],
+                },
                 stats: {
                     attack: 100,
                     crit: 0,
@@ -228,7 +230,14 @@ describe('Oleander (enemy-side) — team symmetry: an enemy Oleander reacts to i
 
         const enemyAllyDebuffer: EnemyAttacker = {
             id: 'enemy-ally',
-            stats: { attack: 100, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 200,
+            },
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'active', abilities: [debuffAbility('Def Down')] }] },
@@ -257,6 +266,7 @@ describe('Oleander (enemy-side) — team symmetry: an enemy Oleander reacts to i
             hp: 1_000_000_000,
             speed: 1,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyAllyDebuffer, enemyOleander],
         };
 
@@ -349,7 +359,13 @@ const dotEnemy = (id: string): EnemyAttacker =>
                             target: 'enemy',
                             trigger: 'on-cast',
                             conditions: [],
-                            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 3 },
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 5,
+                                stacks: 1,
+                                duration: 3,
+                            },
                         },
                     ],
                 },
@@ -408,6 +424,7 @@ const HAYYAN_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineIn
     hp: 1_000_000_000,
     speed: 1, // slower than the enemy → the enemy's debuff/DoT lands before the focus acts
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -426,7 +443,10 @@ function sumDirectHeal(result: ReturnType<typeof runCombat>, actorId: string): n
 describe('Hayyan (player-side) — repairs ONLY the debuffed ally, not itself, not on a DoT', () => {
     it('an enemy debuff on the ally (focus) is repaired by Hayyan (team actor) for 6% of Hayyan Max HP', () => {
         const result = runCombat(
-            HAYYAN_BASE({ teamActors: [hayyanTeamActor()], enemyAttackers: [debuffEnemy('enemy-deb')] })
+            HAYYAN_BASE({
+                teamActors: [hayyanTeamActor()],
+                enemyAttackers: [debuffEnemy('enemy-deb')],
+            })
         );
         // numRounds:1 → exactly one qualifying debuff-applied event → one 6%-of-max-HP grant.
         expect(sumDirectHeal(result, 'hayyan')).toBeCloseTo((HAYYAN_HP * HAYYAN_HEAL_PCT) / 100, 6);
@@ -440,14 +460,20 @@ describe('Hayyan (player-side) — repairs ONLY the debuffed ally, not itself, n
             slots: [noopActiveSlot(), { slot: 'passive', abilities: [hayyanAllyDebuffedHeal()] }],
         };
         const result = runCombat(
-            HAYYAN_BASE({ shipSkills: selfHayyanSkills, enemyAttackers: [debuffEnemy('enemy-deb')] })
+            HAYYAN_BASE({
+                shipSkills: selfHayyanSkills,
+                enemyAttackers: [debuffEnemy('enemy-deb')],
+            })
         );
         expect(sumDirectHeal(result, 'attacker')).toBe(0);
     });
 
     it('a DoT (not a timed debuff) landing on the ally does NOT fire on-ally-debuffed', () => {
         const result = runCombat(
-            HAYYAN_BASE({ teamActors: [hayyanTeamActor()], enemyAttackers: [dotEnemy('enemy-dot')] })
+            HAYYAN_BASE({
+                teamActors: [hayyanTeamActor()],
+                enemyAttackers: [dotEnemy('enemy-dot')],
+            })
         );
         expect(sumDirectHeal(result, 'hayyan')).toBe(0);
     });
@@ -495,10 +521,14 @@ describe('Hayyan (enemy-side) — team symmetry: an enemy Hayyan repairs its OWN
             hp: 1_000_000_000,
             speed: 200, // player acts first — its debuff wakes the enemy reactive same round
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [enemyHayyan],
         };
 
         const result = runCombat(input);
-        expect(sumDirectHeal(result, 'enemy-hayyan')).toBeCloseTo((HAYYAN_HP * HAYYAN_HEAL_PCT) / 100, 6);
+        expect(sumDirectHeal(result, 'enemy-hayyan')).toBeCloseTo(
+            (HAYYAN_HP * HAYYAN_HEAL_PCT) / 100,
+            6
+        );
     });
 });

@@ -151,6 +151,7 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (enemy sid
             hp: 1_000_000_000,
             speed: 1,
             healTargetId: 'attacker',
+            mode: 'healing',
             enemyAttackers: [
                 {
                     id: 'e1',

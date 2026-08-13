@@ -188,6 +188,7 @@ function runHermes(opts: { hits: number; pattern: ParsedPattern; enemies: EnemyA
         hp: 1_000_000_000,
         speed: 500, // acts before Hermes
         healTargetId: 'hermes',
+        mode: 'healing',
         position: 'M1',
         target: parsedTarget('front'),
         pattern: opts.pattern,

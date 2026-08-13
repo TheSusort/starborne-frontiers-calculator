@@ -71,6 +71,7 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     hp: 40_000,
     // healingCtx requires a heal target; simulateBattle points it at the focus (player[0]).
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

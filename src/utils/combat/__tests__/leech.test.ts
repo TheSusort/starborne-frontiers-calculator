@@ -100,6 +100,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 numRounds: 1,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         { slot: 'active', abilities: [damageAb(100)] },
@@ -123,6 +124,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 numRounds: 3,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         {
@@ -172,6 +174,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 numRounds: 4,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         {
@@ -226,6 +229,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 critDamage: 100,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         { slot: 'active', abilities: [damageAb(100)] },
@@ -245,6 +249,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 critDamage: 100,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         { slot: 'active', abilities: [damageAb(100)] },
@@ -272,6 +277,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 healModifier: 50,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         { slot: 'active', abilities: [damageAb(100)] },
@@ -308,6 +314,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 healModifier: 50,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: {
                     slots: [
                         { slot: 'active', abilities: [damageAb(100)] },
@@ -386,6 +393,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
                 numRounds: 1,
                 hp: 10_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 speed: 200,
                 teamActors: [teamWalk('t1', 40), teamWalk('t2', 30)],
                 shipSkills: {
@@ -456,6 +464,7 @@ describe('damage-taken procs — passive on the heal target', () => {
                 hp: 10_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 2000)],
                 shipSkills: {
                     slots: [
@@ -480,6 +489,7 @@ describe('damage-taken procs — passive on the heal target', () => {
                 hp: 10_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 2000)],
                 shipSkills: {
                     slots: [
@@ -507,6 +517,7 @@ describe('damage-taken procs — passive on the heal target', () => {
                 hp: 10_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 2000)],
                 shipSkills: {
                     slots: [
@@ -534,6 +545,7 @@ describe('damage-taken procs — passive on the heal target', () => {
                 hp: 10_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 2000)],
                 shipSkills: {
                     slots: [
@@ -557,6 +569,7 @@ describe('damage-taken procs — passive on the heal target', () => {
                 hp: 10_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 2000)],
                 shipSkills: {
                     slots: [
@@ -583,6 +596,7 @@ describe('damage-taken procs — passive on the heal target', () => {
                 hp: 1000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [manualEnemy('atk1', 5000)],
                 shipSkills: {
                     slots: [
@@ -660,6 +674,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                 hp: 1_000_000,
                 defence: 2000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'e1',
@@ -687,6 +702,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'e1',
@@ -725,6 +741,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'e1',
@@ -756,6 +773,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'e1',
@@ -783,6 +801,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 enemyAttackers: [
                     {
                         id: 'e1',
@@ -826,6 +845,7 @@ describe('enemy attacker kit application (runPlayerTurn walk)', () => {
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 enemyAttackers: [
                     {
@@ -883,6 +903,7 @@ describe('enemy attacker kit application (runPlayerTurn walk)', () => {
                 hp: 1_000_000,
                 defence: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 enemyAttackers: [
                     {
@@ -1010,6 +1031,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                 enemyDefense: 0,
                 enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: gatedFocus,
                 enemyAttackers: [
                     {
@@ -1071,6 +1093,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                 defence: 0, // tank defence 0 → enemy damage is unreduced (clean integers)
                 enemyDefense: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: focusWithEnemyBuffGate,
                 enemyAttackers: [
                     {
@@ -1139,6 +1162,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                 enemyDefense: 0,
                 enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 shipSkills: tankWithSelfDebuffGate,
                 enemyAttackers: [
                     {
@@ -1197,6 +1221,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                 hp: 1,
                 enemyDefense: 0,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 // Focus is damage-only (no self-heal) → once dead it stays dead.
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },

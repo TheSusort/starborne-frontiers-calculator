@@ -70,6 +70,7 @@ const TANK = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     defence: 0,
     hp: 10000,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

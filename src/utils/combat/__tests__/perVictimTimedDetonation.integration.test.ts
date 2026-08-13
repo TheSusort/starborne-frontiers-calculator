@@ -144,6 +144,7 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     hp: 1_000_000_000,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: lineRange1Pattern(),
@@ -364,6 +365,7 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
         const { events, result } = collect(
             NONPOS_BASE({
                 healTargetId: 'attacker',
+                mode: 'healing',
                 // enemy attacker present (so it takes a turn + reaches the gate) and POSITIONED at
                 // M3 — but the FOCUS is left non-positional (NONPOS_BASE sets no position/target/
                 // pattern) → no player actor has a position → isPositional is false for this enemy.

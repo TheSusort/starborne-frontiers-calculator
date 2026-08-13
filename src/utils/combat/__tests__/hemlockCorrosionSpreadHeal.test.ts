@@ -178,6 +178,7 @@ const playerHemlock = (
     hp: HEMLOCK_HP,
     speed: 1000, // Hemlock acts first, so Toxic Overflow + Corrosion are on the holder by round end
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),
@@ -449,6 +450,7 @@ describe('Team symmetry — an ENEMY-side Hemlock reacts to a PLAYER-side spread
             // heals still emit reactive-heal-performed, so the enemy Hemlock's fire is observable
             // (filtered by casterId below) — mirrors sansiEnemyRepairedHeal's enemy-side harness.
             healTargetId: 'attacker',
+            mode: 'healing',
             position: 'M4',
             teamActors: [ally('player-B', 'M3'), ally('player-C', 'T3')],
             enemyAttackers: [enemyHemlock],

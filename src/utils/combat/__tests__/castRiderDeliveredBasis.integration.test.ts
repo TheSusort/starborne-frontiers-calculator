@@ -158,7 +158,7 @@ const focusCast = (
     position: 'M1',
     target: parsedTarget('front'),
     pattern,
-    positionalTeamBattle: true,
+    mode: 'battle',
     enemyAttackers: enemies,
     ...overrides,
 });

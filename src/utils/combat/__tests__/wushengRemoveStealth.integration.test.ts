@@ -239,6 +239,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000,
     healTargetId: 'attacker', // healing mode → positioned enemy roster is built
+    mode: 'healing',
     ...overrides,
 });
 

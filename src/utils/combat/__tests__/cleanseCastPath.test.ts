@@ -105,6 +105,7 @@ describe('C1 Task 3: cast-path cleanse removes debuffs (player-side)', () => {
             BASE({
                 numRounds: 1,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 // Focus cleanses up to 2, but only ONE removable debuff exists this round.
                 shipSkills: cleanseSkills(2),
@@ -139,6 +140,7 @@ describe('C1 Task 3: cast-path cleanse removes debuffs (player-side)', () => {
             BASE({
                 numRounds: NUM_ROUNDS,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 shipSkills: cleanseSkills(2),
                 enemyAttackers: [debuffEnemy(1)],
@@ -167,6 +169,7 @@ describe('C1 Task 3: cast-path cleanse removes debuffs (player-side)', () => {
             BASE({
                 numRounds: 1,
                 healTargetId: 'attacker',
+                mode: 'healing',
                 bus,
                 // Focus cleanses but no enemy applies any debuff → nothing to remove.
                 shipSkills: cleanseSkills(2),

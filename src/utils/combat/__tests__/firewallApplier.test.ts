@@ -138,6 +138,7 @@ const BASE = (
     hp: 1_000_000_000,
     speed: 1, // slower than the enemy → enemy debuffs the carrier each round before it acts
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

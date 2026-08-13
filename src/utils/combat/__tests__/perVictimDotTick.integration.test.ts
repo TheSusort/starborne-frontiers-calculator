@@ -129,6 +129,7 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     hp: 1_000_000_000,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
     pattern: lineRange1Pattern(),
@@ -341,6 +342,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         const { events, result } = collect(
             NONPOS_BASE({
                 healTargetId: 'attacker',
+                mode: 'healing',
                 hp: 10000,
                 numRounds: 3,
                 enemyAttackers: [enemyAt('enemy-mid', 'M3', 1_000_000_000)],
@@ -595,6 +597,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         const { events, result } = collect(
             POSITIONAL_BASE({
                 healTargetId: 'team-ally',
+                mode: 'healing',
                 numRounds: 3,
                 teamActors: [teamAlly('team-ally', 'M2', 10000)],
                 __testTapActors: (actors: CombatActor[]) => {

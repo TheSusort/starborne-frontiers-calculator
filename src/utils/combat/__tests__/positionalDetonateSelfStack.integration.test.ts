@@ -114,6 +114,7 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     hp: 1_000_000_000,
     healModifier: 0,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     // Security 0 on the victim + hacking high on the caster so every DoT application lands.
     hacking: 10_000,

@@ -114,6 +114,7 @@ const buildDpsInput = (shipSkills: ReturnType<typeof rhodiumShipSkills>): Combat
     hp: 1_000_000_000,
     speed: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
 });
 
 describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DPS-mode damage metric', () => {

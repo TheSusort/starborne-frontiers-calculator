@@ -184,6 +184,7 @@ const BASE = (
     hp: 1_000_000_000,
     speed: 100, // faster than the enemy (speed 10) → its recurring self-buffs are live first
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 

@@ -174,6 +174,7 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     defence: 0,
     hp: HP,
     healTargetId: 'attacker',
+    mode: 'healing',
     ...overrides,
 });
 
@@ -607,7 +608,7 @@ describe('Shield Converter survives hits it never actually converted', () => {
 describe('preserves the per-victim accounting identity across a converted hit (positional)', () => {
     it('sum(dealt) === sum(taken) === sum(incoming), all equal to the full original hit', () => {
         const input = BASE_PLAYER_SIDE({
-            positionalTeamBattle: true,
+            mode: 'battle',
             numRounds: 1,
             teamActors: [
                 holderTeamActor(

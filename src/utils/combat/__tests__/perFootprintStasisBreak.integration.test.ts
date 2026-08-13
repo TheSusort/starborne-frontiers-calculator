@@ -241,6 +241,7 @@ const PLAYER_BASE = (pattern: ParsedPattern, doesntBreakStasis: boolean): Combat
     hacking: 0,
     doesntBreakStasis,
     healTargetId: 'attacker',
+    mode: 'healing',
     // Breaker (focus) sits at the player M-row REAR column (M1) so its row-scan reaches the enemy
     // M-row FIRST (anchoring enemy front M4, covering M3) while the culler's front-anchored AoE never
     // reaches it. Fires `front` with the supplied pattern → anchor M4, covered M3.
@@ -438,6 +439,7 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
     // Focus is parked far back as the heal target only (B-row, no offense).
     speed: 1,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'B1',
     target: parsedTarget('front'),
     pattern: basePattern(),

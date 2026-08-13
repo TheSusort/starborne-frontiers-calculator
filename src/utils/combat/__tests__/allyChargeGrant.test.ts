@@ -296,6 +296,7 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
         hp: 1_000_000_000, // huge focus HP so the enemy's attack-1 pokes never destroy it
         speed: 100,
         healTargetId: 'attacker', // required for enemyAttackers; the focus is the heal target
+        mode: 'healing',
         teamActors: deriveTeamEngineActors([graphiteTeammate(amount)], undefined),
         enemyAttackers: [enemy],
     });
@@ -508,6 +509,7 @@ describe('enemy-side Hayyan ally-charge acceleration', () => {
         defence: 0,
         hp: 1_000_000_000, // huge tank HP so it survives and incoming damage stays observable
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers,
     });
 
@@ -629,6 +631,7 @@ describe('enemy-side Graphite (dormant — no player Stealth)', () => {
         defence: 0,
         hp: 1_000_000_000,
         healTargetId: 'attacker',
+        mode: 'healing',
         enemyAttackers,
     });
 

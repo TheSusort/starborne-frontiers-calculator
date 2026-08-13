@@ -99,6 +99,7 @@ const engineBase = (
     // hacking 200 vs enemy security 0 → inflict landing chance clamp((200-0)/100) = 1.0.
     hacking: 200,
     healTargetId: 'attacker',
+    mode: 'healing',
     position: 'M4',
     // The single-target debuff ability resolves against THIS parsed target ('front') —
     // whichever enemy attacker occupies the front-most position becomes the anchor.
