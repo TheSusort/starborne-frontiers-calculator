@@ -114,4 +114,13 @@ describe('the engine demands an explicit mode rather than inferring one', () => 
             runCombat({ ...HEAL_BASE(), healTargetId: FOCUS_ID, mode: 'healing' })
         ).not.toThrow();
     });
+
+    it("accepts healTargetId with mode 'battle'", () => {
+        // Legal, not just tolerated: ~20 fixtures migrated from the old `positionalTeamBattle:
+        // true` field carry a `healTargetId` alongside it, so a future tightening of guard 1
+        // (healTargetId requires 'healing' or 'battle') would break them silently without this.
+        expect(() =>
+            runCombat({ ...BATTLE_BASE(), healTargetId: FOCUS_ID, mode: 'battle' })
+        ).not.toThrow();
+    });
 });

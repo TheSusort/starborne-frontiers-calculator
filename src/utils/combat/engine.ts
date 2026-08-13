@@ -1130,8 +1130,11 @@ export type TeamActorEngineInput = TeamActorInput & {
 /**
  * What kind of run this is — the engine's ONLY run-kind discriminator.
  *
- *  - `'dps'`     the focus's output is the report. The run ends when the focus's target dies, and
- *                also when the focus itself dies (nothing left to measure).
+ *  - `'dps'`     the focus's output is the report. The run ends when the focus itself dies
+ *                (`isDpsMeasurementRun`, nothing left to measure). The OTHER dps-run exit — the
+ *                focus's target dying — is NOT mode-gated: it is still derived from roster
+ *                emptiness (`dpsEnemyTarget`, i.e. no enemy attackers) and is deliberately left
+ *                alone here; a later PR in this series retires that derivation too.
  *  - `'healing'` heal/shield accounting is the report. The run continues past the focus's death.
  *  - `'battle'`  two-team battle. The squad fights on without its focus.
  *
@@ -2304,12 +2307,16 @@ export function runCombat(input: CombatEngineInput): {
     // cast yet) → the enemiesHitThisCastFor delegate below defaults to 1.
     const enemiesHitThisCastByActor = new Map<string, number>();
 
-    // --- Healing mode (healing calc) ---
-    // Resolve the heal target up front (throw on an unknown id — the switch must name a
-    // player actor). When set, the engine runs in healing mode: every runPlayerTurn call
-    // gets the SHARED HealingRuntimeCtx, heals/shields consume against the live target, and
-    // a per-round HealingRoundEngine is assembled. Absent → DPS mode (the ctx is never built
-    // and `healing: undefined` flows into runPlayerTurn — the heal block is inert).
+    // --- Heal target resolution (data, not a mode switch) ---
+    // Resolve the heal target up front (throw on an unknown id — it must name a player actor,
+    // the focus or a team actor). This id no longer decides which mode the engine runs in —
+    // that is `input.mode` (see `RunMode` above and the explicitness guards below), which can
+    // legally combine with `healTargetId` in `'battle'` runs too. Once resolved, `healTarget`
+    // feeds the SHARED HealingRuntimeCtx (assembled a few lines down) that every runPlayerTurn
+    // call shares: heals/shields consume against the live target and a per-round
+    // HealingRoundEngine is built. Note `healTarget` can end up set even when this id is
+    // absent — `'battle'` mode anchors it to the focus actor below — so its presence, not this
+    // id, is what keeps the heal pipeline active.
     const healTargetId = input.healTargetId;
     const allPlayerActorsById = new Map<string, CombatActor>([
         [attacker.id, attacker],
@@ -2331,7 +2338,8 @@ export function runCombat(input: CombatEngineInput): {
 
     // Explicitness guards. These do NOT infer a mode — they refuse an input whose mode and data
     // disagree, which is the difference between validation and the derivation SP-4 removed.
-    // Mirrors the engine's existing style (`:2349` throws on a colliding enemyAttacker id).
+    // Mirrors the engine's existing style (the enemyAttacker id-collision check below also
+    // throws on bad input rather than silently deriving around it).
     if (input.healTargetId && runMode !== 'healing' && runMode !== 'battle') {
         throw new Error(
             `runCombat: healTargetId requires mode 'healing' or 'battle' (got '${runMode}')`
@@ -3034,7 +3042,10 @@ export function runCombat(input: CombatEngineInput): {
     const reactionFiredThisAttack = new Set<string>();
 
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
-    // through the `let`/the target reference). Only constructed in healing mode.
+    // through the `let`/the target reference). Constructed whenever `healTarget` is set — which
+    // includes `'battle'` runs (battle mode anchors `healTarget` to the focus actor above), NOT
+    // healing mode only. That is exactly why `teamBattle: runMode === 'battle'` two lines below
+    // exists: this ctx is shared by both modes and needs to tell them apart.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
         ? {
               targetId: healTarget.id,

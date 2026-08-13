@@ -1068,10 +1068,12 @@ export function simulateBattle(
         // enemyAttackers branches.
         ignoresStealth: focus.shipSkills.ignoresStealth,
         ...preFightModifiersFor(focus.id),
-        // Positional team battle: the engine builds the positioned enemy roster from the
-        // enemyAttackers presence and runs the heal/shield pipeline off this flag (SP-U U5 R6
-        // decouple — no vestigial `healTargetId` needed). A player single-`ally` heal/shield
-        // resolves the lowest-HP living player ally (team-symmetric with the enemy side).
+        // Positional team battle: the positioned enemy roster comes from the `enemyAttackers`
+        // presence below (SP-U U5), not from `mode`. `mode: 'battle'` is the run-kind, not a
+        // flag the pipeline is switched on by — it anchors `healTarget` to the focus actor
+        // (engine.ts) so the heal/shield pipeline stays active with no vestigial `healTargetId`
+        // needed. A player single-`ally` heal/shield resolves the lowest-HP living player ally
+        // (team-symmetric with the enemy side).
         mode: 'battle',
         teamActors,
         enemyAttackers,
