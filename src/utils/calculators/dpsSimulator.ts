@@ -20,11 +20,6 @@ import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
-import {
-    DEFAULT_FRONT_ENEMY_TARGET,
-    DEFAULT_BASE_PATTERN,
-    DEFAULT_ATTACKER_SLOT,
-} from './dpsEnemyPlacement';
 import { focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
 
 /** The engine's focus-actor id (engine.ts:1781 `const focusActorId = 'attacker'`). */
@@ -479,37 +474,21 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemySpeed,
         teamActors: engineTeamActors,
         bus: collectingBus,
-        // Real positioned enemy roster. Non-empty → the engine's `dpsEnemyTarget` goes false and
-        // the focus's damage lands per-victim on these actors rather than the dummy sink. Each
-        // enemy gets a default ParsedTarget so it actually attacks (see below).
-        enemyAttackers: input.enemyAttackers?.map((e) => ({
-            ...e,
-            target: e.target ?? DEFAULT_FRONT_ENEMY_TARGET,
-            pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
-        })),
-        // Focus attacker's board slot — `isPositional` needs this AND an opposing position.
-        // Defaulted alongside target/pattern for the same reason: without it the run resolves to the
-        // dummy, `perTargetDealt` stays empty, and the re-derived metric below reports ZERO damage
-        // rather than falling back to the legacy scalar. Silent, so it is closed here.
-        position:
-            input.position ??
-            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_ATTACKER_SLOT : undefined),
-        // Position alone does NOT route the cast: `selectTurnTarget` requires
-        // `isPositional(...) && target`, so without a ParsedTarget it short-circuits to the dummy
-        // `legacyVictim` and the real enemy is never touched. Defaulted (rather than left to the
-        // caller) so "supply a real enemy" is sufficient on its own — omitting the target was a
-        // silent fallback to the dummy, not an error, which is a footgun worth closing here.
-        // Only applies when a real enemy is present, so callers on the scalar path are untouched.
-        target:
-            input.target ??
-            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_FRONT_ENEMY_TARGET : undefined),
-        // `pattern` is required by the SAME positional-apply gate as `target` (engine.ts:8344).
-        // Omitting it resolves onto the real enemy and still credits cumulativeDamage via the
-        // legacy sink, but skips the per-victim apply — so `perTargetDealt` comes back empty and
-        // the re-derived metric reads zero. Silent, hence defaulted alongside the target.
-        pattern:
-            input.pattern ??
-            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_BASE_PATTERN : undefined),
+        // Real positioned enemy roster, forwarded verbatim. Non-empty → the engine's
+        // `dpsEnemyTarget` goes false and the focus's damage lands per-victim on these actors
+        // rather than the dummy sink.
+        //
+        // Position/target/pattern — for these enemies AND for the focus attacker below — are no
+        // longer defaulted here. `normalizeCombatRoster` (the engine's ONE accommodation boundary,
+        // called on `runCombat`'s first line) fills exactly these axes, so a second derivation at
+        // this adapter is redundant. It also fills them UNCONDITIONALLY, where this adapter gated
+        // on `enemyAttackers.length > 0`; the widened case is a scalar-path run, which has no
+        // opposing position for `isPositional` to match and is therefore unaffected by carrying a
+        // slot.
+        enemyAttackers: input.enemyAttackers,
+        position: input.position,
+        target: input.target,
+        pattern: input.pattern,
     });
 
     const hasRealEnemy = (input.enemyAttackers?.length ?? 0) > 0;
