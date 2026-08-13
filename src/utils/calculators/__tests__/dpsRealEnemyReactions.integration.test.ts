@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dealtBy } from '../../combat/__testutils__/perTargetDealt';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
-import { setupKeyedTestRng, resetRateGateRng } from '../rateAccumulator';
+import { setupKeyedTestRng } from '../rateAccumulator';
 import { DEFAULT_ATTACKER_SLOT, DEFAULT_ENEMY_SLOT } from '../dpsEnemyPlacement';
 import type { ShipSkills } from '../../../types/abilities';
 import type { CombatEvent } from '../../combat/events';
@@ -66,7 +66,6 @@ const collect = (events: CombatEvent[]) => ({
 describe('a real DPS enemy acts', () => {
     beforeEach(() => {
         setupKeyedTestRng(12345);
-        resetRateGateRng();
     });
 
     it('attacks the focus, emitting `attacked` events against it', () => {

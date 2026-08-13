@@ -22,7 +22,15 @@ export function setRateGateRng(fn: () => number): void {
     rng = fn;
 }
 
-/** Test-only: restore the default Math.random RNG. */
+/**
+ * Test-only: restore the default Math.random RNG.
+ *
+ * ⚠️ ORDER MATTERS. This clears BOTH streams — `rng` and `keyedProvider` — so calling it *after*
+ * `setupKeyedTestRng` un-seeds the test and hands it true randomness, silently. It belongs in an
+ * `afterEach` or a `finally`, never on the line after a seed. In a test file it is usually
+ * redundant anyway: `src/setupTests.ts` already resets after every test.
+ * Enforced by `rateGateSeedingOrder.test.ts`.
+ */
 export function resetRateGateRng(): void {
     rng = Math.random;
     keyedProvider = null;
@@ -95,8 +103,7 @@ export function mulberry32(seed: number): () => number {
  */
 export function makeRateGate(streamKey?: string): (rate: number) => boolean {
     return (rate: number): boolean => {
-        const draw =
-            streamKey != null && keyedProvider != null ? keyedProvider(streamKey) : rng();
+        const draw = streamKey != null && keyedProvider != null ? keyedProvider(streamKey) : rng();
         return draw < Math.min(1, Math.max(0, rate));
     };
 }
