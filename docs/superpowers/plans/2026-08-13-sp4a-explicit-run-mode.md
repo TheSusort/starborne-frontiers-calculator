@@ -491,10 +491,12 @@ Run: `git diff --stat | tail -5`
 Run: `git diff -U0 | grep '^+' | grep -v '^+++' | sort | uniq -c | sort -rn | head`
 Expected: essentially two distinct added lines (`mode: 'healing',` and `mode: 'battle',`) at varying indentation. **Any third kind of added line means the codemod did something unintended — revert with `git checkout -- src` and fix the script.**
 
-- [ ] **Step 3: Typecheck**
+- [ ] **Step 3: Typecheck — THE acceptance gate for this task**
 
 Run: `npx tsc --noEmit`
-Expected: clean. A failure here localises a bad insertion precisely (e.g. inserted into a type literal).
+Expected: **0 errors.** This is the gate, not a formality: `scripts/` is covered by neither `tsc` nor `eslint`, so this is the only automated check on the codemod's output. Two error classes were already found and fixed this way — `TS1117` (duplicate `mode` key from a co-located `positionalTeamBattle`) and `TS2353` (`mode` inserted into a `HealingSimulationInput`, which has no such field).
+
+**If it reports ANY error: run `git checkout -- src` to discard the whole application, fix the script, and re-apply.** Never hand-patch the generated output — the next run would reproduce the same defect, and a hand-patched corpus hides it.
 
 - [ ] **Step 4: Run the full suite**
 
@@ -629,15 +631,26 @@ In `src/utils/combat/engine.ts`, replace the transitional `runMode` block from T
 
 Remove the whole declaration and its doc comment at `src/utils/combat/engine.ts:1203-1207` (the comment block beginning "Positional team-vs-team battle"). Then update the `perRecipientHealApply` doc comment directly below it, which references `positionalTeamBattle` twice — it must now say `mode: 'battle'` (spec rule 7.4: sweep the claims around the edit).
 
-- [ ] **Step 5: Verify the symbol is gone**
+- [ ] **Step 5: Retire the two legacy-parity tests that this step invalidates**
+
+Task 1's `runModeEquivalence.test.ts` opens with three parity tests whose whole purpose was to prove the *transition* was safe. Two of them cannot survive this step, and that is correct, not a regression:
+
+- **`"mode 'battle' is byte-identical to positionalTeamBattle: true"`** — its legacy arm passes `positionalTeamBattle: true`, a field that no longer exists. **Delete this test.** It has served its purpose: it proved the mapping was exact while both spellings existed.
+- **`"mode 'healing' is byte-identical to healTargetId alone"`** — its legacy arm passes `healTargetId` with no `mode`, which now THROWS by design (Step 3's first guard). **Delete this test.** The guard test added in Step 1 above asserts exactly that throw, so the coverage moves rather than disappears.
+
+**Keep** `"omitting mode on a plain DPS input is identical to mode 'dps'"` (no `healTargetId`, so no guard fires and the default is still worth pinning) and **keep** `"battle mode keeps the healing result block"` (the regression fence for the `healPipelineActive` distinction).
+
+Update the file's top-level `describe` name if it now overstates what remains.
+
+- [ ] **Step 6: Verify the symbol is gone**
 
 Run: `grep -rn "positionalTeamBattle" src --include='*.ts' --include='*.tsx'`
-Expected: no output.
+Expected: no output. If this still prints `runModeEquivalence.test.ts`, Step 5 was not done.
 
-- [ ] **Step 6: Run the tests**
+- [ ] **Step 7: Run the tests**
 
 Run: `npx vitest run src/utils/combat/__tests__/runModeEquivalence.test.ts`
-Expected: PASS, 8 tests.
+Expected: PASS — 5 tests (2 parity tests deleted in Step 5, 3 guard tests added in Step 1).
 
 Run: `npx tsc --noEmit && npm test -- --run 2>&1 | tail -30`
 Expected: all pass. If a file fails with `healTargetId requires mode`, that is a call site Tasks 4-5 missed — add its mode; the guard is doing its job.
@@ -645,7 +658,7 @@ Expected: all pass. If a file fails with `healTargetId requires mode`, that is a
 Run: `git diff --stat -- '*.snap'`
 Expected: **empty.**
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/utils/combat/engine.ts src/utils/combat/__tests__/runModeEquivalence.test.ts
