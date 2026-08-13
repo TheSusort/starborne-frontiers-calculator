@@ -6,8 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
-import { bareInput, bareEnemy } from '../__testutils__/bareRosterFixture';
-import type { CombatEngineInput } from '../engine';
+import { bareInput } from '../__testutils__/bareRosterFixture';
 
 describe('the normalization boundary is live in runCombat', () => {
     beforeEach(() => {
@@ -17,10 +16,15 @@ describe('the normalization boundary is live in runCombat', () => {
     it('routes a position-less, targeting-less roster per-victim instead of into the sink', () => {
         const { rounds } = runCombat(bareInput());
 
-        // perTargetDealt is the discriminator. Pre-boundary it was EMPTY for this input.
+        // perTargetDealt is the discriminator. Pre-boundary it was EMPTY for this input. The
+        // `every(... === 'e1')` below is also the "never routes to the dummy" assertion — a
+        // separate test asserting `victims` (not `dealt`) `.not.toContain('enemy')` passed
+        // vacuously whenever `dealt` was empty and added no signal `every` didn't already cover
+        // once `dealt.length > 0` is established, so it was folded in here rather than kept
+        // standalone.
         const dealt = rounds.flatMap((r) =>
             Object.entries(r.perTargetDealt ?? {}).flatMap(([source, byVictim]) =>
-                Object.entries(byVictim as Record<string, number>).map(([victim, amount]) => ({
+                Object.entries(byVictim).map(([victim, amount]) => ({
                     source,
                     victim,
                     amount,
@@ -32,27 +36,9 @@ describe('the normalization boundary is live in runCombat', () => {
         expect(dealt.some((d) => d.amount > 0)).toBe(true);
     });
 
-    it('never routes damage to the dummy when a roster is supplied', () => {
-        const { rounds } = runCombat(bareInput());
-        const victims = rounds.flatMap((r) =>
-            Object.values(r.perTargetDealt ?? {}).flatMap((byVictim) =>
-                Object.keys(byVictim as Record<string, number>)
-            )
-        );
-        expect(victims).not.toContain('enemy');
-    });
-
-    it('leaves an explicitly-positioned run byte-identical', () => {
-        const explicit = {
-            ...bareInput(),
-            position: 'B1',
-            enemyAttackers: [{ ...bareEnemy()[0], position: 'T2' }],
-        } as CombatEngineInput;
-
-        setupKeyedTestRng(12345);
-        const before = runCombat(explicit);
-        setupKeyedTestRng(12345);
-        const after = runCombat(explicit);
-        expect(after.rawTotals).toEqual(before.rawTotals);
-    });
+    // "leaves an explicitly-positioned run byte-identical" used to live here, comparing
+    // `runCombat` against ITSELF under the same RNG seed — that proves RNG determinism, not that
+    // the boundary is a no-op on positioned input. The honest form of that claim is a
+    // module-level assertion on `normalizeCombatRoster` directly: see
+    // `normalizeRoster.test.ts`'s "is a no-op on a fully-positioned, fully-targeted input".
 });

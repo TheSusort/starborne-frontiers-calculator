@@ -5,7 +5,9 @@ import {
     DEFAULT_ENEMY_SLOT,
     DEFAULT_FRONT_ENEMY_TARGET,
     DEFAULT_BASE_PATTERN,
+    defaultTeamSlot,
 } from '../../calculators/dpsEnemyPlacement';
+import { resolveCells } from '../../targeting/resolvePattern';
 import type { CombatEngineInput } from '../engine';
 
 /** Minimal valid engine input. Fields the boundary never reads are set to inert values. */
@@ -108,6 +110,25 @@ describe('normalizeCombatRoster — auto-placement', () => {
         expect(out.enemyAttackers!.map((e) => e.position)).toEqual(['M4', 'T4', 'B4']);
     });
 
+    it('walks team actors back in defaultTeamSlot order, not collision-resolver order', () => {
+        const out = normalizeCombatRoster(
+            baseInput({
+                enemyAttackers: [enemyInput('e1')],
+                teamActors: [{ id: 't1' }, { id: 't2' }, { id: 't3' }] as never,
+            })
+        );
+        // defaultTeamSlot order is ['M3','M2','M1',...]; the focus keeps the anchor (M4), so the
+        // Nth team actor lands on defaultTeamSlot(N) rather than wherever the collision resolver
+        // happens to place it. The symmetric gap on the enemy side (no test above) hid a real
+        // off-by-one until it was closed — this pins the same invariant for the team side.
+        expect(out.teamActors!.map((t) => t.position)).toEqual([
+            defaultTeamSlot(0),
+            defaultTeamSlot(1),
+            defaultTeamSlot(2),
+        ]);
+        expect(out.teamActors!.map((t) => t.position)).toEqual(['M3', 'M2', 'M1']);
+    });
+
     describe('an invented slot yields to an explicit one', () => {
         it('player: focus invented + team explicit on the anchor cell — the team actor keeps M4, the focus moves', () => {
             const out = normalizeCombatRoster(
@@ -187,9 +208,14 @@ describe('normalizeCombatRoster — targeting synthesis', () => {
         expect(out.enemyAttackers?.[0].pattern).toEqual(DEFAULT_BASE_PATTERN);
     });
 
-    it('synthesizes a pattern with range 0 — "base|1|" has no offset table and throws', () => {
+    it('synthesizes a pattern that actually resolves — "base|1|" has no offset table and would throw', () => {
+        // Checking `out.pattern?.range === 0` in isolation only re-derives a property of the
+        // DEFAULT_BASE_PATTERN constant the adjacent `toEqual` test already pins — it would pass
+        // even if `withTargeting` synthesized something else with `range: 0` on it. Actually
+        // resolving the synthesized pattern observes the thing that matters: a positional apply can
+        // use it without throwing, which range:1 (no offset table) could not.
         const out = normalizeCombatRoster(baseInput({ enemyAttackers: [enemyInput('e1')] }));
-        expect(out.pattern?.range).toBe(0);
+        expect(() => resolveCells(out.pattern!, out.position!)).not.toThrow();
     });
 
     it('NEVER substitutes a target the caller supplied, including an ally-side one', () => {
@@ -208,7 +234,7 @@ describe('normalizeCombatRoster — targeting synthesis', () => {
         expect(out.enemyAttackers?.[0].chargedPattern).toBeUndefined();
     });
 
-    it('fills a missing pattern even when the target was supplied, and vice versa', () => {
+    it('fills a missing pattern even when the target was supplied', () => {
         const explicitTarget = { raw: 'back enemy', side: 'enemy', selection: 'back' } as never;
         const out = normalizeCombatRoster(
             baseInput({ target: explicitTarget, enemyAttackers: [enemyInput('e1')] })
@@ -219,11 +245,102 @@ describe('normalizeCombatRoster — targeting synthesis', () => {
         expect(out.pattern).toEqual(DEFAULT_BASE_PATTERN);
     });
 
+    it('fills a missing target even when the pattern was supplied — the vice versa direction', () => {
+        const explicitPattern = {
+            raw: 'line range 2',
+            shape: 'line',
+            range: 2,
+            modifiers: {},
+        } as never;
+        const out = normalizeCombatRoster(
+            baseInput({ pattern: explicitPattern, enemyAttackers: [enemyInput('e1')] })
+        );
+        // Same independence, opposite axis: a missing TARGET falls back to the dummy at
+        // selectTurnTarget regardless of how well-formed the pattern is.
+        expect(out.pattern).toBe(explicitPattern);
+        expect(out.target).toEqual(DEFAULT_FRONT_ENEMY_TARGET);
+    });
+
     it('gives target-less team actors the defaults too', () => {
         const out = normalizeCombatRoster(
             baseInput({ enemyAttackers: [enemyInput('e1')], teamActors: [{ id: 't1' }] as never })
         );
         expect(out.teamActors?.[0].target).toEqual(DEFAULT_FRONT_ENEMY_TARGET);
         expect(out.teamActors?.[0].pattern).toEqual(DEFAULT_BASE_PATTERN);
+    });
+});
+
+describe('normalizeCombatRoster — fenced in both directions', () => {
+    it('TOO LOOSE would move explicit positions: a full explicit board is returned unchanged', () => {
+        const input = baseInput({
+            position: 'T1' as never,
+            teamActors: [{ id: 't1', position: 'T2' }] as never,
+            enemyAttackers: [enemyInput('e1', 'B3'), enemyInput('e2', 'B4')],
+        });
+        const out = normalizeCombatRoster(input);
+        expect(out.position).toBe('T1');
+        expect(out.teamActors?.[0].position).toBe('T2');
+        expect(out.enemyAttackers?.map((e) => e.position)).toEqual(['B3', 'B4']);
+    });
+
+    it('TOO STRICT would skip mixed rosters: it places only the actors that lack a position', () => {
+        const out = normalizeCombatRoster(
+            baseInput({
+                enemyAttackers: [enemyInput('e1', 'B3'), enemyInput('e2')],
+            })
+        );
+        expect(out.enemyAttackers?.[0].position).toBe('B3');
+        expect(out.enemyAttackers?.[1].position).toBeDefined();
+        expect(out.enemyAttackers?.[1].position).not.toBe('B3');
+    });
+
+    // The brief's original third test asserted "the anchor (index 0) keeps its cell" on ANY
+    // focus/team collision. Since 3952a6a0 that is only true when the focus's own slot is
+    // EXPLICIT — an INVENTED anchor now yields to an explicit collider. Both directions are
+    // fenced below rather than the single case the brief assumed. The same two properties are
+    // also exercised (with different concrete positions) by the "an invented slot yields to an
+    // explicit one" describe block above; they are kept here too, deliberately, because THIS
+    // describe block is the one that pairs them with the TOO LOOSE / TOO STRICT tests as the
+    // brief's baseline three-test requirement — not an accidental copy-paste.
+    it('explicit vs explicit collision: the anchor (index 0) keeps its cell — pre-existing resolver behaviour', () => {
+        const out = normalizeCombatRoster(
+            baseInput({
+                position: 'M4' as never,
+                teamActors: [{ id: 't1', position: 'M4' }] as never,
+                enemyAttackers: [enemyInput('e1')],
+            })
+        );
+        expect(out.position).toBe('M4');
+        expect(out.teamActors?.[0].position).not.toBe('M4');
+    });
+
+    it('invented vs explicit collision: the explicit actor keeps the cell and the invented anchor moves', () => {
+        const out = normalizeCombatRoster(
+            baseInput({
+                // position omitted — the focus is auto-placed onto DEFAULT_ATTACKER_SLOT ('M4').
+                teamActors: [{ id: 't1', position: DEFAULT_ATTACKER_SLOT }] as never,
+                enemyAttackers: [enemyInput('e1')],
+            })
+        );
+        expect(out.teamActors?.[0].position).toBe(DEFAULT_ATTACKER_SLOT);
+        expect(out.position).not.toBe(DEFAULT_ATTACKER_SLOT);
+    });
+
+    it('is a no-op on a fully-positioned, fully-targeted input (module-level, not runCombat-level)', () => {
+        // The honest form of "leaves an explicitly-positioned run byte-identical": that name was
+        // previously attached to a runCombat test that compared runCombat against ITSELF, which
+        // proves RNG determinism, not that this boundary is inert on positioned input. This
+        // asserts the actual no-op property directly on the module under test.
+        const target = { raw: 'back enemy', side: 'enemy', selection: 'back' } as never;
+        const pattern = { raw: 'single target', shape: 'base', range: 0, modifiers: {} } as never;
+        const input = baseInput({
+            position: 'B1' as never,
+            target,
+            pattern,
+            teamActors: [{ id: 't1', position: 'T2', target, pattern }] as never,
+            enemyAttackers: [{ ...enemyInput('e1', 'T2'), target, pattern }],
+        });
+        const out = normalizeCombatRoster(input);
+        expect(out).toEqual(input);
     });
 });
