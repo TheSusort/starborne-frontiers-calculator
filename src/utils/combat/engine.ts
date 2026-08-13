@@ -1127,6 +1127,20 @@ export type TeamActorEngineInput = TeamActorInput & {
     preFight?: PreFightCombatModifiers;
 };
 
+/**
+ * What kind of run this is — the engine's ONLY run-kind discriminator.
+ *
+ *  - `'dps'`     the focus's output is the report. The run ends when the focus's target dies, and
+ *                also when the focus itself dies (nothing left to measure).
+ *  - `'healing'` heal/shield accounting is the report. The run continues past the focus's death.
+ *  - `'battle'`  two-team battle. The squad fights on without its focus.
+ *
+ * Default `'dps'`. The default is a CONSTANT, not a derivation — that distinction is the whole
+ * point of this type. Never infer a mode from a data field (`healTargetId`, roster emptiness):
+ * that is exactly what SP-4 removed.
+ */
+export type RunMode = 'dps' | 'healing' | 'battle';
+
 export interface CombatEngineInput {
     attack: number;
     crit: number;
@@ -1200,6 +1214,9 @@ export interface CombatEngineInput {
      *  engine runs in healing mode — heals/shields/cleanses are consumed and a `healing`
      *  result block is returned. Absent → DPS mode (the heal pipeline is fully inert). */
     healTargetId?: string;
+    /** See `RunMode`. Default `'dps'`. Required in spirit: `healTargetId` without
+     *  `mode: 'healing'` throws once the transitional derivation is gone (Task 6). */
+    mode?: RunMode;
     /** Positional team-vs-team battle (the combat simulator sets this), NOT the healing
      *  calculator. Threaded into the healing ctx so a PLAYER single-`ally` heal/shield resolves
      *  the lowest-HP living player ally (team-symmetric with the enemy side) instead of the
@@ -2314,16 +2331,29 @@ export function runCombat(input: CombatEngineInput): {
     // Every downstream focus-carve-out (`healTarget && actor.id === healTarget.id`) and the
     // healingCtx anchor thus resolve exactly as before. Real-vs-real team heals still route to the
     // lowest-HP living ally via `lowestHpAllyId` (the `teamBattle` path), NOT this anchor.
-    const healTarget = explicitHealTarget ?? (input.positionalTeamBattle ? attacker : undefined);
-    const healingMode = !!healTarget;
+    // TRANSITIONAL — DELETED IN TASK 6. Until every caller passes `mode`, fall back to the legacy
+    // signals. The mapping is EXACT, not approximate: `healTargetId` present implies
+    // `explicitHealTarget` defined, because :2306 throws otherwise. See the plan's equivalence table.
+    const runMode: RunMode =
+        input.mode ??
+        (input.positionalTeamBattle ? 'battle' : input.healTargetId ? 'healing' : 'dps');
+
+    const healTarget = explicitHealTarget ?? (runMode === 'battle' ? attacker : undefined);
+
     /**
-     * A DPS MEASUREMENT run: one focus attacker whose output is the whole point, as opposed to a
-     * two-team battle (`positionalTeamBattle`) or a healing report (`healingMode`). Named because
-     * the distinction is load-bearing for the focus-death exit: only here does the focus dying mean
-     * there is nothing left to report. Both other modes legitimately continue past it and pin that
-     * behaviour in tests.
+     * The heal/shield pipeline is active — TRUE IN BATTLE MODE TOO, because battle mode anchors
+     * `healTarget` to the focus above. This is NOT a mode and must never be conflated with
+     * `runMode === 'healing'`: the healing RESULT BLOCK is gated on it, and every
+     * `battleSimulator` result carries that block today.
      */
-    const isDpsMeasurementRun = !input.positionalTeamBattle && !healingMode;
+    const healPipelineActive = !!healTarget;
+
+    /**
+     * A DPS MEASUREMENT run: one focus attacker whose output is the whole point. Load-bearing for
+     * the focus-death exit — only here does the focus dying mean there is nothing left to report.
+     * Healing and battle runs legitimately continue past it and pin that behaviour in tests.
+     */
+    const isDpsMeasurementRun = runMode === 'dps';
 
     // Enemy attackers. Offense actors that bombard the player side (healing/sim mode). The enemy
     // roster is built purely from their presence (SP-U U5): no `healTargetId` is required — sim
@@ -2406,7 +2436,7 @@ export function runCombat(input: CombatEngineInput): {
     // positioned enemies exist AND every player actor is positioned with an ENEMY-side parsed
     // target (positions + parsed targets are fixed for the whole battle). If ANY player could
     // fall back to the dummy sink, keep it in the turn order so its accumulated DoTs still tick.
-    // NOT gated on healingMode / enemyAttackers.length — the healing calculator sets healTargetId
+    // NOT gated on healPipelineActive / enemyAttackers.length — the healing calculator sets healTargetId
     // and can supply bare (non-positioned) enemies where the dummy is still the offense sink.
     //
     // SP-M M1 (Task 9b fix): the first conjunct is extracted as `hasPositionedEnemyRoster` — "does
@@ -3005,9 +3035,8 @@ export function runCombat(input: CombatEngineInput): {
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
         ? {
               targetId: healTarget.id,
-              teamBattle: input.positionalTeamBattle ?? false,
-              perRecipientApply:
-                  (input.perRecipientHealApply ?? false) || (input.positionalTeamBattle ?? false),
+              teamBattle: runMode === 'battle',
+              perRecipientApply: (input.perRecipientHealApply ?? false) || runMode === 'battle',
               credit: (actorId, bucket, amount) => {
                   healFor(actorId)[bucket] += amount;
               },
@@ -10357,8 +10386,9 @@ export function runCombat(input: CombatEngineInput): {
             roundsToKill: enemy.destroyedRound,
             finalHpPct: enemyFinalHpPct,
         },
-        // Additive — present ONLY in healing mode (DPS callers see the legacy shape).
-        ...(healingMode
+        // Additive — present whenever the heal pipeline is active (battle mode too; DPS callers
+        // with no heal target see the legacy shape).
+        ...(healPipelineActive
             ? {
                   healing: {
                       rounds: healingRounds,
