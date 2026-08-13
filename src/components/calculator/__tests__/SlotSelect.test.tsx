@@ -24,6 +24,10 @@ describe('SlotSelect', () => {
 
     it("never marks the actor's OWN slot as taken", () => {
         render(<SlotSelect value="M4" onChange={() => {}} label="Slot" taken={['M4']} />);
+        // Select is portal-based — options render only once the menu is open. Without opening it,
+        // queryByText('M4 (taken)') is absent no matter what the own-slot logic does, so this
+        // assertion needs the click first or it discriminates nothing.
+        fireEvent.click(screen.getByLabelText('Slot'));
         expect(screen.queryByText('M4 (taken)')).not.toBeInTheDocument();
     });
 });

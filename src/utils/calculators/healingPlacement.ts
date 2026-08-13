@@ -20,6 +20,25 @@ export const DEFAULT_HEALER_SLOT: Position = 'M2';
 /** The neutral fallback when coverage cannot be computed — mid-board, NOT the front column. */
 const NEUTRAL_HEAL_TARGET_SLOT: Position = 'M3';
 
+/** Secondary neutral fallback, used only on the rare board where the healer itself already
+ *  occupies `NEUTRAL_HEAL_TARGET_SLOT` — see `neutralHealTargetSlot` below. */
+const NEUTRAL_HEAL_TARGET_SLOT_ALT: Position = 'M2';
+
+/**
+ * Healer-aware wrapper around `NEUTRAL_HEAL_TARGET_SLOT`. The slot dropdown lets the user move the
+ * healer onto ANY cell, including M3 — and the plain constant returned unguarded would then hand
+ * back the healer's own cell. `resolveHealingPlayerPlacement` has no way to tell that apart from a
+ * genuine pick, so the healer wins index 0 and the heal target gets evicted to the first free cell
+ * in `ATTACKER_SLOT_OPTIONS` order — chosen with NO knowledge of coverage, i.e. exactly the
+ * off-footprint zero this module exists to steer defaults away from. Every fallback return in
+ * `defaultHealTargetSlot` must go through this, never the bare constant.
+ */
+function neutralHealTargetSlot(healerSlot: Position): Position {
+    return healerSlot === NEUTRAL_HEAL_TARGET_SLOT
+        ? NEUTRAL_HEAL_TARGET_SLOT_ALT
+        : NEUTRAL_HEAL_TARGET_SLOT;
+}
+
 /**
  * The heal target's default slot — **minimal autoplace** (owner decision 9, 2026-08-12).
  *
@@ -32,7 +51,10 @@ const NEUTRAL_HEAL_TARGET_SLOT: Position = 'M3';
  *   1. a covered cell that is neither the healer's own cell nor the FRONT column (decision 2's
  *      no-front-bias still holds — it is about enemy fire, an independent axis from ally coverage);
  *   2. any covered cell that is not the healer's own cell;
- *   3. `NEUTRAL_HEAL_TARGET_SLOT`.
+ *   3. `neutralHealTargetSlot(healerSlot)` — `NEUTRAL_HEAL_TARGET_SLOT`, or its alternate when the
+ *      healer itself already stands there. Every return in this function goes through that wrapper,
+ *      never the bare constant, so this can NEVER return the healer's own cell — including when
+ *      `healerPattern` is absent/non-support or `resolveCells` throws, not just the covered branch.
  *
  * Returns the neutral default when `healerPattern` is absent (manual entry, no ship picked) or is
  * NOT a support pattern — a non-support pattern never filters ally recipients
@@ -45,7 +67,7 @@ export function defaultHealTargetSlot(
     healerSlot: Position = DEFAULT_HEALER_SLOT,
     healerPattern?: ParsedPattern
 ): Position {
-    if (!healerPattern?.modifiers.support) return NEUTRAL_HEAL_TARGET_SLOT;
+    if (!healerPattern?.modifiers.support) return neutralHealTargetSlot(healerSlot);
 
     // `resolveCells` THROWS for a pattern signature with no offset table (resolvePattern.ts:40) —
     // and this helper now sits on `simulateHealing`'s hot path, so an unguarded throw would surface
@@ -59,12 +81,12 @@ export function defaultHealTargetSlot(
     try {
         coveredCells = resolveCells(healerPattern, healerSlot);
     } catch {
-        return NEUTRAL_HEAL_TARGET_SLOT;
+        return neutralHealTargetSlot(healerSlot);
     }
 
     const covered = coveredCells.map((c) => c.position).filter((p) => p !== healerSlot);
 
-    return covered.find((p) => !p.endsWith('4')) ?? covered[0] ?? NEUTRAL_HEAL_TARGET_SLOT;
+    return covered.find((p) => !p.endsWith('4')) ?? covered[0] ?? neutralHealTargetSlot(healerSlot);
 }
 
 /**

@@ -1831,8 +1831,9 @@ describe('uncoveredAllyIds (decision 8)', () => {
         ).toEqual(['stranded']);
     });
 
-    it('flags the CASTER too when its own footprint covers nobody else', () => {
-        // Line-Support-Range-1 @ M4 clips forward off-board → covers only {M4}.
+    it('flags the ally when the caster-only footprint covers nobody else', () => {
+        // Line-Support-Range-1 @ M4 clips forward off-board → covers only {M4}. The caster itself
+        // still stands on a covered cell (its own), so it is NOT flagged — the stranded ally is.
         const ids = uncoveredAllyIds([
             { id: 'healer', position: 'M4', pattern: line1 },
             { id: 'stranded', position: 'M1' },

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import HealingCalculatorPage from '../HealingCalculatorPage';
 import type { Ship } from '../../../types/ship';
 import { parseShipTargeting } from '../../../utils/targetingParser';
+import { ShipSelector } from '../../../components/ship/ShipSelector';
 
 const mockGetShipById = vi.fn((_id: string): Ship | undefined => undefined);
 
@@ -19,9 +20,11 @@ vi.mock('../../../hooks/useEngineeringStats', () => ({
     useEngineeringStats: () => ({ getEngineeringStatsForShipType: () => undefined }),
 }));
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
-// ShipSelector pulls in ShipDisplay, which needs many context providers — stub it out. Only the
-// tests that actually pick a ship reach it.
-vi.mock('../../../components/ship/ShipSelector', () => ({ ShipSelector: () => null }));
+// ShipSelector pulls in ShipDisplay, which needs many context providers — stub it out. Wrapped in
+// vi.fn() (not a bare arrow) so the one test that actually exercises the ship-picker path
+// (`selectEnemyShip`) can swap in a real, clickable implementation for itself and restore the
+// null stub afterward — every other test keeps seeing the same do-nothing default.
+vi.mock('../../../components/ship/ShipSelector', () => ({ ShipSelector: vi.fn(() => null) }));
 vi.mock('../../../components/seo/Seo', () => ({ default: () => null }));
 vi.mock('../../../hooks/useThemeColors', () => ({
     useThemeColors: () => ({ gridStroke: '#000', text: '#fff' }),
@@ -90,6 +93,8 @@ describe('HealingCalculatorPage', () => {
     beforeEach(() => {
         mockGetShipById.mockReset();
         mockGetShipById.mockReturnValue(undefined);
+        vi.mocked(ShipSelector).mockReset();
+        vi.mocked(ShipSelector).mockReturnValue(null);
     });
 
     it('renders the page with panels and a default healer config', () => {
@@ -306,5 +311,39 @@ describe('HealingCalculatorPage', () => {
             </MemoryRouter>
         );
         expect(screen.queryByText('Placement warning')).not.toBeInTheDocument();
+    });
+
+    // ── An enemy ship pick must never enter the run already destroyed ──────────
+    //
+    // `selectEnemyShip` used to write `Math.round(final.hp ?? DEFAULT_ENEMY_HP)` straight into the
+    // config. `??` only substitutes for null/undefined, so a ship whose RESOLVED hp is 0 (e.g. 0
+    // base HP, the case here) sailed straight through as `hp: 0` — a 0-HP enemy starts dead, so the
+    // healer's cast delivers nothing to it and every `basis:'damage-dealt'` rider pays out zero.
+    //
+    // ShipSelector is stubbed to null for every other test in this file; this is the one place that
+    // swaps in a real, clickable stand-in so the actual `onSelectShip` handler runs end-to-end,
+    // rather than re-asserting the arithmetic in isolation.
+    it("floors an enemy ship pick's resolved HP at 1, never leaving it already destroyed", () => {
+        const zeroHpShip: Ship = {
+            ...supportHealer,
+            id: 'zero-hp-enemy',
+            baseStats: { ...supportHealer.baseStats, hp: 0 },
+        };
+        vi.mocked(ShipSelector).mockImplementation(
+            ({ onSelect }: { onSelect: (ship: Ship) => void }) => (
+                <button onClick={() => onSelect(zeroHpShip)}>pick enemy ship</button>
+            )
+        );
+
+        render(
+            <MemoryRouter>
+                <HealingCalculatorPage />
+            </MemoryRouter>
+        );
+
+        const enemyCard = screen.getByText(/Enemy Team \(1\)/).closest('.card') as HTMLElement;
+        fireEvent.click(within(enemyCard).getByText('pick enemy ship'));
+
+        expect(within(enemyCard).getByLabelText('HP')).toHaveValue(1);
     });
 });

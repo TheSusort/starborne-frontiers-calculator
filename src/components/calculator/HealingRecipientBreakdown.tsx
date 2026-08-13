@@ -21,7 +21,7 @@ interface DisplayRow extends RecipientRow {
     isTotal: boolean;
 }
 
-const fmt = (n: number): string => n.toLocaleString('en-US');
+const fmt = (n: number): string => n.toLocaleString();
 
 const TOTAL_ROW_ID = '__total__';
 

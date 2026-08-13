@@ -66,9 +66,29 @@ describe('defaultHealTargetSlot — minimal autoplace (decision 9)', () => {
         );
     });
 
-    it('never returns the healer own cell', () => {
+    it('never returns the healer own cell — covered branch', () => {
         const slot = defaultHealTargetSlot('M2', parsePattern('Pattern-Line-Support-Range-3'));
         expect(slot).not.toBe('M2');
+    });
+
+    // The neutral fallback (`NEUTRAL_HEAL_TARGET_SLOT` = 'M3') is reachable from THREE paths: an
+    // absent/non-support pattern, an unresolvable pattern, and the covered branch's own last
+    // resort. All three returned the bare constant unguarded until this fence, so a healer parked
+    // on M3 (reachable via the slot dropdown) got its OWN cell handed back — the exact invariant
+    // this describe block is named for. Cover all three, not just the covered branch above.
+    it('never returns the healer own cell — neutral fallback, no pattern', () => {
+        expect(defaultHealTargetSlot('M3', undefined)).not.toBe('M3');
+    });
+
+    it('never returns the healer own cell — neutral fallback, non-support pattern', () => {
+        expect(defaultHealTargetSlot('M3', parsePattern('Pattern-Cone-Range-1'))).not.toBe('M3');
+    });
+
+    it('never returns the healer own cell — neutral fallback, tableless (unresolvable) pattern', () => {
+        const pattern = parsePattern('Pattern-Line-Support-Range-2');
+        // Precondition: the underlying call really does throw, or this test guards nothing.
+        expect(() => resolveCells(pattern, 'M3')).toThrow();
+        expect(defaultHealTargetSlot('M3', pattern)).not.toBe('M3');
     });
 
     it('still respects decision 2 — no front bias when an alternative exists', () => {

@@ -403,7 +403,12 @@ const HealingCalculatorPage: React.FC = () => {
                     // The enemy is a real, killable actor since SP-3: its own HP/defence/security
                     // drive whether it dies, how much the healer's cast hurts it (the basis for
                     // damage-dealt riders), and whether the healer's debuffs land on it.
-                    hp: Math.round(final.hp ?? DEFAULT_ENEMY_HP),
+                    // Floored at 1: `final.hp` can resolve to 0 (e.g. a ship with 0 base HP), and
+                    // `??` only substitutes the default for null/undefined — it lets a resolved 0
+                    // straight through. A 0-HP enemy enters the run already destroyed, which
+                    // silently zeroes every `basis:'damage-dealt'` rider (see the HP-field comment
+                    // in EnemyAttackersPanel.tsx, which clamps for the same reason on manual entry).
+                    hp: Math.max(1, Math.round(final.hp ?? DEFAULT_ENEMY_HP)),
                     defence: Math.round(final.defence ?? DEFAULT_ENEMY_DEFENCE),
                     security: Math.round(final.security ?? DEFAULT_ENEMY_SECURITY),
                     chargeCount: ship.chargeSkillCharge ?? 0,
