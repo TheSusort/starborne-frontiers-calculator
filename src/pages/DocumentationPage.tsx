@@ -2686,12 +2686,78 @@ const DocumentationPage: React.FC = () => {
                                         damage each round — and buff themselves and their team with
                                         their own abilities) or quick manual attack/defense lines.
                                         Each enemy has an affinity selector matched against the
-                                        target&apos;s affinity to scale their incoming damage. A
-                                        hover-gated round status panel beside the Healing Over Time
-                                        chart shows, for the hovered round and grouped per healer
-                                        config, the healer&apos;s own active buffs as well as which
-                                        self-buffs are active on each enemy and which debuffs or
-                                        DoTs they have landed on the target.
+                                        target&apos;s affinity to scale their incoming damage. An
+                                        enemy you pick from your ships also attacks with its own
+                                        targeting and pattern, so an area attacker hits every cell
+                                        its pattern covers rather than a single ship. There is
+                                        always at least one enemy: the last one cannot be removed,
+                                        because with nobody to fight, damage-scaled repairs would
+                                        have no real Defense to measure against. A hover-gated round
+                                        status panel beside the Healing Over Time chart shows, for
+                                        the hovered round and grouped per healer config, the
+                                        healer&apos;s own active buffs as well as which self-buffs
+                                        are active on each enemy and which debuffs or DoTs they have
+                                        landed on the target.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Board slots:</span> the
+                                        healer, the heal target, every team ship and every enemy
+                                        picks the slot it fights from (column 4 is the front), which
+                                        affects targeting patterns and adjacency. Two ships on your
+                                        side cannot share a slot &mdash; choosing an occupied one
+                                        swaps them. Separate healer configs may share a slot, since
+                                        each is simulated on its own board. Ships you have not
+                                        placed start on sensible defaults: the heal target is placed
+                                        inside the healer&apos;s support pattern where one exists.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Heals follow the healer&apos;s pattern:
+                                        </span>{' '}
+                                        a repair is aimed from the healer&apos;s own slot and covers
+                                        exactly the cells its support pattern reaches, just as in
+                                        game. An ally standing outside that pattern receives{' '}
+                                        <span className="font-semibold">nothing</span> &mdash; not a
+                                        reduced amount, nothing at all &mdash; and a healer whose
+                                        pattern only covers its own cell cannot heal anyone else
+                                        from there. Because a silent zero looks like a broken
+                                        calculator, the page raises a placement warning naming every
+                                        ally that is currently out of reach, so move that ally onto
+                                        a covered cell or move the healer. One cast can also cover
+                                        several allies at once, which is why healing is reported per
+                                        ally.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Healing by ally:</span> under
+                                        the charts, a breakdown table lists effective healing and
+                                        overheal for each ship a repair actually landed on, with the
+                                        heal target marked as the primary row (it is the ship the
+                                        summary and the charts follow). Ships are counted here by
+                                        what they received, whereas the healer&apos;s own summary
+                                        counts what it produced regardless of where it went &mdash;
+                                        so the rows deliberately do not add up to the healer&apos;s
+                                        total, and a row can even show healing on a round the healer
+                                        itself produced none, because a team-mate&apos;s repair
+                                        landed. An ally missing from the table received nothing.
+                                        Shields and cleanses have no per-ally figure and stay on the
+                                        healer&apos;s summary. Only your own ships are listed: an
+                                        enemy that repairs itself off its own damage still does so
+                                        in the fight, but it is never counted as healing for your
+                                        team (neither here nor in Team Healing).
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Enemies are real ships and can be destroyed:
+                                        </span>{' '}
+                                        each enemy carries its own HP, Defense and Security, all
+                                        editable (a ship you pick fills them from its stats). Its
+                                        Defense decides how much damage your healer&apos;s attack
+                                        actually does to it &mdash; which matters for skills that
+                                        repair or shield for a share of the damage they deal &mdash;
+                                        and its Security resists debuffs your side aims at it. Kill
+                                        an enemy and it stops attacking for the rest of the run, so
+                                        the incoming damage your healer has to out-heal drops as the
+                                        fight goes on.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

@@ -7,10 +7,12 @@ import { Checkbox } from '../ui/Checkbox';
 import { Select } from '../ui/Select';
 import { Ship, AffinityName } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
+import type { Position } from '../../types/encounters';
 import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
+import { SlotSelect } from './SlotSelect';
 
 /** UI state for one enemy attacker card. Maps to EnemyAttackerInput at sim time. */
 export interface EnemyAttackerConfig {
@@ -30,6 +32,16 @@ export interface EnemyAttackerConfig {
     affinity?: AffinityName;
     /** Walked basics for the damage walk; present only when a ship is picked. */
     shipSkills?: ShipSkills;
+    /** Board slot. Column 4 is the FRONT. Seeded by defaultEnemySlot(index). */
+    position: Position;
+    /** Enemy's own max HP — it can now be destroyed. Never 0, defaulted OR entered: a 0-HP enemy is
+     *  already dead, so the healer's cast delivers nothing to it and every `damage-dealt` rider
+     *  silently pays out zero. The HP field clamps to 1 for exactly this reason. */
+    hp: number;
+    /** Enemy's own defence — the basis for the healer's damage-dealt riders. */
+    defence: number;
+    /** Enemy's own security — resists the healer's outbound debuffs. */
+    security: number;
 }
 
 interface EnemyAttackersPanelProps {
@@ -44,10 +56,15 @@ interface EnemyAttackersPanelProps {
 
 const EnemyCard: React.FC<{
     enemy: EnemyAttackerConfig;
+    /** Cells the OTHER enemies hold — annotated in the dropdown so a collision is visible before it
+     *  happens. Sides are independent boards, so only enemy cells count here. */
+    takenSlots: readonly Position[];
+    /** False for the LAST remaining enemy — the roster is floored at one, see the panel below. */
+    canRemove: boolean;
     onRemove: () => void;
     onSelectShip: (ship: Ship) => void;
     onUpdate: (updates: Partial<EnemyAttackerConfig>) => void;
-}> = ({ enemy, onRemove, onSelectShip, onUpdate }) => {
+}> = ({ enemy, takenSlots, canRemove, onRemove, onSelectShip, onUpdate }) => {
     const { getShipById } = useShips();
     const selectedShip = enemy.shipId ? getShipById(enemy.shipId) : undefined;
 
@@ -61,9 +78,11 @@ const EnemyCard: React.FC<{
                         variant="compact"
                     />
                 </div>
-                <Button variant="danger" onClick={onRemove} aria-label="Remove enemy">
-                    <CloseIcon />
-                </Button>
+                {canRemove && (
+                    <Button variant="danger" onClick={onRemove} aria-label="Remove enemy">
+                        <CloseIcon />
+                    </Button>
+                )}
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <Input
@@ -108,6 +127,39 @@ const EnemyCard: React.FC<{
                     helpLabel="The enemy's hacking stat. Landing chance for its debuffs = (enemy hacking − heal-target security), clamped to 0–100%."
                 />
                 <Input
+                    label="HP"
+                    type="number"
+                    // Clamped to 1, NOT 0 — the one value `EnemyAttackerConfig.hp` documents as
+                    // unreachable. A 0-HP enemy enters the run already destroyed: the healer's cast
+                    // delivers nothing to it and every `basis:'damage-dealt'` heal or shield rider
+                    // silently pays out zero. Clearing the field yields NaN, so the `|| 1` fallback
+                    // matters as much as the clamp does.
+                    min="1"
+                    value={enemy.hp}
+                    onChange={(e) => onUpdate({ hp: Math.max(1, parseInt(e.target.value) || 1) })}
+                    helpLabel="The enemy's own max HP. It can be destroyed, and a destroyed enemy stops attacking. Minimum 1 — an enemy with 0 HP would start the fight already destroyed."
+                />
+                <Input
+                    label="Defence"
+                    type="number"
+                    min="0"
+                    value={enemy.defence}
+                    onChange={(e) =>
+                        onUpdate({ defence: Math.max(0, parseInt(e.target.value) || 0) })
+                    }
+                    helpLabel="The enemy's own defence — it reduces the damage your healer deals to it, which is the basis for heals and shields scaled off damage dealt."
+                />
+                <Input
+                    label="Security"
+                    type="number"
+                    min="0"
+                    value={enemy.security}
+                    onChange={(e) =>
+                        onUpdate({ security: Math.max(0, parseInt(e.target.value) || 0) })
+                    }
+                    helpLabel="Resists debuffs your healer applies."
+                />
+                <Input
                     label="Charge Count"
                     type="number"
                     min="0"
@@ -123,6 +175,12 @@ const EnemyCard: React.FC<{
                     />
                 </div>
             </div>
+            <SlotSelect
+                value={enemy.position}
+                onChange={(position) => onUpdate({ position })}
+                taken={takenSlots}
+                helpLabel="Column 4 is the front of the board. Two enemies cannot share a cell — a collision moves the later one."
+            />
             <Select
                 label="Affinity"
                 value={enemy.affinity ?? 'antimatter'}
@@ -174,6 +232,19 @@ export const EnemyAttackersPanel: React.FC<EnemyAttackersPanelProps> = ({
                         <EnemyCard
                             key={enemy.id}
                             enemy={enemy}
+                            takenSlots={enemies
+                                .filter((other) => other.id !== enemy.id)
+                                .map((other) => other.position)}
+                            // ⚠️ THE ROSTER IS FLOORED AT ONE, and the floor is not cosmetic. With
+                            // `enemies: []` the healing run has no positioned opponent at all, so
+                            // `selectTurnTarget` falls back to the engine's vestigial DUMMY — a fixed
+                            // 10,000-defence / 1,000,000-HP sink that never dies. Every
+                            // `basis:'damage-dealt'` heal or shield rider then scales off that 10,000
+                            // instead of the real enemy's defence (measured: totalDirectHeal 3,876 →
+                            // 1,290 against one enemy at defence 1,000, with `perTargetDealt` going
+                            // undefined — a silent 3x move from one click). The page's `removeEnemy`
+                            // floors it too; this is the half the user can see.
+                            canRemove={enemies.length > 1}
                             onRemove={() => onRemove(enemy.id)}
                             onSelectShip={(ship) => onSelectShip(enemy.id, ship)}
                             onUpdate={(updates) => onUpdate(enemy.id, updates)}

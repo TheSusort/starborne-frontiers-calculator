@@ -60,6 +60,37 @@ describe('dpsEnemyPlacement', () => {
         it('returns a same-length array', () => {
             expect(resolvePlayerSlots(['M4', 'M4', 'M3'])).toHaveLength(3);
         });
+
+        // `priorityIndices` exists for the healing calculator, whose heal target has a
+        // coverage-aware default cell while the generic team ships do not — and which the page
+        // appends LAST, so it would otherwise lose every collision.
+        it('reserves a priority index wanted slot ahead of an EARLIER generic ship', () => {
+            // Index 2 (the privileged ship) wants T2 and index 1 also wants T2. Without priority
+            // index 1 would win and index 2 be evicted; with it, index 1 moves instead.
+            const out = resolvePlayerSlots(['M2', 'T2', 'T2'], [2]);
+            expect(out[0]).toBe('M2');
+            expect(out[2]).toBe('T2');
+            expect(out[1]).not.toBe('T2');
+            expect(new Set(out).size).toBe(3);
+        });
+
+        it('never lets a priority index displace index 0', () => {
+            // The attacker/healer at index 0 still outranks everything — the enemy must keep
+            // targeting the cell the user chose for it.
+            const out = resolvePlayerSlots(['M4', 'M4'], [1]);
+            expect(out[0]).toBe('M4');
+            expect(out[1]).not.toBe('M4');
+        });
+
+        it('keeps the original ascending single-pass order when no priority is given', () => {
+            // Backward-compatibility guard for the DPS calculator, which shares this function and
+            // passes no second argument. Hand-computed against the ORIGINAL single-pass algorithm
+            // (ascending index, each collision pushed to the first free ATTACKER_SLOT_OPTIONS cell):
+            // T1 kept → T1 collides, first free is T2 → T2 wanted but now taken, first free is T3 →
+            // M4 free. A comparison against another call of this same function would be vacuous, so
+            // the expectation is spelled out.
+            expect(resolvePlayerSlots(['T1', 'T1', 'T2', 'M4'])).toEqual(['T1', 'T2', 'T3', 'M4']);
+        });
     });
 
     it('uses a base pattern of range 0, the only signature with an offset table', () => {

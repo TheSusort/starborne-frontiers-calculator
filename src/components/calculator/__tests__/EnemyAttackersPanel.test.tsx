@@ -48,6 +48,12 @@ const manual: EnemyAttackerConfig = {
     hacking: 0,
     chargeCount: 0,
     startCharged: false,
+    // SP-3b Task 8: an enemy is a real, placed, killable actor. `hp: 0` would mean an
+    // already-destroyed enemy, so these are the page's real defaults rather than zeros.
+    position: 'M4',
+    hp: 40000,
+    defence: 5000,
+    security: 100,
 };
 
 const noop = () => {};
@@ -111,7 +117,13 @@ describe('EnemyAttackersPanel', () => {
         fireEvent.click(screen.getByText('+ Add enemy'));
         expect(onAdd).toHaveBeenCalled();
 
-        const five = [1, 2, 3, 4, 5].map((n) => ({ ...manual, id: `${n}`, name: `Enemy ${n}` }));
+        const slots = ['M4', 'T4', 'B4', 'M3', 'T3'] as const;
+        const five = [1, 2, 3, 4, 5].map((n) => ({
+            ...manual,
+            id: `${n}`,
+            name: `Enemy ${n}`,
+            position: slots[n - 1],
+        }));
         rerender(
             <EnemyAttackersPanel
                 isOpen
@@ -164,9 +176,48 @@ describe('EnemyAttackersPanel', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', { affinity: 'electric' });
     });
 
-    it('propagates manual edits and removal', () => {
+    it('propagates manual edits', () => {
         const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        fireEvent.change(screen.getByLabelText('Attack'), { target: { value: '8000' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
+    });
+
+    // ⚠️ The remove control is WITHHELD from the last remaining enemy. An empty roster leaves the
+    // healing run with no positioned opponent, so the engine falls back to its vestigial dummy (a
+    // fixed 10,000-defence / 1,000,000-HP sink that never dies) and every `basis:'damage-dealt'`
+    // rider silently rebases off that 10,000 — measured as totalDirectHeal 3,876 → 1,290.
+    it('propagates removal, but never for the last remaining enemy', () => {
         const onRemove = vi.fn();
+        const two = [manual, { ...manual, id: '2', name: 'Enemy 2', position: 'M3' as const }];
+        const { unmount } = render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={two}
+                onAdd={noop}
+                onRemove={onRemove}
+                onSelectShip={noop}
+                onUpdate={noop}
+            />
+        );
+        const buttons = screen.getAllByLabelText('Remove enemy');
+        expect(buttons).toHaveLength(2);
+        fireEvent.click(buttons[1]);
+        expect(onRemove).toHaveBeenCalledWith('2');
+        unmount();
+
+        // The floor: one enemy left → no control at all.
         render(
             <EnemyAttackersPanel
                 isOpen
@@ -175,13 +226,10 @@ describe('EnemyAttackersPanel', () => {
                 onAdd={noop}
                 onRemove={onRemove}
                 onSelectShip={noop}
-                onUpdate={onUpdate}
+                onUpdate={noop}
             />
         );
-        fireEvent.change(screen.getByLabelText('Attack'), { target: { value: '8000' } });
-        expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
-        fireEvent.click(screen.getByLabelText('Remove enemy'));
-        expect(onRemove).toHaveBeenCalledWith('1');
+        expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
     });
 
     it('renders the hacking field and propagates edits', () => {
@@ -200,6 +248,82 @@ describe('EnemyAttackersPanel', () => {
         expect(screen.getByLabelText('Hacking')).toHaveValue(250);
         fireEvent.change(screen.getByLabelText('Hacking'), { target: { value: '300' } });
         expect(onUpdate).toHaveBeenCalledWith('1', { hacking: 300 });
+    });
+
+    // ── SP-3b Task 8: the enemy is a real, placed, killable actor ───────────────
+    it("renders the enemy's OWN hp/defence/security and propagates edits", () => {
+        const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        // The defaults must not be zeros: hp 0 is an already-destroyed enemy (every damage-dealt
+        // rider then pays out nothing) and security 0 makes the healer's debuffs land strictly more
+        // often than they did before the run became positional.
+        expect(screen.getByLabelText('HP')).toHaveValue(40000);
+        expect(screen.getByLabelText('Defence')).toHaveValue(5000);
+        expect(screen.getByLabelText('Security')).toHaveValue(100);
+
+        fireEvent.change(screen.getByLabelText('HP'), { target: { value: '1' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { hp: 1 });
+        // HP clamps to 1, not 0. Clearing the field is the reachable path to 0 (parseInt('') is NaN),
+        // and 0 is the one value the field must never emit: a 0-HP enemy starts the run already
+        // destroyed, so the healer's cast delivers nothing to it and every damage-dealt rider pays
+        // out zero. A typed 0 must not get through either.
+        fireEvent.change(screen.getByLabelText('HP'), { target: { value: '' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { hp: 1 });
+        fireEvent.change(screen.getByLabelText('HP'), { target: { value: '0' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { hp: 1 });
+        expect(onUpdate).not.toHaveBeenCalledWith('1', { hp: 0 });
+        fireEvent.change(screen.getByLabelText('Defence'), { target: { value: '9000' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { defence: 9000 });
+        fireEvent.change(screen.getByLabelText('Security'), { target: { value: '250' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { security: 250 });
+    });
+
+    it('renders a board-slot dropdown and reports the chosen cell', () => {
+        const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        // Column 4 is the FRONT — annotated, because there is no board to read it off.
+        expect(screen.getByText('M4 (front)')).toBeInTheDocument();
+        // `Select` is portal-based, not a native <select>: open it, then click the option.
+        fireEvent.click(screen.getByLabelText('Board slot'));
+        fireEvent.click(screen.getByText('T1'));
+        expect(onUpdate).toHaveBeenCalledWith('1', { position: 'T1' });
+    });
+
+    it("annotates another enemy's cell as taken", () => {
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual, { ...manual, id: '2', name: 'Enemy 2', position: 'T1' }]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={noop}
+            />
+        );
+        // Open the FIRST enemy's dropdown (M4) — T1 belongs to the second enemy.
+        fireEvent.click(screen.getAllByLabelText('Board slot')[0]);
+        expect(screen.getByText('T1 (taken)')).toBeInTheDocument();
     });
 
     it('renders correctly with zero enemies and still shows the Add button', () => {

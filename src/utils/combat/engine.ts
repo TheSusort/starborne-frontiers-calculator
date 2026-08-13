@@ -1529,19 +1529,35 @@ export interface HealingRoundEngine {
      *  the legacy per-round scalars it replaced were removed in the same change. Keyed by victim
      *  actor id. */
     perActorIncoming: Map<string, ActorIntake>;
-    /** Per-RECIPIENT healing accounting, keyed by the actor the DIRECT CAST REPAIR landed on —
-     *  the counterpart to `perActor`, which is keyed by the SOURCE that cast it. Only the direct
-     *  cast-heal site credits this axis today (playerTurn.ts:3660-3662); `shield`, `hotHeal`,
-     *  standing-leech and reactive-heal buckets are NOT on this axis yet, and each of those still
-     *  applies only when the recipient is `healing.targetId` (the legacy single-target path).
-     *  Populated only when `perRecipientApply` (or `positionalTeamBattle`) is set; **empty
-     *  otherwise**, which is what keeps every legacy healing result byte-identical.
+    /** Per-RECIPIENT healing accounting, keyed by the actor a repair LANDED ON — the counterpart to
+     *  `perActor`, which is keyed by the SOURCE that cast it. Populated only when
+     *  `perRecipientApply` (or `positionalTeamBattle`) is set; **empty otherwise**, which is what
+     *  keeps every legacy healing result byte-identical.
      *
-     *  ⚠️ For whoever extends this next: the shield-grant site (playerTurn.ts:3730-3738) has NO
-     *  flag gate — it calls `healing.recipientActor(rid)` and routes per-recipient
-     *  unconditionally. Adding `creditRecipient(rid, 'shield', …)` there MUST be gated on
-     *  `perRecipientApply` (mirroring the directHeal site), or the map becomes non-empty on
-     *  legacy runs and the byte-identical guarantee above breaks. */
+     *  EVERY repair whose pool application succeeds is on this axis (SP-3b Task 7): the direct cast
+     *  site (playerTurn.ts), HoT ticks (playerTurn.ts `tickHot` — raw into the HOLDER's `hotHeal`),
+     *  standing + per-victim + taken leeches and the non-positional taken-leech block (engine.ts,
+     *  all four via `creditLandedRepair`), and reactive repairs (triggers.ts). That completeness is
+     *  load-bearing: the healing report's `effectiveHealing`/`overheal` read this axis, so a source
+     *  that credited only `perActor` would silently vanish from the reported consumption.
+     *
+     *  `creditLandedRepair` is a `runCombat`-local closure, not an export — `tickHot`
+     *  (playerTurn.ts) and the reactive executor (triggers.ts) live in OTHER modules and cannot
+     *  reach it, so each duplicates the `perRecipientApply` gate check inline instead of calling
+     *  through. A future (seventh) cross-module credit site has nothing to reach for either — it
+     *  must add its own inline gate, the same way those two do.
+     *
+     *  `shield` and `cleanseCount` are still SOURCE-ONLY and deliberately so — the shield pool lands
+     *  per-recipient via `grantShieldToTarget`, but no recipient-side shield TOTAL is computed, and
+     *  the healing report keeps both source-keyed to match.
+     *
+     *  ⚠️ For whoever extends this next: mirror a repair ONLY where its pool application actually
+     *  happened. Several sources credit the source axis's raw bucket for recipients they never
+     *  repair (a non-heal-target `all-allies` leech share), and mirroring those invents a landing.
+     *  And every new credit MUST be gated on `perRecipientApply` — the shield-grant site
+     *  (playerTurn.ts:3730-3738) has NO flag gate of its own, so an ungated
+     *  `creditRecipient(rid, 'shield', …)` there would make the map non-empty on legacy runs and
+     *  break the byte-identical guarantee above. */
     perRecipient: Map<string, ActorHealing>;
     /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
@@ -3053,6 +3069,38 @@ export function runCombat(input: CombatEngineInput): {
           }
         : undefined;
 
+    /**
+     * SP-3b Task 7: mirror ONE LANDED repair onto the RECIPIENT axis (`perRecipient`).
+     *
+     * The axis is defined as "keyed by the actor the repair LANDED ON", but until this change only
+     * the direct cast-repair site (playerTurn.ts) credited it — HoT ticks, standing/taken leeches and
+     * reactive repairs credited the SOURCE axis alone. That made the axis unusable as the report's
+     * consumption basis: pointing `effectiveHealing`/`overheal` at it dropped every non-cast repair
+     * (measured on the healing goldens: Magnolia's leech overheal 1258 → 0, the HoT scenario's
+     * 2000 → 500, Isha's reactive effective 15000 → 0). Call this wherever a repair's pool
+     * application succeeds, with the same RAW bucket the source axis used.
+     *
+     * ⚠️ GATED on `perRecipientApply` — the guarantee the axis doc leans on is that a legacy
+     * single-target run leaves the map EMPTY. Ungated credits here would make it non-empty and break
+     * every byte-identical legacy healing result.
+     *
+     * Only call this where the pool application actually happened. Several sources credit the source
+     * axis's RAW bucket for recipients they never repair (a non-heal-target `all-allies` leech share);
+     * mirroring those would invent a landing that did not occur.
+     */
+    const creditLandedRepair = (
+        recipientId: string,
+        rawBucket: 'directHeal' | 'hotHeal',
+        raw: number,
+        consumed: number,
+        overheal: number
+    ): void => {
+        if (!healingCtx?.perRecipientApply) return;
+        healingCtx.creditRecipient?.(recipientId, rawBucket, raw);
+        healingCtx.creditRecipient?.(recipientId, 'effectiveHeal', consumed);
+        healingCtx.creditRecipient?.(recipientId, 'overheal', overheal);
+    };
+
     // --- Phase 3 reactive triggers ---
     // Intent queues (FIFO), one per side (SP-U U3: merged the former separate `intentQueue` /
     // `enemyIntentQueue` locals into one bySide record). Reactive listeners enqueue follow-up
@@ -3540,6 +3588,10 @@ export function runCombat(input: CombatEngineInput): {
                         const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
                         healingCtx.credit(sourceId, 'effectiveHeal', consumed);
                         healingCtx.credit(sourceId, 'overheal', overheal);
+                        // Recipient axis (SP-3b Task 7): only the heal target's share LANDS here —
+                        // an all-allies leech credits the source's raw for every ally but applies
+                        // to none of the others, so only this branch may mirror.
+                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
@@ -3630,6 +3682,9 @@ export function runCombat(input: CombatEngineInput): {
                         );
                         healingCtx.credit(sourceId, 'effectiveHeal', consumed);
                         healingCtx.credit(sourceId, 'overheal', overheal);
+                        // Recipient axis (SP-3b Task 7) — this per-victim path repairs whichever
+                        // ally it resolved, so the landing id is `rid`, not the heal target.
+                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
@@ -3691,6 +3746,9 @@ export function runCombat(input: CombatEngineInput): {
                 const { consumed, overheal } = healingCtx.applyHealToTarget(raw, victim);
                 healingCtx.credit(victim.id, 'effectiveHeal', consumed);
                 healingCtx.credit(victim.id, 'overheal', overheal);
+                // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
+                // source and recipient coincide here — the axes still differ in meaning.
+                creditLandedRepair(victim.id, 'directHeal', raw, consumed, overheal);
             } else {
                 healingCtx.credit(victim.id, 'shield', raw);
                 // H3.6: this engine standing-leech shield site intentionally does NOT emit
@@ -9524,6 +9582,15 @@ export function runCombat(input: CombatEngineInput): {
                                                 consumed
                                             );
                                             healingCtx.credit(healTarget!.id, 'overheal', overheal);
+                                            // Recipient axis (SP-3b Task 7): the non-positional
+                                            // taken-leech always lands on the heal target.
+                                            creditLandedRepair(
+                                                healTarget!.id,
+                                                'directHeal',
+                                                raw,
+                                                consumed,
+                                                overheal
+                                            );
                                         } else {
                                             healingCtx.credit(healTarget!.id, 'shield', raw);
                                             healingCtx.grantShieldToTarget(raw);

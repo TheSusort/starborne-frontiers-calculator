@@ -65,11 +65,18 @@ const ConfigBlock: React.FC<{ name: string; color: string; rd: HealingRoundData 
     rd,
 }) => {
     if (!rd) return null;
+    // ⚠️ MUST ENUMERATE EVERY METRIC THE GRID BELOW CAN RENDER, on BOTH axes. It listed only the
+    // source-axis (healer-output) fields, so a round where the healer produced nothing while an ALLY's
+    // cast landed on the heal target — recipient-axis `effectiveHealing`/`overheal`, non-zero — printed
+    // "No healer output this round" over numbers it was hiding. Adding a metric to the grid means
+    // adding it here.
     const isEmpty =
         rd.directHeal === 0 &&
         rd.hotHeal === 0 &&
         rd.shield === 0 &&
         rd.cleanseCount === 0 &&
+        rd.effectiveHealing === 0 &&
+        rd.overheal === 0 &&
         rd.incomingDamage === 0 &&
         (rd.teamHealing ?? 0) === 0;
 
@@ -167,6 +174,16 @@ const RoundTooltip: React.FC<RoundTooltipProps> = ({ active, label, healers }) =
                     rd={h.result.rounds[label - 1]}
                 />
             ))}
+            {/* THE AXIS CUE. Direct/HoT/Shield are SOURCE-axis (what the healer produced, wherever it
+                went); Effective/Overheal are RECIPIENT-axis (what landed on the heal target). They are
+                not parts of one sum and can disagree by design — an ally's cast gives Effective with
+                zero Direct. This tooltip is the one surface that shows both side by side, so it is the
+                one that has to say so. Rendered once per tooltip, not per config. */}
+            <p className="mt-1.5 pt-1.5 border-t border-dark-border text-[10px] text-theme-text-secondary">
+                <span className="text-white">Direct/HoT/Shield</span> is what this healer produced;{' '}
+                <span className="text-white">Effective/Overheal</span> is what landed on the heal
+                target. Different measures — they need not add up.
+            </p>
         </div>
     );
 };

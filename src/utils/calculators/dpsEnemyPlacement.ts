@@ -92,19 +92,48 @@ export const ATTACKER_SLOT_OPTIONS: readonly Position[] = [
  *
  * `slots[0]` is the attacker and keeps its slot; each later ship that collides is pushed to the
  * first free slot in `ATTACKER_SLOT_OPTIONS` order. Returns a same-length array.
+ *
+ * `priorityIndices` (optional) nominates later indices whose wanted slot must ALSO survive a
+ * collision: they are reserved right after index 0 and before every other index, so a generic ship
+ * yields to them rather than the reverse. It exists for the healing calculator, where the heal
+ * target's default cell is coverage-aware (`defaultHealTargetSlot`) while the generic team defaults
+ * are not — and the page appends the heal target LAST, so without this it loses every collision and
+ * gets evicted to a cell that may sit OUTSIDE the healer's support footprint, i.e. zero healing.
+ *
+ * Backward-compatible by construction: with `priorityIndices` empty (the DPS calculator, which has
+ * no privileged ship) the reservation order is `[0, 1, 2, …]` — byte-identical to the original
+ * single-pass behaviour. The returned array stays index-aligned with `slots` in both cases, so
+ * callers' `slots[i + 1]` mappings are untouched.
  */
-export function resolvePlayerSlots(slots: ReadonlyArray<Position>): Position[] {
+export function resolvePlayerSlots(
+    slots: ReadonlyArray<Position>,
+    priorityIndices: ReadonlyArray<number> = []
+): Position[] {
+    const isPriority = (i: number) => i !== 0 && priorityIndices.includes(i);
+    const allIndices = slots.map((_, i) => i);
+    // Reservation order: the anchor (index 0), then the nominated indices, then the rest — each
+    // group in ascending index order. Assignment writes back by index, never by position in this
+    // order, so the result stays aligned with `slots`.
+    const order = [
+        ...allIndices.filter((i) => i === 0 || isPriority(i)),
+        ...allIndices.filter((i) => i !== 0 && !isPriority(i)),
+    ];
+
     const taken = new Set<Position>();
-    return slots.map((wanted) => {
+    const resolvedByIndex: Position[] = new Array(slots.length);
+    for (const i of order) {
+        const wanted = slots[i];
         if (!taken.has(wanted)) {
             taken.add(wanted);
-            return wanted;
+            resolvedByIndex[i] = wanted;
+            continue;
         }
         const free = ATTACKER_SLOT_OPTIONS.find((p) => !taken.has(p));
         // 12 slots vs at most 5 player ships (1 attacker + 4 team), so `free` always exists; the
         // fallback keeps the return type honest rather than asserting.
         const resolved = free ?? wanted;
         taken.add(resolved);
-        return resolved;
-    });
+        resolvedByIndex[i] = resolved;
+    }
+    return resolvedByIndex;
 }

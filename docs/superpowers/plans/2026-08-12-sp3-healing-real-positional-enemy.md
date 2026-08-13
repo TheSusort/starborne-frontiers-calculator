@@ -871,7 +871,56 @@ describe('healing calculator default placement', () => {
         expect(resolveEnemySlots(['M4', 'M4', 'M4'])).toHaveLength(3);
     });
 });
+
+// ── Decision 9: minimal autoplace ───────────────────────────────────────────
+// Seed the heal target into a cell the HEALER's own support footprint covers, so a default board
+// does not silently produce zero healing. Only SUPPORT patterns filter ally recipients
+// (`supportFootprintAllyIds` returns undefined otherwise), so a non-support pattern needs no
+// autoplace at all.
+describe('defaultHealTargetSlot — minimal autoplace (decision 9)', () => {
+    it('seeds a cell the healer support footprint covers', () => {
+        // Pattern-Line-Support-Range-1 @ M2 covers {M2, M3} (resolvePattern.test.ts:83-87 shows the
+        // M3 anchor case; from M2 the forward cell is M3). M2 is the healer's own cell, so the heal
+        // target must land on M3.
+        expect(defaultHealTargetSlot('M2', parsePattern('Pattern-Line-Support-Range-1'))).toBe('M3');
+    });
+
+    it('never returns the healer own cell', () => {
+        const slot = defaultHealTargetSlot('M2', parsePattern('Pattern-Line-Support-Range-3'));
+        expect(slot).not.toBe('M2');
+    });
+
+    it('still respects decision 2 — no front bias when an alternative exists', () => {
+        // Range-3 @ M1 covers {M1, M2, M3, M4}. M4 is the FRONT column and must not be preferred
+        // while M2/M3 are available.
+        const slot = defaultHealTargetSlot('M1', parsePattern('Pattern-Line-Support-Range-3'));
+        expect(slot).not.toBe('M4');
+        expect(['M2', 'M3']).toContain(slot);
+    });
+
+    it('falls back to the neutral default when no pattern is known (manual entry)', () => {
+        expect(defaultHealTargetSlot('M2', undefined)).toBe('M3');
+    });
+
+    it('falls back to the neutral default for a NON-support pattern', () => {
+        // A non-support pattern never filters ally recipients, so coverage is irrelevant.
+        expect(defaultHealTargetSlot('M2', parsePattern('Pattern-Cone-Range-1'))).toBe('M3');
+    });
+
+    it('falls back gracefully when the footprint covers only the healer own cell', () => {
+        // Line-Support-Range-1 @ M4: the forward cell clips off-board, leaving {M4} — the healer's
+        // own cell. No covered cell is available for the heal target, so take the neutral default
+        // rather than returning M4 (two actors cannot share a cell).
+        expect(defaultHealTargetSlot('M4', parsePattern('Pattern-Line-Support-Range-1'))).toBe('M3');
+    });
+});
 ```
+
+⚠️ Add `import { parsePattern } from '../../targetingParser';` to the test file.
+
+⚠️ **Verify each expected footprint before trusting these assertions.** If a case differs, confirm
+the real footprint with `resolveCells(parsePattern('<pattern>'), '<anchor>')` and fix the **test's**
+expectation — never the offset table. Report any divergence rather than silently adjusting.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -884,6 +933,8 @@ Create `src/utils/calculators/healingPlacement.ts`:
 
 ```ts
 import type { Position } from '../../types/encounters';
+import type { ParsedPattern } from '../targetingParser';
+import { resolveCells } from '../targeting/resolvePattern';
 import { ATTACKER_SLOT_OPTIONS, resolvePlayerSlots } from './dpsEnemyPlacement';
 
 /**
@@ -900,9 +951,43 @@ import { ATTACKER_SLOT_OPTIONS, resolvePlayerSlots } from './dpsEnemyPlacement';
  */
 export const DEFAULT_HEALER_SLOT: Position = 'M2';
 
-/** The heal target's default slot — mid-board, NOT the front column. */
-export function defaultHealTargetSlot(): Position {
-    return 'M3';
+/** The neutral fallback when coverage cannot be computed — mid-board, NOT the front column. */
+const NEUTRAL_HEAL_TARGET_SLOT: Position = 'M3';
+
+/**
+ * The heal target's default slot — **minimal autoplace** (owner decision 9, 2026-08-12).
+ *
+ * Seeds a cell the HEALER's own support footprint covers, because an off-footprint heal target
+ * receives **nothing at all**: `resolveSupportRecipients` FILTERS the recipient list by the footprint
+ * and never expands it, and a single-`ally` heal's base is just `[healTargetId]`. That zero is
+ * game-faithful and deliberately not softened — so the defaults must simply not walk into it.
+ *
+ * Selection order:
+ *   1. a covered cell that is neither the healer's own cell nor the FRONT column (decision 2's
+ *      no-front-bias still holds — it is about enemy fire, an independent axis from ally coverage);
+ *   2. any covered cell that is not the healer's own cell;
+ *   3. `NEUTRAL_HEAL_TARGET_SLOT`.
+ *
+ * Returns the neutral default when `healerPattern` is absent (manual entry, no ship picked) or is
+ * NOT a support pattern — a non-support pattern never filters ally recipients
+ * (`supportFootprintAllyIds` returns `undefined`), so coverage is irrelevant there.
+ *
+ * DEFERRED (follow-up): the full multi-supporter footprint intersection. This considers the healer
+ * only. Decision 8's placement warning is the safety net for everything this misses.
+ */
+export function defaultHealTargetSlot(
+    healerSlot: Position = DEFAULT_HEALER_SLOT,
+    healerPattern?: ParsedPattern
+): Position {
+    if (!healerPattern?.modifiers.support) return NEUTRAL_HEAL_TARGET_SLOT;
+
+    const covered = resolveCells(healerPattern, healerSlot)
+        .map((c) => c.position)
+        .filter((p) => p !== healerSlot);
+
+    return (
+        covered.find((p) => !p.endsWith('4')) ?? covered[0] ?? NEUTRAL_HEAL_TARGET_SLOT
+    );
 }
 
 /**
@@ -1054,17 +1139,29 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
 
     it('a killable enemy stops contributing incoming damage', () => {
         idc = 0;
-        // Window kept TIGHT: over a long window the healer kills everything and the premise
-        // evaporates (SP-1's earned lesson).
-        const result = simulateHealing(
-            BASE({
-                rounds: 3,
-                enemies: [
-                    { ...enemy('enemy-1', 0, 1), stats: { ...enemy('enemy-1', 0, 1).stats, attack: 5_000 } },
-                ],
-            })
-        );
-        // The 1-HP enemy dies in round 1, so rounds 2-3 take no incoming damage from it.
+        // ⚠️ ANTI-VACUITY, load-bearing. The enemy must land at least one hit BEFORE dying, or
+        // "no incoming damage after round 1" is trivially true and the test observes nothing.
+        // Turn order is speed-driven, so the enemy is given speed 999 (> the healer's 300) to act
+        // FIRST in round 1; it then dies to the healer's cast in that same round.
+        // Window kept TIGHT (3 rounds): over a long window the focus kills everything and the
+        // premise evaporates — SP-1's earned lesson.
+        const glassCannon = {
+            ...enemy('enemy-1', 0, 1),
+            stats: {
+                attack: 5_000,
+                crit: 0,
+                critDamage: 0,
+                speed: 999,
+                defence: 0,
+                hp: 1,
+                security: 100,
+            },
+        };
+        const result = simulateHealing(BASE({ rounds: 3, enemies: [glassCannon] }));
+
+        // Precondition: it DID hit in round 1. Without this the assertion below is vacuous.
+        expect(result.rounds[0].incomingDamage).toBeGreaterThan(0);
+        // And it died, so rounds 2-3 take nothing.
         const laterIncoming = result.rounds.slice(1).reduce((n, r) => n + r.incomingDamage, 0);
         expect(laterIncoming).toBe(0);
     });
@@ -1111,13 +1208,9 @@ Then, in the `runCombat` call:
         enemyHp: LEGACY_SINK_HP,
 ```
 
-Replace `enemySecurity: ENEMY_SECURITY,` and `enemySpeed: 0,` — each enemy now carries its own `security` and `speed`. Check whether the engine still requires those two top-level fields:
-
-```bash
-grep -n "enemySecurity\|enemySpeed" src/utils/combat/engine.ts | head
-```
-
-If they are required, pass `enemySecurity: 100` and `enemySpeed: 0` with a comment noting they describe the unreached legacy sink. If optional, drop them.
+**Delete `enemySecurity: ENEMY_SECURITY,` and `enemySpeed: 0,` outright** — each enemy now carries its
+own `security` and `speed`. ✅ **VERIFIED: both are OPTIONAL** on `CombatEngineInput`
+(`engine.ts:1180`, `:1186`), so dropping them compiles. Do not pass legacy-sink placeholders.
 
 - [ ] **Step 5: Thread positions, targeting, and the new flag**
 
@@ -1671,16 +1764,152 @@ In `HealingCalculatorPage.tsx`, pass `healerPosition`, each `TeamActorInput.posi
 `simulateHealing`. Derive `healerTargeting` with `parseShipTargeting(selectedHealerShip)` when a
 ship is picked, leaving it `undefined` for manual entry so the adapter's synthetic fallback applies.
 
-- [ ] **Step 8: Verify and commit**
+Note the heal target's default slot is already handled in the adapter (`defaultHealTargetSlot`,
+wired in Task 6) — do NOT re-implement it here. Only pass an explicit `position` when the user has
+chosen one.
+
+- [ ] **Step 8: The uncovered-placement warning (owner decision 8)**
+
+**This is the safety net for the whole positional model, and it matters more than the autoplace.**
+An ally standing on a cell that no supporter's footprint covers receives **exactly zero** healing —
+owner-ruled game-faithful and deliberately never softened. A silent zero is indistinguishable from a
+bug, so the UI must say so.
+
+Still-live cases the autoplace cannot fix:
+- A **caster-only footprint**: healer at `M4` with `Pattern-Line-Support-Range-1`, whose forward cell
+  clips off-board, covers only the healer's own cell — no ally cell is coverable at all.
+- Any ally the user places off-pattern deliberately or accidentally.
+
+Add to `src/utils/calculators/healingPlacement.ts`:
+
+```ts
+/**
+ * Player-side ally ids standing on a cell that NO supporter's footprint covers.
+ *
+ * A support cast anchors on the caster's own cell and `resolveSupportRecipients` FILTERS recipients
+ * by that footprint, so an uncovered ally receives exactly zero. That zero is intended (owner ruling)
+ * — this helper exists to make it VISIBLE, never to change it.
+ *
+ * A supporter is any player ship whose parsed ACTIVE pattern carries `modifiers.support`. Ships with
+ * no resolvable support pattern contribute no coverage. When there is NO supporter at all, returns an
+ * empty array: nothing is "uncovered" if nothing was ever going to cover it, and warning on every
+ * ally in a damage-only team would be noise.
+ */
+export function uncoveredAllyIds(
+    allies: ReadonlyArray<{ id: string; position: Position; pattern?: ParsedPattern }>
+): string[] {
+    const covered = new Set<Position>();
+    let sawSupporter = false;
+    for (const a of allies) {
+        if (!a.pattern?.modifiers.support) continue;
+        sawSupporter = true;
+        try {
+            for (const c of resolveCells(a.pattern, a.position)) covered.add(c.position);
+        } catch {
+            // Unknown pattern signature (no offset table) — contributes no coverage rather than
+            // throwing. Same guard as defaultHealTargetSlot; see its comment.
+        }
+    }
+    if (!sawSupporter) return [];
+    return allies.filter((a) => !covered.has(a.position)).map((a) => a.id);
+}
+```
+
+Tests for it (`healingPlacement.test.ts`):
+
+```ts
+describe('uncoveredAllyIds (decision 8)', () => {
+    const line1 = parsePattern('Pattern-Line-Support-Range-1'); // @M2 covers {M2, M3}
+
+    it('flags an ally off every supporter footprint', () => {
+        expect(
+            uncoveredAllyIds([
+                { id: 'healer', position: 'M2', pattern: line1 },
+                { id: 'covered', position: 'M3' },
+                { id: 'stranded', position: 'B1' },
+            ])
+        ).toEqual(['stranded']);
+    });
+
+    it('flags the ally when the caster-only footprint covers nobody else', () => {
+        // Line-Support-Range-1 @ M4 clips forward off-board → covers only {M4}. The caster itself
+        // still stands on a covered cell (its own), so it is NOT flagged — the stranded ally is.
+        const ids = uncoveredAllyIds([
+            { id: 'healer', position: 'M4', pattern: line1 },
+            { id: 'stranded', position: 'M1' },
+        ]);
+        expect(ids).toEqual(['stranded']);
+    });
+
+    it('unions coverage across MULTIPLE supporters', () => {
+        // A second supporter at B1 covers B2, rescuing an ally the healer cannot reach.
+        expect(
+            uncoveredAllyIds([
+                { id: 'healer', position: 'M2', pattern: line1 },
+                { id: 'support2', position: 'B1', pattern: line1 },
+                { id: 'rescued', position: 'B2' },
+            ])
+        ).toEqual([]);
+    });
+
+    it('returns EMPTY when no ship has a support pattern (damage-only team)', () => {
+        expect(
+            uncoveredAllyIds([
+                { id: 'a', position: 'M2' },
+                { id: 'b', position: 'B1' },
+            ])
+        ).toEqual([]);
+    });
+
+    it('treats a NON-support pattern as contributing no coverage', () => {
+        expect(
+            uncoveredAllyIds([
+                { id: 'a', position: 'M2', pattern: parsePattern('Pattern-Cone-Range-1') },
+                { id: 'b', position: 'B1' },
+            ])
+        ).toEqual([]);
+    });
+});
+```
+
+⚠️ Verify each expected footprint with `resolveCells` before trusting these; if one differs, fix the
+**test's** expectation and report it, never the offset table.
+
+Then surface it in `HealingCalculatorPage.tsx`: resolve each player ship's pattern via
+`parseShipTargeting(getShipById(shipId))` when a ship is picked, call `uncoveredAllyIds`, and render a
+warning naming the affected ships. Use the `card` class or an existing UI primitive — **no emojis**,
+plain text plus a warning colour class. Wording should state the consequence, not just the fact, e.g.
+*"Aegis is outside every supporter's pattern and will receive no healing. Move it, or move a
+supporter."*
+
+- [ ] **Step 9: Two Minors carried from Task 6's review**
+
+- **A default currently outranks an explicit placement.** The adapter nominates the heal target for
+  slot priority unconditionally, whether its slot came from the user or from `defaultHealTargetSlot`.
+  Measured: `resolvePlayerSlots(['M2','T2','T2'], [2])` → `['M2','T1','T2']`, i.e. an ally the user
+  **explicitly** parked on `T2` is moved to make room for the heal target's **default** pick. Healing
+  is unaffected, but the ally's cell silently changes, which can change which ship is front-most and
+  therefore who the enemy targets. Fix: nominate the heal target only when its slot came from the
+  default path, so explicit beats default. Once every ship has a dropdown-chosen slot this goes
+  largely inert — but it is wrong while defaults still exist.
+- **The crowded-board guard asserts a floor, not a value.** `healingPositionalEnemy.test.ts`'s crowded
+  leg uses `toBeGreaterThan(0)`; pin the actual expected total instead, so a future partial regression
+  that lands the heal on a different covered recipient is caught.
+
+- [ ] **Step 10: Verify and commit**
 
 ```bash
 npx tsc --noEmit && npm run lint && npm test 2>&1 | tail -20
 git add -A
-git commit -m "feat(healing): slot dropdowns and enemy hp/defence/security inputs"
+git commit -m "feat(healing): slot dropdowns, enemy hp/defence/security, uncovered-placement warning"
 ```
 
 Existing `HealingCalculatorPage` and `EnemyAttackersPanel` tests will need the new required config
 fields added to their fixtures. That is expected mechanical churn, not a behavioural change.
+
+⚠️ If any `.snap` moves, attribute it to a named cause and report it. This task is UI + config state;
+the only sim-visible change is that positions and enemy HP/defence/security now reach the adapter, so
+a moved healing golden means a fixture's board changed — explain it, never re-pin blind.
 
 ---
 

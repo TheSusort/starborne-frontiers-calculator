@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { TeamShipConfig, SelectedGameBuff, CombatStatBlock } from '../../types/calculator';
-import { ATTACKER_SLOT_OPTIONS } from '../../utils/calculators/dpsEnemyPlacement';
 import type { Position } from '../../types/encounters';
 import { ShipSkills } from '../../types/abilities';
 import { AFFINITY_OPTIONS } from '../../constants/affinities';
@@ -19,6 +18,7 @@ import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
 import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
 import { GameBuffPicker } from './GameBuffPicker';
+import { SlotSelect } from './SlotSelect';
 
 type TeamShipStats = CombatStatBlock;
 
@@ -39,6 +39,9 @@ interface TeamShipRowProps {
      *  shares this row and is not positional yet). */
     slot?: Position;
     onSlotChange?: (slot: Position) => void;
+    /** Cells other same-side ships hold — annotated in the dropdown so a collision is visible
+     *  before it happens. Absent → no annotations. */
+    takenSlots?: readonly Position[];
 }
 
 export const TeamShipRow: React.FC<TeamShipRowProps> = ({
@@ -55,6 +58,7 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
     onAffinityChange,
     slot,
     onSlotChange,
+    takenSlots,
     onShipSkillsChange,
 }) => {
     const [expanded, setExpanded] = useState(false);
@@ -137,12 +141,10 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                     )}
 
                     {slot && onSlotChange && (
-                        <Select
-                            label="Board slot"
+                        <SlotSelect
                             value={slot}
-                            onChange={(v) => onSlotChange(v as Position)}
-                            options={ATTACKER_SLOT_OPTIONS.map((p) => ({ value: p, label: p }))}
-                            className="w-full"
+                            onChange={onSlotChange}
+                            taken={takenSlots}
                             helpLabel="Column 4 is the front. Two team ships cannot share a slot."
                         />
                     )}

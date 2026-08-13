@@ -1,4 +1,5 @@
 import type { ShipTypeName } from '../constants/shipTypes';
+import type { ParsedTarget, ParsedPattern } from '../utils/targetingParser';
 import { AffinityName } from './ship';
 import type { Condition, ShipSkills } from './abilities';
 import type { Position } from './encounters';
@@ -286,6 +287,10 @@ export interface HealerShipConfig {
     chargeCount: number;
     startCharged: boolean;
     shipSkills: ShipSkills;
+    /** Board slot this healer casts from. The healing run is positional: the healer's cell anchors
+     *  its support footprint, and an ally outside that footprint receives NO healing at all.
+     *  Healer configs are alternatives compared in SEPARATE runs, so two configs may share a cell. */
+    position?: Position;
 }
 
 export type HealerShipConfigUpdateableField =
@@ -373,6 +378,15 @@ export interface TeamActorInput {
     /** Board slot for this team actor. Forwarded to the engine's `teamActors[].position` by
      *  `deriveTeamEngineActors`'s spread, driving positional target selection + footprint apply. */
     position?: Position;
+    /** Parsed ACTIVE targeting for this team actor. Forwarded to the engine's
+     *  `teamActors[].target` / `.pattern` by `deriveTeamEngineActors`'s spread. Both are needed:
+     *  the positional apply gate requires target AND pattern, and a missing pattern fails
+     *  SILENTLY (the cast resolves but credits nothing per-victim). */
+    target?: ParsedTarget;
+    pattern?: ParsedPattern;
+    /** Parsed CHARGED targeting when it differs from active; falls back to the active axes. */
+    chargedTarget?: ParsedTarget;
+    chargedPattern?: ParsedPattern;
     /** Ship role (Ship.type) for role-filtered ally-damage reactions (Graphite).
      *  Auto-filled from ship data on the healing page; absent for manual actors →
      *  role-filtered reactions never fire for them (conservative). */
