@@ -11,7 +11,7 @@ import type { ParsedTarget, ParsedPattern, ShipTargeting } from '../targetingPar
 import { computeAffinityModifiers } from './affinityUtils';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { deriveTeamEngineActors } from './dpsSimulator';
-import { DEFAULT_BASE_PATTERN, DEFAULT_FRONT_ENEMY_TARGET } from './dpsEnemyPlacement';
+import { DEFAULT_FRONT_ENEMY_TARGET } from './dpsEnemyPlacement';
 import {
     defaultEnemySlot,
     resolveEnemySlots,
@@ -448,7 +448,10 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // ally-side active target would otherwise bind the dummy and deliver zero, exactly as the
         // focus did.
         target: offensiveTarget(t.target),
-        pattern: t.pattern ?? DEFAULT_BASE_PATTERN,
+        // `pattern` is NOT defaulted here: `normalizeCombatRoster` (runCombat's first line) fills an
+        // absent pattern with the same DEFAULT_BASE_PATTERN. `target` still is — substituting an
+        // ALLY-side target is this calculator's matchup POLICY, and the boundary only FILLS.
+        pattern: t.pattern,
         chargedTarget: chargedOffensiveTarget(t.chargedTarget),
         chargedPattern: t.chargedPattern,
     }));
@@ -511,7 +514,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             // support ship picked as an enemy — 20 of them have an ally-side active target — would
             // otherwise bind the dummy and deliver nothing.
             target: offensiveTarget(e.target),
-            pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
+            // Filled by `normalizeCombatRoster`, not here — see the team-actor branch above.
+            pattern: e.pattern,
             chargedTarget: chargedOffensiveTarget(e.chargedTarget),
             chargedPattern: e.chargedPattern,
         };
@@ -566,7 +570,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // offensive clause in the cast delivers exactly zero. Substituted here; the support footprint
         // rides `pattern` below and is untouched. See `offensiveTarget` for the measurements.
         target: offensiveTarget(input.healerTargeting?.active?.target),
-        pattern: input.healerTargeting?.active?.pattern ?? DEFAULT_BASE_PATTERN,
+        // Filled by `normalizeCombatRoster` when absent — see the team-actor branch above.
+        pattern: input.healerTargeting?.active?.pattern,
         chargedTarget: chargedOffensiveTarget(input.healerTargeting?.charged?.target),
         chargedPattern: input.healerTargeting?.charged?.pattern,
         // Heals apply to each recipient the caster's support pattern covers — WITHOUT
