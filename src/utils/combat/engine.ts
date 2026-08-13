@@ -1664,6 +1664,19 @@ function convertHitToSelfDot(
     return damage;
 }
 /**
+ * TEST-ONLY instrumentation for the SP-4 ladder. Counts how many times a turn resolved its victim
+ * through `tb.legacyVictim` — the dummy fallback (cluster C, the keystone). SP-4c can only be pure
+ * deletion once this is zero for every run, so the number is the ladder's gate, not a debug aid.
+ * Module-level and NOT reset per run: `__resetLegacyVictimFallbackCount` is the test's job.
+ */
+let legacyVictimFallbackCount = 0;
+export function __getLegacyVictimFallbackCount(): number {
+    return legacyVictimFallbackCount;
+}
+export function __resetLegacyVictimFallbackCount(): void {
+    legacyVictimFallbackCount = 0;
+}
+/**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
  * CURRENT effective speed (selectNextBySpeed) until the pool drains — every actor takes one
@@ -6575,6 +6588,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           }
                       )
                     : null;
+            if (selected == null) legacyVictimFallbackCount++;
             return { tgt: selected ?? tb.legacyVictim };
         };
 
