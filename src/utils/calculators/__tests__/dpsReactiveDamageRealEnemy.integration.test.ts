@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
-import { setupKeyedTestRng, resetRateGateRng } from '../rateAccumulator';
+import { setupKeyedTestRng } from '../rateAccumulator';
 import { DEFAULT_ATTACKER_SLOT, DEFAULT_ENEMY_SLOT } from '../dpsEnemyPlacement';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { focusDamageTotal } from '../dpsMetricFromDealt';
@@ -96,7 +96,6 @@ const procsAgainstRealEnemy = (events: CombatEvent[]) =>
 describe("SP-1 follow-up: a reactive-damage proc hits the real DPS enemy's HP and the DPS metric", () => {
     beforeEach(() => {
         setupKeyedTestRng(12345);
-        resetRateGateRng();
     });
 
     it("credits the proc to the focus's per-victim map, so it reaches the re-derived DPS total", () => {
