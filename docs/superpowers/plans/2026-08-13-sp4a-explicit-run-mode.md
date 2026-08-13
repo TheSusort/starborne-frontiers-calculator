@@ -314,34 +314,9 @@ Zero golden movement."
 - Consumes: `CombatEngineInput.mode` from Task 1.
 - Produces: nothing new; after this task no production caller relies on the transitional derivation.
 
-- [ ] **Step 1: Write the failing test**
+**No new test in this task, by decision.** An earlier draft asserted on source TEXT (grep-as-test) that each caller passes `mode`. Dropped: the healing and battle callers' explicitness is enforced behaviourally by Task 6's guards (an un-migrated caller throws with a named error), and `mode: 'dps'` is the default so there is nothing behavioural to assert for `dpsSimulator`. Coverage for this task is `tsc` plus the existing suites for all three callers — `battleSimulator`'s and `healingEngineAdapter`'s tests exercise these exact paths and would fail on a wrong mode.
 
-Append to `src/utils/combat/__tests__/runModeEquivalence.test.ts`:
-
-```ts
-describe('production callers pass mode explicitly', () => {
-    it('no production caller relies on the transitional derivation', async () => {
-        // A grep-as-test: cheap, and it fails loudly if a later refactor drops the explicit mode
-        // and silently falls back to the legacy inference.
-        const { readFileSync } = await import('node:fs');
-        const files = [
-            'src/utils/calculators/battleSimulator.ts',
-            'src/utils/calculators/healingEngineAdapter.ts',
-            'src/utils/calculators/dpsSimulator.ts',
-        ];
-        for (const f of files) {
-            expect(readFileSync(f, 'utf8'), f).toMatch(/\bmode:\s*'(dps|healing|battle)'/);
-        }
-    });
-});
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-Run: `npx vitest run src/utils/combat/__tests__/runModeEquivalence.test.ts -t 'transitional derivation'`
-Expected: FAIL on `battleSimulator.ts`.
-
-- [ ] **Step 3: Add `mode` to each caller**
+- [ ] **Step 1: Add `mode` to each caller**
 
 `src/utils/calculators/battleSimulator.ts:1075` — replace `positionalTeamBattle: true,` with:
 
@@ -361,24 +336,25 @@ Expected: FAIL on `battleSimulator.ts`.
         mode: 'dps',
 ```
 
-- [ ] **Step 4: Run the test and the suite**
+- [ ] **Step 2: Verify the callers' own suites still pass**
 
-Run: `npx vitest run src/utils/combat/__tests__/runModeEquivalence.test.ts`
-Expected: PASS, 5 tests.
+Run: `npx vitest run src/utils/calculators/__tests__ src/utils/combat/__tests__/runModeEquivalence.test.ts 2>&1 | tail -20`
+Expected: all pass. A wrong mode on any caller breaks these — `battleSimulator`'s tests depend on `teamBattle` routing and `healingEngineAdapter`'s on the healing result block.
+
+- [ ] **Step 3: Full verification**
 
 Run: `npx tsc --noEmit && npm test -- --run 2>&1 | tail -20`
 Expected: all pass. `git diff --stat -- '*.snap'` empty.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/utils/calculators/battleSimulator.ts src/utils/calculators/healingEngineAdapter.ts src/utils/calculators/dpsSimulator.ts src/utils/combat/__tests__/runModeEquivalence.test.ts
+git add src/utils/calculators/battleSimulator.ts src/utils/calculators/healingEngineAdapter.ts src/utils/calculators/dpsSimulator.ts
 git commit -m "refactor(calculators): production callers state their run mode
 
 battleSimulator -> 'battle' (replacing positionalTeamBattle: true),
-healingEngineAdapter -> 'healing', dpsSimulator -> 'dps'. A grep-as-test
-fences the explicitness so a later refactor cannot silently fall back to
-the transitional inference. Zero golden movement."
+healingEngineAdapter -> 'healing', dpsSimulator -> 'dps'. No production
+caller relies on the transitional derivation any more. Zero golden movement."
 ```
 
 ---
@@ -689,7 +665,7 @@ Zero golden movement."
 
 **Files:**
 - Delete: `scripts/codemod-run-mode.mjs`
-- Modify: `src/constants/changelog.ts` — **no entry.** This PR is an internal refactor with no user-visible change (CLAUDE.md: skip minor refactors). SP-4e is the one that needs an entry.
+- No changelog edit: this PR is an internal refactor with no user-visible change (CLAUDE.md: skip minor refactors). SP-4e is the one that needs an entry.
 
 - [ ] **Step 1: Delete the codemod**
 
@@ -713,7 +689,7 @@ Expected: **empty.** This is the PR's headline gate — a discriminator refactor
 
 - [ ] **Step 4: Confirm the placement-symmetry oracle is at baseline**
 
-Run the oracle as documented in `[[project_placement_symmetry_oracle]]` with `--seeds 15`.
+Run: `npm run audit:placement-symmetry -- --seeds 15`
 Expected: the `2 / 146 / 13-13-13` baseline, unchanged.
 
 - [ ] **Step 5: Verify the deletions actually happened**
