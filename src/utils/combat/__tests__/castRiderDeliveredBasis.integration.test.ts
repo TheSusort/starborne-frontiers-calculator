@@ -34,7 +34,7 @@
  * order — the repair is scaled off that attack.
  *
  * SCOPE. The DPS calculator never reaches this code (`simulateDPS` sets neither `healTargetId` nor
- * `positionalTeamBattle`, so the whole heal block is unreachable). The healing calculator reaches
+ * `mode: 'battle'`, so the whole heal block is unreachable). The healing calculator reaches
  * it but threads no positions, so no positional apply runs, nothing defers, and it keeps reading
  * `directDamage` — byte-identical, and pinned by healingGoldenParity + healing.test.ts. Only the
  * positional battle simulator changes.

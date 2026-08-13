@@ -1217,16 +1217,11 @@ export interface CombatEngineInput {
     /** See `RunMode`. Default `'dps'`. Required in spirit: `healTargetId` without
      *  `mode: 'healing'` throws once the transitional derivation is gone (Task 6). */
     mode?: RunMode;
-    /** Positional team-vs-team battle (the combat simulator sets this), NOT the healing
-     *  calculator. Threaded into the healing ctx so a PLAYER single-`ally` heal/shield resolves
-     *  the lowest-HP living player ally (team-symmetric with the enemy side) instead of the
-     *  vestigial `healTargetId` focus. See HealingRuntimeCtx.teamBattle. Default false. */
-    positionalTeamBattle?: boolean;
     /** Apply heals to EACH recipient's own actor (per-recipient application), WITHOUT adopting
-     *  `positionalTeamBattle`'s lowest-HP single-`ally` routing. The healing calculator sets this
+     *  `mode: 'battle'`'s lowest-HP single-`ally` routing. The healing calculator sets this
      *  once it runs positionally: its heals must follow the caster's support PATTERN, which is the
      *  game's rule for every ship (Volk's lowest-HP repair is its PASSIVE, not a pattern effect).
-     *  `positionalTeamBattle` implies this behaviour too, so the battle sim is unaffected.
+     *  `mode: 'battle'` implies this behaviour too, so the battle sim is unaffected.
      *  Absent/false → heals apply only to `healTargetId` (legacy single-target accounting). */
     perRecipientHealApply?: boolean;
     /** Enemy attackers (healing mode): offense-only queue actors bombarding the heal
@@ -1548,7 +1543,7 @@ export interface HealingRoundEngine {
     perActorIncoming: Map<string, ActorIntake>;
     /** Per-RECIPIENT healing accounting, keyed by the actor a repair LANDED ON — the counterpart to
      *  `perActor`, which is keyed by the SOURCE that cast it. Populated only when
-     *  `perRecipientApply` (or `positionalTeamBattle`) is set; **empty otherwise**, which is what
+     *  `perRecipientApply` (or `mode: 'battle'`) is set; **empty otherwise**, which is what
      *  keeps every legacy healing result byte-identical.
      *
      *  EVERY repair whose pool application succeeds is on this axis (SP-3b Task 7): the direct cast
@@ -2331,12 +2326,19 @@ export function runCombat(input: CombatEngineInput): {
     // Every downstream focus-carve-out (`healTarget && actor.id === healTarget.id`) and the
     // healingCtx anchor thus resolve exactly as before. Real-vs-real team heals still route to the
     // lowest-HP living ally via `lowestHpAllyId` (the `teamBattle` path), NOT this anchor.
-    // TRANSITIONAL — DELETED IN TASK 6. Until every caller passes `mode`, fall back to the legacy
-    // signals. The mapping is EXACT, not approximate: `healTargetId` present implies
-    // `explicitHealTarget` defined, because :2306 throws otherwise. See the plan's equivalence table.
-    const runMode: RunMode =
-        input.mode ??
-        (input.positionalTeamBattle ? 'battle' : input.healTargetId ? 'healing' : 'dps');
+    const runMode: RunMode = input.mode ?? 'dps';
+
+    // Explicitness guards. These do NOT infer a mode — they refuse an input whose mode and data
+    // disagree, which is the difference between validation and the derivation SP-4 removed.
+    // Mirrors the engine's existing style (`:2349` throws on a colliding enemyAttacker id).
+    if (input.healTargetId && runMode !== 'healing' && runMode !== 'battle') {
+        throw new Error(
+            `runCombat: healTargetId requires mode 'healing' or 'battle' (got '${runMode}')`
+        );
+    }
+    if (runMode === 'healing' && !input.healTargetId) {
+        throw new Error(`runCombat: mode 'healing' requires healTargetId`);
+    }
 
     const healTarget = explicitHealTarget ?? (runMode === 'battle' ? attacker : undefined);
 
@@ -2357,7 +2359,7 @@ export function runCombat(input: CombatEngineInput): {
 
     // Enemy attackers. Offense actors that bombard the player side (healing/sim mode). The enemy
     // roster is built purely from their presence (SP-U U5): no `healTargetId` is required — sim
-    // mode supplies them under `positionalTeamBattle` with no explicit heal focus, and a future
+    // mode supplies them under `mode: 'battle'` with no explicit heal focus, and a future
     // real DPS enemy (SP-U 5a) supplies one with neither.
     const enemyAttackerInputs = input.enemyAttackers ?? [];
     // SP-U U5: the dummy `enemy` is the REAL, destructible DPS target ONLY in pure DPS mode —
@@ -2448,12 +2450,12 @@ export function runCombat(input: CombatEngineInput): {
     // active targets allies does not make the enemy roster any less real. Gating the resolvers on
     // dummyEnemyIsVestigial (its full AND) misrouted Judge/Incinerator/Chakara/Rhodium's reactive
     // damage onto the vestigial dummy whenever the player team included an ally-targeting ship, even
-    // in a fully positional sim. Gating them on `input.positionalTeamBattle` instead (an earlier
-    // draft of this fix) over-corrected the other way: direct-engine tests (e.g.
-    // purgeConditionalSources.test.ts) supply a real, positioned enemyAttackers roster WITHOUT ever
-    // setting input.positionalTeamBattle, so that flag is too strict a requirement for "should the
-    // resolvers see the real roster". `hasPositionedEnemyRoster` is the narrowest correct signal for
-    // both cases.
+    // in a fully positional sim. Gating them on the then-named `positionalTeamBattle` input field
+    // (now `mode: 'battle'`) instead (an earlier draft of this fix) over-corrected the other way:
+    // direct-engine tests (e.g. purgeConditionalSources.test.ts) supply a real, positioned
+    // enemyAttackers roster WITHOUT ever setting that flag, so it was too strict a requirement for
+    // "should the resolvers see the real roster". `hasPositionedEnemyRoster` is the narrowest
+    // correct signal for both cases.
     const hasPositionedEnemyRoster = enemyAttackerActors.some((a) => a.position != null);
     const dummyEnemyIsVestigial =
         hasPositionedEnemyRoster &&
@@ -5653,11 +5655,12 @@ export function runCombat(input: CombatEngineInput): {
             // (a proc whose target resolved to ctx.enemy — e.g. an AoE with an empty living roster —
             // stays credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim.
             //
-            // SP-1 follow-up: gated on `hasPositionedEnemyRoster`, NOT `input.positionalTeamBattle`
-            // — the same correction SP-M M1 made one gate over (engine.ts:2375, "positionalTeamBattle
-            // is too strict; hasPositionedEnemyRoster is the narrowest correct signal"). Only
-            // simulateBattle sets positionalTeamBattle, yet the DPS calculator also supplies a real,
-            // positioned enemy roster; under the old flag every reactive-damage proc there fell to
+            // SP-1 follow-up: gated on `hasPositionedEnemyRoster`, NOT the then-named
+            // `positionalTeamBattle` input field (now `mode: 'battle'`) — the same correction SP-M M1
+            // made one gate over (engine.ts:2375, "positionalTeamBattle is too strict;
+            // hasPositionedEnemyRoster is the narrowest correct signal"). Only simulateBattle set
+            // that flag, yet the DPS calculator also supplies a real, positioned enemy roster;
+            // under the old flag every reactive-damage proc there fell to
             // the credit-only branch below, reducing no real HP and never reaching `perTargetDealt`
             // — which, since SP-1 re-derives the DPS metric FROM that map, meant the proc fired and
             // contributed exactly nothing (Judge/Incinerator/Rhodium/Chakara fire on the focus's own
@@ -7754,14 +7757,15 @@ export function runCombat(input: CombatEngineInput): {
             selfHpPctFor: bySide('player').selfHpPctFor,
             // SP-M M1 (Task 7b review, Task 9b fix): gated on `hasPositionedEnemyRoster` — "does a
             // real, positioned opposing-enemy roster exist" — NOT `dummyEnemyIsVestigial` and NOT
-            // `input.positionalTeamBattle`. dummyEnemyIsVestigial ANDs in a second conjunct (every
-            // player actor's parsed target must be enemy-side) that is false whenever the player
-            // team includes an ally-targeting ship (e.g. a healer) even in a fully positional
-            // simulateBattle — that misrouted these resolvers onto the vestigial dummy instead of
-            // the real enemy roster. `input.positionalTeamBattle` over-corrects the other way: it
-            // is only ever set by simulateBattle, but direct-engine tests (e.g.
-            // purgeConditionalSources.test.ts) supply a real, positioned enemyAttackers roster
-            // without ever setting that flag — gating on it there wrongly fell back to the dummy.
+            // the then-named `positionalTeamBattle` input field (now `mode: 'battle'`).
+            // dummyEnemyIsVestigial ANDs in a second conjunct (every player actor's parsed target
+            // must be enemy-side) that is false whenever the player team includes an ally-targeting
+            // ship (e.g. a healer) even in a fully positional simulateBattle — that misrouted these
+            // resolvers onto the vestigial dummy instead of the real enemy roster. Gating on that
+            // flag over-corrected the other way: it was only ever set by simulateBattle, but
+            // direct-engine tests (e.g. purgeConditionalSources.test.ts) supply a real, positioned
+            // enemyAttackers roster without ever setting it — gating on it there wrongly fell back
+            // to the dummy.
             // In pure DPS mode (no enemyAttackers supplied) enemyAttackerActors is EMPTY, so
             // hasPositionedEnemyRoster is false and the positional-only
             // mostBuffsAmong(enemyAttackerActors) would otherwise resolve to undefined and the
@@ -7786,9 +7790,9 @@ export function runCombat(input: CombatEngineInput): {
             // re-checked against its own live state, preserving Judge/Incinerator DPS-mode credit.
             // NEVER the dummy when a real roster exists — gated on `hasPositionedEnemyRoster`, NOT
             // `dummyEnemyIsVestigial` (falsely false whenever the player team includes an
-            // ally-targeting ship such as a healer, even in a fully positional battle) and NOT
-            // `input.positionalTeamBattle` (falsely false for direct-engine tests that supply a real
-            // enemyAttackers roster without that flag — see Task 9b).
+            // ally-targeting ship such as a healer, even in a fully positional battle) and NOT the
+            // then-named `positionalTeamBattle` input field (now `mode: 'battle'`; falsely false for
+            // direct-engine tests that supply a real enemyAttackers roster without it — see Task 9b).
             livingOpposingActorIds: () =>
                 hasPositionedEnemyRoster
                     ? enemyAttackerActors
@@ -10059,7 +10063,7 @@ export function runCombat(input: CombatEngineInput): {
         //
         // GATED ON `dpsEnemyTarget` (the pure-DPS mode this fix targets). The other two modes are
         // deliberately excluded:
-        //  - Positional sim (`positionalTeamBattle`, battleSimulator): reactives route through
+        //  - Positional sim (`mode: 'battle'`, battleSimulator): reactives route through
         //    applyVictimDamage + the per-victim maps (serialized into RoundData AFTER this drain),
         //    NOT `roundDamage` — the delta would be 0 here anyway, so the gate only makes the no-op
         //    explicit.

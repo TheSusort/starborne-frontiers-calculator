@@ -42,7 +42,7 @@
  *
  * SURFACE. This reaches the healing/sim surfaces ONLY: the executor's first line bails on
  * `!ctx.healing`, and `runCombat` builds `healingCtx` only under an explicit `healTargetId` or
- * `positionalTeamBattle`. `simulateDPS` sets neither, so the DPS calculator never reaches this branch.
+ * `mode: 'battle'`. `simulateDPS` sets neither, so the DPS calculator never reaches this branch.
  *
  * TURN ORDER (inherited from `transformIncomingToDot.test.ts`): the transform carrier outruns its
  * attacker so its own turn-start DoT tick runs BEFORE the incoming hit, and no tick from an entry the

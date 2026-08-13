@@ -767,6 +767,7 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
                 hp: 10_000,
                 // DPS mode: NO healTargetId, NO enemyAttackers.
                 healTargetId: undefined,
+                mode: 'dps',
                 enemyHp: 10_000_000,
                 shipSkills: {
                     slots: [{ slot: 'passive', abilities: [crossingBuff(false)] }],

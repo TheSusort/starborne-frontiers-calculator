@@ -73,27 +73,9 @@ const DPS_BASE = (): CombatEngineInput => ({ ...base() });
 const HEAL_BASE = (): CombatEngineInput => ({ ...base(), shipSkills: selfHealSkills() });
 const BATTLE_BASE = (): CombatEngineInput => ({ ...base() });
 
-describe('run mode is equivalent to the legacy discriminators', () => {
+describe('mode is the sole run-kind signal', () => {
     beforeEach(() => {
         setupKeyedTestRng(9001);
-    });
-
-    it("mode 'battle' is byte-identical to positionalTeamBattle: true", () => {
-        setupKeyedTestRng(9001);
-        const legacy = runCombat({ ...BATTLE_BASE(), positionalTeamBattle: true });
-        setupKeyedTestRng(9001);
-        const explicit = runCombat({ ...BATTLE_BASE(), mode: 'battle' });
-
-        expect(explicit).toEqual(legacy);
-    });
-
-    it("mode 'healing' is byte-identical to healTargetId alone", () => {
-        setupKeyedTestRng(9001);
-        const legacy = runCombat({ ...HEAL_BASE(), healTargetId: FOCUS_ID });
-        setupKeyedTestRng(9001);
-        const explicit = runCombat({ ...HEAL_BASE(), healTargetId: FOCUS_ID, mode: 'healing' });
-
-        expect(explicit).toEqual(legacy);
     });
 
     it("omitting mode on a plain DPS input is identical to mode 'dps'", () => {
@@ -111,5 +93,25 @@ describe('run mode is equivalent to the legacy discriminators', () => {
         // `mode === 'healing'` would silently drop it from every battleSimulator result.
         const result = runCombat({ ...BATTLE_BASE(), mode: 'battle' });
         expect('healing' in result && result.healing !== undefined).toBe(true);
+    });
+});
+
+describe('the engine demands an explicit mode rather than inferring one', () => {
+    it('throws when healTargetId is set without a heal-bearing mode', () => {
+        expect(() => runCombat({ ...HEAL_BASE(), healTargetId: FOCUS_ID })).toThrow(
+            /healTargetId requires mode/
+        );
+    });
+
+    it("throws when mode 'healing' names no heal focus", () => {
+        expect(() => runCombat({ ...HEAL_BASE(), mode: 'healing' })).toThrow(
+            /mode 'healing' requires healTargetId/
+        );
+    });
+
+    it("accepts healTargetId with mode 'healing'", () => {
+        expect(() =>
+            runCombat({ ...HEAL_BASE(), healTargetId: FOCUS_ID, mode: 'healing' })
+        ).not.toThrow();
     });
 });

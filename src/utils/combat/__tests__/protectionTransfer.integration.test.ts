@@ -1025,7 +1025,7 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
 // Positional (not the file's default non-positional shape) because `emitHit` — the site that books
 // the victim's own row — exists only on the positional path. In non-positional mode the victim gets
 // no `perTargetDamage` entry at all, which is a separate pre-existing gap that never reaches the
-// battle simulator (`simulateBattle` always sets `positionalTeamBattle`).
+// battle simulator (`simulateBattle` always sets `mode: 'battle'`).
 // ───────────────────────────────────────────────────────────────────────────────────────
 
 /** A positioned enemy that fires one real 100% hit at the FRONT-most player (M4 in this harness's

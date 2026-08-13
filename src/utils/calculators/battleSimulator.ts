@@ -799,8 +799,8 @@ const withStealthBypass = (t: ParsedTarget | undefined, on: boolean): ParsedTarg
  *                  rates), position, target, pattern.
  *   - enemyTeam  → `enemyAttackers`, each with stats + shipSkills + position/target/pattern.
  *
- * The battle is driven by positions on both sides. `positionalTeamBattle: true` is the single
- * signal the engine keys on (SP-U U5 R6 decouple): it builds the positioned enemy roster from the
+ * The battle is driven by positions on both sides. `mode: 'battle'` is the single signal the
+ * engine keys on (SP-U U5 R6 decouple): it builds the positioned enemy roster from the
  * enemyAttackers presence, lets enemies fire on players, and runs the real-vs-real heal/shield
  * pipeline (heals route to the lowest-HP living ally) — no `healTargetId` is passed.
  *

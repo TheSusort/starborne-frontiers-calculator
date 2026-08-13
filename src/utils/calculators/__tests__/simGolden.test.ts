@@ -23,7 +23,7 @@ describe('sim goldens (BattleResult snapshots)', () => {
         ['dps', dpsMode],
         ['healing', healingMode],
         // SP-U U5: a decisive-outcome battle (terminates on a real wipe) and a sim-mode
-        // heal-casting battle (locks the R6-decoupled positionalTeamBattle heal routing).
+        // heal-casting battle (locks the R6-decoupled `mode: 'battle'` heal routing).
         ['deathPath', deathPath],
         ['healCasting', healCasting],
         // SP-F F1: dedicated AoE reconciliation fixture — see the intent-guard test below.

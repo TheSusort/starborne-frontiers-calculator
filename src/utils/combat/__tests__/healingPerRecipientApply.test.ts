@@ -226,7 +226,7 @@ describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
         // Decision 7: NOT lowest HP. The 20%-HP ally is on-pattern and still gets nothing.
         //
         // NOTE — this test is deliberately INSENSITIVE to `perRecipientHealApply` itself: with
-        // `positionalTeamBattle` absent, `healing.teamBattle` is false, so `recipientsFor`
+        // `mode: 'battle'` absent, `healing.teamBattle` is false, so `recipientsFor`
         // (playerTurn.ts:3361) takes the single-element `else base = [healing.targetId]` branch —
         // there is no second candidate for the flag to include or exclude, and
         // `applyHealToTarget`'s `victim` default (engine.ts:3005) already resolves to the same
@@ -259,7 +259,7 @@ describe('SP-3a: the fence — teamBattle keeps its lowest-HP routing', () => {
         expect(low!.currentHp).toBe(10_000);
     });
 
-    it('positionalTeamBattle STILL routes that same heal by lowest HP', () => {
+    it("mode 'battle' STILL routes that same heal by lowest HP", () => {
         idc = 0;
         let target: CombatActor | undefined;
         let low: CombatActor | undefined;
