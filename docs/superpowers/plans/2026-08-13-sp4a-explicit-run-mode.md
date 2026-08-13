@@ -642,12 +642,34 @@ Task 1's `runModeEquivalence.test.ts` opens with three parity tests whose whole 
 
 Update the file's top-level `describe` name if it now overstates what remains.
 
-- [ ] **Step 6: Verify the symbol is gone**
+- [ ] **Step 6: Sweep the ~40 stale comment references**
 
-Run: `grep -rn "positionalTeamBattle" src --include='*.ts' --include='*.tsx'`
-Expected: no output. If this still prints `runModeEquivalence.test.ts`, Step 5 was not done.
+Deleting the field leaves roughly 40 comments across 20 files describing a symbol that no longer exists. Spec rule 7.4 makes this in scope: a comment asserting something now false is worse than no comment. **Verified inventory at the time of writing** (re-grep, since line numbers drift):
 
-- [ ] **Step 7: Run the tests**
+*Production code — all must be swept:*
+- `engine.ts:1226`, `:1229` (the `perRecipientHealApply` doc, references it twice), `:1551`, `:2360`, `:2451`, `:2454`, `:5656`, `:5657`, `:5659`, `:7757`, `:7761`, `:7790`, `:10062`
+- `playerTurn.ts:2723`, `:3651`
+- `battleSimulator.ts:802`
+
+*Test files — sweep only where the comment describes what the test does NOW:* `castRiderDeliveredBasis`, `healingPerRecipientApply` (`:229` and the `it(...)` NAME at `:262`), `lifelineShieldLog`, `zeroAmountReactiveHeal`, `multiHitInlineEmitGuards`, `adjacentEnemiesDot`, `adjacentEnemiesDebuff`, `protectionTransfer`, `reactiveDamagePositionalHp` (4 sites), `simGolden`, `simGoldenFixtures`, `dpsReactiveDamageRealEnemy`.
+
+**Two different comment kinds — do not treat them alike:**
+1. **Describes current behaviour** → rewrite to say `mode: 'battle'`. Example, `battleSimulator.ts:802`: "The battle is driven by positions on both sides. `positionalTeamBattle: true` …" → name the mode instead.
+2. **Historical rationale about a past decision** → keep the history, but mark the old name so a reader is not hunting a symbol that no longer exists. Example, `engine.ts:2451-2454` explains that an earlier draft gated the resolvers on `input.positionalTeamBattle` and over-corrected. That reasoning stays valuable; write it as "the then-named `positionalTeamBattle` (now `mode: 'battle'`)". **Do not delete historical rationale to make a grep clean.**
+
+- [ ] **Step 7: Verify no CODE reference survives**
+
+The plain grep will still match comments after Step 6 (by design — historical rationale legitimately names the old symbol). So check for code references specifically:
+
+Run: `grep -rn "positionalTeamBattle" src --include='*.ts' --include='*.tsx' | grep -vE ':\s*(//|\*|/\*)' | grep -v "then-named"`
+Expected: **no output.** Any hit is live code, not prose.
+
+Then confirm the sweep actually happened — no comment may still present the field as current:
+
+Run: `grep -rn "input.positionalTeamBattle\|positionalTeamBattle: true\|positionalTeamBattle ?" src --include='*.ts' --include='*.tsx'`
+Expected: no output.
+
+- [ ] **Step 8: Run the tests**
 
 Run: `npx vitest run src/utils/combat/__tests__/runModeEquivalence.test.ts`
 Expected: PASS — 5 tests (2 parity tests deleted in Step 5, 3 guard tests added in Step 1).
@@ -658,10 +680,10 @@ Expected: all pass. If a file fails with `healTargetId requires mode`, that is a
 Run: `git diff --stat -- '*.snap'`
 Expected: **empty.**
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/utils/combat/engine.ts src/utils/combat/__tests__/runModeEquivalence.test.ts
+git add src
 git commit -m "refactor(engine): mode is the only run-kind signal
 
 Deletes the transitional derivation and the positionalTeamBattle input. Two
