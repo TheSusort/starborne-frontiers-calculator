@@ -81,6 +81,7 @@ import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEvent, CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
+import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
     HealingRuntimeCtx,
@@ -1675,7 +1676,7 @@ function convertHitToSelfDot(
  * enemy, making this a byte-identical relocation of the old single-block round —
  * events are write-only taps that never read or change a sim value.
  */
-export function runCombat(input: CombatEngineInput): {
+export function runCombat(rawInput: CombatEngineInput): {
     rounds: RoundData[];
     rawTotals: {
         direct: number;
@@ -1705,6 +1706,16 @@ export function runCombat(input: CombatEngineInput): {
     /** Healing-mode accounting (additive — present ONLY when healTargetId is set). */
     healing?: { rounds: HealingRoundEngine[]; destroyedRound?: number };
 } {
+    /**
+     * SP-4b: the ONE accommodation boundary. Everything below this line sees a fully positional
+     * world — every actor has a slot and active targeting — regardless of how under-specified the
+     * caller's input was. Rebinding to `input` means every existing `input.x` read below picks up
+     * the normalized values with no further edits.
+     *
+     * Deliberately the FIRST statement: actor construction (`createActor`, ~line 1779) consumes
+     * `input.position`, and `teamTargetById` / `enemyTargetById` consume the target axes.
+     */
+    const input = normalizeCombatRoster(rawInput);
     const {
         attack,
         crit,
