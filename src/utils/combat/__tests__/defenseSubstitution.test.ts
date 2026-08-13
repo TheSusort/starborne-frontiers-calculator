@@ -13,9 +13,11 @@
  * modelCompletenessTriage.test.ts ("Meatshield: ... builds an ally-scoped defense-substitution
  * ability").
  *
- * Uses the NON-positional (legacy `healTargetId`) path deliberately, so the enemy's hit routes
- * through `victimDefenceFor` (engine.ts) — one of the four defence-read sites this task patches
- * — without needing any board-position plumbing.
+ * Routes the enemy's hit through `victimDefenceFor` (engine.ts) — one of the four defence-read
+ * sites this task patches. `victimDefenceFor` is called with whatever victim `selectTurnTarget`
+ * resolved, so it is reached on the positional path too; SP-4b-1's normalization boundary places
+ * every actor, so the victim is now nominated by a board cell (`ally-1` on the front-middle `M4`)
+ * instead of by `healTargetId` alone.
  *
  * Team-symmetry (mandatory per feedback_engine_team_symmetry): a second describe block below
  * exercises an ENEMY-side Meatshield substituting for an ENEMY non-defender ally, via the
@@ -68,7 +70,11 @@ const manualEnemy = (id: string, attack: number, speed = 50): EnemyAttacker => (
 const teamActor = (
     id: string,
     defence: number,
-    opts: { passive?: ShipSkills['slots']; role?: TeamActorEngineInput['role'] } = {}
+    opts: {
+        passive?: ShipSkills['slots'];
+        role?: TeamActorEngineInput['role'];
+        position?: Position;
+    } = {}
 ): TeamActorEngineInput => ({
     id,
     speed: 100,
@@ -77,6 +83,7 @@ const teamActor = (
     selfBuffs: [],
     enemyDebuffs: [],
     role: opts.role,
+    ...(opts.position ? { position: opts.position } : {}),
     walk: {
         shipSkills: { slots: opts.passive ?? [] },
         stats: {
@@ -116,6 +123,14 @@ const MEATSHIELD_DEFENCE = 500;
 const EXPECTED_SUBSTITUTED_DAMAGE =
     ENEMY_ATTACK * (1 - calculateDamageReduction(MEATSHIELD_DEFENCE) / 100);
 
+/** SP-4b-1: the boundary places every actor, and the enemy's synthesized `front enemy` selection
+ *  then picks the front-most player in its scan row. `ally-1` is the victim every PLAYER-side case
+ *  below is about, so it is pinned to the front-middle cell; the inert focus and the Meatshield
+ *  carrier sit behind it (`FOCUS_SLOT` / the index-derived team defaults, all column < 4). Left
+ *  implicit, the focus would take `M4` itself and absorb every hit instead. */
+const VICTIM_SLOT: Position = 'M4';
+const FOCUS_SLOT: Position = 'M2';
+
 const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     attack: 0,
     crit: 0,
@@ -139,16 +154,17 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
     hp: 1_000_000_000,
     healTargetId: 'ally-1',
     mode: 'healing',
+    position: FOCUS_SLOT,
     ...overrides,
 });
 
-describe('Meatshield defense-substitution — PLAYER side (non-positional victimDefenceFor path)', () => {
+describe('Meatshield defense-substitution — PLAYER side (victimDefenceFor path)', () => {
     it("a living KNOWN non-defender ally takes LESS damage — mitigated by MEATSHIELD's defence, not its own (defence 0)", () => {
         const withMeatshield = landedDamagesFor(
             BASE_INPUT({
                 teamActors: [
                     teamActor('meatshield', MEATSHIELD_DEFENCE, { passive: [meatshieldPassive] }),
-                    teamActor('ally-1', 0, { role: 'ATTACKER' }),
+                    teamActor('ally-1', 0, { role: 'ATTACKER', position: VICTIM_SLOT }),
                 ],
                 enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
             }),
@@ -166,7 +182,7 @@ describe('Meatshield defense-substitution — PLAYER side (non-positional victim
             BASE_INPUT({
                 teamActors: [
                     teamActor('meatshield', MEATSHIELD_DEFENCE, { passive: [meatshieldPassive] }),
-                    teamActor('ally-1', 0), // no role set
+                    teamActor('ally-1', 0, { position: VICTIM_SLOT }), // no role set
                 ],
                 enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
             }),
@@ -178,7 +194,7 @@ describe('Meatshield defense-substitution — PLAYER side (non-positional victim
     it('control: WITHOUT Meatshield present, the ally takes the FULL unmitigated hit (its own 0 defence)', () => {
         const withoutMeatshield = landedDamagesFor(
             BASE_INPUT({
-                teamActors: [teamActor('ally-1', 0)],
+                teamActors: [teamActor('ally-1', 0, { position: VICTIM_SLOT })],
                 enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
             }),
             'ally-1'
@@ -191,7 +207,7 @@ describe('Meatshield defense-substitution — PLAYER side (non-positional victim
             BASE_INPUT({
                 teamActors: [
                     teamActor('meatshield', MEATSHIELD_DEFENCE, { passive: [meatshieldPassive] }),
-                    teamActor('ally-1', 0, { role: 'DEFENDER' }),
+                    teamActor('ally-1', 0, { role: 'DEFENDER', position: VICTIM_SLOT }),
                 ],
                 enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
             }),

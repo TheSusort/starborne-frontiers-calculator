@@ -80,17 +80,36 @@ function shielder(id: string, extra: Partial<Ship> = {}): Ship {
         activeSkillText: `This Unit grants <unit-damage>Shield equal to ${SHIELDER_SHIELD_PCT}%</unit-damage> of its Max HP.`,
         secondPassiveSkillText:
             'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their Shield destroyed.',
+        // SP-4b-1: state the targeting DATA COLUMNS (see `debuffer`'s note for why). The R2
+        // passive is `patternScoped` — "an ally within the Active pattern" — so the Active pattern
+        // is what bounds its reach, and leaving the columns empty left the boundary to fill a
+        // single-cell front-ENEMY footprint for a support ship. These are the REAL Aegis columns
+        // from docs/ship-data.json; from M2 that support cone covers {M2, T2, M3, M4, B2}, so the
+        // M3 debuffer is inside it and the narrowing is not what limits the cleanse below.
+        activeTarget: 'allies',
+        activePattern: 'Pattern-Prolonged_Cone-Support-Range-2',
         ...extra,
     });
 }
 
-/** Curator-shaped AoE debuffer: inflicts a timed debuff on every enemy and hits them. */
+/** Curator-shaped AoE debuffer: inflicts a timed debuff on every enemy and hits them.
+ *
+ *  SP-4b-1: the `activeTarget`/`activePattern` DATA COLUMNS are now stated. `parseShipTargeting`
+ *  reads those columns, NOT the skill text, so leaving them empty made `plan.targeting` undefined
+ *  and the cast had no board footprint at all — which the pre-boundary engine resolved to the
+ *  legacy sink. The boundary fills an absent footprint with SINGLE-TARGET front-enemy, and a
+ *  single-target cast reaches only the front-most opposing cell (M3, the other debuffer) and never
+ *  the M2 shielder, so no shield was ever broken and the whole reactive-cleanse chain went dead.
+ *  Every production ship carries these columns; stating them is what makes this fixture's
+ *  "damage to ALL enemies" claim true of the run and not only of the prose. */
 function debuffer(id: string): Ship {
     return ship({
         id,
         name: 'Debuffer',
         activeSkillText:
             'This Unit deals <unit-damage>100% damage</unit-damage> to all enemies, and inflicts <unit-skill>Attack Down III</unit-skill> for 2 turns.',
+        activeTarget: 'all',
+        activePattern: 'Pattern-All',
     });
 }
 
@@ -244,9 +263,33 @@ describe('ship-panel state — activeDebuffs reflects removal', () => {
         const round1 = result.rounds.find((r) => r.round === 1);
         if (!round1) throw new Error('fixture: no round 1 in the result');
 
-        // Both shielders cleanse their whole team when a team shield breaks, so by the end of
-        // round 1 NO ship should still be listed as carrying Attack Down III.
-        expect(round1.ships.map((s) => s.activeDebuffs).flat()).not.toContain('Attack Down III');
+        // The R2 cleanse is `target: 'ally'`, so it clears the ONE ally the trigger named — the
+        // shielder whose shield broke. By the end of round 1 neither shielder still carries Attack
+        // Down III, while the two debuffers (which nothing cleansed) still do.
+        //
+        // SP-4b-1 note on what this used to assert. The old form was "NO ship still lists it", and
+        // it held for a reason that had nothing to do with the removal path under test: the
+        // debuffer's cast carried no board footprint, so its AoE debuff went into the legacy dummy
+        // sink and `activeDebuffs` came back EMPTY for every ship in every round (verified by
+        // running this same probe against the pre-boundary tree). Now that the cast lands on the
+        // real, placed enemies the snapshot is populated, and the assertion has to name who was
+        // cleansed and who was not. The still-carrying debuffers are what makes it non-vacuous: an
+        // `activeDebuffs` that degenerated back to always-empty now FAILS this test instead of
+        // passing it — which is exactly the regression this file exists to catch.
+        const byId = new Map(round1.ships.map((s) => [s.actorId, s.activeDebuffs]));
+        const carries = (id: string) => (byId.get(id) ?? []).includes('Attack Down III');
+        expect([...byId.keys()].sort()).toEqual([
+            'attacker',
+            'e:e-debuff:1',
+            'e:e-shield:0',
+            'p:p-debuff:1',
+        ]);
+        // Removed from the cleansed shielders (the player focus and the enemy shielder)…
+        expect(carries('attacker')).toBe(false);
+        expect(carries('e:e-shield:0')).toBe(false);
+        // …and still listed on the un-cleansed debuffers.
+        expect(carries('p:p-debuff:1')).toBe(true);
+        expect(carries('e:e-debuff:1')).toBe(true);
     });
 
     it('still lists a debuff that was never removed', () => {

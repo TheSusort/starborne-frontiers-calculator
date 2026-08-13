@@ -125,73 +125,76 @@ const creditedDirectFor = (sourceId: string, input: CombatEngineInput): number =
 const dealtFor = (sourceId: string, input: CombatEngineInput): number =>
     dealtBy(runCombat(input).rounds, sourceId);
 
+// SP-4b-1: the normalization boundary places every actor and synthesizes the focus's missing
+// `target`/`pattern`, so the carrier's proc now resolves POSITIONALLY onto the real
+// `enemyAttackers[]` entry instead of the legacy dummy sink. `applyReactiveDamage` therefore takes
+// its per-victim branch: the proc lowers that enemy's real HP and books the intake via
+// `creditDealt` (→ `RoundData.perTargetDealt`), and the credit-only `creditDamage('direct')`
+// channel — the one `creditedDirectFor` taps — is no longer written at all. Every magnitude below
+// moves to `dealtFor` and additionally pins the old channel EMPTY: the two destinations are
+// mutually exclusive per proc, so asserting only `dealt > 0` would still pass if a later change
+// re-credited both and double-counted.
 describe('Vindicator on-resist HP damage — engine integration', () => {
     it('deals ~30% of the carrier max HP to the resisted enemy (defence-0, mitigation ~none)', () => {
-        const credited = creditedDirectFor(
-            'attacker',
-            BASE([noopActive, onResistPassive(30)], {
-                enemyAttackers: [debuffEnemy('enemy-deb', 1)],
-            })
-        );
-        expect(credited).toBeCloseTo(CARRIER_HP * 0.3, 0);
+        const input = BASE([noopActive, onResistPassive(30)], {
+            enemyAttackers: [debuffEnemy('enemy-deb', 1)],
+        });
+        expect(dealtFor('attacker', input)).toBeCloseTo(CARRIER_HP * 0.3, 0);
+        // The scalar sink is not credited in parallel.
+        expect(creditedDirectFor('attacker', input)).toBe(0);
     });
 
     it('is mitigated by the victim defence', () => {
-        const lowDef = creditedDirectFor(
-            'attacker',
-            BASE([noopActive, onResistPassive(30)], {
-                enemyAttackers: [debuffEnemy('enemy-deb', 1)],
-            })
-        );
+        const lowDefInput = BASE([noopActive, onResistPassive(30)], {
+            enemyAttackers: [debuffEnemy('enemy-deb', 1)],
+        });
+        const lowDef = dealtFor('attacker', lowDefInput);
         const highDefEnemy = debuffEnemy('enemy-deb', 1);
         (highDefEnemy.stats as { defence: number }).defence = 50_000;
-        const highDef = creditedDirectFor(
-            'attacker',
-            BASE([noopActive, onResistPassive(30)], { enemyAttackers: [highDefEnemy] })
-        );
+        const highDefInput = BASE([noopActive, onResistPassive(30)], {
+            enemyAttackers: [highDefEnemy],
+        });
+        const highDef = dealtFor('attacker', highDefInput);
         expect(highDef).toBeGreaterThan(0);
         expect(highDef).toBeLessThan(lowDef);
+        // Neither run leaks a parallel scalar credit that could carry the mitigation instead.
+        expect(creditedDirectFor('attacker', lowDefInput)).toBe(0);
+        expect(creditedDirectFor('attacker', highDefInput)).toBe(0);
     });
 
     it('procs once when two debuffs from ONE cast are both resisted', () => {
-        const credited = creditedDirectFor(
-            'attacker',
-            BASE([noopActive, onResistPassive(30)], {
-                enemyAttackers: [debuffEnemy('enemy-deb', 2)],
-            })
-        );
-        expect(credited).toBeCloseTo(CARRIER_HP * 0.3, 0); // one proc, not two
+        const input = BASE([noopActive, onResistPassive(30)], {
+            enemyAttackers: [debuffEnemy('enemy-deb', 2)],
+        });
+        expect(dealtFor('attacker', input)).toBeCloseTo(CARRIER_HP * 0.3, 0); // one proc, not two
+        expect(creditedDirectFor('attacker', input)).toBe(0);
     });
 
     it('procs once per DISTINCT enemy resisting in the same round', () => {
-        const credited = creditedDirectFor(
-            'attacker',
-            BASE([noopActive, onResistPassive(30)], {
-                enemyAttackers: [debuffEnemy('enemy-a', 1), debuffEnemy('enemy-b', 1)],
-            })
-        );
-        expect(credited).toBeCloseTo(CARRIER_HP * 0.6, 0); // two procs
+        const input = BASE([noopActive, onResistPassive(30)], {
+            enemyAttackers: [debuffEnemy('enemy-a', 1), debuffEnemy('enemy-b', 1)],
+        });
+        expect(dealtFor('attacker', input)).toBeCloseTo(CARRIER_HP * 0.6, 0); // two procs
+        expect(creditedDirectFor('attacker', input)).toBe(0);
     });
 
     it('control: no on-resist passive → no credit', () => {
-        const credited = creditedDirectFor(
-            'attacker',
-            BASE([noopActive], { enemyAttackers: [debuffEnemy('enemy-deb', 1)] })
-        );
-        expect(credited).toBe(0);
+        const input = BASE([noopActive], { enemyAttackers: [debuffEnemy('enemy-deb', 1)] });
+        // Extended to BOTH channels — pinning only the scalar one would have gone vacuous the
+        // moment the proc moved to the per-victim channel.
+        expect(creditedDirectFor('attacker', input)).toBe(0);
+        expect(dealtFor('attacker', input)).toBe(0);
     });
 });
 
 // Team symmetry: an ENEMY-owned Vindicator resisting a PLAYER debuff procs identically.
 //
-// NOTE on targeting: a NON-positional player cast always resolves against the fixed 'enemy'
-// DPS dummy (engine.ts's `legacyVictim` for the player side), never against a specific
-// `enemyAttackers[]` entry — so a plain `target: 'enemy'` debuff can never land ON the
-// enemy-owned Vindicator. To route the player's debuff at the actual enemyAttacker, both the
-// caster and the target enemy need a board `position` (the recipe `enemySideAttacked.integration
-// .test.ts` uses for its positional two-team battle): `position`/`target`/`pattern` on the
-// CombatEngineInput make the player's cast resolve via `resolvePositionalTarget` over
-// `enemyAttackerActors`, landing on 'enemy-vindi' instead of the dummy.
+// NOTE on targeting: this block states `position`/`target`/`pattern` on both sides EXPLICITLY, so
+// the player's cast resolves via `resolvePositionalTarget` over `enemyAttackerActors` and lands on
+// 'enemy-vindi' — the recipe `enemySideAttacked.integration.test.ts` uses for its positional
+// two-team battle. Since SP-4b-1's normalization boundary those three axes are filled for any
+// caller that omits them too, so the routing no longer depends on the fixture stating them; they
+// stay spelled out here because the SPECIFIC victim matters, not merely that one exists.
 const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
     raw: selection,
     side: 'enemy',

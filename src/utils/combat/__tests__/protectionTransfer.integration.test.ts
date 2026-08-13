@@ -169,6 +169,14 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
     hp: 1_000_000_000,
     healTargetId: 'ally-1',
     mode: 'healing',
+    // SP-4b-1: the normalization boundary places EVERY actor, so the focus can no longer sit off
+    // the board as a pure bystander. Left unplaced it would be auto-placed on the front-middle
+    // anchor `M4`, win the enemy's `front` selection outright, and become the direct-hit victim
+    // instead of `ally-1` — which is the one thing every test in this file needs `ally-1` to be.
+    // `M2` keeps it in the middle row (so it never outranks a team actor's default `M3`/`M4` in the
+    // front->back scan) while staying clear of `M1`/`M4`, the two cells the positional tests below
+    // place explicitly.
+    position: 'M2',
     ...overrides,
 });
 
@@ -204,17 +212,31 @@ describe('Protection damage transfer (integration)', () => {
     });
 
     it('redirect keeps the TARGET affinity, not the protector matchup', () => {
-        // The enemy carries a +25% affinity edge vs its TARGET (the ally), folded into the hit via
-        // affinityDamageModifier (thermal→chemical-style advantage). The protector's OWN matchup
-        // (a hypothetical −25%) must NEVER be re-resolved onto the redirected chunk: the wiring
-        // passes the already-affinity-baked `damage` into protectionCascade, which only swaps the
-        // DEFENSE factor. So the chunk scales with the +25%, not a −25%.
+        // The enemy carries a +25% affinity edge vs its TARGET (the ally): a REAL thermal→chemical
+        // matchup, not a hand-set scalar. SP-4b-1: the hit now resolves positionally, and the
+        // positional apply RE-RESOLVES the matchup per victim from the raw affinities
+        // (victimHitDamage → computeAffinityModifiers(attackerAffinity, victim.affinity)) rather
+        // than reading the pre-resolved `affinityDamageModifier` scalar. In production the two
+        // always agree, because the adapter derives the scalar FROM those same raw affinities — so
+        // stating the matchup rather than its pre-computed output is the shape this test needs.
+        // The protector (the focus) is deliberately ELECTRIC, i.e. thermal→electric = −25%: exactly
+        // the wrong matchup the redirect must NOT re-resolve onto the chunk. The wiring passes the
+        // already-affinity-baked `damage` into protectionCascade, which only swaps the DEFENSE
+        // factor, so the chunk scales with the target's +25%, never the protector's −25%.
         const AFF = 25;
         const build = (withProt: boolean): CombatEngineInput =>
             BASE_INPUT({
                 selfBuffs: withProt ? [protectionAccum(3)] : [],
-                teamActors: [teamActor('ally-1', 0)],
-                enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK, AFF)],
+                affinity: 'electric', // the protector's own (disadvantaged) matchup — the trap.
+                teamActors: [
+                    {
+                        ...teamActor('ally-1', 0),
+                        walk: { ...teamActor('ally-1', 0).walk!, affinity: 'chemical' },
+                    },
+                ],
+                enemyAttackers: [
+                    { ...manualEnemy('enemy-1', ENEMY_ATTACK, AFF), affinity: 'thermal' },
+                ],
             });
 
         // The +25% edge is real: the ally-without-protector takes 1.25× the base hit.
@@ -488,24 +510,29 @@ describe('Protection damage transfer (integration)', () => {
     });
 
     it('positional mode: Protection covers a NON-adjacent ally (all-allies, not hex-neighbours)', () => {
-        // Wiring `position` on the victim AND another player actor makes `anyOtherPositioned`
-        // true, so `adjacentAllyIdsFor` (adjacency.ts) would narrow to hex-neighbours instead of
-        // falling back to "all living same-side allies". T1's hex-neighbours are {T2, M1, M2}
-        // (see board.ts's AXIAL table / DIRECTIONS) — T4 is deliberately NOT one of them. Under
-        // the OLD adjacency-based resolution this protector would be excluded from
-        // `protectorsFor`; Protection's confirmed model (coverage = ALL living same-side allies,
-        // independent of board adjacency) must still redirect to it.
+        // Every actor carries a position (SP-4b-1's boundary guarantees it), so `adjacentAllyIdsFor`
+        // (adjacency.ts) narrows to hex-neighbours instead of falling back to "all living same-side
+        // allies". T1's hex-neighbours are {T2, M1, M2} (see board.ts's AXIAL table / DIRECTIONS) —
+        // B4 is deliberately NOT one of them. Under an adjacency-based resolution this protector
+        // would be excluded from `protectorsFor`; Protection's confirmed model (coverage = ALL
+        // living same-side allies, independent of board adjacency) must still redirect to it.
+        //
+        // Targeting geometry (SP-4b-1): `front` selection scans ROWS from the caster's own row and
+        // only then picks the front-most column WITHIN that row (selectTargets). Pinning the enemy
+        // to T1 makes row T the scan row, and `ally-1` is the sole player actor there — so the hit
+        // lands on the victim rather than on the protector or the (row-M) focus. The protector
+        // therefore has to leave row T, which is why it sits on B4 rather than T4.
         const input = BASE_INPUT({
             selfBuffs: [], // the focus carries no Protection — the protector is a team actor.
             defence: 0,
             teamActors: [
-                { ...teamActor('ally-1', 0), position: 'T1' }, // victim
+                { ...teamActor('ally-1', 0), position: 'T1' }, // victim — alone in row T
                 {
                     ...teamActor('prot-1', PROTECTOR_DEFENCE, [protectionAuraPassive(3)]),
-                    position: 'T4', // NOT a hex-neighbour of T1 — proves all-allies coverage.
+                    position: 'B4', // NOT a hex-neighbour of T1 — proves all-allies coverage.
                 },
             ],
-            enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+            enemyAttackers: [{ ...manualEnemy('enemy-1', ENEMY_ATTACK), position: 'T1' }],
         });
 
         const victim = totalIncoming(input, 'ally-1');
@@ -825,6 +852,12 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
             hp: 1_000_000_000,
             healTargetId: 'ally-1',
             mode: 'healing',
+            // SP-4b-1: the focus is an inert bystander, but the normalization boundary places every
+            // actor — so it has to be told where to stand. Left unplaced it takes the front-middle
+            // anchor, wins the enemy's `front` selection and becomes the direct-hit victim itself,
+            // and then nothing is ever redirected to `prot-1`. `M2` sits in the same row as the
+            // intended victim but behind it (column 2 < 4), so `ally-1` stays the front-most.
+            position: 'M2',
             teamActors: [
                 {
                     id: 'ally-1', // direct-hit victim — front column (M4), the kill-switch reflector.

@@ -209,12 +209,18 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
     it('applies Provoke to the attacker when an adjacent ally is directly damaged', () => {
         // Adjacent ally 'ally-T2' at T2 is the heal target → the enemy hits it → owner at M2 is
         // adjacent → Bulwark fires → Provoke lands on the attacking enemy.
+        //
+        // SP-4b-1: the enemy must be PINNED to row T. Every actor is placed now, and `front`
+        // selection scans rows from the caster's own row before taking the front-most column within
+        // it (selectTargets) — an unpositioned enemy lands on the middle row, finds the OWNER at M2
+        // there, and hits the owner itself, which is not an ALLY hit and wakes nothing. From T1 the
+        // scan row is T, whose only occupant is the intended victim `ally-T2`.
         const events = debuffApplied(
             BASE({
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
                 healTargetId: 'ally-T2',
                 mode: 'healing',
-                enemyAttackers: [enemyHitter('enemy-atk')],
+                enemyAttackers: [{ ...enemyHitter('enemy-atk'), position: 'T1' }],
             }),
             'Provoke'
         );
@@ -230,24 +236,36 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
         // the owner's on-ally-attacked listener runs but the requireDamagedAllyAdjacent gate
         // rejects it → no Bulwark Provoke. (Adjacent ally-T2 still present so the geometry is
         // positional, not the all-allies fallback — proving the adjacency gate, not vacuity.)
-        const events = debuffApplied(
-            BASE({
-                teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
-                healTargetId: 'ally-B4',
-                mode: 'healing',
-                enemyAttackers: [enemyHitter('enemy-atk')],
-            }),
-            'Provoke'
-        );
+        //
+        // SP-4b-1: the enemy is pinned to row B for the same reason as the positive case above.
+        // Left unplaced it would hit the M2 OWNER instead of the non-adjacent ally, and the
+        // expected-zero would hold because no ally was ever hit — a vacuous pass.
+        const input = BASE({
+            teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
+            healTargetId: 'ally-B4',
+            mode: 'healing',
+            enemyAttackers: [{ ...enemyHitter('enemy-atk'), position: 'B4' }],
+        });
+        const events = debuffApplied(input, 'Provoke');
 
         expect(events.length).toBe(0);
+        // Non-vacuous: the NON-adjacent ally really was the one hit, so the gate rejected a live
+        // on-ally-attacked wake-up rather than never being consulted.
+        const attackedIds = new Set<string>();
+        const bus = createEventBus();
+        bus.on('attacked', (e) => attackedIds.add(e.targetId));
+        runCombat({ ...input, bus });
+        expect(attackedIds.has('ally-B4')).toBe(true);
+        expect(attackedIds.has(FOCUS)).toBe(false);
     });
 
     it('applies at most once per round', () => {
-        // Two enemy attackers BOTH hit the same adjacent ally (T2) in one round. The owner's
+        // Two enemy attackers each hit an ADJACENT ally in one round. The owner's
         // on-ally-attacked listener fires twice, but oncePerRound consumes after the first
-        // successful proc → exactly one Provoke applied. healTargetId is T2; both enemies are
-        // non-positional, so both land on T2.
+        // successful proc → exactly one Provoke applied. healTargetId is T2;
+        // both are placed by the boundary and each resolves onto an ADJACENT ally: `enemy-1` on
+        // the middle row hits `ally-M3`, `enemy-2` on the top row hits `ally-T2`. Both cells
+        // neighbour M2, so the listener still enqueues twice.
         const events = debuffApplied(
             BASE({
                 numRounds: 1,
@@ -255,7 +273,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-M3', 'M3')],
                 healTargetId: 'ally-T2',
                 mode: 'healing',
-                // Two enemies both hit the adjacent heal target T2 in the same round → two
+                // Two enemies each hit an adjacent ally in the same round → two
                 // `attacked` events on an adjacent ally, so the listener enqueues twice.
                 enemyAttackers: [enemyHitter('enemy-1'), enemyHitter('enemy-2')],
             }),
@@ -263,8 +281,8 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
         );
 
         // oncePerRound: at most one Provoke per round regardless of how many adjacent allies
-        // were hit. (Both enemies hit the heal target T2 — both adjacent — so the listener
-        // enqueues at least twice; the gate still yields exactly one application.)
+        // were hit. (Both enemies hit an adjacent ally, so the listener enqueues at least
+        // twice; the gate still yields exactly one application.)
         expect(events.filter((e) => e.round === 1).length).toBe(1);
     });
 });

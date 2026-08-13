@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { dealtBy } from '../../combat/__testutils__/perTargetDealt';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
 import { setupKeyedTestRng, resetRateGateRng } from '../rateAccumulator';
 import { DEFAULT_ATTACKER_SLOT, DEFAULT_ENEMY_SLOT } from '../dpsEnemyPlacement';
@@ -196,8 +197,19 @@ describe('a real DPS enemy acts', () => {
 
         // The death round is reported rather than discarded...
         expect(result.rounds.length).toBeGreaterThan(0);
-        // ...and the team's damage from it is credited (teamDamage is the non-focus channel).
+        // ...and the team's damage from it is credited.
+        //
+        // SP-4b-1: the credit moved channel. The boundary places every actor and synthesizes the
+        // missing `target`/`pattern`, so the team actor's cast resolves positionally onto the real,
+        // placed enemy and books through `applyVictimDamage` → `creditDealt`
+        // (`RoundData.perTargetDealt`). `RoundData.teamDamage` sums the `roundDamage` scalar map,
+        // which only the legacy dummy-sink route wrote — exactly the asymmetry engine.ts already
+        // documents for the positional sim ("reactives route through applyVictimDamage + the
+        // per-victim maps ... NOT roundDamage"). So the non-focus channel to read here is the
+        // per-victim one, and the scalar is pinned empty because the two are mutually exclusive per
+        // cast: `dealt > 0` alone would still pass if a later change credited both.
+        expect(dealtBy(result.rounds, 'team-1')).toBeGreaterThan(0);
         const teamTotal = result.rounds.reduce((sum, r) => sum + (r.teamDamage ?? 0), 0);
-        expect(teamTotal).toBeGreaterThan(0);
+        expect(teamTotal).toBe(0);
     });
 });

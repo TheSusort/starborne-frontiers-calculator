@@ -3300,8 +3300,16 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                 bus,
                 teamActors: [
                     teamWalk('graphite', 120, 50_000, opts.ownerSkills),
+                    // SP-4b-1: the tank claims the front-middle cell EXPLICITLY. The normalization
+                    // boundary places every actor and synthesizes the enemy's `front enemy`
+                    // targeting, so the victim is decided by board geometry now — and on its
+                    // index-derived default (M2) the tank sits behind the auto-placed FOCUS at the
+                    // M4 anchor, which would take every hit instead. An explicit placement beats
+                    // the invented anchor, so the focus steps back and the tank is the front-most
+                    // player, which is the arrangement every scenario here asserts.
                     teamWalk('tank', 80, 1_000_000, opts.tankSkills ?? { slots: [] }, {
                         role: opts.tankRole,
+                        position: 'M4',
                     }),
                 ],
                 enemyAttackers: [opts.enemy ?? flatEnemy()],
@@ -3384,7 +3392,21 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
             ],
         });
 
-        it('100%-crit enemy → Provoke lands on THAT enemy id each attack turn (per-target routing)', () => {
+        // SP-4b-1: Provoke's OWN forced targeting is now live, and it feeds back into who gets
+        // hit. The boundary makes the run positional, so `resolvePositionalTarget` honours the
+        // `provokedBy` override that the legacy non-positional route ignored entirely. The 3-round
+        // ladder that follows is fully determined:
+        //   R1  ea1 attacks the tank (an ALLY of the owner) → the reactive fires → Provoke on ea1
+        //       (duration 2).
+        //   R2  ea1 is provoked → it must attack the PROVOKER, graphite. A hit on the owner itself
+        //       is on-attacked scope, not on-ally-attacked, so the ally listener stays silent and
+        //       no Provoke is re-applied.
+        //   R3  the R1 Provoke has lapsed → ea1 goes back to the tank → the reactive fires again.
+        // So the count is 2 (rounds 1 and 3), not 3, and the missing round is the one the debuff
+        // itself redirected. The load-bearing claim — the debuff routes to the ATTACKING enemy's
+        // own id — is unchanged, and pinning the exact rounds keeps that ladder honest instead of
+        // just relaxing the count.
+        it('100%-crit enemy → Provoke lands on THAT enemy id on every ally-attack turn (per-target routing)', () => {
             const events = runScenario({
                 ownerSkills: provokeSkills(),
                 tankRole: 'DEFENDER',
@@ -3394,9 +3416,22 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                 (e) =>
                     e.type === 'debuff-applied' &&
                     (e as { buffName?: string }).buffName === 'Provoke'
-            ) as Array<{ targetId: string }>;
-            expect(provokes.length).toBe(3);
+            ) as Array<{ targetId: string; round: number }>;
             expect(provokes.every((e) => e.targetId === 'ea1')).toBe(true);
+            expect(provokes.map((e) => e.round)).toEqual([1, 3]);
+            // The reason round 2 is missing, pinned rather than assumed: the live Provoke pulled
+            // the enemy onto the owner that round.
+            const attackedAt = (
+                events.filter((e) => e.type === 'attacked') as Array<{
+                    round: number;
+                    targetId: string;
+                }>
+            ).map((e) => [e.round, e.targetId]);
+            expect(attackedAt).toEqual([
+                [1, 'tank'],
+                [2, 'graphite'],
+                [3, 'tank'],
+            ]);
         });
 
         it('0%-crit enemy → no Provoke (crit filter holds at the engine level)', () => {

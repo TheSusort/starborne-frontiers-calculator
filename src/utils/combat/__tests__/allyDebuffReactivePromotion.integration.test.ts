@@ -480,17 +480,30 @@ describe('Hayyan (player-side) — repairs ONLY the debuffed ally, not itself, n
 });
 
 describe('Hayyan (enemy-side) — team symmetry: an enemy Hayyan repairs its OWN debuffed ally', () => {
-    it('repairs the ally the PLAYER just debuffed (the shared enemy-side dummy actor), scaled off its OWN max HP', () => {
-        // The player's non-positional debuff always lands on the singular dummy `enemy` actor
-        // (id 'enemy') — the engine's own doc comment (CombatEngineInput.enemyAttackers) names it
-        // "the player-offense target". That dummy IS enemy-side (isEnemySide checks
-        // `actorId === enemy.id`), so it is a same-side ALLY to enemy-hayyan — exactly the
-        // ally-scoping this trigger exists to prove, without needing extra positional plumbing.
+    it('repairs the ally the PLAYER just debuffed (a real, placed enemy-side ally), scaled off its OWN max HP', () => {
+        // SP-4b-1: the debuffed ally is now a REAL, placed enemy actor rather than the shared
+        // dummy. This test used to lean on "the player's non-positional debuff always lands on the
+        // singular dummy `enemy` actor", which was enemy-side and therefore a same-side ally to
+        // enemy-hayyan. The normalization boundary places every actor and synthesizes the focus's
+        // `front enemy` targeting, so the debuff now resolves onto a real opposing cell — and with
+        // enemy-hayyan the only enemy that would be ITSELF, which is on-attacked scope, not
+        // on-ALLY-debuffed. Giving the roster a front-most victim restores the ally relationship the
+        // trigger is about, and states it positionally instead of borrowing the dummy.
+        const enemyVictim: EnemyAttacker = {
+            id: 'enemy-victim',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 5 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4', // front-most enemy → the focus's `front enemy` debuff lands here
+            shipSkills: { slots: [] },
+        } as EnemyAttacker;
+
         const enemyHayyan: EnemyAttacker = {
             id: 'enemy-hayyan',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HAYYAN_HP, speed: 10 },
             chargeCount: 0,
             startCharged: false,
+            position: 'M3', // behind the victim, so it is never the debuff's own target
             shipSkills: { slots: [{ slot: 'passive', abilities: [hayyanAllyDebuffedHeal()] }] },
         } as EnemyAttacker;
 
@@ -522,13 +535,17 @@ describe('Hayyan (enemy-side) — team symmetry: an enemy Hayyan repairs its OWN
             speed: 200, // player acts first — its debuff wakes the enemy reactive same round
             healTargetId: 'attacker',
             mode: 'healing',
-            enemyAttackers: [enemyHayyan],
+            enemyAttackers: [enemyVictim, enemyHayyan],
         };
 
         const result = runCombat(input);
+        // Scaled off HAYYAN's OWN max HP, not the debuffed ally's (which is 1e9 here — a value the
+        // expected number would be nowhere near if the wrong actor's pool were used).
         expect(sumDirectHeal(result, 'enemy-hayyan')).toBeCloseTo(
             (HAYYAN_HP * HAYYAN_HEAL_PCT) / 100,
             6
         );
+        // The reactive is ALLY-scoped: the debuffed actor itself repairs nothing.
+        expect(sumDirectHeal(result, 'enemy-victim')).toBe(0);
     });
 });

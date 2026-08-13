@@ -411,7 +411,14 @@ describe('reactive death-triggered bridge', () => {
             speed: 50, // focus acts after atk1 (100) but before t1 (10)
             healTargetId: 't1',
             mode: 'healing',
-            teamActors: [teamWalk('t1', 3000)],
+            // SP-4b-1: `t1` claims the front-middle cell explicitly. The normalization boundary
+            // places every actor and synthesizes `atk1`'s missing targeting, so the victim is now
+            // decided by board geometry — and with `t1` on its index-derived default (M3) the
+            // auto-placed FOCUS would hold M4, win `front enemy`, and soak the 5000 on its 100000
+            // HP. `t1` would never die and the on-ally-destroyed trigger would never fire. An
+            // explicit placement beats the invented anchor, so the focus steps back and `t1` is the
+            // front-most player again. Nothing in the extra-action or turn-order path changes.
+            teamActors: [{ ...teamWalk('t1', 3000), position: 'M4' }],
             enemyAttackers: [
                 {
                     id: 'atk1',
