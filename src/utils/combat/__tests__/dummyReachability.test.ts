@@ -5,6 +5,21 @@
  * This file pins what 4b-1 can actually guarantee: a run with a NON-EMPTY enemy roster never takes
  * it. Runs with no enemy at all still do — that is 4b-2's job, and the second test pins the
  * fallback as still-live so this file cannot silently go vacuous before then.
+ *
+ * ⚠️ READ BEFORE TREATING A ZERO HERE AS 4c's GO-AHEAD. This file is NOT sufficient on its own,
+ * for two independent reasons:
+ *
+ *  1. **Coverage.** It exercises `bareInput()` — one focus-attacker damage path — plus an empty
+ *     roster. It does NOT exercise team-actor turns, enemy turns, corpse targeting, death
+ *     retargeting, or walked-team damage. A zero here means "this shape does not reach the
+ *     fallback", never "no shape does". Broaden it across those paths before 4c leans on it.
+ *     (Raised on PR #324 and correct.)
+ *  2. **Semantics.** The counter records CONSULTATIONS of `tb.legacyVictim`, not credits to the
+ *     legacy sink. The two come apart: in the mid-run whiff window the fallback is consulted and
+ *     nothing is booked, so the count is legitimately non-zero while no damage routes to the sink.
+ *     4c must handle that path rather than expect a global zero.
+ *
+ * Both are recorded in `.superpowers/sdd/progress.md` under "Residual for SP-4c".
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
