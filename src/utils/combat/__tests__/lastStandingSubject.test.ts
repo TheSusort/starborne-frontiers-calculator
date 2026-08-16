@@ -173,7 +173,12 @@ describe('D-PR16 last-standing condition subject (engine wiring)', () => {
                 teamActors: [ally('ally-T2', 'T2', 3_000)],
                 healTargetId: 'ally-T2',
                 mode: 'healing',
-                enemyAttackers: [enemyHitter('enemy-atk', 5_000)],
+                // SP-4b-1: the enemy is PINNED to row T so `front enemy` resolves onto `ally-T2`. The
+                // boundary places every actor and synthesizes the enemy's targeting, and `front` scans
+                // ROWS from the caster's own row before taking the front-most column within it
+                // (selectTargets) — an unplaced enemy lands on the middle row and hits the 1e9-HP focus
+                // at M2 instead, so the ally never dies and on-ally-destroyed never fires.
+                enemyAttackers: [{ ...enemyHitter('enemy-atk', 5_000), position: 'T1' }],
             })
         );
 
@@ -190,7 +195,12 @@ describe('D-PR16 last-standing condition subject (engine wiring)', () => {
                 teamActors: [ally('ally-T2', 'T2', 3_000), ally('ally-M3', 'M3', 1_000_000_000)],
                 healTargetId: 'ally-T2',
                 mode: 'healing',
-                enemyAttackers: [enemyHitter('enemy-atk', 5_000)],
+                // SP-4b-1: the enemy is PINNED to row T so `front enemy` resolves onto `ally-T2`. The
+                // boundary places every actor and synthesizes the enemy's targeting, and `front` scans
+                // ROWS from the caster's own row before taking the front-most column within it
+                // (selectTargets) — an unplaced enemy lands on the middle row and hits the 1e9-HP focus
+                // at M2 instead, so the ally never dies and on-ally-destroyed never fires.
+                enemyAttackers: [{ ...enemyHitter('enemy-atk', 5_000), position: 'T1' }],
             })
         );
 

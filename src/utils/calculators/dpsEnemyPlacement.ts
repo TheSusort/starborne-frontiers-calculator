@@ -8,21 +8,34 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
  * run has no adjacency and patterns collapse to single-target — the closest positional equivalent
  * of the scalar opponent this replaces.
  *
- * Positions are required, not cosmetic: `isPositional` (positionalBinding.ts) needs BOTH the acting
- * actor and an opposing actor to carry one, otherwise `selectTurnTarget` falls back to the
- * vestigial dummy and the focus never damages the real enemy.
+ * Positions are load-bearing, not cosmetic: `resolvesPositionalVictim` (positionalBinding.ts) needs
+ * the acting actor to carry one AND the opposing roster to hold a targetable member (placed, max
+ * hp > 0), or `selectTurnTarget` falls back to the vestigial dummy and the focus never damages the
+ * real enemy.
+ *
+ * Since SP-4b-1 these are also the values `normalizeCombatRoster` — the engine's ONE accommodation
+ * boundary, `runCombat`'s first line — auto-places with, so a CALLER no longer has to supply a
+ * position for the fallback to be avoided. They stay exported because the PAGES still resolve their
+ * own slots for the UI — `DPSCalculatorPage` calls `resolvePlayerSlots` itself and the slot
+ * dropdowns (`SlotSelect`) mark taken cells — and a UI that showed different cells than the run
+ * used would be lying.
  */
 export const DEFAULT_ATTACKER_SLOT: Position = 'M4';
 export const DEFAULT_ENEMY_SLOT: Position = 'M4';
 
 /**
- * Fallback targeting for a positional DPS run.
+ * Fallback targeting for a positional DPS run — and, since SP-4b-1, the value
+ * `normalizeCombatRoster` fills an ABSENT active target with for every actor on both sides.
  *
  * Position alone does NOT route a cast. `selectTurnTarget` requires
- * `isPositional(actor.position, opposingRoster) && target` — with no ParsedTarget it
+ * `resolvesPositionalVictim(actor.position, opposingRoster) && target` — with no ParsedTarget it
  * short-circuits to `legacyVictim` (the dummy), however well-positioned the roster is. The same
  * missing target also keeps the dummy in the turn order, because `dummyEnemyIsVestigial` checks
- * `t?.side === 'enemy'`.
+ * `t?.side === 'enemy'`. That short-circuit is now UNREACHABLE for anything entering through
+ * `runCombat`: the boundary fills this target on the first line, so no actor below it is
+ * target-less, and `selectTurnTarget` is a closure inside `runCombat` with no other entry point.
+ * The mechanism stays documented because it is the REASON the boundary exists — not because a
+ * caller can still trip it.
  *
  * `side: 'enemy'` is relative to the acting actor ("the side opposing me"), so this same value is
  * correct for the focus attacker AND for an enemy attacker targeting the player.
@@ -34,14 +47,18 @@ export const DEFAULT_FRONT_ENEMY_TARGET: ParsedTarget = {
 };
 
 /**
- * Fallback single-target footprint for a positional DPS run.
+ * Fallback single-target footprint for a positional DPS run — and, like the target above, the value
+ * `normalizeCombatRoster` fills an ABSENT active pattern with for every actor since SP-4b-1.
  *
  * ALSO load-bearing, not cosmetic. The positional apply gate is
- * `isPositional(...) && target != null && pattern != null && turn.positionalScalars != null`
- * (engine.ts:8344). With a target but no pattern the cast still RESOLVES onto the real enemy and
- * still credits `cumulativeDamage` via the legacy sink — but it never runs the per-victim apply, so
- * `creditDealt` never fires and `RoundData.perTargetDealt` comes back empty. That failure is silent:
- * damage looks right while the per-victim accounting the metric depends on is missing.
+ * `resolvesPositionalVictim(...) && target != null && pattern != null && turn.positionalScalars != null`
+ * (the focus cast site in engine.ts; the team and enemy sites mirror it). With a target but no
+ * pattern the cast still RESOLVES onto the real enemy and still credits `cumulativeDamage` via the
+ * legacy single-apply — but it never runs the per-victim apply, so `creditDealt` never fires and
+ * `RoundData.perTargetDealt` comes back empty. That failure is silent: damage looks right while the
+ * per-victim accounting the metric depends on is missing. The boundary fills target and pattern
+ * INDEPENDENTLY for exactly this reason, and the resulting half-filled state no longer occurs below
+ * `runCombat` — the audit found the signature (total credited, `perTargetDealt` empty) zero times.
  */
 /** `range` MUST be 0, not 1: `patternSignature` builds `"base|0|"`, whose offset table is
  *  `[ORIGIN]` — the anchor cell alone. `"base|1|"` has no table and `resolveCells` throws. */
@@ -90,8 +107,10 @@ export const ATTACKER_SLOT_OPTIONS: readonly Position[] = [
  * sharing the attacker's slot silently ERASES the attacker from that cell — the enemy stops
  * targeting it and area damage skips it.
  *
- * `slots[0]` is the attacker and keeps its slot; each later ship that collides is pushed to the
- * first free slot in `ATTACKER_SLOT_OPTIONS` order. Returns a same-length array.
+ * `slots[0]` is the attacker and keeps its slot — with ONE exception since SP-4b-1: pass
+ * `anchorIsExplicit: false` and an INVENTED anchor slot yields to a nominated explicit one instead
+ * (see that parameter below). Each later ship that collides is pushed to the first free slot in
+ * `ATTACKER_SLOT_OPTIONS` order. Returns a same-length array.
  *
  * `priorityIndices` (optional) nominates later indices whose wanted slot must ALSO survive a
  * collision: they are reserved right after index 0 and before every other index, so a generic ship
@@ -104,20 +123,43 @@ export const ATTACKER_SLOT_OPTIONS: readonly Position[] = [
  * no privileged ship) the reservation order is `[0, 1, 2, …]` — byte-identical to the original
  * single-pass behaviour. The returned array stays index-aligned with `slots` in both cases, so
  * callers' `slots[i + 1]` mappings are untouched.
+ *
+ * `anchorIsExplicit` (optional, defaults to `true` — every existing caller's byte-identical
+ * behaviour) governs where index 0 sits relative to the priority group. `true` keeps the original
+ * rule: the anchor is reserved before anything else, priority or not — correct when `slots[0]` is
+ * itself an explicit placement (or when the caller has no such concept, e.g. the DPS page's
+ * attacker-config slot). Pass `false` when `slots[0]` was ITSELF invented by auto-placement: an
+ * invented slot must yield to an explicit one (`normalizeRoster.ts`'s binding constraint), and
+ * `priorityIndices` alone cannot express that because index 0 is unconditionally exempt from it —
+ * see `isPriority` below. With `anchorIsExplicit: false`, index 0 is reserved right AFTER the
+ * priority group instead of before it, so a nominated explicit actor now wins the collision and the
+ * invented anchor gets pushed to the first free cell instead. `priorityIndices` empty still yields
+ * `[0, 1, 2, …]` either way, so this only changes behaviour when both a priority index AND
+ * `anchorIsExplicit: false` are passed together — never for a caller that omits the third argument.
  */
 export function resolvePlayerSlots(
     slots: ReadonlyArray<Position>,
-    priorityIndices: ReadonlyArray<number> = []
+    priorityIndices: ReadonlyArray<number> = [],
+    anchorIsExplicit: boolean = true
 ): Position[] {
     const isPriority = (i: number) => i !== 0 && priorityIndices.includes(i);
     const allIndices = slots.map((_, i) => i);
-    // Reservation order: the anchor (index 0), then the nominated indices, then the rest — each
-    // group in ascending index order. Assignment writes back by index, never by position in this
-    // order, so the result stays aligned with `slots`.
-    const order = [
-        ...allIndices.filter((i) => i === 0 || isPriority(i)),
-        ...allIndices.filter((i) => i !== 0 && !isPriority(i)),
-    ];
+    // Reservation order: each group in ascending index order. Assignment writes back by index,
+    // never by position in this order, so the result stays aligned with `slots`.
+    const order = anchorIsExplicit
+        ? // Original rule: the anchor (index 0), then the nominated indices, then the rest.
+          [
+              ...allIndices.filter((i) => i === 0 || isPriority(i)),
+              ...allIndices.filter((i) => i !== 0 && !isPriority(i)),
+          ]
+        : // The anchor's slot was invented: the nominated (explicit) indices reserve first, THEN
+          // the anchor, then the rest — so an explicit actor's cell survives even when the anchor
+          // wanted it too.
+          [
+              ...allIndices.filter(isPriority),
+              ...allIndices.filter((i) => i === 0),
+              ...allIndices.filter((i) => i !== 0 && !isPriority(i)),
+          ];
 
     const taken = new Set<Position>();
     const resolvedByIndex: Position[] = new Array(slots.length);

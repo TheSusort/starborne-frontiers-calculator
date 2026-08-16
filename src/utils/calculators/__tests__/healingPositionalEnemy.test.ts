@@ -156,12 +156,15 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
 
     // ── A TEAM actor's cast lands on the real enemy too, not the sink ────────────────
     //
-    // A team actor's parsed axes are sourced ONLY from `teamTargetById`/`teamPatternById`
-    // (engine.ts:1869-1885), so `position` alone is not enough: without target AND pattern the
-    // actor's cast falls back to `legacyVictim` — the 10,000-defence sink — and every
-    // `basis:'damage-dealt'` rider it owns computes off THAT defence (measured 2579 vs 7753 here,
-    // a ~3× error surfacing as `teamHealing`). NO golden fixture covers this (every golden team
-    // actor carries an empty or heal-only kit), so this is the only guard for it.
+    // A team actor's parsed axes are sourced ONLY from `teamTargetById`/`teamPatternById`, so
+    // `position` alone was not enough: without target AND pattern the actor's cast fell back to
+    // `legacyVictim` — the 10,000-defence sink — and every `basis:'damage-dealt'` rider it owns
+    // computed off THAT defence (measured 2579 vs 7753 here, a ~3× error surfacing as
+    // `teamHealing`). NO golden fixture covers this (every golden team actor carries an empty or
+    // heal-only kit), so this is the only guard for it. SP-4b-1 note: the missing-axes premise is
+    // no longer reachable through `runCombat` — `normalizeCombatRoster` fills both — so what this
+    // test now guards is the ROUTING (a walked team actor's damage credits the real enemy), not
+    // the adapter's fill.
     it("a walked team actor's damage credits the REAL enemy, not the legacy sink", () => {
         idc = 0;
         const allyDamage: TeamActorInput = {
@@ -470,10 +473,10 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
     //
     // ⚠️ THE MAJORITY PRODUCTION CONFIG, and it silently delivered ZERO.
     // `resolvePositionalTarget` returns `null` for `target.side === 'ally'`
-    // (positionalBinding.ts:66-68), so `selectTurnTarget` falls back to `tb.legacyVictim` — the
-    // vestigial dummy. But `willApplyPositionally` (engine.ts:8388) checks only
-    // `isPositional && target != null && pattern != null` and NEVER the target's side, so it stays
-    // TRUE while the bound victim is the position-less dummy; the positional apply then resolves
+    // (positionalBinding.ts), so `selectTurnTarget` falls back to `tb.legacyVictim` — the
+    // vestigial dummy. But `willApplyPositionally` (the focus cast site in engine.ts) checks only
+    // `resolvesPositionalVictim && target != null && pattern != null` and NEVER the target's side,
+    // so it stays TRUE while the bound victim is the position-less dummy; the positional apply then resolves
     // footprint victims from `tgt.position === undefined`, finds none, and delivers nothing.
     //
     // `docs/ship-targeting.csv` has 20 ships with an ally-side `active_target` — AEGIS, Chimei,
@@ -670,5 +673,37 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         expect(tankIsTarget).toBe(5_000);
         // Negative leg: the SAME actor, now merely an ally and not the heal target, stays neutral.
         expect(allyIsTarget).toBe(4_000);
+    });
+    // ── An INVENTED enemy slot must yield to an EXPLICIT one (task 5d, Fix 4) ────────────
+    //
+    // `healingEngineAdapter` pre-resolved `e.position ?? defaultEnemySlot(i)` and handed the result
+    // to `resolveEnemySlots` as a SINGLE argument, discarding which cells the caller actually asked
+    // for. `resolvePlayerSlots` then reserved index 0 first unconditionally — so when enemy #0 is
+    // UNPLACED, its INVENTED default (`defaultEnemySlot(0)` === 'M4') claimed M4 ahead of an enemy
+    // the caller had EXPLICITLY put there, evicting that explicit enemy to the first free cell.
+    //
+    // This is the same defect class commit 3952a6a0 fixed inside the normalization boundary, one
+    // layer up and reachable from the healing page (a user who places one enemy and leaves another
+    // on "auto" hits it). The observable is WHICH enemy the healer's `front`-selecting cast lands on:
+    // column 4 is the front, so the M4 occupant takes the hit.
+    it('an UNPLACED enemy does not evict an explicitly-placed one from its cell', () => {
+        idc = 0;
+        // Identical stats so the two are distinguishable ONLY by id and by placement.
+        const auto = { ...enemy('enemy-auto', 1_000, 500_000) } as Record<string, unknown>;
+        delete auto.position; // caller left this one on auto → the adapter invents M4 for index 0
+        const explicitFront = enemy('enemy-explicit', 1_000, 500_000); // caller asked for M4
+
+        const result = simulateHealing(
+            BASE({
+                enemies: [auto, explicitFront] as HealingSimulationInput['enemies'],
+            })
+        );
+
+        const dealt = result.rounds[0].perTargetDealt?.[FOCUS_ID_IN_ENGINE] ?? {};
+        // The caller's explicit M4 must win the cell, so the front-selecting cast hits IT.
+        expect(Object.keys(dealt)).toEqual(['enemy-explicit']);
+        // Anti-vacuity: the run really did land a positional hit, so the assertion above is a
+        // statement about WHICH enemy, not about an empty map.
+        expect(dealt['enemy-explicit']).toBeGreaterThan(0);
     });
 });

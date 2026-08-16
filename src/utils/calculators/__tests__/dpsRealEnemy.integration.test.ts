@@ -184,4 +184,69 @@ describe('DPS calculator with a real positioned enemy', () => {
         // explicit target is threaded and does not break resolution, not that it changes victim.
         expect(dealt).toBeGreaterThan(0);
     });
+
+    it('credits WALKED TEAM damage to teamDamage, reconciling with perTargetDealt', () => {
+        // SP-4b-1 regression fence. `RoundData.teamDamage` is the ONLY channel the DPS chart reads
+        // for non-focus damage (DPSRoundChart's `hasTeamDamage` / dashed "with team" overlay /
+        // violet tooltip row / `killRoundFor`). The engine sums it from the scalar `roundDamage`
+        // map, whose team writer is suppressed the moment the team actor resolves positionally —
+        // which is now EVERY DPS-page run, since the page always supplies a positioned `enemy-1`
+        // and the normalization boundary places + targets every actor. Left unre-derived, the
+        // whole team feature silently disappears from the chart and `killRoundFor` reports a
+        // LATER kill round than the sim produced. So teamDamage must come from the per-victim
+        // channel here, exactly as `totalRoundDamage` already does for the focus.
+        const result = simulateDPS({
+            ...baseInput(),
+            position: DEFAULT_ATTACKER_SLOT,
+            enemyAttackers: realEnemy(),
+            teamActors: [
+                {
+                    id: 'team-1',
+                    speed: 90,
+                    chargeCount: 0,
+                    startCharged: false,
+                    selfBuffs: [],
+                    enemyDebuffs: [],
+                    shipSkills: plainDamageKit(),
+                    stats: {
+                        attack: 15000,
+                        crit: 0,
+                        critDamage: 150,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        security: 100,
+                        defence: 1000,
+                        hp: 300000,
+                        healModifier: 0,
+                    },
+                    position: 'M3',
+                },
+            ],
+        });
+
+        const dealtBySource = (r: (typeof result.rounds)[number], id: string) =>
+            Object.values(r.perTargetDealt?.[id] ?? {}).reduce((s, n) => s + n, 0);
+
+        // The team actor really did hit the real enemy...
+        const teamDealt = result.rounds.reduce((sum, r) => sum + dealtBySource(r, 'team-1'), 0);
+        expect(teamDealt).toBeGreaterThan(0);
+
+        // ...and that damage reaches the aggregate the display layer reads, per round and in total.
+        expect(result.rounds.some((r) => (r.teamDamage ?? 0) > 0)).toBe(true);
+        expect(result.summary.teamTotalDamage ?? 0).toBeGreaterThan(0);
+
+        // Reconciliation (not a magic number — adding an actor shifts every RNG draw): each row's
+        // teamDamage is exactly that round's per-victim channel summed over the walked team ids,
+        // and the summary is the total of the same, mirroring the focus re-derivation.
+        result.rounds.forEach((r) => {
+            expect(r.teamDamage ?? 0).toBe(Math.round(dealtBySource(r, 'team-1')));
+        });
+        expect(result.summary.teamTotalDamage).toBe(Math.round(teamDealt));
+
+        // The enemy's OWN output must never leak into the player-side team aggregate. The enemy
+        // deals real damage in this fixture, so the per-round equality above is a LIVE exclusion
+        // of every non-focus actor that is not a walked team member, not a vacuous one.
+        const enemyDealt = result.rounds.reduce((sum, r) => sum + dealtBySource(r, 'enemy-1'), 0);
+        expect(enemyDealt).toBeGreaterThan(0);
+    });
 });

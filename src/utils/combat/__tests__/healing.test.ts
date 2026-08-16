@@ -1014,8 +1014,15 @@ describe('healing mode — enemy attackers and target intake', () => {
                 healTargetId: 't1',
                 mode: 'healing',
                 // t1 walk defence 0 so intake = enemy attack (no reduction): exactly 3000/round.
+                // SP-4b-1: `t1` claims the front-middle cell EXPLICITLY. The normalization
+                // boundary places every actor and synthesizes the enemy's `front enemy` targeting,
+                // so the victim is chosen by board geometry — and on its index-derived default (M3)
+                // `t1` sits behind the auto-placed FOCUS at the M4 anchor, which would soak the
+                // enemy's fire instead. An explicit placement beats the invented anchor, so the
+                // focus steps back and the heal target is the front-most player again.
                 teamActors: [
                     teamWalk('t1', 40, 5000, {
+                        position: 'M4',
                         walk: {
                             shipSkills: { slots: [] },
                             stats: {
@@ -2061,6 +2068,12 @@ describe('healing — Task 9: reactive trigger integration', () => {
                         },
                     },
                 ],
+                // SP-4b-1: `t1` claims the front-middle cell EXPLICITLY. The normalization
+                // boundary places every actor and synthesizes the enemy's `front enemy` targeting,
+                // so the victim is chosen by board geometry — and on its index-derived default (M3)
+                // `t1` sits behind the auto-placed FOCUS at the M4 anchor, which would soak the
+                // enemy's fire instead. An explicit placement beats the invented anchor, so the
+                // focus steps back and the heal target is the front-most player again.
                 teamActors: [
                     {
                         id: 't1',
@@ -2069,6 +2082,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
                         startCharged: false,
                         selfBuffs: [],
                         enemyDebuffs: [],
+                        position: 'M4',
                         walk: {
                             shipSkills: { slots: [] },
                             stats: {

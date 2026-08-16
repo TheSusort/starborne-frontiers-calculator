@@ -20,12 +20,7 @@ import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
-import {
-    DEFAULT_FRONT_ENEMY_TARGET,
-    DEFAULT_BASE_PATTERN,
-    DEFAULT_ATTACKER_SLOT,
-} from './dpsEnemyPlacement';
-import { focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
+import { actorsDamagePerRound, focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
 
 /** The engine's focus-actor id (engine.ts:1781 `const focusActorId = 'attacker'`). */
 const FOCUS_ACTOR_ID = 'attacker';
@@ -114,18 +109,21 @@ export interface DPSSimulationInput {
      *  false, so the focus's damage lands per-victim on THESE actors instead of the vestigial
      *  dummy. Reuses the engine's own shape — deliberately not a parallel type. */
     enemyAttackers?: NonNullable<CombatEngineInput['enemyAttackers']>;
-    /** Board slot of the focus attacker. Required for `isPositional` to resolve a real target:
-     *  it needs BOTH this and an opposing actor's position, otherwise `selectTurnTarget` falls
-     *  back to the dummy and the focus never damages the real enemy. */
+    /** Board slot of the focus attacker. Optional since SP-4b-1: `normalizeCombatRoster` — the
+     *  engine's accommodation boundary, `runCombat`'s first line — auto-places any actor that
+     *  arrives without one (`DEFAULT_ATTACKER_SLOT` for the focus). Supply it to CHOOSE the cell;
+     *  omitting it no longer sends the focus to the dummy. */
     position?: Position;
-    /** Pre-parsed targeting preference for the focus attacker. Position alone is NOT enough:
-     *  `selectTurnTarget` requires `isPositional(...) && target`, so with no ParsedTarget it
-     *  short-circuits to `legacyVictim` (the dummy) however well-positioned the roster is.
-     *  Also required for `dummyEnemyIsVestigial` (which checks `t?.side === 'enemy'`) to drop
-     *  the dummy from the turn order. */
+    /** Pre-parsed targeting preference for the focus attacker. Also optional since SP-4b-1 — the
+     *  boundary fills an absent one with `DEFAULT_FRONT_ENEMY_TARGET`. Without that fill,
+     *  `selectTurnTarget` (which requires `resolvesPositionalVictim(...) && target`) would
+     *  short-circuit to `legacyVictim` (the dummy) however well-positioned the roster is, and
+     *  `dummyEnemyIsVestigial` (which checks `t?.side === 'enemy'`) would keep the dummy in the
+     *  turn order — which is precisely why the boundary fills it. */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
-     *  positional apply site. A single-target 1v1 wants shape 'base'. */
+     *  positional apply site. A single-target 1v1 wants shape 'base', which is exactly what the
+     *  boundary's `DEFAULT_BASE_PATTERN` fill supplies when this is absent. */
     pattern?: ParsedPattern;
 }
 
@@ -184,14 +182,27 @@ export interface RoundData {
      *  etc). For attackers/victims covered by this channel, Σ over victims for one attacker ==
      *  that attacker's `damageDealt` (battleSimulator.ts) and Σ over attackers for one victim ==
      *  `perTargetDamage[victim]` — so `damageDealt`/`damageTaken` reconcile for supported targeted
-     *  positional writes. This is NOT an unconditional guarantee: it excludes reactive damage
-     *  (`applyReactiveDamage` never writes this channel), actors with no targeting data (case-c),
-     *  and focus-target DoT (healTarget defaults to focus, so it never books here); it also
+     *  positional writes. This is NOT an unconditional guarantee: it excludes actors with no
+     *  targeting data (case-c) and focus-target DoT (healTarget defaults to focus, so it never
+     *  books here); it also
      *  inherits the Protection redirect double-count and the Protection DoT-tick-batch redirect
      *  gap (no single source attacker to mirror to). Set ONLY when non-empty (mirrors
      *  `perTargetDamage`'s "absent when empty" rule, goldens byte-identical). DoT-tick
      *  contributions land in the TICK round (the ticking victim's own turn-start), not the cast
-     *  round — same pre-existing timing `perTargetDamage` already has for DoT ticks. */
+     *  round — same pre-existing timing `perTargetDamage` already has for DoT ticks.
+     *
+     *  REACTIVE DAMAGE **IS** INCLUDED on the positional path, and this comment used to say the
+     *  opposite. `applyReactiveDamage` writes here via `creditDealt` when `hasPositionedEnemyRoster`
+     *  and the victim is a real positioned actor (`engine.ts` ~5784, shipped in #318);
+     *  `applyCounterAttack` (~5554) and reflect (~5243) write it unconditionally. Only a run with
+     *  NO positioned enemy roster falls back to credit-only `creditDamage`. Verified empirically
+     *  across four reactive shapes — start-of-round proc, adjacent-ally retaliation, reflect, and a
+     *  true on-attacked counter — each crediting this channel keyed by the reacting actor.
+     *
+     *  The stale claim was not harmless: it is what made a reviewer report `teamDamage` as
+     *  under-counting reactive damage (PR #324), a Major finding that measurement disproved. A
+     *  comment describing a channel's CONTENTS is load-bearing documentation — reviewers reason
+     *  from it. */
     perTargetDealt?: Record<string, Record<string, number>>;
     /** Per-actor shield accounting for THIS round (H1 Task 6), keyed by actor id. For each actor:
      *  `granted` = total shield actually added to its pool this round (post-cap delta);
@@ -479,37 +490,21 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemySpeed,
         teamActors: engineTeamActors,
         bus: collectingBus,
-        // Real positioned enemy roster. Non-empty → the engine's `dpsEnemyTarget` goes false and
-        // the focus's damage lands per-victim on these actors rather than the dummy sink. Each
-        // enemy gets a default ParsedTarget so it actually attacks (see below).
-        enemyAttackers: input.enemyAttackers?.map((e) => ({
-            ...e,
-            target: e.target ?? DEFAULT_FRONT_ENEMY_TARGET,
-            pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
-        })),
-        // Focus attacker's board slot — `isPositional` needs this AND an opposing position.
-        // Defaulted alongside target/pattern for the same reason: without it the run resolves to the
-        // dummy, `perTargetDealt` stays empty, and the re-derived metric below reports ZERO damage
-        // rather than falling back to the legacy scalar. Silent, so it is closed here.
-        position:
-            input.position ??
-            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_ATTACKER_SLOT : undefined),
-        // Position alone does NOT route the cast: `selectTurnTarget` requires
-        // `isPositional(...) && target`, so without a ParsedTarget it short-circuits to the dummy
-        // `legacyVictim` and the real enemy is never touched. Defaulted (rather than left to the
-        // caller) so "supply a real enemy" is sufficient on its own — omitting the target was a
-        // silent fallback to the dummy, not an error, which is a footgun worth closing here.
-        // Only applies when a real enemy is present, so callers on the scalar path are untouched.
-        target:
-            input.target ??
-            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_FRONT_ENEMY_TARGET : undefined),
-        // `pattern` is required by the SAME positional-apply gate as `target` (engine.ts:8344).
-        // Omitting it resolves onto the real enemy and still credits cumulativeDamage via the
-        // legacy sink, but skips the per-victim apply — so `perTargetDealt` comes back empty and
-        // the re-derived metric reads zero. Silent, hence defaulted alongside the target.
-        pattern:
-            input.pattern ??
-            ((input.enemyAttackers?.length ?? 0) > 0 ? DEFAULT_BASE_PATTERN : undefined),
+        // Real positioned enemy roster, forwarded verbatim. Non-empty → the engine's
+        // `dpsEnemyTarget` goes false and the focus's damage lands per-victim on these actors
+        // rather than the dummy sink.
+        //
+        // Position/target/pattern — for these enemies AND for the focus attacker below — are no
+        // longer defaulted here. `normalizeCombatRoster` (the engine's ONE accommodation boundary,
+        // called on `runCombat`'s first line) fills exactly these axes, so a second derivation at
+        // this adapter is redundant. It also fills them UNCONDITIONALLY, where this adapter gated
+        // on `enemyAttackers.length > 0`; the widened case is a scalar-path run, which has no
+        // TARGETABLE opposing roster for `resolvesPositionalVictim` to match (no enemy at all, or
+        // only 0-max-HP pressure sources) and is therefore unaffected by carrying a slot.
+        enemyAttackers: input.enemyAttackers,
+        position: input.position,
+        target: input.target,
+        pattern: input.pattern,
     });
 
     const hasRealEnemy = (input.enemyAttackers?.length ?? 0) > 0;
@@ -579,6 +574,43 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         });
     }
 
+    // SP-4b-1: the SAME re-derivation for the walked TEAM actors. `RoundData.teamDamage` /
+    // `teamTotalDamage` are folded by the engine out of the scalar `roundDamage` map, whose team
+    // writer is gated on `!teamPositional` (engine.ts:8891) exactly like the focus's — so the
+    // moment a walked team actor resolves positionally its credit is suppressed there and lands in
+    // `perTargetDealt` instead. That is now EVERY DPS-page run: the page always supplies a
+    // positioned `enemy-1`, and the normalization boundary places + targets every actor, including
+    // team actors the page itself never gave a target/pattern. Left on the scalar, `teamDamage`
+    // reads 0 and DPSRoundChart — whose team features are all `> 0`-guarded — silently drops the
+    // violet tooltip row, the dashed "with team" overlay and its legend entry, and `killRoundFor`
+    // falls back to focus-only and reports a LATER kill round than the sim produced.
+    //
+    // The group shape is NOT the focus's: an explicit list of walked team ids, because
+    // `perTargetDealt` is keyed by attacker across BOTH sides — the engine's "every non-focus
+    // entry" subtraction is only safe on the player-credit-only scalar map, and applied here it
+    // would fold the ENEMY's output into the player's team aggregate.
+    //
+    // Replacement (not addition), mirroring the focus: the two channels are mutually exclusive per
+    // cast — the `!teamPositional` gate above, `applyReactiveDamage`'s
+    // `hasPositionedEnemyRoster ? creditDealt : creditDamage` split (engine.ts:5738/5775), and the
+    // positional DoT/detonation sites which call `creditDealt` only. Legacy (no real enemy) runs
+    // keep the engine's scalar values untouched, so their goldens cannot move.
+    const walkedTeamIds = engineTeamActors?.filter((t) => t.walk).map((t) => t.id) ?? [];
+    const perRoundTeamDamage =
+        hasRealEnemy && walkedTeamIds.length > 0
+            ? actorsDamagePerRound(reportedRounds, walkedTeamIds)
+            : null;
+    if (perRoundTeamDamage) {
+        // Rounded per row, preserving the integer contract the engine's own
+        // `Math.round(teamRoundDamage)` gave this field (the chart prints it with toLocaleString).
+        reportedRounds.forEach((r, i) => {
+            r.teamDamage = Math.round(perRoundTeamDamage[i]);
+        });
+    }
+    const teamTotalDamage = perRoundTeamDamage
+        ? Math.round(perRoundTeamDamage.reduce((sum, n) => sum + n, 0))
+        : Math.round(rawTotals.teamTotal);
+
     // Hang the display timeline on the REPORTED rows (post-kill-trim) — a round the run never
     // reported gets nothing, and each field stays absent when it has nothing to say, so a caller
     // that renders `?? []` shows an empty section rather than an empty-object artifact.
@@ -645,7 +677,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             totalSecondaryDamage: Math.round(rawTotals.totalSecondary),
             totalConditionalDamage: Math.round(rawTotals.totalConditional),
             // Team total only when any walked team actor exists (legacy shape preserved).
-            ...(hasWalkedTeam ? { teamTotalDamage: Math.round(rawTotals.teamTotal) } : {}),
+            ...(hasWalkedTeam ? { teamTotalDamage } : {}),
         },
     };
 }

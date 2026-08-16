@@ -17,11 +17,70 @@ export interface ActorTargetingStatus {
     tauntAppliedRound?: number;
 }
 
+/**
+ * Is this opposing actor a viable positional TARGET for the whole battle?
+ *
+ * SP-4b-1 §4B. A board position alone does not make an actor hittable: an actor declared with
+ * `hp: 0` has no HP to lose and `resolvePositionalTarget` (which indexes only `currentHp > 0`
+ * cells) can never return it — not in round 1, not ever. Such an actor is a SOURCE of pressure,
+ * never a sink for damage.
+ *
+ * The predicate is deliberately keyed on MAX hp (`stats.hp`), not `currentHp`: it must be a
+ * static property of the battle so the apply gate stays static. An actor that WAS targetable and
+ * has since been killed keeps the run positional, so the cast whiffs against the corpse rather
+ * than teleporting back onto the legacy dummy sink and recording phantom damage (see the
+ * `DELIBERATELY no selectedEnemy != null precondition` note at engine.ts's focus cast site, and
+ * `deathFallback.integration.test.ts`).
+ */
+export function isTargetableRosterMember(a: CombatActor): boolean {
+    return a.position !== undefined && a.stats.hp > 0;
+}
+
+/**
+ * Is this actor playing the POSITIONAL game at all — i.e. is it placed on a board that has an
+ * opposing side placed on it too?
+ *
+ * This is the "which mode is this run in" question. It says nothing about whether a cast from
+ * this actor can find a VICTIM — for that, see `resolvesPositionalVictim` below. The two are
+ * genuinely different, and conflating them is the SP-4b-1 §4B defect:
+ *   • sites that route an actor's OWN state (its own HP, its own timed bomb/accumulator
+ *     containers, its own DoT ticks) ask THIS question — the opposing roster is only a
+ *     mode signal, and narrowing it would strand the actor's containers unticked;
+ *   • sites that resolve a cast onto an opposing victim ask the OTHER one.
+ */
 export function isPositional(
     actorPosition: Position | undefined,
     opposingLiving: CombatActor[]
 ): boolean {
     return !!actorPosition && opposingLiving.some((a) => a.position !== undefined);
+}
+
+/**
+ * Can a cast from this actor resolve onto a positional VICTIM?
+ *
+ * The static half of a decision whose dynamic half is `resolvePositionalTarget`; SP-4b-1 §4B
+ * fixed them disagreeing. `isPositional` alone is too weak here because a board position outlives
+ * its owner's ability to be hit: a roster whose every member is a 0-max-HP pressure source is
+ * placed but unhittable, so the gate went positional, selection found nobody, the per-victim apply
+ * booked nothing, and the legacy scalar credit was suppressed "because the positional branch was
+ * taken" — the cast's damage landed in NEITHER channel and vanished.
+ *
+ * Before the SP-4b-1 normalization boundary, "nobody carries a position" was the de-facto signal
+ * for "this roster is pressure, not targets", so the mismatch was unreachable. Normalization
+ * auto-places every actor, so the signal now has to be asked for explicitly.
+ *
+ * Keyed on MAX hp, so an actor KILLED mid-battle still keeps the run positional and the cast
+ * whiffs against the corpse instead of teleporting back onto the legacy dummy sink and recording
+ * phantom damage (see the `DELIBERATELY no selectedEnemy != null precondition` note at engine.ts's
+ * focus cast site, and `deathFallback.integration.test.ts`).
+ *
+ * Team-symmetric by construction: both sides call this one helper with their own opposing roster.
+ */
+export function resolvesPositionalVictim(
+    actorPosition: Position | undefined,
+    opposingLiving: CombatActor[]
+): boolean {
+    return !!actorPosition && opposingLiving.some(isTargetableRosterMember);
 }
 
 /**

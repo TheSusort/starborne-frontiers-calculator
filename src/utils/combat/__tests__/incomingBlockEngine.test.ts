@@ -191,7 +191,19 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     critDamage: 0,
     defensePenetration: 0,
     chargeCount: 0,
-    shipSkills: { slots: [noopActive] },
+    shipSkills: { slots: [{ slot: 'active', abilities: [stealthSelfBuff('focus-stealth')] }] },
+    // SP-4b-1: the focus is pinned to the back of the middle row AND cloaked.
+    //
+    // It used to be off the board entirely, and that is what kept the enemy's targeting on the
+    // stealthed victim: `resolvePositionalTarget` drops stealthed cells UNLESS every candidate is
+    // stealthed, and with the victim the only placed player actor that "restore all" branch always
+    // fired. The normalization boundary places the focus too, so an un-stealthed focus becomes the
+    // one visible cell and soaks every hit. Cloaking it restores the restore-all branch, and the
+    // enemies' own-row front->back scan (they sit in row M) then resolves onto the victim at M4.
+    // Inert to everything under test here — the gates below read the VICTIM's Stealth, never the
+    // focus's.
+    position: 'M1',
+    speed: 2000, // ahead of every victim/enemy, so the focus's Stealth is up before anyone fires
     enemyDefense: 0,
     enemyHp: 1_000_000_000,
     numRounds: 1,

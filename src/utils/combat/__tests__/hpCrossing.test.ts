@@ -106,13 +106,17 @@ const collect = (input: CombatEngineInput) => {
 };
 
 describe('Phase 4c PR 3 Task 2 — tank-side hp-changed emission', () => {
-    // ── Test 1: one hp-changed per enemy ATTACK (aggregate, even for a 3-hit ability) ──
-    // A ship-backed enemy fires a 3-hit damage ability. The drain is aggregate (one
-    // applyIncomingToTarget per attack) → exactly ONE tank-side hp-changed per round,
-    // even though 3 `attacked` events fire (one per hit). targetId = the heal target.
-    // attack 1000, defence 0, multiplier 100, 3 hits, no crit → total damage 3000
-    // → newPct = 100 * (10000 - 3000) / 10000 = 70.0 exact.
-    it('emits ONE hp-changed per enemy attack (aggregate), with 3 attacked events for a 3-hit ability', () => {
+    // ── Test 1: one hp-changed per HP-INTAKE event — a 3-hit ability makes three ──
+    // A ship-backed enemy fires a 3-hit damage ability. `hp-changed` is emitted once per
+    // `applyVictimDamage` call, and SP-4b-1 changes how many of those a multi-hit cast makes: the
+    // boundary places every actor and synthesizes the enemy's targeting, so the cast resolves
+    // positionally onto the real focus actor and takes the per-victim apply — where the locked
+    // multi-hit rule (a `hits: N` cast is N FULL-WALK attacks) means three separate HP intakes.
+    // The legacy dummy-sink route drained once with the pre-summed 3000, which is why this used to
+    // read as a single aggregate event. Same victim, same total, three events instead of one.
+    // attack 1000, defence 0, multiplier 100, no crit → 1000 per hit on a 10000 max HP focus, so
+    // the percentages step 100 → 90 → 80 → 70 and the LAST newPct is the old aggregate's 70.
+    it('emits ONE hp-changed per HP intake — a 3-hit ability drains three times, ending at 70%', () => {
         const threeHitEnemy: EnemyAttacker = {
             id: 'atk1',
             stats: { attack: 1000, crit: 0, critDamage: 0, speed: 50 },
@@ -143,18 +147,24 @@ describe('Phase 4c PR 3 Task 2 — tank-side hp-changed emission', () => {
             })
         );
 
-        // Exactly ONE hp-changed (aggregate per attack), but THREE attacked events.
-        expect(hpChanged).toHaveLength(1);
+        // One hp-changed per sub-attack, matching the three `attacked` events one-for-one.
+        expect(hpChanged).toHaveLength(3);
         expect(attacked).toHaveLength(3);
 
-        const e = hpChanged[0];
-        expect(e.targetId).toBe('attacker');
-        expect(e.round).toBe(1);
-        // oldPct is exactly 100 (full HP before the attack).
-        expect(e.oldPct).toBeCloseTo(100, 6);
-        // newPct = 100 * (10000 - 3000) / 10000 = 70.0 exactly (attack 1000, multiplier 100,
-        // 3 hits, defence 0, no crit → each hit 1000, aggregate 3000).
-        expect(e.newPct).toBeCloseTo(70, 6);
+        for (const e of hpChanged) {
+            expect(e.targetId).toBe('attacker');
+            expect(e.round).toBe(1);
+        }
+        // The three crossings are contiguous and each is exactly one 1000-damage hit out of a
+        // 10000 max HP pool: 100 → 90, 90 → 80, 80 → 70. Asserting the whole ladder (not just the
+        // endpoints) is what keeps this from passing on any three events that happen to end at 70.
+        expect(hpChanged.map((e) => [e.oldPct, e.newPct])).toEqual([
+            [100, 90],
+            [90, 80],
+            [80, 70],
+        ]);
+        // The aggregate total is unchanged from the legacy route: 3 × 1000 off 10000 → 70%.
+        expect(hpChanged[hpChanged.length - 1].newPct).toBeCloseTo(70, 6);
     });
 
     // ── Test 1b: exact percentages on a manual flat enemy ────────────────────────
@@ -842,6 +852,13 @@ const tankActor = (id: string, hp: number, speed = 30): TeamActorEngineInput => 
     startCharged: false,
     selfBuffs: [],
     enemyDebuffs: [],
+    // SP-4b-1: the tank is the actor every scenario below needs the enemy to hit. The
+    // normalization boundary places every actor and synthesizes the enemy's `front enemy`
+    // targeting, so the victim is now chosen by board geometry — and an index-derived team default
+    // (`M3`) sits BEHIND the focus's front-middle anchor (`M4`), which would make the HEALER the
+    // one taking every hit. Claiming `M4` explicitly puts the tank back in front (the invented
+    // anchor yields to an explicit placement) and keeps the enemy's fire on it.
+    position: 'M4',
     walk: {
         shipSkills: { slots: [] },
         stats: {

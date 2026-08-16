@@ -3798,8 +3798,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // living opposing actor — NEVER the vestigial DPS-dummy sink (ctx.enemy.id), which
             // stays alive whenever the team fields an ally-targeting ship (healer) and would
             // otherwise leak a phantom "→ enemy" line into the log (repeated once per fire).
-            // `livingOpposingActorIds` is gated on hasPositionedEnemyRoster (returns [] in pure
-            // DPS-calc mode), so DPS mode still falls back to the dummy sink — its intended role.
+            // `livingOpposingActorIds` is gated on hasPositionedEnemyRoster (returns [] when no
+            // TARGETABLE opposing roster exists), so such a run still falls back to the dummy sink —
+            // its intended role. "Pure DPS-calc mode" was the shorthand when this was written and no
+            // longer names that case: since SP-1 the DPS page supplies a real, positioned enemy and
+            // since SP-4b-1 the normalization boundary places it, so the fallback now means an
+            // absent roster or one made only of 0-max-HP pressure sources.
             const opposing = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
             victimIds = [opposing.length > 0 ? opposing[0] : ctx.enemy.id];
         }

@@ -11,7 +11,7 @@ import type { ParsedTarget, ParsedPattern, ShipTargeting } from '../targetingPar
 import { computeAffinityModifiers } from './affinityUtils';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { deriveTeamEngineActors } from './dpsSimulator';
-import { DEFAULT_BASE_PATTERN, DEFAULT_FRONT_ENEMY_TARGET } from './dpsEnemyPlacement';
+import { DEFAULT_FRONT_ENEMY_TARGET } from './dpsEnemyPlacement';
 import {
     defaultEnemySlot,
     resolveEnemySlots,
@@ -73,15 +73,20 @@ export interface EnemyAttackerInput {
      *  live per-turn landing recompute (hacking vs heal-target security) drives inbound debuff
      *  landing. Absent → engine defaults hacking to 200 (100% landing at neutral security). */
     hacking?: number;
-    /** Board slot. Required for `isPositional` to resolve a real target: it needs BOTH this and
-     *  an opposing actor's position, or `selectTurnTarget` falls back to the vestigial dummy. */
+    /** Board slot. Optional since SP-4b-1 — `normalizeCombatRoster` auto-places an enemy that
+     *  arrives without one (`defaultEnemySlot`, walked from the front column). Supply it to choose
+     *  the cell; an EXPLICIT cell also beats another enemy's invented one on a collision. */
     position?: Position;
     /** Parsed target selection. Position alone does NOT route a cast — with no ParsedTarget,
-     *  `selectTurnTarget` short-circuits to `legacyVictim` however well-positioned the roster. */
+     *  `selectTurnTarget` short-circuits to `legacyVictim` however well-positioned the roster.
+     *  The boundary fills that gap now (`DEFAULT_FRONT_ENEMY_TARGET`), so the short-circuit is
+     *  unreachable from here; the adapter still SUBSTITUTES an ally-side target, which is a
+     *  matchup policy the boundary deliberately does not apply — see `offensiveTarget`. */
     target?: ParsedTarget;
-    /** Parsed pattern. Required by the SAME positional-apply gate as `target`: with a target but
+    /** Parsed pattern. Governed by the SAME positional-apply gate as `target`: with a target but
      *  no pattern the cast resolves onto the real enemy yet skips the per-victim apply, leaving
-     *  `perTargetDealt` empty while the damage number still looks plausible. */
+     *  `perTargetDealt` empty while the damage number still looks plausible. Also filled by the
+     *  boundary (`DEFAULT_BASE_PATTERN`) when absent, so that half-filled state cannot arise. */
     pattern?: ParsedPattern;
     /** Charged-axis targeting when it differs from active. Falls back to `target` / `pattern`. */
     chargedTarget?: ParsedTarget;
@@ -113,8 +118,10 @@ export interface HealingSimulationInput {
     teamActors?: TeamActorInput[];
     enemies: EnemyAttackerInput[];
     rounds: number;
-    /** The healer's board slot. Required for `isPositional`: it needs BOTH this and an opposing
-     *  actor's position, else `selectTurnTarget` falls back to the vestigial dummy. */
+    /** The healer's board slot. Optional, but the engine's auto-placement never sees it absent:
+     *  `resolveHealingPlayerPlacement` substitutes `DEFAULT_HEALER_SLOT` (M2) before the input is
+     *  built, and the coverage-aware heal-target default is derived FROM the resolved healer cell —
+     *  so omitting it moves the heal target too, not just the healer. */
     healerPosition?: Position;
     /** The healer's own parsed skill targeting (`parseShipTargeting`). Real patterns drive both
      *  the offensive cast AND — via the support footprint — which allies its heals reach. */
@@ -276,11 +283,14 @@ export const FOCUS_ID = 'attacker';
  * player ship and every enemy gets a cell (`resolvePlayerSlots` / `resolveEnemySlots`, so no two
  * same-side actors share one — a collision silently ERASES the earlier actor from that cell), and
  * every actor on BOTH sides — focus, team actors, enemies — carries a ParsedTarget + ParsedPattern,
- * defaulted to front/base when the caller supplies none. That default is load-bearing, not tidiness:
- * a team actor's axes are sourced exclusively from `teamTargetById`/`teamPatternById`
- * (engine.ts:1869-1885), so an actor missing them has `selectTurnTarget` short-circuit to
- * `legacyVictim` — the dummy — and its `basis:'damage-dealt'` riders then scale off the sink's
- * 10,000 defence instead of the real enemy's.
+ * defaulted to front/base when the caller supplies none. Since SP-4b-1 that defaulting is the
+ * ENGINE's, not this adapter's: `normalizeCombatRoster` fills both axes on `runCombat`'s first line
+ * and the duplicate derivation here was retired. It is load-bearing, not tidiness: a team actor's
+ * axes are sourced exclusively from `teamTargetById`/`teamPatternById`, so an actor missing them
+ * would have `selectTurnTarget` short-circuit to `legacyVictim` — the dummy — and its
+ * `basis:'damage-dealt'` riders would then scale off the sink's 10,000 defence instead of the real
+ * enemy's. What this adapter still owns is the ally-side SUBSTITUTION (`offensiveTarget`), which is
+ * a matchup policy rather than a fill — the boundary only fills what is ABSENT.
  *
  * Consequences the pre-SP-3 dummy run did not have: every player cast lands per-victim on a real
  * enemy (so `basis:'damage-dealt'` riders scale off that enemy's own defence), enemies can be
@@ -290,9 +300,11 @@ export const FOCUS_ID = 'attacker';
  * via `defaultHealTargetSlot`) is the only mitigation.
  *
  * The vestigial dummy is the opponent only where positional resolution yields nothing: when
- * `enemies` is EMPTY, or when a placed actor's target/pattern resolves to no victim at all, since
- * `selectTurnTarget` ends in `selected ?? legacyVictim` (engine.ts:6465). See the LEGACY_SINK_*
- * comment below.
+ * `enemies` is EMPTY, when the roster holds no targetable member (every enemy at max hp 0), or when
+ * a placed actor's target resolves to no living victim — the mid-run whiff window — since
+ * `selectTurnTarget` ends in `selected ?? legacyVictim`. Note "target/pattern missing" has dropped
+ * off that list: the boundary fills both, so an actor with no axes is no longer one of the ways in.
+ * See the LEGACY_SINK_* comment below.
  *
  * `enemies: []` is a TEST-ONLY shape, and that is now ENFORCED rather than merely asserted: the page
  * seeds one enemy and FLOORS the roster at one (`removeEnemy` refuses to empty it and the last card's
@@ -375,11 +387,12 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
      * The actor-level `target` axis exists to bind the OFFENSIVE cast — which opposing cell this
      * actor's damage anchors on. An ALLY-side target cannot do that job and must not be forwarded.
      *
-     * ⚠️ NOT a normalisation nicety. `resolvePositionalTarget` returns `null` for
-     * `target.side === 'ally'` (positionalBinding.ts:66-68), so `selectTurnTarget` falls back to
-     * `tb.legacyVictim` — the vestigial DUMMY. Worse, `willApplyPositionally` (engine.ts:8388) tests
-     * only `isPositional && target != null && pattern != null` and never the target's SIDE, so it
-     * stays TRUE while the bound victim is the position-less dummy: the positional apply then resolves
+     * ⚠️ NOT a normalisation nicety, and NOT something the engine's boundary covers — it fills an
+     * ABSENT axis, it never rewrites a supplied one. `resolvePositionalTarget` returns `null` for
+     * `target.side === 'ally'`, so `selectTurnTarget` falls back to `tb.legacyVictim` — the
+     * vestigial DUMMY. Worse, `willApplyPositionally` (the focus cast site in engine.ts) tests only
+     * `resolvesPositionalVictim && target != null && pattern != null` and never the target's SIDE,
+     * so it stays TRUE while the bound victim is the position-less dummy: the positional apply then resolves
      * footprint victims from `tgt.position === undefined`, finds none, and delivers ZERO. Measured on
      * a Volk-shaped `allies` target with `Pattern-Cone-Support-Range-1` over a `damage` + 50%
      * `damage-dealt` rider kit: `perTargetDealt` undefined and the rider heal 0 at enemy defence 1,000
@@ -432,14 +445,16 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // collapses to neutral and the documented ±25% swing silently disappears. Threaded onto
     // whichever actor IS the heal target; an actor's own `affinity` always wins.
     // The parsed axes mirror the enemy branch below EXACTLY, and for the same reason: a team
-    // actor's target/pattern are sourced ONLY from `teamTargetById`/`teamPatternById`
-    // (engine.ts:1869-1885, read at :6134-6142), which are populated only from `t.target`/
-    // `t.pattern`. With neither, `selectTurnTarget` short-circuits to `legacyVictim` — the dummy —
-    // however well-positioned the roster is, and the actor's `basis:'damage-dealt'` riders then
+    // actor's target/pattern are sourced ONLY from `teamTargetById`/`teamPatternById`, which are
+    // populated only from `t.target`/`t.pattern`. With neither, `selectTurnTarget` WOULD
+    // short-circuit to `legacyVictim` — the dummy — however well-positioned the roster is, and
+    // the actor's `basis:'damage-dealt'` riders would
     // compute against the sink's 10,000 defence instead of the real enemy's (measured 2579 vs 7753
     // on a walked ally with attack 10,000 vs an enemy at defence 1,000 — a ~3× error that surfaces
-    // as `teamHealing`). It bites the DEFAULT production config, whose heal target walks
-    // `buildDefaultShipSkills()` — a kit that carries a damage ability.
+    // as `teamHealing`). It bit the DEFAULT production config, whose heal target walks
+    // `buildDefaultShipSkills()` — a kit that carries a damage ability. SP-4b-1 moved that
+    // guarantee INTO the engine (`normalizeCombatRoster` fills both axes for every team actor), so
+    // what remains here is only the ally-side substitution, which the boundary must not do.
     const positionedTeamActors = (teamActors ?? []).map((t, i) => ({
         ...t,
         position: playerAllySlots[i],
@@ -448,7 +463,10 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // ally-side active target would otherwise bind the dummy and deliver zero, exactly as the
         // focus did.
         target: offensiveTarget(t.target),
-        pattern: t.pattern ?? DEFAULT_BASE_PATTERN,
+        // `pattern` is NOT defaulted here: `normalizeCombatRoster` (runCombat's first line) fills an
+        // absent pattern with the same DEFAULT_BASE_PATTERN. `target` still is — substituting an
+        // ALLY-side target is this calculator's matchup POLICY, and the boundary only FILLS.
+        pattern: t.pattern,
         chargedTarget: chargedOffensiveTarget(t.chargedTarget),
         chargedPattern: t.chargedPattern,
     }));
@@ -469,7 +487,23 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // Absent enemy or target affinity → neutral (damageMod 0, cap 100, penalty 0):
     // byte-identical to prior behaviour for all fixtures that omit affinity.
     // Enemy-side slots are resolved separately — sides are independent boards.
-    const enemySlots = resolveEnemySlots(enemies.map((e, i) => e.position ?? defaultEnemySlot(i)));
+    //
+    // An INVENTED slot must yield to an EXPLICIT one — the same binding constraint
+    // `normalizeRoster.ts`'s `placeSide` obeys, for the same reason. `e.position ?? defaultEnemySlot(i)`
+    // collapses "the caller asked for this cell" and "we made this cell up" into one array, and
+    // `resolvePlayerSlots` reserves index 0 before everything else, so an unplaced enemy #0 used to
+    // claim its invented `defaultEnemySlot(0)` (M4) ahead of an enemy the caller had explicitly put
+    // there — silently evicting that explicit enemy to the first free cell. Restoring the distinction
+    // takes the two extra arguments commit 3952a6a0 added for exactly this: every explicitly-placed
+    // index is nominated so it survives a collision against anything invented, and `anchorIsExplicit`
+    // says whether index 0's own wanted cell was the caller's choice or ours. Both arguments are inert
+    // when every enemy is explicitly placed (nothing is invented to lose to) and when none is (there
+    // is no explicit cell to protect), so the common healing-page shapes are unchanged.
+    const enemySlots = resolveEnemySlots(
+        enemies.map((e, i) => e.position ?? defaultEnemySlot(i)),
+        enemies.flatMap((e, i) => (i !== 0 && e.position !== undefined ? [i] : [])),
+        enemies[0]?.position !== undefined
+    );
     const engineEnemyAttackers = enemies.map((e, i) => {
         const aff = computeAffinityModifiers(e.affinity, healTargetAffinity);
         return {
@@ -488,14 +522,16 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             affinityCritPenalty: aff.critPenalty,
             position: enemySlots[i],
             // A kitless/manual enemy has no parsed targeting, so it would have NO ParsedTarget and
-            // fall back to `legacyVictim` — the dummy — leaving SP-4 blocked. The synthetic
-            // fallback keeps every enemy resolving onto a real player actor. An ALLY-side parsed
-            // target is substituted for the same default rather than forwarded (see
-            // `offensiveTarget`): since the page now feeds every enemy its REAL parsed targeting, a
-            // support ship picked as an enemy — 20 of them have an ally-side active target — would
-            // otherwise bind the dummy and deliver nothing.
+            // fall back to `legacyVictim` — the dummy — leaving SP-4 blocked. That ABSENT case is
+            // now the engine boundary's job (`normalizeCombatRoster` fills the same
+            // `DEFAULT_FRONT_ENEMY_TARGET`); `offensiveTarget` is kept here for the half it owns —
+            // an ALLY-side parsed target is SUBSTITUTED rather than forwarded, which a fill cannot
+            // do because the axis is present. That half is live: the page feeds every enemy its
+            // REAL parsed targeting, so a support ship picked as an enemy — 20 of them have an
+            // ally-side active target — would otherwise bind the dummy and deliver nothing.
             target: offensiveTarget(e.target),
-            pattern: e.pattern ?? DEFAULT_BASE_PATTERN,
+            // Filled by `normalizeCombatRoster`, not here — see the team-actor branch above.
+            pattern: e.pattern,
             chargedTarget: chargedOffensiveTarget(e.chargedTarget),
             chargedPattern: e.chargedPattern,
         };
@@ -550,7 +586,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // offensive clause in the cast delivers exactly zero. Substituted here; the support footprint
         // rides `pattern` below and is untouched. See `offensiveTarget` for the measurements.
         target: offensiveTarget(input.healerTargeting?.active?.target),
-        pattern: input.healerTargeting?.active?.pattern ?? DEFAULT_BASE_PATTERN,
+        // Filled by `normalizeCombatRoster` when absent — see the team-actor branch above.
+        pattern: input.healerTargeting?.active?.pattern,
         chargedTarget: chargedOffensiveTarget(input.healerTargeting?.charged?.target),
         chargedPattern: input.healerTargeting?.charged?.pattern,
         // Heals apply to each recipient the caster's support pattern covers — WITHOUT

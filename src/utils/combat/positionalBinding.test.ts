@@ -1,11 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import type { ParsedTarget } from '../targetingParser';
-import { isPositional, resolvePositionalTarget } from './positionalBinding';
+import {
+    isPositional,
+    isTargetableRosterMember,
+    resolvePositionalTarget,
+    resolvesPositionalVictim,
+} from './positionalBinding';
 import type { ActorTargetingStatus } from './positionalBinding';
 import type { CombatActor } from './state';
 
 const actor = (id: string, position: CombatActor['position'], currentHp = 100): CombatActor =>
     ({ id, position, currentHp }) as CombatActor;
+
+/** Same shape as `actor`, but carrying the MAX-hp field the targetability predicate reads. */
+const targetable = (
+    id: string,
+    position: CombatActor['position'],
+    maxHp: number,
+    currentHp = maxHp
+): CombatActor => ({ id, position, currentHp, stats: { hp: maxHp } }) as unknown as CombatActor;
 
 const enemyTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
     raw: `enemy-${selection}`,
@@ -28,6 +41,62 @@ describe('isPositional', () => {
 
     it('false when opposing list is empty', () => {
         expect(isPositional('M4', [])).toBe(false);
+    });
+
+    it('IGNORES targetability — a placed 0-max-HP roster still means "positional run"', () => {
+        // Load-bearing distinction (SP-4b-1 §4B): the sites that route an actor's OWN state
+        // (timed bomb/accumulator bursts, own-HP DoT ticks) gate on THIS predicate. Narrowing it
+        // to targetable rosters strands those containers unticked — a bomb applied onto a player
+        // by a 0-max-HP pressure source would never burst (barrier.test.ts's bomb case).
+        expect(isPositional('M4', [targetable('e1', 'M4', 0)])).toBe(true);
+    });
+});
+
+describe('isTargetableRosterMember', () => {
+    it('false without a position', () => {
+        expect(isTargetableRosterMember(targetable('e1', undefined, 5000))).toBe(false);
+    });
+
+    it('false at 0 MAX hp — a pressure source is never a damage sink', () => {
+        expect(isTargetableRosterMember(targetable('e1', 'M4', 0))).toBe(false);
+    });
+
+    it('true for a placed actor with HP to lose', () => {
+        expect(isTargetableRosterMember(targetable('e1', 'M4', 5000))).toBe(true);
+    });
+
+    it('keyed on MAX hp, so a KILLED actor stays a roster target (the cast whiffs, it does not re-route)', () => {
+        expect(isTargetableRosterMember(targetable('e1', 'M4', 5000, 0))).toBe(true);
+    });
+});
+
+describe('resolvesPositionalVictim', () => {
+    it('false when the caster has no position', () => {
+        expect(resolvesPositionalVictim(undefined, [targetable('e1', 'M4', 5000)])).toBe(false);
+    });
+
+    it('false when the opposing list is empty', () => {
+        expect(resolvesPositionalVictim('M4', [])).toBe(false);
+    });
+
+    it('false when every placed opposing actor is a 0-max-HP pressure source', () => {
+        // The SP-4b-1 §4B case: `isPositional` says true here, so the apply gate used to go
+        // positional while `resolvePositionalTarget` found nobody — and the cast's damage was
+        // credited to neither the per-victim channel nor the legacy sink.
+        expect(resolvesPositionalVictim('M4', [targetable('e1', 'M4', 0)])).toBe(false);
+    });
+
+    it('true as soon as ONE placed opposing actor has HP to lose', () => {
+        expect(
+            resolvesPositionalVictim('M4', [
+                targetable('e1', 'M4', 0),
+                targetable('e2', 'M3', 5000),
+            ])
+        ).toBe(true);
+    });
+
+    it('stays true once that actor is KILLED — the run remains positional and the cast whiffs', () => {
+        expect(resolvesPositionalVictim('M4', [targetable('e1', 'M4', 5000, 0)])).toBe(true);
     });
 });
 

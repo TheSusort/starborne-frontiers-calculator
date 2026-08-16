@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -134,25 +135,39 @@ const creditedDirectDamageFor = (sourceId: string, input: CombatEngineInput): nu
     return total;
 };
 
+/**
+ * Sums the PER-VICTIM dealt credit attributed to `sourceId` across the whole run.
+ *
+ * SP-4b-1: this is where every reactive proc below now books. The normalization boundary places
+ * every actor and synthesizes the missing `target`/`pattern`, so the proc resolves onto the real,
+ * placed opposing actor and `applyReactiveDamage` takes its per-victim branch — lowering that
+ * actor's real HP and crediting through `creditDealt` (→ `RoundData.perTargetDealt`). The
+ * credit-only `creditDamage('direct')` channel that `creditedDirectDamageFor` taps is the LEGACY
+ * sink's route and is no longer written at all. The two are mutually exclusive per proc, which is
+ * why each magnitude below is paired with a "the old channel stays 0" assertion: `dealt > 0` alone
+ * would still pass if a later change credited both and double-counted.
+ */
+const dealtFor = (sourceId: string, input: CombatEngineInput): number =>
+    dealtBy(runCombat(input).rounds, sourceId);
+
 describe('PR4b: reactive damage executor — defense mitigation + crit (player-owned)', () => {
     it('a high-defence victim receives LESS than attack × multiplier (mitigation now applies)', () => {
         const ATTACK = 10_000;
         const MULT = 80; // FrontLine's real multiplier
 
-        const lowDefence = creditedDirectDamageFor(
-            'attacker',
-            buildPlayerOwnerInput({
-                reactionAbilities: reactiveDamage(MULT),
-                enemy: chargedCastEnemy('e1', 0),
-            })
-        );
-        const highDefence = creditedDirectDamageFor(
-            'attacker',
-            buildPlayerOwnerInput({
-                reactionAbilities: reactiveDamage(MULT),
-                enemy: chargedCastEnemy('e1', 50_000),
-            })
-        );
+        const lowDefInput = buildPlayerOwnerInput({
+            reactionAbilities: reactiveDamage(MULT),
+            enemy: chargedCastEnemy('e1', 0),
+        });
+        const highDefInput = buildPlayerOwnerInput({
+            reactionAbilities: reactiveDamage(MULT),
+            enemy: chargedCastEnemy('e1', 50_000),
+        });
+        const lowDefence = dealtFor('attacker', lowDefInput);
+        const highDefence = dealtFor('attacker', highDefInput);
+        // Nothing is credited in parallel on the legacy scalar channel.
+        expect(creditedDirectDamageFor('attacker', lowDefInput)).toBe(0);
+        expect(creditedDirectDamageFor('attacker', highDefInput)).toBe(0);
 
         const unmitigated = ATTACK * (MULT / 100);
         // Pre-PR4b baseline: both lowDefence and highDefence would equal `unmitigated` exactly
@@ -164,7 +179,7 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
     });
 
     it('a crit-capable reactive ability at 100% crit deals crit-scaled damage (deterministic gate)', () => {
-        const noCritStat = creditedDirectDamageFor(
+        const noCritStat = dealtFor(
             'attacker',
             buildPlayerOwnerInput({
                 reactionAbilities: reactiveDamage(80),
@@ -173,7 +188,7 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
                 critDamage: 150,
             })
         );
-        const fullCrit = creditedDirectDamageFor(
+        const fullCrit = dealtFor(
             'attacker',
             buildPlayerOwnerInput({
                 reactionAbilities: reactiveDamage(80),
@@ -184,11 +199,14 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
         );
         // crit:100 deterministically fires the dedicated reactive-damage crit gate on its very
         // first (only) draw; critDamage 150% → hitCritMultiplier = 1 + 150/100 = 2.5.
+        // Non-vacuous: the no-crit baseline is a real, positive number, so the ×2.5 below is a
+        // genuine scaling assertion rather than 0 === 0.
+        expect(noCritStat).toBeGreaterThan(0);
         expect(fullCrit).toBeCloseTo(noCritStat * 2.5, 0);
     });
 
     it('a noCrit-flagged ability at 100% crit does NOT crit-scale (negative pin — passes before and after)', () => {
-        const noCritFlagAt0 = creditedDirectDamageFor(
+        const noCritFlagAt0 = dealtFor(
             'attacker',
             buildPlayerOwnerInput({
                 reactionAbilities: reactiveDamage(80, { noCrit: true }),
@@ -197,7 +215,7 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
                 critDamage: 150,
             })
         );
-        const noCritFlagAt100 = creditedDirectDamageFor(
+        const noCritFlagAt100 = dealtFor(
             'attacker',
             buildPlayerOwnerInput({
                 reactionAbilities: reactiveDamage(80, { noCrit: true }),
@@ -208,31 +226,31 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
         );
         // noCrit:true → the crit gate is never even rolled (the `!noCrit &&` short-circuit) →
         // identical damage regardless of the owner's crit stat.
+        expect(noCritFlagAt0).toBeGreaterThan(0); // non-vacuous
         expect(noCritFlagAt100).toBeCloseTo(noCritFlagAt0, 0);
     });
 
     it('zero-damage guard: a 0-multiplier reactive credits nothing (raw <= 0 skip, #211 review)', () => {
         // Replaces the pre-#211 unit test for the removed creditReactiveDamage zero guard —
         // the equivalent guard now lives inside applyReactiveDamage (`if (raw <= 0) return`).
-        const credited = creditedDirectDamageFor(
-            'attacker',
-            buildPlayerOwnerInput({
-                reactionAbilities: reactiveDamage(0),
-                enemy: chargedCastEnemy('e1', 0),
-            })
-        );
-        expect(credited).toBe(0);
+        const input = buildPlayerOwnerInput({
+            reactionAbilities: reactiveDamage(0),
+            enemy: chargedCastEnemy('e1', 0),
+        });
+        // Extended to BOTH channels — pinning only the scalar one went vacuous the moment the
+        // proc moved to the per-victim channel.
+        expect(creditedDirectDamageFor('attacker', input)).toBe(0);
+        expect(dealtFor('attacker', input)).toBe(0);
     });
 
     it('gate-flip control: the reaction never fires without a charged cast (no credit at all)', () => {
-        const noReaction = creditedDirectDamageFor(
-            'attacker',
-            buildPlayerOwnerInput({
-                reactionAbilities: reactiveDamage(80),
-                enemy: nonChargingEnemy('e1', 0),
-            })
-        );
-        expect(noReaction).toBe(0);
+        const input = buildPlayerOwnerInput({
+            reactionAbilities: reactiveDamage(80),
+            enemy: nonChargingEnemy('e1', 0),
+        });
+        // Both channels, for the same reason as the zero-damage guard above.
+        expect(creditedDirectDamageFor('attacker', input)).toBe(0);
+        expect(dealtFor('attacker', input)).toBe(0);
     });
 });
 
@@ -296,20 +314,18 @@ describe('PR4b: reactive damage executor — team-symmetric mitigation (enemy-ow
         const ATTACK = 100; // the enemy owner's OWN attack (its reactive scales off ITS effectiveAttack)
         const MULT = 80;
 
-        const lowDefence = creditedDirectDamageFor(
-            'e1',
-            buildEnemyOwnerInput({
-                reactionAbilities: reactiveDamage(MULT),
-                focusDefence: 0,
-            })
-        );
-        const highDefence = creditedDirectDamageFor(
-            'e1',
-            buildEnemyOwnerInput({
-                reactionAbilities: reactiveDamage(MULT),
-                focusDefence: 50_000,
-            })
-        );
+        const lowDefInput = buildEnemyOwnerInput({
+            reactionAbilities: reactiveDamage(MULT),
+            focusDefence: 0,
+        });
+        const highDefInput = buildEnemyOwnerInput({
+            reactionAbilities: reactiveDamage(MULT),
+            focusDefence: 50_000,
+        });
+        const lowDefence = dealtFor('e1', lowDefInput);
+        const highDefence = dealtFor('e1', highDefInput);
+        expect(creditedDirectDamageFor('e1', lowDefInput)).toBe(0);
+        expect(creditedDirectDamageFor('e1', highDefInput)).toBe(0);
 
         const unmitigated = ATTACK * (MULT / 100);
         expect(lowDefence).toBeCloseTo(unmitigated, 0);

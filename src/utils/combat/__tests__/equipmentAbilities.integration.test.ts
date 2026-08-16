@@ -23,6 +23,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { setRateGateRng, setKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { CombatActor } from '../state';
 import { createEventBus, CombatEvent } from '../events';
@@ -39,6 +40,7 @@ import { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
+import { adjacentAllyIds } from '../adjacency';
 
 // ---------------------------------------------------------------------------
 // Shared test harness helpers
@@ -1123,6 +1125,13 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
+        // SP-4b-1: the tank claims the front-middle cell EXPLICITLY. The normalization boundary
+        // places every actor and synthesizes the enemy's `front enemy` targeting, so the victim is
+        // chosen by board geometry now — and on its index-derived default (M3) the tank sits behind
+        // the auto-placed HEALER at the M4 anchor, which would soak the hit instead. Every gate in
+        // this block reads the TANK's HP deficit, so without this the tank stays at full HP and the
+        // effect under test never engages. An explicit placement beats the invented anchor.
+        position: 'M4',
         walk: {
             shipSkills: { slots: [] },
             stats: {
@@ -1255,6 +1264,8 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         const NUM_ROUNDS = 10;
         const VIV_PROC = 0.5;
         const VIV_AMP = 100; // +100% → ×2 when it fires
+        // NOTE: the historical fire count in this comment (8 of 10) belonged to the pre-SP-4b-1
+        // fixture, where seven of those casts landed on a tank that had been dead since round 3.
         // NOTE: `installBackloadedAccumulator`'s `setRateGateRng` override is dead for this gate
         // under SP-0 — the heal-amp proc gate now carries an `${ownerId}:proc` stream key
         // (triggers.ts), and the keyed test provider (installed globally in setupTests.ts)
@@ -1269,28 +1280,48 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
             isGateOfInterest: (d) => d === 4 || (d >= 7 && d % 2 === 1),
             nonGate: 0.99, // non-proc draws: enemy crit is rate 0 (never fires); no crit on the noCrit heal
         });
-        // Enemy hits hard enough to keep tank below 25% (heal basis 'hp' restores only 1000/round
-        // into a 10000 tank → with 8000 dmg/round the tank stays pinned far below 25%).
+        // Enemy damage is tuned so the tank sits BELOW 25% while STILL ALIVE.
+        //
+        // SP-4b-1: it used to be 8000/round, which killed the tank in round 3 of 10 — and the run
+        // still credited a full 1000 directHeal for each of the seven post-death casts, so the
+        // "10 casts × 1000" baseline and most of the amp fires were casts onto a corpse. Once the
+        // heal resolves against a real, placed recipient rather than the legacy sink, a heal with
+        // no living recipient credits nothing, so those seven rounds vanished and the baseline
+        // read 3000. The fix is to make the scenario do what its own comment always claimed.
+        //
+        // Arithmetic at 1800/round. Tank max HP 10000; heal basis 'hp' → 1000 per un-amped cast;
+        // the enemy (speed 1000) acts first and the healer (speed 10) last, so the gate reads the
+        // POST-hit HP. Un-amped the tank nets −800/round, so `start_r = 10000 − 800(r−1)` and the
+        // healer sees `start_r − 1800`. That first drops under 2500 (25%) when 800(r−1) > 5700,
+        // i.e. round 9 — leaving rounds 9 and 10 inside the window with `post-hit_10 = 1000`, still
+        // alive. So the baseline is 10 live casts and the amp gets a real, bounded window.
+        const ENEMY_DPR = 1800;
         const withAmp = runCombat(
             AMP_BASE({
                 numRounds: NUM_ROUNDS,
                 shipSkills: healerSkills(healAmp('target-below-25', VIV_AMP, VIV_PROC)),
-                enemyAttackers: [enemyHitter(8000)],
+                enemyAttackers: [enemyHitter(ENEMY_DPR)],
             })
         );
         const without = runCombat(
             AMP_BASE({
                 numRounds: NUM_ROUNDS,
                 shipSkills: healerSkills(),
-                enemyAttackers: [enemyHitter(8000)],
+                enemyAttackers: [enemyHitter(ENEMY_DPR)],
             })
         );
         const baseHeal = sumHeal(without, 'directHeal');
         const ampHeal = sumHeal(withAmp, 'directHeal');
-        // Baseline: 10 casts × 1000 = 10000. With 8 proc'd ×2 fires: 2 normal + 8 doubled =
-        // 2×1000 + 8×2000 = 18000.
+        // The tank is ALIVE for the whole run in BOTH arms — the guard that keeps this from
+        // measuring post-death casts ever again.
+        expect(without.healing!.destroyedRound).toBeUndefined();
+        expect(withAmp.healing!.destroyedRound).toBeUndefined();
+        // Baseline: 10 live casts × 1000 = 10000.
         expect(baseHeal).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
-        const ACTUAL_FIRES = 8;
+        // Two fires, and exactly the two the arithmetic above predicts: the window opens at round
+        // 9 (post-hit 1800 HP = 18%) and the round-9 amp's extra 1000 leaves round 10 at 2000 =
+        // 20%, still inside it. Both are LIVE casts on a tank that survives the run.
+        const ACTUAL_FIRES = 2;
         const expectedAmp =
             NUM_ROUNDS * BASE_PER_CAST + ACTUAL_FIRES * BASE_PER_CAST * (VIV_AMP / 100);
         expect(ampHeal).toBeCloseTo(expectedAmp, 6);
@@ -3598,39 +3629,33 @@ describe('D-PR11 integration — Fortifying Shroud: positional adjacent-allies b
         expect(buffGrantedTo.size).toBe(2);
     });
 
-    it('without board positions (non-positional): buff falls back to all same-side allies (all-allies)', () => {
-        // When no positions are wired, adjacentAllyIds falls back to all living same-side
-        // allies (owner excluded). The ability still fires (start-of-turn, no procChance),
-        // and all three team actors receive the buff.
-        const bus = createEventBus();
+    // SP-4b: this case used to drive `runCombat` with every actor's `position` stripped. That
+    // premise no longer exists — `normalizeCombatRoster` auto-places the whole roster on the
+    // engine's first line, so a position-less run cannot be expressed through the public entry
+    // point and the buff resolves through the POSITIONAL branch instead.
+    //
+    // The all-allies fallback itself is NOT dummy machinery: it lives in `adjacency.ts`, it is
+    // untouched by SP-4c/4d/4e, and it stays reachable for any caller that resolves recipients
+    // outside `runCombat`. So the case is kept, one layer DOWN — the boundary is bypassed by
+    // calling the recipient resolver the engine's `adjacentAllyIdsFor` delegate wraps
+    // (engine.ts: `adjacentAllyIdsFor: (ownerId) => adjacentAllyIds(ownerId, actors)`).
+    // The positional sibling above still proves the end-to-end grant wiring through `runCombat`.
+    it('without board positions (non-positional): recipients fall back to all same-side allies (all-allies)', () => {
+        // The same D-PR11 roster the integration case built, minus positions: the Fortifying
+        // Shroud owner ('attacker') plus three allies, none of them placed.
+        const roster = [
+            { id: 'attacker', position: undefined },
+            { id: 'ally-A', position: undefined },
+            { id: 'ally-B', position: undefined },
+            { id: 'ally-C', position: undefined },
+        ];
 
-        const buffGrantedTo = new Set<string>();
-        bus.on('buff-applied', (e) => {
-            if (e.buffName === 'Defense Up I') buffGrantedTo.add(e.actorId);
-        });
+        const recipients = adjacentAllyIds('attacker', roster);
 
-        // Team actors without position (non-positional path).
-        const teamActors: TeamActorEngineInput[] = [
-            makePositionedAlly('ally-A', 'T2'),
-            makePositionedAlly('ally-B', 'M3'),
-            makePositionedAlly('ally-C', 'B4'),
-        ].map((a) => ({ ...a, position: undefined }));
-
-        // Focus also without position.
-        const input: CombatEngineInput = {
-            ...makeShroudInput(bus, teamActors),
-            position: undefined,
-        };
-
-        runCombat(input);
-
-        // Without positions all three allies get the buff (all-allies fallback).
-        expect(buffGrantedTo.has('ally-A')).toBe(true);
-        expect(buffGrantedTo.has('ally-B')).toBe(true);
-        expect(buffGrantedTo.has('ally-C')).toBe(true);
-        // Owner still excluded (adjacentAllyIds always excludes the owner).
-        expect(buffGrantedTo.has('attacker')).toBe(false);
-        expect(buffGrantedTo.size).toBe(3);
+        // Without positions all three allies are recipients (all-allies fallback)...
+        expect([...recipients].sort()).toEqual(['ally-A', 'ally-B', 'ally-C']);
+        // ...and the owner is still excluded (adjacentAllyIds always excludes the owner).
+        expect(recipients).not.toContain('attacker');
     });
 });
 
@@ -4136,7 +4161,18 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
                 enemyAttackers: [selfDebuffer()],
             })
         );
-        expect(withWarp.rawTotals.direct).toBeGreaterThan(control.rawTotals.direct);
+        // SP-4b-1: the carrier's cast now resolves positionally onto the real, placed enemy, so its
+        // damage is booked per-victim (`RoundData.perTargetDealt`, via applyVictimDamage) instead of
+        // on the legacy dummy sink's `rawTotals.direct`. Same damage, different channel — so the
+        // comparison moves with it, and the old channel is pinned empty in BOTH arms because the two
+        // destinations are mutually exclusive per cast (a `dealt` comparison alone would still pass
+        // if a later change credited both and double-counted).
+        const warpDealt = dealtBy(withWarp.rounds, 'attacker');
+        const controlDealt = dealtBy(control.rounds, 'attacker');
+        expect(controlDealt).toBeGreaterThan(0); // non-vacuous: the carrier really is hitting
+        expect(warpDealt).toBeGreaterThan(controlDealt);
+        expect(withWarp.rawTotals.direct).toBe(0);
+        expect(control.rawTotals.direct).toBe(0);
     });
 });
 
@@ -4954,9 +4990,17 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
     const NUM_ROUNDS = 10;
     const ENEMY_ATTACK = 1_000;
     const ENEMY_HITS = 11; // 11 × 0.19 = 2.09 → proc would pass TWICE/round → oncePerRound is binding
-    const D = ENEMY_ATTACK * ENEMY_HITS; // per-attack aggregate damage taken = 11_000
     const AP_PCT = 42; // legendary
-    const ONE_GRANT = (AP_PCT / 100) * D; // 4_620 — exactly ONE share
+    // SP-4b-1: the `damage-taken` basis is the damage of ONE HP-intake event, and a `hits: N` cast
+    // is N FULL-WALK attacks — so an 11-hit attack is eleven 1000-damage intakes, not one 11_000
+    // aggregate. The engine only ever collapsed them into a single intake on the legacy dummy-sink
+    // route; now that the cast resolves positionally onto the real, placed carrier it drains once
+    // per sub-attack (the same move `hpCrossing.test.ts`'s three-hit `hp-changed` ladder pins). The
+    // grant is therefore 0.42 × 1_000, not 0.42 × 11_000. Nothing about the once-per-round cap
+    // changed: eleven intakes still give the 0.19 proc gate two passes per round, and the cap still
+    // reduces them to one — which is exactly what the no-cap control at the bottom demonstrates.
+    const D = ENEMY_ATTACK; // damage taken by ONE sub-attack intake = 1_000
+    const ONE_GRANT = (AP_PCT / 100) * D; // 420 — exactly ONE share
 
     /** An enemy attacker that hits the carrier (the focus / heal target) with an 11-hit attack
      *  each round. attack 1000, multiplier 100, no crit → aggregate damage taken = 11_000. */
@@ -5041,9 +5085,9 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
                     critDamage: 0,
                     numRounds: NUM_ROUNDS,
                     hp: CARRIER_HP,
-                    // No carrier defence → the enemy's 11-hit attack lands its full nominal
-                    // aggregate (1000 × 11 = 11_000) as the damage taken, so the grant pins to
-                    // 0.42 × 11_000 = 4_620 exactly (no mitigation arithmetic in the assertion).
+                    // No carrier defence → each of the enemy's 11 sub-attacks lands its full
+                    // nominal 1000 as that intake's damage taken, so the grant pins to
+                    // 0.42 × 1_000 = 420 exactly (no mitigation arithmetic in the assertion).
                     defence: 0,
                     enemyHp: 1_000_000_000,
                     healTargetId: 'attacker',
@@ -5186,6 +5230,13 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
+        // SP-4b-1: the tank claims the front-middle cell EXPLICITLY. The normalization boundary
+        // places every actor and synthesizes the enemy's `front enemy` targeting, so the victim is
+        // chosen by board geometry now — and on its index-derived default (M3) the tank sits behind
+        // the auto-placed HEALER at the M4 anchor, which would soak the hit instead. Every gate in
+        // this block reads the TANK's HP deficit, so without this the tank stays at full HP and the
+        // effect under test never engages. An explicit placement beats the invented anchor.
+        position: 'M4',
         walk: {
             shipSkills: { slots: [] },
             stats: {

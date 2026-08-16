@@ -25,6 +25,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
+import { createEventBus, CombatEvent } from '../events';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
 import { createStatusEngine } from '../statusEngine';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -110,6 +111,29 @@ const counterBase = (
     enemyAttackers: [basicEnemy('foe', 3_000)],
     ...overrides,
 });
+
+/**
+ * Reactive hits (counters included) landing on `victimId`, read off the LOG-ONLY
+ * `reactive-damage-performed` row `applyCounterAttack` emits via triggers.ts.
+ *
+ * SP-4b-1: `perTargetDamage[victim]` can no longer express "no counter landed here". The
+ * normalization boundary places every actor, so an enemy's ordinary cast now resolves positionally
+ * onto the focus and books the focus's own row through `emitHit` — a channel the legacy dummy-sink
+ * route never wrote. A counter and a plain direct hit are indistinguishable once summed there, so
+ * the re-counter negative has to be read from the reactive channel, which only a proc ever writes.
+ */
+const reactiveHitsOn = (input: CombatEngineInput, victimId: string): number => {
+    const bus = createEventBus();
+    let n = 0;
+    bus.on(
+        'reactive-damage-performed',
+        (e: Extract<CombatEvent, { type: 'reactive-damage-performed' }>) => {
+            if (e.targetId === victimId) n++;
+        }
+    );
+    runCombat({ ...input, bus });
+    return n;
+};
 
 /** Cumulative damage credited to `actorId` across the run via the round perTargetDamage maps. */
 const totalPerTargetDamage = (result: ReturnType<typeof runCombat>, actorId: string): number => {
@@ -234,16 +258,25 @@ describe('G PR1 — counter executor branch (end-to-end via runCombat)', () => {
                 },
             ],
         };
-        const result = runCombat(
-            counterBase(counterSkills(50), {
-                enemyAttackers: [basicEnemy('foe', 3_000, { shipSkills: enemyWithCounter })],
-            })
-        );
+        const withEnemyCounter = counterBase(counterSkills(50), {
+            enemyAttackers: [basicEnemy('foe', 3_000, { shipSkills: enemyWithCounter })],
+        });
+        const result = runCombat(withEnemyCounter);
         // The player's counter DID fire (the enemy took counter damage)...
         expect(totalPerTargetDamage(result, 'foe')).toBeGreaterThan(0);
-        // ...but the enemy's counter NEVER fired in response — the player owner takes ZERO counter
-        // damage (the counter walk emits no `attacked` event → no re-counter).
-        expect(totalPerTargetDamage(result, 'attacker')).toBe(0);
+        expect(reactiveHitsOn(withEnemyCounter, 'foe')).toBeGreaterThan(0);
+        // ...but the enemy's counter NEVER fired in response — the counter walk emits no `attacked`
+        // event, so no reactive hit is ever credited BACK to the player owner. Read off the
+        // reactive channel, because `perTargetDamage['attacker']` now also carries the enemy's
+        // ordinary positional cast (see `reactiveHitsOn`).
+        expect(reactiveHitsOn(withEnemyCounter, 'attacker')).toBe(0);
+        // Same fact stated on the magnitude channel, so a future change that re-credited a
+        // re-counter there cannot slip past: the focus's booked damage is EXACTLY what it takes
+        // when the enemy carries no counter at all — no counter-of-counter is folded in.
+        const noEnemyCounter = counterBase(counterSkills(50));
+        const focusWithout = totalPerTargetDamage(runCombat(noEnemyCounter), 'attacker');
+        expect(focusWithout).toBeGreaterThan(0); // non-vacuous: the focus IS being hit
+        expect(totalPerTargetDamage(result, 'attacker')).toBeCloseTo(focusWithout, 6);
     });
 });
 

@@ -338,71 +338,14 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
         });
     });
 
-    it('a NON-positional enemy attacker with a timed bomb does NOT burst via the per-positioned-enemy path', () => {
-        idc = 0;
-        // GATE PIN — the `isPositional` half. The new per-positioned-enemy burst is gated on
-        //   enemyHasTimedContainers && isPositional(actor.position, allPlayerActors)
-        // `isPositional(pos, opposing)` = `!!pos && opposing.some(a => a.position !== undefined)`
-        // (positionalBinding.ts:24). We make the SECOND conjunct false while keeping everything
-        // else true, so this pins the player-side positional condition specifically:
-        //
-        //   • The enemy attacker `enemy-mid` HAS a board position (M3) → `actor.position` is set,
-        //     so the FIRST conjunct of isPositional is satisfied.
-        //   • It DOES carry a timed bomb → `enemyHasTimedContainers` is true.
-        //   • It DOES take its own turn (speed 1, reaches the `:4851` enemy-attacker branch and the
-        //     gate) — we assert below it took a turn each round.
-        //   • The ONLY thing false: the FOCUS is non-positional (no `position`/`target`/`pattern`,
-        //     no walked team) → `allPlayerActors === [attacker]` with `attacker.position` undefined
-        //     → `allPlayerActors.some(a => a.position !== undefined)` is false → isPositional false.
-        //
-        // So if someone deleted the `isPositional(...)` clause from the gate (or it regressed to
-        // true), this enemy WOULD burst 4000 here and the assertions below would fail — NOT vacuous.
-        //
-        // We run in healing mode (healTargetId = the focus healing itself) so the enemy attacks
-        // resolve against a real heal target. The enemy attacker carries a 4 × 1000 timed bomb
-        // (countdown 2): under the legacy
-        // enemy-attacker branch this bomb is NEVER burst, and the per-positioned path is gated OFF.
-        const { events, result } = collect(
-            NONPOS_BASE({
-                healTargetId: 'attacker',
-                mode: 'healing',
-                // enemy attacker present (so it takes a turn + reaches the gate) and POSITIONED at
-                // M3 — but the FOCUS is left non-positional (NONPOS_BASE sets no position/target/
-                // pattern) → no player actor has a position → isPositional is false for this enemy.
-                enemyAttackers: [enemyAt('enemy-mid', 'M3', 1_000_000_000)],
-                __testTapActors: (actors: CombatActor[]) => {
-                    actors
-                        .find((a) => a.id === 'enemy-mid')
-                        ?.pendingBombs.push(timedBomb(1000, 4, 2, 'attacker'));
-                },
-            })
-        );
-
-        // The enemy attacker DID take a turn each of the 2 rounds (proves it reached the turn body /
-        // the gate) — without this, the "no burst" assertions below could pass vacuously.
-        const midTurns = events.filter(
-            (e) => e.type === 'turn-started' && e.actorId === 'enemy-mid'
-        );
-        expect(midTurns.length).toBe(2);
-
-        // The timed bomb did NOT burst via the per-positioned path in EITHER round: no per-target
-        // burst recorded on the enemy, no detonation tally credited to the applier on this path.
-        for (const round of result.rounds) {
-            expect(round.perTargetDamage?.['enemy-mid']).toBeUndefined();
-            expect(round.perActorDetonation?.['enemy-mid']).toBeUndefined();
-            expect(round.perActorDetonation?.['attacker']).toBeUndefined();
-        }
-
-        // And NO bomb-detonated event fired at all (the gate suppressed the only path that could
-        // have surfaced this enemy-actor bomb).
-        const bombDet = events.filter((e) => e.type === 'bomb-detonated');
-        expect(bombDet.length).toBe(0);
-
-        // The enemy was NOT destroyed — a 4000 burst would have been survivable at 1e9 HP anyway,
-        // but confirming no death rules out any death-driven side effect masking the result.
-        const destroyed = events.filter(
-            (e) => e.type === 'ship-destroyed' && e.actorId === 'enemy-mid'
-        );
-        expect(destroyed.length).toBe(0);
-    });
+    // SP-4b: 'a NON-positional enemy attacker with a timed bomb does NOT burst via the
+    // per-positioned-enemy path' lived here. It was a pure GATE PIN on the second conjunct of
+    // `enemyHasTimedContainers && isPositional(actor.position, allPlayerActors)` — it forced
+    // `allPlayerActors.some(a => a.position !== undefined)` false by leaving the focus unplaced.
+    // `normalizeCombatRoster` places every actor on `runCombat`'s first line, so that conjunct is
+    // now unconditionally true and the state it pinned is unreachable through the public entry
+    // point. The gate is legacy/non-positional-world machinery that SP-4c deletes with the dummy,
+    // so the pin was removed rather than kept alive under a bypass. The positive burst path is
+    // still covered by 'a TIMED bomb bursts on the positioned enemy's OWN turn against its OWN HP'
+    // above, which is what makes those assertions non-vacuous.
 });

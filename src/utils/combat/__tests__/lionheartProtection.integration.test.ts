@@ -143,11 +143,24 @@ const BASE_INPUT: CombatEngineInput = {
     hp: 1_000_000_000,
     healTargetId: 'ally-1', // both manual enemies fire at this single shared victim.
     mode: 'healing',
+    // SP-4b-1: `ally-1` claims the front-middle cell and BOTH enemies are pinned to the middle
+    // row. The normalization boundary places every actor and synthesizes the enemies' `front
+    // enemy` targeting, so "both enemies fire at this single shared victim" is now a claim about
+    // board geometry rather than about `healTargetId`. Two things have to be stated for it to hold:
+    // the auto-placed focus would otherwise take the M4 anchor and soak both hits, and `front`
+    // scans ROWS from the caster's own row first (selectTargets) — so an enemy left on the
+    // index-derived T-row default would hit whoever the collision pushed into row T instead.
     teamActors: [
-        teamActor('ally-1', 0), // the direct-hit victim (no Protection of its own).
-        teamActor('lionheart', LIONHEART_DEFENCE, [lionheartProtectionPassive()]), // the protector.
+        { ...teamActor('ally-1', 0), position: 'M4' }, // the direct-hit victim (no Protection).
+        {
+            ...teamActor('lionheart', LIONHEART_DEFENCE, [lionheartProtectionPassive()]),
+            position: 'M2',
+        }, // the protector
     ],
-    enemyAttackers: [manualEnemy('enemy-A', ENEMY_ATTACK), manualEnemy('enemy-B', ENEMY_ATTACK)],
+    enemyAttackers: [
+        { ...manualEnemy('enemy-A', ENEMY_ATTACK), position: 'M4' },
+        { ...manualEnemy('enemy-B', ENEMY_ATTACK), position: 'M3' },
+    ],
 };
 
 describe('Lionheart Protection — clear-on-redirect (integration)', () => {

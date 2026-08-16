@@ -357,6 +357,13 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
     it('ADJACENT ally hit: Centurion retaliates when an adjacent ally is directly damaged', () => {
         // Owner at M2; adjacent ally 'ally-T2' at T2 is the heal target → the enemy hits T2 →
         // owner is adjacent → the on-ally-attacked counter fires against the attacker.
+        //
+        // SP-4b-1: the enemy has to be PINNED to row T. `front` selection scans rows starting from
+        // the caster's own row and only then takes the front-most column within it (selectTargets),
+        // and every actor is now placed — so an unpositioned enemy would land on the middle row,
+        // find the OWNER at M2 there, and fire the SELF counter instead. That reads as a pass while
+        // testing nothing about adjacency. From T1 the scan row is T, whose only occupant is the
+        // intended victim `ally-T2`.
         const skills = buildShipAbilities(centurionShip(CENTURION_P2));
         const result = runCombat(
             counterBase(skills, {
@@ -365,7 +372,7 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
                 healTargetId: 'ally-T2',
                 mode: 'healing',
-                enemyAttackers: [basicEnemy('foe', 3_000)],
+                enemyAttackers: [{ ...basicEnemy('foe', 3_000), position: 'T1' }],
             })
         );
         const counterRounds = result.rounds
@@ -379,6 +386,11 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
         // Owner at M2; heal target is 'ally-B4' at B4 (NON-adjacent). The enemy hits B4; the
         // on-ally-attacked listener runs but requireDamagedAllyAdjacent rejects it → no counter.
         // Adjacent ally-T2 still present so the geometry is positional (not the all-allies fallback).
+        //
+        // SP-4b-1: the enemy is pinned to row B for the same reason as the ADJACENT case above —
+        // otherwise it lands on the middle row, hits the OWNER at M2, and the SELF counter fires,
+        // which is a real retaliation and has nothing to do with the adjacency gate under test.
+        // `ally-B4` is the only actor in row B, so the scan resolves onto it.
         const skills = buildShipAbilities(centurionShip(CENTURION_P2));
         const result = runCombat(
             counterBase(skills, {
@@ -387,9 +399,12 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
                 healTargetId: 'ally-B4',
                 mode: 'healing',
-                enemyAttackers: [basicEnemy('foe', 3_000)],
+                enemyAttackers: [{ ...basicEnemy('foe', 3_000), position: 'B4' }],
             })
         );
+        // The non-adjacent ally IS being hit (non-vacuous): the gate rejected a real ally hit
+        // rather than the enemy quietly attacking someone else.
+        expect(totalPerTargetDamage(result, 'ally-B4')).toBeGreaterThan(0);
         expect(totalPerTargetDamage(result, 'foe')).toBe(0);
     });
 });

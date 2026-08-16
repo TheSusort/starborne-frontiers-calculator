@@ -113,8 +113,12 @@ export function defaultEnemySlot(index: number): Position {
  * entry wins and the earlier enemy vanishes from that cell. Sides are independent boards, so the
  * player and enemy rosters are resolved separately.
  */
-export function resolveEnemySlots(slots: ReadonlyArray<Position>): Position[] {
-    return resolvePlayerSlots(slots);
+export function resolveEnemySlots(
+    slots: ReadonlyArray<Position>,
+    priorityIndices: ReadonlyArray<number> = [],
+    anchorIsExplicit: boolean = true
+): Position[] {
+    return resolvePlayerSlots(slots, priorityIndices, anchorIsExplicit);
 }
 
 /**

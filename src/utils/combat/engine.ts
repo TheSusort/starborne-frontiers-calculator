@@ -53,7 +53,12 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
-import { isPositional, resolvePositionalTarget } from './positionalBinding';
+import {
+    isPositional,
+    isTargetableRosterMember,
+    resolvePositionalTarget,
+    resolvesPositionalVictim,
+} from './positionalBinding';
 import {
     applyPositionalDamage,
     footprintVictims,
@@ -81,6 +86,7 @@ import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEvent, CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
+import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
     HealingRuntimeCtx,
@@ -1663,6 +1669,39 @@ function convertHitToSelfDot(
     return damage;
 }
 /**
+ * TEST-ONLY instrumentation for the SP-4 ladder. Counts how many times a turn resolved its victim
+ * through `tb.legacyVictim` — the dummy fallback (cluster C, the keystone). It is the ladder's gate,
+ * not a debug aid.
+ *
+ * WHAT IT MEASURES, precisely: that the fallback object was **CONSULTED** — `selectTurnTarget`
+ * returned `tb.legacyVictim` because no living positional victim resolved. That is strictly weaker
+ * than "the legacy sink was **CREDITED**", and the two come apart. A consultation is followed by a
+ * scalar credit only when the roster was never targetable (every placed opposing actor at max
+ * `hp === 0`) or empty. It is followed by **no credit at all** in the KNOWN NON-ZERO RESIDUE: the
+ * mid-run **whiff window** — a roster that WAS targetable and has since been killed, where the apply
+ * gate correctly goes positional, finds no anchor and books nothing, while the scalar credit is
+ * suppressed because the positional branch was taken. Measured on the shared bare roster, 4 rounds:
+ * an enemy at max hp 5 000 dies to the round-1 cast and rounds 2-4 each take the fallback with
+ * `rawTotals.cumulative === 0` — 3 takes, 0 credited. That whiff is deliberate, documented
+ * behaviour (see the focus cast site's "the correct behaviour is for the attacker to WHIFF" and
+ * `damageChannelAccounting.integration.test.ts`), not a defect to be fixed.
+ *
+ * CONSEQUENCE FOR SP-4c: do NOT treat "this counter is zero for every run" as the entry condition —
+ * zero is unreachable while the whiff window exists, and SP-4c is not deleting the whiff. Consulting
+ * is the right thing to count precisely BECAUSE it is what keeps `legacyVictim` reachable and
+ * therefore undeletable. SP-4c must handle that path explicitly — giving the whiff a non-dummy way
+ * to express "no living victim" — rather than expecting a zero here.
+ *
+ * Module-level and NOT reset per run: `__resetLegacyVictimFallbackCount` is the test's job.
+ */
+let legacyVictimFallbackCount = 0;
+export function __getLegacyVictimFallbackCount(): number {
+    return legacyVictimFallbackCount;
+}
+export function __resetLegacyVictimFallbackCount(): void {
+    legacyVictimFallbackCount = 0;
+}
+/**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
  * CURRENT effective speed (selectNextBySpeed) until the pool drains — every actor takes one
@@ -1675,7 +1714,7 @@ function convertHitToSelfDot(
  * enemy, making this a byte-identical relocation of the old single-block round —
  * events are write-only taps that never read or change a sim value.
  */
-export function runCombat(input: CombatEngineInput): {
+export function runCombat(rawInput: CombatEngineInput): {
     rounds: RoundData[];
     rawTotals: {
         direct: number;
@@ -1705,6 +1744,16 @@ export function runCombat(input: CombatEngineInput): {
     /** Healing-mode accounting (additive — present ONLY when healTargetId is set). */
     healing?: { rounds: HealingRoundEngine[]; destroyedRound?: number };
 } {
+    /**
+     * SP-4b: the ONE accommodation boundary. Everything below this line sees a fully positional
+     * world — every actor has a slot and active targeting — regardless of how under-specified the
+     * caller's input was. Rebinding to `input` means every existing `input.x` read below picks up
+     * the normalized values with no further edits.
+     *
+     * Deliberately the FIRST statement: actor construction (`createActor`, ~line 1779) consumes
+     * `input.position`, and `teamTargetById` / `enemyTargetById` consume the target axes.
+     */
+    const input = normalizeCombatRoster(rawInput);
     const {
         attack,
         crit,
@@ -1907,7 +1956,9 @@ export function runCombat(input: CombatEngineInput): {
 
     // Per-team-actor parsed positional pattern (Task 8a), mirroring teamTargetById. The pattern
     // lives only on the TeamActorEngineInput — thread it to the team-turn call site by id for the
-    // Task 8b apply path. Empty for every non-positional input (no pattern set) → inert today.
+    // Task 8b apply path. Was empty for every non-positional input (no pattern set) and inert when
+    // written; since SP-4b-1 `normalizeCombatRoster` fills every team actor's target and pattern
+    // before this runs, so both maps are fully populated for every caller.
     const teamPatternById = new Map<string, ParsedPattern>();
     for (const t of teamActors) {
         if (t.pattern) {
@@ -1931,9 +1982,10 @@ export function runCombat(input: CombatEngineInput): {
     // Per-enemy-attacker parsed positional target (Task C3, side-symmetric). The enemy's
     // `position` already rides on its CombatActor (buildEnemyPlayerActorRuntime → createActor),
     // but its parsed `target` lives only on the EnemyActorInput — thread it to the enemy-turn
-    // call site by id, mirroring teamTargetById. Empty for every non-positional input (no enemy
-    // passes a target) → the gated branch never fires and the legacy heal-target binding stays
-    // byte-identical.
+    // call site by id, mirroring teamTargetById. Was empty for every non-positional input (no enemy
+    // passed a target), so the gated branch never fired and the legacy heal-target binding stayed
+    // byte-identical; since SP-4b-1 the boundary fills it for every supplied enemy, so the map is
+    // empty only when the caller supplies no `enemyAttackers` at all.
     const enemyTargetById = new Map<string, ParsedTarget>();
     for (const e of input.enemyAttackers ?? []) {
         if (e.target) {
@@ -1943,7 +1995,8 @@ export function runCombat(input: CombatEngineInput): {
 
     // Per-enemy-attacker parsed positional pattern (Task 8a), mirroring enemyTargetById /
     // teamPatternById. The pattern lives only on the EnemyActorInput — thread it to the enemy-turn
-    // call site by id for the Task 8b apply path. Empty for every non-positional input → inert today.
+    // call site by id for the Task 8b apply path. Same staleness note as enemyTargetById above: the
+    // SP-4b-1 boundary fills a pattern for every supplied enemy, so this is no longer inert.
     const enemyPatternById = new Map<string, ParsedPattern>();
     for (const e of input.enemyAttackers ?? []) {
         if (e.pattern) {
@@ -2438,7 +2491,11 @@ export function runCombat(input: CombatEngineInput): {
     // resolves. Used by grantExtraAction; companion actorsBySide lands in PR3.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
 
-    // The dummy `enemy` is the player-offense sink for DPS-calc / non-positional mode. In a
+    // The dummy `enemy` is the player-offense sink for a run with no targetable opposing roster.
+    // (Historically that meant "DPS-calc / non-positional mode" — accurate when this was written,
+    // stale now: since SP-1/SP-3b both calculators supply a REAL enemy roster, and since SP-4b-1
+    // `normalizeCombatRoster` places and targets every actor, so the sink is reached only when the
+    // caller supplies no enemy at all or a roster of 0-max-HP pressure sources.) In a
     // fully-positional team-vs-team sim it is vestigial: every player resolves a real positioned
     // enemy target, so nothing ever routes into its containers and its DoT-tick turn is a pure
     // no-op that only leaks a phantom "enemy" line into the log. Gate its TURN out in that case
@@ -2447,6 +2504,12 @@ export function runCombat(input: CombatEngineInput): {
     // positioned enemies exist AND every player actor is positioned with an ENEMY-side parsed
     // target (positions + parsed targets are fixed for the whole battle). If ANY player could
     // fall back to the dummy sink, keep it in the turn order so its accumulated DoTs still tick.
+    // STATICALLY is the operative word (SP-4b-1 §4B): the two halves are NOT required to agree
+    // per turn, and deliberately do not. `resolvePositionalTarget` is liveness-aware, so once a
+    // targetable roster has been WIPED mid-battle the static gate still reads positional while
+    // selection returns null — the whiff window. That divergence is intended (the cast whiffs
+    // against corpses rather than teleporting onto the dummy); what §4B fixed was the two
+    // disagreeing on a roster that was NEVER targetable, where the damage reached no channel.
     // NOT gated on healPipelineActive / enemyAttackers.length — the healing calculator sets healTargetId
     // and can supply bare (non-positioned) enemies where the dummy is still the offense sink.
     //
@@ -2465,7 +2528,14 @@ export function runCombat(input: CombatEngineInput): {
     // enemyAttackers roster WITHOUT ever setting that flag, so it was too strict a requirement for
     // "should the resolvers see the real roster". `hasPositionedEnemyRoster` is the narrowest
     // correct signal for both cases.
-    const hasPositionedEnemyRoster = enemyAttackerActors.some((a) => a.position != null);
+    //
+    // SP-4b-1 §4B: "positioned" here means positioned AND a viable target (`isTargetableRosterMember`
+    // — max hp > 0), the same member predicate `resolvesPositionalVictim` (the cast/apply gates)
+    // is built from — NOT `isPositional`, which asks only "is a board in play". A roster of 0-HP
+    // pressure sources can never absorb a cast, so the dummy is still the offense sink and MUST stay
+    // in the turn order — dropping it would strand every DoT/bomb routed into its containers, which
+    // is the same "credited to no channel" defect one layer down.
+    const hasPositionedEnemyRoster = enemyAttackerActors.some(isTargetableRosterMember);
     const dummyEnemyIsVestigial =
         hasPositionedEnemyRoster &&
         allPlayerActors.every((a) => {
@@ -6544,7 +6614,7 @@ export function runCombat(input: CombatEngineInput): {
             const tb = turnBindings(a.side);
             const target = willFireChargedFor(a) ? parsedChargedTargetFor(a) : parsedTargetFor(a);
             const selected =
-                isPositional(a.position, tb.opposingRoster) && target
+                resolvesPositionalVictim(a.position, tb.opposingRoster) && target
                     ? resolvePositionalTarget(
                           a.position!,
                           target,
@@ -6564,6 +6634,7 @@ export function runCombat(input: CombatEngineInput): {
                           }
                       )
                     : null;
+            if (selected == null) legacyVictimFallbackCount++;
             return { tgt: selected ?? tb.legacyVictim };
         };
 
@@ -6580,7 +6651,10 @@ export function runCombat(input: CombatEngineInput): {
             // E3 (AoE purge): footprint victim ids for an 'all-enemies' on-cast purge.
             // Computed ONLY when positional — `tgt.position != null` is the positional
             // discriminator (selectTurnTarget returns the position-less dummy/heal-target sink
-            // in DPS/healing-single mode). footprintVictims is the same pure resolver the AoE
+            // when nothing positional resolved; since SP-4b-1's normalization boundary that means
+            // an absent/never-targetable opposing roster or the mid-run whiff window, no longer
+            // "the DPS/healing calculators", which now supply real placed enemies). footprintVictims
+            // is the same pure resolver the AoE
             // damage path uses; covered cells are included (status removal is uniform across the
             // footprint). Non-positional → undefined → the playerTurn purge loop falls back to
             // the single anchor → byte-identical. The purge ability gates on
@@ -8397,8 +8471,10 @@ export function runCombat(input: CombatEngineInput): {
                             // When the selection is null — not positional, OR positional but no living
                             // positioned enemy target — we diverge NOTHING from the legacy dummy `enemy`
                             // binding (keeps every existing path byte-identical; the null-target sub-case
-                            // is treated as a no-op fallthrough to legacy). No existing test passes
-                            // positions, so this branch never fires for them.
+                            // is treated as a no-op fallthrough to legacy). At Task C1 no existing test
+                            // passed positions, so this branch never fired for them — since SP-4b-1's
+                            // normalization boundary every actor of every caller is placed and targeted,
+                            // so it is now the ORDINARY path and the legacy fallthrough is the exception.
                             // Positional target (phase 2): the selected enemy actor, else the dummy sink.
                             // Both are full CombatActors, so all per-target bindings derive from `tgt`
                             // uniformly. For the legacy (non-positional) path tgt === enemy, whose
@@ -8430,7 +8506,7 @@ export function runCombat(input: CombatEngineInput): {
                             // hold — so the suppression condition matches the `positional` gate
                             // EXACTLY. A non-damage cast keeps its inline emit (flag ignored).
                             const willApplyPositionally =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null;
                             // Sub-project I, PR I2: snapshot the opposing roster's enemy-status
@@ -8490,12 +8566,17 @@ export function runCombat(input: CombatEngineInput): {
                             // loop against the LIVE enemy roster. Re-resolves anchor + footprint per hit;
                             // origin cells take full damage, covered cells half. Each victim's HP/shield/
                             // Barrier/Cheat-Death/death is mutated through the real applyOutgoingToEnemy.
-                            // No production caller threads position+target+pattern yet, so this is false
-                            // for every existing test/golden → byte-identical.
+                            // At Task 8b no production caller threaded position+target+pattern, so this
+                            // was false for every existing test/golden → byte-identical. STALE since
+                            // SP-4b-1: `normalizeCombatRoster` fills a position, a target and a pattern
+                            // for every actor, so this is now the NORMAL path for both calculators.
                             // The pattern is REQUIRED for footprint expansion — without it there is no
-                            // apply to perform (the existing positionalSelection tests set position+target
-                            // to exercise target binding only, never a pattern, so they keep the legacy
-                            // single-sink credit and never enter this branch).
+                            // apply to perform (the then-existing positionalSelection tests set
+                            // position+target to exercise target binding only, never a pattern, so they
+                            // kept the legacy single-sink credit and never entered this branch; the
+                            // boundary fills the ACTIVE pattern on `runCombat`'s first line, and the
+                            // charged axes fall back to it (`chargedPattern ?? pattern`), so no input
+                            // reaching HERE is pattern-less any more).
                             //
                             // DELIBERATELY no `selectedEnemy != null` precondition (CodeRabbit raised this):
                             // in positional/simulator mode there is NO dummy enemy sink to fall back to.
@@ -8508,7 +8589,7 @@ export function runCombat(input: CombatEngineInput): {
                             // per-hit live re-resolution own the whiff. (Credit suppression below pairs with
                             // this: the per-victim apply is the ONLY damage path here.)
                             const positional =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null &&
                                 turn.positionalScalars != null;
@@ -8718,7 +8799,7 @@ export function runCombat(input: CombatEngineInput): {
                             // Task 5 (per-victim crit signal): predict positional apply (mirror of the
                             // focus site) so runPlayerTurn defers its inline ability-performed emit.
                             const teamWillApplyPositionally =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null;
                             // Sub-project I, PR I2: pre-turn snapshot (mirrors the focus site).
@@ -8753,14 +8834,19 @@ export function runCombat(input: CombatEngineInput): {
                             // team actor's own position / parsed target (teamTargetById) / parsed pattern
                             // (teamPatternById). Drives the per-victim apply loop against the LIVE enemy
                             // roster when this walked team actor is positional, has a parsed target, AND its
-                            // firing hit produced scalars. No production caller threads these yet → false for
-                            // every existing test/golden → byte-identical.
+                            // firing hit produced scalars. At Task 8b no production caller threaded these,
+                            // so it was false for every existing test/golden → byte-identical. STALE since
+                            // SP-4b-1: the boundary places and targets every team actor, so this fires for
+                            // both calculators' team ships. That flip is what silently cost the DPS page its
+                            // team-damage series — the scalar `roundDamage` team writer is gated on
+                            // `!teamPositional`, so the credit moved to `perTargetDealt` and the display had
+                            // to follow it (`RoundData.teamDamage`; see its note in dpsSimulator.ts).
                             // The pattern (teamPatternById) is REQUIRED for footprint expansion — without
-                            // it there is no apply to perform (the positionalSelection C2 test sets
-                            // position+target only, never a pattern, so it keeps the legacy single-sink
-                            // credit and never enters this branch).
+                            // it there is no apply to perform (the then-shipped positionalSelection C2 test
+                            // set position+target only, never a pattern, so it kept the legacy single-sink
+                            // credit and never entered this branch; the boundary now fills the pattern).
                             const teamPositional =
-                                isPositional(actor.position, enemyAttackerActors) &&
+                                resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null &&
                                 teamTurn.positionalScalars != null;
@@ -8994,7 +9080,7 @@ export function runCombat(input: CombatEngineInput): {
                         // which would double-hit (HP already drained inside applyVictimDamage).
                         //
                         // GATE: only a POSITIONED enemy (enemy-site positional sense — the same
-                        // `isPositional(actor.position, allPlayerActors)` predicate the firing-hit
+                        // `resolvesPositionalVictim(actor.position, allPlayerActors)` predicate the firing-hit
                         // gate uses at `enemyPositional`/`:5011`) that actually carries timed
                         // entries. The non-empty guard makes this a STRICT no-op (byte-identical)
                         // for every existing fixture — none seed enemy-actor timed containers.
@@ -9170,7 +9256,7 @@ export function runCombat(input: CombatEngineInput): {
                             // defers its inline ability-performed emit. The opposing roster from the enemy's
                             // view is the PLAYER team (allPlayerActors).
                             const enemyWillApplyPositionally =
-                                isPositional(actor.position, allPlayerActors) &&
+                                resolvesPositionalVictim(actor.position, allPlayerActors) &&
                                 enemyTarget != null &&
                                 enemyPattern != null;
                             // §4.5: inject break hook into runPlayerTurn for the enemy turn (mirrors
@@ -9299,10 +9385,15 @@ export function runCombat(input: CombatEngineInput): {
                                 // (allPlayerActors), the parsed target rides on enemyTargetById, and the
                                 // parsed pattern on enemyPatternById. When true, the firing-hit damage lands
                                 // per-victim via drivePositionalApply (below) against the live player roster
-                                // and the legacy single-apply is SUPPRESSED. No production caller threads
-                                // position+target+pattern for an enemy yet → false for every golden.
+                                // and the legacy single-apply is SUPPRESSED. "No production caller threads
+                                // position+target+pattern for an enemy yet → false for every golden" was
+                                // true when written and is NOT true now — SP-U U5 already corrected it (see
+                                // the note at the `if (enemyPositional)` body below: the 2v2/3v3/healing
+                                // goldens thread enemy positions and patterns), and since SP-4b-1 the
+                                // normalization boundary places and targets every supplied enemy, so this
+                                // is the ordinary path whenever a caller passes `enemyAttackers`.
                                 enemyPositional =
-                                    isPositional(actor.position, allPlayerActors) &&
+                                    resolvesPositionalVictim(actor.position, allPlayerActors) &&
                                     enemyTarget != null &&
                                     enemyPattern != null &&
                                     enemyTurn.positionalScalars != null;
