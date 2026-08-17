@@ -395,4 +395,4 @@ $ npx eslint src
 block only), `engine.ts` (three comment blocks only — header, inner scope comment, call-site
 comment). No assertion, no engine-behaviour line, no snapshot touched.
 
-Commit: `d7fe5cfd` — `docs(sp4b2b): fix review findings on the Task 2b leech comments/changelog`.
+Commit: `8ec848ba` — `docs(sp4b2b): fix review findings on the Task 2b leech comments/changelog`.
