@@ -70,9 +70,11 @@ describe('the Direct damage row on a positional run', () => {
         }
     });
 
-    it('leaves a scalar-path run untouched', () => {
-        // No enemyAttackers → the engine's own scalar credit still fills the row. Until Task 6
-        // lands, this is the fence that proves the re-derivation only touches the positional path.
+    it('also reports Direct on a caller that supplies no enemyAttackers', () => {
+        // SP-4b-2a: there is no scalar path any more — `simulateDPS` synthesizes a real, positioned
+        // enemy for a caller that omits `enemyAttackers`, so this run is positional too and
+        // `directDamage` comes from the same by-subtraction re-derivation as the explicit-roster
+        // case above, not from the engine's (now-dead) scalar credit.
         const { rounds } = simulateDPS(baseInput());
         for (const r of rounds) expect(r.directDamage).toBeGreaterThan(0);
     });

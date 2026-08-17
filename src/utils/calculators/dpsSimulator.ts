@@ -349,6 +349,46 @@ export function deriveTeamEngineActors(
     });
 }
 
+/** The id every synthesized DPS enemy carries — the same one `DPSCalculatorPage` gives its explicit
+ *  roster entry, so a caller that graduates from synthesis to a real ship keeps its per-victim keys. */
+export const SYNTHESIZED_DPS_ENEMY_ID = 'enemy-1';
+
+/**
+ * The real enemy a scalar-only DPS caller gets (SP-4b-2a).
+ *
+ * `attack: 0` and no `shipSkills` are load-bearing, not laziness: a 0-attack, skill-less positioned
+ * enemy is RNG-stream-INERT (rate gates are keyed per actor id), so supplying it moves neither the
+ * totals nor the crit sequence of the run it joins. An enemy that ACTS would move every number.
+ * Position and targeting are deliberately absent — `normalizeCombatRoster`, the engine's ONE
+ * accommodation boundary, places and targets it (SP-4b-1). Filling them here would be a second
+ * derivation of the same defaults.
+ */
+function synthesizedDpsEnemy(args: {
+    enemyHp: number;
+    enemyDefense: number;
+    enemySpeed: number | undefined;
+    enemySecurity: number;
+    enemyAffinity: AffinityName | undefined;
+}): NonNullable<CombatEngineInput['enemyAttackers']>[number] {
+    return {
+        id: SYNTHESIZED_DPS_ENEMY_ID,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            // The engine's own dummy default (`enemySpeed ?? 50`, engine.ts:1874) — the enemy acts
+            // last at default speeds, and turn order must not shift for a caller that set nothing.
+            speed: args.enemySpeed ?? 50,
+            defence: args.enemyDefense,
+            hp: args.enemyHp,
+            security: args.enemySecurity,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        ...(args.enemyAffinity ? { affinity: args.enemyAffinity } : {}),
+    };
+}
+
 /**
  * Thin adapter over the combat engine (`src/utils/combat/engine.ts`). This derives
  * the engine's input from the public DPS input — landing chance, the static
@@ -381,6 +421,26 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     const hacking = input.hacking ?? 200;
     const enemySecurity = input.enemySecurity ?? 100;
 
+    // A DPS run ALWAYS faces a real, positioned enemy now (SP-4b-2a). A caller that supplies none
+    // gets one built from the scalar inputs it did supply — which is what `DPSCalculatorPage` has
+    // passed explicitly since SP-1, so this closes the last DPS path that reached the dummy sink.
+    // `DPSSimulationInput.enemyAttackers` stays OPTIONAL: it is the UI-facing input, and the
+    // scalars stay with it (they are calculator fields, not engine dummy scalars — SP-4 §9).
+    // Every downstream reader of "the real enemy roster" uses THIS, not `input.enemyAttackers`
+    // directly, so a scalar-only caller is indistinguishable from an explicit one past this point.
+    const effectiveEnemyAttackers: NonNullable<CombatEngineInput['enemyAttackers']> = input
+        .enemyAttackers?.length
+        ? input.enemyAttackers
+        : [
+              synthesizedDpsEnemy({
+                  enemyHp,
+                  enemyDefense,
+                  enemySpeed,
+                  enemySecurity,
+                  enemyAffinity: input.enemyAffinity,
+              }),
+          ];
+
     // Self-side constants (not subject to rolls)
     const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
         selfBuffs,
@@ -403,7 +463,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // which has billions of HP and never dies. Against a real enemy it therefore reports
     // `survived: true` / `roundsToKill: undefined` forever. Capture the REAL enemies' deaths off an
     // emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same remedy.
-    const realEnemyIds = new Set((input.enemyAttackers ?? []).map((e) => e.id));
+    const realEnemyIds = new Set(effectiveEnemyAttackers.map((e) => e.id));
     const realEnemyDeathRound = new Map<string, number>();
     /** Last `hp-changed` percentage seen per real enemy. Integer-granular and only emitted on
      *  change, so a missing entry legitimately means "untouched" → 100. */
@@ -490,24 +550,21 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemySpeed,
         teamActors: engineTeamActors,
         bus: collectingBus,
-        // Real positioned enemy roster, forwarded verbatim. Non-empty → the engine's
-        // `dpsEnemyTarget` goes false and the focus's damage lands per-victim on these actors
-        // rather than the dummy sink.
+        // A DPS run ALWAYS faces a real, positioned enemy now (`effectiveEnemyAttackers`, derived
+        // above from `input.enemyAttackers` when supplied, else synthesized from the scalars). This
+        // closes the last DPS path that reached the dummy sink.
         //
         // Position/target/pattern — for these enemies AND for the focus attacker below — are no
         // longer defaulted here. `normalizeCombatRoster` (the engine's ONE accommodation boundary,
         // called on `runCombat`'s first line) fills exactly these axes, so a second derivation at
-        // this adapter is redundant. It also fills them UNCONDITIONALLY, where this adapter gated
-        // on `enemyAttackers.length > 0`; the widened case is a scalar-path run, which has no
-        // TARGETABLE opposing roster for `resolvesPositionalVictim` to match (no enemy at all, or
-        // only 0-max-HP pressure sources) and is therefore unaffected by carrying a slot.
-        enemyAttackers: input.enemyAttackers,
+        // this adapter is redundant.
+        enemyAttackers: effectiveEnemyAttackers,
         position: input.position,
         target: input.target,
         pattern: input.pattern,
     });
 
-    const hasRealEnemy = (input.enemyAttackers?.length ?? 0) > 0;
+    const hasRealEnemy = realEnemyIds.size > 0;
 
     // Real-enemy outcome, re-derived from the `ship-destroyed` tap. "Killed" means EVERY real enemy
     // is down (with one enemy — the common case — that is just it); `roundsToKill` is the round the
@@ -530,7 +587,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
      * lethal hit does not reliably leave a final 0% `hp-changed` behind it.
      */
     const weightedRealEnemyHpPct = (): number => {
-        const roster = input.enemyAttackers ?? [];
+        const roster = effectiveEnemyAttackers;
         const totalMaxHp = roster.reduce((sum, e) => sum + (e.stats.hp ?? 0), 0);
         // No HP anywhere to lose (all-zero or unspecified maxima) → nothing was taken off it.
         if (totalMaxHp <= 0) return 100;
