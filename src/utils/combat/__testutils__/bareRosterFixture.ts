@@ -24,13 +24,47 @@ export const damageKit = (): ShipSkills => ({
     ],
 });
 
-/** No position, no target, no pattern. */
-export const bareEnemy = () => [
+type EnemyAttackerInput = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+/**
+ * The id `bareEnemy()` carries. Fixtures that assert an actor identity read this instead of
+ * hardcoding the string: on a positional run the vestigial dummy `enemy` is dropped from the turn
+ * order, so the actor that takes the opposing turn — and that debuffs/DoTs report as their target —
+ * is THIS id, not `'enemy'`.
+ */
+export const BARE_ENEMY_ID = 'e1';
+
+/**
+ * No position, no target, no pattern.
+ *
+ * `overrides` exists for one reason, learned repairing the SP-4b-2b fixture waves: the default
+ * 500,000 HP is NOT a survival guarantee. A fixture whose focus actually deals damage for several
+ * rounds will DESTROY this enemy mid-sim, and once the opposing roster is wiped the run changes
+ * shape — the enemy stops taking turns, the cast falls back onto the legacy dummy victim (with the
+ * dummy's `enemyDefense`, so damage magnitudes change too), and any assertion that assumed "one
+ * enemy turn per round" silently reads a shorter fight. Fixtures that need a punching bag for the
+ * whole sim pass `bareEnemy({ stats: { hp: 10_000_000 } })`; `stats` is merged field-by-field over
+ * the inert defaults, so raising HP does not accidentally give the enemy an attack.
+ */
+export const bareEnemy = (
+    overrides: Omit<Partial<EnemyAttackerInput>, 'stats'> & {
+        stats?: Partial<EnemyAttackerInput['stats']>;
+    } = {}
+): EnemyAttackerInput[] => [
     {
-        id: 'e1',
-        stats: { attack: 0, crit: 0, critDamage: 0, speed: 10, defence: 0, hp: 500_000 },
+        id: BARE_ENEMY_ID,
         chargeCount: 0,
         startCharged: false,
+        ...overrides,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            speed: 10,
+            defence: 0,
+            hp: 500_000,
+            ...overrides.stats,
+        },
     },
 ];
 

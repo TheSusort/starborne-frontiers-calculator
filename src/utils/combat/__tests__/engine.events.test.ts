@@ -7,6 +7,19 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
+
+/**
+ * The focus attacker's own actor id. Every CARDINALITY assertion that means "the focus fanned out N
+ * events" filters on this (the `runCollectingPerformed` pattern from
+ * `dpsSubAttackEvents.integration.test.ts`, SP-4b-2a): since SP-4b-2b every run has a real opponent,
+ * and an enemy supplied without `shipSkills` gets the engine's synthesized flat-card basic attack —
+ * so it casts once per round and emits its own `skill-fired` + zero-damage `ability-performed`.
+ * Those are the OTHER actor's cast; filtering them out keeps every expected count the pre-change
+ * number and keeps the assertion meaning "the focus emitted N", not "how many actors are on the
+ * board".
+ */
+const FOCUS = 'attacker';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -45,7 +58,7 @@ const dotSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 15000,
     crit: 50,
     critDamage: 150,
@@ -108,6 +121,9 @@ describe('runCombat event emission', () => {
         );
         // Phase 2: each round runs the attacker turn then the enemy turn, each emitting a
         // started/ended pair → 4 turn events per round (rounds * 2 turns * 2 events).
+        // SP-4b-2b: the second turn belongs to the REAL enemy (`BARE_ENEMY_ID`) — the vestigial
+        // dummy `enemy` is dropped from the turn order on a positional run — so the count is
+        // unchanged and only the id it reports moved.
         expect(turnEvents.length).toBe(rounds * 4);
 
         // Order per round: attacker started, attacker ended, enemy started, enemy ended.
@@ -127,15 +143,21 @@ describe('runCombat event emission', () => {
 
             expect(enemyStarted.type).toBe('turn-started');
             expect(enemyStarted.round).toBe(r);
-            expect(enemyStarted.actorId).toBe('enemy');
+            expect(enemyStarted.actorId).toBe(BARE_ENEMY_ID);
             expect(enemyEnded.type).toBe('turn-ended');
             expect(enemyEnded.round).toBe(r);
-            expect(enemyEnded.actorId).toBe('enemy');
+            expect(enemyEnded.actorId).toBe(BARE_ENEMY_ID);
         }
     });
 
     it('a faster enemy flips the per-round turn order (enemy then attacker)', () => {
-        const { events, result } = collect({ ...baseInput(), enemySpeed: 200 });
+        // The speed that decides the order is the REAL enemy's own. The top-level `enemySpeed`
+        // scalar configures the vestigial dummy, which a positional run drops from the turn order
+        // entirely — it can no longer move anything (verified: with `enemySpeed: 200` the order
+        // stayed attacker-first).
+        const { events, result } = collect(
+            baseInput({ enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, speed: 200 } }) })
+        );
         const rounds = result.rounds.length;
 
         const turnEvents = events.filter(
@@ -153,10 +175,10 @@ describe('runCombat event emission', () => {
 
             expect(enemyStarted.type).toBe('turn-started');
             expect(enemyStarted.round).toBe(r);
-            expect(enemyStarted.actorId).toBe('enemy');
+            expect(enemyStarted.actorId).toBe(BARE_ENEMY_ID);
             expect(enemyEnded.type).toBe('turn-ended');
             expect(enemyEnded.round).toBe(r);
-            expect(enemyEnded.actorId).toBe('enemy');
+            expect(enemyEnded.actorId).toBe(BARE_ENEMY_ID);
 
             expect(attStarted.type).toBe('turn-started');
             expect(attStarted.round).toBe(r);
@@ -169,8 +191,9 @@ describe('runCombat event emission', () => {
 
     it('emits skill-fired slots matching the charge cadence', () => {
         const { events, result } = collect(baseInput());
-        const skillFired = events.filter((e) => e.type === 'skill-fired');
-        // One per round
+        const skillFired = events.filter((e) => e.type === 'skill-fired' && e.actorId === FOCUS);
+        // One per round (the FOCUS's own cadence — see FOCUS's doc comment for why the real
+        // enemy's own once-per-round cast is filtered out rather than counted).
         expect(skillFired.length).toBe(result.rounds.length);
         // Each skill-fired slot matches the round's action.
         for (const e of skillFired) {
@@ -192,7 +215,9 @@ describe('runCombat event emission', () => {
         // One event per SUB-ATTACK since the multi-hit full-walk epic (PR2); this fixture's skill
         // is single-hit, so that is one per round and the count still matches rounds.length.
         const { events, result } = collect(baseInput());
-        const performed = events.filter((e) => e.type === 'ability-performed');
+        const performed = events.filter(
+            (e) => e.type === 'ability-performed' && e.actorId === FOCUS
+        );
         expect(performed.length).toBe(result.rounds.length);
         for (const e of performed) {
             if (e.type !== 'ability-performed') throw new Error('unreachable');
@@ -216,8 +241,16 @@ describe('runCombat event emission', () => {
     });
 
     it('emits debuff-resisted for an apply debuff at an affinity disadvantage', () => {
-        // A scheduled, always-active 'apply' enemy debuff. At an affinity disadvantage
-        // (affinityDamageModifier < 0) it is resisted every round.
+        // A scheduled, always-active 'apply' enemy debuff. At an affinity disadvantage it is
+        // resisted every round.
+        //
+        // SP-4b-2b: the disadvantage must be a REAL matchup, not just the pre-resolved
+        // `affinityDamageModifier` scalar. On a positional cast `landingAtDisadvantage`
+        // (playerTurn.ts) is re-derived as `computeAffinityModifiers(attackerAffinity,
+        // victim.affinity) < 0`, so the scalar alone leaves the run NEUTRAL and the 'apply' debuff
+        // lands silently (measured: 0 resisted, and the row started reporting Armor Break active).
+        // chemical attacker vs thermal enemy is the disadvantaged pairing (thermal beats chemical),
+        // and it resolves to exactly the −25 / cap 75 / penalty 25 the scalars below declare.
         const applyDebuff: SelectedGameBuff = {
             id: 'd1',
             buffName: 'Armor Break',
@@ -229,6 +262,11 @@ describe('runCombat event emission', () => {
         };
         const { events } = collect(
             baseInput({
+                affinity: 'chemical',
+                enemyAttackers: bareEnemy({
+                    affinity: 'thermal',
+                    stats: { hp: 10_000_000 },
+                }),
                 affinityDamageModifier: -25,
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
@@ -254,7 +292,7 @@ describe('runCombat event emission', () => {
         for (const e of resisted) {
             if (e.type !== 'debuff-resisted') throw new Error('unreachable');
             expect(e.buffName).toBe('Armor Break');
-            expect(e.targetId).toBe('enemy');
+            expect(e.targetId).toBe(BARE_ENEMY_ID);
         }
         // It must NOT also land.
         expect(events.some((e) => e.type === 'debuff-applied')).toBe(false);
@@ -415,32 +453,68 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
         expect(expiredRounds).toEqual([2, 4]);
     });
 
-    // The same 2-turn enemy debuff, applied once in round 1, observed via the buff-expired
-    // round it reports — the cleanest observable for the fast-enemy +1 window. The debuff is
-    // applied in the attacker's round-1 turn; the enemy (its carrier) decrements it at its own
-    // Post Turn. At default speeds the enemy acts AFTER the attacker, so the first decrement is
-    // round 1 → expiry round 2. With a faster enemy the round-1 enemy turn already passed when
-    // the attacker applies it, so the first decrement is round 2 → expiry round 3 (the +1).
-    const oneShotEnemyDebuff = (enemySpeed?: number) => {
-        const debuff: SelectedGameBuff = {
-            id: 'd1',
-            buffName: 'Def Down',
-            stacks: 1,
-            isStackable: false,
-            parsedEffects: { defense: -20 },
-            skillSource: 'charge',
-            skillDuration: 2,
-        };
+    // A 2-turn enemy debuff, applied once in round 1, observed via the buff-expired round it
+    // reports — the cleanest observable for the fast-enemy +1 window. The debuff is applied in the
+    // attacker's round-1 turn; the enemy (its carrier) decrements it at its own Post Turn. At
+    // default speeds the enemy acts AFTER the attacker, so the first decrement is round 1 → expiry
+    // round 2. With a faster enemy the round-1 enemy turn already passed when the attacker applies
+    // it, so the first decrement is round 2 → expiry round 3 (the +1).
+    //
+    // SP-4b-2b — WHAT MOVED AND WHY THE FIXTURE, NOT THE ASSERTION, WAS REWRITTEN. This used to
+    // express the rule with a SCHEDULED `enemyDebuffs` entry and the top-level `enemySpeed` scalar.
+    // Neither can express it any more, and both for the same reason: they describe the DUMMY.
+    //   • `enemySpeed` is the dummy's speed, and a positional run drops the dummy from the turn
+    //     order — so it no longer reorders anything (measured: `enemySpeed: 150` left the order
+    //     attacker-first and the expiry at round 2).
+    //   • a SCHEDULED debuff lives in the side-wide `__enemy__` sentinel bucket, which a positional
+    //     run decrements ONCE PER ROUND at the round boundary (engine.ts, the
+    //     `dummyEnemyIsVestigial` decrementEnemy block) precisely BECAUSE the dummy has no turn to
+    //     hang the decrement on. A round-boundary decrement is by construction speed-independent.
+    // So the rule is now expressed where it still lives: an ABILITY-applied timed debuff on the
+    // REAL enemy, whose OWN speed decides turn order. Same rule, same expected rounds (2 and 3),
+    // and the carrier the expiry reports is the real enemy instead of the vestigial dummy.
+    const oneShotEnemyDebuff = (enemySpeed: number) => {
+        const debuffOnCharged = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Def Down',
+                                stacks: 1,
+                                isStackable: false,
+                                parsedEffects: { defense: -20 },
+                                // 'apply' lands unconditionally at a neutral matchup (no landing
+                                // draw), so the round the window opens is not RNG-dependent — the
+                                // whole point of this fixture is the DECREMENT timing.
+                                application: 'apply',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
         const { events } = collect(
             baseInput({
-                shipSkills: plainSkills(),
-                enemyDebuffs: [debuff],
+                shipSkills: debuffOnCharged(),
+                enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, speed: enemySpeed } }),
                 // startCharged → round 1 is charged (debuff fires); chargeCount 99 → never charges
                 // again, so the debuff is applied exactly once, in round 1.
                 hasChargedSkill: true,
                 startCharged: true,
                 chargeCount: 99,
-                enemySpeed,
                 numRounds: 5,
             })
         );
@@ -448,15 +522,15 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
         expect(expired).toHaveLength(1);
         const e = expired[0];
         if (e.type !== 'buff-expired') throw new Error('unreachable');
-        expect(e).toMatchObject({ actorId: 'enemy', buffName: 'Def Down' });
+        expect(e).toMatchObject({ actorId: BARE_ENEMY_ID, buffName: 'Def Down' });
         return e.round;
     };
 
-    it('default speed: a 2-turn enemy debuff applied round 1 expires round 2', () => {
-        expect(oneShotEnemyDebuff()).toBe(2);
+    it('slow enemy (speed 10): a 2-turn enemy debuff applied round 1 expires round 2', () => {
+        expect(oneShotEnemyDebuff(10)).toBe(2);
     });
 
-    it('fast enemy (enemySpeed 150): the same debuff expires one round later (round 3, the +1 KNOWN-DIFF)', () => {
+    it('fast enemy (speed 150): the same debuff expires one round later (round 3, the +1 KNOWN-DIFF)', () => {
         expect(oneShotEnemyDebuff(150)).toBe(3);
     });
 
@@ -521,6 +595,15 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
 // ---------------------------------------------------------------------------
 
 describe('Phase 3 Task 3 — event shape and timing', () => {
+    // The damage clause every detonating charged slot below carries is LOAD-BEARING since
+    // SP-4b-2b: positional detonation detonates the victims this cast HIT (engine.ts's
+    // `detonationTargets`, fed from drivePositionalApply's resolved victims), so a detonate-ONLY
+    // cast resolves nobody and its burst drops entirely — measured 10,800 → 0 on the inferno
+    // fixture. Every real detonator ship deals damage in the same clause (Crocus "deals 250% damage
+    // and detonates Corrosion effects at 180% power", Demolisher, Incinerator), so this is also what
+    // the corpus actually looks like.
+    const detonatorHit = () => ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } });
+
     // Case 1: timed enemy debuff (3 rounds) emits debuff-applied ONCE (round of infliction)
     // with sourceId 'attacker', not on every subsequent round it is active.
     it('timed enemy debuff active 3 rounds emits debuff-applied ONCE on the infliction round, with sourceId', () => {
@@ -563,7 +646,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         if (e.type !== 'debuff-applied') throw new Error('unreachable');
         expect(e.buffName).toBe('Def Down');
         expect(e.round).toBe(1);
-        expect(e.targetId).toBe('enemy');
+        expect(e.targetId).toBe(BARE_ENEMY_ID);
         expect(e.sourceId).toBe('attacker');
     });
 
@@ -581,6 +664,12 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         };
         const { events } = collect(
             baseInput({
+                // A REAL disadvantaged matchup, not just the pre-resolved scalars: a positional
+                // cast re-derives the landing disadvantage from the two actors' own affinities
+                // (chemical attacker vs thermal enemy → −25 / cap 75 / penalty 25). See the
+                // 'emits debuff-resisted for an apply debuff at an affinity disadvantage' test.
+                affinity: 'chemical',
+                enemyAttackers: bareEnemy({ affinity: 'thermal', stats: { hp: 10_000_000 } }),
                 affinityDamageModifier: -25, // affinity disadvantage → 'apply' debuffs are always resisted
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
@@ -886,6 +975,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 {
                     slot: 'charged',
                     abilities: [
+                        detonatorHit(),
                         ab({
                             type: 'detonate-dot',
                             target: 'enemy',
@@ -918,6 +1008,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 {
                     slot: 'charged',
                     abilities: [
+                        detonatorHit(),
                         ab({
                             type: 'detonate-dot',
                             target: 'enemy',
@@ -996,6 +1087,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 {
                     slot: 'charged',
                     abilities: [
+                        detonatorHit(),
                         ab({
                             type: 'detonate-dot',
                             target: 'enemy',
@@ -1028,6 +1120,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 {
                     slot: 'charged',
                     abilities: [
+                        detonatorHit(),
                         ab({
                             type: 'detonate-dot',
                             target: 'enemy',
@@ -1106,6 +1199,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 {
                     slot: 'charged',
                     abilities: [
+                        detonatorHit(),
                         ab({
                             type: 'detonate-dot',
                             target: 'enemy',
@@ -1138,6 +1232,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 {
                     slot: 'charged',
                     abilities: [
+                        detonatorHit(),
                         ab({
                             type: 'detonate-dot',
                             target: 'enemy',
@@ -1240,7 +1335,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         for (const e of applied) {
             if (e.type !== 'debuff-applied') throw new Error('unreachable');
             expect(e.sourceId).toBe('t1');
-            expect(e.targetId).toBe('enemy');
+            expect(e.targetId).toBe(BARE_ENEMY_ID);
         }
     });
 });
@@ -1276,7 +1371,7 @@ describe('accumulate-detonate display in activeEnemyDebuffs', () => {
     const run = (overrides: Partial<CombatEngineInput> = {}) => {
         idCounter = 0;
         return runCombat({
-            enemyAttackers: [],
+            enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
             attack: 15000,
             crit: 50,
             critDamage: 150,
@@ -1553,7 +1648,7 @@ const collectAttacked = (input: CombatEngineInput) => {
 
 /** Base healing-mode input: focus attacker is the heal target, huge HP so it never dies. */
 const healBase = (): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy(),
     attack: 1000,
     crit: 0,
     critDamage: 0,
@@ -1815,7 +1910,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
         });
 
         runCombat({
-            enemyAttackers: [],
+            enemyAttackers: bareEnemy(),
             attack: 5000,
             crit: 0,
             critDamage: 0,
@@ -1896,7 +1991,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
         bus.on('heal-performed', (e) => healPerfs.push(e));
 
         runCombat({
-            enemyAttackers: [],
+            enemyAttackers: bareEnemy(),
             attack: 5000,
             crit: 0,
             critDamage: 0,
@@ -1956,7 +2051,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
         });
 
         runCombat({
-            enemyAttackers: [],
+            enemyAttackers: bareEnemy(),
             attack: 5000,
             crit: 0,
             critDamage: 0,
