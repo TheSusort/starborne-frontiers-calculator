@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
 import { setupKeyedTestRng } from '../rateAccumulator';
-import { baseInput, dotKit, realEnemyInput } from '../__testutils__/dpsRealEnemyFixture';
+import { baseInput, bombKit, dotKit, realEnemyInput } from '../__testutils__/dpsRealEnemyFixture';
 
 describe('re-derived round totals keep the integer contract', () => {
     beforeEach(() => {
@@ -67,6 +67,36 @@ describe('the Direct damage row on a positional run', () => {
             expect(Math.abs(parts - r.totalRoundDamage)).toBeLessThanOrEqual(2);
             expect(r.directDamage).toBeLessThan(r.totalRoundDamage);
             expect(r.directDamage).toBeGreaterThan(0);
+        }
+    });
+
+    it('excludes the DETONATION component too, on a round that carries one', () => {
+        // The DoT case above leaves `detonationDamage` at 0 on every round, so it exercises only
+        // one of the two subtrahends the Direct re-derivation strips off. Detonation is the other,
+        // and it is folded from a DIFFERENT engine channel (`perActorDetonation`, credited
+        // per-victim on a positional run) than the DoT ticks are — a misalignment there drives the
+        // remainder negative, `Math.max(0, …)` clamps it silently to 0, and the four tooltip rows
+        // stop summing to the round total with nothing red to show for it.
+        const { rounds } = simulateDPS(realEnemyInput({ shipSkills: bombKit(), rounds: 4 }));
+
+        const withDetonation = rounds.filter((r) => r.detonationDamage > 0);
+        expect(withDetonation.length).toBeGreaterThan(0); // the fixture is not vacuous
+
+        for (const r of rounds) {
+            const parts =
+                r.directDamage +
+                r.corrosionDamage +
+                r.infernoDamage +
+                (r.genericDamage ?? 0) +
+                r.detonationDamage;
+            // Each part is rounded independently, so allow the accumulated half-unit drift only.
+            expect(Math.abs(parts - r.totalRoundDamage)).toBeLessThanOrEqual(2);
+        }
+        for (const r of withDetonation) {
+            // The clamp did NOT bite: Direct survives the subtraction as a real positive share,
+            // strictly below the total because the detonation is the rest of it.
+            expect(r.directDamage).toBeGreaterThan(0);
+            expect(r.directDamage).toBeLessThan(r.totalRoundDamage);
         }
     });
 

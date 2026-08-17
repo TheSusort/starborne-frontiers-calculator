@@ -51,6 +51,30 @@ export const dotKit = (): ShipSkills => ({
     ],
 });
 
+/** A focus that also plants a one-round Bomb, so the round carries DETONATION damage — the other
+ *  non-Direct channel the Direct-by-subtraction re-derivation has to subtract off. `activeDoTs`
+ *  does NOT work here: that legacy field belongs to the `activeMultiplier` path, and a `shipSkills`
+ *  run takes its DoTs from the ability model (measured — `activeDoTs` alongside `shipSkills` leaves
+ *  `detonationDamage` at 0 on every round). */
+export const bombKit = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                ...damageKit().slots[0].abilities,
+                {
+                    id: 'a3',
+                    type: 'dot',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'dot', dotType: 'bomb', tier: 100, stacks: 1, duration: 1 },
+                },
+            ],
+        },
+    ],
+});
+
 export const baseInput = (over: Partial<DPSSimulationInput> = {}): DPSSimulationInput => ({
     attack: 10_000,
     crit: 0,
@@ -76,10 +100,15 @@ export const baseInput = (over: Partial<DPSSimulationInput> = {}): DPSSimulation
 /** The page's shape: an explicitly-supplied real, positioned enemy. `enemyAffinity` also lands on
  *  the roster entry's own `affinity` — the victim's affinity is half the matchup the positional
  *  apply recomputes per victim, so a caller that only sets `input.enemyAffinity` would still see
- *  an inert (neutral) enemy attacker. */
+ *  an inert (neutral) enemy attacker.
+ *
+ *  The default roster is a DEFAULT, not an override: a caller that passes its own `enemyAttackers`
+ *  in `over` keeps it. Spreading `over` and then hardcoding the field would drop that roster
+ *  silently — the run would still be positional and still green, just against a different enemy
+ *  than the test says it fights. */
 export const realEnemyInput = (over: Partial<DPSSimulationInput> = {}): DPSSimulationInput => ({
     ...baseInput(over),
-    enemyAttackers: [
+    enemyAttackers: over.enemyAttackers ?? [
         {
             id: REAL_ENEMY_ID,
             stats: {
