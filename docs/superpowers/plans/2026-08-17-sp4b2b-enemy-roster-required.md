@@ -659,15 +659,37 @@ repair it. --no-verify because husky runs the suite, which is red on purpose."
 
 ---
 
-### Task 4: Repair wave A — the first third of the inventory
+### The repair waves (Tasks 4-6c) — restructured 2026-08-17 after Task 3's inventory
 
-Take the first ~7 files from Task 3's inventory. For each, give the run a real enemy and audit every number that moves.
+**The inventory is 64 files / 253 tests, not the ~20 files this plan first predicted**, and the gap is
+the classifier working as designed. The "20 files" figure counted files that never mention
+`enemyAttackers` anywhere. Task 1 mechanically inserted `enemyAttackers: []` into 148 call sites
+across 118 files, so the guard now catches every *call site* that used a base literal without
+overriding it — a superset of the file-level measure. Full inventory with per-file test counts:
+`.superpowers/sdd/progress.md` under "## Task 3 inventory".
 
-**Files:** Modify ~7 fixture files from the Task 3 inventory.
+**Waves are balanced by TEST count, not file count.** The distribution is severely skewed: four files
+carry 116 of the 253 failures (46%), and a file whose base factory is fixed once may repair 39 tests
+in one edit. Each wave below lists its exact files, so no file can be silently dropped or repaired twice.
+
+**Every wave follows the same recipe (Task 4 states it in full — read Task 4's brief alongside your
+own, whichever wave you are on).**
+
+---
+
+### Task 4: Repair wave A — the two highest-count files
+
+**Files (2 files / 75 tests):**
+- `src/utils/combat/__tests__/healing.test.ts` (39 tests)
+- `src/utils/combat/__tests__/engine.events.test.ts` (36 tests)
+
+These two carry 30% of the whole inventory and are almost certainly one base-factory fix each, so
+they come first: they are the cheapest test of whether the recipe below actually works before it is
+applied 60 more times.
 
 **Interfaces:**
-- Consumes: Task 3's inventory and the contract message.
-- Produces: nothing new; later waves follow the same recipe.
+- Consumes: Task 3's inventory and the greppable contract message `enemyAttackers is empty`.
+- Produces: nothing new. Later waves reuse this recipe.
 
 - [ ] **Step 1: Stand up a base-commit worktree**
 
@@ -675,11 +697,18 @@ Take the first ~7 files from Task 3's inventory. For each, give the run a real e
 git worktree add /tmp/sp4b2b-base 39d463f1
 ```
 
-Every 4b-2a wave that measured against a base worktree separated real defects from assumed churn; the one hypothesis table written without one was mechanically wrong on 3 of 10 files. Use it to get the pre-change number for anything you are about to call churn.
+Use `cp -a`, never `cp -r`, if you copy `node_modules` into it — plain `cp -r` dereferences the
+`.bin/tsc` symlink, after which `tsc` runs, reports zero errors, and validates nothing. That
+false-good already nearly slipped through this branch.
 
-- [ ] **Step 2: Give each file a real enemy**
+Every wave in the prior sub-project that measured against a base worktree separated real defects from
+assumed churn; the one hypothesis table written without one was mechanically wrong on 3 of 10 files.
+Use it for any number you are about to call churn.
 
-Replace the `enemyAttackers: []` the codemod inserted with a real opponent. Prefer the shared fixture so 20 files do not invent 20 different enemies:
+- [ ] **Step 2: Give each failing run a real enemy**
+
+Replace the `enemyAttackers: []` that Task 1 inserted with a real opponent. Prefer the shared fixture
+so 64 files do not invent 64 different enemies:
 
 ```ts
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
@@ -687,89 +716,207 @@ import { bareEnemy } from '../__testutils__/bareRosterFixture';
 enemyAttackers: bareEnemy(),
 ```
 
-`bareEnemy()` is one 0-attack, skill-less, 500,000-HP enemy at no explicit position — the boundary places it. Where a fixture needs the enemy in a specific cell (see the `front`-selection rule in Global Constraints), give it an explicit `position` rather than fighting the default.
+`bareEnemy()` is one 0-attack, skill-less, 500,000-HP enemy with no explicit position — the
+normalization boundary places it. Where a fixture needs the enemy in a particular cell, give it an
+explicit `position` rather than fighting the default.
 
-- [ ] **Step 3: Run each file and classify every failure**
+**Fix the base factory, not each call site**, where the file has one — that is why these files repair
+39 and 36 tests at once.
+
+- [ ] **Step 3: Classify every remaining failure against a NAMED mechanism**
+
+After the roster is real, some assertions will still move. Each one is attributed to one of these or
+to a new named mechanism you write down — never absorbed:
+
+- **M1** the dummy's turn is gone (`dummyEnemyIsVestigial` is true), so a fixture filtering on the
+  actor id `enemy` must filter on `attacker`.
+- **M2** the enemy ACTS: one zero-damage `ability-performed` per round, so event COUNTS moved. Filter
+  on the focus id — do not re-pin the count. (`engine.events.test.ts` is the likeliest home for this.)
+- **M3** per-victim credit replaces scalar credit: read `perTargetDealt`, not `cumulativeDamage`. Use
+  the shared helper `src/utils/combat/__testutils__/perTargetDealt.ts` (`dealtEntries` / `dealtBy` /
+  `dealtBySource`) rather than re-writing the nested reduce.
+- **M4** `front` selection scans ROWS from the caster's own row before the front-most column, so the
+  enemy often needs the victim's ROW, not just column 4 (which is the FRONT).
+
+A 0-attack enemy emits NO `attacked` event at all (a zero-damage hit is skipped, not emitted as a 0),
+but it DOES take a turn and emit a zero-damage `ability-performed`. **`deaths` is not a routing
+discriminator; `perTargetDealt` is** — a subagent earlier in this epic concluded "damage lands
+nowhere" from `deaths: []` when the damage had landed on a different but real actor.
+
+- [ ] **Step 4: Repair the fixture, never the assertion**
+
+Deleting, skipping, or widening an assertion to absorb a move is out of bounds, and so is re-pinning
+a `> 0` to `toBe(0)` — that exact substitution happened on an earlier PR in this epic, on a fixture
+shaped like the production page, and it passed review. If a fixture's premise has genuinely
+evaporated (for instance `mostBuffsAmong` returns undefined against an unbuffed enemy, so a
+most-buffs selector proc DROPS entirely rather than shifting), fix the fixture's SETUP — buff the
+enemy — or escalate. Do not pin the drop.
+
+- [ ] **Step 5: Verify**
 
 ```bash
-npx vitest run <file> 2>&1 | tail -40
+npx vitest run src/utils/combat/__tests__/healing.test.ts src/utils/combat/__tests__/engine.events.test.ts
 ```
 
-Classify each failure against the mechanisms 4b-1 and 4b-2a already named — and add a new named mechanism if none fits:
-
-- **M1** the dummy turn is gone (`dummyEnemyIsVestigial` is true), so a fixture filtering on the actor id `enemy` must filter on `attacker`.
-- **M2** the enemy ACTS: one zero-damage `ability-performed` per round, so event *counts* moved. Filter on the focus id; do not re-pin.
-- **M3** per-victim credit replaces scalar credit: read `perTargetDealt` (use `src/utils/combat/__testutils__/perTargetDealt.ts` — `dealtEntries`/`dealtBy`/`dealtBySource` — rather than re-writing the nested reduce), not `cumulativeDamage`.
-- **M4** `front` selection scans rows before columns, so the enemy needs the victim's row.
-
-**`deaths` is not a routing discriminator; `perTargetDealt` is.** A 4b-1 subagent concluded "damage lands nowhere" from `deaths: []` when the damage had landed on a different but real actor.
-
-- [ ] **Step 4: Repair without weakening**
-
-Fix the fixture, never the assertion's strength. Deleting, skipping, or widening an assertion to absorb a move is out of bounds; so is re-pinning a `> 0` to `toBe(0)`. If a fixture's premise has genuinely evaporated (`mostBuffsAmong` returns undefined against an unbuffed enemy, so a most-buffs selector proc DROPS entirely rather than shifting), fix the fixture's setup — buff the enemy — or escalate. Do not pin the drop.
-
-- [ ] **Step 5: Verify the wave**
-
-```bash
-npx vitest run <the 7 files> 2>&1 | tail -20
-```
-
-Expected: all green, with every changed line explained in your report.
+Expected: all 75 green, every changed line explained in your report.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "test(engine): wave A — real enemy roster for 7 direct-engine fixtures"
+git commit -m "test(engine): wave A — real enemy roster for the two highest-count fixtures"
 ```
 
 ---
 
-### Task 5: Repair wave B — the second third
+### Task 5: Repair wave B — the next two highest-count files
 
-**Files:** Modify the next ~7 files from the Task 3 inventory.
+**Files (2 files / 41 tests):**
+- `src/utils/combat/__tests__/triggers.test.ts` (23 tests)
+- `src/utils/combat/__tests__/equipmentAbilities.integration.test.ts` (18 tests)
 
-**Interfaces:** Consumes Task 3's inventory; same recipe as Task 4.
+- [ ] **Step 1: Apply Task 4's recipe to these two files**
 
-- [ ] **Step 1: Repeat Task 4's Steps 2-6 for the next ~7 files**
+Read Task 4's brief in full for the recipe — the four named mechanisms, the `bareEnemy()` fixture, the
+`perTargetDealt` helper path, and the base worktree at `/tmp/sp4b2b-base`. Do not work from a summary
+of it.
 
-The recipe is identical: `bareEnemy()` for the roster, the four named mechanisms for classification, the base worktree at `/tmp/sp4b2b-base` for any pre-change number, no weakened assertions. Read Task 4 in full rather than working from memory of it — the mechanism list and the `perTargetDealt` helper path are there.
+`equipmentAbilities.integration.test.ts` is the one file where a gear-injected standing leech may
+appear (`buildEquipmentAbilities.ts` injects `leechScope:'all'` shapes). A leech that now pays out on
+a DoT tick is expected — Task 2b fixed that deliberately. A leech paying zero on a **detonation
+burst** is a known, documented gap, not something to fix here.
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Verify and commit**
 
 ```bash
-git add -A
-git commit -m "test(engine): wave B — real enemy roster for 7 direct-engine fixtures"
+npx vitest run src/utils/combat/__tests__/triggers.test.ts src/utils/combat/__tests__/equipmentAbilities.integration.test.ts
+git add -A && git commit -m "test(engine): wave B — real enemy roster for triggers and equipment abilities"
 ```
 
 ---
 
-### Task 6: Repair wave C — the remainder, plus the deliberate-empty fixtures
+### Task 6: Repair wave C — 27 mechanical files, alphabetical first half
 
-**Files:** Modify the remaining inventory files, plus `runModeEquivalence.test.ts` and any other fixture whose *subject* is the empty roster.
+**Files (27 files / 61 tests)** — all under `src/utils/combat/__tests__/` unless noted:
 
-**Interfaces:** Consumes Task 3's inventory. Produces a green suite.
+`accumulatorGather.integration` (1), `actorStats` (3), `adjacentEnemiesDebuff.integration` (2),
+`adjacentEnemiesDot.integration` (1), `allyDebuffReactivePromotion.integration` (1),
+`apexSelfShieldGate.integration` (2), `applyOutgoingToEnemy` (3), `blockBuff` (1),
+`bombDetonatedVictimId` (1), `bombModifierExclusion` (1), `bombSplashOnDeath.integration` (1),
+`buffDurationOwnTurnReprieve` (3), `buffOnlyTeamWalk.integration` (1), `chargedOverdrive.integration` (5),
+`corrosionToAcidicDecay` (2), `damageChannelAccounting.integration` (2), `deathFallback.integration` (1),
+`decrementUnification` (3), `demolisherBombSplash.integration` (1), `destroyedRoundUnification` (1),
+`enemiesHitGate.integration` (1), `enemyBuffSelfDebuffGate` (4), `enemyDotCountGate.integration` (3),
+`forcedAffinityReciprocalGate.integration` (2), `gearSetDotPair.integration` (4),
+`healingPerRecipientApply` (6), `healingPerRecipientAxis` (5)
 
-- [ ] **Step 1: Repeat Task 4's recipe for the remaining files**
+- [ ] **Step 1: Apply Task 4's recipe to all 27 files**
 
-- [ ] **Step 2: Handle the fixtures whose subject WAS the empty roster**
+Read Task 4's brief in full for the recipe. Work through the list in order and report per file.
 
-Some inventory files exercise the empty roster on purpose rather than by accident. Those convert to throw-assertions (`expect(() => runCombat(...)).toThrow(/enemyAttackers is empty/)`) instead of gaining an enemy — but only where the empty roster is genuinely the thing under test. If the file was merely using it as a convenient default, give it a real enemy like every other file.
+Two notes specific to this wave. The bomb/detonation files (`bombDetonatedVictimId`,
+`bombModifierExclusion`, `bombSplashOnDeath`, `demolisherBombSplash`) exercise the positional burst
+path, where a standing leech provably pays nothing — that is a documented gap with an owner ruling to
+fix it in a separate PR, so do not chase a zero leech payout there. And `deathFallback.integration`
+turns on a victim dying: with a real 500,000-HP enemy the death may no longer happen, so give that
+fixture an enemy it can actually kill rather than re-pinning what it observes.
 
-- [ ] **Step 3: Full suite green**
+- [ ] **Step 2: Verify and commit**
+
+```bash
+npx vitest run src/utils/combat/__tests__/accumulatorGather.integration.test.ts # …and the other 26
+git add -A && git commit -m "test(engine): wave C — real enemy roster for 27 fixtures"
+```
+
+---
+
+### Task 6b: Repair wave D — 27 mechanical files, alphabetical second half
+
+**Files (27 files / 64 tests)** — all under `src/utils/combat/__tests__/` unless noted:
+
+`hpCrossing` (1), `indestructibleDeath` (6), `leech` (8), `lowestSpeedAlly` (3),
+`multiEnemyDotStateReporting.integration` (1), `outDetonationDamageUpBuff.integration` (3),
+`outgoingAmplificationEngine` (1), `overloadLifecycle` (4), `ownCleanseReactivePromotion.integration` (2),
+`perActorIncomingSurface` (1), `perActorShield` (1), `perVictimDotTick.integration` (1),
+`perVictimPlayerTimedDetonation.integration` (2), `perVictimTimedDetonation.integration` (1),
+`preFightModifiersEngine` (4), `procChanceGate` (4), `purgeConditionalSources` (2),
+`reactiveShieldRouting` (1), `shieldAppliedEvent` (3), `shieldGrantBattleSim` (1),
+`shieldPenetration` (4), `statVsTargetGate.integration` (3), `teamAuraDistribution.integration` (3),
+`victimEnemyModifiers` (1), `wave7WardenDebuffInflicted.integration` (1),
+`wildfireTeamAuraCritPower.integration` (1), and
+`src/utils/calculators/__tests__/rhodiumChakaraDpsModeCredit.integration.test.ts` (1)
+
+- [ ] **Step 1: Apply Task 4's recipe to all 27 files**
+
+Read Task 4's brief in full for the recipe.
+
+Three notes specific to this wave:
+- **`rhodiumChakaraDpsModeCredit.integration`** has a recorded trap: its proc uses a most-buffs
+  selector, and `mostBuffsAmong` returns undefined against an unbuffed enemy, so the proc DROPS
+  entirely rather than shifting. The dummy-fallback era made that selector trivially satisfiable, so
+  the fixture was never really testing the selector. **Buff the fixture's enemy** — never re-pin to 0.
+- **`leech` (8 tests)** interacts with Task 2b's fix: a standing `leechScope:'all'` leech now pays out
+  on a positional DoT tick where it previously paid nothing. That is the intended new behaviour.
+- **`perVictimDotTick` / `perVictimTimedDetonation` / `perVictimPlayerTimedDetonation` /
+  `outDetonationDamageUpBuff`** sit on the per-victim channels Task 2b touched. A DoT-tick leech
+  payout is expected; a detonation-burst leech zero is the documented gap.
+
+- [ ] **Step 2: Verify and commit**
+
+```bash
+npx vitest run src/utils/combat/__tests__/hpCrossing.test.ts # …and the other 26
+git add -A && git commit -m "test(engine): wave D — real enemy roster for 27 fixtures"
+```
+
+---
+
+### Task 6c: Repair wave E — the fixtures whose SUBJECT is the empty roster
+
+These six are not mechanical. Each one exists to exercise the very fallback this PR forbids, so
+handing it a real enemy would delete the thing it tests. Read each fixture's own comment before
+deciding, and state the decision per file in your report.
+
+**Files (6 files / 12 tests):**
+- `src/utils/combat/__tests__/normalizeRoster.test.ts` (1) — the test is literally named "leaves an
+  empty enemy roster empty — it never invents an enemy". Its premise is the OLD contract, which this
+  PR reverses. It becomes a throw-assertion.
+- `src/utils/combat/__tests__/perVictimWalkedTeamDetonation.integration.test.ts` (1) — a REGRESSION
+  test that sets `enemyAttackers: undefined` with the comment "the lone enemy is the dummy sink", i.e.
+  it deliberately invokes the dummy fallback. Decide whether the regression it guards can be observed
+  on a real roster; if it can, migrate it there and keep the guard. If it genuinely cannot, say so
+  explicitly rather than converting it to a throw-assertion and losing the coverage.
+- `src/utils/combat/__tests__/shieldBasisSecondaryDamage.integration.test.ts` (2) — casts
+  `as CombatEngineInput` over a `CLEAN_MATH` spread that never sets the field. The cast is what let a
+  required field go missing; give it a real enemy AND drop the cast so the compiler can see it.
+- `src/utils/combat/__tests__/dummyEnemyTurnGate.test.ts` (1) — its subject is the dummy's turn gate.
+  Judge whether the gate is still observable at all now that no run reaches the dummy.
+- `src/utils/combat/__tests__/runModeEquivalence.test.ts` (6) — equivalence across run modes, using
+  the empty roster as a convenient default. Give it a real enemy; the equivalence claim should survive.
+- `src/utils/combat/__tests__/dummyReachability.test.ts` (1) — its "STILL takes it with an empty
+  roster" case. Invert it to a throw-assertion here so the suite is green; **Task 7 then widens this
+  file's coverage and adds the sink-credit counter.** Do not do Task 7's work.
+
+- [ ] **Step 1: Decide and repair each of the six**
+
+For any file where the honest answer is "this coverage is gone and cannot be recovered", say so and
+name what is no longer covered — do not paper over it with a throw-assertion that tests the guard
+instead of the mechanic. That trade is the controller's to make, not yours.
+
+- [ ] **Step 2: Full suite green — the first time since Task 3**
 
 ```bash
 npm test 2>&1 | tail -20
 npx tsc --noEmit && npx eslint src
 ```
 
-Expected: all green. This is the first point since Task 3 that the suite is whole again.
+Expected: all green, tsc 0, eslint 0. Report the file/test totals; the pre-branch baseline was 528
+files / 5837 tests.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add -A
-git commit -m "test(engine): wave C — the roster contract holds across the whole suite"
+git commit -m "test(engine): wave E — the empty-roster fixtures meet the new contract"
 ```
 
 ---
