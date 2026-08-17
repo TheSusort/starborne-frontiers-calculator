@@ -2508,15 +2508,36 @@ export function runCombat(rawInput: CombatEngineInput): {
     // the reads byte-identical to the old closure. Read LIVE (`a.corrosionEntries`, not a cached
     // array) because the Cheat-Death wipe REASSIGNS these properties rather than splicing them.
     //
-    // Dead carriers are intentionally NOT filtered out: the dummy's own entries were reported in
-    // its death round before this change, and dropping a corpse's standing stacks would be a
-    // second, unrelated semantic change.
-    //
     // A plain array, not a getter: `enemyAttackerActors` is never mutated after construction
     // (verified — no push/splice anywhere), so the MEMBERSHIP is fixed for the run while each
     // member's containers are still read live at reporting time. A future PR that summons an
     // enemy mid-run must revisit this line.
     const dotCarrierActors: CombatActor[] = [enemy, ...enemyAttackerActors];
+
+    /**
+     * SP-4b-2 D3, task-14 finding 3 — is this carrier's DoT container still LIVE state, or a
+     * corpse's frozen leftovers?
+     *
+     * Nothing clears a DoT container on death (`recordDestroyed` in state.ts only stamps
+     * `destroyedRound` and emits), so a killed carrier keeps whatever stood on it. Whether that
+     * is real depends on ONE thing: does the carrier still take its turn and TICK?
+     *
+     * This predicate is therefore the enemy-side restriction of the ROUND LOOP'S OWN dead-skip
+     * (see the `isDummyEnemy` guard at the top of the turn body) — deliberately derived from it
+     * rather than invented, so the two cannot drift into disagreement:
+     *   • a destroyed POSITIONED enemy attacker is `continue`d before its DoT-tick prologue, so
+     *     its stacks are frozen forever: they deal nothing, never expire, and were still being
+     *     summed into every remaining round's report. That is the phantom, and it is excluded.
+     *   • the DUMMY sink is explicitly EXEMPT from that skip, so it keeps taking turns and its
+     *     containers keep ticking and expiring normally. Its entries are live state and are
+     *     reported exactly as before — which is also what keeps non-positional runs
+     *     byte-identical (measured: 3 test files reach a dead dummy holding entries —
+     *     engine.events, indestructibleDeath, bombSplashOnDeath — and none of them changes).
+     * The heal-target exemption in the round loop's predicate has no counterpart here: the heal
+     * target is a player-side actor and never a member of `dotCarrierActors`.
+     */
+    const dotCarrierReports = (a: CombatActor): boolean =>
+        a.destroyedRound === undefined || a.id === enemy.id;
 
     // ── Unified roster seam (bySide unification PR1) ───────────────────────────
     // The canonical, side-agnostic actor set, named once. Order MATTERS: it drives
@@ -10808,6 +10829,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // SP-4b-2 D3: the DoT-state fields describe every enemy-side carrier, not just the
             // dummy's (never-written) containers. See `dotCarrierActors`.
             //
+            // CORPSES ARE EXCLUDED (task-14 finding 3) — `dotCarrierReports`, evaluated HERE so
+            // each round sees the live death state. A killed positioned enemy never ticks again
+            // and nothing clears its containers, so its stacks would otherwise be summed into
+            // every remaining round while dealing nothing.
+            //
             // MULTI-ENEMY AGGREGATION — deliberate choice: these three are COUNTS, so they SUM
             // across carriers ("how many stacks stand on the enemy side"). Stacks are an
             // EXTENSIVE quantity — they add — unlike `finalHpPct`, an INTENSIVE per-actor ratio
@@ -10815,15 +10841,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // number that is neither the board total nor any one actor's real stack count.
             // Reporting only `enemyAttackers[0]` is the defect class this epic keeps hitting and
             // is explicitly rejected here.
-            activeCorrosionStacks: dotCarrierActors.reduce(
-                (sum, a) => sum + totalStacks(a.corrosionEntries),
-                0
-            ),
-            activeInfernoStacks: dotCarrierActors.reduce(
-                (sum, a) => sum + totalStacks(a.infernoEntries),
-                0
-            ),
-            activeBombCount: dotCarrierActors.reduce((sum, a) => sum + a.pendingBombs.length, 0),
+            activeCorrosionStacks: dotCarrierActors
+                .filter(dotCarrierReports)
+                .reduce((sum, a) => sum + totalStacks(a.corrosionEntries), 0),
+            activeInfernoStacks: dotCarrierActors
+                .filter(dotCarrierReports)
+                .reduce((sum, a) => sum + totalStacks(a.infernoEntries), 0),
+            activeBombCount: dotCarrierActors
+                .filter(dotCarrierReports)
+                .reduce((sum, a) => sum + a.pendingBombs.length, 0),
             activeSelfBuffs: activeSelfBuffsForRound,
             activeEnemyDebuffs: landedEnemyDebuffs,
             resistedEnemyDebuffs,
@@ -10836,7 +10862,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // generic), preserving both the single-carrier byte-identity and the type grouping the
             // `extend-dot` consumers filter on. Carrier order within a type is board order.
             activeDoTStates: [
-                ...dotCarrierActors.flatMap((a) =>
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
                     a.corrosionEntries.map((e) => ({
                         type: 'corrosion' as const,
                         tier: e.tier,
@@ -10844,7 +10870,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ticksRemaining: e.remainingRounds,
                     }))
                 ),
-                ...dotCarrierActors.flatMap((a) =>
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
                     a.infernoEntries.map((e) => ({
                         type: 'inferno' as const,
                         tier: e.tier,
@@ -10852,7 +10878,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ticksRemaining: e.remainingRounds,
                     }))
                 ),
-                ...dotCarrierActors.flatMap((a) =>
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
                     a.pendingBombs.map((b) => ({
                         type: 'bomb' as const,
                         tier: b.tier,
@@ -10862,7 +10888,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ),
                 // SP-E: generic DoTs are never auto-applied from skill text in this task, so this
                 // is [] on every corpus run today — a no-op spread.
-                ...dotCarrierActors.flatMap((a) =>
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
                     a.genericDoTEntries.map((e) => ({
                         type: 'generic' as const,
                         tier: e.tier,

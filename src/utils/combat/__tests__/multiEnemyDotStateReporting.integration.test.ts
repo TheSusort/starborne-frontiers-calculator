@@ -38,7 +38,8 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import type { ActiveDoTStack, PendingBomb, CombatActor } from '../state';
-import type { ParsedTarget } from '../../targetingParser';
+import type { ShipSkills, Ability } from '../../../types/abilities';
+import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 
 const HUGE_HP = 1_000_000_000;
@@ -70,8 +71,9 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 /** A positioned, ZERO-OFFENSE enemy: attack 0 makes it RNG-stream-inert (SP-1's narrowed lesson —
  *  a positioned enemy only perturbs the stream once it ACTS offensively), so adding a second one
- *  cannot shift any draw the assertions depend on. */
-const inertEnemy = (id: string, position: Position): EnemyAttacker =>
+ *  cannot shift any draw the assertions depend on. `hp` is overridable so a fixture can decide
+ *  which carrier dies and when. */
+const inertEnemy = (id: string, position: Position, hp = HUGE_HP): EnemyAttacker =>
     ({
         id,
         stats: {
@@ -79,13 +81,35 @@ const inertEnemy = (id: string, position: Position): EnemyAttacker =>
             crit: 0,
             critDamage: 0,
             defence: 0,
-            hp: HUGE_HP,
+            hp,
             speed: 50,
         },
         chargeCount: 0,
         startCharged: false,
         position,
     }) as EnemyAttacker;
+
+/** The anchor cell alone (range MUST be 0 — see DEFAULT_BASE_PATTERN). */
+const singleCell = (): ParsedPattern => ({ raw: 'single', shape: 'base', range: 0, modifiers: {} });
+
+/** A single-target damage cast, so the fixture below kills exactly one carrier. */
+const damageKit = (multiplier: number): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'md1',
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'damage', multiplier },
+                } as Ability,
+            ],
+        },
+    ],
+});
 
 /** Focus attacker with no damage skill: the row's DoT-state fields are the only thing under test,
  *  and a zero-damage focus keeps every enemy alive for the whole window. */
@@ -201,5 +225,79 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
             { type: 'corrosion', tier: 9, stacks: 6, ticksRemaining: 4 },
             { type: 'bomb', tier: 100, stacks: 1, ticksRemaining: 8 },
         ]);
+    });
+
+    /**
+     * Task-14 finding 3 — A CORPSE IS NOT STANDING STATE.
+     *
+     * Nothing clears a DoT container on death (`recordDestroyed` only stamps `destroyedRound`),
+     * and a destroyed positioned enemy is `continue`d at the top of the turn loop BEFORE its
+     * DoT-tick prologue. So a killed carrier's stacks freeze at their death-round values: they
+     * deal nothing, never expire, and — before this filter — kept being summed into every
+     * remaining round's row. On a multi-enemy board that is a permanent phantom.
+     *
+     * The fixture below is the direct measurement: identical seeding, one carrier killed at the
+     * start of round 2, and the reported totals drop by exactly that carrier's contribution while
+     * the SURVIVOR's entries keep ticking. Without the filter round 2 would still read 5 / 4 / 2
+     * and list four entries, with the dead carrier's `ticksRemaining` frozen at its round-1 value.
+     */
+    it("drops a killed enemy's stacks from the round it dies, keeping the survivor's ticking", () => {
+        // Captured at construction so the death can be asserted directly on the actor.
+        let e1Actor: CombatActor | undefined;
+        const rounds = runCombat({
+            ...BASE,
+            attack: 1000,
+            // 2100 HP against a 1000-damage single-target cast: alive after round 1 (1100 left),
+            // destroyed during round 2. So round 1 measures BOTH carriers and round 2 measures the
+            // survivor alone — the drop is observed within one run, not across two fixtures.
+            shipSkills: damageKit(100),
+            position: 'M1',
+            target: frontTarget(),
+            pattern: singleCell(),
+            numRounds: 3,
+            enemyAttackers: [inertEnemy('e1', 'M4', 2100), inertEnemy('e2', 'M3')],
+            __testTapActors: (actors) => {
+                const byId = new Map(actors.map((a) => [a.id, a]));
+                e1Actor = byId.get('e1');
+                // Long remainingRounds so nothing expires inside the window — every change in the
+                // reported numbers is the death, not an expiry.
+                byId.get('e1')!.corrosionEntries.push(dot(9, 2, 20));
+                byId.get('e1')!.infernoEntries.push(dot(15, 1, 20));
+                byId.get('e1')!.pendingBombs.push(bomb(1));
+                byId.get('e2')!.corrosionEntries.push(dot(9, 3, 20));
+                byId.get('e2')!.infernoEntries.push(dot(30, 3, 20));
+                byId.get('e2')!.pendingBombs.push(bomb(2));
+            },
+        }).rounds;
+
+        // Round 1 — both alive: the board-wide sums of D3.
+        expect(rounds[0].activeCorrosionStacks).toBe(2 + 3);
+        expect(rounds[0].activeInfernoStacks).toBe(1 + 3);
+        expect(rounds[0].activeBombCount).toBe(2);
+
+        // e1 really did die in round 2 — otherwise the rounds below would be a vacuous repeat of
+        // round 1 — and its containers really are still populated (nothing clears them on death),
+        // which is what makes the filter the only reason they stop being reported.
+        expect(e1Actor?.destroyedRound).toBe(2);
+        expect(e1Actor!.corrosionEntries.length).toBeGreaterThan(0);
+
+        // Rounds 2 and 3 — e1 is a corpse: only e2's stacks are reported, and they are the SAME
+        // numbers e2 contributed above (2/3 corrosion → 3, 1/3 inferno → 3, 2 bombs → 1).
+        for (const row of [rounds[1], rounds[2]]) {
+            expect(row.activeCorrosionStacks).toBe(3);
+            expect(row.activeInfernoStacks).toBe(3);
+            expect(row.activeBombCount).toBe(1);
+            expect(row.activeDoTStates.map((s) => s.type)).toEqual([
+                'corrosion',
+                'inferno',
+                'bomb',
+            ]);
+        }
+
+        // The survivor's entries are still LIVE — `ticksRemaining` keeps counting down after the
+        // other carrier died, so the filter removed a corpse rather than freezing the whole read.
+        const survivorCorrosion = (i: number) =>
+            rounds[i].activeDoTStates.find((s) => s.type === 'corrosion')!.ticksRemaining;
+        expect(survivorCorrosion(2)).toBe(survivorCorrosion(1) - 1);
     });
 });
