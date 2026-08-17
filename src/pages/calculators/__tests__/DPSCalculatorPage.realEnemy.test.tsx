@@ -98,7 +98,7 @@ describe('DPSCalculatorPage supplies a real positioned enemy', () => {
         // Drive the focus ship's own affinity picker (inside the config card's "Affinity" section)
         // to a non-default value so its presence in the sim call is unambiguous — 'chemical' can't
         // be confused with the 'antimatter' default a removed wire-up would silently keep emitting.
-        fireEvent.click(screen.getByTestId('config-affinity-select'));
+        fireEvent.click(screen.getByLabelText('Affinity'));
         fireEvent.click(screen.getByText('Chemical'));
 
         // Drive the enemy's affinity picker to a different non-default value.

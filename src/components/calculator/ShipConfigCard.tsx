@@ -198,7 +198,11 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 }
                                 options={AFFINITY_OPTIONS}
                                 className="w-full"
-                                data-testid="config-affinity-select"
+                                // `aria-label`, not `label`: the enclosing Section already renders
+                                // "AFFINITY" directly above this control, so a visible label would
+                                // print the same word twice. (The "Board Slot" section below can use
+                                // a real `label` because "Fights from" says something different.)
+                                aria-label="Affinity"
                             />
                         </Section>
 
