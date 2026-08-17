@@ -47,6 +47,7 @@ import { synthesizeResisted } from './shared';
 import {
     buildActorConditionContext,
     selfBuffNamesForOwners,
+    LIVE_TRIGGERS,
     type ReactiveAbility,
 } from './triggers';
 import { reduceBombsOnVictim } from './bombCountdown';
@@ -198,6 +199,40 @@ export interface DeferredEnemyApplication {
     emitEvents: () => void;
 }
 
+/**
+ * The PASSIVE-SLOT damage instance of one cast (SP-4b-2 D6).
+ *
+ * A SEPARATE damage instance, not an addend on the firing hit: the always-active passive slot can
+ * carry its own gated `damage` ability with its own multiplier, its own crit rule (`noCrit`) and
+ * its own `target`. `runPlayerTurn` decides all three; the positional apply site only LANDS it.
+ *
+ * TARGETING is the ability's own, deliberately NOT the firing hit's footprint — see
+ * `passiveSlotPattern` / `stagePassiveSlotHit` in engine.ts for the full justification and the
+ * mapping from `target` to a footprint.
+ */
+export interface PassiveSlotHit {
+    /**
+     * Attacker-side scalars for THIS instance alone. `multiplierPct` is the passive's own gated
+     * multiplier (its hit count already folded in by `passiveMultiplier`), `hits` is 1 (the
+     * instance is one hit, however many hits the FIRING skill has) and `secondaryStatValue` is 0
+     * (the defence/HP-scaling payload belongs to the firing hit and is already counted there).
+     * Every other term is the firing cast's, because they are attacker-fixed for the whole turn —
+     * the same terms `nonCritFactor` folds into the aggregate `passiveDamage`.
+     */
+    scalars: AttackerDamageScalars;
+    /**
+     * ALREADY DECIDED here — the apply site must never re-roll or re-decide it. `noCrit` on the
+     * passive's own damage ability forces `false`; otherwise this REUSES the round's first crit
+     * draw rather than taking a new one, so wiring the instance up draws no extra RNG.
+     */
+    didCrit: boolean;
+    /**
+     * The passive damage ability's OWN declared target ('all-enemies' for Judge/Incinerator,
+     * 'enemy' for most). The firing skill's target/pattern are NOT used — see engine.ts.
+     */
+    target: Ability['target'];
+}
+
 /** Everything one player actor's turn contributes to the round's RoundData row. */
 export interface PlayerTurnResult {
     action: 'active' | 'charged';
@@ -284,6 +319,20 @@ export interface PlayerTurnResult {
      *  engine branch (Task 8); non-positional callers ignore it → goldens byte-identical.
      *  Present whenever a damage ability fired this cast (else undefined). */
     positionalScalars?: AttackerDamageScalars;
+    /** SP-4b-2 D6 — the PASSIVE-SLOT damage instance, for the positional apply path to land
+     *  itself (Judge: "At the start of the round, this Unit deals 60% damage to all enemies
+     *  with less than 50% HP").
+     *
+     *  WHY IT HAS TO BE HANDED OVER. `passiveDamage` is folded into the aggregate
+     *  `directDamage` below, which is the whole story on a NON-positional cast: the single sink
+     *  takes `directDamage` and the passive lands with it. On a POSITIONAL cast the engine
+     *  suppresses that scalar credit and re-derives the round's direct damage from the
+     *  per-victim apply — whose payload is `positionalScalars`, the FIRING skill's scalars only.
+     *  The passive instance was therefore computed and dropped (measured: Judge's round-4
+     *  `directDamage` stuck at 23000 instead of 29000). Present only when the passive slot's
+     *  GATED damage ability contributes damage this round; absent otherwise, so the engine's
+     *  wiring is a no-op for every cast without one. */
+    passiveSlotHit?: PassiveSlotHit;
     /** Sub-project I, PR I2 (Layer 3) — ingredients for the engine's per-victim outgoing-
      *  modifier delta (Tygr/Incinerator/Lodolite-shape "+N% to enemies with <named status>"
      *  gates). `primaryCtx` is the SAME `modifierCtx` folded into `positionalScalars.
@@ -3932,6 +3981,71 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ? { modifierAbilities, primaryCtx: modifierCtx }
         : undefined;
 
+    // SP-4b-2 D6: hand the PASSIVE-SLOT damage instance to the positional apply path, which
+    // otherwise never sees it (`positionalScalars` above is the FIRING skill's scalars — the
+    // passive multiplier is deliberately absent from `multiplierPct`, which is why adding this
+    // cannot double-count against it).
+    //
+    // Same shape as `positionalScalars`, with the three fields that are NOT shared:
+    //   multiplierPct      the passive's own gated multiplier (hits already folded in),
+    //   hits: 1            ONE instance, regardless of the firing skill's hit count — the
+    //                      aggregate `passiveDamage` folds it in exactly once too,
+    //   secondaryStatValue 0 — the defence/HP-scaling payload belongs to the firing hit.
+    // Feeding these through `victimHitDamage(scalars, profile, didCrit, 1)` reproduces
+    // `passiveDamage` exactly for the bound victim's defence profile (the same identity Task 4
+    // established for the firing hit), so the positional and aggregate values agree.
+    //
+    // GUARD: `passiveMultiplier > 0`. `damageInputsFromSkill` returns multiplier 0 for a slot
+    // with no damage ability AND for one whose damage ability was gated OFF this round
+    // (gateFiringAbilities drops it), so this is exactly "the passive contributed damage this
+    // round" — the same condition that makes the aggregate `passiveDamage` non-zero.
+    //
+    // TRIGGER EXCLUSIVITY (the same "two channels, never both" discipline D1 needed). A passive
+    // `damage` ability with a LIVE trigger belongs to the REACTIVE machinery: it lands per victim
+    // through `applyReactiveDamage`, WITH a per-victim gate re-check — which is what makes real
+    // Judge's "all enemies below 50% HP" skip the healthy one. Only NON-live triggers belong
+    // here; `on-cast` is explicitly not a live trigger (triggers.ts's ReactiveAbilityType note),
+    // and the reactive machinery never delivers those, so this is their only channel.
+    //
+    // DEFENCE IN DEPTH, not the primary gate: `partitionReactiveAbilities` (triggers.ts) already
+    // strips every live-triggered ability out of `castSkills` before this function sees the slot,
+    // so `damageInputsFromSkill` reports multiplier 0 for them and this condition never decides
+    // anything in production today. VERIFIED by instrumentation: a passive `damage` ability moved
+    // from `on-cast` to `start-of-round` arrives here with an EMPTY gated passive slot, and the
+    // hit still lands exactly once — via the reactive channel (measured identical per-victim
+    // credit both ways, and real Judge deals its 600 once, skipping the >50%-HP enemy). The
+    // condition is kept because `damageInputsFromSkill` itself does NOT filter by trigger: if the
+    // partition ever stopped covering a slot, the two channels would silently both pay out.
+    // `passiveHit.scalingAbility` is the EXACT ability `damageInputsFromSkill` measured
+    // `passiveMultiplier` from — not a second `find`, which could select a different one and
+    // pair this instance's target/trigger with another ability's multiplier.
+    const passiveDamageAbility = passiveHit.scalingAbility;
+    const passiveSlotHit: PassiveSlotHit | undefined =
+        passiveMultiplier > 0 &&
+        passiveDamageAbility &&
+        !LIVE_TRIGGERS.has(passiveDamageAbility.trigger)
+            ? {
+                  scalars: {
+                      effectiveAttack,
+                      multiplierPct: passiveMultiplier,
+                      secondaryStatValue: 0,
+                      hits: 1,
+                      effectiveCritDamage,
+                      outgoingDamageBuffPct: dmgStats.totals.outgoingDamageBuff,
+                      incomingDamageModifierPct: incomingDamageModifier,
+                      defensePenetrationPct: effectivePen,
+                      attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
+                      ...(forceOutgoingAdvantage ? { forceAffinityAdvantage: true } : {}),
+                  },
+                  // REUSED, never re-drawn: `noCrit` forces false (mirroring
+                  // `passiveCritMultiplier`'s `? 1`), otherwise the round's first firing-hit crit
+                  // outcome. `hitCrits` is empty for a cast with no damage ability or a noCrit
+                  // one, and `?? false` is then the correct no-crit answer.
+                  didCrit: passiveHit.noCrit ? false : (hitCrits[0] ?? false),
+                  target: passiveDamageAbility.target,
+              }
+            : undefined;
+
     return {
         action,
         roundCrit,
@@ -3960,6 +4074,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         detonationDamage,
         extraActionGrants,
         positionalScalars,
+        passiveSlotHit,
         perVictimOutgoing,
         // SP-4b-2 D4: the landed half of this turn's scheduled enemy-debuff decision, handed to
         // the engine's per-victim damage read so both consumers share ONE draw.
