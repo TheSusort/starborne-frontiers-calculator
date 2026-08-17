@@ -359,6 +359,13 @@ export const SYNTHESIZED_DPS_ENEMY_ID = 'enemy-1';
  * `attack: 0` and no `shipSkills` are load-bearing, not laziness: a 0-attack, skill-less positioned
  * enemy is RNG-stream-INERT (rate gates are keyed per actor id), so supplying it moves neither the
  * totals nor the crit sequence of the run it joins. An enemy that ACTS would move every number.
+ *
+ * INERT IS NOT ABSENT, and the distinction is measured, not assumed. This actor still takes a turn:
+ * it appears in the turn order and emits one zero-damage `ability-performed` per round. So a fixture
+ * counting EVENTS or asserting a turn-order array sees it, while one asserting damage totals or crit
+ * sequences does not. A consumer that wants focus-only accounting filters on the actor id — it does
+ * not get to assume the roster is a singleton.
+ *
  * Position and targeting are deliberately absent — `normalizeCombatRoster`, the engine's ONE
  * accommodation boundary, places and targets it (SP-4b-1). Filling them here would be a second
  * derivation of the same defaults.

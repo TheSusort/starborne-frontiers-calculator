@@ -6,10 +6,12 @@
  * same reason `__testutils__/bareRosterFixture.ts` exists: importing a `.test.ts` module runs its
  * `describe` blocks as an import side effect, under a second file and a second seed.
  */
-import type { DPSSimulationInput } from '../dpsSimulator';
+import { SYNTHESIZED_DPS_ENEMY_ID, type DPSSimulationInput } from '../dpsSimulator';
 import type { ShipSkills } from '../../../types/abilities';
 
-export const REAL_ENEMY_ID = 'enemy-1';
+/** The same id the simulator synthesizes, so an explicit roster and a synthesized one share
+ *  per-victim keys — re-exported rather than re-declared to keep the two from drifting apart. */
+export const REAL_ENEMY_ID = SYNTHESIZED_DPS_ENEMY_ID;
 
 export const damageKit = (): ShipSkills => ({
     slots: [
