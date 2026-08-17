@@ -3846,8 +3846,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (!owner) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
         for (const e of entries) {
-            // Per-victim damage rides the `direct` channel only; detonation-scoped leeches
-            // never fire here (bombs credit through the aggregate detonation path instead).
+            // Per-victim damage rides the NON-detonation channels only — the positional firing hit
+            // (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick (`corrosion` /
+            // `inferno` / `generic`). Detonation-scoped leeches never fire here; the aggregate
+            // `procStandingLeeches` gates them the same way (`channel !== 'detonation'` → skip),
+            // so the two procs agree on every channel this one is reachable from.
             if (e.scope === 'detonation') continue;
             let raw = amount * (e.pct / 100);
             if (e.kind === 'heal') {
@@ -8769,6 +8772,40 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         e[dotType] += damage;
                                         perActorDot.set(sourceId, e);
                                     }
+                                    // SP-4b-2b Task 2b: the APPLIER's standing damage-dealt leech
+                                    // pays out on this tick. A standing leech is procced from
+                                    // exactly two places — `creditDamage` (the non-positional
+                                    // aggregate channel, which the DUMMY's DoT tick rides at
+                                    // ~:9467) and `procStandingLeechesPerVictim` (the positional
+                                    // per-victim channel, wired at the three attack sites through
+                                    // `procLeechesForVictim`). This branch used NEITHER, so the
+                                    // moment a run faced a real positioned enemy every
+                                    // `leechScope:'all'` leech silently stopped paying out on DoT
+                                    // damage while still paying out on direct damage (Magnolia's
+                                    // self leech; the Leech gear set via buildEquipmentAbilities).
+                                    //
+                                    // Why the PER-VICTIM proc and not `creditDamage`: creditDamage
+                                    // would also write `dmg(sourceId)[dotType]`, double-feeding the
+                                    // scalar DoT channel this branch deliberately keeps out of (see
+                                    // the `total`/`tickDealtBySource` writes above and the
+                                    // cumulativeDamage note in the C2 header). The per-victim proc
+                                    // touches HEAL buckets and heal/shield pools ONLY — it never
+                                    // writes `dmg()`, `roundPerTargetDamage` or `creditDealt` — so
+                                    // no damage number can move. It is also the side-aware one
+                                    // (`allRuntimesById` + side-relative recipients), which makes
+                                    // this TEAM-SYMMETRIC by construction: this credit callback is
+                                    // shared by both sides' per-victim ticks, so a player applier
+                                    // ticking an enemy and an enemy applier ticking a player ally
+                                    // pay out through the identical code.
+                                    //
+                                    // Scope semantics are preserved exactly: on a DoT channel
+                                    // `procStandingLeeches` skips `scope:'detonation'`
+                                    // (`channel !== 'detonation'`) and so does the per-victim proc
+                                    // (its unconditional `continue`), so the two agree here.
+                                    // Cadence matches the dummy path too — `tickDoTs` calls
+                                    // `credit` once per ENTRY, so the owner's heal-crit gate draws
+                                    // once per entry on both paths.
+                                    procStandingLeechesPerVictim(sourceId, damage);
                                 },
                                 // D-PR3 (Vortex Veil): reduce this carrier's incoming DoT ticks.
                                 incomingDotReductionPct: (dotType) =>

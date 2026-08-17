@@ -440,9 +440,9 @@ describe('healingGoldenParity', () => {
     // HOOK-OWNED (passive damage-dealt) → simplified fold: healModifier + crit only (healMod 0,
     // crit 0 → bare raw = credit × 20%).
     //
-    // ⚠️ REBASED IN SP-4b-2b, and one clause of it is now a KNOWN ENGINE GAP rather than a number.
-    // `enemies: []` no longer falls through to the dummy sink; the adapter synthesizes an inert
-    // PRACTICE TARGET (defence 5,000 / hp 40,000, attack 0). Three consequences, all measured:
+    // ⚠️ REBASED IN SP-4b-2b. `enemies: []` no longer falls through to the dummy sink; the adapter
+    // synthesizes an inert PRACTICE TARGET (defence 5,000 / hp 40,000, attack 0). Three
+    // consequences, all measured:
     //
     // Damage constants (effectiveAttack 5000, practice-target defence 5000 → postDefenseFactor
     // 1 − dr(5000)/100 = 0.4165593651036698; was 0.2579415898443159 at the sink's defence 10000):
@@ -462,21 +462,24 @@ describe('healingGoldenParity', () => {
     //   • Practice-target turn (speed 50, acts last): ticks the Inferno for 5000 — it DOES land, and
     //     `perTargetDealt` proves it (R1 = 6289.708 = cast 1289.708 + inferno 5000 at the old basis;
     //     7082.797 = 2082.797 + 5000 now).
-    //     ⚠️ BUT THE LEECH PAYS NOTHING ON IT: the inferno-tick leech was 1000 here and is now 0.
-    //     That is NOT the rebase — a `leechScope:'all'` standing leech pays ZERO on DoT-tick damage
-    //     against ANY real positioned enemy, and always has. Proved by running this exact scenario
-    //     against an explicit enemy at the sink's own stats (defence 10000 / hp 1,000,000) on the
-    //     PRE-SP-4b-2b adapter: 258/round, never 1258. So the credit only ever worked on the dummy
-    //     path, this fixture was its LAST observer, and the gap has been live in production since
-    //     SP-3 (when real rosters arrived). Tracked as its own follow-up; do not "fix" it by editing
-    //     this number back.
-    //   ⇒ directHeal = 416.5594 (→ 417) per round. Full HP → effectiveHealing 0,
-    //     overheal 416.5594 (→ 417). hotHeal 0, shield 0, incomingDamage 0 (attack 0).
+    //     ✅ AND THE LEECH PAYS OUT ON IT: inferno-tick leech = 5000 × 20% = 1000.
+    //     This term briefly read 0 when Task 2 first rebased the fixture, which exposed a
+    //     PRE-EXISTING engine defect (not the rebase): a `leechScope:'all'` standing leech paid ZERO
+    //     on DoT-tick damage against ANY real positioned enemy, because the per-victim positional
+    //     DoT-tick branch procced neither leech hook. FIXED in SP-4b-2b Task 2b — that branch's
+    //     `credit` callback now calls `procStandingLeechesPerVictim` (engine.ts, the per-victim
+    //     tick's credit callback; fenced by `src/utils/combat/__tests__/positionalDotLeech.test.ts`
+    //     on BOTH sides). The term is back at exactly its pre-SP-4b-2b value of 1000, because
+    //     inferno scales off the APPLIER's effective attack (5000), not the victim — measured at
+    //     39d463f1: directHeal 1258/round = cast 258 + inferno 1000.
+    //   ⇒ directHeal = 416.5594 + 1000 = 1416.5594 (→ 1417) per round. Full HP → effectiveHealing 0,
+    //     overheal 1416.5594 (→ 1417). hotHeal 0, shield 0, incomingDamage 0 (attack 0).
     //   • Rounds 7-10 are ZERO: the practice target is KILLABLE and dies in round 6 —
     //     2082.797 + 5000 = 7082.797/round vs hp 40,000 (6 × 7082.797 = 42,496.8 > 40,000). Round 6
     //     still heals, because the cast lands before the death.
-    //   cumulativeHealing (raws summed UNROUNDED, rounded last): 417, 833, 1250, 1666, 2083, 2499,
-    //     then flat. totalDirectHeal = 6 × 416.5594 = 2499.36 → 2499 (was 12579).
+    //   cumulativeHealing (raws summed UNROUNDED, rounded last): 1417, 2833, 4250, 5666, 7083, 8499,
+    //     then flat. totalDirectHeal = 6 × 1416.5594 = 8499.36 → 8499 (12579 pre-SP-4b-2b, where the
+    //     dummy never died so all 10 rounds paid at the sink's defence-10000 cast basis).
     const scenario9Input = () =>
         BASE({
             rounds: 10,
@@ -527,19 +530,21 @@ describe('healingGoldenParity', () => {
 
     snap('Magnolia shape (standing damage-leech all-scope: cast + Inferno tick)', scenario9Input);
 
-    // Supplementary in-code assertion for scenario 9: round-1 directHeal is the cast-leech ALONE.
-    // Hand-derived, not read off the snapshot: 0.2 × 2082.796825518349 = 416.5594 → 417.
-    // It was `1258` (cast 258 + inferno 1000) while `enemies: []` fell through to the dummy. Both
-    // terms moved, for two different reasons — the cast leech was REBASED by the practice target's
-    // defence 5,000, and the inferno term is a pre-existing positional leech gap, not a rebase. See
-    // the ⚠️ block on `scenario9Input` above before touching this number.
-    it('scenario 9: round-1 directHeal is exactly 417 (cast leech only; inferno leech is a known gap)', () => {
+    // Supplementary in-code assertion for scenario 9: round-1 directHeal is BOTH leech terms.
+    // Hand-derived, not read off the snapshot:
+    //   cast leech    = 0.2 × 2082.796825518349 = 416.5593651036698
+    //   inferno leech = 0.2 × 5000              = 1000            (SP-4b-2b Task 2b)
+    //   → 1416.5594 → 1417.
+    // It was `1258` (cast 258 + inferno 1000) while `enemies: []` fell through to the dummy: the cast
+    // term was REBASED by the practice target's defence 5,000 (258 → 417), while the inferno term
+    // round-trips at exactly 1000 — it briefly read 0 between Task 2 and Task 2b, which is how the
+    // pre-existing positional leech gap was found. See the ⚠️ block on `scenario9Input` above.
+    it('scenario 9: round-1 directHeal is exactly 1417 (cast leech 417 + inferno-tick leech 1000)', () => {
         idCounter = 0;
         const result = simulateHealing(scenario9Input());
-        expect(result.rounds[0].directHeal).toBe(417);
-        // ANTI-VACUITY for the claim in the name: the inferno DOES tick on the practice target for
-        // 5,000, so the 0 above is the leech failing to read it — not the DoT failing to land. If a
-        // future fix makes the leech pay, this line keeps holding and the one above is what moves.
+        expect(result.rounds[0].directHeal).toBe(1417);
+        // ANTI-VACUITY: the inferno DOES tick on the practice target for 5,000 — so the 1000 term
+        // inside the figure above is the leech reading a REAL tick, not a coincidence of rounding.
         const dealt = result.rounds[0].perTargetDealt?.attacker?.['practice-target'];
         expect(dealt).toBeCloseTo(2082.796825518349 + 5000, 6);
     });
@@ -622,16 +627,20 @@ describe('healingGoldenParity', () => {
     // against an explicit enemy at the sink's own stats (defence 10000 / hp 1,000,000) on the
     // PRE-SP-4b-2b adapter also gives `[0,0,0,0]`, and so does the practice target's own stat block.
     // So the 129 only ever existed on the dummy path, which SP-4b-2b's practice target replaced. The
-    // code gap is real, but — unlike scenario 9's inferno-tick leech, which IS production-reachable
+    // code gap is real, but — unlike scenario 9's inferno-tick leech, which WAS production-reachable
     // (Magnolia's own standing `'all'`-scope self leech, plus the same shape injected by gear via
-    // `buildEquipmentAbilities.ts:52`) — this fixture's `leechScope:'detonation'` STANDING leech is
+    // `buildEquipmentAbilities.ts:52`) and is therefore FIXED in SP-4b-2b Task 2b — this fixture's
+    // `leechScope:'detonation'` STANDING leech is
     // probably corpus-UNREACHABLE: its only real-ship producer is Valkyrie's Echoing Burst leech
     // (`skillTextParser.ts` ~4335-4338), which is `on-bomb-detonated` and therefore REACTIVE, so it
     // is partitioned out of `standingLeeches` before it can ever reach this gap — `engine.ts:3860-
     // 3866` says so explicitly ("no corpus ship reaches it here … Valkyrie's `ally` one is
     // `on-bomb-detonated`, so it is reactive and never enters this map"). So this half is a real code
-    // gap with no known live-production instance, not a second confirmed regression. Tracked as its
-    // own follow-up alongside scenario 9's. The snapshot is kept (rather than the test deleted)
+    // gap with no known live-production instance, not a second confirmed regression. DELIBERATELY
+    // LEFT UNFIXED (owner ruling, SP-4b-2b Task 2b), and tripwired instead — see the "KNOWN GAP
+    // (tripwire)" describe in `src/utils/combat/__tests__/positionalDotLeech.test.ts`, which goes RED
+    // the moment a positional burst starts paying a detonation-scoped standing leech.
+    // The snapshot is kept (rather than the test deleted)
     // because `perTargetDealt` still pins that the cast itself lands per-victim every round.
     // Spot-checked for plausibility.
     snap(
