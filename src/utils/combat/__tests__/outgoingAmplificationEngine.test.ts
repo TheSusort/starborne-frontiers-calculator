@@ -37,6 +37,7 @@ const menaceAmp = (): Ability =>
     });
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 100, // force crits so amplify-on-crit is eligible every hit
     critDamage: 50,

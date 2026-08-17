@@ -232,6 +232,7 @@ describe('self-debuff gate in runPlayerTurn (Task 7)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 10000,
     crit: 0,
     critDamage: 0,

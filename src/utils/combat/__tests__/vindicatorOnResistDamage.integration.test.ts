@@ -80,6 +80,7 @@ const BASE = (
     slots: ShipSkills['slots'],
     overrides: Partial<CombatEngineInput> = {}
 ): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1,
     crit: 0,
     critDamage: 0,

@@ -156,6 +156,7 @@ const offensiveEnemy = (
     }) as EnemyAttacker;
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -221,6 +222,7 @@ const enemyMalvex = (id: string, shieldPctOfHp: number): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const BASE_ENEMY_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5_000, // player focus attack → the hit landing on the enemy Malvex.
     crit: 0,
     critDamage: 0,

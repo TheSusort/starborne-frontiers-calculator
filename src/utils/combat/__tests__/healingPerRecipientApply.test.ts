@@ -88,6 +88,7 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
 });
 
 const BASE = (): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

@@ -87,6 +87,7 @@ const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
 // firing-hit damage = 5000 (kills the front enemy when its HP ≤ 5000). Its active also applies
 // the Blast bomb to the front enemy.
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -240,6 +241,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
         // enemy (via the skill), which has no position. The bomb is applied to it. On death,
         // victim.position === undefined → splash gate blocks.
         const noPositionInput: CombatEngineInput = {
+            enemyAttackers: [],
             attack: 5000,
             crit: 0,
             critDamage: 0,

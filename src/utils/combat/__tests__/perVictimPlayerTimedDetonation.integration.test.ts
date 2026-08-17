@@ -159,6 +159,7 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
 // Non-positional BASE: a single focus dummy enemy, NO position/target/pattern/enemyAttackers — the
 // legacy focus-dummy timed path. Timed containers are seeded on the focus dummy ('enemy').
 const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: FOCUS_ATTACK,
     crit: 0,
     critDamage: 0,

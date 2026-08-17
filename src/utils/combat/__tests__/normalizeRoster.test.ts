@@ -57,7 +57,7 @@ describe('normalizeCombatRoster — auto-placement', () => {
         const out = normalizeCombatRoster(
             baseInput({ enemyAttackers: [enemyInput('e1'), enemyInput('e2'), enemyInput('e3')] })
         );
-        const slots = out.enemyAttackers!.map((e) => e.position);
+        const slots = out.enemyAttackers.map((e) => e.position);
         expect(new Set(slots).size).toBe(3);
         expect(slots[0]).toBe(DEFAULT_ENEMY_SLOT);
     });
@@ -107,7 +107,7 @@ describe('normalizeCombatRoster — auto-placement', () => {
             baseInput({ enemyAttackers: [enemyInput('e1'), enemyInput('e2'), enemyInput('e3')] })
         );
         // defaultEnemySlot order is ['M4','T4','B4',...]; index 0 takes the anchor.
-        expect(out.enemyAttackers!.map((e) => e.position)).toEqual(['M4', 'T4', 'B4']);
+        expect(out.enemyAttackers.map((e) => e.position)).toEqual(['M4', 'T4', 'B4']);
     });
 
     it('walks team actors back in defaultTeamSlot order, not collision-resolver order', () => {

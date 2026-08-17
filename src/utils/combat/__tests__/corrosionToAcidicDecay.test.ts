@@ -131,6 +131,7 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
         }) as TeamActor;
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 0,
         crit: 0,
         critDamage: 0,

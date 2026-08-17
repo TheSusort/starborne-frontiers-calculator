@@ -116,6 +116,7 @@ const aegisActor = (position: Position, pattern: ParsedPattern): TeamActorEngine
 
 /** The shielded ally sits at M4, in AEGIS's (M3) footprint. */
 const shieldedAlly = (): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

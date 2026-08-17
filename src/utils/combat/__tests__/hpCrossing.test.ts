@@ -68,6 +68,7 @@ const cheatDeathBuff = () => ({
  * damaging (empty skills) so the only HP-intake is the enemy attacks / DoT ticks.
  */
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1000,
     crit: 0,
     critDamage: 0,

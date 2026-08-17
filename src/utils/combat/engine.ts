@@ -1258,7 +1258,7 @@ export interface CombatEngineInput {
      *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier.
      *  `defence` and `hp` are optional now (default 0 for bare-stat legacy path); Task 9
      *  populates them with real matchup values via the adapter. */
-    enemyAttackers?: {
+    enemyAttackers: {
         id: string;
         stats: {
             attack: number;

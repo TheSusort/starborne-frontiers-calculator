@@ -87,6 +87,7 @@ const collect = (input: CombatEngineInput): CombatEvent[] => {
 
 /** Shared minimal DPS-mode base (no healTargetId). */
 const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

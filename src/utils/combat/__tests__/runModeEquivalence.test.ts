@@ -44,6 +44,7 @@ const selfHealSkills = (): ShipSkills => ({
 });
 
 const base = (): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 10_000,
     crit: 0,
     critDamage: 0,

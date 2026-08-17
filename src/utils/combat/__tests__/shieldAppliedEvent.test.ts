@@ -41,6 +41,7 @@ describe('shield-applied event + on-shield-applied trigger (H3.5 definitions)', 
 // ---------------------------------------------------------------------------
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     // Focus does NO damage and IS the heal target — it just sits and receives shield.
     attack: 0,
     crit: 0,

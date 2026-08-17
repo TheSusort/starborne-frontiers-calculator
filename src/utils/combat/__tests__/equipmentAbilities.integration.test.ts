@@ -96,6 +96,7 @@ function sumHeal(
 
 /** Base engine input: neutral stats, enemy never dies, healing mode on (focus is target). */
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -968,6 +969,7 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
 
     /** Base engine input for Second Wind integration: healing mode, 'attacker' is the healTarget. */
     const SW_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -1187,6 +1189,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
 
     /** Base input: healing mode, focus 'attacker' is the HEALER (slow), heal target is 'tank'. */
     const AMP_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 1,
         crit: 0,
         critDamage: 0,
@@ -1403,6 +1406,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
 
     /** Base input: healing mode, focus 'attacker' is healer + recipient (self-heal). Never attacked. */
     const EXU_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 1,
         crit: 0,
         critDamage: 0,
@@ -1741,6 +1745,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
 
     /** Base engine input: healing mode, slow focus 'attacker' is the heal target. */
     const MART_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -2082,6 +2087,7 @@ function offensiveEnemyAt(id: string, position: Position, attack: number) {
 
 /** Positional base input: healing mode, focus 'attacker' is the heal-target SURVIVOR at M3. */
 const POS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -2519,6 +2525,7 @@ describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-track
 
     /** Base engine input: healing mode, 'attacker' is the heal target carrying the reactive buff. */
     const PR8_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -3550,6 +3557,7 @@ function makeShroudInput(
     opts: { focusPosition?: Position; side?: 'player' } = {}
 ): CombatEngineInput {
     return {
+        enemyAttackers: [],
         attack: 1,
         crit: 0,
         critDamage: 0,
@@ -3912,6 +3920,7 @@ describe('D-PR reactive cleanse — Reactive Ward (on-attacked) cleanses 1 / 2-o
 
     /** Healing-mode base for the Reactive Ward carrier ('attacker' is the heal target). */
     const WARD_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -4072,6 +4081,7 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
 
     /** Healing-mode base: the carrier 'attacker' is the heal target (so cleanseCount is recorded). */
     const WS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: ATTACK,
         crit: 0,
         critDamage: 0,
@@ -4386,6 +4396,7 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
 
     /** Base healing-mode input: focus 'attacker' positioned, plenty of HP, multi-round. */
     const CLOAK_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 5000,
         crit: 0,
         critDamage: 0,

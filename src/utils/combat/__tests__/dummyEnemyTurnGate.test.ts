@@ -60,6 +60,7 @@ const basicEnemyAt = (id: string, position: Position): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 10000,
     crit: 0,
     critDamage: 0,

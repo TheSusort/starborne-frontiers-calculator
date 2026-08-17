@@ -79,6 +79,7 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
 });
 
 const BASE = (): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -233,6 +234,7 @@ describe('SP-3b Task 7 (review fix): flag-off fence covers HoT + leech + reactiv
         });
 
     const HOT_LEECH_REACTIVE_BASE = (): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 5000,
         crit: 0,
         critDamage: 0,

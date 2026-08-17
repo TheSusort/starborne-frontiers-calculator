@@ -217,6 +217,7 @@ describe('C2b-2 T2: round-ended event fires once per round', () => {
     });
 
     const BASE_EOR = (): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 5000,
         crit: 0,
         critDamage: 0,
@@ -683,6 +684,7 @@ describe('C2b-2 T5: ship-destroyed killerId + byDirectDamage', () => {
     /** Focus IS the heal target; it does nothing damaging so the only HP-intake is
      *  the enemy attack / DoT tick. defence 0 → intake = raw damage. */
     const T5_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 1000,
         crit: 0,
         critDamage: 0,

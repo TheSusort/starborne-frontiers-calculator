@@ -173,6 +173,7 @@ const debuffEnemy = (id: string): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const MORAO_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -490,6 +491,7 @@ const allyBTeamActor = (): TeamActor =>
     }) as TeamActor;
 
 const CULTIVATOR_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

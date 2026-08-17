@@ -159,6 +159,7 @@ const bystander = (id: string, position: Position, security = 0): TeamActorEngin
     }) as TeamActorEngineInput;
 
 const focus = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 100,
     critDamage: 150,
@@ -290,7 +291,7 @@ describe('SP-4b-2 D2 — enemy-side mirror: an ENEMY on-crit debuff lands on the
 
     it('never fires when the enemy cast cannot crit (non-vacuity guard)', () => {
         const noCrit = enemySide(basePattern());
-        const enemies = noCrit.enemyAttackers!;
+        const enemies = noCrit.enemyAttackers;
         expect(
             applications({
                 ...noCrit,

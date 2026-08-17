@@ -195,6 +195,7 @@ const aegisActor = (position: Position, pattern: ParsedPattern): TeamActorEngine
 /** A same-side ally carrying a pre-combat 100%-of-maxHP shield. Its own active is a no-op — this
  *  test only cares about what the ally RECEIVES, not what it deals. */
 const shieldedAlly = (opts: { withShield: boolean }): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

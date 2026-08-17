@@ -54,6 +54,7 @@ const OUT_DD = 'Out. Damage Down II';
 
 describe('Warden Out. Damage Down II — self-inflicted-debuff reactive (Ship-kit W7)', () => {
     const makeInput = (): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 10_000,
         crit: 0,
         critDamage: 0,

@@ -179,6 +179,7 @@ describe('Oleander (player-side) — RoT routes to the inflicting ally, capped o
         }) as TeamActor;
 
     const BASE = (): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 100,
         crit: 0,
         critDamage: 0,
@@ -402,6 +403,7 @@ const hayyanTeamActor = (): TeamActor =>
     }) as TeamActor;
 
 const HAYYAN_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

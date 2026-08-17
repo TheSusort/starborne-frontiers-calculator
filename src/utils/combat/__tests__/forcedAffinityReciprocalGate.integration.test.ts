@@ -51,6 +51,7 @@ const ishaSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 15000,
     crit: 0,
     critDamage: 150,

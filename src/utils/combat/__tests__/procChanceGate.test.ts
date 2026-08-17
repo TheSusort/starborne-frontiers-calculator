@@ -28,6 +28,7 @@ const makeHealAbility = (procChance?: number): Ability => ({
 });
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 100, // every hit crits → on-crit fires once per round
     critDamage: 0,

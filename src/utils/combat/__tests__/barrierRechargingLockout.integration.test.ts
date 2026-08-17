@@ -319,6 +319,7 @@ describe('Barrier Recharging: the CAST-path gate (a charge-slot Barrier grant vs
         }) as EnemyAttacker;
 
     const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 0,
         crit: 0,
         critDamage: 0,

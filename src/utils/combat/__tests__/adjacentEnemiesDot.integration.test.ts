@@ -276,6 +276,7 @@ describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes o
  */
 describe('Ship-kit W5 Task B2: DPS invariance (single-dummy, non-positional)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
+        enemyAttackers: [],
         attack: 1000,
         crit: 0,
         critDamage: 0,

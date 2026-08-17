@@ -62,6 +62,7 @@ const noopActive: ShipSkills['slots'][number] = {
 };
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1,
     crit: 0,
     critDamage: 0,

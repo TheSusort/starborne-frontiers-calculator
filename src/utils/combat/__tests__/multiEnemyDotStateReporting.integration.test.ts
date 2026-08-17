@@ -114,6 +114,7 @@ const damageKit = (multiplier: number): ShipSkills => ({
 /** Focus attacker with no damage skill: the row's DoT-state fields are the only thing under test,
  *  and a zero-damage focus keeps every enemy alive for the whole window. */
 const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

@@ -147,6 +147,7 @@ const enemyBreaker = (position: Position, attack: number): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const focus = (): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

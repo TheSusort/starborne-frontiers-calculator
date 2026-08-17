@@ -92,6 +92,7 @@ const activeInferno: Ability = {
 
 /** Base engine input: neutral stats, enemy never dies, no crit/affinity variance. */
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

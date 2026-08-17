@@ -78,6 +78,7 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (player si
         idc = 0;
         let engine: StatusEngine | undefined;
         runCombat({
+            enemyAttackers: [],
             attack: 1000,
             crit: 0,
             critDamage: 0,
@@ -224,6 +225,7 @@ describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runti
     it('even with 3 pre-existing generic DoT entries, Stasis does NOT land (Acidic Decay family count is 0 today)', () => {
         idc = 0;
         const result = runCombat({
+            enemyAttackers: [],
             attack: 1000,
             crit: 0,
             critDamage: 0,

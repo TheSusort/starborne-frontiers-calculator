@@ -57,6 +57,7 @@ const manualEnemy = (
 });
 
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1000,
     crit: 0,
     critDamage: 0,

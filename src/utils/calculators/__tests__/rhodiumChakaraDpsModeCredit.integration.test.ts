@@ -165,6 +165,7 @@ const rhodiumRun = (enemyHp: number, rounds: number) =>
  *  skill is 0%-damage by construction (both ships' texts above) — any credited direct damage is
  *  unambiguously the reactive proc. */
 const buildDpsInput = (shipSkills: ReturnType<typeof rhodiumShipSkills>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: ATTACK,
     crit: 0,
     critDamage: 0,

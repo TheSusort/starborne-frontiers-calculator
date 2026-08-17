@@ -21,6 +21,7 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
 // A focus actor that does nothing damaging (so DoT/charge paths stay quiet); the heal
 // ability lives on the active slot. enemyHp huge → enemy never dies.
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

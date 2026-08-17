@@ -26,6 +26,7 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
 });
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

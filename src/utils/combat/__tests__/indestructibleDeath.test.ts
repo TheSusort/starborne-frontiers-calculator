@@ -65,6 +65,7 @@ const damagePlusInfernoSkills = (): ShipSkills => {
 };
 
 const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 10000,
     crit: 0,
     critDamage: 0,

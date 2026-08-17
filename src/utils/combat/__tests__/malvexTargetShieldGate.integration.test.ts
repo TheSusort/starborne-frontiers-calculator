@@ -97,6 +97,7 @@ const enemyActor = (
 /** The focus player actor is the Barrier holder: fast (so the grant resolves before any hit lands),
  *  positioned, and aimed at the single enemy — whose `shieldPool` is what the gate reads. */
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

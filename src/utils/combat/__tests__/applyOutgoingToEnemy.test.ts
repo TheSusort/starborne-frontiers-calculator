@@ -104,6 +104,7 @@ const enemyAttacker = (id: string, shipSkills?: ShipSkills): EnemyAttacker => ({
 });
 
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

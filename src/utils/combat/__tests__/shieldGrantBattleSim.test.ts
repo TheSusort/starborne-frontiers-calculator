@@ -41,6 +41,7 @@ const SHIELD_ALL_ALLIES_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     // Focus does NO damage and IS the heal target — it just sits and receives the team shield.
     attack: 0,
     crit: 0,

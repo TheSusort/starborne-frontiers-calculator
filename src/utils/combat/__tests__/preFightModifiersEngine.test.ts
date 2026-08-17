@@ -79,6 +79,7 @@ describe('F3 — createActor pre-fight shield seeding', () => {
 const emptySkills = (): ShipSkills => ({ slots: [{ slot: 'active', abilities: [] }] });
 
 const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1000,
     crit: 0,
     critDamage: 0,

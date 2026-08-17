@@ -185,6 +185,7 @@ const offensiveEnemy = (
     }) as EnemyAttacker;
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

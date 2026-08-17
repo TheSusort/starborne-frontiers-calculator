@@ -231,6 +231,7 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
     // always did — the fix adds a second reader, it does not move the first one.
     it('a NON-positional run still gathers through the scalar credit channel', () => {
         const result = runCombat({
+            enemyAttackers: [],
             attack: 4321,
             crit: 0,
             critDamage: 0,

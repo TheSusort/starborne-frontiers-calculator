@@ -121,6 +121,7 @@ function collectShieldApplied(input: CombatEngineInput) {
 }
 
 const BASE: CombatEngineInput = {
+    enemyAttackers: [],
     // attack: 0 so Laika's own damage rider (110%/150%) never confounds the enemy's shieldPool
     // via the ordinary shield-absorbs-damage-first mechanic — the ONLY shield reduction under
     // test is the deliberate stripShieldPct call, not incidental combat damage.

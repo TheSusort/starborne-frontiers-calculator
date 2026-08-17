@@ -115,6 +115,7 @@ const enemyHitter = (id: string, speed: number, selfBuff: boolean): EnemyAttacke
 // a heal target with a huge HP pool (survives, incoming damage observable), and room for
 // team actors + enemy attackers. enemyHp huge so the dummy never dies.
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 3000,
     crit: 0,
     critDamage: 0,

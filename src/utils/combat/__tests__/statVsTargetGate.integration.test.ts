@@ -44,6 +44,7 @@ const cobaltShipSkills = (): ShipSkills =>
 describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () => {
     it('player-side Cobalt: the 25%-max-HP bonus lands when its own maxHp exceeds the (dummy) enemy maxHp', () => {
         const makeInput = (hp: number, enemyHp: number): CombatEngineInput => ({
+            enemyAttackers: [],
             attack: 1000,
             crit: 0,
             critDamage: 0,
@@ -196,6 +197,7 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
         // RoundData.activeEnemyDebuffs (the reliable per-round landed-debuff source used
         // elsewhere in this suite) proves the real effect landed, not just the event.
         const makeInput = (critDamage: number): CombatEngineInput => ({
+            enemyAttackers: [],
             attack: 1000,
             crit: 0,
             critDamage,
@@ -265,6 +267,7 @@ describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', (
         // chargeCount kept high so the ship never actually reaches its charged skill (stays on
         // 'active' every round) — isolating the charge-count delta as the only observable signal.
         const makeInput = (speed: number, enemySpeed: number): CombatEngineInput => ({
+            enemyAttackers: [],
             attack: 1000,
             crit: 0,
             critDamage: 0,

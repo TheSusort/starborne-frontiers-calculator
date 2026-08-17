@@ -87,6 +87,7 @@ const apexShipSkills = (includeSelfShield: boolean): ShipSkills => ({
 
 describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 4, Task 3)', () => {
     const makeInput = (includeSelfShield: boolean): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 10000,
         crit: 0,
         critDamage: 0,

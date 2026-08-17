@@ -143,6 +143,7 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
 // no positions/teamActors/enemyAttackers. SP-U U5: the enemy now takes the round's dealt damage
 // through the shared per-victim funnel, so it records its OWN intake into the per-actor map.
 const NON_POSITIONAL: CombatEngineInput = {
+    enemyAttackers: [],
     attack: 5_000,
     crit: 0,
     critDamage: 0,

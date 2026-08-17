@@ -48,6 +48,7 @@ const selfShield = (pct: number) =>
 // Tank = focus actor 'attacker', speed 100 (acts BEFORE the speed-50 enemy each round),
 // defence 0 (intake == enemy attack), no crit anywhere → deterministic.
 const TANK = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

@@ -77,6 +77,7 @@ describe('blockBuffBuffs helpers', () => {
 let idCounter = 0;
 
 const blockBuffEngineBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

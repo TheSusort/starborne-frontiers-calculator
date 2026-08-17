@@ -45,6 +45,7 @@ const dotSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 15000,
     crit: 50,
     critDamage: 150,
@@ -1275,6 +1276,7 @@ describe('accumulate-detonate display in activeEnemyDebuffs', () => {
     const run = (overrides: Partial<CombatEngineInput> = {}) => {
         idCounter = 0;
         return runCombat({
+            enemyAttackers: [],
             attack: 15000,
             crit: 50,
             critDamage: 150,
@@ -1551,6 +1553,7 @@ const collectAttacked = (input: CombatEngineInput) => {
 
 /** Base healing-mode input: focus attacker is the heal target, huge HP so it never dies. */
 const healBase = (): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1000,
     crit: 0,
     critDamage: 0,
@@ -1812,6 +1815,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
         });
 
         runCombat({
+            enemyAttackers: [],
             attack: 5000,
             crit: 0,
             critDamage: 0,
@@ -1892,6 +1896,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
         bus.on('heal-performed', (e) => healPerfs.push(e));
 
         runCombat({
+            enemyAttackers: [],
             attack: 5000,
             crit: 0,
             critDamage: 0,
@@ -1951,6 +1956,7 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
         });
 
         runCombat({
+            enemyAttackers: [],
             attack: 5000,
             crit: 0,
             critDamage: 0,

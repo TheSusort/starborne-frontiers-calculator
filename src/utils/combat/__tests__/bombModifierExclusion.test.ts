@@ -128,6 +128,7 @@ const selfBuffingVictim = (id: string, position: Position, hp: number): TeamActo
 });
 
 const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -240,6 +241,7 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
         // countdown decrements: round 1 → 1 (no burst), round 2 → 0 (BURST). Raw burst = 3000.
         // IF the +50% incoming modifier leaked into processBombs the burst would be 4500. Lock 3000.
         const result = runCombat({
+            enemyAttackers: [],
             attack: 0,
             crit: 0,
             critDamage: 0,

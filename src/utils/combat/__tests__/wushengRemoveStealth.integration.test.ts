@@ -218,6 +218,7 @@ const flatOffensiveEnemy = (id: string, position: Position, speed: number): Enem
 });
 
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

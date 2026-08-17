@@ -147,6 +147,7 @@ const mit = (defence: number): number =>
     defence > 0 ? 1 - calculateDamageReduction(defence) / 100 : 1;
 
 const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

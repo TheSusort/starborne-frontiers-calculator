@@ -95,6 +95,7 @@ const damageWithDebuffSlot = (): ShipSkills['slots'][number] => ({
 
 // Minimal focus attacker (no positioning) that fires its active slot (so sourceFired fires 'active').
 const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1000,
     crit: 0,
     critDamage: 0,

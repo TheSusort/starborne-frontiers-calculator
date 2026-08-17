@@ -48,6 +48,7 @@ const REACTIVE_SELF_SHIELD_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     // Focus does NO damage and IS the heal target — it just sits; it is NOT the shield owner.
     attack: 0,
     crit: 0,

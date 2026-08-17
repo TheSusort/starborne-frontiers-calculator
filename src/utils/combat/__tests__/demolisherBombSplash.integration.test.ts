@@ -312,6 +312,7 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
         // enemy-side actor, so adjacentAllyIdsFor(dummy) resolves to the empty set (no OTHER
         // same-side actor exists) — DPS-inert by construction, not by a special-cased guard.
         const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+            enemyAttackers: [],
             attack: 1000,
             crit: 0,
             critDamage: 0,

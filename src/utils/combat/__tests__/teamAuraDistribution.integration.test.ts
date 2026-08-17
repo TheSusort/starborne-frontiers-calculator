@@ -157,6 +157,7 @@ const auraSourceTeamActor = (id: string, aura: Ability): TeamActorEngineInput =>
     teamAlly(id, 0, passiveOnly(aura));
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

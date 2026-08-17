@@ -255,6 +255,7 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
  */
 describe('Ship-kit W5 Task A3: DPS invariance (single-dummy, non-positional)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
+        enemyAttackers: [],
         attack: 1000,
         crit: 0,
         critDamage: 0,

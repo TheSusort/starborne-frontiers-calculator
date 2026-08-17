@@ -132,6 +132,7 @@ const BASE = (
 ): CombatEngineInput => {
     const { chargedMultiplier = 100, activeMultiplier = 100, ...rest } = overrides;
     return {
+        enemyAttackers: [],
         attack: ATTACK,
         crit: 0,
         critDamage: 0,

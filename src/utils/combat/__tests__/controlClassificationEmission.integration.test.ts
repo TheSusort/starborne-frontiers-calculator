@@ -28,6 +28,7 @@ import { createEventBus, CombatEvent } from '../events';
 let idCounter = 0;
 
 const engineBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

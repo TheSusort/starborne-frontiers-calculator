@@ -98,6 +98,7 @@ const nonPositionalEnemy = (
 
 /** Build a one-round healing-mode run: focus actor 'attacker' IS the bound tank/healTarget. */
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

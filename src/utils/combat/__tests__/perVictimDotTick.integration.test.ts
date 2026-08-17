@@ -143,6 +143,7 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
 // Non-positional BASE: a single focus dummy enemy, NO position/target/pattern/enemyAttackers — the
 // legacy DPS path. DoT containers are seeded on the focus dummy ('enemy') for the dummy-tick path.
 const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: FOCUS_ATTACK,
     crit: 0,
     critDamage: 0,

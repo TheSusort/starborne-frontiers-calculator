@@ -103,6 +103,7 @@ const BASE = (
     target?: ParsedTarget,
     pattern?: ParsedPattern
 ): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 0,

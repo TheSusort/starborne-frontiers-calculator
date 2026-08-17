@@ -85,6 +85,7 @@ const damageKit = (multiplier: number, id: string): ShipSkills => ({
 });
 
 const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

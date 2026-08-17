@@ -168,6 +168,7 @@ const offensiveEnemy = (
 
 // ── Engine input factory ───────────────────────────────────────────────────────
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,

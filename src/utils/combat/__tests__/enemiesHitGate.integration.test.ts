@@ -268,6 +268,7 @@ const tygrShipSkills = (): ShipSkills =>
 
 const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
     const result = runCombat({
+        enemyAttackers: [],
         attack: 1000,
         crit: 0,
         critDamage: 0,
