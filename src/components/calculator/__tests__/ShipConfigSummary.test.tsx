@@ -10,11 +10,17 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ShipConfigSummary } from '../ShipConfigSummary';
 import type { DPSShipConfig } from '../../../types/calculator';
-import type {
-    DPSSimulationResult,
-    RoundStatsSnapshot,
+import {
+    simulateDPS,
+    type DPSSimulationResult,
+    type RoundStatsSnapshot,
 } from '../../../utils/calculators/dpsSimulator';
+import { setupKeyedTestRng } from '../../../utils/calculators/rateAccumulator';
 import { buildDefaultShipSkills } from '../../../utils/abilities/configToSimInputs';
+import {
+    dotKit,
+    realEnemyInput,
+} from '../../../utils/calculators/__testutils__/dpsRealEnemyFixture';
 
 const config = (): DPSShipConfig => ({
     id: '1',
@@ -165,5 +171,22 @@ describe('ShipConfigSummary buffed stats', () => {
         expect(screen.getByText(/75% \/ 200%/)).toBeInTheDocument();
         expect(screen.getByText('2.50x')).toBeInTheDocument();
         expect(screen.queryByText('3.00x')).not.toBeInTheDocument();
+    });
+
+    it('shows the Direct breakdown row from a real simulateDPS run, not a hand-built literal', () => {
+        // The hand-built `simResult()` literal above stays green through the exact defect class
+        // #324 introduced (a `> 0`-guarded row silently zeroed on the positional path), so this
+        // one assertion drives a REAL run through the same real-enemy fixture the calculator and
+        // chart suites use.
+        setupKeyedTestRng(12345);
+        const result = simulateDPS(realEnemyInput({ shipSkills: dotKit() }));
+        expect(result.summary.totalDirectDamage).toBeGreaterThan(0);
+
+        renderSummary(result);
+
+        const directLabel = screen.getByText('Direct');
+        expect(directLabel.nextElementSibling?.textContent).toBe(
+            result.summary.totalDirectDamage.toLocaleString()
+        );
     });
 });

@@ -16,6 +16,7 @@ import { Ability, AbilityTarget, IncomingHitContext, ShipSkills } from '../../ty
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
+import { DEFAULT_BASE_PATTERN } from '../calculators/dpsEnemyPlacement';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import { toEnemyModifiers, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
@@ -66,7 +67,7 @@ import {
     type AppliedVictimDamage,
     type SubAttackOutcome,
 } from './positionalApply';
-import type { AttackerDamageScalars } from './victimDamage';
+import type { AttackerDamageScalars, VictimDefenseProfile } from './victimDamage';
 import { victimHitDamage } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake, conditionMet } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
@@ -92,6 +93,7 @@ import {
     HealingRuntimeCtx,
     PlayerActorRuntime,
     PlayerRoundCtx,
+    PassiveSlotHit,
     PlayerTurnResult,
     RateGate,
     runPlayerTurn,
@@ -915,20 +917,38 @@ function processBombs(args: {
     }
 }
 
+/** SP-4b-2 D6: the footprint of an `all-enemies` ability — every occupied cell of the opposing
+ *  board, all at ORIGIN role (full damage; `resolveCells` special-cases shape 'all' and ignores
+ *  the anchor's geometry entirely). Used by `passiveSlotPattern` for a passive-slot damage
+ *  ability whose own `target` is `'all-enemies'` (Judge, Incinerator). */
+const ALL_ENEMIES_PATTERN: ParsedPattern = {
+    raw: 'all enemies',
+    shape: 'all',
+    range: 'all',
+    modifiers: {},
+};
+
 // Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
 // for pct% of the accumulated total on expiry (game-categorised as detonation damage).
 // directDamage already includes affinity, so no extra affinity multiplier is applied.
-// Per-actor attribution (Task 4): the accumulation INPUT is the summed direct damage of ALL
-// players this round (spec: Echoing Burst gathers all players' direct); the OUTPUT burst is
-// credited to the accumulator's applier via `creditDetonation`.
+// Per-actor attribution (Task 4): the accumulation INPUT is the summed direct damage of the
+// ACCUMULATING SIDE this round (spec: Echoing Burst gathers all its side's direct); the OUTPUT
+// burst is credited to the accumulator's applier via `creditDetonation`.
+//
+// SP-4b-2 D1: the input is now supplied by `directDealtBy(<that side's roster>)`, which reads the
+// scalar credit channel AND its positional twin. It used to be a bare sum over the scalar
+// `roundDamage` map, which a positional run never writes — so every accumulator drained on
+// schedule for exactly 0.
 function processAccumulators(args: {
     pendingAccumulators: PendingAccumulator[];
-    allPlayersDirect: number;
+    /** Direct damage the ACCUMULATING side (the side that applied these accumulators — i.e. the
+     *  bursting actor's OPPOSING roster) has dealt so far this round. */
+    gatheredDirect: number;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
     for (let i = args.pendingAccumulators.length - 1; i >= 0; i--) {
         const acc = args.pendingAccumulators[i];
-        acc.accumulated += args.allPlayersDirect;
+        acc.accumulated += args.gatheredDirect;
         acc.roundsRemaining -= 1;
         if (acc.roundsRemaining <= 0) {
             args.creditDetonation(acc.sourceId, acc.accumulated * (acc.pct / 100));
@@ -1731,8 +1751,15 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  by DPSSimulationSummary; a future task can surface it as totalGenericDamage. */
         generic: number;
     };
-    /** SP-U U5: the real DPS enemy's end-of-run outcome. Meaningful only in pure DPS mode (no
-     *  real enemy attackers); the DPS adapter maps it onto DPSSimulationSummary. */
+    /** SP-U U5: the real DPS enemy's end-of-run outcome — read off the singular `enemy` actor,
+     *  so it is meaningful ONLY when that actor is the real target (no enemy attackers supplied).
+     *
+     *  NO PRODUCTION READER since SP-4b-2a. The DPS adapter used to map this onto
+     *  `DPSSimulationSummary`; every `simulateDPS` run now supplies a real positioned roster, so
+     *  these fields describe the never-dying dummy (`survived: true`, `roundsToKill: undefined`,
+     *  `finalHpPct` of a billion-HP sink) and the adapter re-derives all three from its own
+     *  `ship-destroyed` bus tap instead. Kept on the return type for the direct-`runCombat`
+     *  fixtures that still read it; it goes with the dummy in SP-4c. */
     enemyOutcome: {
         /** True when the enemy never reached 0 HP within the round window. */
         survived: boolean;
@@ -1859,8 +1886,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         // SP-U U5: the DPS opponent is now a REAL, destructible actor. In pure DPS mode (no real
         // enemyAttackers) it takes the round's dealt damage through the shared per-victim
         // `applyVictimDamage` funnel, its HP declines naturally, and it dies at 0 HP (terminating
-        // the run). In sim/healing mode the fight runs on the positioned enemy roster and this
-        // actor is a vestigial huge-HP sink (never dies — see `dpsEnemyTarget`).
+        // the run). Whenever an enemy roster IS supplied — sim, healing, and since SP-4b-2a every
+        // DPS-calculator run — the fight runs on the positioned roster and this actor is a
+        // vestigial huge-HP sink (never dies — see `dpsEnemyTarget` for what "pure DPS mode"
+        // does and does not still cover).
         side: 'enemy',
         kind: 'enemy',
         stats: {
@@ -2427,9 +2456,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // SP-U U5: the dummy `enemy` is the REAL, destructible DPS target ONLY in pure DPS mode —
     // i.e. when NO real enemy attackers carry the fight. In that case its HP declines through the
     // per-victim `applyVictimDamage` funnel, it dies at 0 HP, and the run terminates (rounds-to-
-    // kill). When enemy attackers exist (sim/healing mode) the positioned roster is the real
-    // opponent and this `enemy` is a vestigial huge-HP sink that must NEVER die or terminate the
-    // run (kept on the legacy scalar decline, byte-identical).
+    // kill). When enemy attackers exist the positioned roster is the real opponent and this
+    // `enemy` is a vestigial huge-HP sink that must NEVER die or terminate the run (kept on the
+    // legacy scalar decline, byte-identical).
+    //
+    // READ THIS BEFORE TRUSTING ANY "pure DPS mode" PHRASE ELSEWHERE IN THIS FILE (SP-4b-2a).
+    // The discriminator is ROSTER EMPTINESS, never `runMode`, and the two have come apart:
+    //   • `simulateDPS` (the DPS calculator, `mode: 'dps'`) now ALWAYS supplies a real positioned
+    //     enemy — explicit from the page, else synthesized from its scalars — so `dpsEnemyTarget`
+    //     is FALSE on every shipped DPS run and the dummy is vestigial there too.
+    //   • the roster-less branch survives only for DIRECT `runCombat` callers (the remaining
+    //     engine fixtures), which SP-4b-2b migrates and SP-4c deletes.
+    // So a comment reading "pure DPS mode" means "a caller that passed no `enemyAttackers`" — a
+    // test-only shape today — and NOT "the DPS calculator". Every such phrase below is historical
+    // rationale kept for SP-4c, deliberately not rewritten into a claim about the shipped path.
     const dpsEnemyTarget = enemyAttackerInputs.length === 0;
     // Validate enemy attacker ids before building any actors: an id that duplicates another
     // enemy attacker, or collides with a reserved/player id (the singular enemy entity, the
@@ -2471,6 +2511,53 @@ export function runCombat(rawInput: CombatEngineInput): {
     const enemyPlayerRuntimeByActorId = new Map<string, PlayerActorRuntime>(
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
+
+    // SP-4b-2 D3: every enemy-side actor that can CARRY a DoT container, in board order
+    // [dummy sink, …positioned enemy attackers]. The RoundData DoT-state reporting fields read
+    // this instead of the dummy's containers alone.
+    //
+    // WHY: the `corrosionEntries`/`infernoEntries`/`genericDoTEntries`/`pendingBombs` closures
+    // bound above are the DUMMY actor's arrays, captured ONCE at construction. Application and
+    // the per-victim tick both correctly target the REAL positioned victim's own arrays, so once
+    // a positioned roster exists the dummy's arrays are never written and the four reporting
+    // fields froze at 0/[] on every positional run (measured: `enemy-1.infernoEntries` carried
+    // [{stacks:1,tier:15}] on a round the row reported `activeInfernoStacks: 0`).
+    //
+    // The set is DISJOINT — a DoT lands on exactly one victim object — so aggregating across it
+    // cannot double-count. With no `enemyAttackers` (direct-engine callers) it is [enemy], making
+    // the reads byte-identical to the old closure. Read LIVE (`a.corrosionEntries`, not a cached
+    // array) because the Cheat-Death wipe REASSIGNS these properties rather than splicing them.
+    //
+    // A plain array, not a getter: `enemyAttackerActors` is never mutated after construction
+    // (verified — no push/splice anywhere), so the MEMBERSHIP is fixed for the run while each
+    // member's containers are still read live at reporting time. A future PR that summons an
+    // enemy mid-run must revisit this line.
+    const dotCarrierActors: CombatActor[] = [enemy, ...enemyAttackerActors];
+
+    /**
+     * SP-4b-2 D3, task-14 finding 3 — is this carrier's DoT container still LIVE state, or a
+     * corpse's frozen leftovers?
+     *
+     * Nothing clears a DoT container on death (`recordDestroyed` in state.ts only stamps
+     * `destroyedRound` and emits), so a killed carrier keeps whatever stood on it. Whether that
+     * is real depends on ONE thing: does the carrier still take its turn and TICK?
+     *
+     * This predicate is therefore the enemy-side restriction of the ROUND LOOP'S OWN dead-skip
+     * (see the `isDummyEnemy` guard at the top of the turn body) — deliberately derived from it
+     * rather than invented, so the two cannot drift into disagreement:
+     *   • a destroyed POSITIONED enemy attacker is `continue`d before its DoT-tick prologue, so
+     *     its stacks are frozen forever: they deal nothing, never expire, and were still being
+     *     summed into every remaining round's report. That is the phantom, and it is excluded.
+     *   • the DUMMY sink is explicitly EXEMPT from that skip, so it keeps taking turns and its
+     *     containers keep ticking and expiring normally. Its entries are live state and are
+     *     reported exactly as before — which is also what keeps non-positional runs
+     *     byte-identical (measured: 3 test files reach a dead dummy holding entries —
+     *     engine.events, indestructibleDeath, bombSplashOnDeath — and none of them changes).
+     * The heal-target exemption in the round loop's predicate has no counterpart here: the heal
+     * target is a player-side actor and never a member of `dotCarrierActors`.
+     */
+    const dotCarrierReports = (a: CombatActor): boolean =>
+        a.destroyedRound === undefined || a.id === enemy.id;
 
     // ── Unified roster seam (bySide unification PR1) ───────────────────────────
     // The canonical, side-agnostic actor set, named once. Order MATTERS: it drives
@@ -2554,7 +2641,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     //  - PLAYER actor's `enemy-buff` gate → opposing side = the enemy attacker(s). Aggregation:
     //    UNION of every enemy attacker's self-buff names (the condition is "does an enemy have a
-    //    buff", not "does THIS enemy"). Inert in DPS mode (no enemy attackers → empty list).
+    //    buff", not "does THIS enemy"). NOT inert on a DPS run any more (SP-4b-2a): every
+    //    `simulateDPS` run supplies a real enemy, so this reads that enemy's self-buffs. It is
+    //    empty in PRACTICE for a SYNTHESIZED enemy only because that actor carries no skills and
+    //    so grants itself nothing — an emptiness of content, not of roster. Only a caller that
+    //    passes no `enemyAttackers` at all still gets the structurally-empty list.
     //  - PLAYER actor's `self-debuff` gate → its OWN enemy-applied debuffs (per-target store keyed
     //    by its id — the tank carries the enemy attacker's debuffs).
     //  - ENEMY actor's `enemy-buff` gate → opposing side = the player team (union of player
@@ -2577,8 +2668,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
     // Sub-project I, PR I5 — count (not union) of opposing actors holding Stealth, for
     // Selenite's "10% more direct damage for every enemy with Stealth" count-scaling.
-    // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric);
-    // DPS mode has no enemy attackers → livingEnemyAttackerIds() is empty → 0, byte-identical.
+    // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric).
+    // SP-4b-2a: a DPS run DOES have enemy attackers now, so this counts them; it still reads 0
+    // against the synthesized stand-in (no skills → it never gains Stealth). Only a caller that
+    // passes no `enemyAttackers` gets the structurally-empty `livingEnemyAttackerIds()`.
     const playerStealthedEnemyCount = (): number =>
         countOwnersWithSelfBuff(statusEngine, livingEnemyAttackerIds(), 'Stealth');
     const enemyStealthedEnemyCount = (): number =>
@@ -3070,9 +3163,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     //    funnel; if that crosses 0 HP, `recordDestroyed` stamps `destroyedRound` and emits
     //    ship-destroyed with `inTurnLoop` false, so this IS a genuine Path-B post-round death (see
     //    the "Path-B drain (Task 10)" block right after that `applyVictimDamage` call, ~line
-    //    7742). The round loop then breaks (the row for the killing round is already pushed), so
+    //    10554). The round loop then breaks (the row for the killing round is already pushed), so
     //    the buffered grant lands only if the run continued — it currently does not, since the run
-    //    terminates the round the DPS enemy dies. In sim/healing mode the vestigial dummy sink
+    //    terminates the round the DPS enemy dies. Whenever an enemy roster is supplied — sim,
+    //    healing, and since SP-4b-2a every DPS-calculator run — the vestigial dummy sink
     //    (`!dpsEnemyTarget`) never dies, so it never reaches this path. Real positioned enemy
     //    attackers still die DURING a turn (positional applyOutgoingToEnemy → recordDestroyed in
     //    the live queue) → Path A, not B. Enemy-incoming-accounting nuances around this tail are
@@ -4030,6 +4124,51 @@ export function runCombat(rawInput: CombatEngineInput): {
             procStandingLeeches(sourceId, channel, amount);
             input.__testTapCreditDamage?.(sourceId, channel, amount);
         };
+        // ── SP-4b-2 D1: the DIRECT channel's positional twin ──────────────────────────────
+        // Per-round, per-attacker direct damage that landed through the POSITIONAL apply, i.e.
+        // the exact mirror of the `creditDamage(id, 'direct', …)` writes the positional branches
+        // SUPPRESS. There are exactly THREE such writes in this file — the focus cast site, the
+        // walked-team cast site and `applyReactiveDamage` — and each sits in an `if (!positional)`
+        // / `else` pair with its twin below, so the two channels are MUTUALLY EXCLUSIVE per
+        // contribution by construction: nothing can reach both. (The enemy cast site has no
+        // scalar direct write at all — `roundDamage` is a player-credit map — so its twin is the
+        // enemy side's only direct channel, and it too can only fire on the positional branch.)
+        //
+        // Why it exists at all: `processAccumulators` (Echoing Burst) gathers "the direct damage
+        // the accumulating side dealt this round", and on a positional run the scalar bucket is
+        // structurally empty, so the burst detonated for 0 for every user (measured @841e1bc0 vs
+        // HEAD, same fixture: 60000 → 0). This is the honest gather input; it is NOT a second
+        // accounting channel — `cumulativeDamage`, `perTargetDealt` and the row totals are all
+        // untouched by it.
+        const roundPositionalDirect = new Map<string, number>();
+        const creditPositionalDirect = (sourceId: string, amount: number): void => {
+            if (!(amount > 0)) return;
+            roundPositionalDirect.set(
+                sourceId,
+                (roundPositionalDirect.get(sourceId) ?? 0) + amount
+            );
+        };
+        /**
+         * Round-to-date DIRECT damage dealt by an EXPLICIT roster, summing BOTH channels.
+         *
+         * The id list is explicit rather than "everything that is not the other side" on purpose:
+         * an inversion is only safe on the player-credit-only scalar map, and this also reads the
+         * positional tally, which — like `perTargetDealt`, whose problem `actorsDamagePerRound`
+         * in dpsMetricFromDealt.ts solved the same way — is keyed by attacker across BOTH sides.
+         * Inverting there would fold the opposing side's output into this side's aggregate.
+         *
+         * Called at a specific MOMENT in the round (the bursting actor's turn), and both maps are
+         * round-scoped, so it reports exactly what that side had dealt so far — the same instant
+         * semantics the scalar expression it replaces had.
+         */
+        const directDealtBy = (roster: readonly CombatActor[]): number =>
+            roster.reduce(
+                (sum, a) =>
+                    sum +
+                    (roundDamage.get(a.id)?.direct ?? 0) +
+                    (roundPositionalDirect.get(a.id) ?? 0),
+                0
+            );
         // Healing mode: rebind the per-round healing map (so `credit` writes into THIS round)
         // and snapshot the target's HP%/shield at the ROUND TOP — before any turn. Raw floats;
         // the adapter owns any rounding. No-op in DPS mode (currentRoundHealing stays unread).
@@ -5727,10 +5866,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reflected and never Protection-redirected; no shield penetration) and deliberately
             // does NOT creditDamage: a positioned enemy roster is never `dpsEnemyTarget` (which is
             // `enemyAttackerInputs.length === 0`), so the DPS-mode post-round aggregate
-            // (engine.ts:7931) never fires here — cumulativeDamage only reports + declines the
+            // (engine.ts:10536) never fires here — cumulativeDamage only reports + declines the
             // vestigial dummy, never a real victim, so folding the reactive into it would
             // double-count exactly like the per-victim DoT/detonation split documented at
-            // engine.ts:7898. The DPS calculator reads the per-victim map instead
+            // engine.ts:10503-10506. The DPS calculator reads the per-victim map instead
             // (dpsSimulator.ts's focusDamageTotal), which this branch is what feeds.
             //
             // victim.id !== enemy.id: defensive backstop keeping the HP path off the vestigial dummy
@@ -5747,8 +5886,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // — which, since SP-1 re-derives the DPS metric FROM that map, meant the proc fired and
             // contributed exactly nothing (Judge/Incinerator/Rhodium/Chakara fire on the focus's own
             // turn, so it was not hidden behind the enemy-attack-0 default either).
-            // Runs with no positioned enemy (scalar DPS, the healing calculator's bare enemies) keep
-            // the credit-only path by construction — there is no real victim to reduce.
+            // Runs with no positioned enemy keep the credit-only path by construction — there is
+            // no real victim to reduce. Since SP-4b-2a that no longer includes ANY `simulateDPS`
+            // run (a scalar-only DPS caller is given a synthesized positioned enemy), so the
+            // remaining cases are the healing calculator's bare enemies and direct-`runCombat`
+            // callers that supply no roster.
             if (hasPositionedEnemyRoster && victim.id !== enemy.id) {
                 // Buffer this application's log-only consequence twins (Lifeline shield grant,
                 // shield destroyed, cheat death) so they print UNDER this proc's own attack row —
@@ -5782,6 +5924,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                         (roundPerTargetDamage.get(victim.id) ?? 0) + procBooked
                     );
                     creditDealt(ownerId, victim.id, procBooked);
+                    // SP-4b-2 D1: the twin of this function's own `creditDamage(ownerId,
+                    // 'direct', raw)` below — the third and last suppressed direct write. Same
+                    // if/else, so a proc lands in exactly one channel. A reactive hit IS direct
+                    // damage its owner dealt, and it counted toward the Echoing Burst gather
+                    // before the corpus turned positional; without this it would silently stop.
+                    creditPositionalDirect(ownerId, procBooked);
                 }
                 // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
                 return { dealt: raw, didCrit };
@@ -5822,9 +5970,22 @@ export function runCombat(rawInput: CombatEngineInput): {
         // NOTE: the aura/accumulating ability channel is an approximation (NEUTRAL ctx, no re-roll)
         // — see the victimEnemyBuffs jsdoc (finding I1) for details and acceptance rationale.
         const victimIncomingModifiers = (
-            victimId: string
+            victimId: string,
+            /** SP-4b-2 D4: the ACTING turn's already-gated scheduled enemy effects
+             *  (`PlayerTurnResult.scheduledEnemyEffects`), threaded down from the positional apply.
+             *  Without it this read hit the status engine's UNGATED `__enemy__` bucket, so a
+             *  scheduled debuff the round's hacking-vs-security draw RESISTED still cut the
+             *  victim's defence — the reporting channel said "resisted", the damage channel said
+             *  "landed". Optional: the test tap and any future non-positional caller pass nothing
+             *  and keep the raw read, so nothing off the positional path moves. */
+            scheduledEffects?: SelectedGameBuff[]
         ): { enemyDefenseModifier: number; incomingDamageModifier: number } => {
-            const victimDebuffs = victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup);
+            const victimDebuffs = victimEnemyBuffs(
+                statusEngine,
+                victimId,
+                enemyDebuffLookup,
+                scheduledEffects
+            );
             const enemy = toEnemyModifiers(victimDebuffs);
             // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — each stack arms
             // ONE direct hit, which reads every stack the victim holds and spends one of them (see
@@ -5959,6 +6120,54 @@ export function runCombat(rawInput: CombatEngineInput): {
             return full - base;
         };
 
+        /**
+         * ONE victim's defensive profile for a positional damage read.
+         *
+         * Extracted verbatim from `drivePositionalApply`'s inline `defenseProfileOf` (SP-4b-2 D6)
+         * so the passive-slot instance resolves against the SAME per-victim modifier state the
+         * firing hit does, rather than growing a second, drifting copy. Identical across all three
+         * cast sites (B1/PR7b + D-PR12) and direction-agnostic: `victimIncomingModifiers(v.id)`
+         * keys the victim's own store whether it is an enemy or a player.
+         */
+        const victimDefenseProfileOf = (
+            v: CombatActor,
+            opts: {
+                scheduledEnemyEffects?: SelectedGameBuff[];
+                perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
+                preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
+            }
+        ): VictimDefenseProfile => {
+            const m = victimIncomingModifiers(v.id, opts.scheduledEnemyEffects);
+            return {
+                // SP-F F5: Meatshield defense-substitution (approximation) — see the
+                // substitutedDefenceFor doc comment above for the full rule.
+                defence: substitutedDefenceFor(v, v.stats.defence),
+                // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
+                // Direction-agnostic — v.id keys the victim's own enemy-debuff store
+                // regardless of side.
+                defenceModifierPct: m.enemyDefenseModifier,
+                // B1/PR7b + D-PR12: per-victim incoming-damage modifier; combines
+                // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
+                // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
+                incomingDamageModifierPct: m.incomingDamageModifier,
+                affinity: v.affinity ?? 'antimatter',
+                // Sub-project I, PR I2: this footprint victim's own enemy-status-gated
+                // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
+                outgoingDamageDeltaPct: perVictimOutgoingDeltaPct(
+                    opts.perVictimOutgoing,
+                    opts.preTurnVictimStatus,
+                    v
+                ),
+                // SP-F F4: this victim's 'Defensive Affinity Override' (Isha/Nayra) forces
+                // the incoming attacker to affinity DISADVANTAGE against it. Detected per
+                // victim (anchor AND covered) via the victim's own self-buff store — the
+                // positional counterpart to playerTurn's `victimHasDefensiveOverride`.
+                forceAffinityDisadvantage: selfBuffNamesForOwners(statusEngine, [v.id]).includes(
+                    'Defensive Affinity Override'
+                ),
+            };
+        };
+
         // Shared positional-apply driver (Task 9, Step A) — the ONE place the three attack
         // sites (focus / walked-team / enemy) drive `applyPositionalDamage`. Each site has
         // already GATED (isPositional + non-null target/pattern/positionalScalars) and computed
@@ -5992,6 +6201,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             ignoresStealth?: boolean;
             actingId: string;
             opposingLiving: CombatActor[];
+            /** SP-4b-2 D4: this turn's landed scheduled enemy effects, from the acting
+             *  `PlayerTurnResult`. Feeds `defenseProfileOf` so the per-victim damage read honours
+             *  the same landing/resist decision the turn's reporting fold made. */
+            scheduledEnemyEffects?: SelectedGameBuff[];
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
@@ -6085,37 +6298,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ignoresStealth: args.ignoresStealth,
                         provokedBy: provokerOf(statusEngine, args.actingId),
                     },
-                    defenseProfileOf: (v) => {
-                        const m = victimIncomingModifiers(v.id);
-                        return {
-                            // SP-F F5: Meatshield defense-substitution (approximation) — see the
-                            // substitutedDefenceFor doc comment above for the full rule.
-                            defence: substitutedDefenceFor(v, v.stats.defence),
-                            // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
-                            // Direction-agnostic — v.id keys the victim's own enemy-debuff store
-                            // regardless of side.
-                            defenceModifierPct: m.enemyDefenseModifier,
-                            // B1/PR7b + D-PR12: per-victim incoming-damage modifier; combines
-                            // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
-                            // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
-                            incomingDamageModifierPct: m.incomingDamageModifier,
-                            affinity: v.affinity ?? 'antimatter',
-                            // Sub-project I, PR I2: this footprint victim's own enemy-status-gated
-                            // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
-                            outgoingDamageDeltaPct: perVictimOutgoingDeltaPct(
-                                args.perVictimOutgoing,
-                                args.preTurnVictimStatus,
-                                v
-                            ),
-                            // SP-F F4: this victim's 'Defensive Affinity Override' (Isha/Nayra) forces
-                            // the incoming attacker to affinity DISADVANTAGE against it. Detected per
-                            // victim (anchor AND covered) via the victim's own self-buff store — the
-                            // positional counterpart to playerTurn's `victimHasDefensiveOverride`.
-                            forceAffinityDisadvantage: selfBuffNamesForOwners(statusEngine, [
-                                v.id,
-                            ]).includes('Defensive Affinity Override'),
-                        };
-                    },
+                    defenseProfileOf: (v) =>
+                        victimDefenseProfileOf(v, {
+                            scheduledEnemyEffects: args.scheduledEnemyEffects,
+                            perVictimOutgoing: args.perVictimOutgoing,
+                            preTurnVictimStatus: args.preTurnVictimStatus,
+                        }),
                     // PR2 Task 3: stamp the sub-attack under application so the funnel's deferred
                     // LOG buffers (reflect rows + consequence twins) can be drained per sub-attack
                     // rather than all under the first attack row. Save/restore rather than clear:
@@ -6231,6 +6419,200 @@ export function runCombat(rawInput: CombatEngineInput): {
             } finally {
                 deferReflectLogs = false;
             }
+        };
+
+        // ── SP-4b-2 D6: the passive-slot damage instance's own positional apply ───────────
+        /**
+         * ONE cast's PASSIVE-SLOT damage instance (`PlayerTurnResult.passiveSlotHit`) — the design
+         * notes for the pair below (`passiveSlotPattern` + `stagePassiveSlotHit`).
+         *
+         * WHY THIS EXISTS. The always-active passive slot can carry its own gated `damage`
+         * ability — Judge's "At the start of the round, this Unit deals 60% damage to all enemies
+         * with less than 50% HP". `runPlayerTurn` computes it and folds it into the aggregate
+         * `directDamage`, which is the whole story on a NON-positional cast. On a POSITIONAL cast
+         * the scalar direct credit is suppressed and the round's damage is re-derived from the
+         * per-victim apply — whose payload is the FIRING skill's `positionalScalars`. The passive
+         * instance reached neither channel: computed, then dropped (measured, Judge fixture:
+         * round-4 `directDamage` 23000 where the pre-positional engine reported 29000).
+         *
+         * FOOTPRINT / TARGETING — the design call, and it is NOT the firing hit's.
+         * The instance resolves its OWN footprint from the passive damage ability's OWN `target`.
+         * Justification, against the ability's own targeting data rather than against what makes
+         * one fixture pass:
+         *   1. `target` is a field of the ABILITY, and the two disagree in the real kit: Judge's
+         *      passive is `all-enemies` while its firing skill is single-`enemy`. Honouring the
+         *      firing hit's footprint would silently rewrite "all enemies" to "one enemy".
+         *   2. A PATTERN belongs to a SLOT, not to the ship — `activePattern` and `chargedPattern`
+         *      are separate columns of the targeting data, and the passive slot has neither.
+         *      Inheriting the firing slot's pattern would make a passive's reach depend on whether
+         *      the ship happened to fire its active or its charged skill this round, which is not
+         *      a property of the passive at all.
+         *   3. It is wrong in BOTH directions, so "share the footprint" cannot be rescued by the
+         *      single-target case: an AoE firing cast would also spread a `target: 'enemy'`
+         *      passive across the whole footprint, at half damage on covered cells.
+         * The multi-victim test pins both directions.
+         *
+         * WHAT IT DELIBERATELY DOES NOT DO. It emits no `ability-performed` and no `attacked`, and
+         * fires no outgoing rider — because the passive instance never had any of those. On the
+         * non-positional path it was a pure ADDEND on `directDamage`: no event, no rider, no
+         * separate attack row. This restores parity; inventing an event stream for it would be a
+         * new mechanic, not a fix. Crit is likewise NOT re-decided here — `hit.didCrit` was fixed
+         * in `runPlayerTurn` (`noCrit` honoured, otherwise the round's own draw reused) and every
+         * footprint victim reuses that ONE outcome instead of rolling its own, so NO CRIT DRAW is
+         * added and the crit stream's schedule is untouched.
+         *
+         * WHAT IT DOES DRAW AND PROVOKE — read this before repeating "the instance draws no RNG",
+         * which is true of CRIT only and false in general. It IS a real damage instance: it goes
+         * through the real per-victim funnel (`tb.applyToVictim` → `applyOutgoingToEnemy`, which
+         * passes `byDirectDamage: true`) and the real per-victim defence profile, so shields,
+         * Barrier, Cheat Death, Protection and the per-victim credit channel (`perTargetDealt`)
+         * all see it like any other damage source. Concretely, against a victim that carries one:
+         *   • an `incoming-block` ability — the instance ADVANCES that victim's
+         *     `directIntakeIndex` (so it counts as an nth direct hit for `nth-hit-2plus`) and
+         *     ROLLS a `makeRateGate` draw on the victim's own `<id>:proc` sub-stream, which can
+         *     also spend an `oncePerRound` block. Both are pinned in
+         *     `passiveSlotDamageFootprint.integration.test.ts`.
+         *   • a `damage-reflection` ability — the instance sets neither `isReflected` nor
+         *     `isCounter`, so it PROVOKES thorns back at the attacker exactly as the firing hit
+         *     does. (`isAnchor: false` below still exempts it from a `requirePrimaryTarget`
+         *     reflect — Nosorog — since it is not the cast's primary-target hit.)
+         * All of that is the intended reading of "a real damage instance"; it is recorded here so
+         * a later change plans around the real footprint rather than a convenient fiction.
+         *
+         * KNOWN GAPS — both real, both corpus-bounded today, both deliberately UNFIXED here.
+         * Recorded in code rather than in a task report so the next change to this helper does not
+         * have to rediscover them.
+         *   (a) IT PROCS NO LEECHES, IN EITHER DIRECTION. The apply loop below calls
+         *       `tb.applyToVictim` directly and never `procLeechesForVictim`, which is the seam
+         *       the firing hit's per-victim apply goes through — so neither the attacker's
+         *       STANDING leech (`procStandingLeechesPerVictim`) nor the victim's TAKEN leech
+         *       (`procTakenLeechesPerVictim`) fires on this instance. That is a REGRESSION against
+         *       the pre-positional path, where `passiveDamage` was folded into the aggregate
+         *       `directDamage` and reached a standing leech via `creditDamage(…,'direct',…)`. It
+         *       is also at odds with the repo's LOCKED granularity rule ("outgoing procs per
+         *       attack, incoming per occurrence"): a separate damage instance landing on a victim
+         *       is an occurrence, and should proc both directions. Not fixed here because it is a
+         *       behaviour change with its own fixture surface, not a comment correction.
+         *   (b) A CAST WITH NO FIRING-SLOT DAMAGE ABILITY LOSES ITS PASSIVE INSTANCE ENTIRELY.
+         *       Every call site is inside the `positional` branch, and that gate requires
+         *       `turn.positionalScalars != null` — the FIRING skill's scalars. A ship whose active
+         *       or charged slot carries no `damage` ability therefore never reaches this helper,
+         *       and its passive-slot damage is dropped exactly as it was before D6 (the scalar
+         *       direct credit is suppressed on a positional run either way). Corpus-inert today:
+         *       no shipped kit pairs a damage-dealing passive slot with a damage-less firing slot.
+         *
+         * It does NOT set `deferReflectLogs`: with no `ability-performed` of its own there is no
+         * later row for a buffered reflect to attach to, so a reflect it provokes prints where it
+         * happens — the same treatment every non-positional apply gives one.
+         *
+         * Team-symmetric: ONE helper, called from the focus, walked-team and enemy cast sites with
+         * that site's own `tb`.
+         */
+        const passiveSlotPattern = (abilityTarget: PassiveSlotHit['target']): ParsedPattern => {
+            switch (abilityTarget) {
+                // The whole opposing board, every occupied cell at ORIGIN role (full damage) —
+                // `resolveCells` special-cases shape 'all' and ignores the anchor's geometry.
+                case 'all-enemies':
+                    return ALL_ENEMIES_PATTERN;
+                // ONE enemy: the actor's own resolved anchor. The selector targets
+                // (`enemy-most-buffs` / `enemy-highest-attack` / `enemy-highest-speed`) also name
+                // exactly one enemy; picking WHICH one needs the drain-time selector machinery in
+                // triggers.ts, and every corpus ship carrying one of them fires it through a
+                // REACTIVE trigger that already goes through that machinery, so the anchor is both
+                // the conservative answer and today's behaviour for them.
+                // `adjacent-enemies` / `target-and-adjacent-enemies` genuinely name more than one,
+                // but their spread scaling (full or covered-half) is unverified in-game and no
+                // corpus passive reaches here with one — they keep today's single-anchor magnitude
+                // rather than gaining an invented footprint.
+                // Ally-facing targets cannot occur on a `damage` ability; they resolve to the
+                // anchor too rather than being silently dropped.
+                case 'enemy':
+                case 'enemy-most-buffs':
+                case 'enemy-highest-attack':
+                case 'enemy-highest-speed':
+                case 'adjacent-enemies':
+                case 'target-and-adjacent-enemies':
+                case 'self':
+                case 'ally':
+                case 'all-allies':
+                case 'adjacent-allies':
+                    return DEFAULT_BASE_PATTERN;
+            }
+        };
+        /**
+         * Stage ONE cast's passive-slot instance: RESOLVE its footprint now (before the firing
+         * hit lands), return the thunk that APPLIES it afterwards. `undefined` when the instance
+         * finds nobody — the caller then has nothing to run.
+         *
+         * WHY THE SPLIT — the "one turn, one board" invariant. The passive instance and the
+         * firing hit are two damage instances of the SAME turn, and neither may gate the other:
+         *   • resolve BEFORE, so the firing hit's kill cannot make the passive whiff;
+         *   • apply AFTER, so the passive's own kill cannot make the firing hit whiff.
+         * That is exactly the invariant the pre-positional engine had for free — it folded both
+         * into one `directDamage` lump against one sink, so a lethal round paid out BOTH. Either
+         * plain ordering loses one of them on the killing round, and the Judge fixture measures
+         * it: firing-first reports 23000 for the final round, passive-first reports 6000, and both
+         * of those are the same defect this task exists to remove, merely relocated. The engine's
+         * usual live re-resolution (a multi-hit cast's later sub-attacks, `applyPerVictimDetonation`
+         * skipping a victim that died to the firing hit) is a WITHIN-CAST rule — R1's "N
+         * consecutive full-walk attacks" — and the passive slot is not part of the cast.
+         *
+         * Overkill is booked, as everywhere else on this path: the pre-positional lump credited
+         * the whole 29000 against a 2000-HP enemy too.
+         */
+        const stagePassiveSlotHit = (
+            actor: CombatActor,
+            tb: TurnBindings,
+            anchor: CombatActor,
+            hit: PassiveSlotHit,
+            profileOpts: {
+                scheduledEnemyEffects?: SelectedGameBuff[];
+                perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
+                preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
+            }
+        ): (() => void) | undefined => {
+            // The turn's already-resolved anchor IS the turn-start resolution (selectTurnTarget ran
+            // before runPlayerTurn). A cast whose selection fell back to the position-less legacy
+            // sink has no board anchor, so the instance simply whiffs.
+            if (anchor.position === undefined) return undefined;
+            const victims = footprintVictims(
+                passiveSlotPattern(hit.target),
+                anchor.position,
+                tb.opposingRoster
+            );
+            if (victims.length === 0) return undefined;
+            return () => {
+                let delivered = 0;
+                for (const { victim, roleScale } of victims) {
+                    const damage = victimHitDamage(
+                        hit.scalars,
+                        victimDefenseProfileOf(victim, profileOpts),
+                        hit.didCrit,
+                        roleScale
+                    );
+                    if (!(damage > 0)) continue;
+                    // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
+                    // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
+                    const outcome = tb.applyToVictim(victim, damage, false);
+                    // Credit the intake the funnel RECORDED, exactly as the firing hit's emitHit
+                    // does — a Protection cascade / incoming block / DoT transform all move the
+                    // number, and re-crediting the pre-funnel hit would double-count.
+                    const booked = outcome.incomingBooked ?? damage;
+                    if (booked > 1e-9) {
+                        roundPerTargetDamage.set(
+                            victim.id,
+                            (roundPerTargetDamage.get(victim.id) ?? 0) + booked
+                        );
+                        creditDealt(actor.id, victim.id, booked);
+                    }
+                    // The ruled "damage dealt" basis (PR7): booked intake PLUS anything a
+                    // Protection cascade diverted to protectors.
+                    delivered += booked + (outcome.protectionRedirected ?? 0);
+                }
+                // SP-4b-2 D1: a passive-slot instance is DIRECT damage this actor dealt, so it
+                // joins the accumulate-detonate gather exactly like the firing hit does.
+                creditPositionalDirect(actor.id, delivered);
+            };
         };
 
         // ── Deferred ability-performed emit helper ────────────────────────────────────
@@ -6575,14 +6957,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                 },
             });
 
-            // Accumulator gather input: the round-global player-DIRECT sum (same expression as the
-            // focus-dummy path). CORRECT for the enemy site; for the player side it is an INERT
-            // placeholder — the symmetric all-enemies-direct sum is not exposed and no fixture/ability
-            // applies accumulators to players. // symmetric input TBD — inert, no fixture
-            const allPlayersDirect = [...roundDamage.values()].reduce((s, d) => s + d.direct, 0);
+            // Accumulator gather input (SP-4b-2 D1). The accumulators a POSITIONED actor carries
+            // were seeded by the OPPOSING side's casts, so the side whose direct damage they
+            // gather is exactly `opposingRoster` — which makes this ONE expression correct for
+            // BOTH sites, with no side branch: the enemy site passes `allPlayerActors` and the
+            // player/team sites pass `enemyAttackerActors`.
+            //
+            // This replaces a bare sum over the scalar `roundDamage` map, whose comment asserted
+            // it was "CORRECT for the enemy site" and an "INERT placeholder" for the player side.
+            // Neither half held any more: the scalar map goes structurally empty the moment a cast
+            // resolves positionally (its direct credit is suppressed — see `creditPositionalDirect`),
+            // so the "correct" side gathered 0, and the player side was inert only because nothing
+            // fed it, not because the sum was unreachable.
+            const gatheredDirect = directDealtBy(opposingRoster);
             processAccumulators({
                 pendingAccumulators: actor.pendingAccumulators,
-                allPlayersDirect,
+                gatheredDirect,
                 creditDetonation: (sourceId, damage) => {
                     applyVictimDamage(damage, actor, sink, {
                         killerId: sourceId,
@@ -6741,7 +7131,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 // Sub-project I, PR I5: count (not union) of opposing actors holding Stealth,
                 // for Selenite's "for every enemy with Stealth" count-scaling. Same per-turn
-                // cadence as enemyBuffNames above; 0 in DPS mode (no enemy attackers).
+                // cadence as enemyBuffNames above; 0 against a synthesized DPS enemy (it has no
+                // skills, so it never gains Stealth) and structurally 0 only for a caller that
+                // supplied no enemy attackers — see `stealthedEnemyCount`'s own note.
                 stealthedEnemyCount: tb.stealthedEnemyCount(),
                 // Sub-project I, PR I1: opt-in NAMES on the resolved target for name-specific
                 // `enemy-debuff` gates — SAME guard as targetId above (real/positional target
@@ -6918,6 +7310,11 @@ export function runCombat(rawInput: CombatEngineInput): {
              */
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
+            /** SP-4b-2 D4: this turn's scheduled enemy effects AFTER its landing/resist draw.
+             *  `undefined` only where the turn result itself is out of reach (the enemy site's
+             *  hoisted capture on a dead-target / non-positional turn) — `victimEnemyBuffs` then
+             *  keeps its raw bucket read, which is the pre-fix behaviour. */
+            scheduledEnemyEffects: PlayerTurnResult['scheduledEnemyEffects'] | undefined;
         }
         /** One footprint victim's `attacked` signal within ONE sub-attack. */
         interface PositionalVictimSignal {
@@ -7034,6 +7431,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actingId: actor.id,
                 opposingLiving: tb.opposingRoster,
                 applyToVictim: tb.applyToVictim,
+                // SP-4b-2 D4: the acting turn's landed scheduled enemy effects reach
+                // defenseProfileOf's per-victim modifier read, so a RESISTED scheduled debuff
+                // stops cutting the victim's defence behind the reporting channel's back.
+                scheduledEnemyEffects: sel.scheduledEnemyEffects,
                 perVictimOutgoing: sel.perVictimOutgoing,
                 preTurnVictimStatus: sel.preTurnVictimStatus,
                 // Per-victim crit: each covered footprint victim rolls at ITS own affinity-capped
@@ -7429,6 +7830,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 resistedEnemyDebuffs: [],
                 // A skipped turn casts nothing, so it holds back nothing (clause order).
                 deferredEnemyApplications: [],
+                // A skipped turn takes no landing draw and fires no positional attack.
+                scheduledEnemyEffects: [],
                 directDamage: 0,
                 secondaryDamage: 0,
                 conditionalDamage: 0,
@@ -8085,15 +8488,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                 //    means it's alive; the exemption is belt-and-suspenders.
                 //  - the `enemy` actor (DPS opponent / sim-mode dummy sink). This exemption is
                 //    effectively DORMANT today, coupled to the terminal `break` near the end of
-                //    the round loop (~line 7994, `if (dpsEnemyTarget && enemy.destroyedRound !==
-                //    undefined) break;`): in pure DPS mode `enemy` is a real destructible actor,
+                //    the round loop (~line 11008, `if (dpsEnemyTarget && enemy.destroyedRound !==
+                //    undefined) break;` — see `dpsEnemyTarget` for why "pure DPS mode" no longer
+                //    means the DPS calculator): in pure DPS mode `enemy` is a real destructible actor,
                 //    but its HP only lands (and `destroyedRound` only gets stamped) in the
                 //    POST-round accounting step, after this turn loop has already closed for that
                 //    round — so within any given round's turn-loop walk, `enemy.destroyedRound` is
                 //    never set yet, and the round loop breaks immediately once it is, so there is
-                //    no subsequent round left for this exemption to matter in. In sim/healing mode
-                //    the vestigial dummy sink never dies at all, so `destroyedRound` is never set
-                //    there either. The exemption exists so that IF the terminal break above were
+                //    no subsequent round left for this exemption to matter in. On any run with a
+                //    supplied enemy roster (sim, healing, and since SP-4b-2a every DPS-calculator
+                //    run) the vestigial dummy sink never dies at all, so `destroyedRound` is never
+                //    set there either — which is exactly what makes this the ONE enemy-side DoT
+                //    carrier that keeps ticking after death and therefore keeps REPORTING (see
+                //    `dotCarrierReports`, whose exemption is derived from this guard).
+                //    The exemption exists so that IF the terminal break above were
                 //    ever removed (e.g. to keep simulating past the DPS enemy's death), a dead
                 //    `enemy` would still take its turn — banking enemy charges and running the
                 //    enemy-side DoT/decrement bookkeeping — rather than being skipped and dropping
@@ -8607,6 +9015,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // per-victim `attacked` inline (before detonation). The turn's deferred
                                 // ability-performed carries the anchor firing-hit values for the log.
                                 const tb = turnBindings(actor.side);
+                                // SP-4b-2 D6: stage the passive-slot damage instance — its footprint
+                                // is resolved HERE (against the turn-entry board) and applied after
+                                // the firing hit, so neither instance's kill can swallow the other.
+                                // See stagePassiveSlotHit for the invariant and the measurements.
+                                const landPassiveSlotHit = turn.passiveSlotHit
+                                    ? stagePassiveSlotHit(actor, tb, tgt, turn.passiveSlotHit, {
+                                          scheduledEnemyEffects: turn.scheduledEnemyEffects,
+                                          perVictimOutgoing: turn.perVictimOutgoing,
+                                          preTurnVictimStatus,
+                                      })
+                                    : undefined;
                                 const posApply = drivePositionalTurnApply(
                                     actor,
                                     tb,
@@ -8623,6 +9042,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         positionalDetonation: turn.positionalDetonation,
                                         applyDebuffsForSubAttack: turn.applyDebuffsForSubAttack,
                                         deferredEnemyApplications: turn.deferredEnemyApplications,
+                                        scheduledEnemyEffects: turn.scheduledEnemyEffects,
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
@@ -8646,6 +9066,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     (sum, sub) => sum + (sub.deliveredDamage ?? 0),
                                     0
                                 );
+                                // SP-4b-2 D6: the staged passive-slot instance lands now.
+                                landPassiveSlotHit?.();
                             }
                             // Clause order: this turn's damage has landed (or the cast had none) —
                             // now apply the debuff clauses that followed it.
@@ -8663,26 +9085,39 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // clobber them. direct/secondary/conditional are single-focus-turn
                             // today; += keeps the 0..N-turn seam additive.
                             const d = dmg(actor.id);
-                            // secondary/conditional are display sub-buckets already rolled into
-                            // turn.directDamage — they must NOT be routed through creditDamage or the
-                            // standing-leech hook would double-count them.
-                            //
+                            // secondary/conditional are DISPLAY sub-buckets — a view of damage the
+                            // firing hit already counted. They feed `rawTotals` only (one read, at
+                            // the row assembly below) and never `cumulativeDamage`, the HP decline
+                            // or the standing-leech hook, so they are accumulated on BOTH paths.
+                            // The `creditDamage` calls stay inside the guard: those DO feed
+                            // cumulative accounting, and the positional path lands that damage
+                            // per-victim instead.
+                            d.secondary += turn.secondaryDamage;
+                            d.conditional += turn.conditionalDamage;
                             // Credit SUPPRESSION for the positional case (Task 8b): the firing-hit damage
                             // now lands per-victim via applyPositionalDamage above, so it must NOT also be
                             // folded into cumulativeDamage here (that would double-count it). Skip the
-                            // direct/secondary/conditional credits; KEEP detonation (bombs are a separate
-                            // mechanic, out of scope). The single-sink decline that used to be zeroed for
-                            // the positional path is now derived from the victim's own currentHp inside
-                            // runPlayerTurn (PR6b), so no separate decline suppression is needed here.
+                            // direct credit; KEEP detonation (bombs are a separate mechanic, out of scope).
+                            // The single-sink decline that used to be zeroed for the positional path is now
+                            // derived from the victim's own currentHp inside runPlayerTurn (PR6b), so no
+                            // separate decline suppression is needed here.
                             if (!positional) {
-                                d.secondary += turn.secondaryDamage;
-                                d.conditional += turn.conditionalDamage;
                                 creditDamage(actor.id, 'direct', turn.directDamage);
                                 // Detonation credit is suppressed in positional mode (turn.detonationDamage
                                 // is 0 there anyway — runPlayerTurn returns the recipe instead). Keeping it
                                 // inside this guard documents intent and keeps per-victim detonation out of
                                 // cumulativeDamage (it lands per-victim via applyVictimDamage above).
                                 creditDamage(actor.id, 'detonation', turn.detonationDamage);
+                            } else {
+                                // SP-4b-2 D1: the suppressed direct credit's positional TWIN. Same
+                                // gate, opposite branch — which is the whole proof that the Echoing
+                                // Burst gather cannot double-count: a cast reaches exactly one of
+                                // these two lines. `castDelivered` (not `turn.directDamage`) is the
+                                // basis: it is what the per-victim apply ACTUALLY delivered across
+                                // the footprint, the same "damage dealt" basis `perTargetDealt`
+                                // records. Defined whenever `positional`, so the `?? 0` is
+                                // defensive only.
+                                creditPositionalDirect(actor.id, castDelivered ?? 0);
                             }
                             focusTurns.push(turn);
 
@@ -8860,6 +9295,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // the player→enemy STANDING leech and emits the per-victim `attacked`
                                 // inline (before detonation).
                                 const tb = turnBindings(actor.side);
+                                // SP-4b-2 D6: mirror of the focus site — stage the walked team
+                                // actor's passive-slot instance against the turn-entry board.
+                                const landTeamPassiveSlotHit = teamTurn.passiveSlotHit
+                                    ? stagePassiveSlotHit(actor, tb, tgt, teamTurn.passiveSlotHit, {
+                                          scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
+                                          perVictimOutgoing: teamTurn.perVictimOutgoing,
+                                          preTurnVictimStatus: teamPreTurnVictimStatus,
+                                      })
+                                    : undefined;
                                 const teamPosApply = drivePositionalTurnApply(
                                     actor,
                                     tb,
@@ -8877,6 +9321,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         applyDebuffsForSubAttack: teamTurn.applyDebuffsForSubAttack,
                                         deferredEnemyApplications:
                                             teamTurn.deferredEnemyApplications,
+                                        scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
@@ -8898,6 +9343,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     (sum, sub) => sum + (sub.deliveredDamage ?? 0),
                                     0
                                 );
+                                // SP-4b-2 D6: the staged passive-slot instance lands now.
+                                landTeamPassiveSlotHit?.();
                             }
                             // Clause order — mirror of the focus site (see flushDeferredEnemyApplications).
                             flushDeferredEnemyApplications(teamTurn.deferredEnemyApplications);
@@ -8912,20 +9359,42 @@ export function runCombat(rawInput: CombatEngineInput): {
                             //
                             // Credit SUPPRESSION for the positional case (Task 8b): same as the focus site —
                             // the firing-hit damage already landed per-victim via applyPositionalDamage, so
-                            // skip the direct/secondary/conditional credit; KEEP detonation (bombs are out
-                            // of scope). The single-sink decline that used to be zeroed for the positional
-                            // path is now derived from the victim's own currentHp inside runPlayerTurn
-                            // (PR6b), so no separate decline suppression is needed here.
+                            // skip the direct credit; KEEP detonation (bombs are out of scope). The
+                            // single-sink decline that used to be zeroed for the positional path is now
+                            // derived from the victim's own currentHp inside runPlayerTurn (PR6b), so no
+                            // separate decline suppression is needed here.
                             const td = dmg(actor.id);
+                            // secondary/conditional: a SYMMETRY PLACEHOLDER with NO READER today.
+                            // Unlike the focus site's pair — which feeds `rawTotals` at the row
+                            // assembly below — nothing consumes the TEAM values: `rawTotals` is
+                            // focus-only by design (`totalSecondaryRaw += focus.secondary`, and the
+                            // note above that line says so), and the simulator-page seam reads the
+                            // per-actor map's `direct`/`detonation` only. So this write is dead in
+                            // both directions: removing it changes no output, and adding a reader
+                            // later must not have to notice that only one of the two paths fills
+                            // the bucket. It is KEPT because team symmetry is a locked rule here —
+                            // every walked team actor runs the same code path as the focus — and
+                            // because the values are already computed, so keeping them costs one
+                            // add. Do NOT "fix" it by moving it inside the guard: like the focus
+                            // pair, these are DISPLAY sub-buckets of `direct` and never feed
+                            // `cumulativeDamage`, so only the `creditDamage` calls below (which do
+                            // feed cumulative accounting) belong behind the positional guard.
+                            td.secondary += teamTurn.secondaryDamage;
+                            td.conditional += teamTurn.conditionalDamage;
                             if (!teamPositional) {
-                                td.secondary += teamTurn.secondaryDamage;
-                                td.conditional += teamTurn.conditionalDamage;
                                 creditDamage(actor.id, 'direct', teamTurn.directDamage);
                                 // Detonation credit is suppressed in positional mode (teamTurn.detonationDamage
                                 // is 0 there anyway — runPlayerTurn returns the recipe instead). Keeping it
                                 // inside this guard documents intent and keeps per-victim detonation out of
                                 // cumulativeDamage (it lands per-victim via applyVictimDamage above).
                                 creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
+                            } else {
+                                // SP-4b-2 D1: the walked team's mirror of the focus site's
+                                // positional direct twin — see its note for why the pair cannot
+                                // double-count. A walked team actor's direct damage IS part of the
+                                // gather (Echoing Burst gathers the whole side's direct), which is
+                                // the entire point of the fixture that pins the scaling.
+                                creditPositionalDirect(actor.id, teamCastDelivered ?? 0);
                             }
 
                             // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
@@ -9021,13 +9490,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Accumulators: the gather INPUT is the summed direct damage of ALL players
                     // this round (spec: Echoing Burst gathers all players' direct); each burst is
                     // credited to its applier's detonation channel.
-                    const allPlayersDirect = [...roundDamage.values()].reduce(
-                        (s, d) => s + d.direct,
-                        0
-                    );
+                    // SP-4b-2 D1: the same two-channel read the positioned-burst site uses, with
+                    // the dummy sink's accumulating side spelled out — the players. Moves together
+                    // with that site (team symmetry is LOCKED for this pair).
                     processAccumulators({
                         pendingAccumulators,
-                        allPlayersDirect,
+                        gatheredDirect: directDealtBy(allPlayerActors),
                         creditDetonation: (sourceId, damage) =>
                             creditDamage(sourceId, 'detonation', damage),
                     });
@@ -9191,12 +9659,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // dead-target path and whenever the enemy is non-positional → legacy single-apply.
                             let enemyPositional = false;
                             let enemyScalars: AttackerDamageScalars | undefined;
+                            // SP-4b-2 D6: the enemy turn's passive-slot damage instance, hoisted for
+                            // the same reason as enemyScalars (enemyTurn is scoped inside the else
+                            // block). Undefined on the dead-target / non-positional paths.
+                            let enemyPassiveSlotHit: PassiveSlotHit | undefined;
                             // Sub-project I, PR I2: the enemy turn's per-victim outgoing-modifier
                             // ingredients, hoisted out of the else block (enemyTurn is scoped inside
                             // it) so the enemy drivePositionalApply site can pass it. Undefined on the
                             // dead-target / non-positional paths → perVictimOutgoingDeltaPct returns 0
                             // for every victim (byte-identical).
                             let enemyPerVictimOutgoing: PlayerTurnResult['perVictimOutgoing'];
+                            // SP-4b-2 D4: the enemy turn's scheduled enemy-debuff effects AFTER its
+                            // own landing/resist draw, hoisted out of the else block (enemyTurn is
+                            // scoped inside it) so the enemy drivePositionalApply site can pass it.
+                            // Team-symmetric mirror of the focus/team sites. Undefined on the
+                            // dead-target / non-positional paths → victimEnemyBuffs keeps its raw
+                            // read (byte-identical).
+                            let enemyScheduledEnemyEffects:
+                                | PlayerTurnResult['scheduledEnemyEffects']
+                                | undefined;
                             // Sub-project I, PR I2: the pre-turn per-victim status snapshot
                             // (team-symmetric mirror of the focus/team sites' preTurnVictimStatus),
                             // captured just before `runPlayerTurn` below mutates the status engine.
@@ -9398,10 +9879,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     enemyPattern != null &&
                                     enemyTurn.positionalScalars != null;
                                 enemyScalars = enemyTurn.positionalScalars;
+                                enemyPassiveSlotHit = enemyTurn.passiveSlotHit;
                                 // Sub-project I, PR I2: capture the enemy turn's per-victim
                                 // outgoing-modifier ingredients (team-symmetric mirror of the
                                 // focus/team sites).
                                 enemyPerVictimOutgoing = enemyTurn.perVictimOutgoing;
+                                // SP-4b-2 D4: capture the enemy turn's gated scheduled enemy effects.
+                                enemyScheduledEnemyEffects = enemyTurn.scheduledEnemyEffects;
                                 // Per-victim crit: capture the enemy turn's per-victim crit resolver.
                                 enemyRollVictimCrit = enemyTurn.rollVictimCrit;
                                 // Task 5: capture the deferred ability-performed payload (present ⟺ the
@@ -9486,6 +9970,56 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // undefined (enemy's "allies" are enemy-side, not the player team).
                                 processExtraActionGrants(actor, enemyTurn.extraActionGrants);
                             }
+                            // ── SP-4b-2 D6, task-18 finding 3: the enemy's passive-slot instance is
+                            // STAGED HERE, OUTSIDE the `damage > 0` gate below ──────────────────
+                            // Team symmetry is LOCKED, and the two player-side sites stage theirs
+                            // inside a plain `if (positional)` with NO damage term: a cast whose
+                            // FIRING hit contributes nothing to the aggregate still lands its
+                            // passive-slot instance on the victims its OWN footprint reaches. The
+                            // enemy's whole apply block sits inside `damage > 0`, so an enemy in
+                            // that position dropped the instance entirely — the same defect shape
+                            // the `flushDeferredEnemyApplications` note below this block records
+                            // ("a cast that … deals no damage still has to apply it").
+                            //
+                            // MEASURED (the fixture is `passiveSlotDamageFootprint.integration`'s
+                            // zero-damage pair). An enemy firing at an anchor carrying a 100%
+                            // `incoming-reduction` has aggregate `damage` 0 — `directDamage` is
+                            // `firing + passiveDamage`, and BOTH terms share the anchor's
+                            // `nonCritFactor`, which that reduction zeroes. Pre-fix the enemy dealt
+                            // NOTHING AT ALL (`perTargetDealt` undefined) even though an unmitigated
+                            // ally stood in the passive's `all-enemies` footprint; the player-side
+                            // mirror credited that victim its full share.
+                            //
+                            // Resolving the footprint here rather than inside the block is safe:
+                            // everything between is comment + `let` declarations, so the board this
+                            // sees is the same one the old call site saw. Staging is also side-effect
+                            // free (a pure `footprintVictims` read) and the apply skips any victim
+                            // whose share is not `> 0`, with `creditPositionalDirect` no-opping on 0
+                            // — so a zero-attack enemy (the DPS default) stages, lands nothing and
+                            // changes nothing.
+                            const stagedEnemyPassiveSlotHit =
+                                enemyPositional && enemyPassiveSlotHit && tgt !== undefined
+                                    ? stagePassiveSlotHit(
+                                          actor,
+                                          turnBindings(actor.side),
+                                          tgt,
+                                          enemyPassiveSlotHit,
+                                          {
+                                              scheduledEnemyEffects: enemyScheduledEnemyEffects,
+                                              perVictimOutgoing: enemyPerVictimOutgoing,
+                                              preTurnVictimStatus: enemyPreTurnVictimStatus,
+                                          }
+                                      )
+                                    : undefined;
+                            let enemyPassiveSlotLanded = false;
+                            /** The staged instance, run AT MOST ONCE — after the firing hit when there
+                             *  was one (the "one turn, one board" invariant `stagePassiveSlotHit`
+                             *  documents), from the fallback below when there was not. */
+                            const landEnemyPassiveSlotHitOnce = (): void => {
+                                if (enemyPassiveSlotLanded) return;
+                                enemyPassiveSlotLanded = true;
+                                stagedEnemyPassiveSlotHit?.();
+                            };
                             // `tgt !== undefined` narrows the victim for this block (SP-U U5 R6): a
                             // positive `damage` is only produced by the non-skip `else` above, which
                             // runs only when `tgt` is defined — byte-identical (the term is always true
@@ -9589,6 +10123,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             // The SAME array the fallback flush below drains (see
                                             // the capture note), never a fresh one.
                                             deferredEnemyApplications: enemyDeferredApplications,
+                                            // Team symmetry: the enemy's own turn gates its own
+                                            // scheduled debuffs on the player side by the same draw.
+                                            scheduledEnemyEffects: enemyScheduledEnemyEffects,
                                         },
                                         (victim, dmg, outcome) => {
                                             procLeechesForVictim(actor.id, victim, dmg, outcome);
@@ -9621,6 +10158,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     );
                                     enemyCritAgg = posApply.critAgg;
                                     enemyEmitDeferred = posApply.emitDeferred;
+                                    // SP-4b-2 D6: the staged passive-slot instance lands now — after
+                                    // the firing hit, exactly as the two player-side sites do it.
+                                    landEnemyPassiveSlotHitOnce();
+                                    // SP-4b-2 D1: the enemy site's positional direct twin. There is
+                                    // no `if (!enemyPositional) creditDamage(...,'direct',…)` to
+                                    // pair with — `roundDamage` is a player-credit map, so the
+                                    // enemy side never had a scalar direct channel at all. That is
+                                    // exactly why the player-side accumulator gather was documented
+                                    // as an "inert placeholder": nothing fed it. This write is the
+                                    // enemy side's only direct channel, and it can only run on the
+                                    // positional branch — so no double-count is reachable here
+                                    // either. Team symmetry is LOCKED for this pair.
+                                    creditPositionalDirect(
+                                        actor.id,
+                                        posApply.critAgg.subAttacks.reduce(
+                                            (sum, sub) => sum + (sub.deliveredDamage ?? 0),
+                                            0
+                                        )
+                                    );
                                 } else {
                                     // SP-U U2: the enemy's non-positional INCOMING-damage accounting tail
                                     // (applyIncomingToTarget + the damage-taken heal/shield leech block + the
@@ -9787,6 +10343,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     });
                                 }
                             }
+                            // SP-4b-2 D6, task-18 finding 3: the firing hit contributed nothing to
+                            // the aggregate, so the block above never ran — the passive-slot
+                            // instance is not the firing hit's rider and lands anyway. A no-op when
+                            // it already landed after the firing hit (the once-guard), and when the
+                            // turn staged nothing. Placed BEFORE the deferred-application flush, the
+                            // same order the two player-side sites have.
+                            landEnemyPassiveSlotHitOnce();
                             // Clause order — mirror of the two player-side sites. Placed OUTSIDE the
                             // `damage > 0 && tgt !== undefined` block above: a cast that inflicts a
                             // debuff but deals no damage (a pure Stasis bot) still has to apply it,
@@ -9899,6 +10462,46 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reactive emissions would stamp duringTurnOf with the round's last acting actor and
             // buildCombatLog would nest them under that actor's turn instead of the endOfRound group.
             actingActorId = undefined;
+        }
+
+        // SP-4b-2 D5: decrement the GLOBAL enemy-debuff sentinel bucket once per round.
+        //
+        // A SCHEDULED (input-level `enemyDebuffs`) debuff is always upserted into the
+        // side-wide `DEFAULT_ENEMY_TARGET` ('__enemy__') store — `upsertBuff` hardcodes that
+        // target — never into a per-actor store. Its only decrement was the no-argument
+        // `decrementEnemy()` overload in the Post-Turn block above, reachable ONLY on the dummy
+        // actor's own turn (`isDummyEnemy`). Once a real positioned enemy roster exists the dummy
+        // is dropped from the turn order (`dummyEnemyIsVestigial`), so that call never ran and a
+        // timed scheduled debuff, once landed, persisted for the rest of the run. Measured against
+        // 841e1bc0 on the same fixture and seed: `hasDebuff` per round was [t,t,f,t,t] and became
+        // [t,t,t,t,t]; the landing DRAW was unaffected, only the DECAY.
+        //
+        // ONCE-PER-ROUND, guaranteed structurally: this statement sits in the ROUND loop body,
+        // outside the turn loop, so it runs exactly once per round iteration regardless of how
+        // many enemy actors are on the board. Hooking it to an enemy actor's Post-Turn instead
+        // would fire once per enemy and burn a 2-round debuff in a single round on a 2-enemy board.
+        //
+        // CANNOT DOUBLE-FIRE with the dummy's own Post-Turn call: the two are mutually exclusive by
+        // construction. `turnOrderActors` drops the dummy iff `dummyEnemyIsVestigial`, and the dummy
+        // is explicitly exempt from the dead-actor `continue` guard, so it always takes its turn
+        // when it is in the order. Non-vestigial (non-positional) runs therefore never reach this
+        // line and stay byte-identical.
+        //
+        // POSITION: the earliest round boundary after the turn loop. The row's
+        // `activeEnemyDebuffs` is a snapshot taken during the focus attacker's TURN
+        // (`lastAttackerTurn.landedEnemyDebuffs`), so this decrement lands after that read — the
+        // same ordering the dummy's Post-Turn produced when it acted after the attacker.
+        //
+        // actorId on `buff-expired`: `enemy.id`. The sentinel bucket is a SIDE-WIDE store with no
+        // single carrier, so attributing its expiry to one positioned enemy would be the same lie
+        // `finalHpPct` told when it silently described only `enemyAttackers[0]`. `enemy.id` is the
+        // id this identical bucket already emits under on non-positional runs, so the event stream
+        // keeps one stable identity for the bucket across modes and matches the pre-regression
+        // (841e1bc0) stream exactly. `buff-expired` has no reactive listeners — it is log-only.
+        if (dummyEnemyIsVestigial) {
+            for (const buffName of statusEngine.decrementEnemy().expired) {
+                bus.emit({ type: 'buff-expired', actorId: enemy.id, round: r, buffName });
+            }
         }
 
         // The row's attacker fields come from the LAST focus turn this round. Rounds
@@ -10158,23 +10761,29 @@ export function runCombat(rawInput: CombatEngineInput): {
         // (Rhodium's most-buffed-enemy purge, Incinerator's enemy-debuff AoE) credit into
         // `roundDamage` via `creditDamage` DURING the `round-ended` drain above — AFTER this
         // round's scalar snapshot (directDamage/totalRoundDamage/cumulativeDamage/raw totals) was
-        // taken and folded into the persistent accumulators. In pure DPS mode those credits would
-        // otherwise be discarded when `roundDamage` is recreated next round, so they never reached
-        // the public DPS summary. Re-read roundDamage, fold ONLY the post-drain delta into the row +
+        // taken and folded into the persistent accumulators. In pure DPS mode (roster-less — NOT
+        // the DPS calculator any more, see the gate note below) those credits would otherwise be
+        // discarded when `roundDamage` is recreated next round, so they never reached the summary
+        // built from these scalars. Re-read roundDamage, fold ONLY the post-drain delta into the row +
         // accumulators (the pre-drain amount was already folded at the snapshot, so adding the delta
         // avoids double-count), and decline the destructible DPS target's HP by the same delta so
-        // `totalRoundDamage + teamRoundDamage == enemy-HP delta` (8085) and roundsToKill stay honest.
+        // `totalRoundDamage + teamRoundDamage == enemy-HP delta` (10546) and roundsToKill stay honest.
         //
-        // GATED ON `dpsEnemyTarget` (the pure-DPS mode this fix targets). The other two modes are
-        // deliberately excluded:
-        //  - Positional sim (`mode: 'battle'`, battleSimulator): reactives route through
+        // GATED ON `dpsEnemyTarget`, i.e. on ROSTER EMPTINESS — which is not the same population
+        // it was when this was written. SP-4b-2a made `simulateDPS` always supply a real enemy, so
+        // the DPS CALCULATOR no longer reaches this block at all; it now takes the positional
+        // exclusion in the first bullet, and its round-tail reactive credit reaches the summary via
+        // `perTargetDealt` and the adapter's re-derivation instead. What remains here is the
+        // roster-less direct-`runCombat` shape. The exclusions:
+        //  - Any POSITIONAL run — `mode: 'battle'` (battleSimulator) and, since SP-4b-2a, every
+        //    DPS-calculator run: reactives route through
         //    applyVictimDamage + the per-victim maps (serialized into RoundData AFTER this drain),
         //    NOT `roundDamage` — the delta would be 0 here anyway, so the gate only makes the no-op
         //    explicit.
         //  - Healing mode (healingEngineAdapter): NOT positional, so a reactive DOES credit
         //    `roundDamage` — but the healing adapter reads none of the damage scalars, and mutating
         //    `cumulativeDamage` here would perturb the vestigial dummy's NEXT-round HP-decline
-        //    (8129) and its HP%-gates. The gate keeps healing byte-identical.
+        //    (10568) and its HP%-gates. The gate keeps healing byte-identical.
         // The delta is also 0 for every DPS round without an end-of-round reactive-damage proc
         // (`focusTotalFinal === totalRoundDamage` — identical float expression), so existing DPS
         // goldens don't move. Only the 'direct' channel can shift at round tail (applyReactiveDamage
@@ -10205,8 +10814,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // dpsEnemyTarget branch above) used the pre-reactive total, so this is the remaining
                 // amount (no double-apply). A post-drain death is stamped by recordDestroyed inside
                 // applyVictimDamage; the row is pushed just below and the run terminates at the
-                // dpsEnemyTarget break (8359). NOTE (accepted asymmetry): unlike the pre-drain death
-                // path (8115), a kill landed HERE does NOT drain on-enemy-destroyed intents — this is
+                // dpsEnemyTarget break (11008). NOTE (accepted asymmetry): unlike the pre-drain death
+                // path (10553), a kill landed HERE does NOT drain on-enemy-destroyed intents — this is
                 // the terminal round (the row is already assembled and the run breaks immediately),
                 // and re-draining would re-enter the same round-tail credit ordering this block just
                 // reconciled. On-enemy-destroyed effects are charge/extra-action grants that are moot
@@ -10341,41 +10950,76 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...(perActorReflected.size > 0
                 ? { perActorReflected: Object.fromEntries(perActorReflected) }
                 : {}),
-            activeCorrosionStacks: totalStacks(corrosionEntries),
-            activeInfernoStacks: totalStacks(infernoEntries),
-            activeBombCount: pendingBombs.length,
+            // SP-4b-2 D3: the DoT-state fields describe every enemy-side carrier, not just the
+            // dummy's (never-written) containers. See `dotCarrierActors`.
+            //
+            // CORPSES ARE EXCLUDED (task-14 finding 3) — `dotCarrierReports`, evaluated HERE so
+            // each round sees the live death state. A killed positioned enemy never ticks again
+            // and nothing clears its containers, so its stacks would otherwise be summed into
+            // every remaining round while dealing nothing.
+            //
+            // MULTI-ENEMY AGGREGATION — deliberate choice: these three are COUNTS, so they SUM
+            // across carriers ("how many stacks stand on the enemy side"). Stacks are an
+            // EXTENSIVE quantity — they add — unlike `finalHpPct`, an INTENSIVE per-actor ratio
+            // that had to become an HP-weighted remainder. Weighting a count would produce a
+            // number that is neither the board total nor any one actor's real stack count.
+            // Reporting only `enemyAttackers[0]` is the defect class this epic keeps hitting and
+            // is explicitly rejected here.
+            activeCorrosionStacks: dotCarrierActors
+                .filter(dotCarrierReports)
+                .reduce((sum, a) => sum + totalStacks(a.corrosionEntries), 0),
+            activeInfernoStacks: dotCarrierActors
+                .filter(dotCarrierReports)
+                .reduce((sum, a) => sum + totalStacks(a.infernoEntries), 0),
+            activeBombCount: dotCarrierActors
+                .filter(dotCarrierReports)
+                .reduce((sum, a) => sum + a.pendingBombs.length, 0),
             activeSelfBuffs: activeSelfBuffsForRound,
             activeEnemyDebuffs: landedEnemyDebuffs,
             resistedEnemyDebuffs,
             appliedDoTs: dotsConfig,
             dotsLanded,
+            // SP-4b-2 D3: the UNION of every enemy-side carrier's standing DoT entries. A list is
+            // the one shape where the lossless answer exists, so concatenation is the aggregation
+            // — reporting one carrier's entries would silently hide the rest of the board's.
+            // Grouping stays TYPE-MAJOR (all carriers' corrosion, then inferno, then bombs, then
+            // generic), preserving both the single-carrier byte-identity and the type grouping the
+            // `extend-dot` consumers filter on. Carrier order within a type is board order.
             activeDoTStates: [
-                ...corrosionEntries.map((e) => ({
-                    type: 'corrosion' as const,
-                    tier: e.tier,
-                    stacks: e.stacks,
-                    ticksRemaining: e.remainingRounds,
-                })),
-                ...infernoEntries.map((e) => ({
-                    type: 'inferno' as const,
-                    tier: e.tier,
-                    stacks: e.stacks,
-                    ticksRemaining: e.remainingRounds,
-                })),
-                ...pendingBombs.map((b) => ({
-                    type: 'bomb' as const,
-                    tier: b.tier,
-                    stacks: b.stacks,
-                    ticksRemaining: b.countdown,
-                })),
-                // SP-E: always [] today (generic DoTs are never auto-applied from skill text in
-                // this task) — a no-op spread, byte-identical.
-                ...genericDoTEntries.map((e) => ({
-                    type: 'generic' as const,
-                    tier: e.tier,
-                    stacks: e.stacks,
-                    ticksRemaining: e.remainingRounds,
-                })),
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
+                    a.corrosionEntries.map((e) => ({
+                        type: 'corrosion' as const,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                        ticksRemaining: e.remainingRounds,
+                    }))
+                ),
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
+                    a.infernoEntries.map((e) => ({
+                        type: 'inferno' as const,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                        ticksRemaining: e.remainingRounds,
+                    }))
+                ),
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
+                    a.pendingBombs.map((b) => ({
+                        type: 'bomb' as const,
+                        tier: b.tier,
+                        stacks: b.stacks,
+                        ticksRemaining: b.countdown,
+                    }))
+                ),
+                // SP-E: generic DoTs are never auto-applied from skill text in this task, so this
+                // is [] on every corpus run today — a no-op spread.
+                ...dotCarrierActors.filter(dotCarrierReports).flatMap((a) =>
+                    a.genericDoTEntries.map((e) => ({
+                        type: 'generic' as const,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                        ticksRemaining: e.remainingRounds,
+                    }))
+                ),
             ],
         });
 
@@ -10467,9 +11111,13 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // SP-U U5: DPS enemy outcome (the real, destructible target). `roundsToKill` = the round the
     // enemy was destroyed (undefined if it survived the window); `survived` = never reached 0 HP;
-    // `finalHpPct` = its HP% remaining at the end of the run (0 when killed). In sim/healing mode
-    // (vestigial billion-HP sink) this always reports survived (never read — the DPS adapter is
-    // the only consumer).
+    // `finalHpPct` = its HP% remaining at the end of the run (0 when killed). Whenever an enemy
+    // roster was supplied (vestigial billion-HP sink) this always reports survived.
+    //
+    // NO PRODUCTION CONSUMER since SP-4b-2a: the DPS adapter used to read these three and now
+    // re-derives all of them from its own `ship-destroyed` bus tap, because every `simulateDPS`
+    // run supplies a real roster and these fields would describe the dummy. Only
+    // `indestructibleDeath.test.ts` reads them today; they go with the dummy in SP-4c.
     const enemyFinalHpPct =
         enemy.destroyedRound !== undefined
             ? 0

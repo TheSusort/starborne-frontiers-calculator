@@ -94,13 +94,28 @@ const BASE: DPSSimulationInput = {
     hp: 30000,
 };
 
-/** Collect the focus attacker's `ability-performed` events from one `simulateDPS` run. */
+/** The focus attacker's own actor id — every cardinality assertion below counts ITS sub-attacks. */
+const FOCUS = 'attacker';
+
+/**
+ * Collect the FOCUS ATTACKER's `ability-performed` events from one `simulateDPS` run.
+ *
+ * The `actorId === FOCUS` filter is load-bearing since SP-4b-2a: a scalar-only `simulateDPS` run
+ * now fights a real, positioned enemy (`enemy-1`), and an enemy supplied without `shipSkills` gets
+ * the engine's synthesized flat-card basic attack (engine.ts:618-638). With `hp: 30000` on the
+ * attacker (BASE below) that enemy has a living target, so it casts once per round and emits one
+ * extra `ability-performed { actorId: 'enemy-1', damage: 0 }` per round — zero damage, because the
+ * synthesized enemy carries `attack: 0`. That event is the OTHER actor's cast and has nothing to
+ * do with the focus's per-sub-attack fan-out this file pins, so it is filtered out rather than
+ * counted: every expected length here (12 / 4 / 3 / 1) is the pre-SP-4b-2a number, unchanged.
+ */
 const runCollectingPerformed = (
     input: DPSSimulationInput
 ): { performed: AbilityPerformed[]; result: ReturnType<typeof simulateDPS> } => {
     const bus = createEventBus();
     const performed: AbilityPerformed[] = [];
     bus.on('ability-performed', (e) => {
+        if (e.actorId !== FOCUS) return;
         performed.push(e);
     });
     const result = simulateDPS({ ...input, bus });

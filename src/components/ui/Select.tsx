@@ -27,6 +27,10 @@ interface Props {
     onChange: (value: string) => void;
     disabled?: boolean;
     id?: string;
+    /** Accessible name for a Select that carries no visible `label` — e.g. one sitting under a
+     *  section heading that already names it, where a `label` would duplicate that heading on
+     *  screen. Ignored when `label` is set (the visible label already names the control). */
+    'aria-label'?: string;
     'data-testid'?: string;
     helpLabel?: string;
     searchable?: boolean;
@@ -44,6 +48,7 @@ export const Select: React.FC<Props> = ({
     onChange,
     disabled = false,
     id,
+    'aria-label': ariaLabel,
     'data-testid': testId,
     helpLabel,
     searchable = false,
@@ -283,6 +288,7 @@ export const Select: React.FC<Props> = ({
                     aria-haspopup="listbox"
                     aria-expanded={isOpen}
                     aria-labelledby={label ? selectId : undefined}
+                    aria-label={label ? undefined : ariaLabel}
                     data-testid={testId}
                     className={`
                         w-full px-4 py-2 text-left

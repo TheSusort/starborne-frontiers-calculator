@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
+import {
+    simulateDPS,
+    DPSSimulationInput,
+    SYNTHESIZED_DPS_ENEMY_ID,
+} from '../../calculators/dpsSimulator';
 import { TeamActorInput, CombatStatBlock } from '../../../types/calculator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { createEventBus, CombatEvent } from '../events';
@@ -124,12 +128,20 @@ const baseInput = (overrides: Partial<DPSSimulationInput> = {}): DPSSimulationIn
     ...overrides,
 });
 
-/** Per-round turn order from turn-started events (drops the dummy enemy). */
+/**
+ * Per-round PLAYER turn order from turn-started events (drops the opposing actor).
+ *
+ * SP-4b-2a: a scalar-only `simulateDPS` run now fights a REAL, positioned enemy
+ * (`SYNTHESIZED_DPS_ENEMY_ID`); the vestigial dummy `enemy` no longer takes a turn
+ * (`dummyEnemyIsVestigial`, engine.ts). The id to drop moved from `'enemy'` to `'enemy-1'`. The
+ * player orders asserted below are unchanged: the synthesized enemy keeps the dummy's default
+ * speed (50), below both F (100/150) and G (120), and carries `attack: 0` with no `shipSkills`.
+ */
 const playerTurnOrder = (events: CombatEvent[]): string[][] => {
     const byRound = new Map<number, string[]>();
     for (const e of events) {
         if (e.type !== 'turn-started') continue;
-        if (e.actorId === 'enemy') continue;
+        if (e.actorId === SYNTHESIZED_DPS_ENEMY_ID) continue;
         const list = byRound.get(e.round) ?? [];
         list.push(e.actorId);
         byRound.set(e.round, list);

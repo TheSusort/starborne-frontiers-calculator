@@ -139,9 +139,9 @@ describe('DPS calculator with a real positioned enemy', () => {
                 (s, n) => s + n,
                 0
             );
-            expect(r.totalRoundDamage).toBe(rowDealt);
+            expect(r.totalRoundDamage).toBe(Math.round(rowDealt));
             running += rowDealt;
-            expect(r.cumulativeDamage).toBe(running);
+            expect(r.cumulativeDamage).toBe(Math.round(running));
         });
     });
 

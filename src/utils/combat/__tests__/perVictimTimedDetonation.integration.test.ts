@@ -20,16 +20,20 @@
  *
  * Crit 0 keeps every credited value an exact integer.
  *
- * --- The `allPlayersDirect` accumulator caveat (read before case 2) ---
- * `processAccumulators` (`engine.ts:727`) does, per run: `acc.accumulated += allPlayersDirect;
- * acc.roundsRemaining -= 1;` and on `roundsRemaining <= 0` bursts `acc.accumulated * (acc.pct/100)`.
- * `allPlayersDirect` = `[...roundDamage.values()].reduce((s,d)=>s+d.direct,0)` — the round-global
- * sum of all players' DIRECT damage credited up to that turn position. BUT in POSITIONAL mode the
- * focus attacker's direct credit is SUPPRESSED (`engine.ts:4564` — the `if (!positional)` guard
- * skips `creditDamage(actor.id,'direct',…)`; the firing hit lands per-victim via
- * `roundPerTargetDamage` instead). Enemy victims here have attack 0. So `allPlayersDirect` is 0
- * every round → a positional accumulator's `accumulated` grows by 0 → it bursts for exactly its
- * PRE-SEEDED `accumulated * pct/100`. We exploit that for clean integers.
+ * --- The accumulator gather (read before case 2) ---
+ * `processAccumulators` does, per run: `acc.accumulated += gatheredDirect; acc.roundsRemaining
+ * -= 1;` and on `roundsRemaining <= 0` bursts `acc.accumulated * (acc.pct/100)`. `gatheredDirect`
+ * is the DIRECT damage the ACCUMULATING side (here the players) has dealt so far this round.
+ *
+ * WAS A DEFECT, FIXED BY SP-4b-2 D1. This header used to read: "in POSITIONAL mode the focus
+ * attacker's direct credit is SUPPRESSED … So `allPlayersDirect` is 0 every round → a positional
+ * accumulator's `accumulated` grows by 0 → it bursts for exactly its PRE-SEEDED `accumulated *
+ * pct/100`. We exploit that for clean integers." The suppression is real, but reading the
+ * suppressed channel and calling the resulting 0 a convenience was the defect: EVERY positional
+ * accumulate-detonate (the Echoing Burst gear-set family) detonated for zero in production. The
+ * gather now reads the positional channel too, so the pre-seeded total grows by this round's real
+ * player direct damage — for this fixture, the focus's Line-Range-1 firing hit: 100 on the M4
+ * origin + 50 on the M3 covered cell = 150 per round, landing before enemy-mid's own turn.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -109,8 +113,8 @@ const timedBomb = (
 });
 
 // A pre-seeded accumulator. On the run that drops roundsRemaining to <= 0 it bursts for
-// (accumulated + Σ allPlayersDirect over its active runs) × pct/100. In positional mode
-// allPlayersDirect is 0 (see header caveat) → burst = accumulated × pct/100.
+// (accumulated + Σ gatheredDirect over its active runs) × pct/100 — see the header note: since
+// SP-4b-2 D1 `gatheredDirect` is the real player direct damage of the round (150 here), not 0.
 const accumulator = (
     accumulated: number,
     pct: number,
@@ -244,8 +248,11 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
     it('an ACCUMULATOR bursts for accumulated × pct/100 on expiry, credited to its applier', () => {
         idc = 0;
         // enemy-mid carries a pre-loaded accumulator: accumulated 5000, pct 50, roundsRemaining 1.
-        // On its FIRST own turn (round 1): accumulated += allPlayersDirect (0 in positional) → 5000,
-        // roundsRemaining → 0 → BURST = 5000 × 50/100 = 2500. Lands on enemy-mid's OWN HP.
+        // On its FIRST own turn (round 1): accumulated += gatheredDirect → 5000 + 150,
+        // roundsRemaining → 0 → BURST = 5150 × 50/100 = 2575. Lands on enemy-mid's OWN HP.
+        // SP-4b-2 D1: the 150 is the focus's own firing hit THIS round (origin 100 on enemy-front
+        // + covered 50 on enemy-mid), which lands before enemy-mid takes its turn. Before D1 this
+        // read 0 and the burst was 2500 — the gather was structurally empty on any positional run.
         const { result } = collect(
             POSITIONAL_BASE({
                 __testTapActors: (actors: CombatActor[]) => {
@@ -256,11 +263,14 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
             })
         );
 
-        // Round 1: firing hit 50 (covered) + accumulator burst 2500 on enemy-mid's own HP.
+        // Round 1: firing hit 50 (covered) + accumulator burst 2575 on enemy-mid's own HP.
         const round1 = result.rounds[0];
-        expect(round1.perTargetDamage?.['enemy-mid']).toBe(50 + 2500);
+        const gathered = 100 + 50; // this round's player direct: origin + covered footprint cells
+        const burst = (5000 + gathered) * (50 / 100);
+        expect(burst).toBe(2575); // derivation, not a copied output
+        expect(round1.perTargetDamage?.['enemy-mid']).toBe(50 + burst);
         // Credited to the applier ('attacker'), landing on enemy-mid, NOT the focus dummy.
-        expect(round1.perActorDetonation?.['attacker']).toBe(2500);
+        expect(round1.perActorDetonation?.['attacker']).toBe(burst);
         expect(round1.perTargetDamage?.['enemy']).toBeUndefined();
         expect(round1.perActorDetonation?.['enemy']).toBeUndefined();
     });

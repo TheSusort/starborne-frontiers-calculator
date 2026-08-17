@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DPSCalculatorPage from '../DPSCalculatorPage';
 import * as dpsSimulator from '../../../utils/calculators/dpsSimulator';
@@ -76,6 +76,40 @@ describe('DPSCalculatorPage supplies a real positioned enemy', () => {
         // user raises this. Changing the default flips that behaviour for everyone — deliberate
         // decision required, hence the assertion.
         expect(input?.enemyAttackers?.[0]?.stats.attack).toBe(0);
+
+        spy.mockRestore();
+    });
+
+    it('threads BOTH raw affinities into simulateDPS (focus config and enemy roster entry)', () => {
+        // Task 5 fixed a regression where the page resolved affinity into a single scalar
+        // (`affinityDamageModifier`) and stopped there — the positional damage path recomputes the
+        // matchup per victim from the RAW `affinity` fields, so that scalar alone was inert and the
+        // page's affinity selection stopped affecting damage. Nothing else in this suite exercises
+        // the wiring: reverting either `affinity:` line in DPSCalculatorPage.tsx leaves `tsc` clean
+        // and every other test in this directory green, so this is the only guard.
+        const spy = vi.spyOn(dpsSimulator, 'simulateDPS');
+
+        render(
+            <MemoryRouter>
+                <DPSCalculatorPage />
+            </MemoryRouter>
+        );
+
+        // Drive the focus ship's own affinity picker (inside the config card's "Affinity" section)
+        // to a non-default value so its presence in the sim call is unambiguous — 'chemical' can't
+        // be confused with the 'antimatter' default a removed wire-up would silently keep emitting.
+        fireEvent.click(screen.getByLabelText('Affinity'));
+        fireEvent.click(screen.getByText('Chemical'));
+
+        // Drive the enemy's affinity picker to a different non-default value.
+        fireEvent.click(screen.getByLabelText('Enemy Affinity'));
+        fireEvent.click(screen.getByText('Electric'));
+
+        expect(spy).toHaveBeenCalled();
+        const input = spy.mock.calls.at(-1)?.[0];
+
+        expect(input?.affinity).toBe('chemical');
+        expect(input?.enemyAttackers?.[0]?.affinity).toBe('electric');
 
         spy.mockRestore();
     });

@@ -47,6 +47,7 @@ import { synthesizeResisted } from './shared';
 import {
     buildActorConditionContext,
     selfBuffNamesForOwners,
+    LIVE_TRIGGERS,
     type ReactiveAbility,
 } from './triggers';
 import { reduceBombsOnVictim } from './bombCountdown';
@@ -198,6 +199,48 @@ export interface DeferredEnemyApplication {
     emitEvents: () => void;
 }
 
+/**
+ * The PASSIVE-SLOT damage instance of one cast (SP-4b-2 D6).
+ *
+ * A SEPARATE damage instance, not an addend on the firing hit: the always-active passive slot can
+ * carry its own gated `damage` ability with its own multiplier, its own crit rule (`noCrit`) and
+ * its own `target`. `runPlayerTurn` decides all three; the positional apply site only LANDS it.
+ *
+ * TARGETING is the ability's own, deliberately NOT the firing hit's footprint — see
+ * `passiveSlotPattern` / `stagePassiveSlotHit` in engine.ts for the full justification and the
+ * mapping from `target` to a footprint.
+ */
+export interface PassiveSlotHit {
+    /**
+     * Attacker-side scalars for THIS instance alone. `multiplierPct` is the passive's own gated
+     * multiplier (its hit count already folded in by `passiveMultiplier`), `hits` is 1 (the
+     * instance is one hit, however many hits the FIRING skill has) and `secondaryStatValue` is 0
+     * (the defence/HP-scaling payload belongs to the firing hit and is already counted there).
+     * Every other term is the firing cast's, because they are attacker-fixed for the whole turn —
+     * the same terms `nonCritFactor` folds into the aggregate `passiveDamage`.
+     */
+    scalars: AttackerDamageScalars;
+    /**
+     * ALREADY DECIDED here — the apply site must never re-roll or re-decide it. `noCrit` on the
+     * passive's own damage ability forces `false`; otherwise this REUSES the round's first crit
+     * draw rather than taking a new one, so no CRIT draw is added.
+     *
+     * That is a statement about crit ALONE — it is NOT a claim that the instance is RNG-free.
+     * It is a real damage instance and goes through the real victim funnel
+     * (`tb.applyToVictim` → `applyOutgoingToEnemy`, `byDirectDamage: true`), so against a victim
+     * carrying an `incoming-block` ability it advances that victim's `directIntakeIndex` and rolls
+     * a `makeRateGate` draw on the victim's own `<id>:proc` sub-stream. See the
+     * `stagePassiveSlotHit` doc in engine.ts for the full footprint of what it does draw and
+     * provoke, and `passiveSlotDamageFootprint.integration.test.ts` for the pins.
+     */
+    didCrit: boolean;
+    /**
+     * The passive damage ability's OWN declared target ('all-enemies' for Judge/Incinerator,
+     * 'enemy' for most). The firing skill's target/pattern are NOT used — see engine.ts.
+     */
+    target: Ability['target'];
+}
+
 /** Everything one player actor's turn contributes to the round's RoundData row. */
 export interface PlayerTurnResult {
     action: 'active' | 'charged';
@@ -280,10 +323,31 @@ export interface PlayerTurnResult {
     /** Per-cast attacker-side damage scalars for the positional apply path (Task 7).
      *  Populated from the SAME locals that feed the aggregate `directDamage`, so feeding
      *  these + `hitCrits` through `victimHitDamage` for the bound victim's defense profile
-     *  reproduces the firing hit exactly (Task-4 parity). Read ONLY by the future positional
-     *  engine branch (Task 8); non-positional callers ignore it → goldens byte-identical.
-     *  Present whenever a damage ability fired this cast (else undefined). */
+     *  reproduces the FIRING HIT exactly (Task-4 parity). Read ONLY by the positional engine
+     *  branch; non-positional callers ignore it → goldens byte-identical.
+     *  Present whenever a damage ability fired this cast (else undefined).
+     *
+     *  FIRING HIT ≠ `directDamage` (SP-4b-2 D6 — the gap this doc used to paper over). The
+     *  aggregate `directDamage` is `firing hit + passiveDamage`; `multiplierPct` here is the
+     *  FIRING skill's multiplier only, deliberately excluding the passive slot's. So a positional
+     *  cast that re-derives its round damage from this payload alone LOSES the passive-slot
+     *  instance — which is exactly what happened until `passiveSlotHit` below started carrying it.
+     *  Anything else `directDamage` folds in but this does not must be handed over the same way. */
     positionalScalars?: AttackerDamageScalars;
+    /** SP-4b-2 D6 — the PASSIVE-SLOT damage instance, for the positional apply path to land
+     *  itself (Judge: "At the start of the round, this Unit deals 60% damage to all enemies
+     *  with less than 50% HP").
+     *
+     *  WHY IT HAS TO BE HANDED OVER. `passiveDamage` is folded into the aggregate
+     *  `directDamage` below, which is the whole story on a NON-positional cast: the single sink
+     *  takes `directDamage` and the passive lands with it. On a POSITIONAL cast the engine
+     *  suppresses that scalar credit and re-derives the round's direct damage from the
+     *  per-victim apply — whose payload is `positionalScalars`, the FIRING skill's scalars only.
+     *  The passive instance was therefore computed and dropped (measured: Judge's round-4
+     *  `directDamage` stuck at 23000 instead of 29000). Present only when the passive slot's
+     *  GATED damage ability contributes damage this round; absent otherwise, so the engine's
+     *  wiring is a no-op for every cast without one. */
+    passiveSlotHit?: PassiveSlotHit;
     /** Sub-project I, PR I2 (Layer 3) — ingredients for the engine's per-victim outgoing-
      *  modifier delta (Tygr/Incinerator/Lodolite-shape "+N% to enemies with <named status>"
      *  gates). `primaryCtx` is the SAME `modifierCtx` folded into `positionalScalars.
@@ -296,6 +360,21 @@ export interface PlayerTurnResult {
      *  Absent → the engine skips the per-victim fold (byte-identical to I1's single-ctx
      *  behavior); read ONLY by the positional engine branch. */
     perVictimOutgoing?: { modifierAbilities: Ability[]; primaryCtx: ConditionContext };
+    /** SP-4b-2 D4 — this turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
+     *  decision, i.e. exactly the entries that LANDED (`scheduledEnemy.roundEnemyDebuffs`:
+     *  recurring/always/accumulating re-rolled through `roundDebuffLanded()` / the affinity
+     *  gate for `application:'apply'`, plus timed scheduled entries which were gated once at
+     *  application). It is the SAME expansion of the SAME `snapshot(_, DEFAULT_ENEMY_TARGET)
+     *  .activeEnemyDebuffs` list that `victimEnemyBuffs` re-reads raw — minus the resisted
+     *  entries.
+     *
+     *  It exists because the landing/resist DRAW is memoized per turn and must not be taken
+     *  twice: a second draw would consume RNG and let the reporting channel
+     *  (`RoundData.activeEnemyDebuffs`) and the positional DAMAGE channel disagree about the
+     *  very same debuff. The engine's `victimIncomingModifiers` therefore consumes THIS list
+     *  for the scheduled channel instead of re-reading the ungated bucket. Present on every
+     *  turn; the ability channel is per-victim and stays with `victimEnemyBuffs`. */
+    scheduledEnemyEffects: SelectedGameBuff[];
     /** Per-victim crit resolver for the positional AoE apply path (per-victim crit).
      *  Rolls THIS attacker's crit gate at the given victim's affinity-capped rate, so a
      *  covered victim the attacker is at an affinity disadvantage against crits less often
@@ -653,7 +732,10 @@ function resolveSelfBuffTotals(args: {
 // debuffs land unless the attacker is at an affinity disadvantage; everything else draws
 // the hacking-vs-security landing roll. The roll is a LAZY getter (`roundDebuffLanded`)
 // so the single per-round gate draw is taken only when a non-'apply' recurring debuff is
-// present (and is memoized across all round consumers — recurring fold + DoT landing).
+// present (and is memoized across all round consumers — recurring fold, DoT landing, and
+// since SP-4b-2 D4 the POSITIONAL DAMAGE read, which consumes this function's
+// `roundEnemyDebuffs` via `PlayerTurnResult.scheduledEnemyEffects` rather than re-reading
+// the ungated `__enemy__` bucket. One draw, one decision, both channels).
 // NOTE: no `debuff-applied` is emitted here (Phase 3 retiming: recurring/aura per-round
 // re-applications are NOT discrete inflictions — only `debuff-resisted` fires on miss,
 // unchanged from Phase 1).
@@ -1173,8 +1255,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // its max, so decline = how much HP the victim has lost). For the DPS dummy sink this equals
     // the old cumulativeDamage+cumulativeTeamDamage (the sink's currentHp tracks it post-round);
     // for a real positional victim it now reflects that victim's actual HP.
-    // LOAD-BEARING TIMING: in DPS the dummy's currentHp updates POST-round (engine.ts ~3772),
-    // not per-hit, so this derived value equals the entering-round scalar the old param carried.
+    // LOAD-BEARING TIMING: on a roster-less run the dummy's currentHp updates POST-round
+    // (engine.ts ~10568), not per-hit, so this derived value equals the entering-round scalar the
+    // old param carried. That timing does NOT hold for a real positioned victim — its HP falls
+    // during the turn walk — so on a positional run (since SP-4b-2a, every DPS-calculator run)
+    // this reads the victim's HP as it stood when THIS actor's turn began, which is the intended
+    // "entering this turn" semantics for the hp-threshold gates, not a per-round scalar.
     const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
     const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
 
@@ -1410,7 +1496,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     let critDamageForGates = scheduledTotals.critDamageBuff;
 
     // Per-round landing roll, drawn ONCE and memoized across this round's
-    // consumers (the RECURRING/aura partition + DoT landing). Lazy so the
+    // consumers (the RECURRING/aura partition, DoT landing, and — since SP-4b-2 D4, through
+    // `scheduledEnemyEffects` — the positional per-victim damage read; a second draw would
+    // let the reporting and damage channels disagree about the same debuff). Lazy so the
     // single draw is taken only when something actually needs it — TIMED
     // applications gate at application time and do NOT re-draw here, so a
     // round with no recurring/aura enemy content and no DoTs takes no draw
@@ -2202,6 +2290,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const rollOutgoingProc = args.rollOutgoingProc;
     let critHits = 0;
     const hitCrits: boolean[] = [];
+    /**
+     * The FIRST firing-hit crit draw's outcome — the ONE crit result the passive-slot damage
+     * instance reuses, in both of the channels that carry it (task-18 finding 4).
+     *
+     * Not `hitCrits[0]`: the loop below draws `drawHits` times whether or not a damage ability
+     * fired, but only PUSHES when one did (`damageInputsFromSkill` reports `hits: 1` for a slot
+     * with no damage ability, so the draw still happens). A cast with no firing-slot damage
+     * ability therefore has an EMPTY `hitCrits` and a crit outcome all the same — reading
+     * `hitCrits[0] ?? false` there declares the instance non-critical while the aggregate below
+     * crits off that very draw. Capturing the draw itself is what makes the two agree in every
+     * case. `false` when `drawHits` is 0 (a `noCrit` cast), which is the correct no-crit answer.
+     *
+     * NO EXTRA DRAW: this reads the existing per-hit draw, it does not add one.
+     */
+    let firstDrawCrit = false;
     let ampNonCritWeight = 0;
     let ampCritWeight = 0;
     // The engine resolves amplification per footprint victim exactly when it also takes over the
@@ -2212,6 +2315,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (let h = 0; h < drawHits; h++) {
         const didCritHit = critGate(effectiveCrit / 100);
         if (didCritHit) critHits += 1;
+        if (h === 0) firstDrawCrit = didCritHit;
         // Only collect per-hit outcomes when a damage ability actually exists.
         // The draw still happens regardless, so the per-hit RNG draw count is stable.
         if (hasDamageAbility) hitCrits.push(didCritHit);
@@ -2591,7 +2695,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               drawHits
             : damageCritMultiplier;
     const postDefenseFactor = amplifiedCritMultiplier * nonCritFactor;
-    const passiveCritMultiplier = passiveHit.noCrit ? 1 : damageCritMultiplier;
+    /**
+     * ONE instance, ONE crit outcome — the single boolean BOTH channels that carry the
+     * passive-slot hit read (task-18 finding 4): the aggregate `passiveDamage` just below, and
+     * the `PassiveSlotHit.didCrit` the positional per-victim apply lands with.
+     *
+     * WHY IT IS NOT `damageCritMultiplier`. That factor is the FIRING skill's per-hit BLEND —
+     * `1 - critFraction + critFraction × critMult`, i.e. the average over `drawHits` draws. It is
+     * the right basis for a `hits: N` firing hit (N hits, `critHits` of them critical) and the
+     * wrong one for the passive slot, which contributes exactly ONE hit that either crits or does
+     * not. On a 2-hit cast with one crit it valued the instance at 1.5× while the positional apply
+     * — reading `hitCrits[0]` — landed it at 2×, so the log's number and the enemy's health loss
+     * disagreed by that ratio (measured: aggregate 750 vs applied 1000 on the fixture in
+     * `passiveSlotHitCritParity`). Single-hit casts were unaffected, which is why nothing caught it.
+     *
+     * `noCrit` still forces false, exactly as `? 1` did. NO EXTRA DRAW: `firstDrawCrit` is the
+     * per-hit loop's own first draw.
+     */
+    const passiveDidCrit = passiveHit.noCrit ? false : firstDrawCrit;
+    const passiveCritMultiplier = passiveDidCrit
+        ? (1 + effectiveCritDamage / 100) * critIncomingRatio
+        : 1;
     const passiveDamage =
         effectiveAttack * (passiveMultiplier / 100) * passiveCritMultiplier * nonCritFactor;
     const directDamage = preCritDamage * postDefenseFactor + passiveDamage;
@@ -2680,10 +2804,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // healing/sim mode, where it silently killed the focus's entire event stream from the
         // moment cumulative damage crossed `enemyHp` (round 6 of 10 in the reproduction; see
         // `multiHitInlineEmitGuards.test.ts`'s runCombat-level block). The sink NEVER DIES, but its
-        // `currentHp` is CLAMPED: engine.ts (~9513) sets it to `Math.max(0, enemyHp -
+        // `currentHp` is CLAMPED: engine.ts (~10568) sets it to `Math.max(0, enemyHp -
         // cumulativeDamage - cumulativeTeamDamage)` at every round tail, so it reaches 0 and stays
         // there forever, and nothing terminates the run (the `dpsEnemyTarget &&
-        // enemy.destroyedRound !== undefined` break at ~9911 is gated OFF for this mode).
+        // enemy.destroyedRound !== undefined` break at ~11008 is gated OFF for this mode).
         // THE READING ERROR WORTH NOT REPEATING: the derivation below reasons exclusively about
         // MID-CAST HP application — "can anything decline this target's HP while the loop runs" —
         // and every bullet in it is still true. It simply never asked the OTHER question, "can the
@@ -2702,16 +2826,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     apply. So a mid-cast kill inside this loop is impossible — including on the
         //     symmetric reverse invocation (an enemy actor's turn against a player `enemy`/tgt,
         //     e.g. healing mode's tank) — and a target already dead BEFORE the cast is caught by
-        //     the turn-level `skipDeadTargetTurn` guard (engine.ts ~8705), which skips calling
+        //     the turn-level `skipDeadTargetTurn` guard (engine.ts ~9595), which skips calling
         //     `runPlayerTurn` at all rather than letting it fire hits into a corpse.
         //   Everything below is CORROBORATION: it shows no OTHER actor's mid-round work can
         //   decline the bound target's HP either, so the target is alive at every cast this loop
         //   can reach and not merely un-killable by this loop.
-        //   • DPS mode (`dpsEnemyTarget`, engine.ts) drives a REAL destructible enemy, but its HP
-        //     lands POST-round in a single applyVictimDamage call after every turn of the round
-        //     has run (engine.ts ~9469-9494, and the round-tail reactive re-fold ~9638-9673), and
-        //     the run breaks the moment `destroyedRound` is set (engine.ts:9899). Nothing declines
-        //     its HP mid-round.
+        //   • A ROSTER-LESS run (`dpsEnemyTarget`, engine.ts — since SP-4b-2a a direct-`runCombat`
+        //     shape only, no longer the DPS calculator) drives a REAL destructible `enemy`, but its
+        //     HP lands POST-round in a single applyVictimDamage call after every turn of the round
+        //     has run (engine.ts ~10546, and the round-tail reactive re-fold ~10711-10747), and
+        //     the run breaks the moment `destroyedRound` is set (engine.ts ~11008). Nothing
+        //     declines its HP mid-round.
         //   • Every OTHER non-positional mode (sim/healing) binds the VESTIGIAL sink (engine.ts's
         //     `enemy` has no `position`, so `isPositional(enemy.position, …)` is always false),
         //     whose HP is in the billions and which by construction never DIES — `recordDestroyed`
@@ -2719,8 +2844,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     NOT the same as "its currentHp stays positive": the round-tail clamp drives that
         //     field to 0 and pins it there (see WHICH SIGNAL above). Never-dies is the property
         //     this guard relies on; never-at-zero-HP is false and must not be substituted for it.
-        //   • The general reactive-proc funnel (engine.ts:5523, `applyVictimDamage` for a proc
+        //   • The general reactive-proc funnel (engine.ts:5894, `applyVictimDamage` for a proc
         //     victim) is explicitly gated `hasPositionedEnemyRoster && victim.id !== enemy.id`.
+        //     SCOPE NOTE (SP-4b-2a): that gate keeps the funnel off a NON-positional bound target
+        //     — which is what this corroboration is about — but it OPENS on a positional run, and
+        //     since SP-4b-2a that includes every DPS-calculator run. Where the bound target is a
+        //     real positioned actor the derivation rests on the PRIMARY argument above (this loop
+        //     emits only, and its listeners are enqueue-only), which is self-sufficient and says
+        //     so; the corroboration bullets below enumerate the NON-positional shapes only.
         //   • The remaining mid-round `applyVictimDamage` sites do NOT share one gate. An earlier
         //     draft of this comment claimed they were all "gated on `victim.position !== undefined`
         //     or on the victim carrying an ability/kit"; that is WRONG for two of them. The real
@@ -3072,8 +3203,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // ally of the caster (Tithonus) — via statusEngine.steal. Keyed off targetId, same
     // side-symmetric pattern as the on-cast purge loop below (works for player AND enemy
     // casters; no healEventOnly gate — a buff transfer, not a heal/shield/cleanse consumption).
-    // DPS mode (dummy target, no buffs on the anchor `enemy` sink's empty self-store) →
-    // statusEngine.steal finds nothing → [] → no-op → byte-identical.
+    // A run whose target is the dummy sink (no buffs on its empty self-store) →
+    // statusEngine.steal finds nothing → [] → no-op → byte-identical. That is no longer the DPS
+    // calculator (SP-4b-2a): a DPS cast now anchors on a real positioned enemy and CAN steal from
+    // it — which is correct, and inert only because the synthesized stand-in grants itself none.
     //
     // ORDER (Finding 1): this block runs BEFORE the on-cast purge block below. The sole corpus
     // ship carrying both in one skill (Tithonus) reads "steals 1 buff ... THEN purges 2 buffs",
@@ -3097,8 +3230,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // On-cast purge (C2a/C2b-3): remove buffs from the acting actor's target. Keyed off targetId
     // (the opposing victim) → side-symmetric (works for player AND enemy casters; no
-    // healEventOnly gate). gatedSkill holds the fired slot's abilities. DPS mode (dummy target,
-    // no buffs) → no-op → byte-identical. NOT inside the args.healing gate.
+    // healEventOnly gate). gatedSkill holds the fired slot's abilities. A dummy-sink target (no
+    // buffs) → no-op → byte-identical; since SP-4b-2a that is no longer the DPS calculator, whose
+    // cast anchors on a real positioned enemy. NOT inside the args.healing gate.
     // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
     // condition) so conditional purges only fire when their precondition holds.
     // E3: 'all-enemies' purge ability fans over the footprint victims (aoeVictimIds) instead of just targetId.
@@ -3917,6 +4051,71 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ? { modifierAbilities, primaryCtx: modifierCtx }
         : undefined;
 
+    // SP-4b-2 D6: hand the PASSIVE-SLOT damage instance to the positional apply path, which
+    // otherwise never sees it (`positionalScalars` above is the FIRING skill's scalars — the
+    // passive multiplier is deliberately absent from `multiplierPct`, which is why adding this
+    // cannot double-count against it).
+    //
+    // Same shape as `positionalScalars`, with the three fields that are NOT shared:
+    //   multiplierPct      the passive's own gated multiplier (hits already folded in),
+    //   hits: 1            ONE instance, regardless of the firing skill's hit count — the
+    //                      aggregate `passiveDamage` folds it in exactly once too,
+    //   secondaryStatValue 0 — the defence/HP-scaling payload belongs to the firing hit.
+    // Feeding these through `victimHitDamage(scalars, profile, didCrit, 1)` reproduces
+    // `passiveDamage` exactly for the bound victim's defence profile (the same identity Task 4
+    // established for the firing hit), so the positional and aggregate values agree.
+    //
+    // GUARD: `passiveMultiplier > 0`. `damageInputsFromSkill` returns multiplier 0 for a slot
+    // with no damage ability AND for one whose damage ability was gated OFF this round
+    // (gateFiringAbilities drops it), so this is exactly "the passive contributed damage this
+    // round" — the same condition that makes the aggregate `passiveDamage` non-zero.
+    //
+    // TRIGGER EXCLUSIVITY (the same "two channels, never both" discipline D1 needed). A passive
+    // `damage` ability with a LIVE trigger belongs to the REACTIVE machinery: it lands per victim
+    // through `applyReactiveDamage`, WITH a per-victim gate re-check — which is what makes real
+    // Judge's "all enemies below 50% HP" skip the healthy one. Only NON-live triggers belong
+    // here; `on-cast` is explicitly not a live trigger (triggers.ts's ReactiveAbilityType note),
+    // and the reactive machinery never delivers those, so this is their only channel.
+    //
+    // DEFENCE IN DEPTH, not the primary gate: `partitionReactiveAbilities` (triggers.ts) already
+    // strips every live-triggered ability out of `castSkills` before this function sees the slot,
+    // so `damageInputsFromSkill` reports multiplier 0 for them and this condition never decides
+    // anything in production today. VERIFIED by instrumentation: a passive `damage` ability moved
+    // from `on-cast` to `start-of-round` arrives here with an EMPTY gated passive slot, and the
+    // hit still lands exactly once — via the reactive channel (measured identical per-victim
+    // credit both ways, and real Judge deals its 600 once, skipping the >50%-HP enemy). The
+    // condition is kept because `damageInputsFromSkill` itself does NOT filter by trigger: if the
+    // partition ever stopped covering a slot, the two channels would silently both pay out.
+    // `passiveHit.scalingAbility` is the EXACT ability `damageInputsFromSkill` measured
+    // `passiveMultiplier` from — not a second `find`, which could select a different one and
+    // pair this instance's target/trigger with another ability's multiplier.
+    const passiveDamageAbility = passiveHit.scalingAbility;
+    const passiveSlotHit: PassiveSlotHit | undefined =
+        passiveMultiplier > 0 &&
+        passiveDamageAbility &&
+        !LIVE_TRIGGERS.has(passiveDamageAbility.trigger)
+            ? {
+                  scalars: {
+                      effectiveAttack,
+                      multiplierPct: passiveMultiplier,
+                      secondaryStatValue: 0,
+                      hits: 1,
+                      effectiveCritDamage,
+                      outgoingDamageBuffPct: dmgStats.totals.outgoingDamageBuff,
+                      incomingDamageModifierPct: incomingDamageModifier,
+                      defensePenetrationPct: effectivePen,
+                      attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
+                      ...(forceOutgoingAdvantage ? { forceAffinityAdvantage: true } : {}),
+                  },
+                  // REUSED, never re-drawn — and it is THE SAME `passiveDidCrit` the aggregate
+                  // `passiveDamage` is scaled by (see its definition for why one instance gets one
+                  // outcome rather than the firing skill's per-hit blend). Reading `hitCrits[0]`
+                  // here instead is what let the two channels disagree on a multi-hit cast.
+                  didCrit: passiveDidCrit,
+                  target: passiveDamageAbility.target,
+              }
+            : undefined;
+
     return {
         action,
         roundCrit,
@@ -3945,7 +4144,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         detonationDamage,
         extraActionGrants,
         positionalScalars,
+        passiveSlotHit,
         perVictimOutgoing,
+        // SP-4b-2 D4: the landed half of this turn's scheduled enemy-debuff decision, handed to
+        // the engine's per-victim damage read so both consumers share ONE draw.
+        scheduledEnemyEffects: scheduledEnemy.roundEnemyDebuffs,
         rollVictimCrit,
         ...(positionalDetonation ? { positionalDetonation } : {}),
         // Task 5: when the inline emit was SUPPRESSED (engine will resolve positionally), hand the

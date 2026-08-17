@@ -35,9 +35,32 @@
  * fires with the correct (mitigated) amount, exactly like every other reactive-damage credit path
  * — while honestly not claiming the separate round-tail ordering bug is fixed (it isn't, and
  * fixing it is out of this task's locus; flagged in the task report as a follow-up).
+ *
+ * ─── SP-4b-2a migration (Task 7 wave A) ──────────────────────────────────────────────────────
+ * `simulateDPS` now ALWAYS builds a real, positioned enemy (`enemy-1`), so the four `simulateDPS`
+ * tests below no longer take the dummy-fallback branch this file was written against — they take
+ * the POSITIONAL branch, where `enemyWithMostBuffs` is `onceByOwner(() => mostBuffsAmong(
+ * enemyAttackerActors))` (engine.ts:7860-7862, gated on `hasPositionedEnemyRoster`, now true).
+ * Against a single UNBUFFED enemy `mostBuffsAmong` returns `undefined` (engine.ts:7767 —
+ * `return bestCount > 0 ? best : undefined`, the deliberate "no buffs anywhere → no most-buffs
+ * target" rule), so Rhodium's proc found no target and dropped entirely: `directDamage` read 0.
+ *
+ * The repair is to make the fixture exercise the mechanic it NAMES rather than to re-pin 0. Each
+ * `simulateDPS` test now supplies an explicit `buffedEnemyRoster()`: one positioned enemy whose
+ * active grants it `Attack Up III` (the same `buffedEnemy` idiom the positional sibling
+ * reactiveDamagePositionalHp.test.ts uses), so `mostBuffsAmong` resolves it deterministically.
+ * `hp` on the DPS input is load-bearing too: an enemy attacker with NO living opposing victim
+ * takes the no-victim cadence-only skip and never casts, so it would never gain the buff.
+ * The enemy keeps `attack: 0`, so its own basic attack deals 0 and moves nothing.
+ *
+ * EVERY EXPECTED NUMBER IS UNCHANGED (ATTACK × 0.8 per round; kill on round 1 at enemyHp 5000):
+ * the proc is back on the same amount, now landing on a real enemy instead of the dummy sink.
+ * The FIRST test (the `__testTapCreditDamage` probe) still drives `runCombat` directly with NO
+ * `enemyAttackers` and `mode: 'healing'`, so it still covers the surviving dummy-fallback branch
+ * (`hasPositionedEnemyRoster === false`) and is unchanged.
  */
 import { describe, it, expect } from 'vitest';
-import { simulateDPS } from '../dpsSimulator';
+import { simulateDPS, DPSSimulationInput, SYNTHESIZED_DPS_ENEMY_ID } from '../dpsSimulator';
 import { runCombat, CombatEngineInput } from '../../combat/engine';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ship } from '../../../types/ship';
@@ -88,6 +111,56 @@ const creditedDirectDamageFor = (sourceId: string, input: CombatEngineInput): nu
 
 const ATTACK = 10_000;
 
+// A self-buff-granting active (real corpus idiom — verbatim from reactiveDamagePositionalHp.
+// test.ts's `buffedEnemy`). This is the ONLY thing that makes the enemy carry a buff at all, so
+// `mostBuffsAmong` resolves it instead of returning `undefined` ("no buffs anywhere").
+function buffedEnemySkills() {
+    const buffer = {
+        refits: [],
+        activeSkillText: 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+    } as unknown as Ship;
+    return buildShipAbilities(buffer);
+}
+
+/**
+ * The positioned enemy roster Rhodium's `enemy-most-buffs` selector needs (SP-4b-2a). Carries the
+ * SAME id `simulateDPS` would synthesize, `attack: 0` (its own basic attack deals nothing and
+ * moves no number), and the given max HP so the kill test's HP budget is the roster's.
+ */
+const buffedEnemyRoster = (hp: number): NonNullable<DPSSimulationInput['enemyAttackers']> => [
+    {
+        id: SYNTHESIZED_DPS_ENEMY_ID,
+        stats: { attack: 0, crit: 0, critDamage: 0, speed: 50, defence: 0, hp, security: 100 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: buffedEnemySkills(),
+    },
+];
+
+/**
+ * A Rhodium DPS run against that buffed enemy. `hp` on the ATTACKER is load-bearing: an enemy
+ * attacker with no living opposing victim takes the no-victim cadence-only skip and never casts,
+ * so it would never gain the buff the selector keys on. Rhodium's own active is 0%-damage by
+ * construction, so any reported damage is unambiguously the end-of-round reactive proc.
+ */
+const rhodiumRun = (enemyHp: number, rounds: number) =>
+    simulateDPS({
+        attack: ATTACK,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        enemyDefense: 0,
+        enemyHp,
+        rounds,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        shipSkills: rhodiumShipSkills(),
+        defence: 0,
+        hp: 1_000_000_000,
+        enemyAttackers: buffedEnemyRoster(enemyHp),
+    });
+
 /** DPS-mode input (no `enemyAttackers`) carrying the given ship's parsed abilities. The active
  *  skill is 0%-damage by construction (both ships' texts above) — any credited direct damage is
  *  unambiguously the reactive proc. */
@@ -132,19 +205,7 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
         // AFTER the round's directDamage/cumulativeDamage/totalRoundDamage scalar snapshot. The
         // post-drain re-fold folds that late credit into the reported round + summary numbers,
         // so the proc is now visible on the public surface (not only via __testTapCreditDamage).
-        const reaction = simulateDPS({
-            attack: ATTACK,
-            crit: 0,
-            critDamage: 0,
-            defensePenetration: 0,
-            chargeCount: 0,
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
-            rounds: 1,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            shipSkills: rhodiumShipSkills(),
-        });
+        const reaction = rhodiumRun(1_000_000_000, 1);
         // Active skill is 0%-damage; the only credited direct damage is the end-of-round 80%
         // proc (noCrit, 0 defense) → ATTACK × 0.8, on the round row, the direct total, and the
         // cumulative summary.
@@ -154,19 +215,7 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
     });
 
     it("Rhodium's end-of-round proc accumulates across rounds in the public summary", () => {
-        const reaction = simulateDPS({
-            attack: ATTACK,
-            crit: 0,
-            critDamage: 0,
-            defensePenetration: 0,
-            chargeCount: 0,
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
-            rounds: 3,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            shipSkills: rhodiumShipSkills(),
-        });
+        const reaction = rhodiumRun(1_000_000_000, 3);
         // Each round's 80% proc (ATTACK × 0.8 = 8000) is folded into that round + the cumulative
         // summary — the re-fold runs every round, not just once.
         expect(reaction.rounds).toHaveLength(3);
@@ -179,19 +228,7 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
         // 0% — so the enemy survives the (zero) pre-drain decline and is killed by the end-of-round
         // proc's supplemental applyVictimDamage in the re-fold. Pre-fix the proc never touched HP,
         // so the enemy survived all 3 rounds; post-fix it dies on round 1 and the run terminates.
-        const reaction = simulateDPS({
-            attack: ATTACK,
-            crit: 0,
-            critDamage: 0,
-            defensePenetration: 0,
-            chargeCount: 0,
-            enemyDefense: 0,
-            enemyHp: 5_000,
-            rounds: 3,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            shipSkills: rhodiumShipSkills(),
-        });
+        const reaction = rhodiumRun(5_000, 3);
         expect(reaction.summary.survived).toBe(false);
         expect(reaction.summary.roundsToKill).toBe(1);
         // Run terminated on the kill round — no zero-damage rounds past it.
@@ -203,7 +240,7 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
         expect(reaction.rounds[0].enemyHpPct).toBe(100);
     });
 
-    it("Chakara's start-of-round highest-Speed-enemy proc credits cumulativeDamage/directDamage in DPS mode (no positioned enemy attackers)", () => {
+    it("Chakara's start-of-round highest-Speed-enemy proc credits cumulativeDamage/directDamage in DPS mode (against the synthesized positioned enemy)", () => {
         const reaction = simulateDPS({
             attack: ATTACK,
             crit: 0,
@@ -238,8 +275,11 @@ describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DP
         expect(control.summary.totalDamage).toBe(0);
         // Pre-fix: enemyWithHighestSpeed(ownerId) resolved to `undefined` off the empty
         // enemyAttackerActors roster → the proc silently dropped → reaction === control (both 0).
-        // Post-fix: the selector falls back to the live dummy `enemy.id`, so round 1 alone credits
-        // at least ATTACK × 0.6 (the self-buff granted by the co-located "starts each round with
+        // SP-4b-2a: this run is POSITIONAL, so the roster is no longer empty — it holds the one
+        // synthesized enemy — and `highestSpeedInRoster` resolves it directly (no dummy fallback,
+        // and no buff precondition, which is why this test needed no fixture change where the
+        // Rhodium `enemy-most-buffs` ones above did). Round 1 alone therefore still credits at
+        // least ATTACK × 0.6 (the self-buff granted by the co-located "starts each round with
         // Attack Up II..." clause can only ever ADD to this floor, never subtract).
         expect(reaction.rounds[0].directDamage).toBeGreaterThanOrEqual(ATTACK * 0.6);
         expect(reaction.summary.totalDamage).toBeGreaterThan(control.summary.totalDamage);

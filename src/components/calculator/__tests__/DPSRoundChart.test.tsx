@@ -9,6 +9,10 @@ import {
     DEFAULT_ENEMY_SLOT,
 } from '../../../utils/calculators/dpsEnemyPlacement';
 import type { ShipSkills } from '../../../types/abilities';
+import {
+    dotKit,
+    realEnemyInput,
+} from '../../../utils/calculators/__testutils__/dpsRealEnemyFixture';
 
 /**
  * SP-4b-1: the DPS chart had NO test at all, which is how a green 5756-test suite shipped a live
@@ -232,5 +236,54 @@ describe('DPSRoundChart surfaces walked-team damage from a real page-shaped run'
         expect(
             screen.getByText(hasText(`Total (with team): ${combined.toLocaleString()}`))
         ).toBeInTheDocument();
+    });
+
+    it('shows every damage-type row from a real simulated run', () => {
+        setupKeyedTestRng(12345);
+        const result = simulateDPS(realEnemyInput({ shipSkills: dotKit() }));
+
+        render(
+            <DPSRoundChart
+                ships={[{ id: 'ship-1', name: 'Focus Ship', result }]}
+                rounds={result.rounds.length}
+                enemyHp={5_000_000}
+            />
+        );
+
+        // Pick the first round where corrosion has actually landed, so the DoT row is not
+        // vacuously absent.
+        const round = result.rounds.findIndex((r) => r.corrosionDamage > 0) + 1;
+        expect(round).toBeGreaterThan(0);
+        const roundData = result.rounds[round - 1];
+
+        const Tooltip = capturedTooltip!.type as React.FC<Record<string, unknown>>;
+        const props = capturedTooltip!.props as Record<string, unknown>;
+        render(
+            <Tooltip
+                {...props}
+                active
+                label={round}
+                payload={[
+                    {
+                        name: 'Focus Ship',
+                        value: roundData.cumulativeDamage,
+                        color: '#fff',
+                        dataKey: 'ship-1',
+                    },
+                ]}
+            />
+        );
+
+        // PRESENCE, not value: the whole defect class is a `> 0`-guarded row VANISHING.
+        expect(screen.getByText(/Direct: [\d,]+/)).toBeInTheDocument();
+        expect(screen.queryByText('Direct: 0')).not.toBeInTheDocument();
+        expect(screen.getByText(/Corr: [\d,]+/)).toBeInTheDocument();
+        // No decimal tail reaches the user.
+        expect(screen.queryByText(/Direct: [\d,]+\.\d/)).not.toBeInTheDocument();
+
+        // Inf/Detonation are `> 0`-guarded and this fixture produces neither — fencing the
+        // guard in the other direction.
+        expect(screen.queryByText(/Inf: /)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Detonation: /)).not.toBeInTheDocument();
     });
 });
