@@ -296,3 +296,33 @@ Task 3: complete (commits 9cfd4c1e/50fd1759 + guard fix 745b9559; review "needs 
   A required field is a compile-time claim; the runtime guard must still handle undefined.
   Waves restructured (deea2c25) into A-E balanced by TEST count, explicit file lists, all 64
   verified present exactly once. Waves A-D end RED (husky needs --no-verify); wave E ends GREEN.
+Task 4 (wave A): complete (commit 94b14d4e + fix wave 5becf538; review APPROVED). healing.test.ts
+  73/73, engine.events.test.ts 42/42 (115 total; the "39+36=75" was the FAILING subset).
+  ⭐ THE INERTNESS CLAIM IS NOW EMPIRICALLY STRONG: healing.test.ts took a ONE-LINE roster change and
+  moved ZERO assertion values across 73 tests — including hand-computed timelines at 6 decimals, with
+  a live enemy on the board. The reviewer confirmed no numeric expectation appears anywhere in that
+  file's diff. Independent confirmation of "a 0-attack positioned enemy is RNG-stream-inert".
+  ⭐ BUT THE RECIPE WAS INCOMPLETE, AND WAVE A IS WHERE WE WANTED TO LEARN THAT (2 files, not 60):
+  six roster insertion points in one file (3 inline literals a factory search misses) + three NEW
+  mechanisms (M5 affinity re-derivation — the highest-yield grep; M6 dummy scalars inert; M7 scheduled
+  enemyDebuffs decrement at the round boundary) + `bareEnemy()`'s 500k HP is NOT survival (it died in
+  round 4 of 6). All folded into the plan (be134b6f) with a hard gate: a scan for `enemyAttackers: []`
+  must return nothing. damageChannelAccounting moved C -> E (premise evaporated, not mechanical).
+  ⭐ TWO `expected 0 to be greater than 0` FAILURES, NEITHER CHURN — the exact shape that invites the
+  forbidden toBe(0). Both were premise failures with real causes (M5; detonate-only). The reviewer
+  re-derived both causes in affinityUtils.ts rather than trusting the report.
+  ⭐ VERIFIED FALSE ALARM: the escalated "detonate-only cast drops its detonation" (measured
+  10,800 -> 0) is a REAL engine gap but CORPUS-UNREACHABLE. Full scan of 147 ships: only Crocus,
+  Demolisher, Incinerator take the DOT_DETONATE_RE path and all three carry damage in the same clause;
+  Lingshe's charged skill parses to `bomb-countdown-reduce` (skillTextParser.ts:4523) and resolves
+  damage in reduceBombsOnVictim from the cast's own footprint, never touching detonationTargets.
+  LESSON: I relayed that escalation to the owner as possibly-production-live BEFORE verifying it. A
+  subagent's reachability claim is a hypothesis; the corpus CSV settles it in one scan.
+  ⭐ A VACUITY FIX NEEDS A DEMONSTRATED RED STATE. The bomb burst test summed ALL `bomb-detonated`
+  events, and bombs also detonate on EXPIRY — so it had been passing without the skill path firing at
+  all, and would have stayed green if that path regressed to zero. Fixed + proven by stubbing
+  applyPerVictimDetonation to resolve no victim (went red), then reverting (42/42).
+  ALSO OPEN for SP-4c: after the opposing roster is WIPED, a cast lands back on the dummy with the
+  dummy's enemyDefense folded (measured 45,000 -> 14,820.90) — contradicting engine.ts's stated intent
+  that the cast "whiffs against corpses rather than teleporting onto the dummy". 4c's deletion is NOT
+  a pure no-op. No assertion is pinned to that path (the death was removed by raising HP).
