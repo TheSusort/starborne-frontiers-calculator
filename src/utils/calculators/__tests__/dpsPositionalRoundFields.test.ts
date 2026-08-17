@@ -65,8 +65,18 @@ describe('the Direct damage row on a positional run', () => {
                 r.detonationDamage;
             // Each part is rounded independently, so allow the accumulated half-unit drift only.
             expect(Math.abs(parts - r.totalRoundDamage)).toBeLessThanOrEqual(2);
-            expect(r.directDamage).toBeLessThan(r.totalRoundDamage);
             expect(r.directDamage).toBeGreaterThan(0);
+        }
+        // STRICTLY below the total only on the rounds that carry a tick — the same scoping the
+        // detonation case below uses, and for the same reason. On a round with no tick, no generic
+        // damage and no detonation, Direct IS the whole round (measured: the plain `damageKit`
+        // fixture reports directDamage === totalRoundDamage === 7753 on every round), so the strict
+        // form asserts something false about the re-derivation rather than something strong about
+        // it. Every round of THIS fixture happens to tick, so the assertion set is unchanged today
+        // — `withDot` is all three rounds — and it stays honest if the fixture's DoT ever starts a
+        // round late.
+        for (const r of withDot) {
+            expect(r.directDamage).toBeLessThan(r.totalRoundDamage);
         }
     });
 
