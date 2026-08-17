@@ -16,7 +16,11 @@
  *                      decrement at post-turn → expires before next actor).
  */
 import { describe, expect, it, afterEach } from 'vitest';
-import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
+import {
+    simulateDPS,
+    DPSSimulationInput,
+    SYNTHESIZED_DPS_ENEMY_ID,
+} from '../../calculators/dpsSimulator';
 import { createEventBus } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
@@ -109,6 +113,12 @@ describe('extraActions', () => {
     // remaining enemy) → acts again → then enemy.
     // Attacker speed < enemy speed → enemy acts first, then attacker acts, gets
     // extra turn (no one remains) → acts again.
+    //
+    // SP-4b-2a: the turn-taking opponent is now the REAL, positioned enemy this run synthesizes
+    // (`SYNTHESIZED_DPS_ENEMY_ID` === 'enemy-1'), not the vestigial dummy sink (id 'enemy'),
+    // whose turn is gated out as vestigial (`dummyEnemyIsVestigial`, engine.ts). Only the id
+    // moved: the synthesized enemy is built from the SAME `enemySpeed` scalar these two runs
+    // set, so both speed-rank orderings below are unchanged.
     it('extra turn inserted at speed position among remaining actors', () => {
         // Faster attacker: [attacker, attacker, enemy]
         const busFaster = createEventBus();
@@ -126,7 +136,7 @@ describe('extraActions', () => {
             bus: busFaster,
         });
         // attacker (speed 100) re-inserted at position before enemy (speed 50): acts twice first
-        expect(turnsFaster).toEqual(['attacker', 'attacker', 'enemy']);
+        expect(turnsFaster).toEqual(['attacker', 'attacker', SYNTHESIZED_DPS_ENEMY_ID]);
 
         // Slower attacker: [enemy, attacker, attacker]
         const busSlower = createEventBus();
@@ -145,7 +155,7 @@ describe('extraActions', () => {
         });
         // enemy (speed 50) faster, acts first; attacker re-inserted at end (no one remains
         // with speed >= 40 after enemy already acted): [enemy, attacker, attacker]
-        expect(turnsSlower).toEqual(['enemy', 'attacker', 'attacker']);
+        expect(turnsSlower).toEqual([SYNTHESIZED_DPS_ENEMY_ID, 'attacker', 'attacker']);
     });
 
     // ── Test 3: oncePerRound cap resets between rounds ───────────────────────
