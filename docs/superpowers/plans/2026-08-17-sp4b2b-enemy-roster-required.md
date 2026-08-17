@@ -710,7 +710,27 @@ eleven residual failures in `engine.events.test.ts`. Everything below came out o
 8. **Two files already define LOCAL `bareEnemy` symbols** and will collide with the shared import:
    `preFightModifiersEngine.test.ts:238` (wave D) and `healingShieldPenetration.test.ts:63`. Rename or
    alias rather than shadowing.
-9. **A detonate-only cast (detonation clause carrying no damage of its own) resolves nobody and its
+9. **⚠️ THE BIGGEST ONE, from wave B: a repaired file can go GREEN AND VACUOUS, so failures are not
+   the whole job.** After its roster repair, a test was passing on `0 === 0` — both arms'
+   `rawTotals.direct` are now 0 positionally, so it could no longer observe the proc it exists for.
+   Two more equality assertions had the same shape. **Every wave must therefore also scan its files
+   for EQUALITY assertions on `rawTotals.direct`, `directDamage`, and `cumulativeDamage`** — not just
+   fix what fails. An equality that passes because both sides are zero is the fixture-vacuity class
+   this project has been burned by repeatedly. For each one found, either re-express it on
+   `perTargetDealt` or show it still observes something real.
+10. **M3 is broader than first stated.** It is not only `cumulativeDamage`: `result.rawTotals.direct`
+    is dead positionally too, and it accounted for 5 of wave B's 6 residual failures.
+11. **Carry `enemyDefense` onto the roster entry rather than dropping it.** Wave B kept every damage
+    magnitude byte-equal to the base commit that way, and it was load-bearing for a Defense-Shred
+    test. This does not contradict M6: the fight-wide *scalar* is inert, while the same number on the
+    roster entry's own `stats.defence` is live. Move the value, don't delete it.
+12. **M10 (wave B, escalated not fixed): the reactive DRAIN-time `hp-threshold` gate with
+    `hpSubject !== 'self'` is dead on a positional run** — `buildDrainContext` derives `enemyHpPct`
+    from `cumulativeDamage / enemyHp`, both vestigial-dummy scalars positional credit never feeds
+    (measured `cum=0` at every drain). Verified corpus-unreachable, and cast-time plus stat-modifier
+    enemy-HP gates are fine (`playerTurn.ts` reads the real victim). Do not fix the engine; if a
+    fixture depends on it, reshape the fixture to the corpus-reachable form.
+13. **A detonate-only cast (detonation clause carrying no damage of its own) resolves nobody and its
    detonation is dropped entirely** on a positional run. Verified CORPUS-UNREACHABLE — of 147 ships
    only Crocus, Demolisher and Incinerator take that parser path and all three carry damage in the
    same clause (Lingshe's charged skill parses to `bomb-countdown-reduce`, a different path that
