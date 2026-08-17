@@ -6479,6 +6479,28 @@ export function runCombat(rawInput: CombatEngineInput): {
          * All of that is the intended reading of "a real damage instance"; it is recorded here so
          * a later change plans around the real footprint rather than a convenient fiction.
          *
+         * KNOWN GAPS — both real, both corpus-bounded today, both deliberately UNFIXED here.
+         * Recorded in code rather than in a task report so the next change to this helper does not
+         * have to rediscover them.
+         *   (a) IT PROCS NO LEECHES, IN EITHER DIRECTION. The apply loop below calls
+         *       `tb.applyToVictim` directly and never `procLeechesForVictim`, which is the seam
+         *       the firing hit's per-victim apply goes through — so neither the attacker's
+         *       STANDING leech (`procStandingLeechesPerVictim`) nor the victim's TAKEN leech
+         *       (`procTakenLeechesPerVictim`) fires on this instance. That is a REGRESSION against
+         *       the pre-positional path, where `passiveDamage` was folded into the aggregate
+         *       `directDamage` and reached a standing leech via `creditDamage(…,'direct',…)`. It
+         *       is also at odds with the repo's LOCKED granularity rule ("outgoing procs per
+         *       attack, incoming per occurrence"): a separate damage instance landing on a victim
+         *       is an occurrence, and should proc both directions. Not fixed here because it is a
+         *       behaviour change with its own fixture surface, not a comment correction.
+         *   (b) A CAST WITH NO FIRING-SLOT DAMAGE ABILITY LOSES ITS PASSIVE INSTANCE ENTIRELY.
+         *       Every call site is inside the `positional` branch, and that gate requires
+         *       `turn.positionalScalars != null` — the FIRING skill's scalars. A ship whose active
+         *       or charged slot carries no `damage` ability therefore never reaches this helper,
+         *       and its passive-slot damage is dropped exactly as it was before D6 (the scalar
+         *       direct credit is suppressed on a positional run either way). Corpus-inert today:
+         *       no shipped kit pairs a damage-dealing passive slot with a damage-less firing slot.
+         *
          * It does NOT set `deferReflectLogs`: with no `ability-performed` of its own there is no
          * later row for a buffered reflect to attach to, so a reflect it provokes prints where it
          * happens — the same treatment every non-positional apply gives one.
@@ -9342,9 +9364,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // derived from the victim's own currentHp inside runPlayerTurn (PR6b), so no
                             // separate decline suppression is needed here.
                             const td = dmg(actor.id);
-                            // secondary/conditional are DISPLAY sub-buckets — see the mirrored comment
-                            // at the focus site above. They are accumulated on BOTH paths; only the
-                            // `creditDamage` calls (cumulative accounting) stay behind the guard.
+                            // secondary/conditional: a SYMMETRY PLACEHOLDER with NO READER today.
+                            // Unlike the focus site's pair — which feeds `rawTotals` at the row
+                            // assembly below — nothing consumes the TEAM values: `rawTotals` is
+                            // focus-only by design (`totalSecondaryRaw += focus.secondary`, and the
+                            // note above that line says so), and the simulator-page seam reads the
+                            // per-actor map's `direct`/`detonation` only. So this write is dead in
+                            // both directions: removing it changes no output, and adding a reader
+                            // later must not have to notice that only one of the two paths fills
+                            // the bucket. It is KEPT because team symmetry is a locked rule here —
+                            // every walked team actor runs the same code path as the focus — and
+                            // because the values are already computed, so keeping them costs one
+                            // add. Do NOT "fix" it by moving it inside the guard: like the focus
+                            // pair, these are DISPLAY sub-buckets of `direct` and never feed
+                            // `cumulativeDamage`, so only the `creditDamage` calls below (which do
+                            // feed cumulative accounting) belong behind the positional guard.
                             td.secondary += teamTurn.secondaryDamage;
                             td.conditional += teamTurn.conditionalDamage;
                             if (!teamPositional) {
