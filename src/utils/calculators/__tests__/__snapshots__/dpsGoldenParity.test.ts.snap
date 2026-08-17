@@ -431,11 +431,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 27789.192970533066,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 27789.192970533066,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 27789.192970533066,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -467,11 +475,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 93,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 27789.192970533066,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 27789.192970533066,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 27789.192970533066,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -503,11 +519,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 86,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -539,11 +563,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 83,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 27789.192970533066,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 27789.192970533066,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 27789.192970533066,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -575,11 +607,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 76,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -611,11 +651,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 74,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -647,11 +695,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 71,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 27789.192970533066,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 27789.192970533066,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 27789.192970533066,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -683,11 +739,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 64,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -719,11 +783,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 61,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -755,11 +827,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 58,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -791,11 +871,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 56,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 27789.192970533066,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 27789.192970533066,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 27789.192970533066,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -827,11 +915,19 @@ exports[`dpsGoldenParity > ability buff feeds modifier gate (coupling lock) 1`] 
       "enemyHpPct": 49,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 27789.192970533066,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 27789.192970533066,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 27789.192970533066,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -891,11 +987,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 25047.325930773804,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 25047.325930773804,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 25047.325930773804,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -936,11 +1040,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 94,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 26010.684620418953,
+          "incoming": 26010.68462041895,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 26010.68462041895,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 26010.68462041895,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -981,11 +1093,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 87,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 9633.586896451463,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 9633.586896451463,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 9633.586896451463,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1031,11 +1151,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 85,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 53948.08662012819,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 53948.08662012819,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 53948.08662012819,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1081,11 +1209,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 71,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 35168.70788710559,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 35168.70788710559,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 35168.70788710559,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1126,11 +1262,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 63,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 9633.586896451463,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 9633.586896451463,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 9633.586896451463,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1171,11 +1315,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 60,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 9633.586896451463,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 9633.586896451463,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 9633.586896451463,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1221,11 +1373,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 58,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 57801.52137870878,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 57801.52137870878,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 57801.52137870878,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1271,11 +1431,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 43,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 36381.4219521782,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 36381.4219521782,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 36381.4219521782,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1316,11 +1484,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 34,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 28900.76068935439,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 28900.76068935439,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 28900.76068935439,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1361,11 +1537,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 27,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 9633.586896451463,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 9633.586896451463,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 9633.586896451463,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1411,11 +1595,19 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "enemyHpPct": 25,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 57801.52137870878,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 57801.52137870878,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 57801.52137870878,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1425,7 +1617,7 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
   ],
   "summary": {
     "avgDamagePerRound": 29966,
-    "finalHpPct": 10.101405489204373,
+    "finalHpPct": 10.101405489204371,
     "survived": true,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 0,
@@ -1936,11 +2128,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 13894.596485266533,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 13894.596485266533,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 13894.596485266533,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1967,11 +2167,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 97,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 13894.596485266533,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 13894.596485266533,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 13894.596485266533,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -1998,11 +2206,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 93,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5557.8385941066135,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5557.8385941066135,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5557.8385941066135,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2029,11 +2245,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 92,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 27789.192970533066,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 27789.192970533066,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 27789.192970533066,
         },
       },
       "resistedEnemyDebuffs": [
@@ -2065,11 +2289,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 85,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5557.8385941066135,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5557.8385941066135,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5557.8385941066135,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2096,11 +2328,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 83,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5557.8385941066135,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5557.8385941066135,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5557.8385941066135,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2127,11 +2367,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 82,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5557.8385941066135,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5557.8385941066135,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5557.8385941066135,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2158,11 +2406,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 81,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [
@@ -2194,11 +2450,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 78,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5557.8385941066135,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5557.8385941066135,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5557.8385941066135,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2225,11 +2489,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 76,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5557.8385941066135,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5557.8385941066135,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5557.8385941066135,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2256,11 +2528,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 75,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5557.8385941066135,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5557.8385941066135,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5557.8385941066135,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2287,11 +2567,19 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
       "enemyHpPct": 74,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11115.677188213227,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11115.677188213227,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11115.677188213227,
         },
       },
       "resistedEnemyDebuffs": [
@@ -2306,7 +2594,7 @@ exports[`dpsGoldenParity > affinity disadvantage + apply debuff 1`] = `
   ],
   "summary": {
     "avgDamagePerRound": 9726,
-    "finalHpPct": 70.82134738094031,
+    "finalHpPct": 70.8213473809403,
     "survived": true,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 0,
@@ -2497,11 +2785,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2528,11 +2824,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 95,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2559,11 +2863,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 91,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 39522.4077803137,
+          "incoming": 39522.40778031369,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 39522.40778031369,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 39522.40778031369,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2590,11 +2902,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 81,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2621,11 +2941,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 79,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2652,11 +2980,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 74,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 15808.963112125477,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 15808.963112125477,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 15808.963112125477,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2683,11 +3019,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 70,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2714,11 +3058,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 69,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2745,11 +3097,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 67,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 39522.4077803137,
+          "incoming": 39522.40778031369,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 39522.40778031369,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 39522.40778031369,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2776,11 +3136,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 57,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2807,11 +3175,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 52,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2838,11 +3214,19 @@ exports[`dpsGoldenParity > charge gain + enemy-type condition 1`] = `
       "enemyHpPct": 50,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 15808.963112125477,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 15808.963112125477,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 15808.963112125477,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2888,11 +3272,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 37052.25729404409,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 37052.25729404409,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 37052.25729404409,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2919,11 +3311,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 91,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 14820.902917617635,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 14820.902917617635,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 14820.902917617635,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2950,11 +3350,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 87,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 14820.902917617635,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 14820.902917617635,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 14820.902917617635,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -2981,11 +3389,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 83,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5928.361167047054,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5928.361167047054,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5928.361167047054,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3012,11 +3428,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 82,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 14820.902917617635,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 14820.902917617635,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 14820.902917617635,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3043,11 +3467,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 78,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 14820.902917617635,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 14820.902917617635,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 14820.902917617635,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3074,11 +3506,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 74,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5928.361167047054,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5928.361167047054,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5928.361167047054,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3105,11 +3545,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 73,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5928.361167047054,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5928.361167047054,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5928.361167047054,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3136,11 +3584,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 71,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 37052.25729404409,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 37052.25729404409,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 37052.25729404409,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3167,11 +3623,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 62,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 14820.902917617635,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 14820.902917617635,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 14820.902917617635,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3198,11 +3662,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 59,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5928.361167047054,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5928.361167047054,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5928.361167047054,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -3229,11 +3701,19 @@ exports[`dpsGoldenParity > charged cadence + startCharged 1`] = `
       "enemyHpPct": 57,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 5928.361167047054,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 5928.361167047054,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 5928.361167047054,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4435,15 +4915,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": true,
       "directDamage": 24702,
       "dotsLanded": true,
-      "enemyHpPct": 100,
+      "enemyHpPct": 97,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 24701.50486269606,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 24701.50486269606,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 24701.50486269606,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4467,15 +4955,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": true,
       "directDamage": 35817,
       "dotsLanded": true,
-      "enemyHpPct": 94,
+      "enemyHpPct": 93,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 35817.18205090929,
+          "incoming": 35817.18205090928,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 35817.18205090928,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 35817.18205090928,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4499,15 +4995,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": false,
       "directDamage": 17291,
       "dotsLanded": true,
-      "enemyHpPct": 85,
+      "enemyHpPct": 82,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 17291.053403887243,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 17291.053403887243,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 17291.053403887243,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4531,15 +5035,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": false,
       "directDamage": 17291,
       "dotsLanded": true,
-      "enemyHpPct": 81,
+      "enemyHpPct": 79,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 17291.053403887243,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 17291.053403887243,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 17291.053403887243,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4563,15 +5075,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": false,
       "directDamage": 17291,
       "dotsLanded": true,
-      "enemyHpPct": 76,
+      "enemyHpPct": 73,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 17291.053403887243,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 17291.053403887243,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 17291.053403887243,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4595,15 +5115,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": true,
       "directDamage": 35817,
       "dotsLanded": true,
-      "enemyHpPct": 72,
+      "enemyHpPct": 71,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 35817.18205090929,
+          "incoming": 35817.18205090928,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 35817.18205090928,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 35817.18205090928,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4627,15 +5155,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": true,
       "directDamage": 17291,
       "dotsLanded": true,
-      "enemyHpPct": 63,
+      "enemyHpPct": 62,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 17291.053403887243,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 17291.053403887243,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 17291.053403887243,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4659,15 +5195,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": false,
       "directDamage": 24702,
       "dotsLanded": true,
-      "enemyHpPct": 59,
+      "enemyHpPct": 56,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 24701.50486269606,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 24701.50486269606,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 24701.50486269606,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4691,15 +5235,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": false,
       "directDamage": 9881,
       "dotsLanded": true,
-      "enemyHpPct": 52,
+      "enemyHpPct": 51,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 9880.601945078422,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 9880.601945078422,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 9880.601945078422,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4723,15 +5275,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": true,
       "directDamage": 43228,
       "dotsLanded": true,
-      "enemyHpPct": 50,
+      "enemyHpPct": 47,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 43227.63350971811,
+          "incoming": 43227.6335097181,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 43227.6335097181,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 43227.6335097181,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4755,15 +5315,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": true,
       "directDamage": 17291,
       "dotsLanded": true,
-      "enemyHpPct": 39,
+      "enemyHpPct": 38,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 17291.053403887243,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 17291.053403887243,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 17291.053403887243,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4787,15 +5355,23 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
       "didCrit": false,
       "directDamage": 17291,
       "dotsLanded": true,
-      "enemyHpPct": 35,
+      "enemyHpPct": 34,
       "extraTurns": 1,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 17291.053403887243,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 17291.053403887243,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 17291.053403887243,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4805,7 +5381,7 @@ exports[`dpsGoldenParity > extra action (once-per-round passive, charged cadence
   ],
   "summary": {
     "avgDamagePerRound": 23158,
-    "finalHpPct": 30.527017573667333,
+    "finalHpPct": 30.52701757366733,
     "survived": true,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 0,
@@ -4841,11 +5417,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4872,11 +5456,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 95,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4903,11 +5495,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 91,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4934,11 +5534,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 89,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4965,11 +5573,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 84,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -4996,11 +5612,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 82,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5027,11 +5651,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 81,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5058,11 +5690,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 76,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5089,11 +5729,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 74,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5120,11 +5768,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 72,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5151,11 +5807,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 70,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5182,11 +5846,19 @@ exports[`dpsGoldenParity > item-11 live gates (enemy-buff modifier + self-debuff
       "enemyHpPct": 66,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5931,11 +6603,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5962,11 +6642,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 97,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -5993,11 +6681,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 94,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6024,11 +6720,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 91,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 37052.25729404409,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 37052.25729404409,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 37052.25729404409,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6055,11 +6759,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 82,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6086,11 +6798,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 79,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6117,11 +6837,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 76,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6148,11 +6876,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 73,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 14820.902917617635,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 14820.902917617635,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 14820.902917617635,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6179,11 +6915,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 69,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6210,11 +6954,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 66,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6241,11 +6993,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 63,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 11856.722334094107,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 11856.722334094107,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 11856.722334094107,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6272,11 +7032,19 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
       "enemyHpPct": 60,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 37052.25729404409,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 37052.25729404409,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 37052.25729404409,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6286,7 +7054,7 @@ exports[`dpsGoldenParity > multi-hit noCrit 1`] = `
   ],
   "summary": {
     "avgDamagePerRound": 16303,
-    "finalHpPct": 51.0910203718618,
+    "finalHpPct": 51.09102037186189,
     "survived": true,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 0,
@@ -6322,11 +7090,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6353,11 +7129,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 95,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6384,11 +7168,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 91,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 39522.4077803137,
+          "incoming": 39522.40778031369,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 39522.40778031369,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 39522.40778031369,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6415,11 +7207,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 81,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6446,11 +7246,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 79,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6477,11 +7285,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 74,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 15808.963112125477,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 15808.963112125477,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 15808.963112125477,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6508,11 +7324,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 70,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6539,11 +7363,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 69,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6570,11 +7402,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 67,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 39522.4077803137,
+          "incoming": 39522.40778031369,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 39522.40778031369,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 39522.40778031369,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6601,11 +7441,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 57,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6632,11 +7480,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 52,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6663,11 +7519,19 @@ exports[`dpsGoldenParity > passive charge aura accelerates charged cadence 1`] =
       "enemyHpPct": 50,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 15808.963112125477,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 15808.963112125477,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 15808.963112125477,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6713,11 +7577,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 26677.625251711743,
+          "incoming": 26677.625251711746,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 26677.625251711746,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 26677.625251711746,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6744,11 +7616,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 93,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 20008.218938783808,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 20008.218938783808,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 20008.218938783808,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6775,11 +7655,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 88,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 34582.106807774486,
+          "incoming": 34582.10680777448,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 34582.10680777448,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 34582.10680777448,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6806,11 +7694,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 80,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 20008.218938783808,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 20008.218938783808,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 20008.218938783808,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6837,11 +7733,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 75,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 26677.625251711743,
+          "incoming": 26677.625251711746,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 26677.625251711746,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 26677.625251711746,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6868,11 +7772,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 68,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 13832.842723109792,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 13832.842723109792,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 13832.842723109792,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6899,11 +7811,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 65,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 20008.218938783808,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 20008.218938783808,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 20008.218938783808,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6930,11 +7850,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 60,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 20008.218938783808,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 20008.218938783808,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 20008.218938783808,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6961,11 +7889,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 55,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 34582.106807774486,
+          "incoming": 34582.10680777448,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 34582.10680777448,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 34582.10680777448,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -6992,11 +7928,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 46,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 20008.218938783808,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 20008.218938783808,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 20008.218938783808,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7023,11 +7967,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 41,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 20008.218938783808,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 20008.218938783808,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 20008.218938783808,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7054,11 +8006,19 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
       "enemyHpPct": 36,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 13832.842723109792,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 13832.842723109792,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 13832.842723109792,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7068,7 +8028,7 @@ exports[`dpsGoldenParity > per-hit crits (multi-hit + on-crit follow-up) 1`] = `
   ],
   "summary": {
     "avgDamagePerRound": 22520,
-    "finalHpPct": 32.44138420052627,
+    "finalHpPct": 32.44138420052635,
     "survived": true,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 0,
@@ -7104,11 +8064,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7135,11 +8103,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 95,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7166,11 +8142,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 91,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7197,11 +8181,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 89,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7228,11 +8220,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 84,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7259,11 +8259,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 82,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7290,11 +8298,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 81,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7321,11 +8337,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 76,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7352,11 +8376,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 74,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7383,11 +8415,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 72,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 7410.451458808818,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 7410.451458808818,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 7410.451458808818,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7414,11 +8454,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 70,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],
@@ -7445,11 +8493,19 @@ exports[`dpsGoldenParity > plain damage 1`] = `
       "enemyHpPct": 66,
       "infernoDamage": 0,
       "perActorIncoming": {
-        "enemy": {
+        "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
           "incoming": 18526.128647022044,
           "shieldAbsorbed": 0,
+        },
+      },
+      "perTargetDamage": {
+        "enemy-1": 18526.128647022044,
+      },
+      "perTargetDealt": {
+        "attacker": {
+          "enemy-1": 18526.128647022044,
         },
       },
       "resistedEnemyDebuffs": [],

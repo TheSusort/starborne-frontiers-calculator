@@ -604,6 +604,16 @@ describe('dpsGoldenParity', () => {
             affinityDamageModifier: -25,
             affinityCritCap: 75,
             affinityCritPenalty: 25,
+            // SP-4b-2a: on the positional path the engine recomputes the attacker-vs-victim
+            // affinity matchup from the RAW `affinity`/`enemyAffinity` fields (victimHitDamage /
+            // realAffinityCappedCrit / the 'apply'-debuff landing check all read the resolved
+            // enemy actor's own `.affinity`, never these pre-resolved scalars) — measured fact:
+            // the pre-resolved fields alone are INERT on a positional run. The raw pair below
+            // (chemical vs thermal) is chosen via computeAffinityModifiers so the resolved
+            // modifiers equal the ones hard-coded above; both are kept since the production page
+            // always passes both.
+            affinity: 'chemical',
+            enemyAffinity: 'thermal',
             shipSkills,
         };
     });
