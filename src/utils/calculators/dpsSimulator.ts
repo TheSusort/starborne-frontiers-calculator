@@ -565,12 +565,18 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // Keep the per-round rows consistent with the re-derived total — DPSRoundChart and the
     // summary must not disagree. Index-aligned with `rounds` by construction (a round with no
     // entry contributes 0 and keeps its slot).
+    //
+    // ROUNDING: the engine wrote `Math.round(...)` into both fields and the chart prints them with
+    // `toLocaleString()`, so the re-derivation owes the same integer contract — 4b-1 assigned the
+    // raw float and shipped `Total (with team): 179,514.401` to the page. The running sum
+    // accumulates the RAW values and rounds only for display, so the last row's cumulative equals
+    // `summary.totalDamage` (which rounds the same raw total once) exactly.
     if (perRoundFocusDamage) {
         let running = 0;
         reportedRounds.forEach((r, i) => {
-            r.totalRoundDamage = perRoundFocusDamage[i];
+            r.totalRoundDamage = Math.round(perRoundFocusDamage[i]);
             running += perRoundFocusDamage[i];
-            r.cumulativeDamage = running;
+            r.cumulativeDamage = Math.round(running);
         });
     }
 

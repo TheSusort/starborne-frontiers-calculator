@@ -24,6 +24,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: turn ordering, buff granter, bomb attribution, duration reductions, no-op lines removed.',
     'Autogear: defence/crit priority weighting.',
     'Recruitment calculator: Centurion beacons.',
+    'Damage calculator: per-round and total damage numbers no longer show a long decimal tail.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
