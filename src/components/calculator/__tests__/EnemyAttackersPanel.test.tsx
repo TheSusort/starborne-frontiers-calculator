@@ -193,11 +193,16 @@ describe('EnemyAttackersPanel', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
     });
 
-    // ⚠️ The remove control is WITHHELD from the last remaining enemy. An empty roster leaves the
-    // healing run with no positioned opponent, so the engine falls back to its vestigial dummy (a
-    // fixed 10,000-defence / 1,000,000-HP sink that never dies) and every `basis:'damage-dealt'`
-    // rider silently rebases off that 10,000 — measured as totalDirectHeal 3,876 → 1,290.
-    it('propagates removal, but never for the last remaining enemy', () => {
+    // ⚠️ THE REMOVE CONTROL IS OFFERED ON EVERY CARD, INCLUDING THE LAST — reversed in SP-4b-2b, so
+    // read the history before flipping it back. It used to be withheld from the last enemy because an
+    // empty roster left the healing run with no positioned opponent, so the engine fell back to its
+    // vestigial dummy (a fixed 10,000-defence / 1,000,000-HP sink that never dies) and every
+    // `basis:'damage-dealt'` rider silently rebased off that 10,000 — measured as totalDirectHeal
+    // 3,876 → 1,290. `simulateHealing` now synthesizes an inert PRACTICE TARGET for an empty roster,
+    // carrying the page's own default card stats, so that rebase cannot happen and the floor has no
+    // remaining justification. Re-withholding the control is only correct if the adapter stops
+    // synthesizing.
+    it('propagates removal, for every enemy including the last remaining one', () => {
         const onRemove = vi.fn();
         const two = [manual, { ...manual, id: '2', name: 'Enemy 2', position: 'M3' as const }];
         const { unmount } = render(
@@ -217,7 +222,8 @@ describe('EnemyAttackersPanel', () => {
         expect(onRemove).toHaveBeenCalledWith('2');
         unmount();
 
-        // The floor: one enemy left → no control at all.
+        // No floor: one enemy left → the control is still there AND still wired.
+        onRemove.mockClear();
         render(
             <EnemyAttackersPanel
                 isOpen
@@ -229,7 +235,11 @@ describe('EnemyAttackersPanel', () => {
                 onUpdate={noop}
             />
         );
-        expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
+        const last = screen.getByLabelText('Remove enemy');
+        fireEvent.click(last);
+        // Wired, not merely rendered: a control that appears but reports nothing would leave the
+        // roster stuck at one just as effectively as withholding it did.
+        expect(onRemove).toHaveBeenCalledWith(manual.id);
     });
 
     it('renders the hacking field and propagates edits', () => {

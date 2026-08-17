@@ -2689,12 +2689,9 @@ const DocumentationPage: React.FC = () => {
                                         target&apos;s affinity to scale their incoming damage. An
                                         enemy you pick from your ships also attacks with its own
                                         targeting and pattern, so an area attacker hits every cell
-                                        its pattern covers rather than a single ship. There is
-                                        always at least one enemy: the last one cannot be removed,
-                                        because with nobody to fight, damage-scaled repairs would
-                                        have no real Defense to measure against. A hover-gated round
-                                        status panel beside the Healing Over Time chart shows, for
-                                        the hovered round and grouped per healer config, the
+                                        its pattern covers rather than a single ship. A hover-gated
+                                        round status panel beside the Healing Over Time chart shows,
+                                        for the hovered round and grouped per healer config, the
                                         healer&apos;s own active buffs as well as which self-buffs
                                         are active on each enemy and which debuffs or DoTs they have
                                         landed on the target.
@@ -2758,6 +2755,25 @@ const DocumentationPage: React.FC = () => {
                                         an enemy and it stops attacking for the rest of the run, so
                                         the incoming damage your healer has to out-heal drops as the
                                         fight goes on.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            An empty enemy team measures pure output:
+                                        </span>{' '}
+                                        you can remove every enemy. Nothing then shoots back, so
+                                        your heal target stays at full health and every point of
+                                        repair is counted as overheal &mdash; which is exactly how
+                                        to read a healer&apos;s ceiling without survival getting in
+                                        the way. Your healer&apos;s own numbers do not change when
+                                        you do this: the calculator stands in a practice target
+                                        carrying the same HP, Defense and Security a freshly added
+                                        enemy card has, just with no attack and no skills. Because
+                                        its Defense is real, skills that repair or shield for a
+                                        share of the damage they deal keep measuring against the
+                                        same basis they would against a default enemy, so emptying
+                                        the team changes only the damage coming at you. The practice
+                                        target can still be destroyed, just like a real enemy at
+                                        those stats.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

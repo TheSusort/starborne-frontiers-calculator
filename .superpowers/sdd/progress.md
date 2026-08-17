@@ -27,3 +27,95 @@ Prior sub-project's ledger: progress-sp4b2a-archived.md
 
 ## Progress
 (nothing yet)
+Task 1: complete (commit 4104adbc, review APPROVED — 118 files, 231 insertions; full suite 525 files
+  / 5828 tests green, ZERO .snap movement; reviewer independently verified first-property placement
+  across every multi-insertion file and reconciled the 4 deletions exactly).
+  ⭐ LESSON from the implementer: `cp -r node_modules` into a probe worktree DEREFERENCES the
+  .bin/tsc symlink, so tsc appears to run and reports 0 errors — a FALSE GOOD that would have
+  validated any codemod. Use `cp -a`. The implementer caught it itself and re-verified from scratch.
+  Also: making the field required produced 3 legitimate no-unnecessary-type-assertion lint errors
+  (redundant `!` on .enemyAttackers) in normalizeRoster.test.ts (2) + onCritDebuffRouting (1);
+  removed, compile-time-only, confirmed absent pre-codemod via git stash.
+  MINOR carried to final review: (i) scripts/sp4b2b-require-enemy-roster.mjs:41-53 treats "no error
+  lines" as "converged" with no proof tsc ran — the very false-good above; add a sanity check or
+  delete the script post-merge. (ii) Comments in ~3 fixtures still say "no enemyAttackers" directly
+  above a literal that now sets `[]` (rhodiumChakaraDpsModeCredit:227, adjacentEnemiesDot:325-326,
+  demolisherBombSplash:1143) — these get falsified AGAIN by Tasks 4-6, so sweep them in Task 8.
+
+Task 2: COMPLETE. Golden audit below was recorded BEFORE any regeneration (brief Step 9).
+  Full report: task-2-report.md. tsc 0 / eslint 0 / full suite 527 files / 5832 tests green (baseline
+  525/5828 + the 2 new suites). Exactly ONE .snap file moved, the audited one.
+  ⭐ TWO EXTRA floor tests the brief did not list also pinned the old contract and failed:
+  HealingCalculatorPage.test.tsx:126 and EnemyAttackersPanel.test.tsx:199 (plus the canRemove prop
+  doc at EnemyAttackersPanel.tsx:62). LESSON: a behaviour reversal's blast radius is every test that
+  pinned the OLD contract, and a brief's file list is scoped to the change, not to its pins — sweep
+  for the claim's own words (`floored at one`, `last enemy`, `cannot be removed`) before believing
+  the list is complete. Also: the brief's own sample test did not COMPILE (heal config is
+  {pct,basis}, not {multiplier}; `security` is not on HealerStats) and its third test was VACUOUS
+  (a pure-hp heal cannot observe the defence basis it claimed to pin) — 4th time this epic that a
+  plan's sample code could not have passed.
+
+### Four-reader verification (brief item 1)
+Verified independently against the file, not taken on trust. `grep -n '\benemies\b'` over the WHOLE
+adapter (not just >325) before the edit returned exactly four CODE readers — :503, :504, :505, :507 —
+plus the interface field (:119), the destructure (:331) and 7 comment lines. The brief's list was
+correct. After the edit the same scan (excluding `effectiveEnemies`) returns ONLY comments + the
+interface field + the destructure: zero surviving code readers.
+
+### The three `enemies: []` fixtures — audit
+Method: every move was decomposed by PROBE before regenerating, and each candidate mechanism was
+ISOLATED by running the same scenario with an EXPLICIT enemy at (a) the sink's exact stats
+(defence 10,000 / hp 1,000,000) and (b) the practice target's stats, on BOTH the modified and the
+UNMODIFIED adapter. My change is provably a no-op for any non-empty roster (identical numbers on
+both adapters for every explicit-enemy probe), so anything that reproduces at sink stats on the
+unmodified adapter is pre-existing.
+
+Cast damage moves purely with defence: 1289.708 (def 10,000) -> 2082.797 (def 5,000), ×1.615.
+
+| Fixture | Assertion | Old | New | Mechanism |
+|---|---|---|---|---|
+| healingGoldenParity sc 9 (Magnolia) snapshot | r1 directHeal / round | 1258 | 417 | THREE stacked: (a) defence 10,000->5,000 lifts the 20% cast leech 258->417; (b) the inferno-tick leech 1000->0 — PRE-EXISTING, see below; (c) rounds 7-10 -> 0, the practice target is KILLABLE and dies in round 6 (2082.8 cast + 5000 inferno = 7082.8/round vs hp 40,000) |
+| healingGoldenParity sc 9 in-code | `rounds[0].directHeal` | 1258 | 417 | same; re-derived by hand as 0.2 × 2082.797 = 416.56 -> 417 (cast leech only) |
+| healingGoldenParity sc 9 summary | totalDirectHeal | 12579 | 2499 | same three (417 × 6 surviving rounds) |
+| healingGoldenParity sc 10 (Tithonus/Pallas) | directHeal / round | 181 | 292 | DEFENCE ONLY. 7% rider per recipient: 0.07×1289.708=90 -> 0.07×2082.797=146, ×2 recipients. Enemy survives all 10 rounds (no DoT, 40,000/2082.8 = 19.2 rounds), so no killable component |
+| healingGoldenParity sc 10 summary | totalDirectHeal | 1806 | 2916 | same |
+| healingGoldenParity sc 11 (Valkyrie) | totalDirectHeal | 129 | 0 | PRE-EXISTING, not my stats — see below |
+| healingGoldenParity sc 13 (Defiant) | snapshot | `perTargetDealt` absent | populated | FIELD PRESENCE ONLY, zero value movement. The per-victim positional apply now runs because there IS a positioned victim; the dummy is position-less so it never appeared in this map |
+| dpsSubAttackEvents `on-crit repairs off THIS sub-attack's damage` | `performed).toHaveLength(3)` | 3 | 4 | The practice target takes its own turn and emits one `ability-performed` with `damage: 0` (probed: `[attacker×3 @8331.187302073396, practice-target @0]`). The focus's three sub-attacks are BYTE-IDENTICAL. Fixed by SHARPENING the assertion to focus-actor events — NOT by re-pinning 3->4, which would have made the count mean "however many actors happen to exist" |
+
+`healingEngineAdapter.test.ts` needed NO change: all 33 tests pass unmodified, including
+`empty enemies: no intake, targetHpPct stays 100` (the practice target has attack 0, so there is
+still no intake). The brief predicted this file would move; it did not.
+
+### ⚠️ TWO PRE-EXISTING DEFECTS EXPOSED (not introduced here, NOT fixed here)
+Same class, and the two regenerated goldens were the LAST tests observing the working path:
+
+  **A `basis:'damage-dealt'` standing leech with a non-direct `leechScope` pays out ZERO against a
+  real positioned enemy, and always has. Only the dummy path ever credited it.**
+
+  - `leechScope:'all'` (sc 9, Magnolia): the inferno tick DOES land on the real enemy —
+    `perTargetDealt` round 1 = 6289.708 = cast 1289.708 + inferno 5,000 — but the 20% leech pays only
+    on the cast (258), never on the 5,000 tick. Proved pre-existing: explicit enemy at sink stats on
+    the UNMODIFIED adapter also yields 258/round, never 1258.
+  - `leechScope:'detonation'` (sc 11, Valkyrie): directHeal is `[0,0,0,0]` for an explicit enemy at
+    the sink's EXACT stats on the UNMODIFIED adapter, and identical at the practice target's stats.
+    The 129 existed ONLY on the dummy path.
+
+  This is SP-4b-2a's lesson in MIRROR IMAGE: there, production migrated ahead of its corpus and
+  banked latent regressions. Here the corpus was the last holdout still exercising a path production
+  abandoned in SP-3 — so the gap has been live in production since SP-3 for every real-enemy run.
+  Regenerating these goldens is correct (they now record what every production run actually does) but
+  it DELETES the last observer, which is why it is written down here. Needs its own task; it is a
+  leech-attribution gap on the positional path, not a dummy-removal blocker.
+
+### Incidental finding — corrects the brief's Step 4 rationale
+The brief's practice-target comment says corrosion scales with "the victim's max HP
+(`min(enemyHp, 500_000)`)", implying the practice target's HP feeds it TODAY. It does not:
+`engine.ts:1054` reads `args.enemyHp`, the FIGHT-WIDE scalar the adapter still passes as
+`LEGACY_SINK_HP` (1,000,000 -> capped 500,000), not the victim's stats. Confirmed empirically: the
+inferno tick is 5,000 against both a 1,000,000-HP and a 40,000-HP victim. (Inferno scales off the
+APPLIER's attack, `engine.ts:1065`; only corrosion reads `enemyHp`. Detonation is the one that
+already reads the real victim: `detonation.ts:106` `min(c.victimHp, 500_000)`.) The reasoning is
+kept in the code as brief item 4 requires, but re-tensed as forward-looking to SP-4d rather than
+stated as current behaviour — a comment that misdescribes today is how the floor comments in this
+same file went stale.

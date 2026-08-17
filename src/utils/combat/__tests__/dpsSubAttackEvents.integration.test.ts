@@ -325,10 +325,12 @@ describe('non-positional outgoing riders — per-sub-attack fan-out', () => {
      * fixture gap in the plan. `simulateHealing` (healingEngineAdapter.ts) is the OTHER caller of
      * the same non-positional `runPlayerTurn` inline emit and always sets `healTargetId` (hence
      * `ctx.healing`, per its own comment: "healing is always present"), so it is the one entry
-     * point that can actually observe the reactive heal execute. The dummy-enemy defence/HP are
-     * fixed inside the adapter (ENEMY_DEFENSE 10000) — irrelevant here, since all three
-     * sub-attacks are identical and the assertions compare against the fixture's OWN `slice`,
-     * not a hand-computed number.
+     * point that can actually observe the reactive heal execute. The opponent's defence/HP are fixed
+     * by the adapter — since SP-4b-2b this `enemies: []` fights the synthesized PRACTICE TARGET
+     * (defence 5,000 / hp 40,000) rather than the old dummy sink (10,000 / 1,000,000), which moved
+     * the absolute damage numbers. Irrelevant here: all three sub-attacks are identical and every
+     * assertion compares against the fixture's OWN `slice`/`castTotal`, never a hand-computed
+     * number — which is why this test survived that basis change untouched.
      */
     it('on-crit repairs off THIS sub-attack’s damage, not the whole cast', () => {
         idc = 0;
@@ -338,7 +340,19 @@ describe('non-positional outgoing riders — per-sub-attack fan-out', () => {
         const bus = createEventBus();
         const performed: AbilityPerformed[] = [];
         const heals: Extract<CombatEvent, { type: 'reactive-heal-performed' }>[] = [];
-        bus.on('ability-performed', (e) => performed.push(e));
+        // FOCUS filter, for exactly the reason `runCollectingPerformed` above documents — this call
+        // site just reached it later. Since SP-4b-2b an EMPTY `enemies` array is no longer an empty
+        // board: `simulateHealing` synthesizes an inert PRACTICE TARGET, which is a real positioned
+        // actor and so takes its own turn, emitting one extra
+        // `ability-performed { actorId: 'practice-target', damage: 0 }` per round (probed exactly
+        // that). The `3` below is the pre-SP-4b-2b number and is UNCHANGED — the focus's three
+        // sub-attacks are byte-identical (8331.187302073396 each). Counting the other actor's cast
+        // instead would turn a cardinality assertion about the fan-out into an assertion about how
+        // many actors happen to be on the board.
+        bus.on('ability-performed', (e) => {
+            if (e.actorId !== FOCUS) return;
+            performed.push(e);
+        });
         // TRAP: a reactive heal emits `reactive-heal-performed`, NOT `heal-performed`, and keys
         // the caster as `casterId`, not `actorId` (events.ts). Subscribing to the wrong event
         // asserts against an empty array — and passes.
