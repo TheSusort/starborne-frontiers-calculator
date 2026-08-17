@@ -2290,6 +2290,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const rollOutgoingProc = args.rollOutgoingProc;
     let critHits = 0;
     const hitCrits: boolean[] = [];
+    /**
+     * The FIRST firing-hit crit draw's outcome — the ONE crit result the passive-slot damage
+     * instance reuses, in both of the channels that carry it (task-18 finding 4).
+     *
+     * Not `hitCrits[0]`: the loop below draws `drawHits` times whether or not a damage ability
+     * fired, but only PUSHES when one did (`damageInputsFromSkill` reports `hits: 1` for a slot
+     * with no damage ability, so the draw still happens). A cast with no firing-slot damage
+     * ability therefore has an EMPTY `hitCrits` and a crit outcome all the same — reading
+     * `hitCrits[0] ?? false` there declares the instance non-critical while the aggregate below
+     * crits off that very draw. Capturing the draw itself is what makes the two agree in every
+     * case. `false` when `drawHits` is 0 (a `noCrit` cast), which is the correct no-crit answer.
+     *
+     * NO EXTRA DRAW: this reads the existing per-hit draw, it does not add one.
+     */
+    let firstDrawCrit = false;
     let ampNonCritWeight = 0;
     let ampCritWeight = 0;
     // The engine resolves amplification per footprint victim exactly when it also takes over the
@@ -2300,6 +2315,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (let h = 0; h < drawHits; h++) {
         const didCritHit = critGate(effectiveCrit / 100);
         if (didCritHit) critHits += 1;
+        if (h === 0) firstDrawCrit = didCritHit;
         // Only collect per-hit outcomes when a damage ability actually exists.
         // The draw still happens regardless, so the per-hit RNG draw count is stable.
         if (hasDamageAbility) hitCrits.push(didCritHit);
@@ -2679,7 +2695,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               drawHits
             : damageCritMultiplier;
     const postDefenseFactor = amplifiedCritMultiplier * nonCritFactor;
-    const passiveCritMultiplier = passiveHit.noCrit ? 1 : damageCritMultiplier;
+    /**
+     * ONE instance, ONE crit outcome — the single boolean BOTH channels that carry the
+     * passive-slot hit read (task-18 finding 4): the aggregate `passiveDamage` just below, and
+     * the `PassiveSlotHit.didCrit` the positional per-victim apply lands with.
+     *
+     * WHY IT IS NOT `damageCritMultiplier`. That factor is the FIRING skill's per-hit BLEND —
+     * `1 - critFraction + critFraction × critMult`, i.e. the average over `drawHits` draws. It is
+     * the right basis for a `hits: N` firing hit (N hits, `critHits` of them critical) and the
+     * wrong one for the passive slot, which contributes exactly ONE hit that either crits or does
+     * not. On a 2-hit cast with one crit it valued the instance at 1.5× while the positional apply
+     * — reading `hitCrits[0]` — landed it at 2×, so the log's number and the enemy's health loss
+     * disagreed by that ratio (measured: aggregate 750 vs applied 1000 on the fixture in
+     * `passiveSlotHitCritParity`). Single-hit casts were unaffected, which is why nothing caught it.
+     *
+     * `noCrit` still forces false, exactly as `? 1` did. NO EXTRA DRAW: `firstDrawCrit` is the
+     * per-hit loop's own first draw.
+     */
+    const passiveDidCrit = passiveHit.noCrit ? false : firstDrawCrit;
+    const passiveCritMultiplier = passiveDidCrit
+        ? (1 + effectiveCritDamage / 100) * critIncomingRatio
+        : 1;
     const passiveDamage =
         effectiveAttack * (passiveMultiplier / 100) * passiveCritMultiplier * nonCritFactor;
     const directDamage = preCritDamage * postDefenseFactor + passiveDamage;
@@ -4071,11 +4107,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
                       ...(forceOutgoingAdvantage ? { forceAffinityAdvantage: true } : {}),
                   },
-                  // REUSED, never re-drawn: `noCrit` forces false (mirroring
-                  // `passiveCritMultiplier`'s `? 1`), otherwise the round's first firing-hit crit
-                  // outcome. `hitCrits` is empty for a cast with no damage ability or a noCrit
-                  // one, and `?? false` is then the correct no-crit answer.
-                  didCrit: passiveHit.noCrit ? false : (hitCrits[0] ?? false),
+                  // REUSED, never re-drawn — and it is THE SAME `passiveDidCrit` the aggregate
+                  // `passiveDamage` is scaled by (see its definition for why one instance gets one
+                  // outcome rather than the firing skill's per-hit blend). Reading `hitCrits[0]`
+                  // here instead is what let the two channels disagree on a multi-hit cast.
+                  didCrit: passiveDidCrit,
                   target: passiveDamageAbility.target,
               }
             : undefined;
