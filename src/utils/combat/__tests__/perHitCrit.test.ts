@@ -26,6 +26,19 @@ import { createEventBus } from '../events';
 import { makeRateGate, setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 
+/**
+ * The focus attacker's own actor id. Both event-cardinality tests below filter on it.
+ *
+ * SP-4b-2a: a scalar-only `simulateDPS` run now fights a real, positioned enemy (`enemy-1`), and
+ * an enemy supplied without `shipSkills` gets the engine's synthesized flat-card basic attack
+ * (engine.ts:618-638). BASE sets `hp: 30000` on the attacker, so that enemy has a living target
+ * and casts once per round, emitting one extra `ability-performed { actorId: 'enemy-1',
+ * damage: 0 }` per round (zero damage — the synthesized enemy carries `attack: 0`). That is the
+ * OTHER actor's cast; the per-sub-attack counts these tests pin are the FOCUS's, so the collectors
+ * filter on this id and every expected count (12, 4) is the pre-SP-4b-2a number, unchanged.
+ */
+const FOCUS = 'attacker';
+
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
     id: `ph${++idCounter}`,
@@ -153,6 +166,7 @@ describe('perHitCrit', () => {
         const bus = createEventBus();
         const performed: { didCrit?: boolean; critHits?: number; subAttackIndex?: number }[] = [];
         bus.on('ability-performed', (e) => {
+            if (e.actorId !== FOCUS) return;
             performed.push({
                 didCrit: e.didCrit,
                 critHits: e.critHits,
@@ -259,6 +273,7 @@ describe('perHitCrit', () => {
         const bus = createEventBus();
         const performed: { didCrit?: boolean; critHits?: number }[] = [];
         bus.on('ability-performed', (e) => {
+            if (e.actorId !== FOCUS) return;
             performed.push({ didCrit: e.didCrit, critHits: e.critHits });
         });
         simulateDPS({
