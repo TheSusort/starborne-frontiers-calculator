@@ -271,3 +271,71 @@ on purpose in this task).
 Files changed: `src/utils/combat/normalizeRoster.ts`, `src/utils/combat/engine.ts`,
 `src/utils/combat/__tests__/normalizationBoundary.integration.test.ts`, `.superpowers/sdd/progress.md`,
 `.superpowers/sdd/task-3-report.md`.
+
+## Fix wave 1
+
+Two review findings on the guard/return shape landed above. Fixed both, without touching any
+fixture, assertion, or the error message string.
+
+### Finding 1 (Important) — the guard missed part of its own population
+
+`input.enemyAttackers.length === 0` dereferenced `.length` unconditionally. Three fixtures reach the
+boundary with `enemyAttackers` *undefined* rather than empty — they omit the field behind an
+`as CombatEngineInput` cast, which defeats the required-field compile-time check
+(`normalizeRoster.test.ts:93-96`'s `baseInput()`, `perVictimWalkedTeamDetonation.integration.test.ts`
+setting `enemyAttackers: undefined` explicitly at line 328-331, and both call sites in
+`shieldBasisSecondaryDamage.integration.test.ts` at line 110/133 spreading `CLEAN_MATH`, which never
+sets the field). All three died one line before the guard's `throw` could run, with a bare
+`TypeError: Cannot read properties of undefined (reading 'length')` — a different, non-greppable
+signature from the other 61 files' contract message.
+
+Fix: changed the condition to `if (!input.enemyAttackers?.length)`, which is true for both `[]` and
+`undefined`, and added a sentence to the guard's comment recording that an `as CombatEngineInput`
+cast can defeat the required-field type check, which is why the runtime guard has to handle
+`undefined` and not just `[]`. The thrown `Error`'s message text is untouched — same string, same
+call site, same `throw`.
+
+### Finding 2 (Minor) — a third dead branch of the same kind
+
+`...(input.enemyAttackers ? { enemyAttackers: … } : {})` in the returned object was dead: the guard
+above (both before and after Finding 1's fix) already proves `input.enemyAttackers` is truthy by
+that point, so the `: {}` branch could never execute — the same dead-code class as the `?? []` and
+`length ? … : []` branches Task 3 already deleted. Simplified to an unconditional
+`enemyAttackers: enemyAttackers.map(...)` field (using the already-guard-narrowed local, matching the
+`enemySlots` computation just above it), with a comment noting why this field — unlike the genuinely
+optional `teamActors` — has no `: {}` fallback. Behaviour for the reachable case (a real, non-empty
+`enemyAttackers`) is unchanged: same `withTargeting` + `position` mapping, same output shape.
+
+### Verification
+
+- `npx tsc --noEmit` → 0 errors. `npx eslint src` → 0 problems.
+- The three named fixtures now fail with the NAMED contract message instead of a `TypeError`:
+  - `normalizeRoster.test.ts` — `leaves an empty enemy roster empty — it never invents an enemy`:
+    `Error: normalizeCombatRoster: enemyAttackers is empty — every run needs at least one opponent
+    (SP-4b-2b). A caller with no enemy to model should synthesize an inert one, as
+    healingEngineAdapter.practiceTarget does.` thrown from `normalizeRoster.ts:103`.
+  - `perVictimWalkedTeamDetonation.integration.test.ts` —
+    `REGRESSION: a NON-positional walked-team detonate still surfaces detonationDamage via the legacy
+    aggregate path`: same message, same throw site, reached via `runCombat` → `normalizeCombatRoster`.
+  - `shieldBasisSecondaryDamage.integration.test.ts` — both tests in
+    `PR9a: shield-basis additional damage reads the LIVE caster shieldPool at cast time`: same
+    message, same throw site.
+- `npx vitest run src/utils/combat/__tests__/normalizationBoundary.integration.test.ts` → still 2
+  passed (the empty-roster throw test and the live-boundary routing test) — the boundary contract
+  itself is unaffected.
+- Re-ran the full suite (`npx vitest run`) and re-derived the inventory with the same method Task 3
+  used — parsing the structured "Failed Tests" summary block per-test (text between the test header
+  and the first stack `❯` line), not a raw `grep -c` (which Task 3 already flagged as unreliable
+  here since a code frame can itself quote the contract string). Result:
+
+  **64 files / 253 tests still fail (same totals as Task 3 — this wave changes *why* 4 of them fail,
+  not *whether* they fail). All 253 now parse to the exact contract message. Zero fail for any other
+  reason.** The "(b) different reason" bucket from Task 3's report (3 files / 4 tests, `TypeError`)
+  is now empty; those 4 tests moved into the contract-message bucket, joining the other 249 — so the
+  split is now 64 files / 253 tests, 100% contract message, 0 other-reason, instead of Task 3's
+  61+3 / 249+4 split.
+- `git status --short` after the fix shows only `src/utils/combat/normalizeRoster.ts` modified — no
+  `.snap` file moved, no fixture touched.
+
+No fixture was repaired, weakened, or skipped. No assertion changed. The suite remains RED by
+design, now uniformly so.

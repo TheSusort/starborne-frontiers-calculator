@@ -95,7 +95,11 @@ export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInp
     // The contract (SP-4b-2b): every run has at least one opponent. This is a validation guard
     // rather than an accommodation on purpose — the boundary is the ONE place that accommodates an
     // under-specified input, and synthesizing a sink here is what kept the dummy alive.
-    if (input.enemyAttackers.length === 0) {
+    // `enemyAttackers` is typed as required on `CombatEngineInput`, but an `as CombatEngineInput`
+    // cast at a call site defeats that compile-time check, so a fixture can still reach this line
+    // with the field missing entirely rather than empty — the runtime guard must catch `undefined`
+    // as well as `[]`, or those callers get a bare `TypeError` instead of this named contract error.
+    if (!input.enemyAttackers?.length) {
         throw new Error(
             'normalizeCombatRoster: enemyAttackers is empty — every run needs at least one ' +
                 'opponent (SP-4b-2b). A caller with no enemy to model should synthesize an inert ' +
@@ -134,13 +138,11 @@ export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInp
                   })),
               }
             : {}),
-        ...(input.enemyAttackers
-            ? {
-                  enemyAttackers: input.enemyAttackers.map((e, i) => ({
-                      ...withTargeting(e),
-                      position: enemySlots[i],
-                  })),
-              }
-            : {}),
+        // `enemyAttackers` is provably truthy here (the guard above), so — unlike `teamActors`,
+        // which is genuinely optional — there is no `: {}` branch to fall back to.
+        enemyAttackers: enemyAttackers.map((e, i) => ({
+            ...withTargeting(e),
+            position: enemySlots[i],
+        })),
     };
 }
