@@ -198,6 +198,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 }
                                 options={AFFINITY_OPTIONS}
                                 className="w-full"
+                                data-testid="config-affinity-select"
                             />
                         </Section>
 

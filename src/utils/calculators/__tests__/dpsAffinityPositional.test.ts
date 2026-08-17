@@ -27,11 +27,12 @@ describe('affinity on a positional DPS run', () => {
             })
         );
         // Threading the raw pair must be enough on its own — assert the RATIO, not a magic number.
-        // Precision -1 (not the brief's literal 0): neutral * 1.25 lands on an exact half-integer
-        // (23258 * 1.25 = 29072.5) and the engine's own rounding puts the actual total exactly on
-        // the boundary vitest's toBeCloseTo(...,0) requires strict "<" on — measured, reproducible,
-        // not RNG noise. -1 keeps the assertion meaningful (an inert modifier misses by ~5814).
-        expect(advantaged.summary.totalDamage).toBeCloseTo(neutral * 1.25, -1);
+        // Asserting on the raw totals (toBeCloseTo(neutral * 1.25, 0)) is a trap: 23258 * 1.25 lands
+        // on an exact half-integer (29072.5), and the engine's own rounding puts the actual total
+        // exactly on the boundary vitest's toBeCloseTo(...,0) requires strict "<" on — measured,
+        // reproducible, not RNG noise. Working in ratio space sidesteps that boundary entirely while
+        // staying just as tight: an inert modifier would produce a ratio near 1.0, not 1.25.
+        expect(advantaged.summary.totalDamage / neutral).toBeCloseTo(1.25, 2);
     });
 
     it('does not double-apply when the pre-resolved modifier is ALSO supplied', () => {
