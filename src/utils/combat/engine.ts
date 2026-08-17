@@ -9977,6 +9977,46 @@ export function runCombat(rawInput: CombatEngineInput): {
             actingActorId = undefined;
         }
 
+        // SP-4b-2 D5: decrement the GLOBAL enemy-debuff sentinel bucket once per round.
+        //
+        // A SCHEDULED (input-level `enemyDebuffs`) debuff is always upserted into the
+        // side-wide `DEFAULT_ENEMY_TARGET` ('__enemy__') store — `upsertBuff` hardcodes that
+        // target — never into a per-actor store. Its only decrement was the no-argument
+        // `decrementEnemy()` overload in the Post-Turn block above, reachable ONLY on the dummy
+        // actor's own turn (`isDummyEnemy`). Once a real positioned enemy roster exists the dummy
+        // is dropped from the turn order (`dummyEnemyIsVestigial`), so that call never ran and a
+        // timed scheduled debuff, once landed, persisted for the rest of the run. Measured against
+        // 841e1bc0 on the same fixture and seed: `hasDebuff` per round was [t,t,f,t,t] and became
+        // [t,t,t,t,t]; the landing DRAW was unaffected, only the DECAY.
+        //
+        // ONCE-PER-ROUND, guaranteed structurally: this statement sits in the ROUND loop body,
+        // outside the turn loop, so it runs exactly once per round iteration regardless of how
+        // many enemy actors are on the board. Hooking it to an enemy actor's Post-Turn instead
+        // would fire once per enemy and burn a 2-round debuff in a single round on a 2-enemy board.
+        //
+        // CANNOT DOUBLE-FIRE with the dummy's own Post-Turn call: the two are mutually exclusive by
+        // construction. `turnOrderActors` drops the dummy iff `dummyEnemyIsVestigial`, and the dummy
+        // is explicitly exempt from the dead-actor `continue` guard, so it always takes its turn
+        // when it is in the order. Non-vestigial (non-positional) runs therefore never reach this
+        // line and stay byte-identical.
+        //
+        // POSITION: the earliest round boundary after the turn loop. The row's
+        // `activeEnemyDebuffs` is a snapshot taken during the focus attacker's TURN
+        // (`lastAttackerTurn.landedEnemyDebuffs`), so this decrement lands after that read — the
+        // same ordering the dummy's Post-Turn produced when it acted after the attacker.
+        //
+        // actorId on `buff-expired`: `enemy.id`. The sentinel bucket is a SIDE-WIDE store with no
+        // single carrier, so attributing its expiry to one positioned enemy would be the same lie
+        // `finalHpPct` told when it silently described only `enemyAttackers[0]`. `enemy.id` is the
+        // id this identical bucket already emits under on non-positional runs, so the event stream
+        // keeps one stable identity for the bucket across modes and matches the pre-regression
+        // (841e1bc0) stream exactly. `buff-expired` has no reactive listeners — it is log-only.
+        if (dummyEnemyIsVestigial) {
+            for (const buffName of statusEngine.decrementEnemy().expired) {
+                bus.emit({ type: 'buff-expired', actorId: enemy.id, round: r, buffName });
+            }
+        }
+
         // The row's attacker fields come from the LAST focus turn this round. Rounds
         // always have exactly one focus turn today (the attacker is in every queue),
         // so this reproduces the old definite-assignment provenance. The throw replaces

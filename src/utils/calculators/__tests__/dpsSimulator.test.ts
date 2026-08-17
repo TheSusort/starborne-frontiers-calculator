@@ -3332,6 +3332,85 @@ describe('simulateDPS', () => {
             // further resisted records either.
             expect(result.rounds.slice(1).every((r) => !wasResisted(r))).toBe(true);
         });
+
+        /**
+         * SP-4b-2 D5 — the ONCE-PER-ROUND guarantee for the global `__enemy__` sentinel bucket.
+         *
+         * A scheduled (input-level `enemyDebuffs`) debuff always lives in that one side-wide
+         * bucket, never in a per-actor store. Its decrement used to ride the DUMMY actor's own
+         * Post Turn, which stopped happening the moment a real positioned roster existed — so a
+         * landed timed debuff persisted for the rest of the run. The fix moves the decrement to
+         * the ROUND boundary, outside the turn loop.
+         *
+         * WHY THE BOARD SIZE IS THE ASSERTION. The bucket has ONE window shared by the whole
+         * enemy side, so the decrement must fire once per ROUND, not once per enemy ACTOR.
+         * Hooking it to an enemy's Post Turn would burn a 2-round debuff in a single round on
+         * this 2-enemy board — R2 would read ABSENT below instead of PRESENT. The 1-enemy and
+         * 2-enemy runs asserting the IDENTICAL decay curve is what pins roster-independence;
+         * neither run alone can.
+         *
+         * Deterministic, no RNG dependence: hacking 200 vs security 0 saturates the landing
+         * chance to 1.0, so the single charge-sourced application always lands. The enemies are
+         * zero-offense, making them RNG-stream-inert, so the two runs are comparable.
+         */
+        const oneShotTimedDebuffRun = (enemyCount: number) =>
+            simulateDPS({
+                attack: 15000,
+                crit: 0,
+                critDamage: 150,
+                defensePenetration: 0,
+                activeMultiplier: 100,
+                chargedMultiplier: 100,
+                chargeCount: 99, // never re-reaches the threshold after the round-1 charged turn
+                startCharged: true, // the debuff is attempted on round 1 and never again
+                enemyDefense: 0,
+                enemyHp: 1_000_000_000,
+                rounds: 5,
+                selfBuffs: [] as SelectedGameBuff[],
+                enemyDebuffs: [
+                    {
+                        id: 'armor-pierce',
+                        buffName: 'Armor Pierce',
+                        stacks: 1,
+                        parsedEffects: { defense: -20 },
+                        isStackable: false,
+                        skillSource: 'charge' as const,
+                        skillDuration: 2,
+                        application: 'inflict' as const,
+                    },
+                ] as SelectedGameBuff[],
+                hacking: 200,
+                enemySecurity: 0,
+                enemyAttackers: Array.from({ length: enemyCount }, (_, i) => ({
+                    id: `foe-${i + 1}`,
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 50,
+                        security: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                })),
+            });
+
+        it('the scheduled-debuff bucket decrements ONCE PER ROUND, not once per enemy actor', () => {
+            const twoEnemies = oneShotTimedDebuffRun(2).rounds.map(hasDebuff);
+
+            // A 2-turn window landed on R1: present R1 (fresh) and R2 (one decrement spent),
+            // gone from R3. Two decrements in round 1 — one per enemy — would read
+            // [true, false, false, false, false].
+            expect(twoEnemies).toEqual([true, true, false, false, false]);
+        });
+
+        it('the decay curve is identical on a 1-enemy and a 2-enemy board', () => {
+            expect(oneShotTimedDebuffRun(2).rounds.map(hasDebuff)).toEqual(
+                oneShotTimedDebuffRun(1).rounds.map(hasDebuff)
+            );
+        });
     });
 
     describe('teamActors', () => {
