@@ -174,3 +174,112 @@ Task 2b: complete (commit d4dba512 + fix wave 8ec848ba/90855a6b; review "needs f
   MINOR carried to Task 8's sweep: (v) the fix wave's own new comment in positionalDotLeech.test.ts
   cites BASE-commit line numbers (3992/8808/9085/9364/10168), stale by ~13 lines because the SAME
   commit's other edits shifted the file (+4 then -17). Recompute after a same-commit line-count edit.
+
+Task 3: COMPLETE. The guard (verbatim from the brief) + the two dead branches deleted + the stale
+  field doc rewritten. Full report: task-3-report.md. RED BY DESIGN: 528 files / 5838 tests, 464
+  files / 5585 tests GREEN, **64 files / 253 tests RED** — all with the new throw. tsc 0, eslint 0,
+  zero `.snap` movement (none of the 64 touch a snapshot).
+  ⭐ THE "~20 FILES" ESTIMATE WAS MEASURED AT THE WRONG COMMIT FOR THIS QUESTION. Progress.md's own
+  "Measured at 39d463f1" section already says "Exactly 20 files pass no `enemyAttackers` at all" —
+  but that count is PRE-Task-1: it counts fixtures that omitted the field entirely, back when it was
+  optional. Task 1 (4104adbc) mechanically added `enemyAttackers: []` to 148 call sites across 118
+  files purely to satisfy the newly-required TS field — which is exactly the population Task 3's
+  runtime guard now catches. 20 was never wrong, it was answering a different (pre-Task-1) question;
+  64 is the real number on this branch, post-Task-1/2. Tasks 4-6 should plan around 64, not 20.
+
+## Task 3 inventory
+Guard message (verbatim, greppable): `enemyAttackers is empty`. Produced by
+`npx vitest run` on this branch (commit adding the guard, pre-`--no-verify` commit). 64 files /
+253 tests fail. 249 tests across 61 files fail with the exact contract message. **4 tests across 3
+files fail for a DIFFERENT reason — a `TypeError`, not the contract — and are diagnosed below rather
+than folded into the 249.**
+
+### (a) Fail with the contract message — 61 files / 249 tests
+| File | Failing tests | Contract | Other |
+|---|---|---|---|
+| `src/utils/calculators/__tests__/rhodiumChakaraDpsModeCredit.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/accumulatorGather.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/actorStats.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/adjacentEnemiesDebuff.integration.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/adjacentEnemiesDot.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/allyDebuffReactivePromotion.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/apexSelfShieldGate.integration.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/applyOutgoingToEnemy.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/blockBuff.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/bombDetonatedVictimId.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/bombModifierExclusion.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/bombSplashOnDeath.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/buffDurationOwnTurnReprieve.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/buffOnlyTeamWalk.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/chargedOverdrive.integration.test.ts` | 5 | 5 | 0 |
+| `src/utils/combat/__tests__/corrosionToAcidicDecay.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/damageChannelAccounting.integration.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/deathFallback.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/decrementUnification.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/demolisherBombSplash.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/destroyedRoundUnification.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/dummyEnemyTurnGate.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/dummyReachability.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/enemiesHitGate.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/enemyBuffSelfDebuffGate.test.ts` | 4 | 4 | 0 |
+| `src/utils/combat/__tests__/enemyDotCountGate.integration.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/engine.events.test.ts` | 36 | 36 | 0 |
+| `src/utils/combat/__tests__/equipmentAbilities.integration.test.ts` | 18 | 18 | 0 |
+| `src/utils/combat/__tests__/forcedAffinityReciprocalGate.integration.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/gearSetDotPair.integration.test.ts` | 4 | 4 | 0 |
+| `src/utils/combat/__tests__/healing.test.ts` | 39 | 39 | 0 |
+| `src/utils/combat/__tests__/healingPerRecipientApply.test.ts` | 6 | 6 | 0 |
+| `src/utils/combat/__tests__/healingPerRecipientAxis.test.ts` | 5 | 5 | 0 |
+| `src/utils/combat/__tests__/hpCrossing.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/indestructibleDeath.test.ts` | 6 | 6 | 0 |
+| `src/utils/combat/__tests__/leech.test.ts` | 8 | 8 | 0 |
+| `src/utils/combat/__tests__/lowestSpeedAlly.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/multiEnemyDotStateReporting.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/outDetonationDamageUpBuff.integration.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/outgoingAmplificationEngine.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/overloadLifecycle.test.ts` | 4 | 4 | 0 |
+| `src/utils/combat/__tests__/ownCleanseReactivePromotion.integration.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/perActorIncomingSurface.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/perActorShield.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/perVictimDotTick.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/perVictimPlayerTimedDetonation.integration.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/perVictimTimedDetonation.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/preFightModifiersEngine.test.ts` | 4 | 4 | 0 |
+| `src/utils/combat/__tests__/procChanceGate.test.ts` | 4 | 4 | 0 |
+| `src/utils/combat/__tests__/purgeConditionalSources.test.ts` | 2 | 2 | 0 |
+| `src/utils/combat/__tests__/reactiveShieldRouting.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/runModeEquivalence.test.ts` | 6 | 6 | 0 |
+| `src/utils/combat/__tests__/shieldAppliedEvent.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/shieldGrantBattleSim.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/shieldPenetration.test.ts` | 4 | 4 | 0 |
+| `src/utils/combat/__tests__/statVsTargetGate.integration.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/teamAuraDistribution.integration.test.ts` | 3 | 3 | 0 |
+| `src/utils/combat/__tests__/triggers.test.ts` | 23 | 23 | 0 |
+| `src/utils/combat/__tests__/victimEnemyModifiers.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/wave7WardenDebuffInflicted.integration.test.ts` | 1 | 1 | 0 |
+| `src/utils/combat/__tests__/wildfireTeamAuraCritPower.integration.test.ts` | 1 | 1 | 0 |
+
+### (b) Fail for a DIFFERENT reason — 3 files / 4 tests, all the SAME root cause
+All four are `TypeError: Cannot read properties of undefined (reading 'length')` thrown from
+`normalizeRoster.ts:98` (`input.enemyAttackers.length`), NOT the contract `Error`. Root cause: these
+fixtures don't pass `enemyAttackers: []` — they omit the key entirely (or explicitly set it to
+`undefined`) and paper over the missing required field with an `as CombatEngineInput` cast, so
+`input.enemyAttackers` is `undefined` at runtime and `.length` throws before the guard's own message
+can form. Per the brief's Step 3 code (verbatim, not to be embellished), the guard only checks
+`.length === 0`, so it does not defend against `undefined`. Same population, different crash shape —
+still fixtures secretly running without an opponent, and Tasks 4-6 fix them the same way (give them a
+real enemy); they'll just see a `TypeError` instead of the contract message until then.
+
+| File | Test | Cause |
+|---|---|---|
+| `src/utils/combat/__tests__/normalizeRoster.test.ts` | "leaves an empty enemy roster empty — it never invents an enemy" (line 93-96) | Calls `normalizeCombatRoster(baseInput())` where `baseInput()`'s factory never sets `enemyAttackers` at all; the test's own premise (the boundary tolerates and preserves an empty roster) is exactly what SP-4b-2b reverses — the test itself is now testing the OLD contract |
+| `src/utils/combat/__tests__/perVictimWalkedTeamDetonation.integration.test.ts` | "REGRESSION: a NON-positional walked-team detonate still surfaces detonationDamage via the legacy aggregate path" (line 331) | Sets `enemyAttackers: undefined` explicitly, with an inline comment "the lone enemy is the dummy sink (no enemyAttackers)" — deliberately invoking the dummy fallback this epic is deleting |
+| `src/utils/combat/__tests__/shieldBasisSecondaryDamage.integration.test.ts` | both tests in "PR9a: shield-basis additional damage reads the LIVE caster shieldPool at cast time" (lines 110, 133) | `runCombat({ ...CLEAN_MATH, ... } as CombatEngineInput)` never sets `enemyAttackers`; the cast hides the missing required field from `tsc` |
+
+### Production-safety check (brief item 4)
+All 64 files are test files under `__tests__/`. None is `battleSimulator.ts`, `dpsSimulator.ts`, or
+`healingEngineAdapter.ts` — confirmed by grep. No production path hits the new throw:
+`battleSimulator.ts:830` already throws its own `enemyTeam is empty` before reaching the engine;
+`dpsSimulator.ts:500-502` synthesizes `effectiveEnemyAttackers` when the UI-facing input omits one;
+`healingEngineAdapter.ts:634` always passes `engineEnemyAttackers`, which Task 2 populates with the
+practice target when the caller supplies no real enemy.

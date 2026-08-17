@@ -1254,8 +1254,10 @@ export interface CombatEngineInput {
      *  `mode: 'battle'` implies this behaviour too, so the battle sim is unaffected.
      *  Absent/false → heals apply only to `healTargetId` (legacy single-target accounting). */
     perRecipientHealApply?: boolean;
-    /** Enemy attackers (healing mode): offense-only queue actors bombarding the heal
-     *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier.
+    /** The opposing roster — REQUIRED on every run since SP-4b-2b, and never empty (the boundary
+     *  throws). Real ships carrying stats + `shipSkills`, positioned by `normalizeCombatRoster`
+     *  when they arrive without a slot. A caller with no enemy to model synthesizes an inert one
+     *  rather than passing `[]`; see `healingEngineAdapter.practiceTarget`.
      *  `defence` and `hp` are optional now (default 0 for bare-stat legacy path); Task 9
      *  populates them with real matchup values via the adapter. */
     enemyAttackers: {
