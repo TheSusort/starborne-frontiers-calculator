@@ -459,9 +459,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     const engineTeamActors = deriveTeamEngineActors(teamActors, input.enemyAffinity);
     const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
 
-    // `enemyOutcome` is derived from the vestigial DUMMY (`enemy.destroyedRound`, engine.ts:10192),
-    // which has billions of HP and never dies. Against a real enemy it therefore reports
-    // `survived: true` / `roundsToKill: undefined` forever. Capture the REAL enemies' deaths off an
+    // The engine's own `enemyOutcome` is derived from the vestigial DUMMY (`enemy.destroyedRound`,
+    // engine.ts:10192), which has billions of HP and never dies — so it always reports
+    // `survived: true` / `roundsToKill: undefined` and is unusable here (SP-4b-2a: every DPS run now
+    // faces a real enemy, so this is the only outcome). Capture the REAL enemies' deaths off an
     // emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same remedy.
     const realEnemyIds = new Set(effectiveEnemyAttackers.map((e) => e.id));
     const realEnemyDeathRound = new Map<string, number>();
@@ -514,7 +515,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         },
     };
 
-    const { rounds, rawTotals, enemyOutcome } = runCombat({
+    const { rounds, rawTotals } = runCombat({
         attack,
         crit,
         critDamage,
@@ -564,13 +565,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         pattern: input.pattern,
     });
 
-    const hasRealEnemy = realEnemyIds.size > 0;
-
     // Real-enemy outcome, re-derived from the `ship-destroyed` tap. "Killed" means EVERY real enemy
     // is down (with one enemy — the common case — that is just it); `roundsToKill` is the round the
-    // last of them fell.
-    const allRealEnemiesDead =
-        realEnemyIds.size > 0 && realEnemyDeathRound.size === realEnemyIds.size;
+    // last of them fell. `realEnemyIds` is never empty (a scalar-only caller still gets the
+    // synthesized enemy), so there is no "no real enemy at all" case left to guard against here.
+    const allRealEnemiesDead = realEnemyDeathRound.size === realEnemyIds.size;
     const realRoundsToKill = allRealEnemiesDead
         ? Math.max(...realEnemyDeathRound.values())
         : undefined;
@@ -612,12 +611,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // firing hit lands per-victim via applyPositionalDamage and crediting again would double-count.
     // So `rawTotals.cumulative` reads ~0 here and the per-victim map is the only honest source.
     // Mirrors how battleSimulator derives ShipRoundState.damageDealt from the same map (SP-F F1).
-    const perRoundFocusDamage = hasRealEnemy
-        ? focusDamagePerRound(reportedRounds, FOCUS_ACTOR_ID)
-        : null;
-    const totalDamage = hasRealEnemy
-        ? Math.round(focusDamageTotal(reportedRounds, FOCUS_ACTOR_ID))
-        : Math.round(rawTotals.cumulative);
+    const perRoundFocusDamage = focusDamagePerRound(reportedRounds, FOCUS_ACTOR_ID);
+    const totalDamage = Math.round(focusDamageTotal(reportedRounds, FOCUS_ACTOR_ID));
 
     // Keep the per-round rows consistent with the re-derived total — DPSRoundChart and the
     // summary must not disagree. Index-aligned with `rounds` by construction (a round with no
@@ -643,23 +638,21 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // direct damage the focus dealt; and the channel's documented exclusions (focus-target DoT,
     // the Protection redirect double-count) are inherited, not introduced here.
     let derivedDirectTotal = 0;
-    if (perRoundFocusDamage) {
-        let running = 0;
-        reportedRounds.forEach((r, i) => {
-            r.totalRoundDamage = Math.round(perRoundFocusDamage[i]);
-            running += perRoundFocusDamage[i];
-            r.cumulativeDamage = Math.round(running);
+    let runningFocusDamage = 0;
+    reportedRounds.forEach((r, i) => {
+        r.totalRoundDamage = Math.round(perRoundFocusDamage[i]);
+        runningFocusDamage += perRoundFocusDamage[i];
+        r.cumulativeDamage = Math.round(runningFocusDamage);
 
-            const nonDirect =
-                r.corrosionDamage + r.infernoDamage + (r.genericDamage ?? 0) + r.detonationDamage;
-            // Clamped: the subtrahends come from independently-rounded engine folds, and the
-            // channel's known exclusions can make the remainder go slightly negative rather than
-            // meaning "the focus dealt negative direct damage".
-            const direct = Math.max(0, perRoundFocusDamage[i] - nonDirect);
-            r.directDamage = Math.round(direct);
-            derivedDirectTotal += direct;
-        });
-    }
+        const nonDirect =
+            r.corrosionDamage + r.infernoDamage + (r.genericDamage ?? 0) + r.detonationDamage;
+        // Clamped: the subtrahends come from independently-rounded engine folds, and the
+        // channel's known exclusions can make the remainder go slightly negative rather than
+        // meaning "the focus dealt negative direct damage".
+        const direct = Math.max(0, perRoundFocusDamage[i] - nonDirect);
+        r.directDamage = Math.round(direct);
+        derivedDirectTotal += direct;
+    });
 
     // SP-4b-1: the SAME re-derivation for the walked TEAM actors. `RoundData.teamDamage` /
     // `teamTotalDamage` are folded by the engine out of the scalar `roundDamage` map, whose team
@@ -680,13 +673,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // Replacement (not addition), mirroring the focus: the two channels are mutually exclusive per
     // cast — the `!teamPositional` gate above, `applyReactiveDamage`'s
     // `hasPositionedEnemyRoster ? creditDealt : creditDamage` split (engine.ts:5738/5775), and the
-    // positional DoT/detonation sites which call `creditDealt` only. Legacy (no real enemy) runs
-    // keep the engine's scalar values untouched, so their goldens cannot move.
+    // positional DoT/detonation sites which call `creditDealt` only. A run with no walked team
+    // actors at all (`walkedTeamIds.length === 0`) has nothing to re-derive here.
     const walkedTeamIds = engineTeamActors?.filter((t) => t.walk).map((t) => t.id) ?? [];
     const perRoundTeamDamage =
-        hasRealEnemy && walkedTeamIds.length > 0
-            ? actorsDamagePerRound(reportedRounds, walkedTeamIds)
-            : null;
+        walkedTeamIds.length > 0 ? actorsDamagePerRound(reportedRounds, walkedTeamIds) : null;
     if (perRoundTeamDamage) {
         // Rounded per row, preserving the integer contract the engine's own
         // `Math.round(teamRoundDamage)` gave this field (the chart prints it with toLocaleString).
@@ -731,39 +722,21 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             // per-round pace of a fast kill. Survived runs are unaffected (rounds.length ===
             // numRounds there).
             avgDamagePerRound: Math.round(totalDamage / reportedRounds.length),
-            // SP-U U5: rounds-to-kill adapter. The engine drives a real, destructible enemy; when
-            // it dies within the window the run terminates on that round and `enemyOutcome` reports
-            // it. Wiped → roundsToKill = death round, survived false, finalHpPct 0; else survived
-            // true, roundsToKill undefined, finalHpPct = end-of-window enemy HP%.
-            //
-            // Against a REAL enemy those engine fields read the dummy and are meaningless (it never
-            // dies), so they are replaced by the `ship-destroyed`-derived values above.
-            survived: realEnemyIds.size > 0 ? !allRealEnemiesDead : enemyOutcome.survived,
-            ...(realEnemyIds.size > 0
-                ? realRoundsToKill !== undefined
-                    ? { roundsToKill: realRoundsToKill }
-                    : {}
-                : enemyOutcome.roundsToKill !== undefined
-                  ? { roundsToKill: enemyOutcome.roundsToKill }
-                  : {}),
+            // SP-U U5: rounds-to-kill adapter, re-derived from the `ship-destroyed` tap (see above —
+            // the engine's own outcome fields read the DUMMY and are unusable). Wiped → roundsToKill
+            // = death round, survived false, finalHpPct 0; else survived true, roundsToKill
+            // undefined, finalHpPct = end-of-window enemy HP%.
+            survived: !allRealEnemiesDead,
+            ...(realRoundsToKill !== undefined ? { roundsToKill: realRoundsToKill } : {}),
             // A fully wiped roster is at 0%; otherwise the HP-weighted remainder across every real
             // enemy (see weightedRealEnemyHpPct — with the single enemy the UI ships, that is just
-            // its own last `hp-changed` percentage, 100 when never damaged). The engine's
-            // `enemyOutcome.finalHpPct` reads the DUMMY here, so it is not a reading of the real
-            // enemy at all.
-            finalHpPct:
-                realEnemyIds.size > 0
-                    ? allRealEnemiesDead
-                        ? 0
-                        : weightedRealEnemyHpPct()
-                    : enemyOutcome.finalHpPct,
+            // its own last `hp-changed` percentage, 100 when never damaged).
+            finalHpPct: allRealEnemiesDead ? 0 : weightedRealEnemyHpPct(),
             // Same suppression, same remedy as the per-round row above: `rawTotals.direct` is fed
             // by the `!positional`-gated credit, so it reads 0 for every real-enemy run and the
             // summary's damage-type breakdown (ShipConfigSummary.tsx:201) showed "0" beside a
             // correct grand total.
-            totalDirectDamage: perRoundFocusDamage
-                ? Math.round(derivedDirectTotal)
-                : Math.round(rawTotals.direct),
+            totalDirectDamage: Math.round(derivedDirectTotal),
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
             totalInfernoDamage: Math.round(rawTotals.inferno),
             totalDetonationDamage: Math.round(rawTotals.detonation),
