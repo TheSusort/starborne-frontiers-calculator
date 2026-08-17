@@ -49,7 +49,7 @@ const dotKit = (): ShipSkills => ({
     ],
 });
 
-const baseInput = (over: Partial<DPSSimulationInput> = {}): DPSSimulationInput => ({
+export const baseInput = (over: Partial<DPSSimulationInput> = {}): DPSSimulationInput => ({
     attack: 10_000,
     crit: 0,
     critDamage: 0,
@@ -112,5 +112,51 @@ describe('re-derived round totals keep the integer contract', () => {
     it('ends the last round on exactly the summary total', () => {
         const { rounds, summary } = simulateDPS(realEnemyInput({ shipSkills: dotKit() }));
         expect(rounds[rounds.length - 1].cumulativeDamage).toBe(summary.totalDamage);
+    });
+});
+
+describe('the Direct damage row on a positional run', () => {
+    beforeEach(() => {
+        setupKeyedTestRng(12345);
+    });
+
+    it('reports the focus firing damage, not 0', () => {
+        const { rounds, summary } = simulateDPS(realEnemyInput());
+
+        for (const r of rounds) {
+            expect(r.directDamage).toBeGreaterThan(0);
+            expect(Number.isInteger(r.directDamage)).toBe(true);
+        }
+        expect(summary.totalDirectDamage).toBeGreaterThan(0);
+    });
+
+    it('excludes the DoT component instead of double-counting it', () => {
+        // dotKit lands corrosion, so `perTargetDealt` carries direct + ticks. Direct must be the
+        // REMAINDER — reading `dealt` straight would report the ticks twice (once as Direct, once
+        // as Corr) and the four tooltip rows would no longer sum to the round total.
+        const { rounds } = simulateDPS(realEnemyInput({ shipSkills: dotKit() }));
+
+        const withDot = rounds.filter((r) => r.corrosionDamage > 0);
+        expect(withDot.length).toBeGreaterThan(0); // the fixture is not vacuous
+
+        for (const r of rounds) {
+            const parts =
+                r.directDamage +
+                r.corrosionDamage +
+                r.infernoDamage +
+                (r.genericDamage ?? 0) +
+                r.detonationDamage;
+            // Each part is rounded independently, so allow the accumulated half-unit drift only.
+            expect(Math.abs(parts - r.totalRoundDamage)).toBeLessThanOrEqual(2);
+            expect(r.directDamage).toBeLessThan(r.totalRoundDamage);
+            expect(r.directDamage).toBeGreaterThan(0);
+        }
+    });
+
+    it('leaves a scalar-path run untouched', () => {
+        // No enemyAttackers → the engine's own scalar credit still fills the row. Until Task 6
+        // lands, this is the fence that proves the re-derivation only touches the positional path.
+        const { rounds } = simulateDPS(baseInput());
+        for (const r of rounds) expect(r.directDamage).toBeGreaterThan(0);
     });
 });

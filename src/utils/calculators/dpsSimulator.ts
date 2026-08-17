@@ -571,12 +571,36 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // raw float and shipped `Total (with team): 179,514.401` to the page. The running sum
     // accumulates the RAW values and rounds only for display, so the last row's cumulative equals
     // `summary.totalDamage` (which rounds the same raw total once) exactly.
+    // `directDamage` is the ONLY per-kind row the positional path zeroes. `corrosionDamage`,
+    // `infernoDamage` and `detonationDamage` fold `perActorDot`/`perActorDetonation`
+    // (engine.ts:9961-9968) and are already honest; `focus.direct` alone (engine.ts:9960) is not,
+    // because `creditDamage(actor,'direct',…)` sits inside `if (!positional)` (engine.ts:8677).
+    //
+    // Recovered by SUBTRACTION, not by reading `perTargetDealt` directly: that channel INCLUDES
+    // the focus's DoT ticks and its detonation (measured — a corrosion round reads
+    // `dealt = direct + ticks`), so assigning it whole would report the ticks twice, once as
+    // Direct and once as Corr, and the tooltip's four rows would stop summing to the round total.
+    //
+    // Two channel properties ride along and are correct rather than accidental: reactive damage
+    // the focus deals lands in `perTargetDealt` (#318) and is therefore counted as Direct — it IS
+    // direct damage the focus dealt; and the channel's documented exclusions (focus-target DoT,
+    // the Protection redirect double-count) are inherited, not introduced here.
+    let derivedDirectTotal = 0;
     if (perRoundFocusDamage) {
         let running = 0;
         reportedRounds.forEach((r, i) => {
             r.totalRoundDamage = Math.round(perRoundFocusDamage[i]);
             running += perRoundFocusDamage[i];
             r.cumulativeDamage = Math.round(running);
+
+            const nonDirect =
+                r.corrosionDamage + r.infernoDamage + (r.genericDamage ?? 0) + r.detonationDamage;
+            // Clamped: the subtrahends come from independently-rounded engine folds, and the
+            // channel's known exclusions can make the remainder go slightly negative rather than
+            // meaning "the focus dealt negative direct damage".
+            const direct = Math.max(0, perRoundFocusDamage[i] - nonDirect);
+            r.directDamage = Math.round(direct);
+            derivedDirectTotal += direct;
         });
     }
 
@@ -676,7 +700,13 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
                         ? 0
                         : weightedRealEnemyHpPct()
                     : enemyOutcome.finalHpPct,
-            totalDirectDamage: Math.round(rawTotals.direct),
+            // Same suppression, same remedy as the per-round row above: `rawTotals.direct` is fed
+            // by the `!positional`-gated credit, so it reads 0 for every real-enemy run and the
+            // summary's damage-type breakdown (ShipConfigSummary.tsx:201) showed "0" beside a
+            // correct grand total.
+            totalDirectDamage: perRoundFocusDamage
+                ? Math.round(derivedDirectTotal)
+                : Math.round(rawTotals.direct),
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
             totalInfernoDamage: Math.round(rawTotals.inferno),
             totalDetonationDamage: Math.round(rawTotals.detonation),
