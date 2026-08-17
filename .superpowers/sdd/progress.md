@@ -150,3 +150,27 @@ Task 2: complete (commits 70234483 + fix wave 21120626, review APPROVED then fix
   of its sibling's vi.mock block (vi.mock hoisting makes sharing awkward).
 OWNER RULING 2026-08-17: fix the production-reachable `leechScope:'all'` half in THIS PR (Task 2b);
   tripwire the corpus-unreachable `'detonation'` half. Brief: task-2b-brief.md.
+Task 2b: complete (commit d4dba512 + fix wave 8ec848ba/90855a6b; review "needs fixes" -> fixes
+  RE-REVIEWED clean). 528 files / 5837 tests; tsc 0; eslint 0.
+  Fix = ONE call, `procStandingLeechesPerVictim(sourceId, damage)`, in the positional per-victim
+  DoT-tick credit callback. Deliberately NOT `creditDamage`: that would also write
+  `dmg(sourceId)[dotType]` (double-feeding the scalar DoT channel the branch avoids) AND resolves its
+  owner from the PLAYER-ONLY `runtimesById`, which would have shipped a one-directional fix.
+  ⭐ THE STRONGEST FORM OF BLAST-RADIUS EVIDENCE: exactly one golden scenario moved
+  (healingGoldenParity sc-9, directHeal 417 -> 1417/round) and it ROUND-TRIPS to its PRE-EPIC value
+  measured in a worktree at 39d463f1 (1258 = cast 258 + inferno 1000), with perTargetDealt
+  byte-identical there. A restored number beats an explained number.
+  ⭐ A TRIPWIRE CAN RECORD A FALSE MECHANISM AND STILL PASS. The detonation tripwire blamed the
+  `scope==='detonation'` guard; truth is `applyPositionedTimedBurst` (engine.ts:6923-6944) reaches
+  NEITHER leech proc, so deleting that guard would have left the test green and its claimed
+  sensitivity was fiction. Worse, the false diagnosis HID a third instance: an `'all'`-scope leech
+  (Magnolia, Leech gear set — production-reachable) also pays ZERO on a positional burst.
+  ⭐ THE LEECH GAP IS A 3-INSTANCE CLASS: (1) DoT tick FIXED here; (2) detonation burst — no proc at
+  all, reachable via `'all'` scope; (3) heal-target DoT tick (engine.ts:8670-8672 discards the
+  applier), reachable and the likeliest victim on both surfaces.
+  OWNER RULING 2026-08-17: instances 2+3 get a DEDICATED FOLLOW-UP PR that sweeps the class — small
+  enough to actually earn a CodeRabbit review, and a class is better swept than patched per
+  discovery. This PR ships instance 1 fixed + 2/3 documented with ACCURATE mechanisms + tripwired.
+  MINOR carried to Task 8's sweep: (v) the fix wave's own new comment in positionalDotLeech.test.ts
+  cites BASE-commit line numbers (3992/8808/9085/9364/10168), stale by ~13 lines because the SAME
+  commit's other edits shifted the file (+4 then -17). Recompute after a same-commit line-count edit.
