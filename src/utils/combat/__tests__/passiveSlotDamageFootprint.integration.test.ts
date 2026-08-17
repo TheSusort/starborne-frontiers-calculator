@@ -76,6 +76,27 @@ const reflectAbility = (pct: number): Ability => ({
     config: { type: 'damage-reflection', pct },
 });
 
+/** A victim-side `incoming-reduction` that nullifies every direct hit it takes. Its purpose here is
+ *  NOT the mitigation itself but what it does to the ATTACKER's aggregate: `runPlayerTurn` folds
+ *  the bound anchor's reduction into `nonCritFactor`, which both the firing term AND the aggregate
+ *  `passiveDamage` are multiplied by — so an attacker aimed at a carrier reports `directDamage` 0
+ *  for the whole cast. That is the only way to reach a zero-damage cast that still carries a live
+ *  passive-slot instance. */
+const nullifyingReduction = (): Ability => ({
+    id: `psn${++idc}`,
+    type: 'modifier',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'incoming-reduction',
+        scope: 'direct',
+        condition: 'always',
+        pct: 100,
+        critFamily: false,
+    },
+});
+
 /** Victim-side kit: passive-slot defensive abilities only, no damage of its own. */
 const victimKit = (...abilities: Ability[]): ShipSkills => ({
     slots: [{ slot: 'passive', abilities }],
@@ -245,6 +266,67 @@ describe('SP-4b-2 D6 — the passive-slot damage instance resolves its OWN footp
         // 800 attack: firing 800 on its single-cell anchor, passive 400 on EVERY player actor.
         expect(dealt?.['attacker']).toBe(800 + 400);
         expect(dealt?.['ally-1']).toBe(400);
+    });
+});
+
+/**
+ * SP-4b-2 D6, task-18 finding 3 — A CAST THAT DEALT NO FIRING DAMAGE STILL LANDS ITS INSTANCE.
+ *
+ * The passive-slot instance is not the firing hit's rider: the two are separate damage instances of
+ * the same turn (that is the whole reason `stagePassiveSlotHit` splits resolve from apply). The two
+ * PLAYER-side call sites stage theirs inside a plain `if (positional)`; the ENEMY site's entire
+ * apply block sits inside `if (damage > 0 && tgt !== undefined)`, so an enemy whose aggregate came
+ * out at 0 skipped staging altogether and the instance was dropped. Team symmetry is LOCKED here,
+ * and a one-sided passive is the recurring defect shape in this engine.
+ *
+ * REACHING A ZERO-DAMAGE CAST. `damage` is `directDamage + detonationDamage`, and `directDamage` is
+ * `firing + passiveDamage` — both terms carry the ANCHOR's `nonCritFactor`. A 100%
+ * `incoming-reduction` on the anchor zeroes it, so the aggregate reports nothing for a cast that
+ * still has a real instance to land on victims the anchor's mitigation says nothing about.
+ *
+ * The victim asserted in each direction is one the FIRING hit cannot reach (the cast is single-cell
+ * on the anchor) and that carries no mitigation of its own — so the number is the instance's alone.
+ */
+describe('SP-4b-2 D6 — a zero-damage cast still lands its passive-slot instance, both sides', () => {
+    it('the ENEMY side lands it on an unmitigated ally when its firing hit was nullified', () => {
+        const result = runCombat(
+            BASE({
+                // The enemy's anchor. Its 100% reduction is what drives the enemy's aggregate to 0.
+                shipSkills: victimKit(nullifyingReduction()),
+                enemyAttackers: [enemyAt('e-front', 'M4', 800, 500, kit(100, 50, 'all-enemies'))],
+                // Reached by the enemy's `all-enemies` passive and by nothing else, and carrying no
+                // mitigation — this is the assertion that fails when the instance is never staged.
+                teamActors: [allyAt('ally-1', 'M3')],
+            })
+        );
+        const dealt = result.rounds[0].perTargetDealt?.['e-front'];
+
+        // Pre-fix the enemy dealt NOTHING AT ALL — `perTargetDealt` was undefined, not merely
+        // missing this row — because the whole positional apply sat behind `damage > 0`.
+        expect(dealt?.['ally-1']).toBe(400);
+        // The nullifier really did fire: the anchor took no FIRING damage (it would have been 800),
+        // so this case is a zero-aggregate cast and not just an ordinary one.
+        expect(dealt?.['attacker']).toBeLessThan(800);
+    });
+
+    it('the PLAYER side already did — the same shape, mirrored', () => {
+        const result = runCombat(
+            BASE({
+                enemyAttackers: [
+                    // The focus's anchor, nullified exactly as the enemy's is above.
+                    enemyAt('e-front', 'M4', 0, 1, victimKit(nullifyingReduction())),
+                    enemyAt('e-mid', 'M3'),
+                ],
+            })
+        );
+        const dealt = result.rounds[0].perTargetDealt?.['attacker'];
+
+        // The passive's full 500 on the victim only it reaches — green before the fix as well as
+        // after, which is what makes the enemy-side case above a SYMMETRY break rather than a
+        // shared limitation.
+        expect(dealt?.['e-mid']).toBe(500);
+        // Same nullifier, same effect on the anchor's firing share (1000 without it).
+        expect(dealt?.['e-front']).toBeLessThan(1000);
     });
 });
 

@@ -9970,6 +9970,56 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // undefined (enemy's "allies" are enemy-side, not the player team).
                                 processExtraActionGrants(actor, enemyTurn.extraActionGrants);
                             }
+                            // ── SP-4b-2 D6, task-18 finding 3: the enemy's passive-slot instance is
+                            // STAGED HERE, OUTSIDE the `damage > 0` gate below ──────────────────
+                            // Team symmetry is LOCKED, and the two player-side sites stage theirs
+                            // inside a plain `if (positional)` with NO damage term: a cast whose
+                            // FIRING hit contributes nothing to the aggregate still lands its
+                            // passive-slot instance on the victims its OWN footprint reaches. The
+                            // enemy's whole apply block sits inside `damage > 0`, so an enemy in
+                            // that position dropped the instance entirely — the same defect shape
+                            // the `flushDeferredEnemyApplications` note below this block records
+                            // ("a cast that … deals no damage still has to apply it").
+                            //
+                            // MEASURED (the fixture is `passiveSlotDamageFootprint.integration`'s
+                            // zero-damage pair). An enemy firing at an anchor carrying a 100%
+                            // `incoming-reduction` has aggregate `damage` 0 — `directDamage` is
+                            // `firing + passiveDamage`, and BOTH terms share the anchor's
+                            // `nonCritFactor`, which that reduction zeroes. Pre-fix the enemy dealt
+                            // NOTHING AT ALL (`perTargetDealt` undefined) even though an unmitigated
+                            // ally stood in the passive's `all-enemies` footprint; the player-side
+                            // mirror credited that victim its full share.
+                            //
+                            // Resolving the footprint here rather than inside the block is safe:
+                            // everything between is comment + `let` declarations, so the board this
+                            // sees is the same one the old call site saw. Staging is also side-effect
+                            // free (a pure `footprintVictims` read) and the apply skips any victim
+                            // whose share is not `> 0`, with `creditPositionalDirect` no-opping on 0
+                            // — so a zero-attack enemy (the DPS default) stages, lands nothing and
+                            // changes nothing.
+                            const stagedEnemyPassiveSlotHit =
+                                enemyPositional && enemyPassiveSlotHit && tgt !== undefined
+                                    ? stagePassiveSlotHit(
+                                          actor,
+                                          turnBindings(actor.side),
+                                          tgt,
+                                          enemyPassiveSlotHit,
+                                          {
+                                              scheduledEnemyEffects: enemyScheduledEnemyEffects,
+                                              perVictimOutgoing: enemyPerVictimOutgoing,
+                                              preTurnVictimStatus: enemyPreTurnVictimStatus,
+                                          }
+                                      )
+                                    : undefined;
+                            let enemyPassiveSlotLanded = false;
+                            /** The staged instance, run AT MOST ONCE — after the firing hit when there
+                             *  was one (the "one turn, one board" invariant `stagePassiveSlotHit`
+                             *  documents), from the fallback below when there was not. */
+                            const landEnemyPassiveSlotHitOnce = (): void => {
+                                if (enemyPassiveSlotLanded) return;
+                                enemyPassiveSlotLanded = true;
+                                stagedEnemyPassiveSlotHit?.();
+                            };
                             // `tgt !== undefined` narrows the victim for this block (SP-U U5 R6): a
                             // positive `damage` is only produced by the non-skip `else` above, which
                             // runs only when `tgt` is defined — byte-identical (the term is always true
@@ -10055,17 +10105,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // Stasis break; it returns critAgg (for the 0-damage deferred-emit
                                     // fallback) and emitDeferred (the rest of the interleaved sequence).
                                     const tb = turnBindings(actor.side);
-                                    // SP-4b-2 D6: the enemy side's mirror — a Judge-style kit on an
-                                    // ENEMY actor stages and lands its passive-slot instance too.
-                                    // Passives fire on both sides (LOCKED); a one-sided fix is the
-                                    // recurring defect shape here.
-                                    const landEnemyPassiveSlotHit = enemyPassiveSlotHit
-                                        ? stagePassiveSlotHit(actor, tb, tgt, enemyPassiveSlotHit, {
-                                              scheduledEnemyEffects: enemyScheduledEnemyEffects,
-                                              perVictimOutgoing: enemyPerVictimOutgoing,
-                                              preTurnVictimStatus: enemyPreTurnVictimStatus,
-                                          })
-                                        : undefined;
                                     const posApply = drivePositionalTurnApply(
                                         actor,
                                         tb,
@@ -10119,8 +10158,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     );
                                     enemyCritAgg = posApply.critAgg;
                                     enemyEmitDeferred = posApply.emitDeferred;
-                                    // SP-4b-2 D6: the staged passive-slot instance lands now.
-                                    landEnemyPassiveSlotHit?.();
+                                    // SP-4b-2 D6: the staged passive-slot instance lands now — after
+                                    // the firing hit, exactly as the two player-side sites do it.
+                                    landEnemyPassiveSlotHitOnce();
                                     // SP-4b-2 D1: the enemy site's positional direct twin. There is
                                     // no `if (!enemyPositional) creditDamage(...,'direct',…)` to
                                     // pair with — `roundDamage` is a player-credit map, so the
@@ -10303,6 +10343,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     });
                                 }
                             }
+                            // SP-4b-2 D6, task-18 finding 3: the firing hit contributed nothing to
+                            // the aggregate, so the block above never ran — the passive-slot
+                            // instance is not the firing hit's rider and lands anyway. A no-op when
+                            // it already landed after the firing hit (the once-guard), and when the
+                            // turn staged nothing. Placed BEFORE the deferred-application flush, the
+                            // same order the two player-side sites have.
+                            landEnemyPassiveSlotHitOnce();
                             // Clause order — mirror of the two player-side sites. Placed OUTSIDE the
                             // `damage > 0 && tgt !== undefined` block above: a cast that inflicts a
                             // debuff but deals no damage (a pure Stasis bot) still has to apply it,
