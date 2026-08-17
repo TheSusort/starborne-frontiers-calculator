@@ -289,3 +289,110 @@ there.
   scenario 11 cross-reference.
 - `src/utils/calculators/__tests__/__snapshots__/healingGoldenParity.test.ts.snap` — scenario 9 only.
 - `src/constants/changelog.ts` — one `UNRELEASED_CHANGES` entry.
+
+---
+
+## Fix wave 1 — review findings on the comment/prose surface (engine fix unchanged)
+
+Four review findings, all comment/prose only. The engine fix (the one call to
+`procStandingLeechesPerVictim(sourceId, damage)`, `engine.ts:8812` as of this wave) was **not**
+touched, per the reviewer's own confirmation that it is correct, minimal and team-symmetric.
+
+### Finding 1 — the tripwire's claimed mechanism was false; state the real one for the next task
+
+**The real mechanism, stated plainly for whoever picks up the burst-channel gap next:**
+`applyPositionedTimedBurst` (`engine.ts:6923-6944`, the shared bomb/accumulator burst helper used
+by all three attack sites) calls `applyVictimDamage` directly and never calls
+`procLeechesForVictim` — the seam that reaches *either* leech proc. So the positional burst
+channel reaches **neither** `procStandingLeechesPerVictim` **nor** `procTakenLeechesPerVictim`,
+**regardless of scope**. The `scope === 'detonation'` `continue` inside
+`procStandingLeechesPerVictim` (`engine.ts:3858` as of this wave) is never even reached from the
+burst path — it cannot be what produces the tripwire's zero, because nothing calls either proc
+from that channel at all. Proof: the only call sites of the two procs are `engine.ts:3992, 8812,
+9085ish, 9364ish, 10168ish` (direct-hit and DoT-tick sites only) — the burst helper is not among
+them. Deleting the `scope === 'detonation'` guard entirely would leave the tripwire exactly as
+green as it is today, which is what made the old header's claimed sensitivity ("a new kit whose
+detonation leech is on-cast would turn this RED") false.
+
+**Consequence for scope:** the gap is a whole-channel miss, not a `'detonation'`-only one. A
+production-reachable `leechScope:'all'` standing leech — Magnolia's self leech, and the Leech gear
+set via `buildEquipmentAbilities.ts` — also pays **zero** on a positional bomb/accumulator burst
+today, where on the old dummy path it paid via `creditDamage(sourceId, 'detonation', damage)`
+(`engine.ts:9523-9524, :9536-9537`). This is the identical "procs no leeches in either direction"
+gap the engine already documents for the sibling passive-slot-damage-footprint helper at
+`engine.ts:6485-6498` ("KNOWN GAPS … (a) IT PROCS NO LEECHES, IN EITHER DIRECTION"). Two
+independent helpers on the positional path now carry the same documented class of miss.
+
+Rewrote the tripwire's header comment in `positionalDotLeech.test.ts` (above the `KNOWN GAP
+(tripwire)` describe block) to state the real mechanism, name the reachable `'all'`-scope
+exposure explicitly with its dummy-path comparison numbers, point at the sibling comment instead
+of re-deriving it, and drop the false sensitivity claim. **Did not touch the burst channel** — that
+routing decision is explicitly left to the owner/a follow-up task. The test body and its
+`perTargetDamage['enemy-back'] === 6000` anti-vacuity assertion are untouched.
+
+### Finding 2 — narrowed the changelog's enemy-mirror claim to what actually shipped
+
+The shipped fix only reaches the **shared, side-agnostic per-victim DoT-tick branch**
+(`engine.ts:8721` `sideIsPlayer`/`opposing` branch) — it does not touch the separate **heal-target**
+DoT-tick branch (`engine.ts:8670-8672` as of this wave: `credit: (_sourceId, _dotType, damage) =>
+{ tankDotDamage += damage; }`), which discards the applier entirely. The heal target is the
+likeliest victim of an enemy DoT on both surfaces the changelog entry names — the healing
+calculator's tank, and battle mode where `healTarget = attacker` (`engine.ts:2434`). So "an enemy
+ship with the same passive repairs itself off its own damage-over-time in the same way" overclaimed:
+as shipped, the enemy-side half only pays out when the enemy's DoT ticks on a **non-heal-target**
+player ally, not on the heal target itself.
+
+Narrowed the `UNRELEASED_CHANGES` sentence in `src/constants/changelog.ts` to: "...an enemy ship
+with the same passive repairs itself the same way when its damage-over-time ticks on one of your
+other ships. It still heals nothing when that damage-over-time ticks on the ship you picked as the
+heal target — that case isn't fixed yet." Plain English, no emoji, matches the surrounding voice
+(curly apostrophe, present-tense "now" framing). Entry kept, not removed.
+
+### Finding 3 — fixed two stale claims in `procStandingLeechesPerVictim`'s header
+
+- `engine.ts` block header (previously "Honors `scope`: a detonation-scoped leech is skipped on
+  the per-victim `direct` channel") was incomplete against the inner per-entry comment (already
+  updated in the original Task 2b pass to cover the DoT-tick channel too). Rewrote the header to
+  cover both channels the proc actually serves (`direct` firing hit + positional DoT tick) and
+  added a pointer to the burst-channel gap (Finding 1) so a future reader does not mistake this
+  `continue` for the reason bursts pay zero.
+- "RECIPIENT RESOLUTION: via `runtimesById`" was stale against the actual `allRuntimesById` used
+  three lines later (`engine.ts:3885`-ish). Corrected to `allRuntimesById` in the comment — this
+  staleness was pre-existing (not introduced by Task 2b) but is exactly the kind of wrong
+  resolution claim that would mislead a future one-directional change, so fixed while in the block.
+
+### Finding 4 — de-triplicated the call-site comment at the DoT-tick credit callback
+
+The ~30-line comment attached to the `procStandingLeechesPerVictim(sourceId, damage)` call inside
+the DoT-tick branch restated the two-proc landscape, the scope-agreement argument and the
+team-symmetry argument — all already covered by the canonical block comment above
+`procStandingLeechesPerVictim`'s own definition (`engine.ts:3811-3844`). Reduced the call-site
+comment to a pointer at that canonical block plus the two things that are genuinely specific to
+*this* call site: (a) why `creditDamage` was rejected here specifically — it would double-feed the
+`total`/`tickDealtBySource` accumulators this branch already writes, and (b) the cadence note tied
+to `tickDoTs` calling `credit` once per entry. No information was deleted, only de-duplicated to
+its one canonical location plus a reference.
+
+### Verification (this wave)
+
+```
+$ npx vitest run src/utils/combat/__tests__/positionalDotLeech.test.ts
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+
+$ npx vitest run src/utils/calculators/__tests__/healingGoldenParity.test.ts
+ Test Files  1 passed (1)
+      Tests  53 passed (53)
+
+$ npx tsc --noEmit
+(exit 0, no output)
+
+$ npx eslint src
+(exit 0, no output)
+```
+
+`git diff --stat`: `src/constants/changelog.ts` (1 line), `positionalDotLeech.test.ts` (comment
+block only), `engine.ts` (three comment blocks only — header, inner scope comment, call-site
+comment). No assertion, no engine-behaviour line, no snapshot touched.
+
+Commit: `d7fe5cfd` — `docs(sp4b2b): fix review findings on the Task 2b leech comments/changelog`.

@@ -337,27 +337,43 @@ describe("SP-4b-2b Task 2b — a leechScope:'all' standing leech pays out on a p
 });
 
 /**
- * KNOWN GAP TRIPWIRE — a `leechScope:'detonation'` standing leech pays ZERO positionally.
+ * KNOWN GAP TRIPWIRE — a standing leech pays ZERO off a positional bomb/accumulator burst.
  *
- * DELIBERATELY NOT FIXED (owner ruling, SP-4b-2b Task 2b). Two engine facts combine:
- *   • `procStandingLeechesPerVictim` `continue`s on `scope === 'detonation'` — the per-victim
- *     channel is the non-detonation channel by construction.
- *   • The positional burst is deliberately never routed through
- *     `creditDamage(actor.id, 'detonation', …)` (engine.ts ~:6913, ~:9546), which is the only
- *     path that would reach `procStandingLeeches`'s detonation branch.
- * So positionally there is NO channel a detonation-scoped standing leech can ride.
+ * DELIBERATELY NOT FIXED HERE (owner ruling, SP-4b-2b Task 2b) — the burst channel's routing is
+ * its own scope decision for a follow-up task, not a comment fix.
  *
- * WHY IT IS LEFT ALONE: it is corpus-UNREACHABLE. The only producer of `leechScope:'detonation'`
- * is the "Echoing Burst explodes" parse (Valkyrie), whose leech ability triggers
- * `on-bomb-detonated` — so the reactive partition pulls it out of `castSkills` before the
- * `standingLeeches` scan ever sees it (engine.ts ~:3860-3866 documents this). No shipped ship can
- * register a detonation-scoped STANDING leech today.
+ * THE REAL MECHANISM (corrected — a prior version of this comment misattributed the zero to a
+ * scope guard; it does not come from one). `applyPositionedTimedBurst` (engine.ts:6923-6944)
+ * applies a burst's damage via `applyVictimDamage` directly and never calls
+ * `procLeechesForVictim` — the seam that would reach either leech proc. So the positional burst
+ * channel reaches NEITHER `procStandingLeechesPerVictim` NOR `procTakenLeechesPerVictim`,
+ * regardless of the leech's `scope`. The `scope === 'detonation'` `continue` inside
+ * `procStandingLeechesPerVictim` (engine.ts:3854) is never even reached from this path — it
+ * cannot be what produces the zero below, because nothing calls either proc from the burst
+ * channel in the first place. (The only call sites of the two procs are engine.ts:3992, 8808,
+ * 9085, 9364, 10168 — none of them the burst channel.) Deleting that scope guard entirely would
+ * leave this test exactly as green as it is today.
  *
- * THE POINT OF THIS TEST: the gap has now been independently rediscovered twice. If a future
- * change makes it pay out — a new kit whose detonation leech is on-cast, or a positional burst
- * routed through `creditDamage` — this test goes RED and announces the gap instead of it being
- * found a third time from first principles. A red here is NOT necessarily a regression: read this
- * comment, decide whether the payout is correct, and update the expectation deliberately.
+ * SO THE GAP IS WIDER THAN THE `'detonation'` SCOPE THIS FIXTURE HAPPENS TO USE. A
+ * production-REACHABLE `leechScope:'all'` standing leech — Magnolia's self leech, and the Leech
+ * gear set via `buildEquipmentAbilities.ts` — ALSO pays zero on a positional bomb/accumulator
+ * burst, where on the old dummy path it paid via `creditDamage(sourceId, 'detonation', damage)`
+ * (engine.ts:9523-9524, :9536-9537). This is the identical "procs no leeches in either direction"
+ * gap the engine already documents for the sibling passive-slot-damage-footprint helper at
+ * engine.ts:6485-6498 — read that comment for the fuller shape of the defect class.
+ *
+ * WHY *THIS FIXTURE* STAYS CORPUS-UNREACHABLE EVEN SO: it uses a `leechScope:'detonation'` leech
+ * so the assertion is unambiguous, and that scope's only producer — the "Echoing Burst explodes"
+ * parse (Valkyrie) — triggers `on-bomb-detonated`, so the reactive partition pulls it out of
+ * `castSkills` before the `standingLeeches` scan ever sees it (engine.ts ~:3860-3866). No shipped
+ * ship registers a detonation-scoped STANDING leech today. The underlying burst-channel gap it
+ * stands in for is not similarly corpus-bounded — see the `'all'`-scope exposure above.
+ *
+ * THE POINT OF THIS TEST: it pins the zero so that fixing the burst channel — routing it through
+ * `procLeechesForVictim`, for either scope — is a deliberate, reviewed decision rather than a
+ * silent side effect. Because the gap is channel-wide, that fix will also change the payout of a
+ * `leechScope:'all'` leech on a burst (Magnolia, the Leech gear set); read this comment before
+ * updating either expectation.
  */
 describe('KNOWN GAP (tripwire): a detonation-scoped standing leech pays zero on a positional burst', () => {
     it('a positioned enemy’s timed bomb bursts, and the focus’s detonation-scoped leech still credits 0', () => {
