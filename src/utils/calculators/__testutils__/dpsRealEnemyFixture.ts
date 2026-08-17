@@ -71,7 +71,10 @@ export const baseInput = (over: Partial<DPSSimulationInput> = {}): DPSSimulation
     ...over,
 });
 
-/** The page's shape: an explicitly-supplied real, positioned enemy. */
+/** The page's shape: an explicitly-supplied real, positioned enemy. `enemyAffinity` also lands on
+ *  the roster entry's own `affinity` — the victim's affinity is half the matchup the positional
+ *  apply recomputes per victim, so a caller that only sets `input.enemyAffinity` would still see
+ *  an inert (neutral) enemy attacker. */
 export const realEnemyInput = (over: Partial<DPSSimulationInput> = {}): DPSSimulationInput => ({
     ...baseInput(over),
     enemyAttackers: [
@@ -88,6 +91,7 @@ export const realEnemyInput = (over: Partial<DPSSimulationInput> = {}): DPSSimul
             },
             chargeCount: 0,
             startCharged: false,
+            affinity: over.enemyAffinity,
         },
     ],
 });

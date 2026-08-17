@@ -302,6 +302,11 @@ const DPSCalculatorPage: React.FC = () => {
                     selfBuffs: attackerBuffs,
                     enemyDebuffs: enemyBuffs,
                     startCharged: config.startCharged,
+                    // RAW affinities as well as the pre-resolved modifiers. The positional apply
+                    // recomputes the matchup per victim from these two fields; the pre-resolved
+                    // `affinityDamageModifier` below is inert on that path, so passing it alone
+                    // meant the affinity selection did not affect damage at all.
+                    affinity: config.affinity,
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
                     affinityCritPenalty: critPenalty,
@@ -330,6 +335,7 @@ const DPSCalculatorPage: React.FC = () => {
                             startCharged: false,
                             shipSkills: enemyConfig.shipSkills,
                             position: DEFAULT_ENEMY_SLOT,
+                            affinity: enemyAffinity,
                         },
                     ],
                 })
