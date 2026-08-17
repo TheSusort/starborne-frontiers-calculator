@@ -26,6 +26,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Recruitment calculator: Centurion beacons.',
     'Damage calculator: per-round and total damage numbers no longer show a long decimal tail.',
     'Damage calculator: the per-round tooltip and the damage-type breakdown show real Direct damage again instead of 0.',
+    'Damage calculator: the secondary and conditional damage rows in the config summary are populated again.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

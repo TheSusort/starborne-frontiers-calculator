@@ -8663,20 +8663,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // clobber them. direct/secondary/conditional are single-focus-turn
                             // today; += keeps the 0..N-turn seam additive.
                             const d = dmg(actor.id);
-                            // secondary/conditional are display sub-buckets already rolled into
-                            // turn.directDamage — they must NOT be routed through creditDamage or the
-                            // standing-leech hook would double-count them.
-                            //
+                            // secondary/conditional are DISPLAY sub-buckets — a view of damage the
+                            // firing hit already counted. They feed `rawTotals` only (one read, at
+                            // the row assembly below) and never `cumulativeDamage`, the HP decline
+                            // or the standing-leech hook, so they are accumulated on BOTH paths.
+                            // The `creditDamage` calls stay inside the guard: those DO feed
+                            // cumulative accounting, and the positional path lands that damage
+                            // per-victim instead.
+                            d.secondary += turn.secondaryDamage;
+                            d.conditional += turn.conditionalDamage;
                             // Credit SUPPRESSION for the positional case (Task 8b): the firing-hit damage
                             // now lands per-victim via applyPositionalDamage above, so it must NOT also be
                             // folded into cumulativeDamage here (that would double-count it). Skip the
-                            // direct/secondary/conditional credits; KEEP detonation (bombs are a separate
-                            // mechanic, out of scope). The single-sink decline that used to be zeroed for
-                            // the positional path is now derived from the victim's own currentHp inside
-                            // runPlayerTurn (PR6b), so no separate decline suppression is needed here.
+                            // direct credit; KEEP detonation (bombs are a separate mechanic, out of scope).
+                            // The single-sink decline that used to be zeroed for the positional path is now
+                            // derived from the victim's own currentHp inside runPlayerTurn (PR6b), so no
+                            // separate decline suppression is needed here.
                             if (!positional) {
-                                d.secondary += turn.secondaryDamage;
-                                d.conditional += turn.conditionalDamage;
                                 creditDamage(actor.id, 'direct', turn.directDamage);
                                 // Detonation credit is suppressed in positional mode (turn.detonationDamage
                                 // is 0 there anyway — runPlayerTurn returns the recipe instead). Keeping it
@@ -8912,14 +8915,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                             //
                             // Credit SUPPRESSION for the positional case (Task 8b): same as the focus site —
                             // the firing-hit damage already landed per-victim via applyPositionalDamage, so
-                            // skip the direct/secondary/conditional credit; KEEP detonation (bombs are out
-                            // of scope). The single-sink decline that used to be zeroed for the positional
-                            // path is now derived from the victim's own currentHp inside runPlayerTurn
-                            // (PR6b), so no separate decline suppression is needed here.
+                            // skip the direct credit; KEEP detonation (bombs are out of scope). The
+                            // single-sink decline that used to be zeroed for the positional path is now
+                            // derived from the victim's own currentHp inside runPlayerTurn (PR6b), so no
+                            // separate decline suppression is needed here.
                             const td = dmg(actor.id);
+                            // secondary/conditional are DISPLAY sub-buckets — see the mirrored comment
+                            // at the focus site above. They are accumulated on BOTH paths; only the
+                            // `creditDamage` calls (cumulative accounting) stay behind the guard.
+                            td.secondary += teamTurn.secondaryDamage;
+                            td.conditional += teamTurn.conditionalDamage;
                             if (!teamPositional) {
-                                td.secondary += teamTurn.secondaryDamage;
-                                td.conditional += teamTurn.conditionalDamage;
                                 creditDamage(actor.id, 'direct', teamTurn.directDamage);
                                 // Detonation credit is suppressed in positional mode (teamTurn.detonationDamage
                                 // is 0 there anyway — runPlayerTurn returns the recipe instead). Keeping it
