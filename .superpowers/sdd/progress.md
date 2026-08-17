@@ -127,3 +127,26 @@ the sink's 1,000,000. (Detonation also already reads the real victim: `detonatio
 would NOT be free — it would immediately multiply every corrosion tick against it by the same
 ratio (e.g. 40,000 -> 500,000 is 12.5x). The comment in the code is kept re-tensed to the present
 rather than SP-4d-forward-looking, per this correction.
+Task 2: complete (commits 70234483 + fix wave 21120626, review APPROVED then fix RE-REVIEWED clean).
+  527 files / 5832 tests; tsc 0; eslint 0; exactly ONE .snap moved (the audited one).
+  ⭐ The brief's own third test was VACUOUS as written — a pure-`basis:'hp'` heal cannot observe the
+  defence basis it existed to pin, so it would have passed with the practice target at defence 0,
+  exactly the drift it guards. Rewritten with a damage-dealt rider + an anti-vacuity guard; the
+  reviewer mutation-verified it BOTH ways (practice defence -> 0 fails the equality; the shared
+  constant -> 0 fails the guard). FOURTH plan in this epic whose sample code could not pass.
+  ⭐ A subagent CONTRADICTED recorded epic knowledge and was WRONG: it inferred corrosion's HP basis
+  from an INFERNO measurement (inferno is attack-scaled, so it proves nothing about corrosion) and
+  wrote 3 comments claiming corrosion reads the fight-wide scalar. Truth: engine.ts:8741 passes
+  `enemyHp: recipientMaxHp(actor.id)` in the per-victim positional tick branch — the branch a
+  positioned enemy actually runs; the fight-wide scalar reaches tickDoTs only at :9450 inside the
+  `actor.id === enemy.id` dummy branch. Both reviewers verified in source. Fixed in 21120626.
+  ⭐ A behaviour REVERSAL's blast radius is every test that pinned the old contract: un-flooring the
+  roster failed 2 tests the brief never listed (HealingCalculatorPage.test.tsx:126,
+  EnemyAttackersPanel.test.tsx:199). Sweeping for the claim's OWN WORDS found them.
+  Also: the falsified UNRELEASED changelog entry was SPLIT, not left contradicting the new one —
+  shipping both would have put a contradiction inside one release's notes.
+  MINOR carried to final review: (iii) the two exposed leech gaps have no tripwire on the sc-11 side
+  (sc-9 keeps a positive guard); (iv) HealingCalculatorPage.zeroEnemies.test.tsx duplicates ~20 lines
+  of its sibling's vi.mock block (vi.mock hoisting makes sharing awkward).
+OWNER RULING 2026-08-17: fix the production-reachable `leechScope:'all'` half in THIS PR (Task 2b);
+  tripwire the corpus-unreachable `'detonation'` half. Brief: task-2b-brief.md.
