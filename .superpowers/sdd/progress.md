@@ -283,3 +283,16 @@ All 64 files are test files under `__tests__/`. None is `battleSimulator.ts`, `d
 `dpsSimulator.ts:500-502` synthesizes `effectiveEnemyAttackers` when the UI-facing input omits one;
 `healingEngineAdapter.ts:634` always passes `engineEnemyAttackers`, which Task 2 populates with the
 practice target when the caller supplies no real enemy.
+Task 3: complete (commits 9cfd4c1e/50fd1759 + guard fix 745b9559; review "needs fixes" -> fixed).
+  Guard lives at the ONE boundary; message `enemyAttackers is empty` is greppable and load-bearing.
+  ⭐ THE INVENTORY IS 64 FILES / 253 TESTS, NOT ~20. The 20-file figure counted files that never
+  mention enemyAttackers ANYWHERE; Task 1's 148 insertions across 118 files exposed every CALL SITE
+  that used a base literal without overriding it. The throw-as-classifier is what surfaced the real
+  population — the plan's original idea (infer it from moved goldens) would have understated it 3x.
+  ⭐ AN `as CombatEngineInput` CAST DEFEATS A REQUIRED FIELD. 3 files/4 tests reached the boundary
+  with the field UNDEFINED (not `[]`) behind a cast, so `input.enemyAttackers.length` threw a bare
+  TypeError one line before the named error could form — a validation guard silently non-uniform over
+  its own population. Fix: `!input.enemyAttackers?.length`. Now 253/253 carry the one signature.
+  A required field is a compile-time claim; the runtime guard must still handle undefined.
+  Waves restructured (deea2c25) into A-E balanced by TEST count, explicit file lists, all 64
+  verified present exactly once. Waves A-D end RED (husky needs --no-verify); wave E ends GREEN.
