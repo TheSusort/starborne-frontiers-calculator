@@ -296,6 +296,21 @@ export interface PlayerTurnResult {
      *  Absent → the engine skips the per-victim fold (byte-identical to I1's single-ctx
      *  behavior); read ONLY by the positional engine branch. */
     perVictimOutgoing?: { modifierAbilities: Ability[]; primaryCtx: ConditionContext };
+    /** SP-4b-2 D4 — this turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
+     *  decision, i.e. exactly the entries that LANDED (`scheduledEnemy.roundEnemyDebuffs`:
+     *  recurring/always/accumulating re-rolled through `roundDebuffLanded()` / the affinity
+     *  gate for `application:'apply'`, plus timed scheduled entries which were gated once at
+     *  application). It is the SAME expansion of the SAME `snapshot(_, DEFAULT_ENEMY_TARGET)
+     *  .activeEnemyDebuffs` list that `victimEnemyBuffs` re-reads raw — minus the resisted
+     *  entries.
+     *
+     *  It exists because the landing/resist DRAW is memoized per turn and must not be taken
+     *  twice: a second draw would consume RNG and let the reporting channel
+     *  (`RoundData.activeEnemyDebuffs`) and the positional DAMAGE channel disagree about the
+     *  very same debuff. The engine's `victimIncomingModifiers` therefore consumes THIS list
+     *  for the scheduled channel instead of re-reading the ungated bucket. Present on every
+     *  turn; the ability channel is per-victim and stays with `victimEnemyBuffs`. */
+    scheduledEnemyEffects: SelectedGameBuff[];
     /** Per-victim crit resolver for the positional AoE apply path (per-victim crit).
      *  Rolls THIS attacker's crit gate at the given victim's affinity-capped rate, so a
      *  covered victim the attacker is at an affinity disadvantage against crits less often
@@ -3946,6 +3961,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         extraActionGrants,
         positionalScalars,
         perVictimOutgoing,
+        // SP-4b-2 D4: the landed half of this turn's scheduled enemy-debuff decision, handed to
+        // the engine's per-victim damage read so both consumers share ONE draw.
+        scheduledEnemyEffects: scheduledEnemy.roundEnemyDebuffs,
         rollVictimCrit,
         ...(positionalDetonation ? { positionalDetonation } : {}),
         // Task 5: when the inline emit was SUPPRESSED (engine will resolve positionally), hand the

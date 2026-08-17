@@ -28,6 +28,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Damage calculator: the per-round tooltip and the damage-type breakdown show real Direct damage again instead of 0.',
     'Damage calculator: the secondary and conditional damage rows in the config summary are populated again.',
     'Damage calculator: affinity advantage and disadvantage affect damage again — the matchup was being ignored once the calculator started fighting a real enemy.',
+    "Combat simulator and DPS calculator: a debuff a ship applies when it critically hits now lands on the enemy it actually hit. Enforcer's is the one in the current roster, and it was being applied to nothing — so the damage boost it is supposed to give never arrived. An area attack that crits several enemies now debuffs every enemy it crit, and the same fix applies to enemy ships using it against you.",
+    'DPS calculator: an enemy debuff that your Hacking failed to land no longer boosts your damage anyway. The round-by-round breakdown already reported it as resisted, but the damage number was computed as though it had landed every time — so a ship with low Hacking read the same total as one that landed the debuff on every round. Debuffs that are guaranteed rather than Hacking-based are unaffected.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

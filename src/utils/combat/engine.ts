@@ -5822,9 +5822,22 @@ export function runCombat(rawInput: CombatEngineInput): {
         // NOTE: the aura/accumulating ability channel is an approximation (NEUTRAL ctx, no re-roll)
         // — see the victimEnemyBuffs jsdoc (finding I1) for details and acceptance rationale.
         const victimIncomingModifiers = (
-            victimId: string
+            victimId: string,
+            /** SP-4b-2 D4: the ACTING turn's already-gated scheduled enemy effects
+             *  (`PlayerTurnResult.scheduledEnemyEffects`), threaded down from the positional apply.
+             *  Without it this read hit the status engine's UNGATED `__enemy__` bucket, so a
+             *  scheduled debuff the round's hacking-vs-security draw RESISTED still cut the
+             *  victim's defence — the reporting channel said "resisted", the damage channel said
+             *  "landed". Optional: the test tap and any future non-positional caller pass nothing
+             *  and keep the raw read, so nothing off the positional path moves. */
+            scheduledEffects?: SelectedGameBuff[]
         ): { enemyDefenseModifier: number; incomingDamageModifier: number } => {
-            const victimDebuffs = victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup);
+            const victimDebuffs = victimEnemyBuffs(
+                statusEngine,
+                victimId,
+                enemyDebuffLookup,
+                scheduledEffects
+            );
             const enemy = toEnemyModifiers(victimDebuffs);
             // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — each stack arms
             // ONE direct hit, which reads every stack the victim holds and spends one of them (see
@@ -5992,6 +6005,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             ignoresStealth?: boolean;
             actingId: string;
             opposingLiving: CombatActor[];
+            /** SP-4b-2 D4: this turn's landed scheduled enemy effects, from the acting
+             *  `PlayerTurnResult`. Feeds `defenseProfileOf` so the per-victim damage read honours
+             *  the same landing/resist decision the turn's reporting fold made. */
+            scheduledEnemyEffects?: SelectedGameBuff[];
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
@@ -6086,7 +6103,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         provokedBy: provokerOf(statusEngine, args.actingId),
                     },
                     defenseProfileOf: (v) => {
-                        const m = victimIncomingModifiers(v.id);
+                        const m = victimIncomingModifiers(v.id, args.scheduledEnemyEffects);
                         return {
                             // SP-F F5: Meatshield defense-substitution (approximation) — see the
                             // substitutedDefenceFor doc comment above for the full rule.
@@ -6918,6 +6935,11 @@ export function runCombat(rawInput: CombatEngineInput): {
              */
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
+            /** SP-4b-2 D4: this turn's scheduled enemy effects AFTER its landing/resist draw.
+             *  `undefined` only where the turn result itself is out of reach (the enemy site's
+             *  hoisted capture on a dead-target / non-positional turn) — `victimEnemyBuffs` then
+             *  keeps its raw bucket read, which is the pre-fix behaviour. */
+            scheduledEnemyEffects: PlayerTurnResult['scheduledEnemyEffects'] | undefined;
         }
         /** One footprint victim's `attacked` signal within ONE sub-attack. */
         interface PositionalVictimSignal {
@@ -7034,6 +7056,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actingId: actor.id,
                 opposingLiving: tb.opposingRoster,
                 applyToVictim: tb.applyToVictim,
+                // SP-4b-2 D4: the acting turn's landed scheduled enemy effects reach
+                // defenseProfileOf's per-victim modifier read, so a RESISTED scheduled debuff
+                // stops cutting the victim's defence behind the reporting channel's back.
+                scheduledEnemyEffects: sel.scheduledEnemyEffects,
                 perVictimOutgoing: sel.perVictimOutgoing,
                 preTurnVictimStatus: sel.preTurnVictimStatus,
                 // Per-victim crit: each covered footprint victim rolls at ITS own affinity-capped
@@ -7429,6 +7455,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 resistedEnemyDebuffs: [],
                 // A skipped turn casts nothing, so it holds back nothing (clause order).
                 deferredEnemyApplications: [],
+                // A skipped turn takes no landing draw and fires no positional attack.
+                scheduledEnemyEffects: [],
                 directDamage: 0,
                 secondaryDamage: 0,
                 conditionalDamage: 0,
@@ -8623,6 +8651,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         positionalDetonation: turn.positionalDetonation,
                                         applyDebuffsForSubAttack: turn.applyDebuffsForSubAttack,
                                         deferredEnemyApplications: turn.deferredEnemyApplications,
+                                        scheduledEnemyEffects: turn.scheduledEnemyEffects,
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
@@ -8880,6 +8909,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         applyDebuffsForSubAttack: teamTurn.applyDebuffsForSubAttack,
                                         deferredEnemyApplications:
                                             teamTurn.deferredEnemyApplications,
+                                        scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
                                     },
                                     (victim, damage, outcome) =>
                                         procLeechesForVictim(actor.id, victim, damage, outcome),
@@ -9203,6 +9233,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // dead-target / non-positional paths → perVictimOutgoingDeltaPct returns 0
                             // for every victim (byte-identical).
                             let enemyPerVictimOutgoing: PlayerTurnResult['perVictimOutgoing'];
+                            // SP-4b-2 D4: the enemy turn's scheduled enemy-debuff effects AFTER its
+                            // own landing/resist draw, hoisted out of the else block (enemyTurn is
+                            // scoped inside it) so the enemy drivePositionalApply site can pass it.
+                            // Team-symmetric mirror of the focus/team sites. Undefined on the
+                            // dead-target / non-positional paths → victimEnemyBuffs keeps its raw
+                            // read (byte-identical).
+                            let enemyScheduledEnemyEffects:
+                                | PlayerTurnResult['scheduledEnemyEffects']
+                                | undefined;
                             // Sub-project I, PR I2: the pre-turn per-victim status snapshot
                             // (team-symmetric mirror of the focus/team sites' preTurnVictimStatus),
                             // captured just before `runPlayerTurn` below mutates the status engine.
@@ -9408,6 +9447,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // outgoing-modifier ingredients (team-symmetric mirror of the
                                 // focus/team sites).
                                 enemyPerVictimOutgoing = enemyTurn.perVictimOutgoing;
+                                // SP-4b-2 D4: capture the enemy turn's gated scheduled enemy effects.
+                                enemyScheduledEnemyEffects = enemyTurn.scheduledEnemyEffects;
                                 // Per-victim crit: capture the enemy turn's per-victim crit resolver.
                                 enemyRollVictimCrit = enemyTurn.rollVictimCrit;
                                 // Task 5: capture the deferred ability-performed payload (present ⟺ the
@@ -9595,6 +9636,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             // The SAME array the fallback flush below drains (see
                                             // the capture note), never a fresh one.
                                             deferredEnemyApplications: enemyDeferredApplications,
+                                            // Team symmetry: the enemy's own turn gates its own
+                                            // scheduled debuffs on the player side by the same draw.
+                                            scheduledEnemyEffects: enemyScheduledEnemyEffects,
                                         },
                                         (victim, dmg, outcome) => {
                                             procLeechesForVictim(actor.id, victim, dmg, outcome);

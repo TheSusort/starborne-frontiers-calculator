@@ -1309,6 +1309,77 @@ describe('simulateDPS', () => {
             });
             expect(neutral.summary.totalDamage).toBeGreaterThan(disadvantage.summary.totalDamage);
         });
+
+        /**
+         * SP-4b-2 D4 — the reporting channel and the positional DAMAGE channel must consume the
+         * SAME landing/resist decision.
+         *
+         * The sibling cases above compare `summary.totalDamage` between two RUNS; this one couples
+         * the two channels WITHIN one run, round by round. That is the assertion the defect
+         * slipped past: `RoundData.activeEnemyDebuffs`/`resistedEnemyDebuffs` reported the debuff
+         * as never-landed every round (playerTurn's per-round fold — correct and untouched) while
+         * the per-victim damage read went to `statusEngine.snapshot(_, DEFAULT_ENEMY_TARGET)
+         * .activeEnemyDebuffs`, the status engine's UNCONDITIONAL bucket, which has no landing
+         * gate by design. Once DPS resolves positionally that bucket became the damage source, so
+         * a resisted debuff still cut the enemy's defence.
+         */
+        it('a RESISTED scheduled debuff modifies neither the report nor the damage (D4 coupling)', () => {
+            const resistible = simulateDPS({ ...baseWithDebuff, hacking: 0, enemySecurity: 100 });
+            const noDebuffs = simulateDPS({ ...baseInput, enemyDefense: 10000, rounds: 5 });
+
+            // The REPORT: resisted every round, active in none.
+            expect(
+                resistible.rounds.every((r) =>
+                    r.resistedEnemyDebuffs.some((ab) => ab.buffName === 'def-debuff')
+                )
+            ).toBe(true);
+            expect(
+                resistible.rounds.some((r) =>
+                    r.activeEnemyDebuffs.some((ab) => ab.buffName === 'def-debuff')
+                )
+            ).toBe(false);
+            // The DAMAGE must agree with the report, round for round.
+            expect(resistible.rounds.map((r) => r.directDamage)).toEqual(
+                noDebuffs.rounds.map((r) => r.directDamage)
+            );
+
+            // Non-vacuity: the same debuff at 100% landing DOES raise damage, so the equality
+            // above is a gate doing its job rather than a debuff with no effect.
+            const landed = simulateDPS({ ...baseWithDebuff, hacking: 200, enemySecurity: 100 });
+            expect(landed.rounds[0].directDamage).toBeGreaterThan(noDebuffs.rounds[0].directDamage);
+        });
+
+        /**
+         * SP-4b-2 D4, the other direction: gating the damage read must not disarm a debuff that
+         * genuinely has no landing gate. The discriminator is the `application` field, NOT the
+         * status engine's `isAlwaysActive` bucket — both debuffs here are unmarked (no
+         * `skillSource`) and therefore land in the SAME always-active bucket; only the
+         * `application: 'apply'` one is guaranteed, and `resolveEnemyDebuffs` gates it on affinity
+         * rather than on the hacking-vs-security roll.
+         */
+        it('an "apply" scheduled debuff still modifies DAMAGE at 0% hacking — the gate is `application`, not the always-active bucket', () => {
+            const applyDebuff: SelectedGameBuff = {
+                ...makeAlwaysBuff('def-apply', { defense: -50 }),
+                application: 'apply',
+            };
+            const guaranteed = simulateDPS({
+                ...baseWithDebuff,
+                enemyDebuffs: [applyDebuff],
+                hacking: 0,
+                enemySecurity: 100,
+            });
+            const noDebuffs = simulateDPS({ ...baseInput, enemyDefense: 10000, rounds: 5 });
+
+            expect(
+                guaranteed.rounds.every((r) =>
+                    r.activeEnemyDebuffs.some((ab) => ab.buffName === 'def-apply')
+                )
+            ).toBe(true);
+            // Reported active AND damage-affecting, every round, despite 0% landing chance.
+            expect(
+                guaranteed.rounds.every((r, i) => r.directDamage > noDebuffs.rounds[i].directDamage)
+            ).toBe(true);
+        });
     });
 
     describe('startCharged', () => {
