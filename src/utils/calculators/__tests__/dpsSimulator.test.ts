@@ -14,6 +14,7 @@ import {
     TeamActorInput,
 } from '../../../types/calculator';
 import { Ability, Condition, ShipSkills } from '../../../types/abilities';
+import { AffinityName } from '../../../types/ship';
 
 // Same test-only seed `src/setupTests.ts` installs per-test (SP-0's keyed provider).
 const RATE_GATE_TEST_SEED = 0x5eed1234;
@@ -933,9 +934,22 @@ describe('simulateDPS', () => {
             enemyDebuffs: [] as SelectedGameBuff[],
         };
 
+        // SP-4b-2a: the positional path recomputes the attacker-vs-victim affinity matchup
+        // from the RAW `affinity`/`enemyAffinity` fields (victimHitDamage / realAffinityCappedCrit
+        // read the resolved enemy actor's own `.affinity`, not these pre-resolved scalars) —
+        // measured fact: the pre-resolved affinityDamageModifier/affinityCritCap/affinityCritPenalty
+        // alone are INERT on a positional run. Every affinity fixture below now also supplies the
+        // raw pair chosen via computeAffinityModifiers so the resolved modifiers match what it
+        // hard-codes (thermal→chemical = advantage; chemical→thermal = disadvantage), keeping the
+        // pre-resolved fields too (the production page always passes both).
         it('advantage multiplies all damage by 1.25', () => {
             const baseline = simulateDPS(baseNoDefense);
-            const result = simulateDPS({ ...baseNoDefense, affinityDamageModifier: 25 });
+            const result = simulateDPS({
+                ...baseNoDefense,
+                affinityDamageModifier: 25,
+                affinity: 'thermal',
+                enemyAffinity: 'chemical',
+            });
             expect(result.summary.totalDamage).toBe(
                 Math.round(baseline.summary.totalDamage * 1.25)
             );
@@ -947,6 +961,8 @@ describe('simulateDPS', () => {
                 affinityDamageModifier: -25,
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
+                affinity: 'chemical',
+                enemyAffinity: 'thermal',
             });
             // effectiveCrit = min(75, 100-25) = 75; critDamage = 150.
             // Deterministic schedule (3 rounds): acc starts at 0; fires when acc >= 1.
@@ -984,6 +1000,8 @@ describe('simulateDPS', () => {
                 affinityDamageModifier: 0,
                 affinityCritCap: 100,
                 affinityCritPenalty: 0,
+                affinity: undefined as AffinityName | undefined,
+                enemyAffinity: undefined as AffinityName | undefined,
             };
             const landedRounds = (mods: Partial<typeof base>) =>
                 simulateDPS({ ...base, ...mods }).rounds.filter((r) =>
@@ -994,9 +1012,15 @@ describe('simulateDPS', () => {
                 affinityDamageModifier: -25,
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
+                affinity: 'chemical',
+                enemyAffinity: 'thermal',
             });
             const neutral = landedRounds({});
-            const advantage = landedRounds({ affinityDamageModifier: 25 });
+            const advantage = landedRounds({
+                affinityDamageModifier: 25,
+                affinity: 'thermal',
+                enemyAffinity: 'chemical',
+            });
 
             expect(disadvantage).toBe(0); // 0% landing is deterministic
             expect(advantage).toBeGreaterThan(neutral);
@@ -1254,6 +1278,8 @@ describe('simulateDPS', () => {
                 affinityDamageModifier: -25,
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
+                affinity: 'chemical',
+                enemyAffinity: 'thermal',
             });
             setupKeyedTestRng(RATE_GATE_TEST_SEED);
             const noDebuffs = simulateDPS({
@@ -1263,6 +1289,8 @@ describe('simulateDPS', () => {
                 affinityDamageModifier: -25,
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
+                affinity: 'chemical',
+                enemyAffinity: 'thermal',
             });
             // Resisted → the defense debuff never applies → same damage as having no debuff.
             expect(disadvantage.summary.totalDamage).toBe(noDebuffs.summary.totalDamage);
@@ -1880,20 +1908,42 @@ describe('simulateDPS', () => {
             );
         });
 
-        it('DPS-parity sentinel (sub-project I, PR I1): a buffName-tagged enemy-debuff gate stays name-AGNOSTIC in the DPS simulator', () => {
+        it('sub-project I, PR I1: a buffName-tagged enemy-debuff gate is now NAME-SPECIFIC in the DPS simulator (positional convergence, SP-4b-2a)', () => {
             // Mirrors Tygr's "+30% damage to enemies with Stasis or Disable" — a buffName-
-            // tagged enemy-debuff condition. The live combat engine now resolves this by NAME
-            // (only Stasis/Disable satisfy it), but the DPS simulator must NEVER populate
-            // ConditionContext.enemyDebuffNames (the opt-in sentinel) — it stays on the legacy
-            // name-agnostic enemyDebuffCount path, so ANY landed enemy debuff (even one named
-            // something else entirely) still satisfies the gate. This protects byte-identical
-            // DPS output across this change.
-            const stasisNamedModifier: Ability = {
+            // tagged enemy-debuff condition. Until SP-4b-2a's `071f2a33`, a scalar-only DPS run
+            // never resolved positionally, so `buildTurnArgs`'s `enemyDebuffNames` opt-in guard
+            // (engine.ts ~6746-6754, "when tgt is the dummy `enemy` sink... this key is OMITTED
+            // entirely") kept the DPS simulator on the legacy name-agnostic `enemyDebuffCount`
+            // path even for a buffName-tagged condition — ANY landed enemy debuff satisfied the
+            // gate, matching a "byte-identical to before positional" sentinel this test used to
+            // assert (title: "stays name-AGNOSTIC").
+            //
+            // Measured on this codebase: since `071f2a33` makes EVERY simulateDPS run fight a
+            // real, positioned `enemy-1`, that SAME guard now resolves `tgt.id !== enemy.id`
+            // (the dummy) for every run, so `enemyDebuffNames` is ALWAYS supplied — the DPS
+            // simulator now takes the exact name-specific path
+            // `enemyDebuffNameSpecificGate.integration.test.ts` locks for the live engine. This
+            // is the epic's intended convergence (SP-4: "engine with NO dummy ships, everything
+            // positional" — DPS and the live engine now share one pipeline), not a regression:
+            // the sentinel's premise ("DPS mode is never positional") is exactly what the epic
+            // retired. The old assertion (an UNRELATED debuff still satisfies a Stasis-named
+            // gate) is therefore VACUOUS now — replaced with a real assertion of the new,
+            // correct behaviour: only a debuff actually named to match the condition satisfies
+            // it; an unrelated name does not.
+            //
+            // Uses a non-reserved buffName ('Overcharge Mark') rather than the real ship's
+            // literal 'Stasis' — 'Stasis' is itself a recognized control-status name
+            // (isStasis(), stasisBuffs.ts) with unrelated turn-blocking side effects that would
+            // contaminate this test; the name-match MECHANISM being tested is identical
+            // regardless of which string is used.
+            const namedModifier: Ability = {
                 id: 'm',
                 type: 'modifier',
                 target: 'self',
                 trigger: 'on-cast',
-                conditions: [{ subject: 'enemy-debuff', derivable: true, buffName: 'Stasis' }],
+                conditions: [
+                    { subject: 'enemy-debuff', derivable: true, buffName: 'Overcharge Mark' },
+                ],
                 config: {
                     type: 'modifier',
                     channel: 'outgoingDamage',
@@ -1901,10 +1951,16 @@ describe('simulateDPS', () => {
                     isMultiplicative: true,
                 },
             };
-            const skills = activeSkills([damageAbility('d', 100), stasisNamedModifier]);
-            // Deliberately UNRELATED debuff name — never 'Stasis'.
+            const skills = activeSkills([damageAbility('d', 100), namedModifier]);
+            const namedDebuff = makeAlwaysBuff('Overcharge Mark', { defense: -10 });
+            // Deliberately UNRELATED debuff name — never 'Overcharge Mark'.
             const unrelatedDebuff = makeAlwaysBuff('security-down', { defense: -10 });
 
+            const withNamedDebuff = simulateDPS({
+                ...baseInput,
+                shipSkills: skills,
+                enemyDebuffs: [namedDebuff],
+            });
             const withUnrelatedDebuff = simulateDPS({
                 ...baseInput,
                 shipSkills: skills,
@@ -1916,9 +1972,14 @@ describe('simulateDPS', () => {
                 enemyDebuffs: [],
             });
 
-            // Legacy/name-agnostic behavior preserved: presence of ANY enemy debuff satisfies
-            // the gate, not just one literally named 'Stasis'.
-            expect(withUnrelatedDebuff.rounds[0].directDamage).toBeGreaterThan(
+            // The matching name satisfies the gate (+30% outgoing damage)...
+            expect(withNamedDebuff.rounds[0].directDamage).toBeGreaterThan(
+                withNoDebuff.rounds[0].directDamage
+            );
+            // ...but an unrelated name — even though it lands just as validly — does not. This
+            // is the property the old name-agnostic sentinel explicitly forbade and the new
+            // positional convergence now guarantees.
+            expect(withUnrelatedDebuff.rounds[0].directDamage).toBe(
                 withNoDebuff.rounds[0].directDamage
             );
         });
@@ -1957,17 +2018,17 @@ describe('simulateDPS', () => {
             );
         });
 
-        it('DPS-parity (sub-project I, PR I4a): a self-crit-power dotDamage scaling modifier composes with the enemy-debuff sentinel', () => {
+        it('sub-project I, PR I4a: a self-crit-power dotDamage scaling modifier composes with the NAME-SPECIFIC enemy-debuff gate (positional convergence, SP-4b-2a)', () => {
             // Mirrors Wildfire's "…additional Inferno damage to enemies with Scorching
             // Radiation, for every 10% crit power" — a dotDamage-channel modifier gated on a
-            // buffName-tagged enemy-debuff condition (reuses the SAME DPS-parity sentinel
-            // proven for Tygr/I1 above: the DPS simulator never populates
-            // ConditionContext.enemyDebuffNames, so ANY enemy debuff satisfies the gate, not
-            // just one literally named 'Scorching Radiation') PLUS the new self-crit-power
-            // scaling source. Unlike Selenite's stealthedEnemyCount (an opposing-roster count
-            // that is structurally 0 in DPS mode), self-crit-power IS populated in DPS mode —
-            // it is the caster's OWN live crit power, always known, not enemy-roster-dependent.
-            // baseInput.critDamage = 150, perUnit 0.1 → +15pp dotDamage when the gate is met.
+            // buffName-tagged enemy-debuff condition, reusing the SAME positional-convergence
+            // mechanism as the I1 test above (`buildTurnArgs`'s `enemyDebuffNames` opt-in is now
+            // ALWAYS supplied since `071f2a33` makes every DPS run positional) PLUS the
+            // self-crit-power scaling source. Unlike Selenite's stealthedEnemyCount (an
+            // opposing-roster count that is structurally 0 in DPS mode), self-crit-power IS
+            // populated in DPS mode — it is the caster's OWN live crit power, always known, not
+            // enemy-roster-dependent. baseInput.critDamage = 150, perUnit 0.1 → +15pp dotDamage
+            // when the gate is met.
             const wildfireModifier: Ability = {
                 id: 'm',
                 type: 'modifier',
@@ -2001,29 +2062,35 @@ describe('simulateDPS', () => {
                 ...baseInput,
                 shipSkills: activeSkills([damageAbility('d', 100), dotAbility, wildfireModifier]),
             };
+            // 'Scorching Radiation' matches the condition's buffName exactly (unlike I1's Stasis,
+            // this is not a reserved control-status name, so it is safe to use verbatim here).
+            const namedDebuff = makeAlwaysBuff('Scorching Radiation', { defense: -10 });
             // Deliberately UNRELATED debuff name — never 'Scorching Radiation'.
             const unrelatedDebuff = makeAlwaysBuff('security-down', { defense: -10 });
 
+            const withNamedDebuff = simulateDPS({ ...dotBase, enemyDebuffs: [namedDebuff] });
             const withUnrelatedDebuff = simulateDPS({
                 ...dotBase,
                 enemyDebuffs: [unrelatedDebuff],
             });
             const withNoDebuff = simulateDPS({ ...dotBase, enemyDebuffs: [] });
 
-            // Round 1 only: `enemyDebuffCount` also folds in this ship's OWN just-applied
-            // Inferno entry from round 2 onward (the legacy count-agnostic fallback counts
-            // ANY landed enemy debuff/DoT, including a self-inflicted one) — so by round 2
-            // BOTH runs satisfy the gate regardless of `enemyDebuffs`, collapsing the
-            // difference this test is isolating. Round 1's modifierCtx is built BEFORE that
-            // turn's own Inferno application lands, so it is the one round where the STATIC
-            // `enemyDebuffs` config is the sole gate source — cleanly isolating the
-            // crit-power scaling contribution.
+            // Round 1 only: on the positional path the name-specific gate reads THIS cast's own
+            // just-applied Inferno as an entry with a SYNTHESIZED base-type name ('Inferno'),
+            // never 'Scorching Radiation' — so round 2+ still isolates cleanly (unlike the old
+            // name-agnostic count, which used to fold the self-inflicted DoT into the same
+            // sentinel bucket from round 2 onward). Round 1 remains the round with no prior-round
+            // state at all, so it is checked here too for continuity with the original fixture.
             expect(withNoDebuff.rounds[0].infernoDamage).toBeGreaterThan(0);
-            // Legacy/name-agnostic behavior preserved (any debuff satisfies the gate) AND the
-            // crit-power scaling contributes exactly +15% on top.
-            expect(withUnrelatedDebuff.rounds[0].infernoDamage).toBeCloseTo(
+            // The matching name composes with the crit-power scaling for exactly +15%...
+            expect(withNamedDebuff.rounds[0].infernoDamage).toBeCloseTo(
                 withNoDebuff.rounds[0].infernoDamage * 1.15,
                 5
+            );
+            // ...but an unrelated name does not satisfy the gate at all (name-specific now,
+            // not name-agnostic) — the crit-power scaling contributes nothing.
+            expect(withUnrelatedDebuff.rounds[0].infernoDamage).toBe(
+                withNoDebuff.rounds[0].infernoDamage
             );
         });
 
