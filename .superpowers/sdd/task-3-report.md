@@ -263,7 +263,7 @@ should break — holds on this branch.
 ## Commit
 
 ```
-2c98e6b3 feat(engine): an empty enemy roster is a validation error
+9cfd4c1e feat(engine): an empty enemy roster is a validation error
 ```
 (committed with `--no-verify`, per the brief — husky's pre-commit runs the full suite, which is red
 on purpose in this task).
