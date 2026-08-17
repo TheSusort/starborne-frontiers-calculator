@@ -1376,25 +1376,56 @@ describe('Phase 3 reactive triggers', () => {
     // enemy that never drops below 50%) shows the same round-1 dealt WITHOUT the burst,
     // which is what makes the comparison non-vacuous.
     //
-    // SHAPE NOTE (SP-4b-2b wave B, mechanism M10). This test used to express the same rule
-    // with a SINGLE-TARGET on-crit `debuff` gated on `hpSubject:'enemy'`, and read the
-    // resulting `Below50 Shred` out of `activeEnemyDebuffs`. That shape is DEAD on a
-    // positional run and cannot be revived from the fixture side: the global drain gate
-    // (`triggers.ts` `buildDrainContext`) computes its `enemyHpPct` as
-    // `100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)` — BOTH vestigial-dummy scalars.
-    // Positional credit books into `perTargetDealt` and never feeds `cumulativeDamage`
-    // (measured at the drain: `cum=0` on every drain of this fixture), so that gate reads
-    // 100% forever and any non-self hp-threshold on a drained reactive silently never
-    // fires. `executeIntent` already scrubs that gate — and re-checks the condition PER
-    // VICTIM against the victim's live HP (`resolveAoEReactiveDamageVictims` →
-    // `buildPerVictimConditionCtx`) — for exactly one ability shape:
-    // `type:'damage' && target:'all-enemies'`. That is also the ONLY shape real skill text
-    // can produce for this gate: `buildShipAbilities.hpThresholdFromSentence` is the sole
-    // source of `hpSubject:'enemy'`, its three call sites all emit STAT MODIFIERS rather
-    // than abilities, and the one ability that gets the condition is the round-boundary
-    // damage ability re-targeted to `all-enemies` (Judge) at buildShipAbilities.ts ~1675.
-    // The old single-target debuff shape was therefore synthetic. This test now uses the
-    // corpus-reachable shape so it measures the rule on the path that is actually live.
+    // SHAPE NOTE (SP-4b-2b wave B, mechanism M10; corrected by wave B's review — the
+    // original note below mis-scoped the gap, see the M10 tripwire test after fix D for the
+    // corrected, broader statement and a fixture that still exercises the dead shape).
+    //
+    // This test used to express the same rule with a SINGLE-TARGET on-crit `debuff` gated on
+    // `hpSubject:'enemy'`, and read the resulting `Below50 Shred` out of `activeEnemyDebuffs`.
+    // That shape is DEAD on a positional run and cannot be revived from the fixture side: the
+    // global drain gate (`triggers.ts` `buildDrainContext`, l.1847-1849) computes its
+    // `enemyHpPct` as `100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)` — BOTH vestigial-dummy
+    // scalars. Positional credit books into `perTargetDealt` and never feeds
+    // `cumulativeDamage` (measured at the drain: `cum=0` on every drain of this fixture), so
+    // that gate reads 100% forever.
+    //
+    // The dead predicate is `hpSubject !== 'self'` (`triggers.ts:2581`, `triggers.ts:2652`) —
+    // which INCLUDES an UNDEFINED `hpSubject`, not just `'enemy'`: `evaluateConditions.ts`'s
+    // `evalHpThreshold` (l.252-258) routes anything that isn't `'self'` or `'target'` to
+    // `ctx.enemyHpPct`, so a condition with no `hpSubject` field at all is gated exactly the
+    // same as one that says `'enemy'`.
+    //
+    // `executeIntent` already scrubs that gate — and re-checks the condition PER VICTIM
+    // against the victim's live HP (`resolveAoEReactiveDamageVictims` →
+    // `buildPerVictimConditionCtx`) — for exactly one ability shape: `type:'damage' &&
+    // target:'all-enemies'`. Corpus scan against `docs/ship-skills.csv` (via
+    // `DAMAGE_HP_GATE_RE`, `skillTextParser.ts:731-732`) finds exactly ONE ship that matches:
+    // Judge. Its condition does NOT come from `hpThresholdFromSentence` — it comes from
+    // `parseHpThresholdCondition` → `buildShipAbilities.ts:1627-1637`, which emits the
+    // condition with NO `hpSubject` field at all (the engine comment at
+    // `buildShipAbilities.ts:1670-1672` attributes it to `hpThresholdFromSentence`; that
+    // attribution is itself wrong, but pre-existing — left alone here, not propagated). Judge
+    // is safe because it is start-of-round, gets re-targeted to `all-enemies` at
+    // `buildShipAbilities.ts:1670-1684`, and is then scrubbed and per-victim re-checked at
+    // `triggers.ts:2577-2593` — the one live path. `hpThresholdFromSentence`'s three call
+    // sites (`buildShipAbilities.ts:522, 554, 685`) all emit STAT MODIFIERS (`out.push({
+    // channel: 'outgoingDamage' | 'critDamage', … })`), never abilities, so they cannot reach
+    // this gate either way. The parser side of this gap is therefore corpus-UNREACHABLE: no
+    // parsed ship kit can produce a non-`all-enemies` ability with a non-self hp-threshold at
+    // drain time.
+    //
+    // The single-target debuff shape this test used to use is NOT synthetic, though — it is
+    // exactly what the in-app ability editor produces: `ConditionRow.tsx:182-193` offers
+    // "Whose HP" → `enemy` on ANY `hp-threshold` condition regardless of ability type, and
+    // `AbilityCard.tsx:964-965` offers every trigger (including on-crit and every other
+    // reactive) on every ability type. That editor tree feeds `config.shipSkills` straight
+    // into the DPS calculator (`ShipConfigCard.tsx:299-305` → `SkillSlotList` →
+    // `SkillEditorModal` → `AbilityCard`). So a USER-AUTHORED on-crit reactive gated on
+    // "enemy below 50% HP" silently never fires today — this is a live silent failure for
+    // user-authored abilities, even though no shipped, parsed ship kit hits it. This test now
+    // uses the corpus-reachable `all-enemies` shape so it measures the rule on the path that
+    // is actually live; the editor-reachable dead shape is pinned separately by the M10
+    // tripwire test below (after fix D).
     // ----------------------------------------------------------------------
     it('fix C: an on-crit HP-gated proc fires when the triggering hit itself crosses the HP threshold (the drain sees post-hit HP)', () => {
         // 150% base hit + a 50%-multiplier on-crit proc gated on the enemy being below 50% HP.
@@ -1512,6 +1543,94 @@ describe('Phase 3 reactive triggers', () => {
             .find((b) => b.buffName === 'Defense Shred');
         expect(resistedRow).toBeDefined();
         expect(resistedRow!.turnsRemaining).toBe('permanent');
+    });
+
+    // ----------------------------------------------------------------------
+    // M10 TRIPWIRE (SP-4b-2b wave B review finding #2) — pins the engine gap that fix C's
+    // SHAPE NOTE above documents: `buildDrainContext` (`triggers.ts:1847-1849`) derives
+    // `enemyHpPct` from `cumulativeDamage / enemyHp`, both vestigial-dummy scalars that
+    // positional credit never feeds, so it reads 100% forever. That makes the drain-time
+    // gate `hpSubject !== 'self'` (`triggers.ts:2581`, `triggers.ts:2652`) DEAD for every
+    // ability shape except the one `executeIntent` special-cases (`type:'damage' &&
+    // target:'all-enemies'`). This fixture deliberately uses the OTHER shape — a
+    // single-target on-crit `debuff` — which is exactly what the in-app ability editor
+    // produces (`ConditionRow.tsx:182-193` + `AbilityCard.tsx:964-965`, see the SHAPE NOTE
+    // above) but is corpus-unreachable from parsed ship text. If `buildDrainContext` is ever
+    // fixed to read the real per-victim HP, this test's second assertion block must go RED —
+    // that is the point of the test existing. Nothing in the rest of this suite currently
+    // observes this dead path, so a future fix could otherwise land with no test reacting.
+    // ----------------------------------------------------------------------
+    it('M10 tripwire: a non-self drain-time hp-threshold reactive never fires on a positional run (buildDrainContext reads the vestigial dummy, not the real victim)', () => {
+        const hpGatedDebuffSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-crit',
+                            conditions: [
+                                {
+                                    subject: 'hp-threshold',
+                                    derivable: true,
+                                    hpComparator: 'below',
+                                    hpPercent: 50,
+                                    hpSubject: 'enemy',
+                                },
+                            ],
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Below50 Shred',
+                                stacks: 1,
+                                parsedEffects: { defense: -30 },
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        // A squishy roster enemy (100 000 HP, the same defence: 8000 the file carries
+        // throughout, survivable for all 4 rounds at ~18.5k/hit): the active's undebuffed hit
+        // genuinely takes the enemy's REAL HP below 50% by round 3 (100 → 81.5 → 63 → 44.4%),
+        // so a correctly-implemented gate would eventually see the threshold and let "Below50
+        // Shred" land — the same kind of post-hit crossing fix C's control/squishy pair
+        // measures on the live all-enemies path.
+        const { result } = collectEvents(
+            baseInput({
+                shipSkills: hpGatedDebuffSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 100, // every active turn crits → the on-crit trigger fires every round
+                enemyAttackers: bareEnemy({ stats: { hp: 100_000, defence: 8000 } }),
+                numRounds: 4,
+            })
+        );
+
+        // The run genuinely happened: every round landed a real, positive hit on the enemy
+        // (this is what stops the test from being able to pass on a fixture that never ran).
+        for (const round of result.rounds) {
+            expect(focusDealtInRound(round)).toBeGreaterThan(0);
+        }
+
+        // M10: the gate never sees the enemy's real HP (it reads the vestigial dummy's
+        // cumulativeDamage/enemyHp, both 0/untouched on a positional run), so the debuff never
+        // lands in ANY round — even though the enemy's real HP genuinely dropped under 50%.
+        for (const round of result.rounds) {
+            expect(round.activeEnemyDebuffs.some((b) => b.buffName === 'Below50 Shred')).toBe(
+                false
+            );
+        }
     });
 });
 
