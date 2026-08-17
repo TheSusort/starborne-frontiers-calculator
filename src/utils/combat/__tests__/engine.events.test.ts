@@ -65,6 +65,11 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     defensePenetration: 10,
     chargeCount: 3,
     shipSkills: dotSkills(),
+    // Legacy vestigial-dummy scalars — DEAD on this positional run. The real opposing actor
+    // is `enemyAttackers[0]` (`bareEnemy`, above), which carries its own `defence: 0` and (via
+    // the `hp: 10_000_000` override) 10M HP; nothing here reads `enemyDefense`/`enemyHp` for it.
+    // Kept only because `CombatEngineInput` still requires them. Do not copy these two values
+    // into a new fixture expecting them to configure the enemy's stats.
     enemyDefense: 8000,
     enemyHp: 400000,
     numRounds: 6,
@@ -602,6 +607,20 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
     // fixture. Every real detonator ship deals damage in the same clause (Crocus "deals 250% damage
     // and detonates Corrosion effects at 180% power", Demolisher, Incinerator), so this is also what
     // the corpus actually looks like.
+    //
+    // This is a REAL, latent engine gap, not a fixture quirk: any future `DOT_DETONATE_RE` cast
+    // whose clause carries no `type: 'damage'` ability (skillTextParser.ts:3167) would lose its
+    // detonation entirely on a positional run (`detonationTargets`, engine.ts:7426 →
+    // `applyPerVictimDetonation`, engine.ts:7753). It is intentionally left UNFIXED here — a
+    // follow-up investigation scanned all 147 corpus ships' skill columns and confirmed the gap is
+    // CORPUS-UNREACHABLE today: only Crocus, Demolisher and Incinerator mention detonation, and all
+    // three deal damage in the same clause (safe, per above). Lingshe's charged skill also
+    // detonates but does NOT match `DOT_DETONATE_RE` — it parses to `bomb-countdown-reduce`
+    // (skillTextParser.ts:4523-4537), which resolves its damage in `reduceBombsOnVictim`
+    // (bombCountdown.ts:29-80) from the cast's own target footprint, entirely independent of
+    // `detonationTargets`, so it is unaffected by this gap. Do not read `detonatorHit()` below as
+    // incidental filler: it exists BECAUSE of this gap, and removing it would silently zero out
+    // every skill-triggered detonation assertion in this describe block.
     const detonatorHit = () => ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } });
 
     // Case 1: timed enemy debuff (3 rounds) emits debuff-applied ONCE (round of infliction)
@@ -670,7 +689,9 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 // 'emits debuff-resisted for an apply debuff at an affinity disadvantage' test.
                 affinity: 'chemical',
                 enemyAttackers: bareEnemy({ affinity: 'thermal', stats: { hp: 10_000_000 } }),
-                affinityDamageModifier: -25, // affinity disadvantage → 'apply' debuffs are always resisted
+                // Legacy-dummy scalar, inert on this positional run — see the block comment
+                // above: the real disadvantage comes from the two actors' own `affinity` fields.
+                affinityDamageModifier: -25,
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
                 enemyDebuffs: [recurringDebuff],
@@ -1043,11 +1064,20 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
             baseInput({ shipSkills: skillsWithModifier(), numRounds: 4 })
         );
 
+        // Bombs also burst on natural countdown-0 EXPIRY (processBombs, the enemy-turn/
+        // positioned-timed-burst path), which never sets `detonatorId` (events.ts: "UNDEFINED
+        // for a natural countdown-0 expiry ... which nobody 'detonates'"). Only the
+        // skill-triggered `detonate()` path stamps `detonatorId` with the casting actor
+        // (engine.ts's `applyPerVictimDetonation`: "the positional detonate caster IS the
+        // detonator"). Summing every `bomb-detonated` event regardless of source would let an
+        // expiry burst alone satisfy both assertions below even if the skill-triggered path
+        // (this test's actual subject) regressed to zero — filter to `detonatorId === FOCUS`
+        // so the measurement is specific to the charged-cast burst.
         const baseBurstSkill = baseEvents
-            .filter((e) => e.type === 'bomb-detonated')
+            .filter((e) => e.type === 'bomb-detonated' && e.detonatorId === FOCUS)
             .reduce((sum, e) => sum + (e.type === 'bomb-detonated' ? e.damage : 0), 0);
         const modBurstSkill = modEvents
-            .filter((e) => e.type === 'bomb-detonated')
+            .filter((e) => e.type === 'bomb-detonated' && e.detonatorId === FOCUS)
             .reduce((sum, e) => sum + (e.type === 'bomb-detonated' ? e.damage : 0), 0);
 
         // With modifier 0: burst = baseline
