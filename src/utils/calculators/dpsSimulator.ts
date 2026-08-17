@@ -260,6 +260,11 @@ export interface RoundData {
      *  in `finalHpPct`). Populated only under `collectStatusTimeline`, and only for actors carrying
      *  at least one name. */
     enemyStatuses?: Record<string, RoundActorStatuses>;
+    /** SP-4b-2 D3: BOARD-WIDE totals — the SUM across every enemy-side DoT carrier at round tail
+     *  (the vestigial dummy sink plus every positioned enemy). Stacks and bomb entries are
+     *  extensive quantities, so they add; this is deliberately not `finalHpPct`'s HP-weighted
+     *  treatment, which exists because HP% is an intensive per-actor ratio. On the usual 1-enemy
+     *  board these are that enemy's own totals. `activeBombCount` counts bomb ENTRIES, not stacks. */
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
@@ -268,6 +273,10 @@ export interface RoundData {
     resistedEnemyDebuffs: ActiveBuff[];
     appliedDoTs: DoTApplicationEntry[];
     dotsLanded: boolean;
+    /** SP-4b-2 D3: the UNION of every enemy-side carrier's standing DoT entries, grouped
+     *  TYPE-MAJOR (all carriers' corrosion, then inferno, then bombs, then generic) with board
+     *  order inside each type. A list is the one shape with a lossless multi-carrier answer, so
+     *  entries are concatenated rather than collapsed onto a representative enemy. */
     activeDoTStates: ActiveDoTState[];
 }
 

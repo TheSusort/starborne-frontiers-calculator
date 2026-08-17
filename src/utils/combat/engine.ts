@@ -2472,6 +2472,32 @@ export function runCombat(rawInput: CombatEngineInput): {
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
+    // SP-4b-2 D3: every enemy-side actor that can CARRY a DoT container, in board order
+    // [dummy sink, …positioned enemy attackers]. The RoundData DoT-state reporting fields read
+    // this instead of the dummy's containers alone.
+    //
+    // WHY: the `corrosionEntries`/`infernoEntries`/`genericDoTEntries`/`pendingBombs` closures
+    // bound above are the DUMMY actor's arrays, captured ONCE at construction. Application and
+    // the per-victim tick both correctly target the REAL positioned victim's own arrays, so once
+    // a positioned roster exists the dummy's arrays are never written and the four reporting
+    // fields froze at 0/[] on every positional run (measured: `enemy-1.infernoEntries` carried
+    // [{stacks:1,tier:15}] on a round the row reported `activeInfernoStacks: 0`).
+    //
+    // The set is DISJOINT — a DoT lands on exactly one victim object — so aggregating across it
+    // cannot double-count. With no `enemyAttackers` (direct-engine callers) it is [enemy], making
+    // the reads byte-identical to the old closure. Read LIVE (`a.corrosionEntries`, not a cached
+    // array) because the Cheat-Death wipe REASSIGNS these properties rather than splicing them.
+    //
+    // Dead carriers are intentionally NOT filtered out: the dummy's own entries were reported in
+    // its death round before this change, and dropping a corpse's standing stacks would be a
+    // second, unrelated semantic change.
+    //
+    // A plain array, not a getter: `enemyAttackerActors` is never mutated after construction
+    // (verified — no push/splice anywhere), so the MEMBERSHIP is fixed for the run while each
+    // member's containers are still read live at reporting time. A future PR that summons an
+    // enemy mid-run must revisit this line.
+    const dotCarrierActors: CombatActor[] = [enemy, ...enemyAttackerActors];
+
     // ── Unified roster seam (bySide unification PR1) ───────────────────────────
     // The canonical, side-agnostic actor set, named once. Order MATTERS: it drives
     // the per-round turn order — `roundActors` is assigned to it each round —
@@ -10391,41 +10417,71 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...(perActorReflected.size > 0
                 ? { perActorReflected: Object.fromEntries(perActorReflected) }
                 : {}),
-            activeCorrosionStacks: totalStacks(corrosionEntries),
-            activeInfernoStacks: totalStacks(infernoEntries),
-            activeBombCount: pendingBombs.length,
+            // SP-4b-2 D3: the DoT-state fields describe every enemy-side carrier, not just the
+            // dummy's (never-written) containers. See `dotCarrierActors`.
+            //
+            // MULTI-ENEMY AGGREGATION — deliberate choice: these three are COUNTS, so they SUM
+            // across carriers ("how many stacks stand on the enemy side"). Stacks are an
+            // EXTENSIVE quantity — they add — unlike `finalHpPct`, an INTENSIVE per-actor ratio
+            // that had to become an HP-weighted remainder. Weighting a count would produce a
+            // number that is neither the board total nor any one actor's real stack count.
+            // Reporting only `enemyAttackers[0]` is the defect class this epic keeps hitting and
+            // is explicitly rejected here.
+            activeCorrosionStacks: dotCarrierActors.reduce(
+                (sum, a) => sum + totalStacks(a.corrosionEntries),
+                0
+            ),
+            activeInfernoStacks: dotCarrierActors.reduce(
+                (sum, a) => sum + totalStacks(a.infernoEntries),
+                0
+            ),
+            activeBombCount: dotCarrierActors.reduce((sum, a) => sum + a.pendingBombs.length, 0),
             activeSelfBuffs: activeSelfBuffsForRound,
             activeEnemyDebuffs: landedEnemyDebuffs,
             resistedEnemyDebuffs,
             appliedDoTs: dotsConfig,
             dotsLanded,
+            // SP-4b-2 D3: the UNION of every enemy-side carrier's standing DoT entries. A list is
+            // the one shape where the lossless answer exists, so concatenation is the aggregation
+            // — reporting one carrier's entries would silently hide the rest of the board's.
+            // Grouping stays TYPE-MAJOR (all carriers' corrosion, then inferno, then bombs, then
+            // generic), preserving both the single-carrier byte-identity and the type grouping the
+            // `extend-dot` consumers filter on. Carrier order within a type is board order.
             activeDoTStates: [
-                ...corrosionEntries.map((e) => ({
-                    type: 'corrosion' as const,
-                    tier: e.tier,
-                    stacks: e.stacks,
-                    ticksRemaining: e.remainingRounds,
-                })),
-                ...infernoEntries.map((e) => ({
-                    type: 'inferno' as const,
-                    tier: e.tier,
-                    stacks: e.stacks,
-                    ticksRemaining: e.remainingRounds,
-                })),
-                ...pendingBombs.map((b) => ({
-                    type: 'bomb' as const,
-                    tier: b.tier,
-                    stacks: b.stacks,
-                    ticksRemaining: b.countdown,
-                })),
-                // SP-E: always [] today (generic DoTs are never auto-applied from skill text in
-                // this task) — a no-op spread, byte-identical.
-                ...genericDoTEntries.map((e) => ({
-                    type: 'generic' as const,
-                    tier: e.tier,
-                    stacks: e.stacks,
-                    ticksRemaining: e.remainingRounds,
-                })),
+                ...dotCarrierActors.flatMap((a) =>
+                    a.corrosionEntries.map((e) => ({
+                        type: 'corrosion' as const,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                        ticksRemaining: e.remainingRounds,
+                    }))
+                ),
+                ...dotCarrierActors.flatMap((a) =>
+                    a.infernoEntries.map((e) => ({
+                        type: 'inferno' as const,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                        ticksRemaining: e.remainingRounds,
+                    }))
+                ),
+                ...dotCarrierActors.flatMap((a) =>
+                    a.pendingBombs.map((b) => ({
+                        type: 'bomb' as const,
+                        tier: b.tier,
+                        stacks: b.stacks,
+                        ticksRemaining: b.countdown,
+                    }))
+                ),
+                // SP-E: generic DoTs are never auto-applied from skill text in this task, so this
+                // is [] on every corpus run today — a no-op spread.
+                ...dotCarrierActors.flatMap((a) =>
+                    a.genericDoTEntries.map((e) => ({
+                        type: 'generic' as const,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                        ticksRemaining: e.remainingRounds,
+                    }))
+                ),
             ],
         });
 
