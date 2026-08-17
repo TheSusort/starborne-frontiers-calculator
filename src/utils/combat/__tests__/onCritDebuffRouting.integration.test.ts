@@ -22,6 +22,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
+import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
 import { Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
@@ -71,10 +72,25 @@ const onCritDebuff = (): Ability => ({
     },
 });
 
-const punchingBag = (id: string, position: Position): EnemyAttacker =>
+/** The same shape as `onCritDebuff`, but `application: 'inflict'` — i.e. the landing DRAW is live
+ *  (hacking-vs-security), which is the whole point of the per-victim fan-out block below. */
+const onCritInflictDebuff = (): Ability => {
+    const base = onCritDebuff();
+    return { ...base, id: 'ocdi', config: { ...base.config, application: 'inflict' } } as Ability;
+};
+
+const punchingBag = (id: string, position: Position, security = 0): EnemyAttacker =>
     ({
         id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1,
+            security,
+        },
         chargeCount: 0,
         startCharged: false,
         position,
@@ -110,7 +126,7 @@ const critingEnemy = (id: string, position: Position, pattern: ParsedPattern): E
     }) as EnemyAttacker;
 
 /** A player-side team actor that just stands there and takes hits (an enemy-side crit victim). */
-const bystander = (id: string, position: Position): TeamActorEngineInput =>
+const bystander = (id: string, position: Position, security = 0): TeamActorEngineInput =>
     ({
         id,
         speed: 1,
@@ -129,6 +145,7 @@ const bystander = (id: string, position: Position): TeamActorEngineInput =>
                 critDamage: 0,
                 defensePenetration: 0,
                 hacking: 0,
+                security,
                 defence: 0,
                 hp: 1_000_000_000,
             },
@@ -181,6 +198,32 @@ function applications(
     });
     runCombat({ ...input, bus });
     return applied;
+}
+
+/** Every landing DECISION the reactive debuff produced, plus the crit identity of the casts that
+ *  triggered it. `landed` + `resisted` together are one entry per gate evaluation, which is what
+ *  makes "one draw per crit victim" measurable rather than inferred. */
+function landingOutcomes(input: CombatEngineInput): {
+    landed: string[];
+    resisted: string[];
+    critVictimIds: string[];
+} {
+    const bus = createEventBus();
+    const landed: string[] = [];
+    const resisted: string[] = [];
+    const critVictimIds: string[] = [];
+    bus.on('debuff-applied', (e) => {
+        if (e.buffName === DEBUFF) landed.push(e.targetId);
+    });
+    bus.on('debuff-resisted', (e) => {
+        if (e.buffName === DEBUFF) resisted.push(e.targetId);
+    });
+    bus.on('ability-performed', (e) => {
+        for (const id of e.critVictimIds ?? [])
+            if (!critVictimIds.includes(id)) critVictimIds.push(id);
+    });
+    runCombat({ ...input, bus });
+    return { landed, resisted, critVictimIds };
 }
 
 describe('SP-4b-2 D2 — player-side on-crit enemy-debuff routing', () => {
@@ -254,5 +297,166 @@ describe('SP-4b-2 D2 — enemy-side mirror: an ENEMY on-crit debuff lands on the
                 enemyAttackers: [{ ...enemies[0], stats: { ...enemies[0].stats, crit: 0 } }],
             })
         ).toEqual([]);
+    });
+});
+
+/**
+ * SP-4b-2 D2, task-14 finding 4 — THE PER-VICTIM FAN-OUT ITSELF.
+ *
+ * The block above pins the ADDRESS (which enemy the debuff reaches). What it deliberately could
+ * not measure is the CARDINALITY the crit route introduced: `applicationTargetIds` became a LIST,
+ * so the debuff executor's landing gate is now drawn once PER crit victim, and the header comment
+ * on that loop states the rule ("one draw PER TARGET"). Every fixture above uses
+ * `application: 'apply'` — RNG-free by design, so the landing gate is never drawn at all — and
+ * `crit: 100`, so every footprint victim crits. Between them, neither half of the executor's own
+ * claim ("an AoE that crit two of three victims debuffs exactly those two") was asserted anywhere.
+ *
+ * These two cases split that claim along its two axes and assert each one:
+ *   • LANDING is per victim — an `inflict` debuff over identically-defended victims produces one
+ *     independent landing decision each, so some land and some resist within a single cast.
+ *   • CRIT MEMBERSHIP is per victim — the debuffed set is EXACTLY the cast's `critVictimIds`, on a
+ *     cast that crit only some of the enemies it hit.
+ *
+ * SEEDING. Both cases need a genuinely mixed draw, so all four pin the SAME
+ * `setupKeyedTestRng(MIXED_DRAW_SEED)` (never followed by `resetRateGateRng` — the global
+ * bootstrap's `afterEach` owns cleanup). The seed chooses WHICH victims land/crit; it does not
+ * choose the invariants — the set-equality and the one-decision-per-victim count hold for every
+ * seed, and the "genuinely partial / genuinely mixed" guards are the only assertions the seed
+ * exists to make reproducible. It was found by scanning seeds 1.. for the first that makes all
+ * four fixtures below genuinely mixed at once (2: 1-of-4 land, 2-of-3 land, 2-of-4 crit,
+ * 2-of-4 crit).
+ *
+ * Team symmetry is LOCKED: each case has its enemy-side mirror.
+ */
+describe('SP-4b-2 D2 — the crit route fans the landing gate out per victim', () => {
+    /** See the SEEDING note above: the smallest seed that makes all four fixtures genuinely mixed. */
+    const MIXED_DRAW_SEED = 2;
+
+    // hacking 250 vs security 200 → a landing chance of exactly 0.5, so four independent draws
+    // over four identical victims cannot all agree. Every victim shares one chance, so a MIXED
+    // result is only possible if the gate is drawn per victim.
+    const FOUR_FOES = (): EnemyAttacker[] => [
+        punchingBag('foe-a', 'M4', 200),
+        punchingBag('foe-b', 'M3', 200),
+        punchingBag('foe-c', 'M2', 200),
+        punchingBag('foe-d', 'M1', 200),
+    ];
+
+    it('an `inflict` on-crit debuff draws landing PER crit victim — some land, some resist', () => {
+        setupKeyedTestRng(MIXED_DRAW_SEED);
+        const { landed, resisted, critVictimIds } = landingOutcomes(
+            focus({
+                hacking: 250,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [hit()] },
+                        { slot: 'passive', abilities: [onCritInflictDebuff()] },
+                    ],
+                },
+                pattern: allPattern(),
+                enemyAttackers: FOUR_FOES(),
+            })
+        );
+
+        // crit 100 → the AoE crit all four, so all four are candidates for the debuff.
+        expect(new Set(critVictimIds)).toEqual(new Set(['foe-a', 'foe-b', 'foe-c', 'foe-d']));
+
+        // EXACTLY ONE landing decision per crit victim — the cardinality claim. A single shared
+        // draw (the pre-fan-out shape) would produce one decision, not four.
+        expect([...landed, ...resisted].sort()).toEqual(['foe-a', 'foe-b', 'foe-c', 'foe-d']);
+
+        // …and the four draws genuinely disagreed, which is what makes them independent rather
+        // than one outcome replayed four times. (Seed-pinned; the two assertions above are not.)
+        expect(landed.length).toBeGreaterThan(0);
+        expect(resisted.length).toBeGreaterThan(0);
+    });
+
+    it('an enemy `inflict` on-crit debuff draws landing per PLAYER victim (mirror)', () => {
+        setupKeyedTestRng(MIXED_DRAW_SEED);
+        const enemy = critingEnemy('foe-crit', 'M4', allPattern());
+        const { landed, resisted, critVictimIds } = landingOutcomes(
+            focus({
+                attack: 0,
+                crit: 0,
+                // security 200 on both player actors → the enemy's 250 hacking gives the same 0.5.
+                shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+                security: 200,
+                speed: 1,
+                teamActors: [bystander('ally-front', 'M4', 200), bystander('ally-mid', 'M3', 200)],
+                enemyAttackers: [
+                    {
+                        ...enemy,
+                        shipSkills: {
+                            slots: [
+                                { slot: 'active', abilities: [hit()] },
+                                { slot: 'passive', abilities: [onCritInflictDebuff()] },
+                            ],
+                        },
+                    } as EnemyAttacker,
+                ],
+            })
+        );
+
+        expect(new Set(critVictimIds)).toEqual(new Set(['attacker', 'ally-front', 'ally-mid']));
+        expect([...landed, ...resisted].sort()).toEqual(['ally-front', 'ally-mid', 'attacker']);
+        expect(landed.length).toBeGreaterThan(0);
+        expect(resisted.length).toBeGreaterThan(0);
+    });
+
+    // The other axis: `apply` (no landing draw at all) so the ONLY thing that can vary is which
+    // victims the cast crit. crit 50 → per-victim crit draws → a partial crit.
+    it('a PARTIAL crit debuffs exactly the victims it crit, and no others', () => {
+        setupKeyedTestRng(MIXED_DRAW_SEED);
+        const { landed, resisted, critVictimIds } = landingOutcomes(
+            focus({
+                crit: 50,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [hit()] },
+                        { slot: 'passive', abilities: [onCritDebuff()] },
+                    ],
+                },
+                pattern: allPattern(),
+                enemyAttackers: FOUR_FOES(),
+            })
+        );
+
+        // GENUINELY PARTIAL (seed-pinned): the cast crit some but not all four. Without this the
+        // set-equality below would be satisfied by an all-crit cast and prove nothing.
+        expect(critVictimIds.length).toBeGreaterThan(0);
+        expect(critVictimIds.length).toBeLessThan(4);
+
+        // THE CLAIM: the debuffed set IS the crit set — the non-crit victims are untouched, and no
+        // crit victim is missed. `apply` never resists, so `landed` is the whole story.
+        expect(new Set(landed)).toEqual(new Set(critVictimIds));
+        expect(resisted).toEqual([]);
+        expect(landed.every((id) => id !== SINK_ID)).toBe(true);
+    });
+
+    it('an enemy PARTIAL crit debuffs exactly the player actors it crit (mirror)', () => {
+        setupKeyedTestRng(MIXED_DRAW_SEED);
+        const enemy = critingEnemy('foe-crit', 'M4', allPattern());
+        const { landed, resisted, critVictimIds } = landingOutcomes(
+            focus({
+                attack: 0,
+                crit: 0,
+                shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+                speed: 1,
+                teamActors: [
+                    bystander('ally-front', 'M4'),
+                    bystander('ally-mid', 'M3'),
+                    bystander('ally-back', 'M2'),
+                ],
+                enemyAttackers: [
+                    { ...enemy, stats: { ...enemy.stats, crit: 50 } } as EnemyAttacker,
+                ],
+            })
+        );
+
+        expect(critVictimIds.length).toBeGreaterThan(0);
+        expect(critVictimIds.length).toBeLessThan(4);
+        expect(new Set(landed)).toEqual(new Set(critVictimIds));
+        expect(resisted).toEqual([]);
+        expect(landed.every((id) => id !== SINK_ID)).toBe(true);
     });
 });
