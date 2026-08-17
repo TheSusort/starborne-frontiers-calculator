@@ -275,13 +275,17 @@ export const PRACTICE_TARGET_ID = 'practice-target';
  *
  * HP stays at the card default rather than being inflated to make it immortal, because an HP-scaled
  * damage channel is exactly what a huge number would distort: corrosion is `min(enemyHp, 500_000)`
- * per 1% per stack (engine.ts:1054) and detonation is `min(victimHp, 500_000)` (detonation.ts:106),
- * so an immortal target would inflate that damage and every rider scaled off it. Note the tenses —
- * detonation already reads the real VICTIM, while corrosion still reads the fight-wide `enemyHp`
- * SCALAR this adapter passes as `LEGACY_SINK_HP`, so corrosion is insensitive to this block until
- * SP-4d retires the scalars. Measured: the inferno tick is 5,000 against a 1,000,000-HP victim and
- * against a 40,000-HP one alike — inferno scales off the APPLIER's attack (engine.ts:1065), not HP.
- * Making the target immortal now would therefore bank a distortion that SP-4d silently switches on.
+ * per 1% per stack (engine.ts:1054) and detonation is `min(victimHp, 500_000)` (detonation.ts:106).
+ * Both already read the real VICTIM's own max HP today: corrosion's per-victim positional DoT-tick
+ * branch passes `enemyHp: recipientMaxHp(actor.id)` (engine.ts:8741) — the only site that credits a
+ * DoT tick per-victim (`creditDealt`, engine.ts:8806) — and that is the branch the practice target
+ * actually runs, since it sits in `baseHpById` via `enemyAttackerActors` (engine.ts:2753-2758). The
+ * bare fight-wide `enemyHp` scalar only reaches `tickDoTs` through the vestigial dummy branch
+ * (engine.ts:9450), which the practice target never takes. So inflating this HP to make the target
+ * immortal would immediately multiply every corrosion tick against it by the same ratio — e.g. 40,000
+ * → 500,000 is 12.5×. Inferno is unaffected either way: measured at 5,000 against a 1,000,000-HP
+ * victim and a 40,000-HP one alike, because it scales off the APPLIER's attack (engine.ts:1065), not
+ * HP.
  *
  * `hacking` is deliberately absent rather than zeroed: absent means the engine's own 200, which is
  * what the page's card seeds, and a kitless actor lands no debuffs either way. Targeting axes are

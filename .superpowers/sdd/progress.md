@@ -110,12 +110,20 @@ Same class, and the two regenerated goldens were the LAST tests observing the wo
 
 ### Incidental finding — corrects the brief's Step 4 rationale
 The brief's practice-target comment says corrosion scales with "the victim's max HP
-(`min(enemyHp, 500_000)`)", implying the practice target's HP feeds it TODAY. It does not:
-`engine.ts:1054` reads `args.enemyHp`, the FIGHT-WIDE scalar the adapter still passes as
-`LEGACY_SINK_HP` (1,000,000 -> capped 500,000), not the victim's stats. Confirmed empirically: the
-inferno tick is 5,000 against both a 1,000,000-HP and a 40,000-HP victim. (Inferno scales off the
-APPLIER's attack, `engine.ts:1065`; only corrosion reads `enemyHp`. Detonation is the one that
-already reads the real victim: `detonation.ts:106` `min(c.victimHp, 500_000)`.) The reasoning is
-kept in the code as brief item 4 requires, but re-tensed as forward-looking to SP-4d rather than
-stated as current behaviour — a comment that misdescribes today is how the floor comments in this
-same file went stale.
+(`min(enemyHp, 500_000)`)", implying the practice target's HP feeds it TODAY. It does — this claim
+was re-checked and reversed after Task 2's own review: `engine.ts:1054`'s `args.enemyHp` is fed
+`recipientMaxHp(actor.id)` at the per-victim positional DoT-tick branch (`engine.ts:8741`, comment
+"Corrosion scales with the AFFLICTED ship's own max HP"), which is the ONLY site that calls
+`creditDealt(sourceId, actor.id, dealt)` for a DoT tick (`engine.ts:8806`) — i.e. the site that
+populates the `perTargetDealt` entry Task 2's own fixture asserts on. The practice target sits in
+`baseHpById` via `enemyAttackerActors` (`engine.ts:2753-2758`), so it runs this branch, not the
+fight-wide scalar. The bare `enemyHp` scalar (`LEGACY_SINK_HP`) only reaches `tickDoTs` through the
+vestigial `actor.id === enemy.id` dummy branch (`engine.ts:9450`), which the practice target never
+takes. Confirmed empirically: the inferno tick is 5,000 against both a 1,000,000-HP and a
+40,000-HP victim (inferno scales off the APPLIER's attack, `engine.ts:1065`, not HP), while
+corrosion against the 40,000-HP practice target ticks at the practice target's own basis today, not
+the sink's 1,000,000. (Detonation also already reads the real victim: `detonation.ts:106`
+`min(c.victimHp, 500_000)`.) Consequence: inflating the practice target's HP to make it immortal
+would NOT be free — it would immediately multiply every corrosion tick against it by the same
+ratio (e.g. 40,000 -> 500,000 is 12.5x). The comment in the code is kept re-tensed to the present
+rather than SP-4d-forward-looking, per this correction.

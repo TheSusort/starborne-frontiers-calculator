@@ -449,8 +449,10 @@ describe('healingGoldenParity', () => {
     //   cast direct        = 5000 × 100% × 0.4165593651036698 = 2082.796825518349
     //   Inferno tick       = 1 stack × (100/100) × 5000 × dotMult 1 × affinityMult 1 = 5000
     //     — UNCHANGED by the rebase: inferno scales off the APPLIER's effective attack
-    //       (engine.ts:1065), not the victim's HP. Only corrosion reads an HP basis, and it reads
-    //       the fight-wide `args.enemyHp` scalar (engine.ts:1054), still the sink's 1,000,000.
+    //       (engine.ts:1065), not the victim's HP. Corrosion is the one that reads an HP basis, and
+    //       it ALREADY reads the practice target's own max HP (`recipientMaxHp(actor.id)` at the
+    //       per-victim positional DoT-tick branch, engine.ts:8741) — 40,000 here, not the sink's
+    //       1,000,000; that branch is the one this fixture's `perTargetDealt` assertion proves runs.
     //
     // Per-round timeline (rounds 1-6; Inferno re-applied every round at duration 1):
     //   • Focus turn (speed 100, acts first): the cast deals direct 2082.797 to the practice target
@@ -619,10 +621,18 @@ describe('healingGoldenParity', () => {
     // leech pays ZERO against a real positioned enemy, and always has: running this exact scenario
     // against an explicit enemy at the sink's own stats (defence 10000 / hp 1,000,000) on the
     // PRE-SP-4b-2b adapter also gives `[0,0,0,0]`, and so does the practice target's own stat block.
-    // So the 129 only ever existed on the dummy path, which SP-4b-2b's practice target replaced, and
-    // the gap has been live in production since SP-3. Same class as scenario 9's inferno-tick leech;
-    // tracked as its own follow-up. The snapshot is kept (rather than the test deleted) because
-    // `perTargetDealt` still pins that the cast itself lands per-victim every round.
+    // So the 129 only ever existed on the dummy path, which SP-4b-2b's practice target replaced. The
+    // code gap is real, but — unlike scenario 9's inferno-tick leech, which IS production-reachable
+    // (Magnolia's own standing `'all'`-scope self leech, plus the same shape injected by gear via
+    // `buildEquipmentAbilities.ts:52`) — this fixture's `leechScope:'detonation'` STANDING leech is
+    // probably corpus-UNREACHABLE: its only real-ship producer is Valkyrie's Echoing Burst leech
+    // (`skillTextParser.ts` ~4335-4338), which is `on-bomb-detonated` and therefore REACTIVE, so it
+    // is partitioned out of `standingLeeches` before it can ever reach this gap — `engine.ts:3860-
+    // 3866` says so explicitly ("no corpus ship reaches it here … Valkyrie's `ally` one is
+    // `on-bomb-detonated`, so it is reactive and never enters this map"). So this half is a real code
+    // gap with no known live-production instance, not a second confirmed regression. Tracked as its
+    // own follow-up alongside scenario 9's. The snapshot is kept (rather than the test deleted)
+    // because `perTargetDealt` still pins that the cast itself lands per-victim every round.
     // Spot-checked for plausibility.
     snap(
         'Valkyrie shape (accumulate-detonate burst → detonation-scope leeches, burst round only)',

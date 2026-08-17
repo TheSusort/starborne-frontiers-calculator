@@ -59,14 +59,10 @@ const EnemyCard: React.FC<{
     /** Cells the OTHER enemies hold — annotated in the dropdown so a collision is visible before it
      *  happens. Sides are independent boards, so only enemy cells count here. */
     takenSlots: readonly Position[];
-    /** True for every card since SP-4b-2b: the roster has no floor, because an empty one is a real
-     *  scenario the adapter handles with a practice target. See the panel below. Kept as a prop
-     *  rather than dropped so a caller with its own reason to withhold the control still can. */
-    canRemove: boolean;
     onRemove: () => void;
     onSelectShip: (ship: Ship) => void;
     onUpdate: (updates: Partial<EnemyAttackerConfig>) => void;
-}> = ({ enemy, takenSlots, canRemove, onRemove, onSelectShip, onUpdate }) => {
+}> = ({ enemy, takenSlots, onRemove, onSelectShip, onUpdate }) => {
     const { getShipById } = useShips();
     const selectedShip = enemy.shipId ? getShipById(enemy.shipId) : undefined;
 
@@ -80,11 +76,9 @@ const EnemyCard: React.FC<{
                         variant="compact"
                     />
                 </div>
-                {canRemove && (
-                    <Button variant="danger" onClick={onRemove} aria-label="Remove enemy">
-                        <CloseIcon />
-                    </Button>
-                )}
+                <Button variant="danger" onClick={onRemove} aria-label="Remove enemy">
+                    <CloseIcon />
+                </Button>
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <Input
@@ -246,7 +240,6 @@ export const EnemyAttackersPanel: React.FC<EnemyAttackersPanelProps> = ({
                             // 1,000, with `perTargetDealt` going undefined — a 3x move from one
                             // click). The practice target removed that reason; do not reinstate the
                             // floor here without reinstating it in the adapter first.
-                            canRemove
                             onRemove={() => onRemove(enemy.id)}
                             onSelectShip={(ship) => onSelectShip(enemy.id, ship)}
                             onUpdate={(updates) => onUpdate(enemy.id, updates)}
