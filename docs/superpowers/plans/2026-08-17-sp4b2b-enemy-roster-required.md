@@ -675,6 +675,48 @@ in one edit. Each wave below lists its exact files, so no file can be silently d
 **Every wave follows the same recipe (Task 4 states it in full — read Task 4's brief alongside your
 own, whichever wave you are on).**
 
+#### Recipe corrections measured in wave A — these supersede the recipe where they conflict
+
+Wave A repaired `healing.test.ts` with ONE line and moved **zero** assertion values across its 73
+tests (strong independent evidence that a 0-attack positioned enemy really is inert). It then hit
+eleven residual failures in `engine.events.test.ts`. Everything below came out of that, plus its review:
+
+1. **A file can have MANY roster insertion points, and some are invisible to a factory search.**
+   `engine.events.test.ts` had SIX — three of them inline `runCombat({ … })` literals, not the base
+   factory. **Gate: after your edits, a scan for `enemyAttackers: []` in your files must return
+   nothing.** A partial fix that leaves some call sites throwing is this wave's main failure mode.
+2. **`bareEnemy()`'s 500,000 HP is NOT a survival guarantee.** The first damage fixture pointed at it
+   killed it in round 4 of 6, silently changing the shape of the run. The shared fixture now takes
+   overrides — `bareEnemy({ stats: { hp: 10_000_000 } })` — and exports `BARE_ENEMY_ID`. **Damage
+   fixtures should default to the 10M form.** A no-arg `bareEnemy()` is byte-identical to before.
+3. **M1 restated — the common case is the opposite of the original wording.** Usually the assertion is
+   about the OPPONENT, and its id moves from `'enemy'` to the roster entry's own id (`BARE_ENEMY_ID`).
+   Wave A retargeted eight such assertions across six tests.
+4. **M5 (new, highest yield): a positional cast RE-DERIVES the affinity matchup from the two actors'
+   own `affinity` fields.** Any fixture that sets `affinityDamageModifier` and expects it to bite is
+   now silently NEUTRAL — in wave A this made an `'apply'` debuff land unresisted, which then showed
+   up as a row reporting the debuff active. **Fix by giving both actors real `affinity` values**, not
+   by re-pinning. Grep your files for `affinityDamageModifier` first; it is the fastest predictor of
+   which fixtures will move.
+5. **M6 (new): the `enemySpeed` / `enemyDefense` / `enemyHp` scalars describe the vestigial dummy and
+   are INERT on a positional run.** They still read as live setup. Do not derive an expected number
+   from them, and leave a note where a fixture keeps them.
+6. **M7 (new): a scheduled `enemyDebuffs` entry decrements once per round at the round boundary**, so
+   no carrier-turn timing is observable through it. A fixture asserting turn-order-sensitive debuff
+   expiry needs a real carrier whose own speed sets the order.
+7. **Treat every `expected 0 to be greater than 0` as suspect-until-measured.** Two of wave A's eleven
+   failures presented in exactly that shape — the shape that invites the forbidden `toBe(0)` re-pin —
+   and NEITHER was churn. Both were premise failures (M5, and a detonate-only cast) with real causes.
+8. **Two files already define LOCAL `bareEnemy` symbols** and will collide with the shared import:
+   `preFightModifiersEngine.test.ts:238` (wave D) and `healingShieldPenetration.test.ts:63`. Rename or
+   alias rather than shadowing.
+9. **A detonate-only cast (detonation clause carrying no damage of its own) resolves nobody and its
+   detonation is dropped entirely** on a positional run. Verified CORPUS-UNREACHABLE — of 147 ships
+   only Crocus, Demolisher and Incinerator take that parser path and all three carry damage in the
+   same clause (Lingshe's charged skill parses to `bomb-countdown-reduce`, a different path that
+   resolves damage independently). So: if a detonation fixture goes to zero, add a damage clause to
+   match the corpus, and do not chase an engine fix.
+
 ---
 
 ### Task 4: Repair wave A — the two highest-count files
@@ -804,7 +846,7 @@ git add -A && git commit -m "test(engine): wave B — real enemy roster for trig
 `apexSelfShieldGate.integration` (2), `applyOutgoingToEnemy` (3), `blockBuff` (1),
 `bombDetonatedVictimId` (1), `bombModifierExclusion` (1), `bombSplashOnDeath.integration` (1),
 `buffDurationOwnTurnReprieve` (3), `buffOnlyTeamWalk.integration` (1), `chargedOverdrive.integration` (5),
-`corrosionToAcidicDecay` (2), `damageChannelAccounting.integration` (2), `deathFallback.integration` (1),
+`corrosionToAcidicDecay` (2), `deathFallback.integration` (1),
 `decrementUnification` (3), `demolisherBombSplash.integration` (1), `destroyedRoundUnification` (1),
 `enemiesHitGate.integration` (1), `enemyBuffSelfDebuffGate` (4), `enemyDotCountGate.integration` (3),
 `forcedAffinityReciprocalGate.integration` (2), `gearSetDotPair.integration` (4),
@@ -876,7 +918,14 @@ These six are not mechanical. Each one exists to exercise the very fallback this
 handing it a real enemy would delete the thing it tests. Read each fixture's own comment before
 deciding, and state the decision per file in your report.
 
-**Files (6 files / 12 tests):**
+**Files (7 files / 14 tests):**
+- `src/utils/combat/__tests__/damageChannelAccounting.integration.test.ts` (2) — **moved here from
+  wave C on the wave-A review's advice.** Its "an EMPTY opposing roster credits every cast to the
+  LEGACY sink" case and its sibling INVARIANT test both have premises the classifier makes illegal.
+  These are Step-4 "the premise has evaporated" cases that no roster line can repair: the legacy sink
+  is exactly what this PR makes unreachable. Decide per test whether the invariant can be re-expressed
+  against a real roster (keep the coverage) or whether it only ever described the sink (then it
+  becomes a throw-assertion and you say what stopped being covered).
 - `src/utils/combat/__tests__/normalizeRoster.test.ts` (1) — the test is literally named "leaves an
   empty enemy roster empty — it never invents an enemy". Its premise is the OLD contract, which this
   PR reverses. It becomes a throw-assertion.
