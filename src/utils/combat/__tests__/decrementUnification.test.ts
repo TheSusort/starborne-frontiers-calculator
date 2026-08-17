@@ -37,6 +37,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers
@@ -129,7 +130,9 @@ const collect = (input: CombatEngineInput): CombatEvent[] => {
 
 /** Shared minimal DPS-mode base (no healTargetId). */
 const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a real opponent. DAMAGE fixture (5000 attack over 5 rounds) so it takes the
+    // 10M-HP form; a mid-sim death would truncate the decrement rounds this file counts.
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -200,7 +203,12 @@ describe('Case 1 — DPS dummy debuff expiry (sentinel store, actorId: "enemy")'
         );
         // The debuff was actually inflicted — non-vacuous precondition for expiry.
         expect(applied.length).toBeGreaterThan(0);
-        expect(applied[0].targetId).toBe('enemy');
+        // SP-4b-2b (M1): the debuff LANDS on the real opposing actor now that a roster is required.
+        // Its sentinel-store ENTRY still decrements and expires on the vestigial `enemy` actor —
+        // see the next test, which still asserts `actorId: 'enemy'` and is unchanged. That split
+        // between "where it landed" and "whose Post Turn decrements it" is precisely Branch 1, the
+        // thing this file exists to pin, so it is stated here rather than smoothed over.
+        expect(applied[0].targetId).toBe(BARE_ENEMY_ID);
     });
 
     it('buff-expired fires ONCE, attributed to actorId "enemy", on the expected round', () => {

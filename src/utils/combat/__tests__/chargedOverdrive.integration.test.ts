@@ -12,16 +12,22 @@
  * (one letter apart, identical magnitude, different lifetime).
  *
  * HARNESS SHAPE: unlike the sibling Hit Mitigation / Shield Converter suites (which test a
- * DEFENDER reading an INCOMING hit, and so use a positional teamActor "holder" + enemyAttackers),
- * this status is read by the ATTACKER on its own OUTGOING charged cast. The cleanest harness for
- * that is the non-positional "team walk" shape proven by teamWalk.test.ts: a top-level focus
- * attacker (whose `directDamage`/`action`/`charges` per round are read straight off `RoundData`,
- * exactly as chronoReaverCharge.integration.test.ts does) plus ONE faster ally team actor that
- * grants the status via an `all-allies` charged-skill cast, armed via the `startCharged` +
- * `chargeCount: 99` trick (fires in round 1 and never again — the same one-shot-grant trick the
- * Hit Mitigation / Shield Converter suites use, just without a board position since nothing here
- * needs one). The granter's own charged skill deals NO damage (`multiplier: 0`) in every fixture,
- * matching Sentinel's real kit — she has no charged damage ability at all.
+ * DEFENDER reading an INCOMING hit), this status is read by the ATTACKER on its own OUTGOING
+ * charged cast. The harness is a top-level focus attacker (whose `action`/`charges` per round are
+ * read straight off `RoundData`, exactly as chronoReaverCharge.integration.test.ts does) plus ONE
+ * faster ally team actor that grants the status via an `all-allies` charged-skill cast, armed via
+ * the `startCharged` + `chargeCount: 99` trick (fires in round 1 and never again — the same
+ * one-shot-grant trick the Hit Mitigation / Shield Converter suites use). The granter's own charged
+ * skill deals NO damage (`multiplier: 0`) in every fixture, matching Sentinel's real kit — she has
+ * no charged damage ability at all.
+ *
+ * SP-4b-2b: the harness used to be the NON-positional "team walk" shape (no `enemyAttackers`), which
+ * is now illegal — the normalization boundary requires an opposing roster and auto-places it, so
+ * every run here is positional. The two consequences, both handled below: `ENEMY_DEFENSE` moves onto
+ * the roster entry's own `stats.defence` (keeping every pinned number identical), and the focus's
+ * damage is read per-victim through `focusDealt` rather than off the now-always-zero scalar
+ * `RoundData.directDamage`. `all-allies` targeting still reaches the top-level focus, so the grant
+ * mechanism is unchanged.
  *
  * `ENEMY_DEFENSE` is deliberately non-zero throughout: with `defence: 0` the penetration term
  * `enemyDefense * (1 - pen/100)` cancels to 0 regardless of `pen`, and every assertion below would
@@ -36,6 +42,9 @@ import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { CHARGED_OVERDRIVE_II, holdsChargedOverdriveII } from '../chargedOverdrive';
 import type { StatusEngine } from '../statusEngine';
 import type { Ability } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { dealtBy } from '../__testutils__/perTargetDealt';
+import type { RoundData } from '../../calculators/dpsSimulator';
 
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
@@ -51,6 +60,21 @@ const expectedDirectDamage = (pen: number): number => {
     const reduction = calculateDamageReduction(effectiveDefense);
     return Math.round(ATTACK * (1 - reduction / 100));
 };
+
+/**
+ * The focus's own firing-hit damage for one round.
+ *
+ * SP-4b-2b (M3): every run now carries a real, positioned opposing roster, so the focus cast takes
+ * the POSITIONAL branch and its damage is booked per-victim (`RoundData.perTargetDealt`) instead of
+ * on the scalar `RoundData.directDamage`, which is 0 on every round of a positional run. Reading
+ * `directDamage` here would have left all five assertions below comparing 0 to 0 — green and
+ * completely blind to the wiring they exist to pin.
+ *
+ * `Math.round` is applied because the per-victim channel carries the UNROUNDED delivered amount
+ * (e.g. 595.5723… where the old scalar reported 596), so rounding here keeps the SAME pinned
+ * integers `expectedDirectDamage` produces — the assertions did not move, only the channel did.
+ */
+const focusDealt = (round: RoundData): number => Math.round(dealtBy([round], 'attacker'));
 
 let idCounter = 0;
 const dmg = (multiplier: number): Ability => ({
@@ -132,7 +156,11 @@ const BASE = (
 ): CombatEngineInput => {
     const { chargedMultiplier = 100, activeMultiplier = 100, ...rest } = overrides;
     return {
-        enemyAttackers: [],
+        // SP-4b-2b: a real, positioned opponent. ENEMY_DEFENSE is carried onto its OWN
+        // `stats.defence` — that is what keeps the pinned damage numbers identical, since the
+        // fight-wide `enemyDefense` scalar is inert on a positional run (M6/#11). HP is the
+        // fixture's own 10M so nothing ever dies.
+        enemyAttackers: bareEnemy({ stats: { hp: HP, defence: ENEMY_DEFENSE } }),
         attack: ATTACK,
         crit: 0,
         critDamage: 0,
@@ -175,8 +203,8 @@ describe('Charged Overdrive II adds Defense Penetration to the next charged cast
         expect(baseline.rounds[0].action).toBe('charged');
         // The concrete post-mitigation numbers, not just "higher" — pen 20 vs pen 0 against a
         // non-zero enemy defence, per the production formula.
-        expect(boosted.rounds[0].directDamage).toBe(expectedDirectDamage(20));
-        expect(baseline.rounds[0].directDamage).toBe(expectedDirectDamage(0));
+        expect(focusDealt(boosted.rounds[0])).toBe(expectedDirectDamage(20));
+        expect(focusDealt(baseline.rounds[0])).toBe(expectedDirectDamage(0));
         // Sanity: the two expected values are actually distinguishable (a vacuity guard — if
         // ENEMY_DEFENSE were 0 these would collapse to the same number regardless of the wiring).
         expect(expectedDirectDamage(20)).not.toBe(expectedDirectDamage(0));
@@ -195,8 +223,8 @@ describe('Charged Overdrive II adds Defense Penetration to the next charged cast
             'active',
             'charged',
         ]);
-        expect(result.rounds[1].directDamage).toBe(expectedDirectDamage(20)); // cast 1: boosted
-        expect(result.rounds[3].directDamage).toBe(expectedDirectDamage(0)); // cast 2: baseline
+        expect(focusDealt(result.rounds[1])).toBe(expectedDirectDamage(20)); // cast 1: boosted
+        expect(focusDealt(result.rounds[3])).toBe(expectedDirectDamage(0)); // cast 2: baseline
     });
 
     it('an ACTIVE cast does not spend it', () => {
@@ -208,9 +236,9 @@ describe('Charged Overdrive II adds Defense Penetration to the next charged cast
         const result = runCombat(BASE({ numRounds: 2, teamActors: [granterAlly()] }));
 
         expect(result.rounds[0].action).toBe('active');
-        expect(result.rounds[0].directDamage).toBe(expectedDirectDamage(0));
+        expect(focusDealt(result.rounds[0])).toBe(expectedDirectDamage(0));
         expect(result.rounds[1].action).toBe('charged');
-        expect(result.rounds[1].directDamage).toBe(expectedDirectDamage(20));
+        expect(focusDealt(result.rounds[1])).toBe(expectedDirectDamage(20));
     });
 
     it('is spent by a charged cast that deals no damage', () => {
@@ -238,7 +266,11 @@ describe('Charged Overdrive II adds Defense Penetration to the next charged cast
         // Sanity: the consuming cast really did deal no damage (rules out a fixture mistake where
         // this "no damage ability" cast accidentally dealt damage, which would make the case below
         // indistinguishable from the ordinary "is spent" case already covered above).
-        expect(result.rounds[1].directDamage).toBe(0);
+        // ANTI-VACUITY: a bare "this round dealt 0" is worthless if the CHANNEL is dead, so pin
+        // that the same channel reports the round-1 ACTIVE cast's real damage first.
+        expect(focusDealt(result.rounds[0])).toBe(expectedDirectDamage(0));
+        expect(focusDealt(result.rounds[0])).toBeGreaterThan(0);
+        expect(focusDealt(result.rounds[1])).toBe(0);
         // The direct proof: gone after the no-damage charged cast consumed it.
         expect(holdsChargedOverdriveII(engine!, 'attacker')).toBe(false);
     });
@@ -270,8 +302,8 @@ describe('Charged Overdrive II adds Defense Penetration to the next charged cast
             'charged',
         ]);
         // The GRANTING cast must NOT be boosted by the grant it itself just issued.
-        expect(result.rounds[1].directDamage).toBe(expectedDirectDamage(0));
+        expect(focusDealt(result.rounds[1])).toBe(expectedDirectDamage(0));
         // The actor's NEXT charged cast must read/consume the round-2 grant and be boosted.
-        expect(result.rounds[3].directDamage).toBe(expectedDirectDamage(20));
+        expect(focusDealt(result.rounds[3])).toBe(expectedDirectDamage(20));
     });
 });

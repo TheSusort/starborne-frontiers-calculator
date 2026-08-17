@@ -26,6 +26,9 @@ import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { dealtBy } from '../__testutils__/perTargetDealt';
+import type { RoundData } from '../../calculators/dpsSimulator';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -232,7 +235,10 @@ describe('self-debuff gate in runPlayerTurn (Task 7)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a real, TARGETABLE opponent (non-zero max HP). `enemyDefense: 0` is carried onto
+    // its own stats.defence so the 10000/20000 figures below are unchanged. Every test that needs a
+    // Provoke/Taunt-carrying enemy overrides this with its own.
+    enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000, defence: 0 } }),
     attack: 10000,
     crit: 0,
     critDamage: 0,
@@ -257,6 +263,25 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     mode: 'healing',
     ...overrides,
 });
+
+/**
+ * The focus's own firing-hit damage for one round.
+ *
+ * SP-4b-2b (M3): `GRANT_BASE` now carries a real, TARGETABLE opponent (non-zero max HP), so the
+ * focus cast takes the POSITIONAL branch and its damage is booked per-victim rather than on the
+ * scalar `RoundData.directDamage`, which is 0 on every round of a positional run. Reading
+ * `directDamage` in the four `GRANT_BASE`-default tests below would have compared 0 to 0 — green,
+ * and blind to the buff-to-damage coupling that is the whole instrument here.
+ *
+ * NOTE for later waves: the tests further down that pass their OWN `enemyAttackers` still read
+ * `directDamage` and still pass. That is NOT an inconsistency in this helper — those fixtures build
+ * their enemies through an `as EnemyAttacker` cast that omits `stats.hp` entirely, so the roster has
+ * no TARGETABLE member (`resolvesPositionalVictim`, keyed on MAX hp), the run stays NON-positional,
+ * and the scalar channel is still the live one for them. Their 10000-vs-20000 contrast is real, so
+ * they are left alone here, but the missing `hp` is a latent fixture defect worth fixing on purpose
+ * rather than by accident.
+ */
+const focusDealt = (round: RoundData): number => Math.round(dealtBy([round], 'attacker'));
 
 /** Active deals damage + grants a self "Attack Up" (+100% attack, 99 turns) GATED on `cond`.
  *  A passive modifier reads that self-buff and folds nothing of its own — the grant's own
@@ -300,8 +325,8 @@ describe('status-grant gate path — flat self-debuff/Provoke (item 11, Step 5b)
         ];
         const result = runCombat(GRANT_BASE({ shipSkills: grantGatedSelfBuffSkill(cond) }));
         // Grant never lands → +100% attack buff never applies → base 10000 both rounds.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(10000);
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(10000);
     });
 
     it('a FLAT enemy-buff(Taunt)-gated self-buff GRANT does NOT fire in DPS mode (no live enemy buff)', () => {
@@ -312,8 +337,8 @@ describe('status-grant gate path — flat self-debuff/Provoke (item 11, Step 5b)
             { subject: 'enemy-buff', derivable: true, buffName: 'Taunt' },
         ];
         const result = runCombat(GRANT_BASE({ shipSkills: grantGatedSelfBuffSkill(cond) }));
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(10000);
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(10000);
     });
 
     it('control: an UNGATED self-buff GRANT DOES fire (buff couples into damage as expected)', () => {
@@ -322,8 +347,8 @@ describe('status-grant gate path — flat self-debuff/Provoke (item 11, Step 5b)
         // applies and couples into the same round's outgoing damage → directDamage doubles to
         // 20000 every round. Contrast the gated cases above, which stay at base 10000.
         const result = runCombat(GRANT_BASE({ shipSkills: grantGatedSelfBuffSkill([]) }));
-        expect(result.rounds[0].directDamage).toBe(20000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        expect(focusDealt(result.rounds[0])).toBe(20000);
+        expect(focusDealt(result.rounds[1])).toBe(20000);
     });
 });
 
@@ -608,7 +633,7 @@ describe('status-grant gate path — count-scaled self-debuff (item 11, Step 4)'
             { subject: 'self-debuff', derivable: true, countComparator: 'gte', countThreshold: 1 },
         ];
         const result = runCombat(GRANT_BASE({ shipSkills: grantGatedSelfBuffSkill(cond) }));
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(10000);
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(10000);
     });
 });

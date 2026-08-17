@@ -28,6 +28,7 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { splashDamageForBomb } from '../bombSplash';
 import type { PendingBomb } from '../state';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -87,7 +88,8 @@ const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
 // firing-hit damage = 5000 (kills the front enemy when its HP ≤ 5000). Its active also applies
 // the Blast bomb to the front enemy.
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b default only — every positional case below supplies its own placed roster.
+    enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -240,8 +242,18 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
         // Override BASE to remove all positions. The focus attacker fires and kills the dummy
         // enemy (via the skill), which has no position. The bomb is applied to it. On death,
         // victim.position === undefined → splash gate blocks.
+        //
+        // SP-4b-2b: `normalizeCombatRoster` now requires a roster AND auto-PLACES every member, so
+        // "the victim has no position" is no longer reachable through a real roster entry — the sink
+        // is the only positionless actor left. The roster here is therefore a documented "pressure
+        // source" (0 MAX hp), which makes `resolvesPositionalVictim` find nobody targetable
+        // (positionalBinding.ts:60-70), keeps the run NON-positional, and keeps the sink as the
+        // victim — the exact premise this case exists to test. Without that, the run would go
+        // positional, the victim would be a PLACED enemy, and the test would pass for the unrelated
+        // reason that a lone enemy has no adjacent ally (already covered two tests above), i.e. it
+        // would be green and vacuous. (SP-4c must revisit this case when it deletes the dummy.)
         const noPositionInput: CombatEngineInput = {
-            enemyAttackers: [],
+            enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 5000,
             crit: 0,
             critDamage: 0,
@@ -264,11 +276,17 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             hp: 1_000_000_000,
             healTargetId: 'attacker',
             mode: 'healing',
-            // NO position on the attacker, and NO enemyAttackers (no positions at all).
+            // NO position on the attacker, and a pressure-source roster → the sink is the victim.
         };
 
         const result = runCombat(noPositionInput);
         const round = result.rounds[0];
+
+        // ANTI-VACUITY: prove the run really did take the non-positional sink path — the scalar
+        // direct channel carries the hit and the per-victim map is empty. Only then does
+        // "no splash" mean "the victim.position gate blocked it".
+        expect(round.directDamage).toBeGreaterThan(0);
+        expect(round.perTargetDealt).toBeUndefined();
 
         // No splash: victim.position was undefined → gate blocked.
         expect(round.perActorSplash).toBeUndefined();

@@ -42,6 +42,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { createActor, CombatActor } from '../state';
 import { createEventBus, CombatEvent } from '../events';
 import { ShipSkills } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type ApplyOutgoing = (
     damage: number,
@@ -104,7 +105,11 @@ const enemyAttacker = (id: string, shipSkills?: ShipSkills): EnemyAttacker => ({
 });
 
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: every run needs a real opponent. The id is DELIBERATELY not the shared
+    // `BARE_ENEMY_ID` ('e1'): this file hand-builds victims called 'e1'/'e2' and asserts on
+    // `perActorIncoming`/`ship-destroyed` keyed by those ids, so a roster actor sharing an id would
+    // conflate the buckets. The focus has `attack: 0` and an empty kit, so this opponent is never hit.
+    enemyAttackers: bareEnemy({ id: 'roster-opponent' }),
     attack: 0,
     crit: 0,
     critDamage: 0,

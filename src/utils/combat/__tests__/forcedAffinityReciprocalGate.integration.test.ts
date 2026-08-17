@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -51,7 +52,11 @@ const ishaSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a real opponent. DAMAGE fixture (15000 attack x 120% over 2 rounds) so it takes
+    // the 10M-HP form; `enemyDefense: 8000` is carried onto the roster entry's own stats.defence
+    // (the fight-wide scalar is inert positionally, M6). Nothing here reads a damage magnitude —
+    // the observable is the `buff-applied` count for the gated grant.
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 8000 } }),
     attack: 15000,
     crit: 0,
     critDamage: 150,

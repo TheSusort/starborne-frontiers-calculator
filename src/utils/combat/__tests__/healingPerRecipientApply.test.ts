@@ -5,6 +5,7 @@ import { parsePattern } from '../../targetingParser';
 import type { ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // Pattern-Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
 // So: healer at M3, ON-footprint ally at M4, OFF-footprint ally at M1.
@@ -88,7 +89,11 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
 });
 
 const BASE = (): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: every run needs a real opponent. This fixture's focus has `attack: 0` and casts
+    // only heals, so the inert 500k-HP default never dies and the run shape is unchanged.
+    // `enemyDefense`/`enemyHp` below describe the vestigial dummy and are INERT positionally (M6);
+    // they are left in place because nothing here derives a number from them.
+    enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
     critDamage: 0,

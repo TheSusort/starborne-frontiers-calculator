@@ -10,6 +10,7 @@ import { createStatusEngine } from '../statusEngine';
 import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 describe('ActorStats — hacking/security', () => {
     it('carries hacking/security when supplied', () => {
@@ -80,7 +81,11 @@ const TEAM_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: every run needs a real opponent. `enemyDefense: 5000` is carried onto the roster
+    // entry's own `stats.defence` (the fight-wide scalar is inert positionally, M6/#11) and the HP
+    // is raised to 10M so a damaging team ship cannot kill it mid-sim. Nothing in this file asserts
+    // a damage magnitude — these tests read stat plumbing off the actors via `__testTapActors`.
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 5000 } }),
     attack: 10000,
     crit: 50,
     critDamage: 150,

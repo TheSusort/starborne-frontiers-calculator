@@ -22,6 +22,7 @@ import { createEventBus, CombatEvent } from '../events';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // Verbatim-shaped phrasing (matches Asphyxiator's real active Inferno III sentence structure:
 // "... then inflicts Inferno III for 3 turns on the targeted enemy and all enemies adjacent to
@@ -266,17 +267,23 @@ describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes o
 });
 
 /**
- * DPS invariance: the DPS calculator's single-dummy mode calls `runCombat` DIRECTLY with no
- * `position`/`pattern`/`enemyAttackers`/`mode: 'battle'` — the vestigial `enemy` sink
- * actor is the sole opponent, `targetId` is never threaded, and `adjacentEnemyIdsFor` is never
- * supplied. The splash fan-out's own guard (`targetId !== undefined && adjacentEnemyIdsFor`)
- * means it can never fire here — so a `target-and-adjacent-enemies` Inferno DoT must produce
- * BYTE-IDENTICAL `dot-applied` events to the SAME DoT with plain `target: 'enemy'` (this is the
- * real DPS-page shape; dpsSimulator.ts calls runCombat the same way).
+ * DPS invariance: the DPS calculator's single-opponent mode calls `runCombat` DIRECTLY with no
+ * `position`/`pattern`/`mode: 'battle'`, so the run stays NON-positional (engine.ts:9025 gates
+ * `positional` on `target` AND `pattern`, not on the roster), `targetId` is never threaded, and
+ * `adjacentEnemyIdsFor` is never supplied. The splash fan-out's own guard
+ * (`targetId !== undefined && adjacentEnemyIdsFor`) means it can never fire here — so a
+ * `target-and-adjacent-enemies` Inferno DoT must produce BYTE-IDENTICAL `dot-applied` events to the
+ * SAME DoT with plain `target: 'enemy'` (this is the real DPS-page shape; dpsSimulator.ts calls
+ * runCombat the same way).
+ *
+ * SP-4b-2b: the sole opponent used to be the vestigial `enemy` sink, reached by passing no
+ * `enemyAttackers`. That is now illegal at the normalization boundary, so this passes a real
+ * one-entry roster and the DoT recipient id moved `'enemy'` → `BARE_ENEMY_ID` (M1). The
+ * byte-identity claim — the whole point of the fixture — is unaffected.
  */
-describe('Ship-kit W5 Task B2: DPS invariance (single-dummy, non-positional)', () => {
+describe('Ship-kit W5 Task B2: DPS invariance (single opponent, non-positional)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
-        enemyAttackers: [],
+        enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,
         crit: 0,
         critDamage: 0,
@@ -319,7 +326,8 @@ describe('Ship-kit W5 Task B2: DPS invariance (single-dummy, non-positional)', (
         // ReactiveStamp-only fields, none present for a cast-time application) proves the
         // splash-config path is a complete no-op in this mode.
         expect(splashApplied).toEqual(plainApplied);
-        // Never lands on anyone but the dummy sink — no splash leakage even by accident.
-        expect(splashApplied.every((e) => e.targetId === 'enemy')).toBe(true);
+        // Never lands on anyone but the sole opponent — no splash leakage even by accident.
+        // M1: that opponent is the real roster entry, not the vestigial `enemy` sink.
+        expect(splashApplied.every((e) => e.targetId === BARE_ENEMY_ID)).toBe(true);
     });
 });

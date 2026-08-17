@@ -31,6 +31,7 @@ import { createEventBus } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -116,7 +117,11 @@ const BASE = (
     target?: ParsedTarget,
     pattern?: ParsedPattern
 ): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b default only: an enemy the 5000 firing hit CAN genuinely kill, because this whole
+    // file turns on victims actually dying — an unkillable punching bag would silently delete the
+    // death every test here observes. Every call site below overrides this with its own placed
+    // roster; the default exists so the base cannot throw at the normalization boundary.
+    enemyAttackers: bareEnemy({ stats: { hp: 5000 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -156,8 +161,6 @@ const destroyedList = (input: CombatEngineInput): string[] => {
     runCombat({ ...input, bus });
     return ids;
 };
-
-const destroyedSet = (input: CombatEngineInput): Set<string> => new Set(destroyedList(input));
 
 describe('Task 1 — inter-turn positional retargeting (player→enemy focus fire)', () => {
     // Two living enemies: front (M4, col 4) and back (M3, col 3). A FAST team actor (speed 200)
@@ -226,20 +229,23 @@ describe('Task 1 — all-dead positional whiff (player→enemy)', () => {
         expect(dead).toEqual(['enemy-only']);
     });
 
-    it('a positional focus with NO enemies at all whiffs cleanly (empty opposing roster)', () => {
+    // SP-4b-2b — THIS TEST'S PREMISE WAS DELETED BY THE CONTRACT IT NOW ASSERTS.
+    //
+    // It used to hand `runCombat` an EMPTY opposing roster and check that the focus whiffed cleanly
+    // instead of throwing. An empty roster is now a contract violation caught at the normalization
+    // boundary, so "no enemies at all" is no longer a state any caller can reach — there is no
+    // roster to give this fixture that would preserve its premise. It therefore becomes an assertion
+    // about the contract itself.
+    //
+    // WHAT STOPPED BEING COVERED HERE: nothing. The behaviour this test shared with its premise — a
+    // POSITIONAL focus resolving `front` against no living opposing actor and whiffing without a
+    // throw or a spurious destroy — is exercised by the sibling test directly above, which reaches
+    // the same all-dead state through a roster that is real but already killed. That is the
+    // reachable form of the state, and it is the form production can actually produce.
+    it('an EMPTY opposing roster is rejected at the normalization boundary, not silently whiffed', () => {
         idc = 0;
-        // Healing mode still needs a heal target; with no enemy attackers the positioned enemy
-        // roster is empty, so the focus `front` resolution returns null every hit → clean whiff.
-        const input = BASE(
-            {
-                enemyAttackers: [],
-            },
-            parsedTarget('front'),
-            basePattern()
-        );
-        // Must not throw, and nothing is destroyed.
-        const dead = destroyedSet(input);
-        expect(dead.size).toBe(0);
+        const input = BASE({ enemyAttackers: [] }, parsedTarget('front'), basePattern());
+        expect(() => runCombat(input)).toThrow(/enemyAttackers is empty/);
     });
 });
 

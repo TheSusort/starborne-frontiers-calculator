@@ -24,6 +24,7 @@ import { ShipSkills, Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor, PendingAccumulator } from '../state';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idc = 0;
 const damageAbility = (multiplier: number): Ability => ({
@@ -226,12 +227,23 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
         expect(burst).toBe(1234); // one contribution, not two
     });
 
-    // The NON-positional path must keep the scalar channel as its source. With no enemy roster to
-    // place, the focus's cast credits `roundDamage.direct` and the gather reads it exactly as it
-    // always did — the fix adds a second reader, it does not move the first one.
+    // The NON-positional path must keep the scalar channel as its source — the fix adds a second
+    // reader, it does not move the first one.
+    //
+    // SP-4b-2b — HOW THIS FIXTURE STAYS NON-POSITIONAL. It used to get there by passing NO enemy
+    // roster at all, which the normalization boundary now rejects. Note that simply supplying a
+    // roster and omitting `target`/`pattern` does NOT work: `normalizeCombatRoster`'s
+    // `withTargeting` FILLS both with the front-enemy/base defaults, so `positional`
+    // (engine.ts:9025) is satisfied and the run takes the per-victim branch. The one remaining
+    // non-positional shape is the documented "pressure source" roster — every opposing member has
+    // 0 MAX hp, so `resolvesPositionalVictim` finds nobody targetable (positionalBinding.ts:60-70).
+    // That is what this fixture uses, and it reproduces the original observables exactly:
+    // `directDamage` 4321 with `perTargetDealt` empty, i.e. the scalar credit channel. The
+    // accumulator therefore stays on the legacy `enemy` sink, which is still the victim on this
+    // path. (SP-4c must revisit this fixture when it deletes the dummy.)
     it('a NON-positional run still gathers through the scalar credit channel', () => {
         const result = runCombat({
-            enemyAttackers: [],
+            enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 4321,
             crit: 0,
             critDamage: 0,
@@ -261,5 +273,11 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
             },
         } as CombatEngineInput);
         expect(result.rounds[0].detonationDamage).toBe(4321);
+        // Anti-vacuity for the CHANNEL claim: on this path the cast credits the SCALAR channel, so
+        // `directDamage` carries the hit and the per-victim map stays empty. If a future change made
+        // this run positional, `perTargetDealt` would populate and the test would no longer be
+        // exercising the reader it names.
+        expect(result.rounds[0].directDamage).toBe(4321);
+        expect(result.rounds[0].perTargetDealt).toBeUndefined();
     });
 });

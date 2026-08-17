@@ -24,6 +24,7 @@ import { createEventBus, CombatEvent } from '../events';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 const DEBUFF_NAME = 'Defense Down II';
 
@@ -241,21 +242,25 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
 });
 
 /**
- * DPS invariance: the DPS calculator's single-dummy mode calls `runCombat` DIRECTLY with no
- * `position`/`pattern`/`enemyAttackers`/`mode: 'battle'` — the vestigial `enemy` sink actor
- * (engine.ts's `createActor({ id: 'enemy', ... })`) is the sole opponent, and `targetId` is never
- * threaded onto the turn args (buildTurnArgs's player-side guard: `tgt.id !== enemy.id`). This is
- * the DPS page's real non-positional shape (dpsSimulator.ts calls `runCombat` the same way), NOT
- * `simulateBattle` (which always sets `mode: 'battle'` and gives every enemy a real
- * position). Today's plain `enemy`-target debuff still lands on the dummy in this mode (the
- * legacy `targetId === undefined && !positionalLanding → [undefined]` fallback resolves the dummy
- * itself as victim) — `target-and-adjacent-enemies` must match that (dummy only, no neighbours to
- * fan out to); `adjacent-enemies` must apply to nobody (no primary-target anchor to resolve
- * neighbours from).
+ * DPS invariance: the DPS calculator's single-opponent mode calls `runCombat` DIRECTLY with no
+ * `position`/`pattern`/`mode: 'battle'`, so the run stays NON-positional (engine.ts:9025 gates
+ * `positional` on `target` AND `pattern`, not on the roster) and `targetId` is never threaded onto
+ * the turn args. This is the DPS page's real non-positional shape (dpsSimulator.ts calls runCombat
+ * the same way), NOT `simulateBattle` (which always sets `mode: 'battle'` and gives every enemy a
+ * real position). A plain `enemy`-target debuff still lands on that single opponent in this mode
+ * (the legacy `targetId === undefined && !positionalLanding → [undefined]` fallback resolves the
+ * sole opposing actor as victim) — `target-and-adjacent-enemies` must match that (one recipient, no
+ * neighbours to fan out to); `adjacent-enemies` must apply to nobody (no primary-target anchor to
+ * resolve neighbours from).
+ *
+ * SP-4b-2b: the sole opponent used to be the vestigial `enemy` sink, reached by passing no
+ * `enemyAttackers` at all. That is now illegal at the normalization boundary, so the fixture passes
+ * a real one-entry roster and the recipient id moved `'enemy'` → `BARE_ENEMY_ID` (M1). The mechanic
+ * under test — exactly one recipient, no fan-out — is unchanged.
  */
-describe('Ship-kit W5 Task A3: DPS invariance (single-dummy, non-positional)', () => {
+describe('Ship-kit W5 Task A3: DPS invariance (single opponent, non-positional)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
-        enemyAttackers: [],
+        enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,
         crit: 0,
         critDamage: 0,
@@ -293,9 +298,10 @@ describe('Ship-kit W5 Task A3: DPS invariance (single-dummy, non-positional)', (
         expect(applied).toHaveLength(0);
     });
 
-    it("target-and-adjacent-enemies applies to exactly the dummy — today's plain-`enemy` behaviour", () => {
+    it("target-and-adjacent-enemies applies to exactly the sole opponent — today's plain-`enemy` behaviour", () => {
         const applied = runDummy(targetAndAdjacentCaster('atk'));
         expect(applied).toHaveLength(1);
-        expect(applied[0]?.targetId).toBe('enemy');
+        // M1: the recipient is the real roster entry, not the vestigial `enemy` sink.
+        expect(applied[0]?.targetId).toBe(BARE_ENEMY_ID);
     });
 });

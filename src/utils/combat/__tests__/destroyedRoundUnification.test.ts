@@ -30,6 +30,7 @@ import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
 import { Ability } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -57,7 +58,12 @@ const manualEnemy = (
 });
 
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: the default opponent is the shared INERT one (0 attack, no skills). That matters
+    // for the hp:0 backstop test, whose premise is "no incoming damage ever reaches the heal
+    // target, so recordDestroyed never runs" — an opponent that attacked would route the death
+    // through recordDestroyed and destroy the very distinction that test draws. Every other test
+    // here overrides this with the specific attacking/DoT enemy it needs.
+    enemyAttackers: bareEnemy(),
     attack: 1000,
     crit: 0,
     critDamage: 0,
