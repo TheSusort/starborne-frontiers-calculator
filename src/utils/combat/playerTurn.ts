@@ -223,7 +223,15 @@ export interface PassiveSlotHit {
     /**
      * ALREADY DECIDED here — the apply site must never re-roll or re-decide it. `noCrit` on the
      * passive's own damage ability forces `false`; otherwise this REUSES the round's first crit
-     * draw rather than taking a new one, so wiring the instance up draws no extra RNG.
+     * draw rather than taking a new one, so no CRIT draw is added.
+     *
+     * That is a statement about crit ALONE — it is NOT a claim that the instance is RNG-free.
+     * It is a real damage instance and goes through the real victim funnel
+     * (`tb.applyToVictim` → `applyOutgoingToEnemy`, `byDirectDamage: true`), so against a victim
+     * carrying an `incoming-block` ability it advances that victim's `directIntakeIndex` and rolls
+     * a `makeRateGate` draw on the victim's own `<id>:proc` sub-stream. See the
+     * `stagePassiveSlotHit` doc in engine.ts for the full footprint of what it does draw and
+     * provoke, and `passiveSlotDamageFootprint.integration.test.ts` for the pins.
      */
     didCrit: boolean;
     /**

@@ -6407,12 +6407,27 @@ export function runCombat(rawInput: CombatEngineInput): {
          * separate attack row. This restores parity; inventing an event stream for it would be a
          * new mechanic, not a fix. Crit is likewise NOT re-decided here — `hit.didCrit` was fixed
          * in `runPlayerTurn` (`noCrit` honoured, otherwise the round's own draw reused) and every
-         * footprint victim reuses that ONE outcome instead of rolling its own, so wiring the
-         * instance up draws no RNG and cannot perturb any other draw's schedule.
+         * footprint victim reuses that ONE outcome instead of rolling its own, so NO CRIT DRAW is
+         * added and the crit stream's schedule is untouched.
          *
-         * It DOES go through the real per-victim funnel (`tb.applyToVictim`) and the real
-         * per-victim defence profile, so shields, Barrier, Cheat Death, Protection and the
-         * per-victim credit channel (`perTargetDealt`) all see it like any other damage source.
+         * WHAT IT DOES DRAW AND PROVOKE — read this before repeating "the instance draws no RNG",
+         * which is true of CRIT only and false in general. It IS a real damage instance: it goes
+         * through the real per-victim funnel (`tb.applyToVictim` → `applyOutgoingToEnemy`, which
+         * passes `byDirectDamage: true`) and the real per-victim defence profile, so shields,
+         * Barrier, Cheat Death, Protection and the per-victim credit channel (`perTargetDealt`)
+         * all see it like any other damage source. Concretely, against a victim that carries one:
+         *   • an `incoming-block` ability — the instance ADVANCES that victim's
+         *     `directIntakeIndex` (so it counts as an nth direct hit for `nth-hit-2plus`) and
+         *     ROLLS a `makeRateGate` draw on the victim's own `<id>:proc` sub-stream, which can
+         *     also spend an `oncePerRound` block. Both are pinned in
+         *     `passiveSlotDamageFootprint.integration.test.ts`.
+         *   • a `damage-reflection` ability — the instance sets neither `isReflected` nor
+         *     `isCounter`, so it PROVOKES thorns back at the attacker exactly as the firing hit
+         *     does. (`isAnchor: false` below still exempts it from a `requirePrimaryTarget`
+         *     reflect — Nosorog — since it is not the cast's primary-target hit.)
+         * All of that is the intended reading of "a real damage instance"; it is recorded here so
+         * a later change plans around the real footprint rather than a convenient fiction.
+         *
          * It does NOT set `deferReflectLogs`: with no `ability-performed` of its own there is no
          * later row for a buffered reflect to attach to, so a reflect it provokes prints where it
          * happens — the same treatment every non-positional apply gives one.
