@@ -100,6 +100,43 @@ const singleCell = (): ParsedPattern => ({ raw: 'single', shape: 'base', range: 
 const lineRange1 = (): ParsedPattern => ({ raw: 'line-1', shape: 'line', range: 1, modifiers: {} });
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
+/** A walked PLAYER ally with no kit and no attack: a pure victim on the player roster, so the
+ *  enemy's `all-enemies` passive instance has somebody to reach besides the focus. */
+const allyAt = (id: string, position: Position): TeamActor => {
+    const stats = {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        shieldPenetration: 0,
+        hacking: 0,
+        security: 0,
+        defence: 0,
+        hp: 1_000_000,
+    };
+    return {
+        id,
+        speed: 10,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        shipSkills: { slots: [] },
+        stats,
+        walk: {
+            shipSkills: { slots: [] },
+            stats,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    };
+};
 const enemyAt = (
     id: string,
     position: Position,
@@ -201,49 +238,7 @@ describe('SP-4b-2 D6 — the passive-slot damage instance resolves its OWN footp
                 // The focus does not attack this round's ordering question at all — the enemy is
                 // faster and acts first; only the enemy's credit is asserted.
                 enemyAttackers: [enemyAt('e-front', 'M4', 800, 500, kit(100, 50, 'all-enemies'))],
-                teamActors: [
-                    {
-                        id: 'ally-1',
-                        speed: 10,
-                        chargeCount: 0,
-                        startCharged: false,
-                        selfBuffs: [],
-                        enemyDebuffs: [],
-                        position: 'M3',
-                        shipSkills: { slots: [] },
-                        stats: {
-                            attack: 0,
-                            crit: 0,
-                            critDamage: 0,
-                            defensePenetration: 0,
-                            shieldPenetration: 0,
-                            hacking: 0,
-                            security: 0,
-                            defence: 0,
-                            hp: 1_000_000,
-                        },
-                        walk: {
-                            shipSkills: { slots: [] },
-                            stats: {
-                                attack: 0,
-                                crit: 0,
-                                critDamage: 0,
-                                defensePenetration: 0,
-                                shieldPenetration: 0,
-                                hacking: 0,
-                                security: 0,
-                                defence: 0,
-                                hp: 1_000_000,
-                            },
-                            selfDotModifier: 0,
-                            defensePenetrationBuff: 0,
-                            affinityDamageModifier: 0,
-                            affinityCritCap: 100,
-                            affinityCritPenalty: 0,
-                            hasChargedSkill: false,
-                        },
-                    },
-                ],
+                teamActors: [allyAt('ally-1', 'M3')],
             })
         );
         const dealt = result.rounds[0].perTargetDealt?.['e-front'];
@@ -413,6 +408,12 @@ describe('SP-4b-2 D6 — the passive-slot instance is a real direct-damage intak
                 // Faster than the focus, so it acts first and the focus's own (absent) cast cannot
                 // reorder the player's intakes.
                 enemyAttackers: [enemyAt('e-front', 'M4', 800, 500, kit(100, 50, 'all-enemies'))],
+                // A second player victim the enemy's FIRING hit cannot reach (single-cell on the
+                // M4 anchor), reached by the passive instance alone and carrying no block. Without
+                // it this case is VACUOUS: the focus's 800 is the firing hit's, so `toBe(800)`
+                // reads the same whether the instance lands and is blocked, is never staged, or
+                // never fires at all. `ally-1` moves only when the instance actually lands.
+                teamActors: [allyAt('ally-1', 'M3')],
             })
         );
         const dealt = result.rounds[0].perTargetDealt?.['e-front'];
@@ -420,5 +421,8 @@ describe('SP-4b-2 D6 — the passive-slot instance is a real direct-damage intak
         // intake #2 (fully blocked). Without the instance passing through the intake surface this
         // would read 1200 — the same discriminator as the player-side case above, mirrored.
         expect(dealt?.['attacker']).toBe(800);
+        // The SAME instance, unblocked, on the ally it is the only thing to reach. This is the
+        // assertion that fails if the instance is not staged/landed at all — 800 above would not.
+        expect(dealt?.['ally-1']).toBe(400);
     });
 });
