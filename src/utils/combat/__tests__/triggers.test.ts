@@ -18,6 +18,9 @@ import { SelectedGameBuff } from '../../../types/calculator';
 import { createStatusEngine } from '../statusEngine';
 import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
 import type { CombatActor } from '../state';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { dealtBy } from '../__testutils__/perTargetDealt';
+import type { RoundData } from '../../calculators/dpsSimulator';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -29,7 +32,14 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // A real, positioned opponent. The top-level `enemyHp` / `enemyDefense` scalars below describe
+    // the VESTIGIAL DUMMY and are inert on a positional run, so the roster entry carries the same
+    // two values the file has always declared: `defence: 8000` keeps every damage magnitude equal
+    // to the pre-positional numbers (and leaves defence-shred effects something to bite on), and
+    // `hp: 10_000_000` replaces the dummy's 400k because bareEnemy()'s default 500k is killable by
+    // this file's ~18.5k/round focus — once the opposing roster is wiped the run changes shape.
+    // Fixtures that WANT a squishy enemy override the roster entry's own hp (see fix C).
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 8000 } }),
     attack: 15000,
     crit: 50,
     critDamage: 150,
@@ -52,6 +62,21 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     hp: 30000,
     ...overrides,
 });
+
+/** The focus actor's id in every run in this file. */
+const FOCUS = 'attacker';
+
+/**
+ * Damage the focus dealt in ONE round, read off the per-victim accounting.
+ *
+ * `RoundData.directDamage` / `.cumulativeDamage` are the LEGACY SCALAR channels: on a positional run
+ * (every run in this file, since `enemyAttackers` became required) the cast credits per victim into
+ * `perTargetDealt` and the scalars stay 0. Measured at 39d463f1 the same fixture reported
+ * `directDamage: 18526` per round with `perTargetDealt` unset; it now reports `directDamage: 0` and
+ * `perTargetDealt: { attacker: { e1: 18526 } }`. Comparisons of "did this round hit harder" therefore
+ * read this, not the scalar — see the SP-4b-2b wave-B report, mechanism M3.
+ */
+const focusDealtInRound = (round: RoundData): number => dealtBy([round], FOCUS);
 
 const collectEvents = (input: CombatEngineInput) => {
     const bus = createEventBus();
@@ -451,7 +476,12 @@ describe('Phase 3 reactive triggers', () => {
         expect(present(withCrit.result.rounds, 3)).toBe(true);
 
         // The crit round (round 1) damage equals the no-reactive baseline (no self-boost).
-        expect(withCrit.result.rounds[0].directDamage).toBe(baseline.result.rounds[0].directDamage);
+        // Read per-victim (M3): comparing the scalar `directDamage` here would be VACUOUSLY equal
+        // (0 === 0) on a positional run and could no longer see a self-boost appear.
+        expect(focusDealtInRound(withCrit.result.rounds[0])).toBe(
+            focusDealtInRound(baseline.result.rounds[0])
+        );
+        expect(focusDealtInRound(baseline.result.rounds[0])).toBeGreaterThan(0);
 
         // crit 0 → never crits → Shred never present.
         const noCrit = collectEvents(
@@ -541,8 +571,8 @@ describe('Phase 3 reactive triggers', () => {
         for (let r = 1; r <= numRounds; r++) {
             const round = result.rounds.find((rd) => rd.round === r)!;
             expect(round.activeSelfBuffs.some((b) => b.buffName === 'Attack Up')).toBe(true);
-            expect(round.directDamage).toBeGreaterThan(
-                baseline.result.rounds.find((rd) => rd.round === r)!.directDamage
+            expect(focusDealtInRound(round)).toBeGreaterThan(
+                focusDealtInRound(baseline.result.rounds.find((rd) => rd.round === r)!)
             );
         }
         const buffApplied = events.filter((e) => e.type === 'buff-applied');
@@ -1075,11 +1105,12 @@ describe('Phase 3 reactive triggers', () => {
             ).toBe(true);
         }
 
-        // Effective defense reduction scales with stacks → directDamage on the LAST round
+        // Effective defense reduction scales with stacks → the damage dealt on the LAST round
         // (most stacks) strictly exceeds the round right after Shred first appears (1 stack).
+        // Read per-victim (M3): the scalar `directDamage` is 0 on a positional run.
         const lastRound = result.rounds[result.rounds.length - 1];
         const firstStackedRound = result.rounds[firstPresent];
-        expect(lastRound.directDamage).toBeGreaterThan(firstStackedRound.directDamage);
+        expect(focusDealtInRound(lastRound)).toBeGreaterThan(focusDealtInRound(firstStackedRound));
     });
 
     it('persistent (test 5): an already-landed persistent debuff is NOT re-rolled per round — it stays active even on rounds where a fresh application is resisted', () => {
@@ -1333,22 +1364,40 @@ describe('Phase 3 reactive triggers', () => {
     });
 
     // ----------------------------------------------------------------------
-    // Fix C — drain-time HP% includes THIS round's damage so far. An on-crit timed
-    // enemy debuff gated on enemy HP% below 50 where the triggering hit itself crosses
-    // the threshold. enemyHp 30000; one crit hit deals ~18.5k ≈ 62% of it.
+    // Fix C — an on-crit reaction gated on "enemy below 50% HP" sees the enemy's POST-HIT
+    // HP, so the triggering hit's OWN damage is what crosses the threshold.
     //
-    // Round-1 trace (verified): entering HP% = 100 (> 50). The on-crit drain runs at
-    // drain point (b), AFTER the attacker's hit. WITH the fix cumulativeDamage at the
-    // drain includes round 1's directDamage (~18.5k) ⇒ post-hit HP% ≈ 38 (< 50) ⇒ the
-    // gate passes ⇒ the timed debuff applies on round 1's drain ⇒ visible from round 2
-    // (same-turn decrement, identical to the scenario-6 on-crit timing).
-    // WITHOUT the fix the drain read the entering-round cumulativeDamage (0) ⇒ HP% 100
-    // (> 50) ⇒ the gate failed on round 1; the debuff would only appear from round 3
-    // (round 2's entering HP% 38 passes, visible round 3). Asserting round-1 ABSENT and
-    // round-2 PRESENT pins the post-hit semantics: it is the crit round's OWN hit that
-    // crosses the threshold and triggers the application.
+    // Round-1 trace (measured): the enemy enters at 100% HP (> 50). The on-crit drain runs
+    // at drain point (b), AFTER the attacker's hit. The victim's live HP at that moment is
+    // 30 000 − 18 526 = 11 474 ⇒ 38% (< 50) ⇒ the gate passes ⇒ the proc fires on the SAME
+    // round as the crit that triggered it. Under entering-round semantics the gate would
+    // read 100% and the proc would not fire until round 2. So round 1's dealt damage
+    // carrying the proc's burst is what pins post-hit semantics; the tanky control (an
+    // enemy that never drops below 50%) shows the same round-1 dealt WITHOUT the burst,
+    // which is what makes the comparison non-vacuous.
+    //
+    // SHAPE NOTE (SP-4b-2b wave B, mechanism M10). This test used to express the same rule
+    // with a SINGLE-TARGET on-crit `debuff` gated on `hpSubject:'enemy'`, and read the
+    // resulting `Below50 Shred` out of `activeEnemyDebuffs`. That shape is DEAD on a
+    // positional run and cannot be revived from the fixture side: the global drain gate
+    // (`triggers.ts` `buildDrainContext`) computes its `enemyHpPct` as
+    // `100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)` — BOTH vestigial-dummy scalars.
+    // Positional credit books into `perTargetDealt` and never feeds `cumulativeDamage`
+    // (measured at the drain: `cum=0` on every drain of this fixture), so that gate reads
+    // 100% forever and any non-self hp-threshold on a drained reactive silently never
+    // fires. `executeIntent` already scrubs that gate — and re-checks the condition PER
+    // VICTIM against the victim's live HP (`resolveAoEReactiveDamageVictims` →
+    // `buildPerVictimConditionCtx`) — for exactly one ability shape:
+    // `type:'damage' && target:'all-enemies'`. That is also the ONLY shape real skill text
+    // can produce for this gate: `buildShipAbilities.hpThresholdFromSentence` is the sole
+    // source of `hpSubject:'enemy'`, its three call sites all emit STAT MODIFIERS rather
+    // than abilities, and the one ability that gets the condition is the round-boundary
+    // damage ability re-targeted to `all-enemies` (Judge) at buildShipAbilities.ts ~1675.
+    // The old single-target debuff shape was therefore synthetic. This test now uses the
+    // corpus-reachable shape so it measures the rule on the path that is actually live.
     // ----------------------------------------------------------------------
-    it('fix C: on-crit HP-gated debuff applies when the triggering hit crosses the HP threshold (drain sees post-hit HP)', () => {
+    it('fix C: an on-crit HP-gated proc fires when the triggering hit itself crosses the HP threshold (the drain sees post-hit HP)', () => {
+        // 150% base hit + a 50%-multiplier on-crit proc gated on the enemy being below 50% HP.
         const hpGatedSkills = (): ShipSkills => ({
             slots: [
                 {
@@ -1361,8 +1410,8 @@ describe('Phase 3 reactive triggers', () => {
                     slot: 'passive',
                     abilities: [
                         ab({
-                            type: 'debuff',
-                            target: 'enemy',
+                            type: 'damage',
+                            target: 'all-enemies',
                             trigger: 'on-crit',
                             conditions: [
                                 {
@@ -1373,41 +1422,42 @@ describe('Phase 3 reactive triggers', () => {
                                     hpSubject: 'enemy',
                                 },
                             ],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Below50 Shred',
-                                stacks: 1,
-                                parsedEffects: { defense: -20 },
-                                isStackable: false,
-                                application: 'inflict',
-                                duration: 3,
-                            },
+                            config: { type: 'damage', multiplier: 50 },
                         }),
                     ],
                 },
             ],
         });
 
-        const { result } = collectEvents(
-            baseInput({
-                shipSkills: hpGatedSkills(),
-                hasChargedSkill: false,
-                chargeCount: 0,
-                crit: 100, // every active turn crits → the on-crit trigger fires
-                enemyHp: 30000, // one crit hit (~18.5k) takes the enemy below 50% HP
-                numRounds: 4,
-            })
-        );
+        // The gate reads the real VICTIM's HP, so the 30 000 lives on the ROSTER ENTRY: the
+        // top-level `enemyHp` scalar configures the vestigial dummy and is inert on a positional
+        // run (M6). `defence: 8000` is baseInput's own value, kept so the crit hit stays ~18.5k
+        // ≈ 62% of 30 000 — one hit crosses the threshold, exactly as the trace above computes.
+        const run = (hp: number) =>
+            collectEvents(
+                baseInput({
+                    shipSkills: hpGatedSkills(),
+                    hasChargedSkill: false,
+                    chargeCount: 0,
+                    crit: 100, // every active turn crits → the on-crit trigger fires
+                    enemyAttackers: bareEnemy({ stats: { hp, defence: 8000 } }),
+                    numRounds: 1,
+                })
+            );
 
-        const present = (n: number) =>
-            result.rounds
-                .find((r) => r.round === n)!
-                .activeEnemyDebuffs.some((b) => b.buffName === 'Below50 Shred');
-        // Round 1: the crit hit crosses 50% → applied on round 1's drain → not yet visible
-        // round 1 (same-turn decrement), visible from round 2. WITHOUT the fix the round-1
-        // drain saw 100% HP and the debuff would only appear from round 3.
-        expect(present(1)).toBe(false);
-        expect(present(2)).toBe(true);
+        const round1 = (r: ReturnType<typeof run>) =>
+            focusDealtInRound(r.result.rounds.find((rd) => rd.round === 1)!);
+
+        // Control: an enemy that never drops below 50% → the gate never passes → round 1 is the
+        // bare 150% hit and nothing else.
+        const tanky = round1(run(10_000_000));
+        expect(tanky).toBeGreaterThan(0);
+
+        // The crit round's own hit takes the enemy to 38% → the proc fires in ROUND 1, adding its
+        // 50%-multiplier burst on top of the 150% base hit (exactly one third of it).
+        const squishy = round1(run(30_000));
+        expect(squishy).toBeGreaterThan(tanky);
+        expect(squishy).toBeCloseTo(tanky + tanky / 3, 5);
     });
 
     // ----------------------------------------------------------------------
