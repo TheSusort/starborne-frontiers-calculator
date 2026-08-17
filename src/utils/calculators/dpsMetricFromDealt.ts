@@ -7,10 +7,11 @@ import type { RoundData } from './dpsSimulator';
  * per-attacker×victim map `battleSimulator` derives `ShipRoundState.damageDealt` from (SP-F F1).
  *
  * Why this exists: in a POSITIONAL run the engine suppresses its
- * `creditDamage(actor, 'direct', …)` fold — `if (!positional)` at `engine.ts:8430`, because the
+ * `creditDamage(actor, 'direct', …)` fold — `if (!positional)` at `engine.ts:9082`, because the
  * firing hit lands per-victim instead and crediting again would double-count. So the scalar
- * `rawTotals.cumulative` reads ~0 once the DPS calculator faces a real positioned enemy, and the
- * per-victim map becomes the only honest source for the metric.
+ * `rawTotals.cumulative` reads ~0, and the per-victim map is the only honest source for the
+ * metric. That is not a special case any more: since SP-4b-2a `simulateDPS` always faces a real
+ * positioned enemy (supplied or synthesized), so this path is the ONLY one the DPS metric takes.
  *
  * A round with no entry for this attacker contributes 0 and KEEPS its slot, so the returned array
  * is index-aligned with `rounds` — callers zip it back onto the rows.

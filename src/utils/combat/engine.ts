@@ -1751,8 +1751,15 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  by DPSSimulationSummary; a future task can surface it as totalGenericDamage. */
         generic: number;
     };
-    /** SP-U U5: the real DPS enemy's end-of-run outcome. Meaningful only in pure DPS mode (no
-     *  real enemy attackers); the DPS adapter maps it onto DPSSimulationSummary. */
+    /** SP-U U5: the real DPS enemy's end-of-run outcome — read off the singular `enemy` actor,
+     *  so it is meaningful ONLY when that actor is the real target (no enemy attackers supplied).
+     *
+     *  NO PRODUCTION READER since SP-4b-2a. The DPS adapter used to map this onto
+     *  `DPSSimulationSummary`; every `simulateDPS` run now supplies a real positioned roster, so
+     *  these fields describe the never-dying dummy (`survived: true`, `roundsToKill: undefined`,
+     *  `finalHpPct` of a billion-HP sink) and the adapter re-derives all three from its own
+     *  `ship-destroyed` bus tap instead. Kept on the return type for the direct-`runCombat`
+     *  fixtures that still read it; it goes with the dummy in SP-4c. */
     enemyOutcome: {
         /** True when the enemy never reached 0 HP within the round window. */
         survived: boolean;
@@ -1879,8 +1886,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         // SP-U U5: the DPS opponent is now a REAL, destructible actor. In pure DPS mode (no real
         // enemyAttackers) it takes the round's dealt damage through the shared per-victim
         // `applyVictimDamage` funnel, its HP declines naturally, and it dies at 0 HP (terminating
-        // the run). In sim/healing mode the fight runs on the positioned enemy roster and this
-        // actor is a vestigial huge-HP sink (never dies — see `dpsEnemyTarget`).
+        // the run). Whenever an enemy roster IS supplied — sim, healing, and since SP-4b-2a every
+        // DPS-calculator run — the fight runs on the positioned roster and this actor is a
+        // vestigial huge-HP sink (never dies — see `dpsEnemyTarget` for what "pure DPS mode"
+        // does and does not still cover).
         side: 'enemy',
         kind: 'enemy',
         stats: {
@@ -2447,9 +2456,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // SP-U U5: the dummy `enemy` is the REAL, destructible DPS target ONLY in pure DPS mode —
     // i.e. when NO real enemy attackers carry the fight. In that case its HP declines through the
     // per-victim `applyVictimDamage` funnel, it dies at 0 HP, and the run terminates (rounds-to-
-    // kill). When enemy attackers exist (sim/healing mode) the positioned roster is the real
-    // opponent and this `enemy` is a vestigial huge-HP sink that must NEVER die or terminate the
-    // run (kept on the legacy scalar decline, byte-identical).
+    // kill). When enemy attackers exist the positioned roster is the real opponent and this
+    // `enemy` is a vestigial huge-HP sink that must NEVER die or terminate the run (kept on the
+    // legacy scalar decline, byte-identical).
+    //
+    // READ THIS BEFORE TRUSTING ANY "pure DPS mode" PHRASE ELSEWHERE IN THIS FILE (SP-4b-2a).
+    // The discriminator is ROSTER EMPTINESS, never `runMode`, and the two have come apart:
+    //   • `simulateDPS` (the DPS calculator, `mode: 'dps'`) now ALWAYS supplies a real positioned
+    //     enemy — explicit from the page, else synthesized from its scalars — so `dpsEnemyTarget`
+    //     is FALSE on every shipped DPS run and the dummy is vestigial there too.
+    //   • the roster-less branch survives only for DIRECT `runCombat` callers (the remaining
+    //     engine fixtures), which SP-4b-2b migrates and SP-4c deletes.
+    // So a comment reading "pure DPS mode" means "a caller that passed no `enemyAttackers`" — a
+    // test-only shape today — and NOT "the DPS calculator". Every such phrase below is historical
+    // rationale kept for SP-4c, deliberately not rewritten into a claim about the shipped path.
     const dpsEnemyTarget = enemyAttackerInputs.length === 0;
     // Validate enemy attacker ids before building any actors: an id that duplicates another
     // enemy attacker, or collides with a reserved/player id (the singular enemy entity, the
@@ -2621,7 +2641,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     //  - PLAYER actor's `enemy-buff` gate → opposing side = the enemy attacker(s). Aggregation:
     //    UNION of every enemy attacker's self-buff names (the condition is "does an enemy have a
-    //    buff", not "does THIS enemy"). Inert in DPS mode (no enemy attackers → empty list).
+    //    buff", not "does THIS enemy"). NOT inert on a DPS run any more (SP-4b-2a): every
+    //    `simulateDPS` run supplies a real enemy, so this reads that enemy's self-buffs. It is
+    //    empty in PRACTICE for a SYNTHESIZED enemy only because that actor carries no skills and
+    //    so grants itself nothing — an emptiness of content, not of roster. Only a caller that
+    //    passes no `enemyAttackers` at all still gets the structurally-empty list.
     //  - PLAYER actor's `self-debuff` gate → its OWN enemy-applied debuffs (per-target store keyed
     //    by its id — the tank carries the enemy attacker's debuffs).
     //  - ENEMY actor's `enemy-buff` gate → opposing side = the player team (union of player
@@ -2644,8 +2668,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
     // Sub-project I, PR I5 — count (not union) of opposing actors holding Stealth, for
     // Selenite's "10% more direct damage for every enemy with Stealth" count-scaling.
-    // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric);
-    // DPS mode has no enemy attackers → livingEnemyAttackerIds() is empty → 0, byte-identical.
+    // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric).
+    // SP-4b-2a: a DPS run DOES have enemy attackers now, so this counts them; it still reads 0
+    // against the synthesized stand-in (no skills → it never gains Stealth). Only a caller that
+    // passes no `enemyAttackers` gets the structurally-empty `livingEnemyAttackerIds()`.
     const playerStealthedEnemyCount = (): number =>
         countOwnersWithSelfBuff(statusEngine, livingEnemyAttackerIds(), 'Stealth');
     const enemyStealthedEnemyCount = (): number =>
@@ -3137,9 +3163,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     //    funnel; if that crosses 0 HP, `recordDestroyed` stamps `destroyedRound` and emits
     //    ship-destroyed with `inTurnLoop` false, so this IS a genuine Path-B post-round death (see
     //    the "Path-B drain (Task 10)" block right after that `applyVictimDamage` call, ~line
-    //    7742). The round loop then breaks (the row for the killing round is already pushed), so
+    //    10554). The round loop then breaks (the row for the killing round is already pushed), so
     //    the buffered grant lands only if the run continued — it currently does not, since the run
-    //    terminates the round the DPS enemy dies. In sim/healing mode the vestigial dummy sink
+    //    terminates the round the DPS enemy dies. Whenever an enemy roster is supplied — sim,
+    //    healing, and since SP-4b-2a every DPS-calculator run — the vestigial dummy sink
     //    (`!dpsEnemyTarget`) never dies, so it never reaches this path. Real positioned enemy
     //    attackers still die DURING a turn (positional applyOutgoingToEnemy → recordDestroyed in
     //    the live queue) → Path A, not B. Enemy-incoming-accounting nuances around this tail are
@@ -5839,10 +5866,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reflected and never Protection-redirected; no shield penetration) and deliberately
             // does NOT creditDamage: a positioned enemy roster is never `dpsEnemyTarget` (which is
             // `enemyAttackerInputs.length === 0`), so the DPS-mode post-round aggregate
-            // (engine.ts:7931) never fires here — cumulativeDamage only reports + declines the
+            // (engine.ts:10536) never fires here — cumulativeDamage only reports + declines the
             // vestigial dummy, never a real victim, so folding the reactive into it would
             // double-count exactly like the per-victim DoT/detonation split documented at
-            // engine.ts:7898. The DPS calculator reads the per-victim map instead
+            // engine.ts:10503-10506. The DPS calculator reads the per-victim map instead
             // (dpsSimulator.ts's focusDamageTotal), which this branch is what feeds.
             //
             // victim.id !== enemy.id: defensive backstop keeping the HP path off the vestigial dummy
@@ -5859,8 +5886,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // — which, since SP-1 re-derives the DPS metric FROM that map, meant the proc fired and
             // contributed exactly nothing (Judge/Incinerator/Rhodium/Chakara fire on the focus's own
             // turn, so it was not hidden behind the enemy-attack-0 default either).
-            // Runs with no positioned enemy (scalar DPS, the healing calculator's bare enemies) keep
-            // the credit-only path by construction — there is no real victim to reduce.
+            // Runs with no positioned enemy keep the credit-only path by construction — there is
+            // no real victim to reduce. Since SP-4b-2a that no longer includes ANY `simulateDPS`
+            // run (a scalar-only DPS caller is given a synthesized positioned enemy), so the
+            // remaining cases are the healing calculator's bare enemies and direct-`runCombat`
+            // callers that supply no roster.
             if (hasPositionedEnemyRoster && victim.id !== enemy.id) {
                 // Buffer this application's log-only consequence twins (Lifeline shield grant,
                 // shield destroyed, cheat death) so they print UNDER this proc's own attack row —
@@ -7079,7 +7109,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 // Sub-project I, PR I5: count (not union) of opposing actors holding Stealth,
                 // for Selenite's "for every enemy with Stealth" count-scaling. Same per-turn
-                // cadence as enemyBuffNames above; 0 in DPS mode (no enemy attackers).
+                // cadence as enemyBuffNames above; 0 against a synthesized DPS enemy (it has no
+                // skills, so it never gains Stealth) and structurally 0 only for a caller that
+                // supplied no enemy attackers — see `stealthedEnemyCount`'s own note.
                 stealthedEnemyCount: tb.stealthedEnemyCount(),
                 // Sub-project I, PR I1: opt-in NAMES on the resolved target for name-specific
                 // `enemy-debuff` gates — SAME guard as targetId above (real/positional target
@@ -8434,15 +8466,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                 //    means it's alive; the exemption is belt-and-suspenders.
                 //  - the `enemy` actor (DPS opponent / sim-mode dummy sink). This exemption is
                 //    effectively DORMANT today, coupled to the terminal `break` near the end of
-                //    the round loop (~line 7994, `if (dpsEnemyTarget && enemy.destroyedRound !==
-                //    undefined) break;`): in pure DPS mode `enemy` is a real destructible actor,
+                //    the round loop (~line 11008, `if (dpsEnemyTarget && enemy.destroyedRound !==
+                //    undefined) break;` — see `dpsEnemyTarget` for why "pure DPS mode" no longer
+                //    means the DPS calculator): in pure DPS mode `enemy` is a real destructible actor,
                 //    but its HP only lands (and `destroyedRound` only gets stamped) in the
                 //    POST-round accounting step, after this turn loop has already closed for that
                 //    round — so within any given round's turn-loop walk, `enemy.destroyedRound` is
                 //    never set yet, and the round loop breaks immediately once it is, so there is
-                //    no subsequent round left for this exemption to matter in. In sim/healing mode
-                //    the vestigial dummy sink never dies at all, so `destroyedRound` is never set
-                //    there either. The exemption exists so that IF the terminal break above were
+                //    no subsequent round left for this exemption to matter in. On any run with a
+                //    supplied enemy roster (sim, healing, and since SP-4b-2a every DPS-calculator
+                //    run) the vestigial dummy sink never dies at all, so `destroyedRound` is never
+                //    set there either — which is exactly what makes this the ONE enemy-side DoT
+                //    carrier that keeps ticking after death and therefore keeps REPORTING (see
+                //    `dotCarrierReports`, whose exemption is derived from this guard).
+                //    The exemption exists so that IF the terminal break above were
                 //    ever removed (e.g. to keep simulating past the DPS enemy's death), a dead
                 //    `enemy` would still take its turn — banking enemy charges and running the
                 //    enemy-side DoT/decrement bookkeeping — rather than being skipped and dropping
@@ -10643,23 +10680,29 @@ export function runCombat(rawInput: CombatEngineInput): {
         // (Rhodium's most-buffed-enemy purge, Incinerator's enemy-debuff AoE) credit into
         // `roundDamage` via `creditDamage` DURING the `round-ended` drain above — AFTER this
         // round's scalar snapshot (directDamage/totalRoundDamage/cumulativeDamage/raw totals) was
-        // taken and folded into the persistent accumulators. In pure DPS mode those credits would
-        // otherwise be discarded when `roundDamage` is recreated next round, so they never reached
-        // the public DPS summary. Re-read roundDamage, fold ONLY the post-drain delta into the row +
+        // taken and folded into the persistent accumulators. In pure DPS mode (roster-less — NOT
+        // the DPS calculator any more, see the gate note below) those credits would otherwise be
+        // discarded when `roundDamage` is recreated next round, so they never reached the summary
+        // built from these scalars. Re-read roundDamage, fold ONLY the post-drain delta into the row +
         // accumulators (the pre-drain amount was already folded at the snapshot, so adding the delta
         // avoids double-count), and decline the destructible DPS target's HP by the same delta so
-        // `totalRoundDamage + teamRoundDamage == enemy-HP delta` (8085) and roundsToKill stay honest.
+        // `totalRoundDamage + teamRoundDamage == enemy-HP delta` (10546) and roundsToKill stay honest.
         //
-        // GATED ON `dpsEnemyTarget` (the pure-DPS mode this fix targets). The other two modes are
-        // deliberately excluded:
-        //  - Positional sim (`mode: 'battle'`, battleSimulator): reactives route through
+        // GATED ON `dpsEnemyTarget`, i.e. on ROSTER EMPTINESS — which is not the same population
+        // it was when this was written. SP-4b-2a made `simulateDPS` always supply a real enemy, so
+        // the DPS CALCULATOR no longer reaches this block at all; it now takes the positional
+        // exclusion in the first bullet, and its round-tail reactive credit reaches the summary via
+        // `perTargetDealt` and the adapter's re-derivation instead. What remains here is the
+        // roster-less direct-`runCombat` shape. The exclusions:
+        //  - Any POSITIONAL run — `mode: 'battle'` (battleSimulator) and, since SP-4b-2a, every
+        //    DPS-calculator run: reactives route through
         //    applyVictimDamage + the per-victim maps (serialized into RoundData AFTER this drain),
         //    NOT `roundDamage` — the delta would be 0 here anyway, so the gate only makes the no-op
         //    explicit.
         //  - Healing mode (healingEngineAdapter): NOT positional, so a reactive DOES credit
         //    `roundDamage` — but the healing adapter reads none of the damage scalars, and mutating
         //    `cumulativeDamage` here would perturb the vestigial dummy's NEXT-round HP-decline
-        //    (8129) and its HP%-gates. The gate keeps healing byte-identical.
+        //    (10568) and its HP%-gates. The gate keeps healing byte-identical.
         // The delta is also 0 for every DPS round without an end-of-round reactive-damage proc
         // (`focusTotalFinal === totalRoundDamage` — identical float expression), so existing DPS
         // goldens don't move. Only the 'direct' channel can shift at round tail (applyReactiveDamage
@@ -10690,8 +10733,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // dpsEnemyTarget branch above) used the pre-reactive total, so this is the remaining
                 // amount (no double-apply). A post-drain death is stamped by recordDestroyed inside
                 // applyVictimDamage; the row is pushed just below and the run terminates at the
-                // dpsEnemyTarget break (8359). NOTE (accepted asymmetry): unlike the pre-drain death
-                // path (8115), a kill landed HERE does NOT drain on-enemy-destroyed intents — this is
+                // dpsEnemyTarget break (11008). NOTE (accepted asymmetry): unlike the pre-drain death
+                // path (10553), a kill landed HERE does NOT drain on-enemy-destroyed intents — this is
                 // the terminal round (the row is already assembled and the run breaks immediately),
                 // and re-draining would re-enter the same round-tail credit ordering this block just
                 // reconciled. On-enemy-destroyed effects are charge/extra-action grants that are moot
@@ -10987,9 +11030,13 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // SP-U U5: DPS enemy outcome (the real, destructible target). `roundsToKill` = the round the
     // enemy was destroyed (undefined if it survived the window); `survived` = never reached 0 HP;
-    // `finalHpPct` = its HP% remaining at the end of the run (0 when killed). In sim/healing mode
-    // (vestigial billion-HP sink) this always reports survived (never read — the DPS adapter is
-    // the only consumer).
+    // `finalHpPct` = its HP% remaining at the end of the run (0 when killed). Whenever an enemy
+    // roster was supplied (vestigial billion-HP sink) this always reports survived.
+    //
+    // NO PRODUCTION CONSUMER since SP-4b-2a: the DPS adapter used to read these three and now
+    // re-derives all of them from its own `ship-destroyed` bus tap, because every `simulateDPS`
+    // run supplies a real roster and these fields would describe the dummy. Only
+    // `indestructibleDeath.test.ts` reads them today; they go with the dummy in SP-4c.
     const enemyFinalHpPct =
         enemy.destroyedRound !== undefined
             ? 0

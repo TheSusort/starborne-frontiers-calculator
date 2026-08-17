@@ -156,7 +156,8 @@ export interface Intent {
          *  PR7: for `basis:'damage-dealt'` the on-crit listener prefers the event's
          *  `deliveredDamage` — what the sub-attack actually delivered, including a Protection
          *  cascade's redirected chunk and excluding a DoT-transformed portion. `damage` remains the
-         *  fallback for the non-positional and DPS paths (PR5). */
+         *  fallback for the non-positional paths (PR5) — which since SP-4b-2a no longer includes
+         *  the DPS calculator: a DPS run is positional and takes the `deliveredDamage` branch. */
         triggerDamage?: number;
         /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
          *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
@@ -565,15 +566,20 @@ export function registerReactiveListeners(args: {
                         // fires them.
                         //
                         // It is emitted ONLY on the interleaved positional path, so the `??` chain
-                        // leaves the DPS path byte-identical: that path has no funnel, so its two
-                        // bases cannot disagree. Riders affected: Burner (Inferno), Warpstrike
+                        // leaves every NON-positional path byte-identical: such a path has no
+                        // funnel, so its two bases cannot disagree. (When this was written that
+                        // set included the DPS calculator; since SP-4b-2a a DPS run is positional
+                        // and takes the `deliveredDamage` basis like any other.) Riders affected:
+                        // Burner (Inferno), Warpstrike
                         // (duration-reduction), Zeolite (purge). Pinned by
                         // onDealDamageDeliveredBasis.integration.test.ts.
                         if ((e.deliveredDamage ?? e.damage ?? 0) <= 0) return;
                         // Capture the owner's own attack target so a reactive DoT rider (Burner's
                         // on-deal-damage Inferno) lands on the enemy actually hit — the real
                         // positional victim — instead of falling back to the DPS dummy `enemy`
-                        // sink. DPS mode: e.targetId is the dummy → byte-identical. Non-DoT riders
+                        // sink. On a run with no positioned roster `e.targetId` IS the dummy →
+                        // byte-identical; that is no longer a DPS-calculator shape (SP-4b-2a), so
+                        // a DPS run now genuinely routes the rider to the real victim. Non-DoT riders
                         // (Warpstrike duration-reduction) ignore victimId, so this is inert there.
                         enqueue({
                             ...intent,
@@ -1442,7 +1448,10 @@ export interface IntentExecContext {
     playerIds: string[];
     /** Enemy attacker ids (healing mode; Task 7). The opposing side for a PLAYER drain owner's
      *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
-     *  here. Empty/omitted in DPS mode (no enemy attackers) → drain `enemyBuffNames` stays []. */
+     *  here. Empty/omitted only when the caller supplied no enemy attackers → drain
+     *  `enemyBuffNames` stays []. That is no longer the DPS calculator: since SP-4b-2a every
+     *  `simulateDPS` run carries a real enemy, whose (empty, for the synthesized stand-in)
+     *  self-buff union is what this now sources. */
     enemyAttackerIds?: string[];
     /** When supplied, filters `enemyAttackerIds` to living opposing actors for the
      *  drain-time `enemy-buff` gate (Graphite start-of-round Stealth check). Absent →
@@ -2080,7 +2089,7 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
  *  APPROXIMATION NOTE (finding I1): the aura/accumulating branch — `activeAbilityStatuses('enemy',
  *  () => NEUTRAL_NAMES_CTX, ...)` — deliberately mirrors `ownerDebuffNamesFor`'s names read: it
  *  applies a NEUTRAL gating ctx (full HP, no debuffs, default context) and NO per-round landing
- *  re-roll. This differs from the aggregate `roundEnemyDebuffs` fold in `playerTurn.ts` (~925-963),
+ *  re-roll. This differs from the aggregate `roundEnemyDebuffs` fold in `playerTurn.ts` (~739-772),
  *  which applies a per-round re-roll (`isApply ? !affinityDisadvantage : roundDebuffLanded()`,
  *  dropping resisted entries) and uses the real gating context. Consequently, for aura/accumulating
  *  enemy debuffs that carry stat effects (`defense`/`incomingDamage`), the per-victim modifier
@@ -3018,7 +3027,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // hits an enemy, it inflicts X on that enemy". "That enemy" is EVERY enemy the attack
         // crit, so this fans out rather than taking a single id; an AoE that crit two of three
         // victims debuffs exactly those two. Checked BEFORE the singular `counterTargetId` for the
-        // same reason the reactive `damage` branch checks it first (triggers.ts ~3830): the
+        // same reason the reactive `damage` branch checks it first (triggers.ts ~3848): the
         // `on-ally-crit` listener stamps BOTH, and this is the more specific of the two. Ranked
         // BELOW the two explicit-target routes above and skipped for `enemy-highest-attack`, whose
         // selector result rides `counterTargetId` and must win over any incidental stamp. Before
@@ -3850,7 +3859,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // enemy the ally critically hit, so fan out over the crit-victim set rather than
             // taking the single counterTargetId below (which is only the FIRST of them). Checked
             // before counterTargetId because the on-ally-crit listener stamps both — this clause
-            // is the more specific of the two and only that listener ever sets it.
+            // is the more specific of the two.
+            //
+            // TWO listeners stamp `critVictimIds` since SP-4b-2 D2 (this used to say "only that
+            // listener ever sets it"): the `on-ally-crit` listener stamps it unconditionally, and
+            // the `on-crit` listener now stamps it too — but ONLY for `debuff` intents. So THIS
+            // damage branch still sees it exclusively from `on-ally-crit`, and an on-crit DAMAGE
+            // rider keeps routing to the first living opposing actor. That cardinality is locked
+            // by subAttackProcGates.integration.test.ts ("an AoE footprint is one attack … the
+            // rider hits once", R3); re-pointing on-crit damage is a separate behaviour change.
             victimIds = intent.eventCtx.critVictimIds;
         } else if (intent.eventCtx?.counterTargetId !== undefined) {
             // The trigger stamped the retaliation target (reflect/revenge, FrontLine's

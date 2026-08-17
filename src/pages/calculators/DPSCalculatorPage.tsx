@@ -315,9 +315,13 @@ const DPSCalculatorPage: React.FC = () => {
                     // SP-2: opt into the display-only status timeline — the summary's buffed stats
                     // and the per-round chips both read it. Off by default so goldens stay clean.
                     collectStatusTimeline: true,
-                    // The real, positioned opponent. Supplying it flips the engine's
-                    // `dpsEnemyTarget` false, so damage lands per-victim on this actor instead of
-                    // the vestigial dummy — and the enemy takes its own turns and fights back.
+                    // The real, positioned opponent. `dpsEnemyTarget` is false for every
+                    // `simulateDPS` run since SP-4b-2a (a caller that supplies none gets a
+                    // synthesized enemy), so what this explicit entry buys is the CHOICE of
+                    // opponent: the page's own stats, its parsed kit, and a real actor that takes
+                    // its own turns and fights back. Damage lands per-victim on it, never on the
+                    // vestigial dummy. `id: 'enemy-1'` matches `SYNTHESIZED_DPS_ENEMY_ID`, so the
+                    // per-victim keys are the same whether the page supplies it or not.
                     position: resolvedAttackerSlot,
                     enemyAttackers: [
                         {
