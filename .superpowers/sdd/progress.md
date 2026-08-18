@@ -361,3 +361,37 @@ Task 6b (wave D): commit d1c69e0b — 189/189 across 27 files, review PENDING.
   in DPS mode" premise is FALSE — it was masked by the fixture having no attacker. Under real damage a
   DPS-mode focus emits hp-changed, crosses 40%, and DOES grant Reinforced (1 grant, round 1). Is that
   correct game behaviour?
+Task 6 (wave C) review: NEEDS FIXES -> fixed f358ebd9. The Important: adjacentEnemiesDebuff/Dot still
+  asserted the FALSE non-positional premise in comments + describe/it titles, so their "DPS invariance"
+  blocks passed for the green-and-blind "a lone enemy has no neighbour" reason.
+  ⭐ THE FIXER MEASURED BEFORE CHOOSING and took the honest route: the pressure source DID restore a
+  non-positional landing, but it moved the recipient id BARE_ENEMY_ID -> the 'enemy' dummy sink, which
+  would have required re-pinning an assertion. That is the "don't force it" signal, so it rewrote the
+  comments/titles to the positional truth and DECLARED the non-positional coverage lost (needs a fresh
+  fixture to restore). Also corrected indestructibleDeath's citation 5876 -> 9130 (the reactive-proc
+  credit skip is not the direct-cast credit skip).
+Task 6b (wave D) review: APPROVED, Minors only. ⭐ The review found the REPORT understated the code:
+  one "throw-assertion conversion" was actually a positive RE-PIN to real new behaviour. Reports drift
+  pessimistic as well as optimistic. It also reconstructed the frozen exact numbers ARITHMETICALLY
+  (corrosion clamps at min(victimHp, 500_000), so both the old dummy 10M and the new roster 10M clamp
+  to the same 500k) — stronger evidence than the measurement it could not re-run.
+Task 6c (wave E): complete (commit 7db8c435; review APPROVED, Minors only).
+  ⭐⭐ FULL SUITE GREEN: 528 files / 5842 tests, committed WITHOUT --no-verify (husky's full-suite hook
+  passed). First green suite since the guard landed.
+  Tool per file: Tool 1 (real enemy) runModeEquivalence + shieldBasisSecondaryDamage; Tool 2 (pressure
+  source) dummyEnemyTurnGate + perVictimWalkedTeamDetonation; Tool 3 (throw) normalizeRoster,
+  dummyReachability, damageChannelAccounting.
+  ⭐ THE IMPLEMENTER VOLUNTEERED A REAL COVERAGE LOSS instead of hiding it: dummyReachability's
+  inverted test WAS the liveness proof for __getLegacyVictimFallbackCount (the reason its sibling's
+  toBe(0) is not vacuous), and a throw-assertion cannot read the counter. The reviewer then verified
+  the feared compound failure did NOT occur — the replacement proof
+  (damageChannelAccounting:374, toBe(ROUNDS)) sits in the MIRROR describe, untouched by this wave.
+  TASK 7 MUST RE-HOME THAT LIVENESS PROOF.
+  ⭐ runModeEquivalence: the ROSTER guard fires 600+ lines AHEAD of the mode guards (normalization at
+  engine.ts:1785, mode guards at :2411/2428/2433), so all four mode-guard tests had been masked.
+  ⭐ Dropping `as CombatEngineInput` for `satisfies` moves enforcement from a runtime guard to the
+  COMPILER — better than the brief asked for.
+  Minors for Task 8's sweep: perVictimWalkedTeamDetonation:349 stale inline comment (contradicts the
+  corrected block comment 12 lines above); dummyEnemyTurnGate:9-12 header says "positioned" where the
+  gate means TARGETABLE; damageChannelAccounting:142's 0-max-HP shape is now the SOLE carrier of the
+  legacy arm of the player-side invariant (dies in SP-4c).
