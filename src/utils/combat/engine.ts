@@ -3898,9 +3898,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     // positional burst) and is skipped on every other channel that reaches this proc — the
     // positional firing hit (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick.
     //
-    // CHANNELS THAT DO *NOT* REACH THIS PROC. Two of the original four-instance KNOWN LEECH GAP
-    // class remain listed here; the fixed ones are kept in place, marked, so a reader can see the
-    // whole class rather than only its open tail:
+    // CHANNELS THAT DO *NOT* REACH THIS PROC. The original three-instance KNOWN LEECH GAP class is
+    // now fully closed; the fixed ones are kept in place, marked, so a reader can see the whole
+    // class rather than assume it away:
     //   1. (FIXED in SP-4b-2b Task 2b) the positional per-victim DoT tick — now a caller, see
     //      `procStandingLeechesPerVictim(sourceId, damage, dotType)` at the DoT-tick branch's
     //      `credit`.
@@ -3912,10 +3912,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     //      damage-taken leech (owner ruling 2026-08-18; Malvex reads "when directly damaged as a
     //      PRIMARY TARGET"). The sibling "KNOWN GAPS … (a)" block this used to cite for the
     //      "either direction" framing is being corrected on the same grounds.
-    //   3. the HEAL-TARGET DoT tick — its `credit` callback discards the applier (`_sourceId`) and
-    //      sums into `tankDotDamage`, so nothing can pay. Marked in place at the
-    //      `if (tankDotDamage > 0)` branch. This is the instance with no test of its own; a sweep
-    //      driven only by `positionalDotLeech.test.ts`'s burst case will miss it.
+    //   3. (FIXED — Site 3, spec §3) the HEAL-TARGET DoT tick — its `credit` callback now threads
+    //      the applier through to this same proc. It previously discarded `_sourceId` and summed
+    //      only into `tankDotDamage`, so nothing could pay. Marked in place at the
+    //      `if (tankDotDamage > 0)` branch. This was the instance with no test of its own; see
+    //      `positionalDotLeech.test.ts`'s "Site 3" describe block.
     const procStandingLeechesPerVictim = (
         sourceId: string,
         amount: number,
@@ -8778,8 +8779,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 }),
                             // Sum the ticked damage across all appliers; route it as INCOMING to the tank
                             // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
-                            credit: (_sourceId, _dotType, damage) => {
+                            credit: (sourceId, dotType, damage) => {
                                 tankDotDamage += damage;
+                                // Site 3 of the leech-channel class (spec §3): the applier is no
+                                // longer discarded, so its standing damage-dealt leech pays out on
+                                // a tick against the heal target — the same proc the sibling
+                                // per-victim branch below uses (instance 1, SP-4b-2b Task 2b).
+                                // `dotType` IS a LeechChannel subset, so it passes straight through.
+                                //
+                                // The aggregate `tankDotDamage` above is still what
+                                // `applyIncomingToTarget` books; this proc writes HEAL buckets and
+                                // pools only and never touches a damage number, so no DoT figure
+                                // moves. Cadence: `tickDoTs` calls `credit` once per ENTRY, so the
+                                // owner's heal-crit gate draws once per entry — matching instance 1.
+                                procStandingLeechesPerVictim(sourceId, damage, dotType);
                             },
                             // D-PR3 (Vortex Veil): reduce the carrier's incoming DoT ticks when
                             // the tank equips Vortex Veil. The condition 'dot-inferno-corrosion'
@@ -8809,18 +8822,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // PR I4b: the tank is the ticking victim.
                             dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
                         });
-                        // KNOWN LEECH GAP — instance 3 of the three-instance class, and the only
-                        // one with no test of its own: this heal-target branch procs NO standing
-                        // leech in either direction. Its `credit` callback above DISCARDS the
-                        // applier (`_sourceId`) and only sums into `tankDotDamage`, so by the time
-                        // `applyIncomingToTarget` books the aggregate there is no source left to
-                        // pay. (Instance 1, the positional per-victim DoT tick, was fixed in
-                        // SP-4b-2b Task 2b — see
-                        // `procStandingLeechesPerVictim(sourceId, damage, dotType)` in the
-                        // sibling `else` branch below. Instance 2 is the positional
-                        // bomb/accumulator burst.) The class, its tripwire and the reachability
-                        // reasoning live in `positionalDotLeech.test.ts` — read it before fixing
-                        // any one instance, or this one gets left behind.
+                        // Site 3 of the leech-channel class, FIXED (spec §3): this branch's
+                        // `credit` callback above now threads the applier through to
+                        // `procStandingLeechesPerVictim`, so a standing damage-dealt leech pays out
+                        // on a tick against the heal target. It previously discarded `_sourceId`
+                        // and summed only into `tankDotDamage`, leaving no source to pay. The
+                        // incoming direction is correctly absent — a DoT tick does not proc the
+                        // victim's damage-taken leech (owner ruling, spec §2.2).
                         if (tankDotDamage > 0) {
                             // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
                             // single killer → byDirectDamage:false, killerId undefined (overrides the

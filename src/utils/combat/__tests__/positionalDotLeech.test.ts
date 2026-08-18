@@ -435,3 +435,88 @@ describe('Site 2 — a standing leech pays out on a positional bomb burst', () =
         expect(sumHeal(result, 'directHeal', 'attacker')).toBeCloseTo(expected, 6);
     });
 });
+
+/**
+ * Site 3 of the leech-channel class (spec §3): a standing leech pays out on a DoT ticking the
+ * HEAL TARGET.
+ *
+ * THE DEFECT. The heal-target branch of the per-victim DoT-tick prologue is preserved verbatim from
+ * the pre-positional engine: its `credit` callback signature is `(_sourceId, _dotType, damage)` —
+ * it DISCARDS the applier and sums only into `tankDotDamage`, so by the time
+ * `applyIncomingToTarget` books the aggregate there is no source left to pay. Instance 1 (the
+ * sibling `else` branch, every non-heal-target victim) was fixed in SP-4b-2b Task 2b; this branch
+ * was left behind, and it had no test at all — which is why a sweep driven only by the burst
+ * tripwire would have missed it.
+ *
+ * TEAM SYMMETRY (spec §5): this branch is structurally player-only — `healTarget` is a player
+ * concept — and its enemy-side counterpart IS instance 1, already covered by the PLAYER/ENEMY pair
+ * at the top of this file. So the applier here is an ENEMY leeching off a DoT on the player tank,
+ * which is the direction that was unreachable.
+ *
+ * TURN ORDER (fixture correction vs. the task-brief draft): the focus 'attacker' (the heal target)
+ * acts BEFORE the speed-1 enemy each round, so at the focus's OWN turn-start in round 1,
+ * `lastTurnCtxByActor.get('enemy-front')` is still unset (enemy-front hasn't had a turn yet) and
+ * `tickDoTs` skips the entry entirely — exactly the ctx-availability gap the ENEMY-side sibling test
+ * above documents for the identical reason. `numRounds: 2` is required so the tick lands at the
+ * focus's turn-start in round 2, once enemy-front's round-1 turn has set its ctx.
+ *
+ * ANTI-VACUITY (deviates from `dealtBy`, and why). Unlike every other site in this file, this
+ * branch's `credit` callback ONLY ever accumulates into `tankDotDamage`; `applyIncomingToTarget`
+ * is then called with no `killerId`/`sourceId` at all
+ * (`applyIncomingToTarget(tankDotDamage, healTarget, { byDirectDamage: false })`), and no call
+ * anywhere in this branch ever reaches `creditDealt`. So `perTargetDealt` (`dealtBy`) and
+ * `perTargetDamage` are BOTH structurally silent for this branch — verified empirically by running
+ * this exact fixture with the Step-3 fix applied and confirming `dealtBy(result.rounds,
+ * 'enemy-front')` still reads 0. That is a genuine, separate, pre-existing attribution gap in the
+ * heal-target branch (it never received the sibling branch's SP-F F1 `tickDealtBySource` /
+ * `creditDealt` reshape) — NOT something this leech-channel fix (spec §3) can or should paper over;
+ * wiring `creditDealt` into this branch would ripple `perTargetDealt` entries into every
+ * healing-mode fixture with an enemy DoT on the tank, leech or not, which is a much wider blast
+ * radius than this task's scope. Flagged for a follow-up task rather than fixed here.
+ *
+ * The load-bearing "it really landed, attributed to the right owner" proof instead uses the
+ * healing display's own `incomingDamage`, fed by the SAME `credit` callback's `tankDotDamage`
+ * accumulator via `applyIncomingToTarget` → `sink.addIncoming` — an independent bookkeeping write
+ * from the leech's `healingCtx.credit`, so it still rules out "the 100 came from nowhere real":
+ * round 0 must show NOTHING (ctx not ready) and round 1 must show EXACTLY the tick's 500. Attribution
+ * to the right OWNER is then closed by construction (only `enemy-front` carries any DoT or leech
+ * against the tank in this fixture) and reinforced by asserting the focus's OWN bucket — which
+ * would catch a `sourceId` mix-up in `procStandingLeechesPerVictim` — stays at 0.
+ */
+describe('Site 3 — a standing leech pays out on a DoT ticking the heal target', () => {
+    it('an enemy’s standing leech pays out on its corrosion ticking the player heal target', () => {
+        idc = 0;
+        // The focus 'attacker' at M4 is the heal target, maxHp 10000. `enemy-front` carries a 20%
+        // standing 'all' leech in its passive slot and has applied corrosion tier 5 / 1 stack to
+        // the focus. The tick (1 × 0.05 × 10000 = 500) lands at the focus's turn-start in round 2
+        // (see the TURN ORDER note above). The enemy's leech must credit directHeal
+        // 500 × 0.20 = 100 to ITSELF (target:'self').
+        const result = runCombat(
+            BASE({
+                hp: 10000,
+                numRounds: 2,
+                enemyAttackers: [
+                    enemyAt('enemy-front', 'M4', 1_000_000_000, [basicSlot(), leechSlot(20)]),
+                ],
+                __testTapActors: (actors: CombatActor[]) => {
+                    actors
+                        .find((a) => a.id === 'attacker')
+                        ?.corrosionEntries.push(corrosion(5, 1, 5, 'enemy-front'));
+                },
+            })
+        );
+
+        // ANTI-VACUITY, load-bearing (see the class comment above for why this is `incomingDamage`
+        // and not `dealtBy`): round 0 has no tick at all (enemy-front's ctx isn't ready yet), round
+        // 1 has EXACTLY the 500 tick and nothing else (enemy-front's own basic attack is attack:0).
+        const incomingByRound = (result.healing?.rounds ?? []).map((rd) => rd.incomingDamage);
+        expect(incomingByRound[0]).toBe(0);
+        expect(incomingByRound[1]).toBe(500);
+        // ANTI-VACUITY: the focus's own bucket stays at 0 — a `sourceId` mix-up inside
+        // `procStandingLeechesPerVictim` (crediting the victim instead of the applier) would show
+        // up here instead of leaking silently.
+        expect(sumHeal(result, 'directHeal', 'attacker')).toBe(0);
+
+        expect(sumHeal(result, 'directHeal', 'enemy-front')).toBeCloseTo(100, 6);
+    });
+});
