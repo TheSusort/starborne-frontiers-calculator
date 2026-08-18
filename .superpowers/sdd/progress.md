@@ -587,3 +587,39 @@ Task 8: complete (commit e840e85e + fix wave 1e05ae06; review "NEEDS FIXES" -> f
   rested on `enemyAttackers` distinguishing callers, which this epic ended. Whether simulateDPS's
   selfBuffs auto-fill reaches the scheduled channel is UNVERIFIED — if reachable it is silently inert
   in production. Its own note now states what would settle it.
+
+## FINAL whole-branch review + PR
+Final review (opus, 962KB package, 36 commits): **READY WITH FOLLOW-UPS, no Critical.** Fix wave
+8b066c51. PR OPENED: #326 https://github.com/TheSusort/starborne-frontiers-calculator/pull/326
+(38 commits, 162 files, +7950/-941). Final gates: 528 files / 5855 tests · tsc 0 · eslint 0 ·
+494 moved .snap lines / 0 unclassified · oracle byte-identical at 147/146/2/13-13-13 · browser OK.
+
+⭐ THE TWO IMPORTANT FINDINGS WERE BOTH IN THE HAND-OFF RECORD, NOT THE CODE:
+1. **"the dummy kept crediting" after a roster wipe was WRONG** and I had put it in the ledger.
+   Measured: `ability-performed` carries 30549.089 = 100000 x postDefenseFactor(8000) every round, but
+   directDamage/cumulativeDamage/perTargetDealt/rawTotals are ALL zero and the dummy's HP never
+   declines (credit counter stays 0). The branch's own code already said so (dummyReachability's
+   CORPSE TARGETING pins consulted:2 / credited:0). Conclusion survives but NARROWS to an event
+   payload → 4c plans a log-fidelity assertion, not an accounting migration. Repo's own logged lesson,
+   re-earned: measure `deliveredDamage`, not `ability-performed.damage`.
+2. Leech instance 3 (heal-target DoT tick) existed only in the gitignored ledger + user-facing
+   changelog prose — the code site had NO marker and the canonical block listed the channels that DO
+   reach the proc without naming the one that doesn't. Now marked in-code both places.
+
+⭐ THE FIX-WAVE AGENT CAUGHT TWO REVIEWER ERRORS — reviewers need verifying too:
+- The review's "verified CORRECT, leave alone" citation list had 2 wrong entries (8344, 1065).
+- **Minor 5's prescribed parametrization would have been VACUOUS**: `HEALER.critDamage` is 0, so a crit
+  multiplies by 1 and all three crit arms measure identically — `it.each([0,50,100])` would have
+  shipped three copies of one test. Fixed by setting CRIT_DAMAGE=100 so the arms span
+  no-crit/mixed/always-crit. The review's cited numbers matched neither family (it measured a
+  different stat block); only the fixer's own measurements went into source.
+
+⭐ CITATION ROT IS A REAL MAINTENANCE CLASS ON THIS FILE: ~7 of 27 new engine.ts line citations were
+stale by 40-80 lines because later tasks grew engine.ts ~125 lines AFTER earlier tasks wrote their
+comments. Now ~30 citations are SYMBOL-PAIRED (positionalDotLeech.test.ts's convention), so a stale
+number is self-correcting. Adopt that convention for any new engine citation.
+
+⭐ Four sibling copies of "DPS mode has no enemy attackers" survived the sweep (triggers.ts:1885,
+playerTurn.ts:560, roundContext.ts:85, evaluateConditions.ts:70) — including in a file where THIS
+branch had already corrected the same claim 437 lines above. The hand-enumerated-layer class again:
+correcting one copy of a claim obliges sweeping every site that repeats it.
