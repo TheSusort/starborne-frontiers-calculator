@@ -736,6 +736,27 @@ eleven residual failures in `engine.events.test.ts`. Everything below came out o
    same clause (Lingshe's charged skill parses to `bomb-countdown-reduce`, a different path that
    resolves damage independently). So: if a detonation fixture goes to zero, add a damage clause to
    match the corpus, and do not chase an engine fix.
+14. **⚠️ A PREMISE IN CIRCULATION IS WRONG (wave C): omitting `target`/`pattern` does NOT keep a run
+    non-positional.** `normalizeCombatRoster`'s `withTargeting` fills both, so **every** run through
+    the boundary is positional. A fixture whose subject is the non-positional / legacy-sink path
+    cannot be repaired by "add a roster and leave the axes off". Wave C wrote comments asserting the
+    opposite before measuring, then had to correct them — measure before you write the comment.
+15. **THE LEGACY SINK IS STILL REACHABLE, and that is good news for wave E.** `resolvesPositionalVictim`
+    is keyed on **max** HP, so a roster whose only member has max HP 0 — a "pressure source" enemy —
+    still routes to the sink, measured byte-identical to pre-branch. Wave C used exactly that shape for
+    the four fixtures whose subject is that channel, each marked for SP-4c. **Wave E: this means
+    `damageChannelAccounting` and `perVictimWalkedTeamDetonation` coverage is PRESERVABLE rather than
+    necessarily lost** — prefer preserving it over converting to a throw-assertion.
+16. **`BARE_ENEMY_ID` is `'e1'`, which collides with a common hand-built victim id.** Grep for `'e1'`
+    before importing the shared fixture — `leech`, `hpCrossing` and `perActorIncomingSurface` are the
+    likely ones. Wave C had to give `applyOutgoingToEnemy` a distinct id to stop `perActorIncoming`
+    buckets being conflated.
+17. **An `as EnemyAttacker` cast that drops `stats.hp` makes its run non-positional BY ACCIDENT.** So a
+    file mixing scalar and per-victim reads is not necessarily self-inconsistent — check the cast before
+    calling it a defect.
+18. **A blanket id replacement can INTRODUCE vacuity.** Wave C caught itself doing this: a negative
+    control's lookup resolved to `undefined` and a `?? []` made it pass regardless. If you sweep ids
+    mechanically, re-check every negative control afterwards.
 
 ---
 
