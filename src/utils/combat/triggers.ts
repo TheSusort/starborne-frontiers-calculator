@@ -1845,6 +1845,75 @@ export function buildActorConditionContext(
     });
 }
 
+/** The conditions that gate a reactive intent at drain time, with the subjects that a BRANCH
+ *  re-checks per resolved target scrubbed out. A scrub here is a PROMISE that the branch below
+ *  re-checks that subject: scrubbing without re-checking turns a gate that was merely dead into
+ *  one that is always-on, which is worse. Each arm names its re-check site. */
+function scrubDrainGateConditions(intent: Intent): Ability['conditions'] {
+    // The self hp-threshold on an on-hp-threshold-crossed ability is TRIGGER CONFIG (the listener
+    // read N from it), NOT a drain-time gate. The crossing already proved the threshold; re-gating
+    // at drain time would WRONGLY BLOCK the reaction when an earlier reactive heal in the intent
+    // queue lifted the owner back above N before this intent drains.
+    if (intent.ability.trigger === 'on-hp-threshold-crossed') {
+        return intent.ability.conditions.filter(
+            (c) => !(c.subject === 'hp-threshold' && c.hpSubject === 'self')
+        );
+    }
+    // Ship-kit W8 Task 12 (Zeolite): an on-deal-damage purge's `enemy-type` gate must check the
+    // ACTUAL victim this event carries, not the fight-wide `ctx.enemyType` (which describes only the
+    // DPS-mode dummy's class and is hardcoded undefined for an enemy-owned reaction, so it can never
+    // be team-symmetric). RE-CHECKED in the `purge` branch against `ctx.roleOf(targetId)` (see the
+    // `enemyTypeCond` block there).
+    if (intent.ability.type === 'purge' && intent.ability.trigger === 'on-deal-damage') {
+        return intent.ability.conditions.filter((c) => c.subject !== 'enemy-type');
+    }
+    // SP-M M1 Task 7 + spec §4 (M10): an enemy-oriented `hp-threshold` / `enemy-debuff` gate is
+    // re-evaluated PER RESOLVED TARGET by the branch below, so it must not also gate globally —
+    // the single global `enemyHpPct` / `enemyDebuffNames` describe the vestigial dummy positionally
+    // and would either block everything or false-pass a whole AoE.
+    // Only an ENEMY/target-oriented hp-threshold is scrubbed: a SELF one keeps gating normally
+    // (buildShipAbilities.ts's re-target never attaches target:'all-enemies' for a self-only
+    // hp-threshold — see that file's matching narrowing).
+    // RE-CHECKED IN, one site per resolution site — every one of these is load-bearing, because a
+    // scrubbed condition with no re-check is an ALWAYS-ON gate:
+    //   `damage` — all-enemies via `resolveAoEReactiveDamageVictims`; the single-target paths via
+    //              the `perVictimOk` filter on `victimIds`; the hp/shield-basis path (which returns
+    //              before `victimIds` exists) via `perVictimOk(sourceId)`.
+    //   `debuff` — `perVictimOk(applicationTargetId)` inside the application loop (NOT on
+    //              `counterTargetId`, which the on-crit route never stamps).
+    //   `purge`  — `perVictimOk(targetId)`.
+    // NOTE the arm ordering above: an `on-hp-threshold-crossed` intent takes the FIRST arm and never
+    // reaches this one, so a non-self hp-threshold co-located on that trigger keeps gating globally
+    // (dead on a positional run, as before — not always-on). Pre-existing precedence, left alone.
+    if (hasPerVictimEnemyGate(intent)) {
+        return intent.ability.conditions.filter(
+            (c) =>
+                !(c.subject === 'hp-threshold' && c.hpSubject !== 'self') &&
+                c.subject !== 'enemy-debuff'
+        );
+    }
+    return intent.ability.conditions;
+}
+
+/** The enemy-oriented conditions `scrubDrainGateConditions` removes, i.e. exactly what a branch
+ *  owes a per-target re-check. Empty → the branch has nothing to re-check. */
+function perVictimEnemyConditions(intent: Intent): Ability['conditions'] {
+    return intent.ability.conditions.filter(
+        (c) =>
+            (c.subject === 'hp-threshold' && c.hpSubject !== 'self') || c.subject === 'enemy-debuff'
+    );
+}
+
+/** Does this intent carry an enemy-oriented gate that a branch re-checks per target? True only for
+ *  the branches that actually perform the re-check — `damage`, `debuff`, `purge`. An ally/self-facing
+ *  ability (`buff`, `heal`, `shield`, `cleanse`) resolves no opposing victim, so its enemy gate stays
+ *  on the GLOBAL gate and is never scrubbed. */
+function hasPerVictimEnemyGate(intent: Intent): boolean {
+    if (perVictimEnemyConditions(intent).length === 0) return false;
+    const t = intent.ability.type;
+    return t === 'damage' || t === 'debuff' || t === 'purge';
+}
+
 function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
     const enemyHpPct =
         ctx.enemyHp > 0 ? Math.max(0, 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)) : 100;
@@ -2627,51 +2696,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // reactives identically. Listeners only ENQUEUE (pure), so a skip leaves no partial state.
     if (owner.actor.destroyedRound !== undefined && !intent.eventCtx?.fromOwnDeath) return;
 
-    // The self hp-threshold condition on an on-hp-threshold-crossed ability is TRIGGER
-    // CONFIG (the listener read N from it), NOT a drain-time gate — scrub it before gating.
-    // The crossing already proved the threshold; re-gating at drain time would WRONGLY BLOCK
-    // the reaction when an earlier reactive heal in the intent queue lifted the owner back
-    // above N before this intent drains. One filtered const feeds BOTH the gate AND the
-    // status's conditions (the status-object exclusion is hygiene only — timed statuses never
-    // re-evaluate conditions post-application).
-    const scrubbedConditions =
-        intent.ability.trigger === 'on-hp-threshold-crossed'
-            ? intent.ability.conditions.filter(
-                  (c) => !(c.subject === 'hp-threshold' && c.hpSubject === 'self')
-              )
-            : // SP-M M1 Task 7: an all-enemies reactive DAMAGE proc (Judge start-of-round
-              // hp-threshold, Incinerator end-of-round enemy-debuff) re-evaluates its enemy
-              // hp-threshold / enemy-effect conditions PER VICTIM in the damage branch below —
-              // scrub them from the single global drain gate (which reads ONE
-              // enemyHpPct/enemyDebuffNames, the vestigial dummy in positional mode) so it
-              // neither blocks nor false-passes the whole AoE. Gated strictly on
-              // type==='damage' && target==='all-enemies' so no other ability is touched.
-              // Task 7b review: only an enemy/target-oriented hp-threshold is scrubbed here —
-              // a hypothetical SELF hp-threshold co-located on an all-enemies damage ability
-              // (buildShipAbilities.ts's re-target never attaches target:'all-enemies' for a
-              // self-only hp-threshold — see that file's matching narrowing) must keep gating
-              // normally at the global drain gate, not be scrubbed for a per-victim re-check
-              // that triggers.ts's damage branch never performs for it.
-              intent.ability.type === 'damage' && intent.ability.target === 'all-enemies'
-              ? intent.ability.conditions.filter(
-                    (c) =>
-                        !(c.subject === 'hp-threshold' && c.hpSubject !== 'self') &&
-                        c.subject !== 'enemy-debuff'
-                )
-              : // Ship-kit W8 Task 12 (Zeolite): an on-deal-damage purge's `enemy-type` gate
-                // ("purges 1 buff … when dealing damage to a Defender") must check the ACTUAL
-                // victim THIS event carries (eventCtx.victimId/counterTargetId), not the single
-                // fight-wide `ctx.enemyType` the generic gate below reads — that field describes
-                // only the DPS-mode dummy enemy's class and is hardcoded undefined for an
-                // enemy-owned reaction (see engine.ts's seedPassiveTimedStatuses call site), so it
-                // can never be team-symmetric. Scrubbed here, re-checked in the `purge` branch
-                // below against `ctx.roleOf(targetId)` — `roleByActorId`/`roleOf` is side-agnostic
-                // by key (Meatshield/Graphite precedent), so this works identically for a
-                // player-owned or enemy-owned Zeolite. Gated strictly on
-                // type==='purge' && trigger==='on-deal-damage' so no other purge is touched.
-                intent.ability.type === 'purge' && intent.ability.trigger === 'on-deal-damage'
-                ? intent.ability.conditions.filter((c) => c.subject !== 'enemy-type')
-                : intent.ability.conditions;
+    // The drain-time gate conditions, with every subject a branch re-checks per resolved target
+    // scrubbed out (see `scrubDrainGateConditions` for each arm and its re-check site). One
+    // filtered const feeds BOTH the gate AND the status's conditions (the status-object exclusion
+    // is hygiene only — timed statuses never re-evaluate conditions post-application).
+    const scrubbedConditions = scrubDrainGateConditions(intent);
 
     // Drain-time condition gate against CURRENT engine state — one gate for every branch,
     // built against the OWNER's snapshot (Task 6). liveGateConditions neutralizes
@@ -2679,6 +2708,24 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // (manualCount). A failed gate is a silent skip (no resisted record).
     const gateConditions = liveGateConditions(scrubbedConditions);
     const baseDrainCtx = buildDrainContext(ctx, intent.ownerId);
+    // The re-check `scrubDrainGateConditions` promised: evaluate the scrubbed enemy-oriented
+    // conditions against ONE resolved target's own live state.
+    //
+    // A target with no resolvable actor — the vestigial dummy sink (`ctx.enemyId`, still the tail
+    // of the `debuff` and `purge` target chains until SP-4c deletes it), or a unit-test ctx with no
+    // `actorById` — falls back to `baseDrainCtx`, the EXACT context the global gate used before this
+    // change. That makes every sink-resolved case byte-identical to pre-fix behaviour rather than a
+    // new reading, and `buildPerVictimConditionCtx` already makes the same fallback internally when
+    // `recipientMaxHpFor` returns 0.
+    const perVictimGate = perVictimEnemyConditions(intent);
+    const perVictimOk = (targetId: string | undefined): boolean => {
+        if (perVictimGate.length === 0) return true;
+        const victim = targetId !== undefined ? ctx.actorById?.(targetId) : undefined;
+        return conditionsMet(
+            perVictimGate,
+            victim ? buildPerVictimConditionCtx(ctx, intent.ownerId, victim) : baseDrainCtx
+        );
+    };
     // Ship-kit W8 Task 13 (Meiying): the `killed-enemy-had-debuff` gate is keyed to the SPECIFIC
     // victim THIS on-enemy-destroyed intent carries (eventCtx.victimId, stamped by the listener
     // above), not the fight-wide owner-scoped context buildDrainContext returns — so it is folded
@@ -3052,6 +3099,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ? intent.eventCtx.critVictimIds
                     : [counterTargetId];
         for (const applicationTargetId of applicationTargetIds) {
+            // M10 (spec §4): the enemy-oriented gate scrubbed from the global check is re-evaluated
+            // against the target THIS application actually lands on — PER fanned-out target, so a
+            // route that resolves several enemies (critVictimIds / adjacent-enemies /
+            // repairedEnemyIds) gates each one on its own live HP rather than on one representative.
+            //
+            // It must sit HERE and not on `counterTargetId` above: the `on-crit` listener stamps
+            // ONLY `critVictimIds` for a debuff intent and deliberately never `counterTargetId`
+            // (see that listener's "Deliberately NOT `counterTargetId`" note), so `counterTargetId`
+            // is undefined on the very route this fix exists for — checking it there would fall back
+            // to `baseDrainCtx` (the dummy's 100%-forever read) and leave the gate dead.
+            // `applicationTargetIds` is the resolution the loop actually applies to, so it is the
+            // only place every route has a real target in hand.
+            if (!perVictimOk(applicationTargetId)) continue;
             // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists
             // every incoming timed debuff. Gate immunity into the landing condition so the
             // EXISTING resist `else` handles it (no duplicated resist code). `&&`
@@ -3787,6 +3847,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (cfg.hpBasisPct !== undefined || cfg.shieldBasisPct !== undefined) {
             const sourceId = intent.eventCtx?.counterTargetId;
             if (sourceId === undefined) return;
+            // M10 (spec §4): this path RETURNS before `victimIds` is resolved below, so it needs its
+            // own re-check of the scrubbed enemy-oriented gate — otherwise a scrub with no matching
+            // re-check would leave the gate always-on here. `sourceId` (the routed inflictor) IS this
+            // path's resolved target. Placed BEFORE the once-per-round key is consumed so a blocked
+            // gate does not burn the round's charge, matching the pre-scrub ordering where the global
+            // gate ran before the branch was entered at all.
+            if (!perVictimOk(sourceId)) return;
             const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}`;
             if (ctx.oncePerRoundConsumed?.has(onceKey)) return;
             ctx.oncePerRoundConsumed?.add(onceKey);
@@ -3899,6 +3966,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const opposing = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
             victimIds = [opposing.length > 0 ? opposing[0] : ctx.enemy.id];
         }
+        // M10 (spec §4): the all-enemies path already filtered per victim via
+        // `resolveAoEReactiveDamageVictims`; the single-target paths (debuffVictimId / first living
+        // opposing actor / sink) did not, so filter them here. Filtering the already-filtered
+        // all-enemies list again would be harmless but redundant — skip it so the two paths stay
+        // one-to-one with their resolution sites.
+        if (intent.ability.target !== 'all-enemies') {
+            victimIds = victimIds.filter((id) => perVictimOk(id));
+        }
         // Wave 5 hardening: flatBasis (the flat bomb-damage basis) must apply ONLY to the
         // bomb-splash — gate it on the actual trigger, not merely on eventCtx.triggerDamage
         // being present. triggerDamage is also stamped by on-crit/on-attacked listeners for
@@ -3995,6 +4070,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ability.target === 'enemy-most-buffs'
                 ? (ctx.enemyWithMostBuffs?.(intent.ownerId) ?? ctx.enemyId)
                 : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId ?? ctx.enemyId);
+        // M10 (spec §4): as in the debuff branch — re-check against the real routed target.
+        if (!perVictimOk(targetId)) return;
         // Task 12 (Zeolite): the `enemy-type` gate was scrubbed from the generic drain-time
         // condition check above (it only sees the single fight-wide dummy class) — re-check it
         // HERE against the ACTUAL victim's role via `ctx.roleOf` (side-agnostic —

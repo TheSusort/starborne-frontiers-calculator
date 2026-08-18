@@ -1546,21 +1546,21 @@ describe('Phase 3 reactive triggers', () => {
     });
 
     // ----------------------------------------------------------------------
-    // M10 TRIPWIRE (SP-4b-2b wave B review finding #2) — pins the engine gap that fix C's
-    // SHAPE NOTE above documents: `buildDrainContext` (`triggers.ts:1847-1849`) derives
-    // `enemyHpPct` from `cumulativeDamage / enemyHp`, both vestigial-dummy scalars that
-    // positional credit never feeds, so it reads 100% forever. That makes the drain-time
-    // gate `hpSubject !== 'self'` (`triggers.ts:2581`, `triggers.ts:2652`) DEAD for every
-    // ability shape except the one `executeIntent` special-cases (`type:'damage' &&
-    // target:'all-enemies'`). This fixture deliberately uses the OTHER shape — a
-    // single-target on-crit `debuff` — which is exactly what the in-app ability editor
-    // produces (`ConditionRow.tsx:182-193` + `AbilityCard.tsx:964-965`, see the SHAPE NOTE
-    // above) but is corpus-unreachable from parsed ship text. If `buildDrainContext` is ever
-    // fixed to read the real per-victim HP, this test's second assertion block must go RED —
-    // that is the point of the test existing. Nothing in the rest of this suite currently
-    // observes this dead path, so a future fix could otherwise land with no test reacting.
+    // M10 FIXED (spec §4): a non-self drain-time `hp-threshold` reactive now reads the REAL
+    // victim's HP, not the retired dummy's. `buildDrainContext` derived `enemyHpPct` from
+    // `cumulativeDamage / enemyHp` — both vestigial-dummy scalars positional credit never feeds —
+    // so it read 100% forever and the gate was dead for every `hpSubject !== 'self'` shape except
+    // the one `executeIntent` special-cased (`damage` && `all-enemies`).
+    //
+    // Corpus-unreachable from parsed ship text but AUTHORABLE in the in-app ability editor, which
+    // is why it was a real user-facing bug: "on crit, apply Defense Shred to the enemy, but only if
+    // the enemy is below 50% HP" silently never fired.
+    //
+    // BOTH ARMS ARE LOAD-BEARING. The positive arm proves the gate now fires; the NEGATIVE arm
+    // proves it still gates. A scrub-without-re-check would pass the positive arm and fail the
+    // negative one — turning a dead gate into an always-on gate, which is worse than the bug.
     // ----------------------------------------------------------------------
-    it('M10 tripwire: a non-self drain-time hp-threshold reactive never fires on a positional run (buildDrainContext reads the vestigial dummy, not the real victim)', () => {
+    it('M10: a below-50% enemy gate fires only once the enemy is really below 50% HP', () => {
         const hpGatedDebuffSkills = (): ShipSkills => ({
             slots: [
                 {
@@ -1600,12 +1600,8 @@ describe('Phase 3 reactive triggers', () => {
             ],
         });
 
-        // A squishy roster enemy (100 000 HP, the same defence: 8000 the file carries
-        // throughout, survivable for all 4 rounds at ~18.5k/hit): the active's undebuffed hit
-        // genuinely takes the enemy's REAL HP below 50% by round 3 (100 → 81.5 → 63 → 44.4%),
-        // so a correctly-implemented gate would eventually see the threshold and let "Below50
-        // Shred" land — the same kind of post-hit crossing fix C's control/squishy pair
-        // measures on the live all-enemies path.
+        // The focus lands ~18.5k/round on a 100k-HP enemy: 100 → 81.5 → 63 → 44.4%. So the gate is
+        // UNSATISFIED in rounds 1-3 and SATISFIED from round 4 — a single fixture carrying both arms.
         const { result } = collectEvents(
             baseInput({
                 shipSkills: hpGatedDebuffSkills(),
@@ -1617,20 +1613,31 @@ describe('Phase 3 reactive triggers', () => {
             })
         );
 
-        // The run genuinely happened: every round landed a real, positive hit on the enemy
-        // (this is what stops the test from being able to pass on a fixture that never ran).
+        // ANTI-VACUITY: every round landed a real positive hit, so the run genuinely happened and
+        // the enemy's HP genuinely crossed the threshold.
         for (const round of result.rounds) {
             expect(focusDealtInRound(round)).toBeGreaterThan(0);
         }
 
-        // M10: the gate never sees the enemy's real HP (it reads the vestigial dummy's
-        // cumulativeDamage/enemyHp, both 0/untouched on a positional run), so the debuff never
-        // lands in ANY round — even though the enemy's real HP genuinely dropped under 50%.
-        for (const round of result.rounds) {
-            expect(round.activeEnemyDebuffs.some((b) => b.buffName === 'Below50 Shred')).toBe(
-                false
-            );
-        }
+        const landedIn = (i: number) =>
+            result.rounds[i].activeEnemyDebuffs.some((b) => b.buffName === 'Below50 Shred');
+
+        // MEASURED trajectory (18 526.13 dealt per round on 100 000 HP, probed at this fixture):
+        //   idx 0  post-hit 81.5%  → gate blocked
+        //   idx 1  post-hit 62.9%  → gate blocked
+        //   idx 2  post-hit 44.4%  → gate PASSES at this round's drain, but `activeEnemyDebuffs` is
+        //                            a round-entry snapshot, so the status it applied surfaces one
+        //                            index later — which is why idx 2 is left unasserted rather
+        //                            than pinned either way.
+        //   idx 3  post-hit 21.1%  → "Below50 Shred" present (and the round's dealt rises to
+        //                            23 321.42, the shred's own -30 defence showing up in damage).
+
+        // NEGATIVE ARM — enemy above 50%: the gate blocks. This is the assertion an over-eager
+        // scrub breaks.
+        expect(landedIn(0)).toBe(false);
+        expect(landedIn(1)).toBe(false);
+        // POSITIVE ARM — enemy below 50%: the gate passes. This is the assertion the bug broke.
+        expect(landedIn(3)).toBe(true);
     });
 });
 
