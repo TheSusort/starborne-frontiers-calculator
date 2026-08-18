@@ -60,34 +60,30 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * have spent it. A scheduled TIMED Hit Mitigation is therefore inert today although it was
  * previously consumed correctly.
  *
- * ⚠️ THE OLD REACHABILITY ARGUMENT NO LONGER HOLDS, and it was the whole basis for accepting this.
- * It read: "no production path reaches it — `battleSimulator` passes `selfBuffs: []` on both runs
- * that supply `enemyAttackers`, and the only caller pairing a non-empty `selfBuffs` with
- * `enemyAttackers` is the healing calculator's engine adapter, whose picker emits no
- * `skillSource`/`skillDuration`". That argument leaned on `enemyAttackers` being the thing that
- * distinguished callers, which SP-4b-2a/SP-4b-2b ended: EVERY caller now supplies a roster (the
- * boundary throws otherwise), so the qualifier narrows nothing. `simulateDPS` pairs a non-empty
- * `selfBuffs` with `enemyAttackers` on every run, and its AUTO-FILLED picks DO carry
- * `skillSource`/`skillDuration` (`SelectedGameBuff`), so Oleander — the one corpus ship whose
- * charge grants `Hit Mitigation`, for 3 turns — is a candidate for exactly this shape in the DPS
- * calculator. Whether the auto-fill actually produces the SCHEDULED channel for it, rather than the
- * `applyTimedAbilityStatus` ability path noted below, is UNVERIFIED and is a hand-off, not a claim.
- * Treat the "inert, accepted" status above as UNCONFIRMED until someone measures it.
- *
- * Precisely what is unverified: `simulateDPS`'s auto-fill writes a `SelectedGameBuff` with
- * `skillSource`/`skillDuration` into `selfBuffs`, but nobody has checked which status-engine channel
- * that lands in for Oleander's `Hit Mitigation` grant — the TIMED `selfMaps` entry this function
- * reads (`statusEngine.timedAbilityStatuses('self', actorId)`, which requires a `payload`), or a
- * payload-less scheduled `upsertBuff` entry that this reader currently skips (see the "sub-channel
- * deliberately dropped" paragraph above). The measurement that would settle it: run `simulateDPS`
- * with Oleander's charged skill cast against a live `enemyAttackers` roster, then — immediately after
- * the grant, before any hit consumes it — call `holdsHitMitigation` on the grantee (or inspect
- * `statusEngine.timedAbilityStatuses('self', actorId)` directly) and check whether the entry is
- * present and carries a `payload`. If it is, the auto-fill reaches the scheduled channel and the
- * status is genuinely reachable today; if the entry is absent or payload-less, "inert" still holds.
- * If a path does reach it, the fix is to surface payload-less TIMED `selfMaps` entries here,
- * NOT to fall back to `selfBuffNamesForOwners`: that would drag the unspendable always-active
- * channel back in, which is the defect this narrowing exists to remove.
+ * RE-GROUNDED (task-0 scout, at `7f8922cd`): the OLD REACHABILITY ARGUMENT here used to read "no
+ * production path reaches it — `battleSimulator` passes `selfBuffs: []` on both runs that supply
+ * `enemyAttackers`, and the only caller pairing a non-empty `selfBuffs` with `enemyAttackers` is the
+ * healing calculator's engine adapter, whose picker emits no `skillSource`/`skillDuration`". That
+ * leaned on `enemyAttackers` distinguishing callers, which SP-4b-2a/SP-4b-2b ended: EVERY caller now
+ * supplies a roster, so the qualifier narrowed nothing. The conclusion still holds, but on a premise
+ * that never depended on `enemyAttackers` at all: `upsertBuff` — what `sourceFired` calls for every
+ * entry in the SCHEDULED `selfBuffs`/`enemyDebuffs` input, manual picker picks and auto-filled
+ * `SelectedGameBuff`s alike, on every caller — writes a `BuffState` with no `payload` field, full
+ * stop (see its `map.set(familyKey, {...})` literal: buffName/turnsRemaining/tier/appliedSeq/
+ * appliedThisTurn, nothing else). `timedAbilityStatuses`, the only thing this function reads,
+ * unconditionally skips payload-less entries (`if (!s.payload) continue;`) — that filter isn't
+ * gated by caller, mode, or `enemyAttackers`, so no scheduled-channel entry can ever be visible
+ * here, regardless of who writes it or what it's paired with. `simulateDPS`'s Oleander scenario this
+ * argument worried about is therefore inert on arrival, with no run needed to confirm it: as a
+ * smaller correction to that scenario, DPSCalculatorPage's `attackerBuffs`/`enemyBuffs` (the
+ * `selfBuffs`/`enemyDebuffs` it hands `simulateDPS`) are wired only to the manual `GameBuffPicker`
+ * (`setAttackerBuffs`/`setEnemyBuffs`, via `onAttackerBuffsChange`/`onEnemyBuffsChange`) — nothing
+ * auto-fills them there. `buildSkillBuffAutoFill` is used by `DefenseCalculatorPage`/
+ * `SpeedCalculatorPage` directly, and separately by `buildShipAbilities`, which converts its output
+ * into real `Ability` objects (`selectedBuffToAbility`) that register through the PAYLOAD-bearing
+ * `applyTimedAbilityStatus` path below — not this scheduled one. Oleander's real charge-skill grant
+ * already reaches the holder that way, which is exactly what hitMitigation.integration.test.ts
+ * exercises. "Inert, accepted" above is CONFIRMED, not a hand-off.
  *
  * Excluded for the same reason: the aura/accumulating channel (`activeAbilityStatuses`). An aura
  * is `recurring` and lives in `auraSelfMaps`, which `removeSelfBuffByName` never visits; an
