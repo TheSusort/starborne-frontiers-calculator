@@ -3898,9 +3898,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // positional burst) and is skipped on every other channel that reaches this proc — the
     // positional firing hit (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick.
     //
-    // CHANNELS THAT DO *NOT* REACH THIS PROC. The original three-instance KNOWN LEECH GAP class is
-    // now fully closed; the fixed ones are kept in place, marked, so a reader can see the whole
-    // class rather than assume it away:
+    // CHANNELS THAT DO *NOT* REACH THIS PROC. The KNOWN LEECH GAP class has FOUR instances, not
+    // three: the three listed below, plus the passive-slot damage instance, which is documented at
+    // its own site (`stagePassiveSlotHit`'s `KNOWN GAPS` block) because that is where its apply
+    // loop lives. Fixed items are kept in place, marked, so a reader can see the whole class
+    // rather than assume it away:
     //   1. (FIXED in SP-4b-2b Task 2b) the positional per-victim DoT tick — now a caller, see
     //      `procStandingLeechesPerVictim(sourceId, damage, dotType)` at the DoT-tick branch's
     //      `credit`.
@@ -8830,6 +8832,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // incoming direction is correctly absent — a DoT tick does not proc the
                         // victim's damage-taken leech (owner ruling, spec §2.2).
                         if (tankDotDamage > 0) {
+                            // ⚠️ OPEN GAP, distinct from the leech class and deliberately NOT fixed
+                            // here: this branch books NO per-victim damage-dealt attribution. The
+                            // sibling non-heal-target branch credits one `creditDealt(sourceId,
+                            // actor.id, dealt)` per distinct applier off its `tickDealtBySource`
+                            // map; this branch keeps only the aggregate `tankDotDamage` and so
+                            // writes `perTargetDealt` for nobody. Consequence for tests: `dealtBy`
+                            // reads NOTHING for a DoT ticking the heal target, however real the
+                            // tick is — use the healing display's `incomingDamage` instead (see
+                            // `positionalDotLeech.test.ts`'s "Site 3" block, which does).
+                            // Not fixed because wiring `creditDealt` in here would move
+                            // `perTargetDealt` in every healing-mode fixture carrying an enemy DoT
+                            // on the tank — far wider than the leech-channel class.
                             // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
                             // single killer → byDirectDamage:false, killerId undefined (overrides the
                             // wrapper's direct-damage default). A defaulted true would wrongly tag a
