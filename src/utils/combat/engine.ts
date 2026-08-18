@@ -3899,9 +3899,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     // CHANNELS THAT DO *NOT* REACH THIS PROC — the three-instance KNOWN LEECH GAP class, all of it
     // recorded in the KNOWN GAP TRIPWIRE in `positionalDotLeech.test.ts`. None of these is what the
-    // `scope === 'detonation'` `continue` below guards:
+    // `scope === 'detonation' && channel !== 'detonation'` `continue` below guards:
     //   1. (FIXED in SP-4b-2b Task 2b) the positional per-victim DoT tick — now a caller, see
-    //      `procStandingLeechesPerVictim(sourceId, damage)` at the DoT-tick branch's `credit`.
+    //      `procStandingLeechesPerVictim(sourceId, damage, dotType)` at the DoT-tick branch's
+    //      `credit`.
     //   2. the positional bomb/accumulator burst — reaches neither this proc nor
     //      `procTakenLeechesPerVictim` at all, scope notwithstanding. Sibling comment: the
     //      "KNOWN GAPS … (a) IT PROCS NO LEECHES, IN EITHER DIRECTION" block (engine.ts:6557,
@@ -3910,7 +3911,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     //      sums into `tankDotDamage`, so nothing can pay. Marked in place at the
     //      `if (tankDotDamage > 0)` branch. This is the instance with no test of its own; a sweep
     //      driven only by `positionalDotLeech.test.ts`'s burst case will miss it.
-    const procStandingLeechesPerVictim = (sourceId: string, amount: number): void => {
+    const procStandingLeechesPerVictim = (
+        sourceId: string,
+        amount: number,
+        channel: LeechChannel
+    ): void => {
         if (!healingCtx || amount <= 0) return;
         const entries = standingLeeches.get(sourceId);
         if (!entries) return;
@@ -3918,12 +3923,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (!owner) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
         for (const e of entries) {
-            // Per-victim damage rides the NON-detonation channels only — the positional firing hit
-            // (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick (`corrosion` /
-            // `inferno` / `generic`). Detonation-scoped leeches never fire here; the aggregate
-            // `procStandingLeeches` gates them the same way (`channel !== 'detonation'` → skip),
-            // so the two procs agree on every channel this one is reachable from.
-            if (e.scope === 'detonation') continue;
+            // Restored to the aggregate `procStandingLeeches`'s gate verbatim (:3834). This copy
+            // kept only the first conjunct, which degenerates "a detonation-scoped leech skips
+            // non-detonation channels" into "skips everything" — the root cause of the whole
+            // four-instance leech-channel class. The parameter is REQUIRED, not optional: an
+            // optional one lets a new call site silently default and re-create the bug.
+            if (e.scope === 'detonation' && channel !== 'detonation') continue;
             let raw = amount * (e.pct / 100);
             if (e.kind === 'heal') {
                 raw *= 1 + owner.healModifier / 100;
@@ -4061,7 +4066,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         damage: number,
         outcome: VictimDamageOutcome
     ): void => {
-        procStandingLeechesPerVictim(actorId, damage);
+        procStandingLeechesPerVictim(actorId, damage, 'direct');
         procTakenLeechesPerVictim(victim, damage, outcome);
     };
 
@@ -8785,8 +8790,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // applier (`_sourceId`) and only sums into `tankDotDamage`, so by the time
                         // `applyIncomingToTarget` books the aggregate there is no source left to
                         // pay. (Instance 1, the positional per-victim DoT tick, was fixed in
-                        // SP-4b-2b Task 2b — see `procStandingLeechesPerVictim(sourceId, damage)`
-                        // in the sibling `else` branch below. Instance 2 is the positional
+                        // SP-4b-2b Task 2b — see
+                        // `procStandingLeechesPerVictim(sourceId, damage, dotType)` in the
+                        // sibling `else` branch below. Instance 2 is the positional
                         // bomb/accumulator burst.) The class, its tripwire and the reachability
                         // reasoning live in `positionalDotLeech.test.ts` — read it before fixing
                         // any one instance, or this one gets left behind.
@@ -8882,7 +8888,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // proc touches HEAL buckets/pools only, so no damage number
                                     // moves. Cadence: `tickDoTs` calls `credit` once per ENTRY, so
                                     // the owner's heal-crit gate draws once per entry here too.
-                                    procStandingLeechesPerVictim(sourceId, damage);
+                                    procStandingLeechesPerVictim(sourceId, damage, dotType);
                                 },
                                 // D-PR3 (Vortex Veil): reduce this carrier's incoming DoT ticks.
                                 incomingDotReductionPct: (dotType) =>

@@ -334,6 +334,41 @@ describe("SP-4b-2b Task 2b — a leechScope:'all' standing leech pays out on a p
         expect(result.rounds[0].perTargetDamage?.['enemy-back']).toBe(500); // the tick landed
         expect(sumHeal(result, 'directHeal', 'attacker')).toBe(0); // and paid nothing
     });
+
+    it('SCOPE GUARD: a detonation-scoped leech pays NOTHING on a corrosion tick, while an all-scoped one pays 100', () => {
+        idc = 0;
+        // Identical fixture to the PLAYER-side case above (tick = 500), run twice with only the
+        // leech's scope changed. 'all' → 500 × 0.20 = 100. 'detonation' → 0, because a corrosion
+        // tick is not a detonation. This pins BOTH halves of the restored conjunct: delete the
+        // `channel !== 'detonation'` half and the 'all' arm breaks; delete the whole line and the
+        // 'detonation' arm breaks.
+        const run = (scope: 'all' | 'detonation') =>
+            runCombat(
+                BASE({
+                    shipSkills: { slots: [basicSlot(), leechSlot(20, scope)] },
+                    enemyAttackers: [
+                        enemyAt('enemy-front', 'M4', 1_000_000_000),
+                        enemyAt('enemy-back', 'M2', 10000),
+                    ],
+                    __testTapActors: (actors: CombatActor[]) => {
+                        actors
+                            .find((a) => a.id === 'enemy-back')
+                            ?.corrosionEntries.push(corrosion(5, 1, 5, 'attacker'));
+                    },
+                })
+            );
+
+        const allScoped = run('all');
+        const detonationScoped = run('detonation');
+
+        // ANTI-VACUITY, load-bearing: the tick really landed in BOTH runs, so the 0 below is a
+        // scope decision and not a fixture that failed to tick.
+        expect(allScoped.rounds[0].perTargetDamage?.['enemy-back']).toBe(500);
+        expect(detonationScoped.rounds[0].perTargetDamage?.['enemy-back']).toBe(500);
+
+        expect(sumHeal(allScoped, 'directHeal', 'attacker')).toBeCloseTo(100, 6);
+        expect(sumHeal(detonationScoped, 'directHeal', 'attacker')).toBe(0);
+    });
 });
 
 /**
