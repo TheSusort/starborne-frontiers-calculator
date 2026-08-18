@@ -448,3 +448,83 @@ Task 7: complete (commit 2ba2f8bb; review APPROVED, Minors only). 528 files / 58
        magnitudes coincide; the whiff-window case duplicates the corpse-targeting shape.
 (xiv)  damageChannelAccounting:142's 0-max-HP shape is now the SOLE carrier of the legacy arm of the
        player-side invariant — and SP-4c removes that shape too.
+
+## Task 8 — comment sweep, Minor triage, whole-branch gates (2026-08-18)
+
+### Snapshot attribution gate — 494 moved lines, 0 unclassified
+
+SCOPE, stated honestly: this repo has FIVE `.snap` files and only ONE moved
+(`healingGoldenParity.test.ts.snap`). None of the five covers a direct `runCombat` fixture, so
+"zero snapshot movement" would only ever have been load-bearing for the three PRODUCTION callers
+(`simulateDPS` / `simulateHealing` / `simulateBattle`). The 64 direct-engine fixtures this PR
+repaired are guarded by their own in-code assertions, not by goldens — which is exactly why the
+five repair waves each had to argue magnitude preservation in prose.
+
+`git diff --stat 39d463f1..HEAD -- '*.snap'` → 1 file, 299 insertions, 195 deletions.
+`git diff 39d463f1..HEAD -- '*.snap' | grep -cE '^[+-][^+-]'` → **494**.
+
+Two commits touched it: `70234483` (Task 2, the practice target) and `d4dba512` (Task 2b, the
+positional DoT-tick standing leech). 2b's 90 lines are INTERNAL to the branch and cancel in the
+cumulative diff — Task 2 alone drove Magnolia's inferno-tick leech term to 0 and 2b restored it to
+1,000, so base..HEAD shows only the net.
+
+| lines | scenario | mechanism |
+| --- | --- | --- |
+| 50 | Defiant (shield-on-Stasis) | **M-A** `perTargetDealt` newly PRESENT — the cast lands per-victim on the practice target instead of the scalar sink. Ten inserted 5-line blocks; NO healing value moved (no `damage-dealt` rider in this scenario). |
+| 50 | Tithonus/Pallas | M-A, ten inserted blocks. |
+| 30 | Magnolia | M-A, six inserted blocks (rounds 1-6 only — see M-D). |
+| 17 | Valkyrie | M-A, inserted blocks + the rows that replaced a removed `perRecipient` opener. |
+| 172 | Tithonus/Pallas | **M-B** rebase — the 7% all-allies rider now reads the practice target's defence 5,000, not the sink's 10,000. directHeal 181 → 292/round, overheal 90 → 146 per recipient, totals 1,806 → 2,916. |
+| 91 | Magnolia | M-B rebase — cast leech 258 → 417 while the inferno term round-trips at 1,000: directHeal 1,258 → 1,417/round. |
+| 55 | Magnolia | **M-D** the practice target is KILLABLE — 6 × 7,082.797 dealt exceeds its 40,000 HP, so it dies in round 6 and rounds 7-10 heal nothing. Verified in the new snapshot: directHeal `[1417 ×6, 0, 0, 0, 0]`, six `perTargetDealt` rows. The zero rounds drop `perRecipient`/`effectiveHealing`/`hotHeal` under the "absent when empty" convention. |
+| 5 | Valkyrie | M-D, same convention on its zero rounds. |
+| 24 | Valkyrie | **M-E** the known `leechScope:'detonation'` standing-leech gap surfaces as an all-zero scenario (129 → 0), documented at length on the fixture and tripwired in `positionalDotLeech.test.ts`. |
+| **494** | | **classified 494 / 494 — UNCLASSIFIED 0** |
+
+### Gates
+- `npx tsc --noEmit` → exit 0.
+- `npx eslint src` → exit 0.
+- `npm test` → **528 files / 5853 tests passed** (5850 + 3 added this task: the preFight
+  discriminator, the sc-11 tripwire, the hpCrossing round-2 twin).
+- Placement-symmetry oracle (`npm run audit:placement-symmetry -- --seeds 15 --base-seed 20260805`)
+  → shipsSwept 147, symmetricShips **146**, findings **2**, focus/team/enemy **13/13/13** distinct
+  kinds and 0 ships observing nothing. Byte-identical to the pre-branch ledger, findings included
+  (both Enforcer `debuff-resisted`, enemy→focus and enemy→team). NOT MOVED.
+- `git status --short -- '*.snap'` → clean.
+
+### ⭐ BROWSER FINDING — the practice target preserves the STAT BASIS, not the NUMBER
+The brief asked for the one-enemy-vs-zero-enemy healer-output equality to be MEASURED. It is not
+equal. Magnolia at HP 500,000, 20 rounds, against the page's own default enemy card with its attack
+zeroed (so incoming is 0 on BOTH sides and only the opponent's identity differs):
+**Direct Heal (raw) 478 with the card → 483 with no enemies (+1.05%).**
+
+Isolated at the adapter level (a scratch harness, since deleted): with the healer's crit at 0 the
+two runs are EXACTLY equal (directHeal `[833,833,833,833]`, total 3,332, 4165.593651036698 dealt per
+round, both ways). With crit 50 they diverge: `[3332,1666,1666,1666]` total 8,331 against the card
+versus `[1666,3332,833,1666]` total 7,498 against the practice target. The only differing input is
+the opponent's ACTOR ID, and the engine's per-victim crit/rate-gate sub-stream is keyed by actor id
+— so renaming the opponent reshuffles the healer's crit schedule and any `damage-dealt` rider moves
+with it. **Pre-existing engine property, not introduced here**; the practice target merely made it
+observable from the page. The adapter's paragraph claiming exact equality was corrected to say
+"stat basis" and carries the measured numbers. ⭐ HAND-OFF: if exact per-round equality is wanted it
+needs an id-independent draw, or the practice target adopting the id the page's first card would
+use — a design decision.
+
+### ⭐ HAND-OFF — `hitMitigation.ts`'s inertness argument no longer holds
+Its "no production path reaches a SCHEDULED TIMED Hit Mitigation" rationale rested on
+`enemyAttackers` distinguishing callers, which SP-4b-2a/2b ended: every caller now supplies a
+roster. `simulateDPS` pairs a non-empty `selfBuffs` with `enemyAttackers` on every run and its
+AUTO-FILLED picks carry `skillSource`/`skillDuration`, and Oleander is the one corpus ship whose
+charge grants `Hit Mitigation` (for 3 turns). Whether the auto-fill actually produces the SCHEDULED
+channel for it rather than the `applyTimedAbilityStatus` ability path is UNVERIFIED. The comment now
+says so; the measurement is a ticket.
+
+### Other hand-offs recorded in-file for SP-4c
+- `indestructibleDeath.test.ts` — the all-zero `rawTotals` block and the `enemyOutcome` pin assert
+  the ABSENCE of channels 4c deletes: DELETE them with the dummy, do not migrate.
+- `damageChannelAccounting.integration.test.ts` — the 0-max-HP shape is now the SOLE carrier of the
+  LEGACY arm of the §4B invariant, and 4c removes that shape too; delete the arm rather than keeping
+  an artificial roster alive to feed it.
+- `enemyBuffSelfDebuffGate.test.ts` — twelve `directDamage` assertions are live only because an
+  `as EnemyAttacker` cast hides the required `stats.hp`; supplying it flips all twelve to the
+  positional channel. Own ticket; prefer dropping the casts so `tsc` demands `hp`.

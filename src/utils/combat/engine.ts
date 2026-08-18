@@ -1160,7 +1160,10 @@ export type TeamActorEngineInput = TeamActorInput & {
  *                (`isDpsMeasurementRun`, nothing left to measure). The OTHER dps-run exit — the
  *                focus's target dying — is NOT mode-gated: it is still derived from roster
  *                emptiness (`dpsEnemyTarget`, i.e. no enemy attackers) and is deliberately left
- *                alone here; a later PR in this series retires that derivation too.
+ *                alone here; a later PR in this series retires that derivation too. Since
+ *                SP-4b-2b that derivation can never be TRUE — `normalizeCombatRoster` throws on
+ *                an absent/empty roster on `runCombat`'s first statement — so the exit is
+ *                UNREACHABLE, not absent. SP-4c deletes it with the dummy.
  *  - `'healing'` heal/shield accounting is the report. The run continues past the focus's death.
  *  - `'battle'`  two-team battle. The squad fights on without its focus.
  *
@@ -1795,7 +1798,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         generic: number;
     };
     /** SP-U U5: the real DPS enemy's end-of-run outcome — read off the singular `enemy` actor,
-     *  so it is meaningful ONLY when that actor is the real target (no enemy attackers supplied).
+     *  so it is meaningful ONLY when that actor is the real target (no enemy attackers supplied) —
+     *  a condition SP-4b-2b made unreachable, so in practice these fields NEVER describe a real
+     *  target any more.
      *
      *  NO PRODUCTION READER since SP-4b-2a. The DPS adapter used to map this onto
      *  `DPSSimulationSummary`; every `simulateDPS` run now supplies a real positioned roster, so
@@ -2056,8 +2061,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     // but its parsed `target` lives only on the EnemyActorInput — thread it to the enemy-turn
     // call site by id, mirroring teamTargetById. Was empty for every non-positional input (no enemy
     // passed a target), so the gated branch never fired and the legacy heal-target binding stayed
-    // byte-identical; since SP-4b-1 the boundary fills it for every supplied enemy, so the map is
-    // empty only when the caller supplies no `enemyAttackers` at all.
+    // byte-identical; since SP-4b-1 the boundary fills it for every supplied enemy, and since
+    // SP-4b-2b the roster is provably non-empty (the boundary throws otherwise) — so this map now
+    // holds one entry per enemy on EVERY run and can no longer be empty.
     const enemyTargetById = new Map<string, ParsedTarget>();
     for (const e of input.enemyAttackers ?? []) {
         if (e.target) {
@@ -2624,8 +2630,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     // The dummy `enemy` is the player-offense sink for a run with no targetable opposing roster.
     // (Historically that meant "DPS-calc / non-positional mode" — accurate when this was written,
     // stale now: since SP-1/SP-3b both calculators supply a REAL enemy roster, and since SP-4b-1
-    // `normalizeCombatRoster` places and targets every actor, so the sink is reached only when the
-    // caller supplies no enemy at all or a roster of 0-max-HP pressure sources.) In a
+    // `normalizeCombatRoster` places and targets every actor, so the sink is reached only through
+    // a roster of 0-max-HP pressure sources or the mid-run whiff window. "No enemy at all" has
+    // dropped off that list since SP-4b-2b: the boundary throws on an absent/empty roster.) In a
     // fully-positional team-vs-team sim it is vestigial: every player resolves a real positioned
     // enemy target, so nothing ever routes into its containers and its DoT-tick turn is a pure
     // no-op that only leaks a phantom "enemy" line into the log. Gate its TURN out in that case
@@ -2687,8 +2694,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     //    buff", not "does THIS enemy"). NOT inert on a DPS run any more (SP-4b-2a): every
     //    `simulateDPS` run supplies a real enemy, so this reads that enemy's self-buffs. It is
     //    empty in PRACTICE for a SYNTHESIZED enemy only because that actor carries no skills and
-    //    so grants itself nothing — an emptiness of content, not of roster. Only a caller that
-    //    passes no `enemyAttackers` at all still gets the structurally-empty list.
+    //    so grants itself nothing — an emptiness of content, not of roster. Since SP-4b-2b there
+    //    is no structurally-empty case left at all: the boundary refuses an absent/empty roster,
+    //    so the only way this list empties is every enemy DYING (`livingEnemyAttackerIds`).
     //  - PLAYER actor's `self-debuff` gate → its OWN enemy-applied debuffs (per-target store keyed
     //    by its id — the tank carries the enemy attacker's debuffs).
     //  - ENEMY actor's `enemy-buff` gate → opposing side = the player team (union of player
@@ -2713,8 +2721,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Selenite's "10% more direct damage for every enemy with Stealth" count-scaling.
     // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric).
     // SP-4b-2a: a DPS run DOES have enemy attackers now, so this counts them; it still reads 0
-    // against the synthesized stand-in (no skills → it never gains Stealth). Only a caller that
-    // passes no `enemyAttackers` gets the structurally-empty `livingEnemyAttackerIds()`.
+    // against the synthesized stand-in (no skills → it never gains Stealth). SP-4b-2b removed the
+    // structurally-empty case entirely — `livingEnemyAttackerIds()` empties only by DEATH now.
     const playerStealthedEnemyCount = (): number =>
         countOwnersWithSelfBuff(statusEngine, livingEnemyAttackerIds(), 'Stealth');
     const enemyStealthedEnemyCount = (): number =>
@@ -2857,8 +2865,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             applierAffinity?: AffinityName,
             emitBus?: CombatEventBus
         ) => void;
-        /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅
-         *  (DPS / no enemy attackers). Recomputed per gate eval (speed is dynamic). */
+        /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅ —
+         *  since SP-4b-2b a side is empty only once every member is DEAD, never because the caller
+         *  supplied no roster. Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
         /** Live self-HP% for a same-side drain owner (hp-threshold gates). Player side reads the
          *  heal target's live HP (every other id → 100), undefined in DPS mode (→ buildDrainContext
@@ -7182,8 +7191,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Sub-project I, PR I5: count (not union) of opposing actors holding Stealth,
                 // for Selenite's "for every enemy with Stealth" count-scaling. Same per-turn
                 // cadence as enemyBuffNames above; 0 against a synthesized DPS enemy (it has no
-                // skills, so it never gains Stealth) and structurally 0 only for a caller that
-                // supplied no enemy attackers — see `stealthedEnemyCount`'s own note.
+                // skills, so it never gains Stealth). There is no structurally-0 caller left since
+                // SP-4b-2b — see `stealthedEnemyCount`'s own note.
                 stealthedEnemyCount: tb.stealthedEnemyCount(),
                 // Sub-project I, PR I1: opt-in NAMES on the resolved target for name-specific
                 // `enemy-debuff` gates — SAME guard as targetId above (real/positional target
@@ -8206,7 +8215,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // C2b-2: opposing actor with the most buffs (Rhodium's enemy-most-buffs purge). Buff
         // count via selfBuffNamesForOwners (incl. unremovable — fine for SELECTION; removal still
         // respects the unremovable set). Ties → first by roster order (deterministic for goldens).
-        // Returns undefined for an empty roster (DPS dummy) → executor falls back to ctx.enemyId.
+        // Returns undefined for an empty roster → executor falls back to ctx.enemyId. Historically
+        // that fallback was how the DPS dummy got picked. No live call site can hand it an empty
+        // roster any more: both arguments (`enemyAttackerActors` / `allPlayerActors`) are fixed
+        // arrays built from the input rosters and never filtered by death, and since SP-4b-2b the
+        // boundary refuses an absent/empty `enemyAttackers`. The guard stays as a total-function
+        // contract, not as a live branch.
         const mostBuffsAmong = (roster: CombatActor[]): string | undefined => {
             let best: string | undefined;
             let bestCount = -1;
@@ -8305,11 +8319,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // direct-engine tests (e.g. purgeConditionalSources.test.ts) supply a real, positioned
             // enemyAttackers roster without ever setting it — gating on it there wrongly fell back
             // to the dummy.
-            // In pure DPS mode (no enemyAttackers supplied) enemyAttackerActors is EMPTY, so
-            // hasPositionedEnemyRoster is false and the positional-only
-            // mostBuffsAmong(enemyAttackerActors) would otherwise resolve to undefined and the
-            // reactive silently drop instead of crediting the dummy `enemy` — restoring the
-            // pre-SP-M behavior of targeting the live dummy when it's the real DPS sink.
+            // HISTORY (the reason the `: () => …enemy.id` arm exists at all): in pure DPS mode no
+            // `enemyAttackers` were supplied, so enemyAttackerActors was EMPTY,
+            // hasPositionedEnemyRoster false, and the positional-only
+            // mostBuffsAmong(enemyAttackerActors) would have resolved to undefined and dropped the
+            // reactive instead of crediting the dummy `enemy` — the arm restored the pre-SP-M
+            // behaviour of targeting the live dummy when it WAS the real DPS sink.
+            // That premise is gone: SP-4b-2b refuses an absent/empty roster, so a supplied roster
+            // always exists and `hasPositionedEnemyRoster` is false only for an all-0-max-HP one.
+            // The arm is kept for that residual shape and goes with the dummy in SP-4c.
             enemyWithMostBuffs: hasPositionedEnemyRoster
                 ? onceByOwner(() => mostBuffsAmong(enemyAttackerActors))
                 : () => (enemy.destroyedRound === undefined ? enemy.id : undefined),
@@ -10682,7 +10700,10 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // SP-U U5: land the enemy's remaining HP. Two modes:
         if (dpsEnemyTarget) {
-            // REAL destructible DPS target (no enemy attackers). This round's dealt damage
+            // REAL destructible DPS target (no enemy attackers) — UNREACHABLE since SP-4b-2b: the
+            // boundary throws on an absent/empty roster, so `dpsEnemyTarget` can never be true and
+            // this whole branch is dead code awaiting deletion with the dummy in SP-4c. Kept, not
+            // deleted, so the accounting it describes is on the record. This round's dealt damage
             // (focus + team) lands on the enemy through the SHARED per-victim funnel, so its HP
             // declines and its intake is accounted per-victim like any real actor (R5): the
             // amount surfaces in `perActorIncoming[enemy]` and `recordDestroyed` fires inside

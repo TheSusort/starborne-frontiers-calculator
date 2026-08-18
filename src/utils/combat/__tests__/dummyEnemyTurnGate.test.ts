@@ -7,9 +7,15 @@
  * its DoT-tick turn is a pure no-op that only leaked a phantom "enemy" line into the combat log.
  *
  * This test pins the gate: the dummy `enemy` takes a turn (emits turn-started) ONLY when the
- * battle is NOT fully positional (DPS calc / non-positional). In a positional-complete battle
- * (positioned enemies + every player positioned with an enemy target) it is excluded from the
- * turn order entirely.
+ * battle is NOT fully positional. In a positional-complete battle it is excluded from the turn
+ * order entirely.
+ *
+ * PRECISION on "positional-complete", because the distinction is what this file's fixtures turn on:
+ * `dummyEnemyIsVestigial`'s first conjunct is `enemyAttackerActors.some(isTargetableRosterMember)`
+ * — TARGETABLE (max hp > 0), not merely POSITIONED. Since SP-4b-1 the boundary positions every
+ * enemy and since SP-4b-2b the roster is never empty, so "positioned" no longer discriminates
+ * anything; a placed-but-unhittable 0-max-HP roster is what still reads as not-fully-positional.
+ * The second conjunct is unchanged: every player actor positioned with an ENEMY-side parsed target.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';

@@ -309,7 +309,10 @@ const practiceTarget = (): EnemyAttackerInput => ({
 /**
  * Thin adapter over the combat engine (`src/utils/combat/engine.ts`) running in HEALING
  * mode. Mirrors `simulateDPS`: it derives the engine's input from the public healing input —
- * the heal-target id mapping, the debuff landing chance (hacking vs a fixed dummy security),
+ * the heal-target id mapping, the debuff landing chance (the healer's hacking vs the VICTIM's
+ * security — per-enemy since SP-3, defaulted to `LEGACY_SINK_SECURITY` when the card leaves it
+ * unspecified, which is every card the UI produces; the fight-wide `enemySecurity` scalar only
+ * still gates a whiffed cast against the vestigial dummy),
  * the static defPen/dot self-buff fold, the charged-skill widening, and the per-team-actor
  * walk (shared `deriveTeamEngineActors`) — then calls `runCombat` and assembles the public
  * result from the additive `healing` block.
@@ -369,7 +372,26 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * 10,000 defence and `perTargetDealt` disappeared — measured totalDirectHeal 3,876 with one real
  * enemy at defence 1,000 → 1,290 with none, a 3x move from a single click on a fresh page. The
  * practice target reuses the page's default card numbers (`healingDefaultEnemy.ts`) precisely so
- * that emptying the roster changes ONLY the incoming damage, never the healer's own output.
+ * that emptying the roster changes only the incoming damage, not the STAT BASIS of the healer's own
+ * output.
+ *
+ * ⚠️ "STAT BASIS", not "the number" — measured, because an earlier version of this paragraph claimed
+ * exact equality and that claim is FALSE for any healer with a nonzero crit rate. Measured against
+ * the page's own default card (attack 0, so nothing shoots back and incoming is 0 on both sides,
+ * every other stat identical, one 100%-multiplier cast plus a 20% `damage-dealt` self leech, 4
+ * rounds):
+ *   • healer crit 0   → IDENTICAL: directHeal [833, 833, 833, 833] both ways, total 3,332 both ways,
+ *     4165.593651036698 dealt per round both ways. The stat basis claim is exact.
+ *   • healer crit 50  → DIVERGENT: [3332, 1666, 1666, 1666] (total 8,331) against the card versus
+ *     [1666, 3332, 833, 1666] (total 7,498) against the practice target.
+ * The only input that differs between those two runs is the OPPONENT'S ACTOR ID (`'1'` versus
+ * `PRACTICE_TARGET_ID`), and the engine's per-victim crit/rate-gate sub-stream is keyed by actor id
+ * — so renaming the opponent reshuffles the healer's crit schedule, and any `damage-dealt` rider
+ * moves with it over a finite window. That is a PRE-EXISTING engine property (the same id-keyed
+ * stream that makes cross-side amount comparisons invalid), not something the practice target
+ * introduced; the practice target merely makes it observable from the page. If exact per-round
+ * equality is ever wanted, it needs either an id-independent draw or the practice target adopting
+ * the id the page's first card would have used — a design decision, not a comment fix.
  *
  * The ally-side substitution below is the other half of the same claim: a support healer's ACTIVE
  * target is ally-side, which resolves to no opposing victim at all.

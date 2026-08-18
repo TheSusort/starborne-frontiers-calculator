@@ -346,7 +346,9 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
                         startCharged: false,
                         selfBuffs: [],
                         enemyDebuffs: [],
-                        // position + target present but NO pattern → non-positional legacy path.
+                        // position + target present, pattern omitted — but the OMISSION is no longer
+                        // what reaches the legacy path (the boundary fills DEFAULT_BASE_PATTERN).
+                        // The 0-max-HP roster above is the lever; see the block comment.
                         position: 'M1',
                         target: parsedTarget('front'),
                         walk: {

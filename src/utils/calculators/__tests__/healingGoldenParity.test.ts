@@ -643,73 +643,94 @@ describe('healingGoldenParity', () => {
     // The snapshot is kept (rather than the test deleted)
     // because `perTargetDealt` still pins that the cast itself lands per-victim every round.
     // Spot-checked for plausibility.
+    const scenario11Input = (): HealingSimulationInput =>
+        BASE({
+            rounds: 4,
+            chargeCount: 2,
+            startCharged: false,
+            healer: { ...HEALER, hp: 10000 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100, hits: 1 },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'charged',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100, hits: 1 },
+                            }),
+                            ab({
+                                type: 'accumulate-detonate',
+                                target: 'enemy',
+                                config: { type: 'accumulate-detonate', turns: 1, pct: 100 },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'ally',
+                                trigger: 'on-cast',
+                                config: {
+                                    type: 'heal',
+                                    pct: 5,
+                                    basis: 'damage-dealt',
+                                    leechScope: 'detonation',
+                                },
+                            }),
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                config: {
+                                    type: 'heal',
+                                    pct: 5,
+                                    basis: 'damage-dealt',
+                                    leechScope: 'detonation',
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        });
+
     snap(
         'Valkyrie shape (accumulate-detonate burst → detonation-scope leeches, burst round only)',
-        () =>
-            BASE({
-                rounds: 4,
-                chargeCount: 2,
-                startCharged: false,
-                healer: { ...HEALER, hp: 10000 },
-                healTargetId: 'healer',
-                shipSkills: {
-                    slots: [
-                        {
-                            slot: 'active',
-                            abilities: [
-                                ab({
-                                    type: 'damage',
-                                    target: 'enemy',
-                                    config: { type: 'damage', multiplier: 100, hits: 1 },
-                                }),
-                            ],
-                        },
-                        {
-                            slot: 'charged',
-                            abilities: [
-                                ab({
-                                    type: 'damage',
-                                    target: 'enemy',
-                                    config: { type: 'damage', multiplier: 100, hits: 1 },
-                                }),
-                                ab({
-                                    type: 'accumulate-detonate',
-                                    target: 'enemy',
-                                    config: { type: 'accumulate-detonate', turns: 1, pct: 100 },
-                                }),
-                            ],
-                        },
-                        {
-                            slot: 'passive',
-                            abilities: [
-                                ab({
-                                    type: 'heal',
-                                    target: 'ally',
-                                    trigger: 'on-cast',
-                                    config: {
-                                        type: 'heal',
-                                        pct: 5,
-                                        basis: 'damage-dealt',
-                                        leechScope: 'detonation',
-                                    },
-                                }),
-                                ab({
-                                    type: 'heal',
-                                    target: 'self',
-                                    trigger: 'on-cast',
-                                    config: {
-                                        type: 'heal',
-                                        pct: 5,
-                                        basis: 'damage-dealt',
-                                        leechScope: 'detonation',
-                                    },
-                                }),
-                            ],
-                        },
-                    ],
-                },
-            })
+        scenario11Input
     );
+
+    // TRIPWIRE for scenario 11's all-zero healing, mirroring scenario 9's positive guard. A snapshot
+    // of zeros is the weakest possible pin: it reads identically whether the leech gap is the cause
+    // (the claim) or the BURST never fired at all (a fixture that observes nothing). This asserts
+    // both halves separately — the zero AND the burst — so the pair can only stay green while the
+    // gap is what it is documented to be. Deliberately magnitude-free on the burst side: it pins
+    // that round 3 delivered STRICTLY MORE than a plain-cast round, which is the charged cast plus
+    // the detonation, without re-encoding numbers the snapshot already owns.
+    it('scenario 11 (KNOWN GAP): the burst really fires, and the detonation-scope leech still pays 0', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario11Input());
+        // The gap: nothing is healed in ANY round, burst round included.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 0]);
+        // ANTI-VACUITY: round 3 (index 2) is the burst round and delivers more damage than an
+        // active-only round, so there WAS a detonation amount for the leech to read 5% of.
+        const dealt = (i: number) => result.rounds[i].perTargetDealt?.attacker?.['practice-target'];
+        expect(dealt(0)).toBeGreaterThan(0);
+        expect(dealt(2)).toBeGreaterThan(dealt(0)!);
+    });
 
     // ── Scenario 12: Quixilver as heal target (rider shield + taken shield) ───
     // HAND-VERIFIED (damage-leech spec §5). The healer IS the focus + heal target (hp 10000,

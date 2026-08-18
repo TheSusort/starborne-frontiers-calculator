@@ -3818,10 +3818,14 @@ describe('simulateDPS', () => {
     // Epic PR3 (charge sign/target): the single-ship DPS calculator has no enemy charge meter.
     // An enemy-directed charge-removal ability (Opal/Provider/Demolisher/Thresh) must be INERT
     // here — no crash, and critically no self-charge contribution (a naive implementation could
-    // fold a mis-signed 'enemy' charge ability into the caster's own bank). `simulateDPS` routes
-    // through `runCombat` with no `enemyAttackers`, so `removeEnemyCharges` loops zero actors
-    // (structural no-op) and `chargeGainFromSkill`'s 'own' filter already excludes enemy/all-
-    // enemies targets from the self-charge sum — this test locks that parity as a regression gate.
+    // fold a mis-signed 'enemy' charge ability into the caster's own bank). It used to be a
+    // STRUCTURAL no-op: `simulateDPS` routed through `runCombat` with no `enemyAttackers`, so
+    // `removeEnemyCharges` looped zero actors. Since SP-4b-2a it loops the SYNTHESIZED enemy (one
+    // actor), and since SP-4b-2b no run can have an empty roster at all — so the inertness is now
+    // one of CONTENT: the stand-in is built with `chargeCount: 0` and no charged skill, so there is
+    // nothing to remove. What this test has always actually locked is the SELF side, and that is
+    // unchanged: `chargeGainFromSkill`'s 'own' filter excludes enemy/all-enemies targets from the
+    // self-charge sum, so an enemy-directed removal contributes nothing to the caster's own bank.
     describe('enemy-directed charge removal is inert in DPS mode (epic PR3)', () => {
         const enemyRemovalSkills = (): ShipSkills => ({
             slots: [

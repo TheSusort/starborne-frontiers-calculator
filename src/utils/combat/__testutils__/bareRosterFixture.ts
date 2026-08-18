@@ -104,10 +104,14 @@ export const BARE_ALLY_ID = 'ally';
  *    DAMAGE path, which is a separate cast site in the engine from the focus's.
  * Speed 1 puts it LAST in the turn order, after the focus and the roster, so it never reorders the
  * turns the other cases observe.
+ *
+ * `attack` is the ONLY knob on purpose. Earlier drafts also exposed `hp` and `position`; no caller
+ * ever passed either, and an unused knob on a shared fixture is a liability — it reads as "these
+ * vary across cases" when they do not, and it invites a future caller to move the ally off M4
+ * without noticing the speed-1 turn-order contract above. HP is fixed at 500,000 (survives any
+ * corpus cast) and the position at 'M4' (the FRONT of the player board — column 4, not column 1).
  */
-export const bareAlly = (
-    overrides: { attack?: number; hp?: number; position?: TeamActorInput['position'] } = {}
-): TeamActorInput => {
+export const bareAlly = (overrides: { attack?: number } = {}): TeamActorInput => {
     const attack = overrides.attack ?? 0;
     return {
         id: BARE_ALLY_ID,
@@ -116,7 +120,7 @@ export const bareAlly = (
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
-        position: overrides.position ?? 'M4',
+        position: 'M4',
         walk: {
             shipSkills: attack > 0 ? damageKit() : { slots: [] },
             stats: {
@@ -126,7 +130,7 @@ export const bareAlly = (
                 defensePenetration: 0,
                 hacking: 0,
                 defence: 0,
-                hp: overrides.hp ?? 500_000,
+                hp: 500_000,
             },
             selfDotModifier: 0,
             defensePenetrationBuff: 0,

@@ -58,11 +58,22 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * `payload` (statusEngine's scheduled `upsertBuff`), and `timedAbilityStatuses` skips payload-less
  * entries — whereas `removeSelfBuffByName` deletes by family key regardless of payload and so could
  * have spent it. A scheduled TIMED Hit Mitigation is therefore inert today although it was
- * previously consumed correctly. Accepted, because no production path reaches it: `battleSimulator`
- * passes `selfBuffs: []` on both runs that supply `enemyAttackers`, and the only caller pairing a
- * non-empty `selfBuffs` with `enemyAttackers` is the healing calculator's engine adapter, whose
- * picker emits no `skillSource`/`skillDuration` — i.e. the always-active case above, not this one.
- * If a path ever does reach it, the fix is to surface payload-less TIMED `selfMaps` entries here,
+ * previously consumed correctly.
+ *
+ * ⚠️ THE OLD REACHABILITY ARGUMENT NO LONGER HOLDS, and it was the whole basis for accepting this.
+ * It read: "no production path reaches it — `battleSimulator` passes `selfBuffs: []` on both runs
+ * that supply `enemyAttackers`, and the only caller pairing a non-empty `selfBuffs` with
+ * `enemyAttackers` is the healing calculator's engine adapter, whose picker emits no
+ * `skillSource`/`skillDuration`". That argument leaned on `enemyAttackers` being the thing that
+ * distinguished callers, which SP-4b-2a/SP-4b-2b ended: EVERY caller now supplies a roster (the
+ * boundary throws otherwise), so the qualifier narrows nothing. `simulateDPS` pairs a non-empty
+ * `selfBuffs` with `enemyAttackers` on every run, and its AUTO-FILLED picks DO carry
+ * `skillSource`/`skillDuration` (`SelectedGameBuff`), so Oleander — the one corpus ship whose
+ * charge grants `Hit Mitigation`, for 3 turns — is a candidate for exactly this shape in the DPS
+ * calculator. Whether the auto-fill actually produces the SCHEDULED channel for it, rather than the
+ * `applyTimedAbilityStatus` ability path noted below, is UNVERIFIED and is a hand-off, not a claim.
+ * Treat the "inert, accepted" status above as UNCONFIRMED until someone measures it.
+ * If a path does reach it, the fix is to surface payload-less TIMED `selfMaps` entries here,
  * NOT to fall back to `selfBuffNamesForOwners`: that would drag the unspendable always-active
  * channel back in, which is the defect this narrowing exists to remove.
  *

@@ -41,7 +41,16 @@ import { bareInput, bareEnemy, damageKit } from '../__testutils__/bareRosterFixt
 import type { RoundData } from '../../calculators/dpsSimulator';
 
 const ROUNDS = 4;
-/** `bareInput` fires one 100%-multiplier damage ability off a 10 000 attack, zero crit. */
+/**
+ * `bareInput` fires one 100%-multiplier damage ability off a 10 000 attack, zero crit.
+ *
+ * ⚠️ TWO PROVENANCES, ONE NUMBER. The mirror suite further down reuses this constant for the
+ * ENEMY's cast, which comes from `playerSideWithMaxHp`'s hand-written `attack: 10_000` — a
+ * SEPARATE literal that merely coincides with `bareInput`'s. Change either side's attack and the
+ * other suite's expectations do not follow; they only look coupled. Kept shared because the
+ * coincidence is deliberate (the mirror is meant to be numerically symmetric with the player side),
+ * but do not read a `PER_CAST` in the mirror suite as being derived from `bareInput`.
+ */
 const PER_CAST = 10_000;
 
 /** The shared bare roster with the sole enemy attacker's MAX HP dialled to `hp`. */
@@ -81,6 +90,15 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         // SOURCE of pressure (`hp: 0`), never as something to hit. It can never be a victim, so
         // the run is not positional and the dummy sink owns the offense — exactly what these
         // callers got before normalization started auto-placing the roster.
+        //
+        // ⭐ SP-4c HAND-OFF, and the reason this case is now load-bearing beyond its own name: since
+        // SP-4b-2b dropped the empty-roster shape (see the block below), this 0-max-HP shape is the
+        // SOLE remaining carrier of the LEGACY arm of the §4B invariant — the only fixture in the
+        // repo that still books a player cast into the scalar sink. SP-4c removes this shape too,
+        // along with the sink it books into. When it does, the invariant's legacy arm has nothing
+        // left to observe and the honest move is to DELETE that arm (both here and in the INVARIANT
+        // test's shape list) rather than to keep a 0-max-HP roster alive artificially to feed it.
+        // The per-victim arm is the one that survives, and it is covered by the two cases below.
         const result = runCombat(rosterWithEnemyHp(0));
 
         expect(result.rawTotals.cumulative).toBe(ROUNDS * PER_CAST);

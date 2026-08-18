@@ -4,7 +4,7 @@
  *
  * ── WHAT THIS FILE GUARANTEES (SP-4b-2b Task 7 closed both of its recorded gaps) ───────────────
  *
- * 1. **COVERAGE — five paths, not one.** The file used to exercise `bareInput()` alone: a single
+ * 1. **COVERAGE — six paths, not one.** The file used to exercise `bareInput()` alone: a single
  *    focus-attacker damage cast, plus an empty roster. A zero from one shape only ever meant "this
  *    shape does not reach the fallback", never "no shape does" (raised on PR #324, and correct). It
  *    now runs a case per engine path that resolves a victim:
@@ -33,7 +33,12 @@
  * books NOTHING. So `__getLegacyVictimFallbackCount()` is legitimately non-zero there while no
  * damage reaches the sink: SP-4c must NOT gate on that counter being zero. It is
  * `__getDummySinkCreditCount()` that 4c can require to be zero, because a zero there means the
- * dummy absorbed nothing and deleting it loses no accounting. The whiff itself is deliberate,
+ * dummy absorbed nothing and deleting it loses no accounting. ⚠️ READ THE COUNTER'S UNITS BEFORE
+ * QUOTING THAT SENTENCE: it counts ROUNDS IN WHICH THE DUMMY'S HP DECLINED, measured at the
+ * round-tail vestigial-sink branch off the SCALAR channel (`enemy.currentHp = enemyHp -
+ * enemyHpDecline`, keyed on that round's own delta) — not individual hits, and not any per-victim
+ * booking. So "zero credits" means "the scalar sink never moved", which is the property 4c needs;
+ * it is NOT a claim that no event anywhere named the dummy. The whiff itself is deliberate,
  * documented behaviour (the focus cast site's "the correct behaviour is for the attacker to WHIFF")
  * and is NOT a defect for 4c to fix — 4c's job is to give the whiff a non-dummy way to say "no
  * living victim", i.e. to make the consultation stop needing an object.

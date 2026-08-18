@@ -158,6 +158,12 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         // The scalar totals are dead the moment a roster exists (engine.ts:5876 skips
         // `creditDamage`), so they are 0 across the board — pinned so a future regression that
         // starts double-booking through BOTH channels is caught here.
+        //
+        // ⭐ SP-4c HAND-OFF: this all-zero block asserts the ABSENCE of a channel SP-4c deletes, so
+        // when `rawTotals` goes with the dummy this assertion must be DELETED, not migrated. It is
+        // not a pin on intended values — a reader who mistakes it for one will try to keep the
+        // scalar block alive to satisfy it. The live claim (per-victim booking) is the
+        // `creditedRounds` assertion above it.
         expect(result.rawTotals).toEqual({
             direct: 0,
             corrosion: 0,
@@ -194,6 +200,9 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         expect(intake).toBeGreaterThanOrEqual(25_000); // pool exhausted → 0% HP
 
         // The scalar block now describes the vestigial sink, not this kill (see the header).
+        // ⭐ SP-4c HAND-OFF: like the `rawTotals` block above, this pins what the SINK reads, on a
+        // field SP-4c deletes. DELETE it with the dummy; do not read it as asserted intent about a
+        // real enemy. The three real claims are the `ship-destroyed` / round / intake asserts above.
         expect(result.enemyOutcome).toEqual({
             survived: true,
             roundsToKill: undefined,

@@ -840,6 +840,47 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         expect(grants).toHaveLength(1);
         expect(grants[0].round).toBe(1);
     });
+
+    // SELF-DISCRIMINATING TWIN of the case above. That one pins the grant in ROUND 1 — the same
+    // round a PHANTOM SEED would appear (the defect the "no phantom seed" case at the top of this
+    // block guards), so on its own it cannot tell a real crossing reaction from a round-1 seed that
+    // happens to look like one. Here the crossing is pushed to ROUND 2 by halving the intake:
+    // defence 0 means intake == raw enemy attack (see `healBase`), so 3500/round takes the focus
+    // 10,000 → 6,500 (65%, no crossing) → 3,000 (30%, crossing). A grant in round 2 CANNOT be a
+    // round-1 seed, so the pair pins the mechanism rather than the timing. The 6500 sibling keeps
+    // its number for the deliberate parity with the Tycho/Kafa cases; this one is free to differ.
+    it('DPS-mode: the crossing reaction fires in ROUND 2 when that is when the crossing happens (not a round-1 seed)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        const hpChanged: Extract<CombatEvent, { type: 'hp-changed' }>[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e));
+        bus.on('hp-changed', (e) => hpChanged.push(e));
+        runCombat(
+            healBase({
+                numRounds: 3,
+                hp: 10_000,
+                healTargetId: undefined,
+                mode: 'dps',
+                enemyHp: 10_000_000,
+                enemyAttackers: [manualEnemy('atk1', 3500)],
+                shipSkills: {
+                    slots: [{ slot: 'passive', abilities: [crossingBuff(false)] }],
+                },
+                bus,
+            })
+        );
+
+        const downwardCrossings = hpChanged.filter(
+            (e) => e.targetId === 'attacker' && e.oldPct >= 40 && e.newPct < 40
+        );
+        expect(downwardCrossings).toHaveLength(1);
+        expect(downwardCrossings[0].round).toBe(2);
+
+        const grants = buffApplied.filter((e) => e.buffName === 'Reinforced');
+        expect(grants).toHaveLength(1);
+        expect(grants[0].round).toBe(2);
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

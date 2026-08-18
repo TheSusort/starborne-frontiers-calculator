@@ -1448,10 +1448,11 @@ export interface IntentExecContext {
     playerIds: string[];
     /** Enemy attacker ids (healing mode; Task 7). The opposing side for a PLAYER drain owner's
      *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
-     *  here. Empty/omitted only when the caller supplied no enemy attackers → drain
-     *  `enemyBuffNames` stays []. That is no longer the DPS calculator: since SP-4b-2a every
-     *  `simulateDPS` run carries a real enemy, whose (empty, for the synthesized stand-in)
-     *  self-buff union is what this now sources. */
+     *  here. Optional on this type for the direct callers that build a drain ctx by hand; no
+     *  `runCombat` run leaves it empty any more. It was the DPS calculator that used to: since
+     *  SP-4b-2a every `simulateDPS` run carries a real enemy (whose self-buff union is empty for
+     *  the synthesized stand-in — an emptiness of CONTENT), and since SP-4b-2b no caller can pass
+     *  an absent/empty roster at all, because the normalization boundary throws. */
     enemyAttackerIds?: string[];
     /** When supplied, filters `enemyAttackerIds` to living opposing actors for the
      *  drain-time `enemy-buff` gate (Graphite start-of-round Stealth check). Absent →

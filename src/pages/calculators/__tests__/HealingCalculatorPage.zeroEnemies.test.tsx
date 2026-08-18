@@ -69,8 +69,9 @@ describe('HealingCalculatorPage with an empty enemy team', () => {
         // PRESENCE, never a number: a `> 0`-guarded display failure in this codebase shows up as a
         // vanished section, not as a wrong value. `simulateHealing` runs inside a `useMemo` during
         // render, so a throw on the empty roster would fail this render outright — which is the
-        // other regression this guards, since the engine boundary starts rejecting empty rosters in
-        // a later task and the practice target is what keeps this page out of that path.
+        // other regression this guards: the engine boundary now REJECTS an empty roster outright
+        // (`normalizeCombatRoster` throws, SP-4b-2b Task 3), and the practice target is the only
+        // thing keeping this page out of that path.
         expect(screen.getAllByText('Effective Healing').length).toBeGreaterThan(0);
         expect(screen.getAllByText(/Overheal/).length).toBeGreaterThan(0);
         // The results panel is still the real thing, not an empty-state placeholder.

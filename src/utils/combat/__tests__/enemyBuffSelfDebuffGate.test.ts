@@ -280,6 +280,15 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
  * and the scalar channel is still the live one for them. Their 10000-vs-20000 contrast is real, so
  * they are left alone here, but the missing `hp` is a latent fixture defect worth fixing on purpose
  * rather than by accident.
+ *
+ * ⭐ HAND-OFF (SP-4b-2b Task 8, deliberately NOT fixed here). Twelve `directDamage` assertions in
+ * this file are live only BECAUSE of that omission — an `as EnemyAttacker` cast silences the
+ * required `stats.hp`, which is the same cast-hides-a-required-field class repair wave E fixed in
+ * `shieldBasisSecondaryDamage`. Supplying `hp` flips those twelve to the positional channel, so
+ * every one of them has to be re-derived onto `focusDealt`/`perTargetDealt`; that is a fixture
+ * migration with twelve numbers to re-measure, not a comment. It also collides with SP-4c: those
+ * twelve currently exercise the scalar sink, which 4c deletes. Do it as its own ticket, and prefer
+ * dropping the casts (so `tsc` demands `hp`) over adding `hp` at each site.
  */
 const focusDealt = (round: RoundData): number => Math.round(dealtBy([round], 'attacker'));
 
