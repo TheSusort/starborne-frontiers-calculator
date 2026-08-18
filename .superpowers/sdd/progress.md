@@ -326,3 +326,38 @@ Task 4 (wave A): complete (commit 94b14d4e + fix wave 5becf538; review APPROVED)
   dummy's enemyDefense folded (measured 45,000 -> 14,820.90) — contradicting engine.ts's stated intent
   that the cast "whiffs against corpses rather than teleporting onto the dummy". 4c's deletion is NOT
   a pure no-op. No assertion is pinned to that path (the death was removed by raising HP).
+Task 5 (wave B): complete (commit ec969d1d + fix wave 6c4def78; review APPROVED). triggers 137/137,
+  equipmentAbilities 76/76. 38 of 41 failures fixed by 12 lines. Gate scan clean.
+  ⭐ NEW CLASS — GREEN-BUT-VACUOUS: a repaired file can pass on `0 === 0` because both arms'
+  rawTotals.direct are 0 positionally. So FAILURES ARE NOT THE WHOLE JOB; every wave must also scan
+  equality assertions on rawTotals.direct/directDamage/cumulativeDamage.
+  ⭐ M10: the reactive DRAIN-time hp-threshold gate with hpSubject !== 'self' is dead positionally
+  (buildDrainContext derives enemyHpPct from cumulativeDamage/enemyHp, both dummy scalars; measured
+  cum=0 at every drain). The review CORRECTED the record twice: the dead predicate includes the
+  UNDEFINED hpSubject case (evaluateConditions.ts:254-258), so a follow-up scoped to
+  hpSubject:'enemy' would UNDER-FIX; and Judge's condition comes from parseHpThresholdCondition
+  (buildShipAbilities.ts:1627-1637, no hpSubject field), NOT hpThresholdFromSentence — a
+  misattribution INHERITED from the engine comment at :1670-1672.
+  ⭐⭐ AND IT IS A LIVE DEFECT, not just a trap: corpus-unreachable from parsed skill text, but the
+  in-app ability EDITOR authors exactly this shape (ConditionRow.tsx:182-193 offers "Whose HP" ->
+  enemy; AbilityCard.tsx:964-965 offers reactive triggers; feeds config.shipSkills into the DPS calc).
+  A user-authored on-crit reactive gated on "enemy below 50% HP" silently never fires.
+  OWNER RULING 2026-08-17: M10 joins the leech follow-up PR. This PR carries the corrected record +
+  a fail-loud tripwire (6c4def78, red-green proven by forcing enemyHpPct=10).
+Task 6 (wave C): commit 2777e0d4 — 146/146 across 26 files, 32 insertion points, review PENDING.
+  ⭐ THE LEGACY SINK IS STILL REACHABLE: resolvesPositionalVictim keys on MAX hp, so a 0-max-HP
+  "pressure source" roster still routes to the sink, byte-identical to pre-branch. Coverage that
+  looked lost is preservable. Used for 4 wave-C fixtures, each marked for SP-4c.
+  ⭐ Omitting target/pattern does NOT keep a run non-positional — withTargeting fills both.
+Task 6b (wave D): commit d1c69e0b — 189/189 across 27 files, review PENDING.
+  ⭐ M14 isPositional is a TAUTOLOGY below the boundary; M13 the pressure source does NOT make the
+  dummy destructible/observable; M12 a bomb burst emits no dot-detonated positionally (and a RATIO
+  guard then yields NaN and can go green in the WRONG direction).
+  ⭐ simulateDPS RE-FOLDS per-victim credit back into RoundData.directDamage, so directDamage
+  assertions that go through simulateDPS are LIVE and must not be migrated. Entry point decides.
+  ⭐ MY BRIEF PASSED WAVE C'S SPECULATIVE 'e1' COLLISION LIST ALONG AS FACT — wrong in BOTH
+  directions. Controller lesson: label an unverified hand-off as unverified.
+  OPEN FOR OWNER (non-blocking, fixture records both ways): hpCrossing's "crossing trigger is dormant
+  in DPS mode" premise is FALSE — it was masked by the fixture having no attacker. Under real damage a
+  DPS-mode focus emits hp-changed, crosses 40%, and DOES grant Reinforced (1 grant, round 1). Is that
+  correct game behaviour?
