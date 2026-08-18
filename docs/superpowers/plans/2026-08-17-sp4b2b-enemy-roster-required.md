@@ -757,6 +757,37 @@ eleven residual failures in `engine.events.test.ts`. Everything below came out o
 18. **A blanket id replacement can INTRODUCE vacuity.** Wave C caught itself doing this: a negative
     control's lookup resolved to `undefined` and a `?? []` made it pass regardless. If you sweep ids
     mechanically, re-check every negative control afterwards.
+19. **Enumerate insertion points by DIFFING the base commit, not by scanning for `enemyAttackers: []`.**
+    The two disagree: in wave D by exactly one line, and that line was a **pre-existing deliberate `[]`**
+    inside a gate-negative. Diff first, then classify each hit as "Task 1 inserted this" vs "this was
+    always here on purpose".
+20. **M14: `isPositional` is a TAUTOLOGY below the boundary** (`normalizeCombatRoster` places every
+    actor). Before repairing any fixture whose subject is a non-positional PLAYER, check which gate it
+    turns on: the 0-max-HP pressure source rescues `resolvesPositionalVictim` but NOT `isPositional`.
+    Wave E's `damageChannelAccounting` and `perVictimWalkedTeamDetonation` are keyed on
+    `resolvesPositionalVictim`, so correction #15 still stands for them — but verify, don't assume.
+    **SP-4c note: if `applyPositionedTimedBurst`'s `isPositional` conjunct survives the dummy deletion,
+    it is dead code.**
+21. **M13: the pressure source does NOT make the vestigial dummy destructible or observable.** Any
+    fixture reading `enemyOutcome`, `perActorIncoming.enemy`, `ship-destroyed` on `'enemy'`, or relying
+    on the run terminating at a kill needs that surface MOVED onto a real enemy. Candidates: anything
+    named `*dummy*` or `*U5*`.
+22. **M12: a bomb burst does not emit `dot-detonated` positionally.** A fixture summing
+    `dot-detonated` to measure a bomb reads 0 — and if its guard is a RATIO rather than `> 0`, it
+    produces `NaN` and **can go green in the wrong direction**. Prefer `rawTotals.detonation`.
+23. **`simulateDPS` keeps `RoundData.directDamage` ALIVE; a direct `runCombat` does not.**
+    `simulateDPS` re-folds per-victim credit back into the scalar, so four of wave D's `directDamage`
+    assertions are non-vacuous. **Check the entry point before declaring an M3 hit** — migrating those
+    to `perTargetDealt` would break them.
+24. **An `as EnemyAttacker` cast that omits `stats.hp` keeps its run non-positional by accident**, which
+    makes some `directDamage` equality assertions genuinely live (confirmed in `leech`). Do not
+    "fix" those into `perTargetDealt` — they would then read 0.
+25. **Re-derive the `'e1'` collision list per file.** Wave D found the inherited list wrong in BOTH
+    directions. Also: a same-run duplicate/reserved id THROWS in `runCombat`, so the silent risk is
+    only in test-side per-actor bookkeeping.
+26. **A detonate-only cast measuring 0 is confirmed live** (two of wave D's files hit it). The
+    corpus-faithful repair — adding a plain damage clause to the same cast — was verified to restore
+    the exact pre-branch detonation magnitudes.
 
 ---
 
