@@ -30,6 +30,7 @@ import { ShipSkills, Ability, AbilityTarget, IncomingCondition } from '../../../
 import { setKeyedRng, makeKeyedRng } from '../../calculators/rateAccumulator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 
 let idc = 0;
 const damageAbility = (multiplier: number, target: AbilityTarget = 'enemy'): Ability => ({
@@ -506,5 +507,82 @@ describe('SP-4b-2 D6 — the passive-slot instance is a real direct-damage intak
         // The SAME instance, unblocked, on the ally it is the only thing to reach. This is the
         // assertion that fails if the instance is not staged/landed at all — 800 above would not.
         expect(dealt?.['ally-1']).toBe(400);
+    });
+});
+
+/** DERIVED BY CONSTRUCTION, not read off a run: the passive-slot instance's delivered damage in this
+ *  fixture. `FOCUS_ATTACK` (1000) × the instance's 100% multiplier, with `defence`, `enemyDefense`
+ *  and `crit` all 0 in `BASE` — so no mitigation, no crit term, no affinity — over `BASE`'s single
+ *  round against exactly ONE positioned enemy, i.e. one full-share hit and no covered halving.
+ *  The same arithmetic at the 50% multiplier gives the 500 that
+ *  "an 'all-enemies' passive under a SINGLE-TARGET cast reaches every enemy, credited per victim"
+ *  already derives inline in the first describe of this file.
+ *  Pinned as a literal so a change in the instance's magnitude fails loudly here. */
+const PASSIVE_INSTANCE_DAMAGE = 1000;
+/** 20% of the above — the standing leech's payout. Written as the arithmetic, not a bare number,
+ *  so the relationship stays legible when either constant is updated. */
+const PASSIVE_INSTANCE_LEECH = PASSIVE_INSTANCE_DAMAGE * 0.2;
+
+/**
+ * Site 4 of the leech-channel class (spec §3): the passive-slot damage instance pays a standing
+ * damage-dealt leech.
+ *
+ * THE DEFECT. `stagePassiveSlotHit`'s apply loop calls `tb.applyToVictim` directly and never
+ * reaches a leech proc, so this separate damage instance paid nothing — a regression against the
+ * pre-positional path, where `passiveDamage` folded into the aggregate `directDamage` and reached
+ * a standing leech via `creditDamage(…, 'direct', …)`.
+ *
+ * PRODUCTION-REACHABLE, and the argument does not need one ship to carry both in the same slot:
+ * the Leech gear set (`buildEquipmentAbilities.ts:52`, `leechScope:'all'`) is equippable on ANY
+ * ship, so Judge + the Leech set reaches it. The fixture co-locates them in one passive slot
+ * because that is the smallest shape that exercises the seam.
+ *
+ * The incoming direction is deliberately NOT asserted — a passive-slot instance does not proc the
+ * victim's damage-taken leech, since the victim is not its primary target (owner ruling, spec §2.2).
+ */
+describe('Site 4 — the passive-slot damage instance pays a standing leech', () => {
+    it('a 20% standing leech credits 20% of the passive-slot instance’s delivered damage', () => {
+        idc = 0;
+        setKeyedRng(makeKeyedRng(1));
+
+        // Firing skill: single-target `enemy` at 0% so the FIRING hit delivers nothing and cannot
+        // contribute a direct-channel leech payout. Passive slot: a 100% `all-enemies` damage
+        // ability (the separate instance under test) PLUS a 20% self leech. One positioned enemy,
+        // so the instance lands exactly one hit and the arithmetic is a single product.
+        const leech: Ability = {
+            id: `psl${++idc}`,
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'heal', pct: 20, basis: 'damage-dealt', leechScope: 'all' },
+        };
+
+        const result = runCombat({
+            ...BASE(),
+            enemyAttackers: [enemyAt('e-front', 'M4')],
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [damageAbility(0, 'enemy')] },
+                    {
+                        slot: 'passive',
+                        abilities: [damageAbility(100, 'all-enemies'), leech],
+                    },
+                ],
+            },
+        });
+
+        // TWO INDEPENDENT PINNED NUMBERS, both hand-derived from the fixture (see the constants
+        // above: 1000 × 100% by construction, and 20% of it). Asserting
+        // the leech as `delivered * 0.2` would derive the expectation from the run's own output —
+        // the run could then halve both numbers together and stay green, which is the
+        // fixture-vacuity shape the Global Constraints forbid. Pinning both means either one
+        // moving fails the test.
+        expect(dealtBy(result.rounds, 'attacker')).toBe(PASSIVE_INSTANCE_DAMAGE);
+        const totalHeal = (result.healing?.rounds ?? []).reduce(
+            (sum, rd) => sum + (rd.perActor.get('attacker')?.directHeal ?? 0),
+            0
+        );
+        expect(totalHeal).toBeCloseTo(PASSIVE_INSTANCE_LEECH, 4);
     });
 });
