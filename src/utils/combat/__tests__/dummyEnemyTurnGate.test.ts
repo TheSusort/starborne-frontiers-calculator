@@ -17,6 +17,7 @@ import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -60,7 +61,15 @@ const basicEnemyAt = (id: string, position: Position): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: an EMPTY roster is refused at the normalization boundary, but this file's whole
+    // subject is the NOT-fully-positional branch of the turn-order gate, so it needs a roster that
+    // is real yet still leaves the dummy as the offense sink. That shape is the documented 0-MAX-HP
+    // "pressure source": `dummyEnemyIsVestigial`'s first conjunct is
+    // `enemyAttackerActors.some(isTargetableRosterMember)` — max hp > 0, the same member predicate
+    // `resolvesPositionalVictim` is built from, NOT `isPositional`. A placed-but-unhittable roster
+    // therefore reads as "pressure, not targets", the dummy stays in the turn order, and the gate's
+    // negative branch is observable exactly as it was pre-branch.
+    enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: 10000,
     crit: 0,
     critDamage: 0,
@@ -96,9 +105,11 @@ const enemyTurnStartedCount = (input: CombatEngineInput): number => {
 };
 
 describe('dummy enemy turn gate', () => {
-    it('DPS mode (no positioned enemies): the dummy enemy takes its tick turn', () => {
+    it('DPS mode (no TARGETABLE enemies): the dummy enemy takes its tick turn', () => {
         idc = 0;
-        // No enemyAttackers / no healTargetId → the dummy `enemy` IS the target (DPS calc).
+        // BASE's roster is a 0-max-HP pressure source (see its note) and there is no healTargetId,
+        // so nothing on the board can absorb the focus's cast → the dummy `enemy` IS the target
+        // (DPS calc) and stays in the turn order.
         expect(enemyTurnStartedCount(BASE())).toBeGreaterThan(0);
     });
 

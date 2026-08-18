@@ -51,6 +51,10 @@ const rosterWithEnemyHp = (hp: number): CombatEngineInput => {
     return { ...bareInput(), numRounds: ROUNDS, enemyAttackers: enemies };
 };
 
+/**
+ * SP-4b-2b: no longer a runnable shape — the normalization boundary refuses it. Kept as a fixture
+ * so the refusal itself is pinned (below) rather than the shape quietly disappearing from this file.
+ */
 const noRoster = (): CombatEngineInput => ({
     ...bareInput(),
     numRounds: ROUNDS,
@@ -85,11 +89,22 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         expect(result.rounds.map(positionalIn)).toEqual([0, 0, 0, 0]);
     });
 
-    it('an EMPTY opposing roster credits every cast to the LEGACY sink', () => {
-        const result = runCombat(noRoster());
-
-        expect(result.rawTotals.cumulative).toBe(ROUNDS * PER_CAST);
-        expect(result.rounds.map(positionalIn)).toEqual([0, 0, 0, 0]);
+    // SP-4b-2b INVERTED THIS TEST. It read "an EMPTY opposing roster credits every cast to the
+    // LEGACY sink", asserting `rawTotals.cumulative === ROUNDS * PER_CAST` and no per-victim credit.
+    // The empty roster is now refused at the normalization boundary, so the premise is illegal by
+    // contract and no roster line can repair it.
+    //
+    // WHAT STOPPED BEING COVERED, and what survives: nothing about the ACCOUNTING. The mechanic
+    // this test observed — "a run with no targetable opponent credits the whole cast to the legacy
+    // sink and nothing to the per-victim channel" — is asserted identically, on the same four
+    // rounds and the same 10 000 per cast, by "a roster of 0-max-HP pressure sources credits every
+    // cast to the LEGACY sink" directly above, and by that shape's entry in the INVARIANT test
+    // below. `resolvesPositionalVictim` keys on MAX hp, so an unhittable roster and an absent one
+    // reach the sink through the identical gate; the two cases were always the same routing class
+    // spelled two ways. What is genuinely gone is only the SPELLING — the emptiness itself — and
+    // that is what this assertion now pins.
+    it('an EMPTY opposing roster is REFUSED — the sink is not reachable that way any more', () => {
+        expect(() => runCombat(noRoster())).toThrow(/enemyAttackers is empty/);
     });
 
     it('a LIVING positioned roster credits every cast to the PER-VICTIM channel', () => {
@@ -115,8 +130,15 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
     it('INVARIANT: across every roster shape, no round books into both channels, and a round with a living victim books into one', () => {
         // The third state — "neither channel while a living victim existed" — is the SP-4b-1 §4B
         // defect. Pinned here directly so a future gate/selection divergence cannot reintroduce it.
+        // SP-4b-2b: the `{ name: 'no roster', input: noRoster }` shape was dropped from this list —
+        // it is refused at the boundary now, pinned by its own test above. It was the same routing
+        // class as the 0-max-HP pressure source that remains here (both fail
+        // `resolvesPositionalVictim` and fall to the sink), so the list still covers every reachable
+        // sink/per-victim/whiff combination. Re-asserted here so the absence is deliberate and a
+        // future reader cannot read it as a quietly deleted shape.
+        expect(() => runCombat(noRoster())).toThrow(/enemyAttackers is empty/);
+
         const shapes: ReadonlyArray<{ name: string; input: () => CombatEngineInput }> = [
-            { name: 'no roster', input: noRoster },
             { name: '0-max-HP pressure source', input: () => rosterWithEnemyHp(0) },
             { name: 'dies in round 1', input: () => rosterWithEnemyHp(5_000) },
             { name: 'survives every round', input: () => rosterWithEnemyHp(500_000) },

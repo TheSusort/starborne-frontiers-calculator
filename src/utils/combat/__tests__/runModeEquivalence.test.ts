@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // NOTE: do NOT call resetRateGateRng() after setupKeyedTestRng() — reset nulls the keyed
 // provider and restores Math.random, un-seeding the test (rateAccumulator.ts:26-29).
@@ -44,7 +45,11 @@ const selfHealSkills = (): ShipSkills => ({
 });
 
 const base = (): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: every run needs a real opponent. This file's subject is `mode` — the run-kind
+    // signal — not the roster, so the roster here is the shared inert 0-attack punching bag.
+    // 20 000 total focus damage against 500 000 HP means it survives both rounds, so the run's
+    // SHAPE is constant across every mode compared below (a mid-run kill would change it).
+    enemyAttackers: bareEnemy(),
     attack: 10_000,
     crit: 0,
     critDamage: 0,
@@ -86,6 +91,13 @@ describe('mode is the sole run-kind signal', () => {
         const explicit = runCombat({ ...DPS_BASE(), mode: 'dps' });
 
         expect(explicit).toEqual(implicit);
+        // NON-VACUITY (correction 9's class): a whole-result `toEqual` is only an equivalence claim
+        // if the results carry something. Positionally the focus's credit lives in `perTargetDealt`,
+        // NOT in the now-dead scalar `directDamage`, so pin the credit that actually exists — two
+        // equal-but-empty results would otherwise satisfy the assertion above.
+        expect(implicit.rounds.map((r) => r.perTargetDealt?.attacker?.[BARE_ENEMY_ID])).toEqual([
+            10_000, 10_000,
+        ]);
     });
 
     it('battle mode keeps the healing result block (healPipelineActive, not mode, gates it)', () => {

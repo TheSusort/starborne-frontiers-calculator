@@ -90,9 +90,27 @@ describe('normalizeCombatRoster — auto-placement', () => {
         expect(out.enemyAttackers?.[0].position).toBe('M4');
     });
 
-    it('leaves an empty enemy roster empty — it never invents an enemy', () => {
-        const out = normalizeCombatRoster(baseInput());
-        expect(out.enemyAttackers ?? []).toEqual([]);
+    // SP-4b-2b: this test used to read "leaves an empty enemy roster empty — it never invents an
+    // enemy", asserting `out.enemyAttackers ?? []` came back `[]`. That was the OLD contract, and
+    // this PR reverses it: the boundary is the one place that could accommodate an
+    // under-specified caller, and accommodating it is exactly what kept the dummy sink alive. So
+    // the boundary now REFUSES an opponent-less run instead of passing the emptiness through.
+    //
+    // The "never invents an enemy" half of the old subject is not lost — it is now implied
+    // strictly more strongly. A function that throws cannot have synthesized a sink, and the
+    // guard's own message names the correct caller-side remedy
+    // (`healingEngineAdapter.practiceTarget`, i.e. synthesize the inert opponent ABOVE the
+    // boundary, where it is visible). Both the `[]` and the `undefined` spelling are pinned
+    // because an `as CombatEngineInput` cast at a call site defeats the compile-time check and
+    // reaches this line with the field missing entirely.
+    it('REFUSES an empty enemy roster rather than passing the emptiness through', () => {
+        expect(() => normalizeCombatRoster(baseInput({ enemyAttackers: [] }))).toThrow(
+            /enemyAttackers is empty/
+        );
+    });
+
+    it('REFUSES a missing enemy roster too — the runtime guard catches `undefined`, not just `[]`', () => {
+        expect(() => normalizeCombatRoster(baseInput())).toThrow(/enemyAttackers is empty/);
     });
 
     it('is a pure function — the caller’s input object is not mutated', () => {

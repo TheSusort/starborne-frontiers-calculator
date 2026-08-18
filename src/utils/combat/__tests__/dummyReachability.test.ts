@@ -3,8 +3,13 @@
  * takes that fallback, clusters B/D/E/F/G fall out behind it and 4c is pure deletion.
  *
  * This file pins what 4b-1 can actually guarantee: a run with a NON-EMPTY enemy roster never takes
- * it. Runs with no enemy at all still do — that is 4b-2's job, and the second test pins the
- * fallback as still-live so this file cannot silently go vacuous before then.
+ * it.
+ *
+ * SP-4b-2b UPDATE. 4b-2b did the promised job: an empty roster is now refused at the normalization
+ * boundary, so "a run with no enemy still takes the fallback" is no longer a reachable state and the
+ * second test asserts the REFUSAL instead. That cost this file its own vacuity guard — the old
+ * second test's `> 0` reading was what proved the counter was wired at all. See that test's comment
+ * for where the surviving liveness evidence lives, and note that Task 7 of this PR re-homes it here.
  *
  * ⚠️ READ BEFORE TREATING A ZERO HERE AS 4c's GO-AHEAD. This file is NOT sufficient on its own,
  * for two independent reasons:
@@ -44,10 +49,26 @@ describe('dummy reachability after normalization', () => {
         expect(__getLegacyVictimFallbackCount()).toBe(0);
     });
 
-    it('STILL takes it with an empty roster — 4b-2 closes this, and the counter proves it is live', () => {
-        // Without this, the assertion above could pass because the counter was never wired.
+    // SP-4b-2b INVERTED THIS TEST. It used to read "STILL takes it with an empty roster — 4b-2
+    // closes this, and the counter proves it is live", running an empty-roster fight and asserting
+    // `__getLegacyVictimFallbackCount() > 0`. 4b-2b is that closure: the empty roster is now
+    // refused at the normalization boundary, so the shape that reached the fallback no longer
+    // exists and the old premise is illegal by contract.
+    //
+    // ⚠️ WHAT THIS COSTS. That assertion carried a second, unrelated job: it was the LIVENESS
+    // PROOF for the counter, i.e. the reason the test above's `toBe(0)` cannot pass merely because
+    // `__getLegacyVictimFallbackCount` was never wired to anything. A throw-assertion does not
+    // observe the counter at all, so that proof does NOT survive here.
+    //
+    // Sibling coverage that does keep the counter honest: `damageChannelAccounting.integration
+    // .test.ts` → "a never-targetable PLAYER roster is a CORPSE, so the enemy whiffs" asserts
+    // `__getLegacyVictimFallbackCount()` is exactly `ROUNDS` (4) — a real, non-zero, exactly-pinned
+    // reading through `runCombat`. So a counter stuck at 0 still fails the suite, just from another
+    // file. Task 7 of this PR re-homes the liveness proof into THIS file and widens it with a
+    // sink-CREDIT counter (the counter here records CONSULTATIONS, which is the second caveat in
+    // this file's header).
+    it('REFUSES an empty roster outright — the shape that reached the fallback is now illegal', () => {
         const noEnemy = { ...bareInput(), enemyAttackers: [] };
-        runCombat(noEnemy);
-        expect(__getLegacyVictimFallbackCount()).toBeGreaterThan(0);
+        expect(() => runCombat(noEnemy)).toThrow(/enemyAttackers is empty/);
     });
 });

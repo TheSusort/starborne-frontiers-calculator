@@ -318,17 +318,26 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
 
     it('REGRESSION: a NON-positional walked-team detonate still surfaces detonationDamage via the legacy aggregate path', () => {
         idc = 0;
-        // No positioned enemy victims (only the dummy `enemy` sink exists). The walked-team ally has a
-        // target but NO pattern AND no positioned roster → selectTurnTarget falls back to the legacy
-        // dummy victim → teamPositional is false → it stays on the legacy single-anchor path: the team
-        // turn detonates the dummy `enemy` sink's seeded bomb (2 × 1000 = 2000) and the credit folds
-        // into teamTurn.detonationDamage (legacy creditDamage → the aggregate teamDamage number). No
+        // No TARGETABLE enemy victims, so the dummy `enemy` sink is the only anchor. The walked-team
+        // ally therefore falls back through selectTurnTarget onto the legacy dummy victim →
+        // teamPositional is false → it stays on the legacy single-anchor path: the team turn
+        // detonates the dummy `enemy` sink's seeded bomb (2 × 1000 = 2000) and the credit folds into
+        // teamTurn.detonationDamage (legacy creditDamage → the aggregate teamDamage number). No
         // positional → the positional-only surfaces (perActorDetonation / perTargetDamage) stay
         // absent. This pins the legacy aggregate path byte-identical.
+        //
+        // SP-4b-2b: this used to say `enemyAttackers: undefined` and attribute the non-positional
+        // routing partly to the missing PATTERN. Both premises are now wrong. `normalizeCombatRoster`
+        // refuses an absent/empty roster outright, and it also FILLS the missing pattern
+        // (DEFAULT_BASE_PATTERN), so the pattern conjunct of `teamPositional` can no longer be the
+        // thing that is false. The surviving lever is the roster: `teamPositional` is keyed on
+        // `resolvesPositionalVictim`, which keys on MAX hp — so a 0-max-HP "pressure source" roster
+        // is placed but unhittable and the legacy path is reached through exactly the same gate as
+        // before, with the same magnitudes. (MEASURED, not assumed: 2000 / 2100 below are unchanged
+        // from the pre-branch `undefined` form.)
         const { events, result } = collect(
             BASE({
-                // No positioned enemy victims; the lone enemy is the dummy sink (no enemyAttackers).
-                enemyAttackers: undefined,
+                enemyAttackers: [enemyAt('pressure-source', 'M4', 0)],
                 teamActors: [
                     {
                         id: 'team-det',
