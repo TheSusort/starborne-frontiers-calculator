@@ -395,3 +395,56 @@ Task 6c (wave E): complete (commit 7db8c435; review APPROVED, Minors only).
   corrected block comment 12 lines above); dummyEnemyTurnGate:9-12 header says "positioned" where the
   gate means TARGETABLE; damageChannelAccounting:142's 0-max-HP shape is now the SOLE carrier of the
   legacy arm of the player-side invariant (dies in SP-4c).
+Task 7: complete (commit 2ba2f8bb; review APPROVED, Minors only). 528 files / 5850 tests (+8, this
+  file 2 -> 10); tsc 0; eslint 0; ZERO .snap movement.
+  ⭐ THE IMPLEMENTER CORRECTLY OVERRODE MY BRIEF'S INCREMENT SITE, and proved it with a MUTANT.
+  `playerTurnBindings.applyToVictim` can never see the dummy (victims come only from
+  enemyAttackerActors / opposingRoster; the dummy is built separately and is never a member), and a
+  0-max-HP positive control makes resolvesPositionalVictim false so drivePositionalApply never runs at
+  all. Symptom: positive control read 0 where it must read 2 while the negative control still held —
+  exactly the "if only one of the two can be satisfied you are on the wrong site" test.
+  REAL SITE: the round-tail vestigial-sink branch, keyed on the ROUND'S OWN delta, not the cumulative
+  decline. The reviewer independently established it is EXACT: `enemy.currentHp` is assigned in exactly
+  ONE place in engine.ts, from cumulativeDamage + cumulativeTeamDamage, whose only reachable mutations
+  are that round's totals — so the guard fires iff the dummy's HP declined that round. One visit per
+  round: no double-count, no miss. It also closed the three non-scalar leak routes (per-actor DoT tick
+  gated `actor.id !== enemy.id`; applyPositionedTimedBurst early-returns for a position-less actor; the
+  only applyVictimDamage(..., enemy, ...) calls sit inside the unreachable dpsEnemyTarget).
+  ⭐ FOR SP-4c: `dpsEnemyTarget` IS ALREADY DEAD CODE — normalization throws on an empty/undefined
+  roster on runCombat's first statement, so `enemyAttackerInputs.length === 0` can never hold. The
+  enemyOutcome block, both applyVictimDamage(..., enemy, ...) calls and the round-tail reactive
+  reconciliation are unreachable. Framing to keep: UNREACHABLE, not proven absent.
+  ⭐ `perTargetDealt` records damage DEALT, not HP REMOVED — a 5,000-HP victim taking a 10,000 cast
+  reads 10,000. The implementer's first draft asserted the clamped value and went red, which is itself
+  evidence the assertion reads the real channel.
+
+## Accumulated MINOR findings for Task 8's sweep / final-review triage
+(i)    scripts/sp4b2b-require-enemy-roster.mjs treats "no error lines" as "tsc converged" with no proof
+       tsc ran — the exact false-good that nearly validated a no-op codemod. One-shot script: DELETE it
+       (the migration is recorded in commit 4104adbc + this ledger) or add a ran-check.
+(ii)   ~3 fixtures still comment "no enemyAttackers" above a literal that now has a roster
+       (rhodiumChakaraDpsModeCredit, adjacentEnemiesDot, demolisherBombSplash).
+(iii)  healingGoldenParity sc-11 has no tripwire on the detonation-scope leech zero (sc-9 has a
+       positive guard).
+(iv)   HealingCalculatorPage.zeroEnemies.test.tsx duplicates ~20 lines of its sibling's vi.mock block.
+(v)    positionalDotLeech.test.ts's comment cites BASE-commit line numbers, stale by ~13 lines because
+       the same commit's other edits shifted the file. Recompute after a same-commit line-count edit.
+(vi)   perVictimWalkedTeamDetonation:349 stale inline comment contradicts the corrected block comment
+       12 lines above it.
+(vii)  dummyEnemyTurnGate:9-12 header says "positioned enemies" where the gate means TARGETABLE.
+(viii) preFightModifiersEngine:138's new control is near-vacuous (victimIncomingModifiers returns
+       {0,0} for ANY unknown id, so it passes whether or not the roster entry exists).
+(ix)   hpCrossing's new positive pins the grant in ROUND 1, the same round a phantom seed would appear;
+       a round-2 crossing would make it self-discriminating.
+(x)    indestructibleDeath's rawTotals-all-zero and enemyOutcome pins are on channels SP-4c deletes —
+       flag for deletion with the dummy so they are not later mistaken for asserted intent.
+(xi)   enemyBuffSelfDebuffGate's 12 directDamage assertions are live only because its `as
+       EnemyAttacker` casts omit stats.hp — the same cast-hides-a-required-field class wave E fixed in
+       shieldBasisSecondaryDamage. Worth its own ticket.
+(xii)  dummyReachability header says "five paths" but enumerates SIX; and its "a zero means the dummy
+       absorbed nothing" sentence should note the counter measures ROUNDS IN WHICH HP DECLINED via the
+       scalar channel, since SP-4c will quote that sentence.
+(xiii) bareAlly exposes unused hp/position knobs; PER_CAST is shared between two fixtures whose
+       magnitudes coincide; the whiff-window case duplicates the corpse-targeting shape.
+(xiv)  damageChannelAccounting:142's 0-max-HP shape is now the SOLE carrier of the legacy arm of the
+       player-side invariant — and SP-4c removes that shape too.
