@@ -3893,20 +3893,25 @@ export function runCombat(rawInput: CombatEngineInput): {
     // The perVictimLeech test pins the exact numbers.
     //
     // NO `dmg()`/cumulative accumulator write here (the per-victim apply already landed the HP
-    // damage; the aggregate direct credit stays suppressed) → no double-count. Honors `scope`:
-    // a detonation-scoped leech is skipped on every channel that reaches this proc — the
+    // damage; the aggregate direct credit stays suppressed) → no double-count. Honors `scope` via
+    // the `channel` argument: a detonation-scoped leech pays on the `'detonation'` channel (the
+    // positional burst) and is skipped on every other channel that reaches this proc — the
     // positional firing hit (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick.
     //
-    // CHANNELS THAT DO *NOT* REACH THIS PROC — the three-instance KNOWN LEECH GAP class, all of it
-    // recorded in the KNOWN GAP TRIPWIRE in `positionalDotLeech.test.ts`. None of these is what the
-    // `scope === 'detonation' && channel !== 'detonation'` `continue` below guards:
+    // CHANNELS THAT DO *NOT* REACH THIS PROC. Two of the original four-instance KNOWN LEECH GAP
+    // class remain listed here; the fixed ones are kept in place, marked, so a reader can see the
+    // whole class rather than only its open tail:
     //   1. (FIXED in SP-4b-2b Task 2b) the positional per-victim DoT tick — now a caller, see
     //      `procStandingLeechesPerVictim(sourceId, damage, dotType)` at the DoT-tick branch's
     //      `credit`.
-    //   2. the positional bomb/accumulator burst — reaches neither this proc nor
-    //      `procTakenLeechesPerVictim` at all, scope notwithstanding. Sibling comment: the
-    //      "KNOWN GAPS … (a) IT PROCS NO LEECHES, IN EITHER DIRECTION" block (engine.ts:6557,
-    //      `KNOWN GAPS — both real, both corpus-bounded today`).
+    //   2. (FIXED — the positional bomb/accumulator burst) now a caller in BOTH of
+    //      `applyPositionedTimedBurst`'s `creditDetonation` callbacks (the `processBombs` one and
+    //      the `processAccumulators` one), each passing `channel: 'detonation'`.
+    //      STILL TRUE for the OTHER direction: the burst reaches `procTakenLeechesPerVictim`
+    //      nowhere, and that is CORRECT rather than a gap — a burst does not proc the victim's
+    //      damage-taken leech (owner ruling 2026-08-18; Malvex reads "when directly damaged as a
+    //      PRIMARY TARGET"). The sibling "KNOWN GAPS … (a)" block this used to cite for the
+    //      "either direction" framing is being corrected on the same grounds.
     //   3. the HEAL-TARGET DoT tick — its `credit` callback discards the applier (`_sourceId`) and
     //      sums into `tankDotDamage`, so nothing can pay. Marked in place at the
     //      `if (tankDotDamage > 0)` branch. This is the instance with no test of its own; a sweep
