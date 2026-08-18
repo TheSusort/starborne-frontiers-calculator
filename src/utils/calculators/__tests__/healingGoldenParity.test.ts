@@ -449,9 +449,10 @@ describe('healingGoldenParity', () => {
     //   cast direct        = 5000 × 100% × 0.4165593651036698 = 2082.796825518349
     //   Inferno tick       = 1 stack × (100/100) × 5000 × dotMult 1 × affinityMult 1 = 5000
     //     — UNCHANGED by the rebase: inferno scales off the APPLIER's effective attack
-    //       (engine.ts:1065), not the victim's HP. Corrosion is the one that reads an HP basis, and
-    //       it ALREADY reads the practice target's own max HP (`recipientMaxHp(actor.id)` at the
-    //       per-victim positional DoT-tick branch, engine.ts:8741) — 40,000 here, not the sink's
+    //       (engine.ts:1066, `ctx.effectiveAttack` in the inferno `tickByTier`), not the victim's
+    //       HP. Corrosion is the one that reads an HP basis, and it ALREADY reads the practice
+    //       target's own max HP (`enemyHp: recipientMaxHp(actor.id)` at the per-victim positional
+    //       DoT-tick branch, engine.ts:8836) — 40,000 here, not the sink's
     //       1,000,000; that branch is the one this fixture's `perTargetDealt` assertion proves runs.
     //
     // Per-round timeline (rounds 1-6; Inferno re-applied every round at duration 1):
@@ -637,8 +638,8 @@ describe('healingGoldenParity', () => {
     // `leechScope:'detonation'` STANDING leech is
     // probably corpus-UNREACHABLE: its only real-ship producer is Valkyrie's Echoing Burst leech
     // (`skillTextParser.ts` ~4335-4338), which is `on-bomb-detonated` and therefore REACTIVE, so it
-    // is partitioned out of `standingLeeches` before it can ever reach this gap — `engine.ts:3860-
-    // 3866` says so explicitly ("no corpus ship reaches it here … Valkyrie's `ally` one is
+    // is partitioned out of `standingLeeches` before it can ever reach this gap — engine.ts:3937-3940
+    // says so explicitly ("no corpus ship reaches it here … Valkyrie's `ally` one is
     // `on-bomb-detonated`, so it is reactive and never enters this map"). So this half is a real code
     // gap with no known live-production instance, not a second confirmed regression. DELIBERATELY
     // LEFT UNFIXED (owner ruling, SP-4b-2b Task 2b), and tripwired instead — see the "KNOWN GAP

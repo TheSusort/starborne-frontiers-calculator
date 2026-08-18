@@ -6,9 +6,10 @@
  * with one real enemy at defence 1,000 -> 1,290 with none).
  *
  * The kit here carries a damage clause AND a `basis:'damage-dealt'` repair rider, which is what
- * makes the third test non-vacuous: the healer's own output is SENSITIVE to the opponent's
- * defence, so pinning "zero enemies == one 0-attack default card" actually pins the stat basis.
- * A pure `basis:'hp'` heal would pass that assertion at any defence, including 0.
+ * makes the LAST case (the parametrized stat-basis one) non-vacuous: the healer's own output is
+ * SENSITIVE to the opponent's defence, so pinning "zero enemies == one 0-attack default card"
+ * actually pins the stat basis. A pure `basis:'hp'` heal would pass that assertion at any defence,
+ * including 0. That case runs at healer crit 0, 50 and 100 — see its own comment for why.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -71,8 +72,14 @@ const damageWithRider = (): ShipSkills => ({
     ],
 });
 
-const BASE = (enemies: EnemyAttackerInput[]): HealingSimulationInput => ({
-    healer: HEALER,
+/** `crit`/`critDamage` are knobs for the parametrized stat-basis case below; every other case
+ *  leaves both at the HEALER defaults of 0. */
+const BASE = (
+    enemies: EnemyAttackerInput[],
+    crit = HEALER.crit,
+    critDamage = HEALER.critDamage
+): HealingSimulationInput => ({
+    healer: { ...HEALER, crit, critDamage },
     chargeCount: 0,
     shipSkills: damageWithRider(),
     selfBuffs: [],
@@ -96,7 +103,8 @@ describe('healing with no enemies — the practice target', () => {
         expect(result.rounds.some((r) => r.directHeal > 0)).toBe(true);
         // `perTargetDealt` is the only non-silent proof of WHICH opponent the cast landed on: it is
         // populated exclusively by the per-victim positional apply, and the dummy — being
-        // position-less — never appears in it (engine.ts:8344 leaves it empty). Naming the victim
+        // position-less — never appears in it (engine.ts:4174's `roundPerTargetDealt` stays empty on
+        // a non-positional round, and RoundData omits the field entirely). Naming the victim
         // is therefore what distinguishes "the practice target took the hit" from "the run quietly
         // fell through to the sink".
         expect(Object.keys(result.rounds[0].perTargetDealt?.attacker ?? {})).toContain(
@@ -115,43 +123,73 @@ describe('healing with no enemies — the practice target', () => {
         expect(result.rounds.every((r) => r.incomingDamage === 0)).toBe(true);
     });
 
-    it('carries the default enemy card stats, so removing every enemy changes only incoming damage', () => {
-        /** The card a user adds on a fresh page, minus its attack — id is the only difference. */
-        const inertDefaultCard: EnemyAttackerInput = {
-            id: 'e1',
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                speed: DEFAULT_ENEMY_SPEED,
-                defence: DEFAULT_ENEMY_DEFENCE,
-                hp: DEFAULT_ENEMY_HP,
-                security: DEFAULT_ENEMY_SECURITY,
-            },
-            chargeCount: 0,
-            startCharged: false,
-        };
+    // PARAMETRIZED OVER THE HEALER'S CRIT on purpose (final-review Minor 5): the
+    // `healingEngineAdapter` doc block cites equality "at healer crit 0, 50 and 100", and this is
+    // the case that makes that citation true.
+    //
+    // ⚠️ `CRIT_DAMAGE` IS WHAT MAKES THE SWEEP MEAN ANYTHING, and it is 100 rather than the HEALER
+    // default of 0 for exactly that reason. Measured: with `critDamage: 0` a crit multiplies by
+    // `1 + 0/100` = 1, so all three arms produce the identical 6,248 / [2083, 2083, 2083] and the
+    // sweep degenerates into three copies of the crit-0 case. At `critDamage: 100` the three arms
+    // separate — crit 0 → 6,248 / [2083, 2083, 2083] (no crit fires), crit 50 → 16,662 /
+    // [4166, 4166, 8331] (a gate that both misses and hits inside one window), crit 100 → 24,994 /
+    // [8331, 8331, 8331] (always) — so the equality is being asserted across three genuinely
+    // different magnitude profiles, including a MIXED one. `makeRateGate` draws at every rate
+    // (rateAccumulator.ts), so what varies across the arms is which branch is TAKEN, not whether
+    // the stream is touched; without a live critDamage that difference is invisible in the output.
+    // Both runs are re-seeded identically before each call, so a divergence here would mean the
+    // practice target and the 0-attack card really do drive the simulation differently.
+    it.each([0, 50, 100])(
+        'carries the default enemy card stats at healer crit %i, so removing every enemy changes only incoming damage',
+        (crit) => {
+            /** See the block comment above: 0 would make the crit sweep inert. */
+            const CRIT_DAMAGE = 100;
+            /** The card a user adds on a fresh page, minus its attack — id is the only difference. */
+            const inertDefaultCard: EnemyAttackerInput = {
+                id: 'e1',
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    speed: DEFAULT_ENEMY_SPEED,
+                    defence: DEFAULT_ENEMY_DEFENCE,
+                    hp: DEFAULT_ENEMY_HP,
+                    security: DEFAULT_ENEMY_SECURITY,
+                },
+                chargeCount: 0,
+                startCharged: false,
+            };
 
-        idc = 0;
-        setupKeyedTestRng(12345);
-        const zero = simulateHealing(BASE([]));
-        idc = 0;
-        setupKeyedTestRng(12345);
-        const one = simulateHealing(BASE([inertDefaultCard]));
+            idc = 0;
+            setupKeyedTestRng(12345);
+            const zero = simulateHealing(BASE([], crit, CRIT_DAMAGE));
+            idc = 0;
+            setupKeyedTestRng(12345);
+            const one = simulateHealing(BASE([inertDefaultCard], crit, CRIT_DAMAGE));
 
-        // A 0-attack default card and the practice target differ only by id, so the healer's own
-        // output must be identical. This is what pins the stat basis.
-        expect(zero.summary.totalDirectHeal).toBe(one.summary.totalDirectHeal);
+            // A 0-attack default card and the practice target differ only by id, so the healer's own
+            // output must be identical. This is what pins the stat basis.
+            expect(zero.summary.totalDirectHeal).toBe(one.summary.totalDirectHeal);
+            // ...and not just in the total: the PER-ROUND series has to match too, or a run that
+            // front-loads and a run that back-loads the same sum would read as equal.
+            expect(zero.rounds.map((r) => r.directHeal)).toEqual(
+                one.rounds.map((r) => r.directHeal)
+            );
 
-        // ⚠️ ANTI-VACUITY, load-bearing. The assertion above is only worth anything if this
-        // fixture's healing is actually SENSITIVE to the opponent's defence — otherwise it would
-        // pass with the practice target at defence 0, which is precisely the silent
-        // damage-maximising drift the shared stat block exists to prevent.
-        idc = 0;
-        setupKeyedTestRng(12345);
-        const softer = simulateHealing(
-            BASE([{ ...inertDefaultCard, stats: { ...inertDefaultCard.stats, defence: 0 } }])
-        );
-        expect(softer.summary.totalDirectHeal).toBeGreaterThan(zero.summary.totalDirectHeal);
-    });
+            // ⚠️ ANTI-VACUITY, load-bearing. The assertion above is only worth anything if this
+            // fixture's healing is actually SENSITIVE to the opponent's defence — otherwise it would
+            // pass with the practice target at defence 0, which is precisely the silent
+            // damage-maximising drift the shared stat block exists to prevent.
+            idc = 0;
+            setupKeyedTestRng(12345);
+            const softer = simulateHealing(
+                BASE(
+                    [{ ...inertDefaultCard, stats: { ...inertDefaultCard.stats, defence: 0 } }],
+                    crit,
+                    CRIT_DAMAGE
+                )
+            );
+            expect(softer.summary.totalDirectHeal).toBeGreaterThan(zero.summary.totalDirectHeal);
+        }
+    );
 });

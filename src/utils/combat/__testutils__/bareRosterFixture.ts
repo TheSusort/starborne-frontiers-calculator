@@ -1,7 +1,9 @@
 /**
- * The "bare roster" shape: no positions, no targeting, one real enemy — what 54 fixture files
- * pass to `runCombat` today. Shared by the boundary and dummy-reachability suites so the two
- * agree on exactly what an under-specified caller looks like.
+ * The "bare roster" shape: no positions, no targeting, one real enemy — what the 64 direct-engine
+ * fixture files SP-4b-2b migrated pass to `runCombat` today (64 files / 253 tests is the branch's
+ * measured inventory; an earlier draft of this line said 54, which undercounted). Shared by the
+ * boundary and dummy-reachability suites so the two agree on exactly what an under-specified
+ * caller looks like.
  */
 import type { CombatEngineInput } from '../engine';
 import type { ShipSkills } from '../../../types/abilities';

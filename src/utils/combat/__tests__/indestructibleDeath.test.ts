@@ -11,7 +11,8 @@
  * SP-4b-2b — THIS FILE'S ORIGINAL SUBJECT WAS THE EMPTY-ROSTER SHAPE, WHICH IS NOW ILLEGAL.
  *
  * U5's destructible target was the singular `enemy` entity, and the engine gates that entirely on
- * `dpsEnemyTarget = enemyAttackerInputs.length === 0` (engine.ts:2475). An empty roster is now a
+ * `dpsEnemyTarget = enemyAttackerInputs.length === 0` (engine.ts:2527, `const dpsEnemyTarget =`).
+ * An empty roster is now a
  * validation error at the normalization boundary, so NOTHING can reach that branch any more:
  *   • with any roster at all the singular `enemy` is a vestigial immortal sink — it never emits
  *     ship-destroyed, never terminates the run, and `enemyOutcome` describes IT, so it reads
@@ -27,15 +28,16 @@
  *
  * TWO properties are `dpsEnemyTarget`-only and do NOT transfer. They are pinned as such below
  * rather than silently dropped:
- *   • the early `break` that TERMINATED the run on the kill (engine.ts:11115) is gated on
+ *   • the early `break` that TERMINATED the run on the kill (engine.ts:11212,
+ *     `if (dpsEnemyTarget && enemy.destroyedRound !== undefined) break;`) is gated on
  *     `dpsEnemyTarget`, so the run now plays out its full `numRounds`. Past the kill the focus
- *     falls back onto the legacy dummy victim and books NO credit (engine.ts:9130's
- *     `if (!positional) { creditDamage(...) }` skips the direct-cast credit call whenever the
- *     cast resolves positionally — which it does here, since `resolvesPositionalVictim` is keyed
- *     on MAX hp and stays true even after the kill — NOT engine.ts:5876, which is the reactive-proc
- *     credit skip inside `applyReactiveDamage`, gated on `hasPositionedEnemyRoster`, a different
- *     path from the direct-cast credit this sentence is about), which is what the credit-window
- *     case asserts.
+ *     falls back onto the legacy dummy victim and books NO credit (engine.ts:9218, the direct-cast
+ *     `if (!positional) {` guard around `creditDamage(...)`, which skips the credit call whenever
+ *     the cast resolves positionally — which it does here, since `resolvesPositionalVictim` is
+ *     keyed on MAX hp and stays true even after the kill — and NOT engine.ts:5969's
+ *     `if (hasPositionedEnemyRoster && victim.id !== enemy.id) {`, which is the reactive-proc
+ *     credit skip inside `applyReactiveDamage`, a different path from the direct-cast credit this
+ *     sentence is about), which is what the credit-window case asserts.
  *   • `result.enemyOutcome` reads the singular `enemy`, i.e. the immortal sink. Its production
  *     successor is `simulateDPS`'s own `ship-destroyed` re-derivation (dpsSimulator.ts:796),
  *     covered by `dpsSynthesizedEnemy` / `dpsMultiEnemyFinalHp` / `dpsRealEnemyReactions`. The
@@ -155,8 +157,10 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         expect(creditedRounds.map((rd) => rd.round)).toEqual([1, 2, 3]);
         expect(result.rounds).toHaveLength(6);
 
-        // The scalar totals are dead the moment a roster exists (engine.ts:5876 skips
-        // `creditDamage`), so they are 0 across the board — pinned so a future regression that
+        // The scalar totals are dead the moment a roster exists — the DIRECT-CAST credit skip at
+        // engine.ts:9218 (`if (!positional) {` around `creditDamage(...)`), which is the site the
+        // header names; NOT the reactive-proc skip at :5969, whatever an earlier draft of this
+        // comment said — so they are 0 across the board — pinned so a future regression that
         // starts double-booking through BOTH channels is caught here.
         //
         // ⭐ SP-4c HAND-OFF: this all-zero block asserts the ABSENCE of a channel SP-4c deletes, so

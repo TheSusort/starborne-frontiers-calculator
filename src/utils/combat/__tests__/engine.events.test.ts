@@ -610,8 +610,9 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
     //
     // This is a REAL, latent engine gap, not a fixture quirk: any future `DOT_DETONATE_RE` cast
     // whose clause carries no `type: 'damage'` ability (skillTextParser.ts:3167) would lose its
-    // detonation entirely on a positional run (`detonationTargets`, engine.ts:7426 →
-    // `applyPerVictimDetonation`, engine.ts:7753). It is intentionally left UNFIXED here — a
+    // detonation entirely on a positional run (`const detonationTargets = new Map<...>()`,
+    // engine.ts:7492 → `applyPerVictimDetonation(recipe, detonationTargets, …)`, engine.ts:7819).
+    // It is intentionally left UNFIXED here — a
     // follow-up investigation scanned all 147 corpus ships' skill columns and confirmed the gap is
     // CORPUS-UNREACHABLE today: only Crocus, Demolisher and Incinerator mention detonation, and all
     // three deal damage in the same clause (safe, per above). Lingshe's charged skill also

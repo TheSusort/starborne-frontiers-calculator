@@ -40,9 +40,10 @@
  * `simulateDPS` now ALWAYS builds a real, positioned enemy (`enemy-1`), so the four `simulateDPS`
  * tests below no longer take the dummy-fallback branch this file was written against — they take
  * the POSITIONAL branch, where `enemyWithMostBuffs` is `onceByOwner(() => mostBuffsAmong(
- * enemyAttackerActors))` (engine.ts:7860-7862, gated on `hasPositionedEnemyRoster`, now true).
- * Against a single UNBUFFED enemy `mostBuffsAmong` returns `undefined` (engine.ts:7767 —
- * `return bestCount > 0 ? best : undefined`, the deliberate "no buffs anywhere → no most-buffs
+ * enemyAttackerActors))` (engine.ts:8348, `? onceByOwner(() => mostBuffsAmong(enemyAttackerActors))`,
+ * gated on `hasPositionedEnemyRoster`, now true).
+ * Against a single UNBUFFED enemy `mostBuffsAmong` returns `undefined` (engine.ts:8250,
+ * `return bestCount > 0 ? best : undefined;`, the deliberate "no buffs anywhere → no most-buffs
  * target" rule), so Rhodium's proc found no target and dropped entirely: `directDamage` read 0.
  *
  * The repair is to make the fixture exercise the mechanic it NAMES rather than to re-pin 0. Each

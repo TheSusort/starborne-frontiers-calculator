@@ -1881,8 +1881,13 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Task 7 (names only — never folded, no double-fold): the drain owner's `enemy-buff` gate
         // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
-        // enemy-applied debuffs (per-target store keyed by ownerId). Both empty in DPS mode
-        // (no enemy attackers, no debuffs on player actors) → drain gating byte-identical.
+        // enemy-applied debuffs (per-target store keyed by ownerId). Both still read EMPTY on a
+        // DPS run, so drain gating stays byte-identical — but NOT for the reason this comment
+        // used to give ("no enemy attackers"). Every `simulateDPS` run has carried a real enemy
+        // since SP-4b-2a, and since SP-4b-2b the normalization boundary REFUSES a roster-less run
+        // outright, so "DPS mode has no enemy attackers" is structurally impossible. The emptiness
+        // is one of CONTENT: the synthesized DPS stand-in holds no self-buffs and nothing debuffs
+        // the player actors. Same correction as `IntentExecContext.enemyAttackerIds` above.
         enemyBuffNames: selfBuffNamesForOwners(
             ctx.statusEngine,
             (ctx.enemyAttackerIds ?? []).filter((id) => ctx.isActorAlive?.(id) ?? true)

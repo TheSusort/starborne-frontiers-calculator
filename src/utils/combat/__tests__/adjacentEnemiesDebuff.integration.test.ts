@@ -245,15 +245,16 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
  * Single-entry roster: `bareEnemy({ stats: { hp: 1_000_000_000 } })` gives the run exactly one
  * real, targetable opposing actor, and `normalizeCombatRoster`'s `withTargeting`
  * (normalizeRoster.ts:86-92) fills BOTH targeting axes for every run through the boundary — so
- * this run IS positional. `engine.ts:9025`'s `positional` gate (and its `willApplyPositionally`
- * prediction at engine.ts:8942) calls `resolvesPositionalVictim`, which IS satisfied here: the
+ * this run IS positional. The `positional` gate (engine.ts:9113, `const positional =`) — and its
+ * `willApplyPositionally` prediction (engine.ts:9030, `const willApplyPositionally =`) — calls `resolvesPositionalVictim`, which IS satisfied here: the
  * roster's one member has max hp > 0 (`isTargetableRosterMember`, positionalBinding.ts:36).
  * `targetId` IS threaded onto the turn args, as `BARE_ENEMY_ID` — not left unset, and not the
  * vestigial `enemy` dummy.
  *
  * Both mechanics still land the same way they did before this correction, but for a different,
  * purely structural reason: `target-and-adjacent-enemies` resolves to exactly one recipient (the
- * anchor itself) because `adjacentEnemyIdsFor` (engine.ts:7104, always supplied on a resolved
+ * anchor itself) because `adjacentEnemyIdsFor` (engine.ts:7170, `adjacentEnemyIdsFor: (anchorId:
+ * string): string[] =>`, always supplied on a resolved
  * anchor) finds no OTHER roster member to return as a neighbour — not because of any
  * non-positional "no anchor" fallback (the anchor IS defined). `adjacent-enemies` applies to
  * nobody for the same reason (an empty neighbour set), not because there is no primary-target

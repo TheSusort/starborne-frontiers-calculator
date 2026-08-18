@@ -557,7 +557,11 @@ export interface PlayerTurnArgs {
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
      *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
      *  cadence/sourcing as `enemyBuffNames` above (triggers.countOwnersWithSelfBuff). Defaults
-     *  to 0 (DPS-assumption: no enemy attackers to count) — byte-identical there. */
+     *  to 0 for any caller that does not supply it — byte-identical there. The old rationale
+     *  ("no enemy attackers to count" in DPS mode) is stale: every DPS run has carried a real
+     *  enemy since SP-4b-2a and, since SP-4b-2b, `normalizeCombatRoster` throws on a roster-less
+     *  input. The 0 holds because the synthesized DPS stand-in carries no Stealth — nobody to
+     *  count STEALTHED, not nobody to count. */
     stealthedEnemyCount?: number;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target for this actor's
      *  name-specific `enemy-debuff` condition gates (Tygr's "to enemies with Stasis or

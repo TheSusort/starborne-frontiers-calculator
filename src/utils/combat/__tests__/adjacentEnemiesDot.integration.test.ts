@@ -270,9 +270,9 @@ describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes o
  * Single-entry roster: `bareEnemy({ stats: { hp: 1_000_000_000 } })` gives the run exactly one
  * real, targetable opposing actor, and `normalizeCombatRoster`'s `withTargeting`
  * (normalizeRoster.ts:86-92) fills BOTH targeting axes for every run through the boundary — so
- * this run IS positional (engine.ts:9025's `positional` gate calls `resolvesPositionalVictim`,
+ * this run IS positional (engine.ts:9113's `const positional =` gate calls `resolvesPositionalVictim`,
  * satisfied here since the roster's one member has max hp > 0). `targetId` IS threaded (as
- * `BARE_ENEMY_ID`), and `adjacentEnemyIdsFor` IS supplied unconditionally (engine.ts:7104).
+ * `BARE_ENEMY_ID`), and `adjacentEnemyIdsFor` IS supplied unconditionally (engine.ts:7170).
  *
  * The splash fan-out's guard (`targetId !== undefined && adjacentEnemyIdsFor`,
  * playerTurn.ts:3160) therefore DOES fire — it just finds no OTHER roster member to return as a

@@ -16,6 +16,13 @@
  * enemy and since SP-4b-2b the roster is never empty, so "positioned" no longer discriminates
  * anything; a placed-but-unhittable 0-max-HP roster is what still reads as not-fully-positional.
  * The second conjunct is unchanged: every player actor positioned with an ENEMY-side parsed target.
+ *
+ * ⭐ SP-4c HAND-OFF. This whole file's SUBJECT — the dummy's turn-order gate — is deleted by SP-4c
+ * along with the dummy itself, so these cases go with it rather than being migrated. It is also a
+ * PRESSURE-SOURCE fixture: the not-fully-positional arms below only reach the dummy's turn via a
+ * placed-but-unhittable 0-max-HP roster (the same `isTargetableRosterMember` trick
+ * `dummyReachability.test.ts` uses for its liveness proof), so when the dummy goes there is no
+ * remaining actor for the gate to exclude and no assertion here survives the deletion.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';

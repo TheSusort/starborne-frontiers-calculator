@@ -234,7 +234,8 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
     // roster at all, which the normalization boundary now rejects. Note that simply supplying a
     // roster and omitting `target`/`pattern` does NOT work: `normalizeCombatRoster`'s
     // `withTargeting` FILLS both with the front-enemy/base defaults, so `positional`
-    // (engine.ts:9025) is satisfied and the run takes the per-victim branch. The one remaining
+    // (engine.ts:9113, `const positional =`) is satisfied and the run takes the per-victim branch.
+    // The one remaining
     // non-positional shape is the documented "pressure source" roster — every opposing member has
     // 0 MAX hp, so `resolvesPositionalVictim` finds nobody targetable (positionalBinding.ts:60-70).
     // That is what this fixture uses, and it reproduces the original observables exactly:

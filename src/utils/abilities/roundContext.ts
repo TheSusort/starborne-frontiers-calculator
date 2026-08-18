@@ -82,8 +82,11 @@ export function buildRoundContext(state: {
      *  period>=2 conditions). Populated live by the engine drain context. */
     turnsTaken?: number;
     /** Sub-project I, PR I5 — count of living opposing actors currently holding the Stealth
-     *  self-buff. Default 0 (DPS-assumption: no enemy attackers to count). Populated live by
-     *  the combat engine. See ConditionContext.stealthedEnemyCount. */
+     *  self-buff. Default 0 for callers that do not populate it; the combat engine supplies a
+     *  live count. NOT because "DPS mode has no enemy attackers" — that premise died with
+     *  SP-4b-2a (every DPS run carries a real enemy) and is unrepresentable after SP-4b-2b
+     *  (the normalization boundary throws on an empty roster). The 0 is about CONTENT: no
+     *  opposing actor carries Stealth. See ConditionContext.stealthedEnemyCount. */
     stealthedEnemyCount?: number;
     /** Sub-project I, PR I4a — the acting unit's own live crit power (effective critDamage),
      *  for Wildfire's "…for every 10% crit power" dotDamage scaling. Default 0 (no live crit

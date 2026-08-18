@@ -66,9 +66,11 @@ export interface ConditionContext {
      *  scaling). Distinct from `enemyBuffNames`, which is a DEDUPED UNION of buff names
      *  across every opposing actor — it can answer "does at least one enemy have Stealth"
      *  but can never distinguish 1 stealthed enemy from N. Live-derived by the combat
-     *  engine (count of living opposing actors carrying Stealth); defaults to 0 elsewhere
-     *  (DPS mode has no enemy attackers to count) — the scaling contributes 0, byte-
-     *  identical to today. */
+     *  engine (count of living opposing actors carrying Stealth); defaults to 0 elsewhere —
+     *  the scaling contributes 0, byte-identical to today. The default is NOT justified by
+     *  "DPS mode has no enemy attackers": a DPS run has carried a real enemy since SP-4b-2a,
+     *  and since SP-4b-2b no caller can express a roster-less run (the normalization boundary
+     *  throws). It is justified by CONTENT — no opposing actor holds Stealth. */
     stealthedEnemyCount?: number;
     /** Sub-project I, PR I4a — the ACTING unit's own live crit power (effective critDamage
      *  stat, e.g. 150), a continuous MAGNITUDE scaling source (distinct from every other

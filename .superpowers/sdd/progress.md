@@ -326,6 +326,24 @@ Task 4 (wave A): complete (commit 94b14d4e + fix wave 5becf538; review APPROVED)
   dummy's enemyDefense folded (measured 45,000 -> 14,820.90) — contradicting engine.ts's stated intent
   that the cast "whiffs against corpses rather than teleporting onto the dummy". 4c's deletion is NOT
   a pure no-op. No assertion is pinned to that path (the death was removed by raising HP).
+  ⚠️ CORRECTED by the Task 8 final review (the two lines above are kept as history; "kept crediting"
+  was WRONG). Post-wipe the fallback is CONSULTED and the `ability-performed` event PAYLOAD carries a
+  dummy-defence-folded number, but NO channel and no HP is touched. Re-measured (focus attack 100k,
+  one 50k-HP positioned enemy killed in round 1, enemyDefense 8000, 4 rounds):
+      ability-performed  R1 100000 · R2/R3/R4 30549.08935443992
+      rounds             R1 {direct:0, cum:0, ptd:{attacker:{e1:100000}}} · R2-R4 ptd ABSENT
+      rawTotals          all zero · counters {consulted: 3, credited: 0}
+  30549.089 is byte-identical to what the SAME fixture reports every round when the roster is a
+  pressure source (hp:0, non-positional, everything drains the dummy) — so the magnitude really is
+  folded against the dummy's defence. But `directDamage`, `cumulativeDamage`, `perTargetDealt` and
+  `rawTotals` are all untouched, and the dummy's HP never declines, so `__getDummySinkCreditCount()`
+  stays 0. The branch's own code already said so: `dummyReachability.test.ts`'s CORPSE TARGETING case
+  pins `consulted: 2, credited: 0`, and `healingGoldenParity` scenario 9's rounds 7-10 read all-zero
+  with `perTargetDealt` absent once the practice target dies.
+  SO: "4c's deletion is not a pure no-op" SURVIVES but NARROWS to an event-payload value. 4c should
+  plan a LOG/EVENT-FIDELITY assertion (the post-wipe `ability-performed.damage`), not an accounting
+  migration — there is no accounting to migrate. This is the repo's own logged lesson in action:
+  measure `deliveredDamage`, not `ability-performed.damage`.
 Task 5 (wave B): complete (commit ec969d1d + fix wave 6c4def78; review APPROVED). triggers 137/137,
   equipmentAbilities 76/76. 38 of 41 failures fixed by 12 lines. Gate scan clean.
   ⭐ NEW CLASS — GREEN-BUT-VACUOUS: a repaired file can pass on `0 === 0` because both arms'

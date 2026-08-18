@@ -2514,11 +2514,16 @@ export function runCombat(rawInput: CombatEngineInput): {
     //   • `simulateDPS` (the DPS calculator, `mode: 'dps'`) now ALWAYS supplies a real positioned
     //     enemy — explicit from the page, else synthesized from its scalars — so `dpsEnemyTarget`
     //     is FALSE on every shipped DPS run and the dummy is vestigial there too.
-    //   • the roster-less branch survives only for DIRECT `runCombat` callers (the remaining
-    //     engine fixtures), which SP-4b-2b migrates and SP-4c deletes.
+    //   • the roster-less branch is now UNREACHABLE, full stop. As of SP-4b-2b the boundary
+    //     REFUSES an empty or missing roster — `normalizeCombatRoster` (runCombat's first line)
+    //     throws `enemyAttackers is empty` — so `dpsEnemyTarget` is FALSE on every run that gets
+    //     this far, from any caller, production or fixture. Its last users were the direct
+    //     `runCombat` engine fixtures, and SP-4b-2b migrated all of them.
     // So a comment reading "pure DPS mode" means "a caller that passed no `enemyAttackers`" — a
-    // test-only shape today — and NOT "the DPS calculator". Every such phrase below is historical
-    // rationale kept for SP-4c, deliberately not rewritten into a claim about the shipped path.
+    // shape NO caller can express any more — and NOT "the DPS calculator". Every such phrase below
+    // is DEAD historical rationale kept only so SP-4c can delete the branch knowingly; none of it
+    // is a claim about any live path. `dpsEnemyTarget` itself survives as a
+    // provably-constant-false discriminator, which is exactly what makes 4c's deletion tractable.
     const dpsEnemyTarget = enemyAttackerInputs.length === 0;
     // Validate enemy attacker ids before building any actors: an id that duplicates another
     // enemy attacker, or collides with a reserved/player id (the singular enemy entity, the
@@ -3890,10 +3895,21 @@ export function runCombat(rawInput: CombatEngineInput): {
     // NO `dmg()`/cumulative accumulator write here (the per-victim apply already landed the HP
     // damage; the aggregate direct credit stays suppressed) → no double-count. Honors `scope`:
     // a detonation-scoped leech is skipped on every channel that reaches this proc — the
-    // positional firing hit (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick. (The
-    // positional bomb/accumulator burst reaches neither this proc nor `procTakenLeechesPerVictim`
-    // at all, scope notwithstanding — see the KNOWN GAP TRIPWIRE in positionalDotLeech.test.ts and
-    // the sibling comment at engine.ts:6485-6498; that gap is NOT what this `continue` guards.)
+    // positional firing hit (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick.
+    //
+    // CHANNELS THAT DO *NOT* REACH THIS PROC — the three-instance KNOWN LEECH GAP class, all of it
+    // recorded in the KNOWN GAP TRIPWIRE in `positionalDotLeech.test.ts`. None of these is what the
+    // `scope === 'detonation'` `continue` below guards:
+    //   1. (FIXED in SP-4b-2b Task 2b) the positional per-victim DoT tick — now a caller, see
+    //      `procStandingLeechesPerVictim(sourceId, damage)` at the DoT-tick branch's `credit`.
+    //   2. the positional bomb/accumulator burst — reaches neither this proc nor
+    //      `procTakenLeechesPerVictim` at all, scope notwithstanding. Sibling comment: the
+    //      "KNOWN GAPS … (a) IT PROCS NO LEECHES, IN EITHER DIRECTION" block (engine.ts:6557,
+    //      `KNOWN GAPS — both real, both corpus-bounded today`).
+    //   3. the HEAL-TARGET DoT tick — its `credit` callback discards the applier (`_sourceId`) and
+    //      sums into `tankDotDamage`, so nothing can pay. Marked in place at the
+    //      `if (tankDotDamage > 0)` branch. This is the instance with no test of its own; a sweep
+    //      driven only by `positionalDotLeech.test.ts`'s burst case will miss it.
     const procStandingLeechesPerVictim = (sourceId: string, amount: number): void => {
         if (!healingCtx || amount <= 0) return;
         const entries = standingLeeches.get(sourceId);
@@ -8763,6 +8779,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // PR I4b: the tank is the ticking victim.
                             dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
                         });
+                        // KNOWN LEECH GAP — instance 3 of the three-instance class, and the only
+                        // one with no test of its own: this heal-target branch procs NO standing
+                        // leech in either direction. Its `credit` callback above DISCARDS the
+                        // applier (`_sourceId`) and only sums into `tankDotDamage`, so by the time
+                        // `applyIncomingToTarget` books the aggregate there is no source left to
+                        // pay. (Instance 1, the positional per-victim DoT tick, was fixed in
+                        // SP-4b-2b Task 2b — see `procStandingLeechesPerVictim(sourceId, damage)`
+                        // in the sibling `else` branch below. Instance 2 is the positional
+                        // bomb/accumulator burst.) The class, its tripwire and the reachability
+                        // reasoning live in `positionalDotLeech.test.ts` — read it before fixing
+                        // any one instance, or this one gets left behind.
                         if (tankDotDamage > 0) {
                             // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
                             // single killer → byDirectDamage:false, killerId undefined (overrides the
@@ -8843,7 +8870,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // landscape, the scope handling and why this makes both sides
                                     // team-symmetric by construction, see the canonical block
                                     // comment above `procStandingLeechesPerVictim`'s definition
-                                    // (engine.ts:3811-3844) — not repeated here.
+                                    // (engine.ts:3868, `// E2 Task 3: PER-VICTIM standing-leech
+                                    // proc for the POSITIONAL apply path.`, running to the
+                                    // definition at :3913) — not repeated here.
                                     //
                                     // SPECIFIC TO THIS CALL SITE: `creditDamage` was not an option
                                     // here, because it would also write `dmg(sourceId)[dotType]`,

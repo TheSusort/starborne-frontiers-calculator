@@ -64,7 +64,8 @@ export interface EnemyAttackerInput {
          *  (`effectiveStatsOf`'s `?? 0` exists but has no landing reader.) So the default is a
          *  belt-and-braces no-op here, kept explicit so the sink's numbers all live in one place —
          *  unlike `hp`/`defence` above, whose engine defaults genuinely ARE 0
-         *  (engine.ts:668,718). */
+         *  (engine.ts:675-676 and :726-727, the two `defence: e.stats.defence ?? 0` /
+         *  `hp: e.stats.hp ?? 0` pairs in the enemy-actor constructors). */
         security?: number;
     };
     chargeCount: number;
@@ -190,7 +191,9 @@ export interface HealingRoundData {
     /** Per-victim damage this round, `attackerId → victimId → damage`, forwarded from RoundData.
      *  Present only on a positional run. This is the ONLY reliable proof the per-victim apply ran:
      *  with a target but no pattern the cast still resolves onto the real enemy and still produces a
-     *  plausible damage number, while `perTargetDealt` comes back EMPTY (engine.ts:8344). */
+     *  plausible damage number, while `perTargetDealt` comes back EMPTY (engine.ts:4174,
+     *  `const roundPerTargetDealt = new Map<...>()`, which "stays EMPTY when roundPerTargetDamage
+     *  is empty (non-positional rounds)" and is then omitted from RoundData altogether). */
     perTargetDealt?: Record<string, Record<string, number>>;
     /** Per-recipient breakdown (SP-3b Task 7): keyed by the ally a repair LANDED ON, forwarded from
      *  `HealingRoundEngine.perRecipient` — the counterpart to the source-keyed `perActor` the
@@ -277,15 +280,18 @@ export const PRACTICE_TARGET_ID = 'practice-target';
  * damage channel is exactly what a huge number would distort: corrosion is `min(enemyHp, 500_000)`
  * per 1% per stack (engine.ts:1054) and detonation is `min(victimHp, 500_000)` (detonation.ts:106).
  * Both already read the real VICTIM's own max HP today: corrosion's per-victim positional DoT-tick
- * branch passes `enemyHp: recipientMaxHp(actor.id)` (engine.ts:8741) — the only site that credits a
- * DoT tick per-victim (`creditDealt`, engine.ts:8806) — and that is the branch the practice target
- * actually runs, since it sits in `baseHpById` via `enemyAttackerActors` (engine.ts:2753-2758). The
+ * branch passes `enemyHp: recipientMaxHp(actor.id)` (engine.ts:8836, that exact line) — the only
+ * site that credits a DoT tick per-victim (`creditDealt(sourceId, actor.id, dealt)`,
+ * engine.ts:8921) — and that is the branch the practice target actually runs, since it sits in
+ * `baseHpById` via `enemyAttackerActors` (engine.ts:2809, `const baseHpById = new Map<string,
+ * number>([`, whose entries include `...enemyAttackerActors.map((a) => [a.id, a.stats.hp])`). The
  * bare fight-wide `enemyHp` scalar only reaches `tickDoTs` through the vestigial dummy branch
- * (engine.ts:9450), which the practice target never takes. So inflating this HP to make the target
+ * (engine.ts:9554, `} else if (actor.kind === 'enemy' && actor.id === enemy.id) {`), which the
+ * practice target never takes. So inflating this HP to make the target
  * immortal would immediately multiply every corrosion tick against it by the same ratio — e.g. 40,000
  * → 500,000 is 12.5×. Inferno is unaffected either way: measured at 5,000 against a 1,000,000-HP
- * victim and a 40,000-HP one alike, because it scales off the APPLIER's attack (engine.ts:1065), not
- * HP.
+ * victim and a 40,000-HP one alike, because it scales off the APPLIER's attack (engine.ts:1066,
+ * `ctx.effectiveAttack` inside the inferno `tickByTier`), not HP.
  *
  * `hacking` is deliberately absent rather than zeroed: absent means the engine's own 200, which is
  * what the page's card seeds, and a kitless actor lands no debuffs either way. Targeting axes are
@@ -328,7 +334,8 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * whichever actor IS the heal target, because the positional path re-resolves every matchup from
  * raw affinities per victim and ignores the pre-resolved scalars. When the healer self-heals, that
  * raw affinity lands on the FOCUS actor, where the engine also reads it as `attackerAffinity`
- * (engine.ts:2088) — so the healer's OWN offensive matchup vs each enemy goes live, and its damage
+ * (engine.ts:2251, `attackerAffinity: input.affinity,` on the focus runtime) — so the healer's OWN
+ * offensive matchup vs each enemy goes live, and its damage
  * cast (and any `damage-dealt` rider off it) swings ±25%. When healing an ALLY the focus carries no
  * affinity at all, so the healer's offence stays neutral. The clean long-term shape is a dedicated
  * `healerAffinity` input rather than borrowing `healTargetAffinity` for two jobs; until then the
@@ -378,8 +385,13 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * The claim is exact equality, not merely "same stat basis": swapping a 0-attack default card for
  * the practice target changes only the incoming damage (0 either way here), never the healer's own
  * output — verified under a seeded RNG (`setupKeyedTestRng`) at healer crit 0, 50 and 100, all three
- * giving byte-identical `totalDirectHeal` and per-round series between the two runs (see
- * `healingPracticeTarget.test.ts`, the third case in the describe block). Reproducing that equality
+ * giving byte-identical `totalDirectHeal` AND per-round series between the two runs (see
+ * `healingPracticeTarget.test.ts`'s `it.each([0, 50, 100])` stat-basis case, which asserts both).
+ * Measured there at `critDamage: 100` — 6,248 / [2083, 2083, 2083] at crit 0, 16,662 /
+ * [4166, 4166, 8331] at crit 50, 24,994 / [8331, 8331, 8331] at crit 100 — so the sweep spans a
+ * no-crit, a MIXED and an always-crit profile. A live `critDamage` is load-bearing to that: with
+ * `critDamage: 0` a crit multiplies by 1 and all three crit settings collapse onto the same 6,248,
+ * which would make the sweep three copies of one case rather than three profiles. Reproducing that equality
  * at all requires a seeded harness: production draws are unseeded `Math.random`
  * (`rateAccumulator.ts:11-14`), so two live page runs are never expected to match — the equality is
  * a property of the simulation given the same random stream, not a promise about two independent
