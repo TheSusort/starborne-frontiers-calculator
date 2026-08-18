@@ -1724,6 +1724,47 @@ export function __resetLegacyVictimFallbackCount(): void {
     legacyVictimFallbackCount = 0;
 }
 /**
+ * TEST-ONLY instrumentation, and the COMPANION to `legacyVictimFallbackCount` above. Counts rounds
+ * in which damage was actually **BOOKED AGAINST** the vestigial dummy `enemy` — i.e. its HP
+ * declined — as opposed to rounds in which the fallback object was merely CONSULTED.
+ *
+ * WHY BOTH EXIST. The two readings come apart, and only this one can be required to be zero:
+ *  • CONSULTED (`legacyVictimFallbackCount`) is non-zero for the mid-run **whiff window** — a
+ *    roster that WAS targetable and has since been killed. Selection hands back the dummy, the
+ *    apply gate stays positional, nothing is booked. That residue is deliberate behaviour SP-4c is
+ *    not deleting, so a global zero there is unreachable.
+ *  • CREDITED (this counter) is non-zero only when the scalar channel actually drained the dummy's
+ *    HP — which happens exactly when `resolvesPositionalVictim` is false for the whole run, i.e.
+ *    the roster is placed but holds no targetable member (every member at max `hp === 0`, the
+ *    "pressure source" shape). **This is the number SP-4c can gate on:** zero across every shape
+ *    means the dummy absorbed nothing and deleting it loses no accounting.
+ *
+ * WHERE IT IS INCREMENTED, and why that is the only live site. The dummy's HP is landed in exactly
+ * two places, both at the round tail:
+ *  1. the `dpsEnemyTarget` branch (`applyVictimDamage(roundEnemyDamage, enemy, …)`), where `enemy`
+ *     is the REAL destructible DPS target rather than a vestigial sink. That branch is
+ *     `enemyAttackerInputs.length === 0`, and since SP-4b-2b `normalizeCombatRoster` THROWS on an
+ *     empty roster before `runCombat` reads it — so the branch is unreachable by contract and is
+ *     deliberately NOT instrumented (a call there would be dead code). Re-open that path and it
+ *     needs its own `noteDummySinkCredit`.
+ *  2. the vestigial-sink `else` branch (`enemy.currentHp = enemyHp - enemyHpDecline`), which is the
+ *     live one and carries the call.
+ * The player-side `TurnBindings.applyToVictim` is NOT a candidate, despite looking like one: it
+ * only ever receives victims drawn from `opposingRoster` (`enemyAttackerActors`), and the dummy is
+ * built separately and is not a member — so it can never be the victim there. The enemy-side
+ * binding's `legacyVictim` is the HEAL TARGET, a real player actor, and crediting it is not a dummy
+ * credit at all; nothing on that side is counted here.
+ *
+ * Module-level and NOT reset per run: `__resetDummySinkCreditCount` is the test's job.
+ */
+let dummySinkCreditCount = 0;
+export function __getDummySinkCreditCount(): number {
+    return dummySinkCreditCount;
+}
+export function __resetDummySinkCreditCount(): void {
+    dummySinkCreditCount = 0;
+}
+/**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
  * CURRENT effective speed (selectNextBySpeed) until the pool drains — every actor takes one
@@ -10672,6 +10713,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // resolve. Kept on the legacy scalar decline + coarse integer hp-changed tap
             // (byte-identical) — it NEVER dies or terminates the run (its HP is billions).
             const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
+            // SP-4b-2b Task 7: the ONE live site where damage is BOOKED against the dummy. Keyed on
+            // THIS round's own contribution, not the cumulative total — `enemyHpDecline` stays > 0
+            // for every later round once anything has ever been booked, which would read as a fresh
+            // credit each round. `cumulativeDamage`/`cumulativeTeamDamage` were advanced by exactly
+            // these two terms above, so the delta is exact. See `__getDummySinkCreditCount`.
+            if (totalRoundDamage + teamRoundDamage > 0) dummySinkCreditCount++;
             enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline);
             const newEnemyHpPctInt =
                 enemyHp > 0 ? Math.round(Math.max(0, 100 * (1 - enemyHpDecline / enemyHp))) : 100;

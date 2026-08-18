@@ -68,6 +68,76 @@ export const bareEnemy = (
     },
 ];
 
+/** The id the second roster member carries in multi-enemy shapes (death retargeting). */
+export const SECOND_BARE_ENEMY_ID = 'e2';
+
+/**
+ * A roster member that ACTS: the bare enemy plus a real attack and the same 100%-multiplier damage
+ * kit the focus carries, so the enemy→player direction is genuinely exercised rather than being
+ * turn-order filler. A 0-attack positioned enemy is RNG-stream-inert and books nothing, so it can
+ * never evidence the "enemy turns" path (SP-1's lesson, narrowed by SP-4b-2a to enemies that ACT).
+ */
+export const attackingEnemy = (
+    overrides: Omit<Partial<EnemyAttackerInput>, 'stats'> & {
+        stats?: Partial<EnemyAttackerInput['stats']>;
+    } = {}
+): EnemyAttackerInput[] =>
+    bareEnemy({
+        shipSkills: damageKit(),
+        ...overrides,
+        stats: { attack: 10_000, ...overrides.stats },
+    });
+
+type TeamActorInput = NonNullable<CombatEngineInput['teamActors']>[number];
+
+/** The id `bareAlly()` carries. */
+export const BARE_ALLY_ID = 'ally';
+
+/**
+ * A WALKED team ally — a real speed-ordered player actor that runs the full `runPlayerTurn`
+ * pipeline (the `walk` bundle is what makes it walked rather than a legacy scheduled-list source).
+ *
+ * `attack` is the whole knob, and the two settings cover two DIFFERENT engine paths:
+ *  • `attack: 0` (default) → an empty kit. The actor still takes a real turn (`turn-started`), so
+ *    this is the TEAM-ACTOR TURN path with no damage confound.
+ *  • `attack > 0` → the shared damage kit, so its cast lands per-victim. That is the WALKED-TEAM
+ *    DAMAGE path, which is a separate cast site in the engine from the focus's.
+ * Speed 1 puts it LAST in the turn order, after the focus and the roster, so it never reorders the
+ * turns the other cases observe.
+ */
+export const bareAlly = (
+    overrides: { attack?: number; hp?: number; position?: TeamActorInput['position'] } = {}
+): TeamActorInput => {
+    const attack = overrides.attack ?? 0;
+    return {
+        id: BARE_ALLY_ID,
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position: overrides.position ?? 'M4',
+        walk: {
+            shipSkills: attack > 0 ? damageKit() : { slots: [] },
+            stats: {
+                attack,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: overrides.hp ?? 500_000,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    };
+};
+
 export const bareInput = (): CombatEngineInput => ({
     attack: 10_000,
     crit: 0,
