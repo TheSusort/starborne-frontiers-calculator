@@ -8878,7 +8878,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // comment above `procStandingLeechesPerVictim`'s definition
                                     // (engine.ts:3868, `// E2 Task 3: PER-VICTIM standing-leech
                                     // proc for the POSITIONAL apply path.`, running to the
-                                    // definition at :3913) — not repeated here.
+                                    // definition at engine.ts:3914, `const procStandingLeechesPerVictim = (`) — not repeated here.
                                     //
                                     // SPECIFIC TO THIS CALL SITE: `creditDamage` was not an option
                                     // here, because it would also write `dmg(sourceId)[dotType]`,

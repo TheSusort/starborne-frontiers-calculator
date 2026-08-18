@@ -339,9 +339,19 @@ describe("SP-4b-2b Task 2b — a leechScope:'all' standing leech pays out on a p
         idc = 0;
         // Identical fixture to the PLAYER-side case above (tick = 500), run twice with only the
         // leech's scope changed. 'all' → 500 × 0.20 = 100. 'detonation' → 0, because a corrosion
-        // tick is not a detonation. This pins BOTH halves of the restored conjunct: delete the
-        // `channel !== 'detonation'` half and the 'all' arm breaks; delete the whole line and the
-        // 'detonation' arm breaks.
+        // tick is not a detonation. WHAT THIS PINS, PRECISELY: that the gate LINE EXISTS. Delete it entirely and the
+        // 'detonation' arm pays 1200 instead of 0, so this test goes red.
+        //
+        // WHAT IT CANNOT PIN, and deliberately does not claim to: the second conjunct on its own.
+        // The gate is `e.scope === 'detonation' && channel !== 'detonation'`, short-circuited on the
+        // first term. The 'all' arm has `e.scope === 'all'`, so the first term is false and the
+        // second is never evaluated — dropping it changes nothing here. The 'detonation' arm runs on
+        // a corrosion channel, where the one-conjunct and two-conjunct forms BOTH skip. So no
+        // fixture shaped like this one can distinguish them.
+        // The conjunct's own coverage arrives with the burst channel (site 2), whose
+        // 'detonation'-scoped arm calls the proc with `channel: 'detonation'` and expects a PAYOUT
+        // — that arm is the one that fails if the conjunct goes missing. Until a call site can
+        // supply `channel: 'detonation'`, the second term is unreachable from any test.
         const run = (scope: 'all' | 'detonation') =>
             runCombat(
                 BASE({
