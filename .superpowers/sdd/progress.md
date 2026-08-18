@@ -492,23 +492,30 @@ cumulative diff — Task 2 alone drove Magnolia's inferno-tick leech term to 0 a
   (both Enforcer `debuff-resisted`, enemy→focus and enemy→team). NOT MOVED.
 - `git status --short -- '*.snap'` → clean.
 
-### ⭐ BROWSER FINDING — the practice target preserves the STAT BASIS, not the NUMBER
-The brief asked for the one-enemy-vs-zero-enemy healer-output equality to be MEASURED. It is not
-equal. Magnolia at HP 500,000, 20 rounds, against the page's own default enemy card with its attack
-zeroed (so incoming is 0 on BOTH sides and only the opponent's identity differs):
-**Direct Heal (raw) 478 with the card → 483 with no enemies (+1.05%).**
+### WITHDRAWN — the earlier "browser finding" below was a harness artefact, not an engine property
+An earlier version of this section reported a browser comparison (Direct Heal 478 with a real
+enemy card vs. 483 with no enemies) and a crit-50 divergence (`[3332,1666,1666,1666]` total 8,331
+vs. `[1666,3332,833,1666]` total 7,498), attributing both to the opponent's actor id feeding an
+id-keyed per-victim RNG stream. That attribution does not survive a proper control. Re-running the
+SAME config twice with no re-seed between runs reproduces the exact divergence shape
+(`[1250,1250,1875,833]` then `[1250,1875,1250,833]`) with no roster change at all — the two
+"different" runs were never independent draws, they were one continuous unseeded stream split in
+two. Re-running with a re-seed (`setupKeyedTestRng`) before EACH run instead gives byte-identical
+`totalDirectHeal` and per-round series at healer crit 0 (3332/3332), crit 50
+(5207/5207, `[1250,1250,1875,833]` both ways) and crit 100 (7498/7498) — see
+`healingPracticeTarget.test.ts`. No engine code is keyed by the opponent's id in the healer's own
+draw sequence (every crit/landing/proc gate is owner-keyed, e.g.
+`` makeRateGate(`${focusActorId}:active-crit`) `` at `engine.ts:2104`); that mechanism was never
+real.
 
-Isolated at the adapter level (a scratch harness, since deleted): with the healer's crit at 0 the
-two runs are EXACTLY equal (directHeal `[833,833,833,833]`, total 3,332, 4165.593651036698 dealt per
-round, both ways). With crit 50 they diverge: `[3332,1666,1666,1666]` total 8,331 against the card
-versus `[1666,3332,833,1666]` total 7,498 against the practice target. The only differing input is
-the opponent's ACTOR ID, and the engine's per-victim crit/rate-gate sub-stream is keyed by actor id
-— so renaming the opponent reshuffles the healer's crit schedule and any `damage-dealt` rider moves
-with it. **Pre-existing engine property, not introduced here**; the practice target merely made it
-observable from the page. The adapter's paragraph claiming exact equality was corrected to say
-"stat basis" and carries the measured numbers. ⭐ HAND-OFF: if exact per-round equality is wanted it
-needs an id-independent draw, or the practice target adopting the id the page's first card would
-use — a design decision.
+**Durable lesson:** a browser comparison of two nonzero-crit runs proves nothing on its own,
+because production RNG is unseeded `Math.random` (`rateAccumulator.ts:11-14`, `17-18`, `39-40`) —
+page-level output-equality claims can only be checked under a seeded harness, and even then the
+control (same config, twice, with and without a re-seed between runs) is what distinguishes a real
+divergence from stream continuation. This artefact was produced by a harness that never ran that
+control. The adapter's paragraph claiming exact equality is CORRECT as originally written and has
+been restored; `healingPracticeTarget.test.ts`'s exact-equality assertion needed no caveat and no
+change.
 
 ### ⭐ HAND-OFF — `hitMitigation.ts`'s inertness argument no longer holds
 Its "no production path reaches a SCHEDULED TIMED Hit Mitigation" rationale rested on

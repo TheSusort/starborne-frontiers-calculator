@@ -477,6 +477,10 @@ describe('healingGoldenParity', () => {
     //   • Rounds 7-10 are ZERO: the practice target is KILLABLE and dies in round 6 —
     //     2082.797 + 5000 = 7082.797/round vs hp 40,000 (6 × 7082.797 = 42,496.8 > 40,000). Round 6
     //     still heals, because the cast lands before the death.
+    //   ⚠️ INERT TAIL: 4 of this golden's 10 snapshotted rounds (7-10) observe a dead opponent and
+    //     read all-zero for that reason alone, not because anything broke. The six LIVE rounds
+    //     (1-6) are what stays pinned above; the zero rows exist only so the snapshot proves the
+    //     run doesn't error out or resurrect the target after death.
     //   cumulativeHealing (raws summed UNROUNDED, rounded last): 1417, 2833, 4250, 5666, 7083, 8499,
     //     then flat. totalDirectHeal = 6 × 1416.5594 = 8499.36 → 8499 (12579 pre-SP-4b-2b, where the
     //     dummy never died so all 10 rounds paid at the sink's defence-10000 cast basis).

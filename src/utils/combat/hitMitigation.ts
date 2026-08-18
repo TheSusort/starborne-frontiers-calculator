@@ -73,6 +73,18 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * calculator. Whether the auto-fill actually produces the SCHEDULED channel for it, rather than the
  * `applyTimedAbilityStatus` ability path noted below, is UNVERIFIED and is a hand-off, not a claim.
  * Treat the "inert, accepted" status above as UNCONFIRMED until someone measures it.
+ *
+ * Precisely what is unverified: `simulateDPS`'s auto-fill writes a `SelectedGameBuff` with
+ * `skillSource`/`skillDuration` into `selfBuffs`, but nobody has checked which status-engine channel
+ * that lands in for Oleander's `Hit Mitigation` grant — the TIMED `selfMaps` entry this function
+ * reads (`statusEngine.timedAbilityStatuses('self', actorId)`, which requires a `payload`), or a
+ * payload-less scheduled `upsertBuff` entry that this reader currently skips (see the "sub-channel
+ * deliberately dropped" paragraph above). The measurement that would settle it: run `simulateDPS`
+ * with Oleander's charged skill cast against a live `enemyAttackers` roster, then — immediately after
+ * the grant, before any hit consumes it — call `holdsHitMitigation` on the grantee (or inspect
+ * `statusEngine.timedAbilityStatuses('self', actorId)` directly) and check whether the entry is
+ * present and carries a `payload`. If it is, the auto-fill reaches the scheduled channel and the
+ * status is genuinely reachable today; if the entry is absent or payload-less, "inert" still holds.
  * If a path does reach it, the fix is to surface payload-less TIMED `selfMaps` entries here,
  * NOT to fall back to `selfBuffNamesForOwners`: that would drag the unspendable always-active
  * channel back in, which is the defect this narrowing exists to remove.

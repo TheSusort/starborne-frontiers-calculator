@@ -375,23 +375,15 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * that emptying the roster changes only the incoming damage, not the STAT BASIS of the healer's own
  * output.
  *
- * ⚠️ "STAT BASIS", not "the number" — measured, because an earlier version of this paragraph claimed
- * exact equality and that claim is FALSE for any healer with a nonzero crit rate. Measured against
- * the page's own default card (attack 0, so nothing shoots back and incoming is 0 on both sides,
- * every other stat identical, one 100%-multiplier cast plus a 20% `damage-dealt` self leech, 4
- * rounds):
- *   • healer crit 0   → IDENTICAL: directHeal [833, 833, 833, 833] both ways, total 3,332 both ways,
- *     4165.593651036698 dealt per round both ways. The stat basis claim is exact.
- *   • healer crit 50  → DIVERGENT: [3332, 1666, 1666, 1666] (total 8,331) against the card versus
- *     [1666, 3332, 833, 1666] (total 7,498) against the practice target.
- * The only input that differs between those two runs is the OPPONENT'S ACTOR ID (`'1'` versus
- * `PRACTICE_TARGET_ID`), and the engine's per-victim crit/rate-gate sub-stream is keyed by actor id
- * — so renaming the opponent reshuffles the healer's crit schedule, and any `damage-dealt` rider
- * moves with it over a finite window. That is a PRE-EXISTING engine property (the same id-keyed
- * stream that makes cross-side amount comparisons invalid), not something the practice target
- * introduced; the practice target merely makes it observable from the page. If exact per-round
- * equality is ever wanted, it needs either an id-independent draw or the practice target adopting
- * the id the page's first card would have used — a design decision, not a comment fix.
+ * The claim is exact equality, not merely "same stat basis": swapping a 0-attack default card for
+ * the practice target changes only the incoming damage (0 either way here), never the healer's own
+ * output — verified under a seeded RNG (`setupKeyedTestRng`) at healer crit 0, 50 and 100, all three
+ * giving byte-identical `totalDirectHeal` and per-round series between the two runs (see
+ * `healingPracticeTarget.test.ts`, the third case in the describe block). Reproducing that equality
+ * at all requires a seeded harness: production draws are unseeded `Math.random`
+ * (`rateAccumulator.ts:11-14`), so two live page runs are never expected to match — the equality is
+ * a property of the simulation given the same random stream, not a promise about two independent
+ * clicks.
  *
  * The ally-side substitution below is the other half of the same claim: a support healer's ACTIVE
  * target is ally-side, which resolves to no opposing victim at all.

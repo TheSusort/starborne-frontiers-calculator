@@ -10,7 +10,10 @@
  * if it lived as one more line inside the control test.
  *
  * Mocks mirror `HealingCalculatorPage.test.tsx` exactly (heavy contexts + recharts), because the
- * page under test is the same one; only the scenario differs.
+ * page under test is the same one; only the scenario differs. Consolidating the two blocks into a
+ * shared helper was attempted and abandoned: `vi.mock` is hoisted above imports by Vitest, so a call
+ * made from inside an imported helper runs AFTER the module graph is already built and has no
+ * effect — each spec file needs its own literal `vi.mock` calls.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
