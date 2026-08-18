@@ -187,15 +187,18 @@ describe('standing-leech hook — damage-dealt passive', () => {
         // both recipients resolve to 'attacker', so directHeal is credited twice per burst.
         //
         // SP-4b-2b — WHY THIS CASE KEEPS THE LEGACY SINK. A detonation-scope standing leech pays
-        // out through the `creditDamage` chokepoint. On a POSITIONAL run the burst is booked on the
-        // per-victim channel instead and the leech proc is not reached, so the leech pays ZERO on a
-        // positional detonation burst. That is a known, deliberately-unfixed engine gap with an
-        // owner ruling to address it in its own PR — so this case must not be re-pinned to 0 and
-        // must not chase the fix. It instead keeps the channel it was written against, via the
-        // documented 0-MAX-HP "pressure source" roster: `resolvesPositionalVictim` finds nobody
-        // targetable (positionalBinding.ts:60-70), the burst stays on the sink, and the numbers are
-        // byte-identical to the pre-branch run. (Revisit when the detonation-leech gap is closed;
-        // SP-4c must revisit it when it deletes the dummy.)
+        // out through the `creditDamage` chokepoint. At the time this test was written, a
+        // POSITIONAL run booked the burst on the per-victim channel instead and never reached the
+        // leech proc at all — that was item 2 of the leech-channel gap class (see the canonical
+        // comment above `procStandingLeechesPerVictim`, engine.ts:3901,
+        // `procStandingLeechesPerVictim`). That instance is now FIXED: both of
+        // `applyPositionedTimedBurst`'s `creditDetonation` callbacks call this proc with
+        // `channel: 'detonation'`. This case still deliberately does not exercise that path,
+        // though — it keeps the documented 0-MAX-HP "pressure source" roster, where
+        // `resolvesPositionalVictim` (positionalBinding.ts:79, `resolvesPositionalVictim`) finds
+        // nobody targetable, so the burst still lands on the legacy sink and the numbers stay
+        // byte-identical to the pre-branch run. SP-4c must revisit this case when it deletes the
+        // dummy/sink path entirely, since the channel this case pins against will stop existing.
         const result = runCombat(
             BASE({
                 enemyAttackers: bareEnemy({ id: 'leech-pressure-source', stats: { hp: 0 } }),

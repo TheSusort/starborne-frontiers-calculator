@@ -3898,11 +3898,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     // positional burst) and is skipped on every other channel that reaches this proc — the
     // positional firing hit (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick.
     //
-    // CHANNELS THAT DO *NOT* REACH THIS PROC. The KNOWN LEECH GAP class has FOUR instances, all
-    // FOUR now fixed for the outgoing direction: the three listed below, plus the passive-slot
-    // damage instance, which is documented at its own site (`stagePassiveSlotHit`'s `KNOWN GAPS`
-    // block, sub-block (a)) because that is where its apply loop lives. Fixed items are kept in
-    // place, marked, so a reader can see the whole class rather than assume it away:
+    // THE LEECH-CHANNEL GAP CLASS'S STATUS AGAINST THIS PROC. It has FOUR instances, and all FOUR
+    // now REACH this proc for the outgoing (damage-dealt) direction: the three listed below, plus
+    // the passive-slot damage instance, which is documented at its own site (`stagePassiveSlotHit`'s
+    // `KNOWN GAPS` block, sub-block (a)) because that is where its apply loop lives. Each entry
+    // below also records that same instance's status against the OTHER direction (the
+    // damage-taken leech, a different proc — `procTakenLeechesPerVictim`/`procLeechesForVictim`)
+    // where the instance correctly does not fire. Fixed items are kept in place, marked, so a
+    // reader can see the whole class rather than assume it away:
     //   1. (FIXED in SP-4b-2b Task 2b) the positional per-victim DoT tick — now a caller, see
     //      `procStandingLeechesPerVictim(sourceId, damage, dotType)` at the DoT-tick branch's
     //      `credit`.
@@ -3913,7 +3916,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     //      nowhere, and that is CORRECT rather than a gap — a burst does not proc the victim's
     //      damage-taken leech (owner ruling 2026-08-18; Malvex reads "when directly damaged as a
     //      PRIMARY TARGET"). The sibling "KNOWN GAPS … (a)" block this used to cite for the
-    //      "either direction" framing is being corrected on the same grounds.
+    //      "either direction" framing has been corrected on the same grounds — see
+    //      `stagePassiveSlotHit`'s `KNOWN GAPS (a)` block, which now carries the same owner ruling.
     //   3. (FIXED — Site 3, spec §3) the HEAL-TARGET DoT tick — its `credit` callback now threads
     //      the applier through to this same proc. It previously discarded `_sourceId` and summed
     //      only into `tankDotDamage`, so nothing could pay. Marked in place at the
@@ -8949,7 +8953,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // comment above `procStandingLeechesPerVictim`'s definition
                                     // (engine.ts:3868, `// E2 Task 3: PER-VICTIM standing-leech
                                     // proc for the POSITIONAL apply path.`, running to the
-                                    // definition at engine.ts:3914, `const procStandingLeechesPerVictim = (`) — not repeated here.
+                                    // definition at engine.ts:3931, `const procStandingLeechesPerVictim = (`) — not repeated here.
                                     //
                                     // SPECIFIC TO THIS CALL SITE: `creditDamage` was not an option
                                     // here, because it would also write `dmg(sourceId)[dotType]`,
