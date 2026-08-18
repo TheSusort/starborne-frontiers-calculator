@@ -3898,11 +3898,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // positional burst) and is skipped on every other channel that reaches this proc — the
     // positional firing hit (`direct`) and, since SP-4b-2b Task 2b, the positional DoT tick.
     //
-    // CHANNELS THAT DO *NOT* REACH THIS PROC. The KNOWN LEECH GAP class has FOUR instances, not
-    // three: the three listed below, plus the passive-slot damage instance, which is documented at
-    // its own site (`stagePassiveSlotHit`'s `KNOWN GAPS` block) because that is where its apply
-    // loop lives. Fixed items are kept in place, marked, so a reader can see the whole class
-    // rather than assume it away:
+    // CHANNELS THAT DO *NOT* REACH THIS PROC. The KNOWN LEECH GAP class has FOUR instances, all
+    // FOUR now fixed for the outgoing direction: the three listed below, plus the passive-slot
+    // damage instance, which is documented at its own site (`stagePassiveSlotHit`'s `KNOWN GAPS`
+    // block, sub-block (a)) because that is where its apply loop lives. Fixed items are kept in
+    // place, marked, so a reader can see the whole class rather than assume it away:
     //   1. (FIXED in SP-4b-2b Task 2b) the positional per-victim DoT tick — now a caller, see
     //      `procStandingLeechesPerVictim(sourceId, damage, dotType)` at the DoT-tick branch's
     //      `credit`.
@@ -3919,6 +3919,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     //      only into `tankDotDamage`, so nothing could pay. Marked in place at the
     //      `if (tankDotDamage > 0)` branch. This was the instance with no test of its own; see
     //      `positionalDotLeech.test.ts`'s "Site 3" describe block.
+    //   4. (FIXED — Site 4, spec §3) the passive-slot damage instance — its apply loop now calls
+    //      `procStandingLeechesPerVictim(actor.id, damage, 'direct')` after the `booked > 1e-9`
+    //      block. STILL CORRECTLY ABSENT for the other direction: the instance does not proc the
+    //      victim's damage-taken leech, since the victim is not its primary target (owner ruling
+    //      2026-08-18, spec §2.2) — see `stagePassiveSlotHit`'s `KNOWN GAPS (a)` block.
     const procStandingLeechesPerVictim = (
         sourceId: string,
         amount: number,
@@ -6567,20 +6572,23 @@ export function runCombat(rawInput: CombatEngineInput): {
          * All of that is the intended reading of "a real damage instance"; it is recorded here so
          * a later change plans around the real footprint rather than a convenient fiction.
          *
-         * KNOWN GAPS — both real, both corpus-bounded today, both deliberately UNFIXED here.
-         * Recorded in code rather than in a task report so the next change to this helper does not
-         * have to rediscover them.
-         *   (a) IT PROCS NO LEECHES, IN EITHER DIRECTION. The apply loop below calls
-         *       `tb.applyToVictim` directly and never `procLeechesForVictim`, which is the seam
-         *       the firing hit's per-victim apply goes through — so neither the attacker's
-         *       STANDING leech (`procStandingLeechesPerVictim`) nor the victim's TAKEN leech
-         *       (`procTakenLeechesPerVictim`) fires on this instance. That is a REGRESSION against
-         *       the pre-positional path, where `passiveDamage` was folded into the aggregate
-         *       `directDamage` and reached a standing leech via `creditDamage(…,'direct',…)`. It
-         *       is also at odds with the repo's LOCKED granularity rule ("outgoing procs per
-         *       attack, incoming per occurrence"): a separate damage instance landing on a victim
-         *       is an occurrence, and should proc both directions. Not fixed here because it is a
-         *       behaviour change with its own fixture surface, not a comment correction.
+         * KNOWN GAPS — (a) below is now FIXED (spec §3, site 4); (b) is real, corpus-bounded
+         * today, and deliberately UNFIXED here. Recorded in code rather than in a task report so
+         * the next change to this helper does not have to rediscover them.
+         *   (a) FIXED (spec §3, site 4) for the OUTGOING direction, and correctly absent for the
+         *       incoming one. The apply loop below now calls `procStandingLeechesPerVictim(…,
+         *       'direct')`, so the ACTOR's standing damage-dealt leech pays out on this instance —
+         *       restoring what the pre-positional path paid when `passiveDamage` folded into the
+         *       aggregate `directDamage`.
+         *       It deliberately does NOT proc the VICTIM's damage-taken leech, and the earlier
+         *       version of this comment was WRONG to call that half a defect. Owner ruling
+         *       2026-08-18: a passive-slot instance does not proc a taken leech, because the victim
+         *       is not its primary target — Malvex reads "when directly damaged as a PRIMARY
+         *       TARGET", Quixilver "when taking HP damage and still having Shield". The repo's
+         *       locked granularity rule ("outgoing per attack, incoming per occurrence") governs
+         *       HOW OFTEN an incoming proc fires, NOT which channels qualify; which channels
+         *       qualify is decided by the ability's own text qualifier. Routing this site through
+         *       `procLeechesForVictim` would therefore ship a bug.
          *   (b) A CAST WITH NO FIRING-SLOT DAMAGE ABILITY LOSES ITS PASSIVE INSTANCE ENTIRELY.
          *       Every call site is inside the `positional` branch, and that gate requires
          *       `turn.positionalScalars != null` — the FIRING skill's scalars. A ship whose active
@@ -6693,6 +6701,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                         );
                         creditDealt(actor.id, victim.id, booked);
                     }
+                    // Site 4 of the leech-channel class (spec §3): this instance pays the actor's
+                    // standing damage-dealt leech. Channel `'direct'` — it is a direct-damage
+                    // intake (it passes `byDirectDamage: true` through `tb.applyToVictim`), so an
+                    // `'all'`-scoped leech pays and a `'detonation'`-scoped one does not.
+                    //
+                    // BASIS: the pre-funnel per-victim `damage`, matching what the firing hit's
+                    // seam passes (`positionalApply.ts`'s `onVictimResolved?.(victim, dmg, …)`
+                    // hands the leech `dmg`, not `booked`). Whether that basis is right under the
+                    // locked "damage dealt = the final on-screen number" rule is a PRE-EXISTING
+                    // question for the whole seam and is deliberately out of scope here —
+                    // consistency with the existing site beats a unilateral change.
+                    //
+                    // Standing direction only, never `procLeechesForVictim`: the victim is not this
+                    // instance's primary target, so its damage-taken leech does not proc (owner
+                    // ruling, spec §2.2).
+                    procStandingLeechesPerVictim(actor.id, damage, 'direct');
                     // The ruled "damage dealt" basis (PR7): booked intake PLUS anything a
                     // Protection cascade diverted to protectors.
                     delivered += booked + (outcome.protectionRedirected ?? 0);
