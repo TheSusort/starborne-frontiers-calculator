@@ -25,6 +25,7 @@ describe('C1 Task 3: cast-path cleanse removes debuffs (player-side)', () => {
     });
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 5000,
         crit: 0,
         critDamage: 0,

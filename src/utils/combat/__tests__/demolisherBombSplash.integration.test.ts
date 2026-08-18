@@ -24,6 +24,7 @@ import type { Position } from '../../../types/encounters';
 import type { CombatActor, PendingBomb } from '../state';
 import type { CombatEvent } from '../events';
 import { createEventBus } from '../events';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // The Demolisher passive splash ability (Task C1's parsed shape, verbatim):
 // "... deals 100% of the Bomb's damage to all adjacent enemies. This damage ignores Defense
@@ -307,11 +308,19 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
         expect(splashes).toHaveLength(0);
     });
 
-    it('DPS invariance: single-dummy (non-positional) mode never splashes and leaves DPS byte-identical', () => {
-        // No position/enemyAttackers — the legacy focus-dummy path. The dummy is the sole
-        // enemy-side actor, so adjacentAllyIdsFor(dummy) resolves to the empty set (no OTHER
-        // same-side actor exists) — DPS-inert by construction, not by a special-cased guard.
+    it('DPS invariance: single-sink (non-positional) mode never splashes and leaves DPS byte-identical', () => {
+        // The legacy focus-dummy path. The dummy is the sole enemy-side actor, so
+        // adjacentAllyIdsFor(dummy) resolves to the empty set (no OTHER same-side actor exists) —
+        // DPS-inert by construction, not by a special-cased guard.
+        //
+        // SP-4b-2b: this used to reach that path with NO `enemyAttackers`. A roster is now required,
+        // and omitting `target`/`pattern` is not enough to stay non-positional —
+        // `normalizeCombatRoster` FILLS both. The roster is therefore a documented "pressure source"
+        // (0 MAX hp): `resolvesPositionalVictim` finds nobody targetable (positionalBinding.ts:60-70),
+        // the run stays non-positional, and the dummy remains the bomb holder and sole enemy-side
+        // actor — the exact premise this case tests. (SP-4c must revisit it when it deletes the dummy.)
         const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+            enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 1000,
             crit: 0,
             critDamage: 0,
@@ -363,6 +372,9 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
         };
 
         const { result, events } = withSplash();
+        // ANTI-VACUITY for the MODE claim: prove the run really is on the non-positional sink path,
+        // or "no splash" would be explained by the run never having reached this code at all.
+        expect(result.rounds[0].perTargetDealt).toBeUndefined();
         // The natural bomb-detonation on the dummy still fires (sanity — the harness is live)...
         expect(events.some((e) => e.type === 'bomb-detonated')).toBe(true);
         // ...but it NEVER produces a splash proc.

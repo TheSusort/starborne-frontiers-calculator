@@ -42,3 +42,11 @@ describe('the normalization boundary is live in runCombat', () => {
     // module-level assertion on `normalizeCombatRoster` directly: see
     // `normalizeRoster.test.ts`'s "is a no-op on a fully-positioned, fully-targeted input".
 });
+
+describe('the roster contract', () => {
+    it('throws on an empty enemy roster rather than handing the run to the dummy', () => {
+        expect(() => runCombat({ ...bareInput(), enemyAttackers: [] })).toThrow(
+            /enemyAttackers is empty/
+        );
+    });
+});

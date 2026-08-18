@@ -30,6 +30,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -66,10 +67,18 @@ const selfShield = (pct: number): Ability =>
         config: { type: 'shield', pct, basis: 'hp' },
     });
 
-// Attack 10000, crit 0 (no crit variance), enemyDefense 0, defensePenetration 0, no buffs —
-// postDefenseFactor collapses to 1, so directDamage == effectiveAttack*(mult/100) +
-// secondaryStatValue exactly (no cross-term arithmetic to untangle).
-const CLEAN_MATH: Partial<CombatEngineInput> = {
+// Attack 10000, crit 0 (no crit variance), the enemy's own `stats.defence` 0, defensePenetration 0,
+// no buffs — postDefenseFactor collapses to 1, so the credited damage is
+// effectiveAttack*(mult/100) + secondaryStatValue exactly (no cross-term arithmetic to untangle).
+//
+// SP-4b-2b: `satisfies` replaces the old `: Partial<CombatEngineInput>` annotation, and every
+// `runCombat` call below drops its `as CombatEngineInput` cast. That cast is why this file was in
+// the missing-roster population at all: `enemyAttackers` is a REQUIRED field on
+// `CombatEngineInput`, and an `as` cast over a spread of a `Partial` told the compiler to stop
+// looking. `satisfies` keeps the assignability check on this literal while leaving its keys
+// REQUIRED in the spread, so each call site now has to name `enemyAttackers` itself — and the
+// compiler, not a runtime guard, is what enforces it.
+const CLEAN_MATH = {
     attack: 10000,
     crit: 0,
     critDamage: 0,
@@ -91,7 +100,7 @@ const CLEAN_MATH: Partial<CombatEngineInput> = {
     position: 'M4',
     target: parsedTarget('front'),
     pattern: basePattern(),
-};
+} satisfies Partial<CombatEngineInput>;
 
 describe('PR9a: shield-basis additional damage reads the LIVE caster shieldPool at cast time', () => {
     it('round 1 (shieldPool starts at 0): additional-damage contributes ZERO; round 2 (after the round-1 self-grant): it reflects the grown pool', () => {
@@ -109,16 +118,28 @@ describe('PR9a: shield-basis additional damage reads the LIVE caster shieldPool 
         };
         const result = runCombat({
             ...CLEAN_MATH,
+            // SP-4b-2b: a real opponent. 10 000 + 20 000 = 30 000 total against 10 000 000 HP, so it
+            // survives both rounds and the run's shape is constant (a mid-run kill would drop the
+            // round-2 cast entirely, which is exactly what this test measures).
+            enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
             shipSkills,
             numRounds: 2,
             healTargetId: 'attacker', // self-heal-target: activates the self-shield-grant block
             mode: 'healing',
-        } as CombatEngineInput);
+        });
+        // M3 (SP-4b-2b): the focus's credit now lands in the per-victim channel, so these read
+        // `perTargetDealt` instead of the scalar `directDamage` — which is 0 on every positional
+        // direct `runCombat` and would have made both assertions vacuous. The MAGNITUDES are
+        // unchanged from the pre-branch `directDamage` readings (10 000 / 20 000), which is the point:
+        // `stats.defence: 0` on the roster entry carries the old `enemyDefense: 0` scalar, so
+        // postDefenseFactor still collapses to 1.
+        const dealt = (round: number) =>
+            result.rounds[round].perTargetDealt?.attacker?.[BARE_ENEMY_ID];
         // Round 1: shieldPool is 0 before any grant → base only.
-        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(dealt(0)).toBe(10000);
         // Round 2: shieldPool is 50,000 (from round 1's grant, applied AFTER round 1's own
         // secondary-damage read) → 10,000 base + 20% of 50,000 = 10,000 + 10,000 = 20,000.
-        expect(result.rounds[1].directDamage).toBe(20000);
+        expect(dealt(1)).toBe(20000);
     });
 
     it('CONTROL: without the self-shield ability, shieldPool never grows — additional-damage stays ZERO every round', () => {
@@ -132,12 +153,16 @@ describe('PR9a: shield-basis additional damage reads the LIVE caster shieldPool 
         };
         const result = runCombat({
             ...CLEAN_MATH,
+            enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
             shipSkills,
             numRounds: 3,
             healTargetId: 'attacker',
             mode: 'healing',
-        } as CombatEngineInput);
-        expect(result.rounds.map((r) => r.directDamage)).toEqual([10000, 10000, 10000]);
+        });
+        // M3, same as above: same three 10 000s, read out of the per-victim channel.
+        expect(result.rounds.map((r) => r.perTargetDealt?.attacker?.[BARE_ENEMY_ID])).toEqual([
+            10000, 10000, 10000,
+        ]);
     });
 });
 
@@ -186,7 +211,7 @@ describe('PR9a: team symmetry — an ENEMY-sourced shield-basis additional-damag
             __testTapActors: (actors) => {
                 captured = actors;
             },
-        } as CombatEngineInput);
+        });
         const focus = captured.find((a) => a.id === 'attacker')!;
         return focus.currentHp;
     };
@@ -205,7 +230,7 @@ describe('PR9a: team symmetry — an ENEMY-sourced shield-basis additional-damag
             __testTapActors: (actors) => {
                 captured = actors;
             },
-        } as CombatEngineInput);
+        });
         const enemy = captured.find((a) => a.id === 'enemy-front')!;
         expect(enemy.shieldPool).toBeGreaterThan(0);
     });

@@ -30,6 +30,7 @@ import { createEventBus } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -87,6 +88,9 @@ const apexShipSkills = (includeSelfShield: boolean): ShipSkills => ({
 
 describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 4, Task 3)', () => {
     const makeInput = (includeSelfShield: boolean): CombatEngineInput => ({
+        // SP-4b-2b: a real opponent for the Disable/Attack Down II debuffs to land on. Inert and
+        // unkillable here — the focus deals 1000/round (10% of 10000 attack) for two rounds.
+        enemyAttackers: bareEnemy(),
         attack: 10000,
         crit: 0,
         critDamage: 0,

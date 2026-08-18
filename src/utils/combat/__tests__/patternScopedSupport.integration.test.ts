@@ -40,6 +40,7 @@ const collectBuffApplied = (events: CombatEvent[]): string[] =>
         .map((e) => e.actorId);
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1000,
     crit: 0,
     critDamage: 150,

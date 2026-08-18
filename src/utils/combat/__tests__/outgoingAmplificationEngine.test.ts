@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // D-PR4 Task 7: engine wiring of outgoing amplification through buildTurnArgs.
@@ -37,6 +39,7 @@ const menaceAmp = (): Ability =>
     });
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 5000,
     crit: 100, // force crits so amplify-on-crit is eligible every hit
     critDamage: 50,
@@ -60,8 +63,11 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     ...overrides,
 });
 
+// SP-4b-2b (M3): the run now fights a real, positioned enemy, so the scalar
+// `RoundData.directDamage` channel is 0 for the whole run and the focus's credit lands
+// per-victim. Sum the focus's own per-victim payout instead — same quantity, live channel.
 const sumDirect = (result: ReturnType<typeof runCombat>): number =>
-    result.rounds.reduce((sum, r) => sum + r.directDamage, 0);
+    dealtBy(result.rounds, 'attacker');
 
 describe('D-PR4 engine wiring — outgoing amplification via buildTurnArgs', () => {
     it('Menace passive amplifies total direct damage above the no-amp control', () => {
@@ -88,6 +94,9 @@ describe('D-PR4 engine wiring — outgoing amplification via buildTurnArgs', () 
 
         // The amplified run credits strictly MORE direct damage than the no-amp control.
         // (FAILS before the engine passes rollOutgoingProc — both runs would be equal.)
+        // Positive control: the un-amplified run must itself credit real damage, so the
+        // strict inequality below cannot pass on a 0-vs-0 comparison (SP-4b-2b vacuity guard).
+        expect(sumDirect(control)).toBeGreaterThan(0);
         expect(sumDirect(withAmp)).toBeGreaterThan(sumDirect(control));
     });
 });

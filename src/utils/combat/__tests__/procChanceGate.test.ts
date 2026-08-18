@@ -13,6 +13,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idCounter = 0;
 const nextId = (): string => `proc-test-${++idCounter}`;
@@ -28,6 +29,7 @@ const makeHealAbility = (procChance?: number): Ability => ({
 });
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 5000,
     crit: 100, // every hit crits → on-crit fires once per round
     critDamage: 0,

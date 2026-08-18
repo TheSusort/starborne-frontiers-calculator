@@ -3,6 +3,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
 // A.3 equivalence guard: a buff-only team actor (no `walk` bundle) must apply
@@ -39,6 +40,10 @@ const plainSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    // SP-4b-2b: a real opponent for the team actor's debuffs to land on. DAMAGE fixture (15000
+    // attack x 150% over 4-6 rounds) so it takes the 10M-HP form. `enemyDefense: 8000` is carried
+    // onto the roster entry's own stats.defence; the fight-wide scalar is inert positionally (M6).
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 8000 } }),
     attack: 15000,
     crit: 50,
     critDamage: 150,

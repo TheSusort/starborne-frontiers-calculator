@@ -5,6 +5,7 @@ import { ShipSkills, Ability } from '../../../types/abilities';
 import { createEventBus, CombatEvent } from '../events';
 import { createStatusEngine } from '../statusEngine';
 import type { RegisteredAbilityStatus } from '../statusEngine';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task 2: Block Buff primitive + firing-skill self/ally buff guard.
@@ -77,6 +78,10 @@ describe('blockBuffBuffs helpers', () => {
 let idCounter = 0;
 
 const blockBuffEngineBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    // SP-4b-2b: the default opponent is the shared INERT one — 0 attack, no skills — which is
+    // exactly what the control test needs (an opponent that exists but inflicts no Block Buff).
+    // Tests that need the debuff override this with `blockBuffEnemy()`.
+    enemyAttackers: bareEnemy(),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -221,7 +226,9 @@ describe('Block Buff — firing-skill self-buff guard (engine)', () => {
 
         runCombat(
             blockBuffEngineBase({
-                // No enemy attacker → nothing inflicts Block Buff on the focus actor.
+                // The base's INERT opponent (no skills at all) → nothing inflicts Block Buff on
+                // the focus actor. Previously this reached the same state by passing no enemy at
+                // all, which the SP-4b-2b normalization boundary now rejects.
                 shipSkills: attackUpSelfSkills(),
                 bus,
             })

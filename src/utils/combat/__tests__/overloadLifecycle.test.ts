@@ -40,6 +40,7 @@ import type { ShipSkills } from '../../../types/abilities';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import type { Position } from '../../../types/encounters';
 import { flattenRound } from '../log/__testutils__/flattenCombatLog';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ── Real-skill-text ship builder ────────────────────────────────────────────
 // Skill text is the source of truth (docs/ship-skills.csv). buildShipAbilities resolves the
@@ -71,6 +72,7 @@ const dpsBase = (
     shipSkills: ShipSkills,
     over: Partial<CombatEngineInput> = {}
 ): CombatEngineInput => ({
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 1000,
     crit: 0,
     critDamage: 0,

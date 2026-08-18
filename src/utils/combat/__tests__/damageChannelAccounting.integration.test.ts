@@ -41,7 +41,16 @@ import { bareInput, bareEnemy, damageKit } from '../__testutils__/bareRosterFixt
 import type { RoundData } from '../../calculators/dpsSimulator';
 
 const ROUNDS = 4;
-/** `bareInput` fires one 100%-multiplier damage ability off a 10 000 attack, zero crit. */
+/**
+ * `bareInput` fires one 100%-multiplier damage ability off a 10 000 attack, zero crit.
+ *
+ * ⚠️ TWO PROVENANCES, ONE NUMBER. The mirror suite further down reuses this constant for the
+ * ENEMY's cast, which comes from `playerSideWithMaxHp`'s hand-written `attack: 10_000` — a
+ * SEPARATE literal that merely coincides with `bareInput`'s. Change either side's attack and the
+ * other suite's expectations do not follow; they only look coupled. Kept shared because the
+ * coincidence is deliberate (the mirror is meant to be numerically symmetric with the player side),
+ * but do not read a `PER_CAST` in the mirror suite as being derived from `bareInput`.
+ */
 const PER_CAST = 10_000;
 
 /** The shared bare roster with the sole enemy attacker's MAX HP dialled to `hp`. */
@@ -51,6 +60,10 @@ const rosterWithEnemyHp = (hp: number): CombatEngineInput => {
     return { ...bareInput(), numRounds: ROUNDS, enemyAttackers: enemies };
 };
 
+/**
+ * SP-4b-2b: no longer a runnable shape — the normalization boundary refuses it. Kept as a fixture
+ * so the refusal itself is pinned (below) rather than the shape quietly disappearing from this file.
+ */
 const noRoster = (): CombatEngineInput => ({
     ...bareInput(),
     numRounds: ROUNDS,
@@ -77,6 +90,15 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         // SOURCE of pressure (`hp: 0`), never as something to hit. It can never be a victim, so
         // the run is not positional and the dummy sink owns the offense — exactly what these
         // callers got before normalization started auto-placing the roster.
+        //
+        // ⭐ SP-4c HAND-OFF, and the reason this case is now load-bearing beyond its own name: since
+        // SP-4b-2b dropped the empty-roster shape (see the block below), this 0-max-HP shape is the
+        // SOLE remaining carrier of the LEGACY arm of the §4B invariant — the only fixture in the
+        // repo that still books a player cast into the scalar sink. SP-4c removes this shape too,
+        // along with the sink it books into. When it does, the invariant's legacy arm has nothing
+        // left to observe and the honest move is to DELETE that arm (both here and in the INVARIANT
+        // test's shape list) rather than to keep a 0-max-HP roster alive artificially to feed it.
+        // The per-victim arm is the one that survives, and it is covered by the two cases below.
         const result = runCombat(rosterWithEnemyHp(0));
 
         expect(result.rawTotals.cumulative).toBe(ROUNDS * PER_CAST);
@@ -85,11 +107,22 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         expect(result.rounds.map(positionalIn)).toEqual([0, 0, 0, 0]);
     });
 
-    it('an EMPTY opposing roster credits every cast to the LEGACY sink', () => {
-        const result = runCombat(noRoster());
-
-        expect(result.rawTotals.cumulative).toBe(ROUNDS * PER_CAST);
-        expect(result.rounds.map(positionalIn)).toEqual([0, 0, 0, 0]);
+    // SP-4b-2b INVERTED THIS TEST. It read "an EMPTY opposing roster credits every cast to the
+    // LEGACY sink", asserting `rawTotals.cumulative === ROUNDS * PER_CAST` and no per-victim credit.
+    // The empty roster is now refused at the normalization boundary, so the premise is illegal by
+    // contract and no roster line can repair it.
+    //
+    // WHAT STOPPED BEING COVERED, and what survives: nothing about the ACCOUNTING. The mechanic
+    // this test observed — "a run with no targetable opponent credits the whole cast to the legacy
+    // sink and nothing to the per-victim channel" — is asserted identically, on the same four
+    // rounds and the same 10 000 per cast, by "a roster of 0-max-HP pressure sources credits every
+    // cast to the LEGACY sink" directly above, and by that shape's entry in the INVARIANT test
+    // below. `resolvesPositionalVictim` keys on MAX hp, so an unhittable roster and an absent one
+    // reach the sink through the identical gate; the two cases were always the same routing class
+    // spelled two ways. What is genuinely gone is only the SPELLING — the emptiness itself — and
+    // that is what this assertion now pins.
+    it('an EMPTY opposing roster is REFUSED — the sink is not reachable that way any more', () => {
+        expect(() => runCombat(noRoster())).toThrow(/enemyAttackers is empty/);
     });
 
     it('a LIVING positioned roster credits every cast to the PER-VICTIM channel', () => {
@@ -115,8 +148,15 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
     it('INVARIANT: across every roster shape, no round books into both channels, and a round with a living victim books into one', () => {
         // The third state — "neither channel while a living victim existed" — is the SP-4b-1 §4B
         // defect. Pinned here directly so a future gate/selection divergence cannot reintroduce it.
+        // SP-4b-2b: the `{ name: 'no roster', input: noRoster }` shape was dropped from this list —
+        // it is refused at the boundary now, pinned by its own test above. It was the same routing
+        // class as the 0-max-HP pressure source that remains here (both fail
+        // `resolvesPositionalVictim` and fall to the sink), so the list still covers every reachable
+        // sink/per-victim/whiff combination. Re-asserted here so the absence is deliberate and a
+        // future reader cannot read it as a quietly deleted shape.
+        expect(() => runCombat(noRoster())).toThrow(/enemyAttackers is empty/);
+
         const shapes: ReadonlyArray<{ name: string; input: () => CombatEngineInput }> = [
-            { name: 'no roster', input: noRoster },
             { name: '0-max-HP pressure source', input: () => rosterWithEnemyHp(0) },
             { name: 'dies in round 1', input: () => rosterWithEnemyHp(5_000) },
             { name: 'survives every round', input: () => rosterWithEnemyHp(500_000) },

@@ -25,6 +25,7 @@ describe('C1 Task 5: "cleanse all" removes every removable debuff (player-side)'
     });
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 5000,
         crit: 0,
         critDamage: 0,

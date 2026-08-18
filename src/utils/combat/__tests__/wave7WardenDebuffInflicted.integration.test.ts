@@ -23,6 +23,7 @@ import { createEventBus } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -54,6 +55,7 @@ const OUT_DD = 'Out. Damage Down II';
 
 describe('Warden Out. Damage Down II — self-inflicted-debuff reactive (Ship-kit W7)', () => {
     const makeInput = (): CombatEngineInput => ({
+        enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
         attack: 10_000,
         crit: 0,
         critDamage: 0,

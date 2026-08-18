@@ -37,6 +37,7 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor, PendingBomb } from '../state';
 import type { CombatEvent } from '../events';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
@@ -128,6 +129,8 @@ const selfBuffingVictim = (id: string, position: Position, hp: number): TeamActo
 });
 
 const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    // SP-4b-2b default only — Case 1 overrides it with its own positioned enemy.
+    enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -215,16 +218,26 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
     });
 
     // ────────────────────────────────────────────────────────────────────────────
-    // Case 2 — NON-positional focus-dummy processBombs bypasses the enemy-debuff modifier
+    // Case 2 — NON-positional processBombs bypasses the enemy-debuff modifier
+    //
+    // SP-4b-2b: this used to run with NO enemy roster, so the bomb sat on the vestigial `enemy`
+    // sink and the run was non-positional by construction. A roster is now required, and merely
+    // omitting `target`/`pattern` is NOT enough to stay non-positional — `normalizeCombatRoster`
+    // FILLS both with defaults. The remaining non-positional shape is the documented "pressure
+    // source" roster (every opposing member has 0 MAX hp, so `resolvesPositionalVictim` finds nobody
+    // targetable — positionalBinding.ts:60-70), which is what this case now uses. That keeps Case 2
+    // structurally distinct from Case 1 — the whole reason the file has two cases is that
+    // `processBombs` and the positional per-victim burst are different code paths — and keeps the
+    // bomb on the sink, exactly where it was. (SP-4c must revisit this case when it deletes the dummy.)
     // ────────────────────────────────────────────────────────────────────────────
-    it('Case 2 (non-positional): a focus dummy under Out. Damage Up (+50%) bursts its bomb at the RAW value', () => {
+    it('Case 2 (non-positional): the bombed sink under Out. Damage Up (+50%) bursts its bomb at the RAW value', () => {
         const bus = createEventBus();
         const bombEvents: CombatEvent[] = [];
         bus.on('bomb-detonated', (e) => bombEvents.push(e as CombatEvent));
 
-        // "Out. Damage Up" debuff on the enemy dummy: incomingDamage +50. This WOULD scale a
+        // "Out. Damage Up" debuff on the bombed sink: incomingDamage +50. This WOULD scale a
         // DIRECT hit by ×1.50 — but it must NOT touch the bomb burst. Timed/active so it lives
-        // on the dummy as a scheduled enemy debuff and is read by victimIncomingModifiers for
+        // on it as a scheduled enemy debuff and is read by victimIncomingModifiers for
         // the direct channel only.
         const outDamageUp: SelectedGameBuff = {
             id: 'bme-out-up',
@@ -236,10 +249,12 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
             skillDuration: 3,
         };
 
-        // Focus dummy ('enemy') carries a 3 × 1000 timed bomb (countdown 2). On its OWN turn the
+        // The sink carries a 3 × 1000 timed bomb (countdown 2). On its OWN turn the
         // countdown decrements: round 1 → 1 (no burst), round 2 → 0 (BURST). Raw burst = 3000.
         // IF the +50% incoming modifier leaked into processBombs the burst would be 4500. Lock 3000.
         const result = runCombat({
+            // 0 MAX hp → a "pressure source" roster → the run stays NON-positional (see above).
+            enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 0,
             crit: 0,
             critDamage: 0,
@@ -268,9 +283,19 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
             },
         });
 
+        // ANTI-VACUITY (SP-4b-2b): the whole test is "the modifier does not apply", which is
+        // trivially true if the modifier was never live on the bomb holder in the first place.
+        // Pin that it IS live, on both rounds, before reading the burst.
+        expect(result.rounds[0].activeEnemyDebuffs.map((d) => d.buffName)).toContain(
+            'Out. Damage Up'
+        );
+        expect(result.rounds[1].activeEnemyDebuffs.map((d) => d.buffName)).toContain(
+            'Out. Damage Up'
+        );
+
         // Round 1: bomb decremented only → detonationDamage 0.
         expect(result.rounds[0].detonationDamage).toBe(0);
-        // Round 2: RAW burst 3000 via the focus-dummy detonation channel — NOT 4500 (the +50%
+        // Round 2: RAW burst 3000 via the scalar detonation channel — NOT 4500 (the +50%
         // Out. Damage Up never reaches processBombs).
         expect(result.rounds[1].detonationDamage).toBe(3000);
         expect(result.rounds[1].detonationDamage).not.toBe(4500);

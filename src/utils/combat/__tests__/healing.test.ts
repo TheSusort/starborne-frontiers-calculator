@@ -8,6 +8,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -21,6 +22,7 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
 // A focus actor that does nothing damaging (so DoT/charge paths stay quiet); the heal
 // ability lives on the active slot. enemyHp huge → enemy never dies.
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy(),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -1298,7 +1300,11 @@ describe('healing mode — enemy attackers and target intake', () => {
     });
 
     // ── Test 8: DPS-mode inertness re-check ───────────────────────────────────
-    it('no enemyAttackers → healing rounds have zero intake', () => {
+    // SP-4b-2b: an EMPTY roster is no longer expressible (the normalization boundary rejects it),
+    // so "no pressure" is now expressed with BASE's inert 0-attack `bareEnemy()`. The assertion is
+    // unchanged and still non-vacuous: a real opponent that cannot deal damage must produce no
+    // intake and no shield absorption, and a 0-attack hit is SKIPPED rather than emitted as a 0.
+    it('a 0-attack enemy attacker → healing rounds have zero intake', () => {
         idCounter = 0;
         const result = runCombat(
             BASE({
@@ -3289,9 +3295,11 @@ describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', 
                 "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
         } as Ship;
         const salvationSkills = buildShipAbilities(salvation);
-        // Control: identical setup but no enemy attackers → Salvation survives, so the
-        // on-destroyed heal must NOT fire (proves the heal is gated on destruction, not
-        // an always-on parse). Salvation has no active heal, so directHeal must be 0.
+        // Control: identical setup but the only opponent is the inert 0-attack `bareEnemy()`
+        // (SP-4b-2b: every run needs a real opponent, so "no pressure" is now expressed as a
+        // harmless enemy rather than an empty roster) → Salvation survives, so the on-destroyed
+        // heal must NOT fire (proves the heal is gated on destruction, not an always-on parse).
+        // Salvation has no active heal, so directHeal must be 0.
         const aliveControl = runCombat(
             BASE({
                 numRounds: 1,
@@ -3302,7 +3310,7 @@ describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', 
                 speed: 100,
                 bus: createEventBus(),
                 selfBuffs: [],
-                enemyAttackers: [],
+                enemyAttackers: bareEnemy(),
                 teamActors: [idleAlly('t1', 50000)],
                 shipSkills: salvationSkills,
             })

@@ -24,6 +24,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { setRateGateRng, setKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { dealtBy } from '../__testutils__/perTargetDealt';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { CombatActor } from '../state';
 import { createEventBus, CombatEvent } from '../events';
@@ -94,8 +95,12 @@ function sumHeal(
     );
 }
 
+/** The focus actor's id in every run in this file. */
+const FOCUS_ID = 'attacker';
+
 /** Base engine input: neutral stats, enemy never dies, healing mode on (focus is target). */
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -676,15 +681,33 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
                 })
             );
 
+            // SP-4b-2b: the cast resolves positionally onto the real, placed enemy, so its damage
+            // is booked per-victim (`RoundData.perTargetDealt`) instead of on the legacy dummy
+            // sink's `rawTotals.direct` — measured at 39d463f1 this fixture read
+            // 11 500 / 10 000 / 10 000 / 10 000 on that scalar and now reads 0 on all four. Same
+            // damage, different channel (mechanism M3); the old channel is pinned empty in every
+            // arm because the two destinations are mutually exclusive per cast, so a later change
+            // that credited BOTH would double-count and is caught here rather than passing.
+            const dealt = (r: ReturnType<typeof runCombat>) => dealtBy(r.rounds, FOCUS_ID);
+
+            // Non-vacuous: the bare baseline really is hitting (its 10 000 just moved channel).
+            expect(dealt(bareNoDebuffs)).toBeGreaterThan(0);
+
             // Qualitative assertion A: INTRUSION fires when debuffs are present.
             // Intrusion-equipped attacker MUST deal strictly more direct damage than bare.
-            expect(withIntrusionWithDebuffs.rawTotals.direct).toBeGreaterThan(
-                bareWithDebuffs.rawTotals.direct
-            );
+            expect(dealt(withIntrusionWithDebuffs)).toBeGreaterThan(dealt(bareWithDebuffs));
 
             // Qualitative assertion B: INTRUSION is dormant when no debuffs are present.
             // Direct damage must equal the bare baseline.
-            expect(withIntrusionNoDebuffs.rawTotals.direct).toBe(bareNoDebuffs.rawTotals.direct);
+            expect(dealt(withIntrusionNoDebuffs)).toBe(dealt(bareNoDebuffs));
+
+            for (const r of [
+                withIntrusionWithDebuffs,
+                bareWithDebuffs,
+                withIntrusionNoDebuffs,
+                bareNoDebuffs,
+            ])
+                expect(r.rawTotals.direct).toBe(0);
         }
     );
 });
@@ -701,7 +724,7 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
 //      - Each round, the debuff lands (application:'apply') → debuff-applied emitted
 //        → on-debuff-inflicted listener fires → Insidiousness enqueued → proc-gated.
 //      - procChance 0.5 over N rounds → floor(N × 0.5) reactive-damage procs credited
-//        as directDamage. So withInsidiousness.rawTotals.direct > withoutInsidiousness.
+//        as direct damage. So withInsidiousness's damage dealt > withoutInsidiousness's.
 //   B. Attacker with NO debuff active + same Insidiousness passive:
 //      - No debuff-applied events → on-debuff-inflicted never fires → zero reactive damage.
 //      - directDamage must equal the same damage-only active WITHOUT Insidiousness.
@@ -778,7 +801,7 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
     }
 
     it(
-        'A. Debuff-applying active + Insidiousness: reactive damage procs add to rawTotals.direct ' +
+        'A. Debuff-applying active + Insidiousness: reactive damage procs add to the damage dealt ' +
             '(13 procs × 2800 = 36400 on top of 80000 base damage)',
         () => {
             // With Insidiousness and debuff active: each round the debuff lands → on-debuff-inflicted
@@ -806,10 +829,17 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
                 })
             );
 
+            // SP-4b-2b: both the active's damage and the reactive proc's damage are booked
+            // per-victim now that the cast resolves onto a real placed enemy — measured at
+            // 39d463f1 this read 116 400 / 80 000 on `rawTotals.direct` and now reads 0 / 0 there
+            // (mechanism M3). Same damage, different channel, so the comparison moves with it and
+            // the empty scalar is pinned in both arms (the two destinations are mutually exclusive
+            // per cast, so a later change crediting both would double-count and fail here).
+            const dealt = (r: ReturnType<typeof runCombat>) => dealtBy(r.rounds, FOCUS_ID);
+
             // Qualitative: Insidiousness adds reactive damage on top of the base active damage.
-            expect(withInsidiousness.rawTotals.direct).toBeGreaterThan(
-                withoutInsidiousness.rawTotals.direct
-            );
+            expect(dealt(withoutInsidiousness)).toBeGreaterThan(0); // non-vacuous baseline
+            expect(dealt(withInsidiousness)).toBeGreaterThan(dealt(withoutInsidiousness));
 
             // Quantitative: the reactive contribution must equal exactly ACTUAL_PROCS × PER_PROC.
             // NOTE: `EXPECTED_PROCS` (floor(20×0.5)=10, a "back-loaded accumulator" formula) is
@@ -818,15 +848,16 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
             // `attacker:proc` sub-stream under the fixed test seed, which fires 13 of 20 times
             // (a real Bernoulli(0.5) outcome, not the deterministic floor formula).
             const ACTUAL_PROCS = 13;
-            const reactiveContribution =
-                withInsidiousness.rawTotals.direct - withoutInsidiousness.rawTotals.direct;
+            const reactiveContribution = dealt(withInsidiousness) - dealt(withoutInsidiousness);
             expect(reactiveContribution).toBeCloseTo(ACTUAL_PROCS * PER_PROC, 1);
+            expect(withInsidiousness.rawTotals.direct).toBe(0);
+            expect(withoutInsidiousness.rawTotals.direct).toBe(0);
         }
     );
 
     it(
         'B. Damage-only active + Insidiousness: no debuff-applied events → no reactive damage ' +
-            '(same rawTotals.direct as bare damage-only)',
+            '(same damage dealt as bare damage-only)',
         () => {
             // Insidiousness present but active deals ONLY direct damage (no debuff-applied events).
             const withInsidiousnessNoDeb = runCombat(
@@ -851,7 +882,13 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
             );
 
             // Must be EQUAL: no debuffs applied → no reactive triggers → zero Insidiousness damage.
-            expect(withInsidiousnessNoDeb.rawTotals.direct).toBe(bareNoDeb.rawTotals.direct);
+            // Read per-victim (M3): on a positional run `rawTotals.direct` is 0 in BOTH arms, so
+            // comparing that scalar would be VACUOUSLY equal (0 === 0) and could not see an
+            // Insidiousness proc appear. Measured at 39d463f1 both arms read 80 000 on the scalar;
+            // that 80 000 now lives in `perTargetDealt`, which is what this compares.
+            const dealt = (r: ReturnType<typeof runCombat>) => dealtBy(r.rounds, FOCUS_ID);
+            expect(dealt(bareNoDeb)).toBeGreaterThan(0); // non-vacuous: the active really hits
+            expect(dealt(withInsidiousnessNoDeb)).toBe(dealt(bareNoDeb));
         }
     );
 });
@@ -968,6 +1005,7 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
 
     /** Base engine input for Second Wind integration: healing mode, 'attacker' is the healTarget. */
     const SW_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy(),
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -1187,6 +1225,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
 
     /** Base input: healing mode, focus 'attacker' is the HEALER (slow), heal target is 'tank'. */
     const AMP_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy(),
         attack: 1,
         crit: 0,
         critDamage: 0,
@@ -1248,7 +1287,8 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
     });
 
     it('Nourishment: target HP% NOT below healer → no boost (equals baseline)', () => {
-        // No enemy → tank stays at 100%; healer at 100% → target-hp-below-self is FALSE.
+        // The default roster is one INERT 0-attack enemy (an empty roster is no longer
+        // expressible), so tank stays at 100%; healer at 100% → target-hp-below-self is FALSE.
         const withAmp = runCombat(
             AMP_BASE({
                 shipSkills: healerSkills(healAmp('target-hp-below-self', 30)),
@@ -1330,7 +1370,8 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
 
     it('Vivacious: target ≥25% HP → never doubles (equals baseline)', () => {
         const NUM_ROUNDS = 5;
-        // No enemy → tank stays at 100% (≥25%) → target-below-25 never met.
+        // The default roster is one INERT 0-attack enemy, so tank stays at 100% (≥25%) →
+        // target-below-25 never met.
         const withAmp = runCombat(
             AMP_BASE({
                 numRounds: NUM_ROUNDS,
@@ -1403,6 +1444,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
 
     /** Base input: healing mode, focus 'attacker' is healer + recipient (self-heal). Never attacked. */
     const EXU_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy(),
         attack: 1,
         crit: 0,
         critDamage: 0,
@@ -1741,6 +1783,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
 
     /** Base engine input: healing mode, slow focus 'attacker' is the heal target. */
     const MART_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy(),
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -2082,6 +2125,7 @@ function offensiveEnemyAt(id: string, position: Position, attack: number) {
 
 /** Positional base input: healing mode, focus 'attacker' is the heal-target SURVIVOR at M3. */
 const POS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -2519,6 +2563,7 @@ describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-track
 
     /** Base engine input: healing mode, 'attacker' is the heal target carrying the reactive buff. */
     const PR8_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy(),
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -3550,6 +3595,7 @@ function makeShroudInput(
     opts: { focusPosition?: Position; side?: 'player' } = {}
 ): CombatEngineInput {
     return {
+        enemyAttackers: bareEnemy(),
         attack: 1,
         crit: 0,
         critDamage: 0,
@@ -3912,6 +3958,7 @@ describe('D-PR reactive cleanse — Reactive Ward (on-attacked) cleanses 1 / 2-o
 
     /** Healing-mode base for the Reactive Ward carrier ('attacker' is the heal target). */
     const WARD_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy(),
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -4072,6 +4119,7 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
 
     /** Healing-mode base: the carrier 'attacker' is the heal target (so cleanseCount is recorded). */
     const WS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy(),
         attack: ATTACK,
         crit: 0,
         critDamage: 0,
@@ -4386,6 +4434,7 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
 
     /** Base healing-mode input: focus 'attacker' positioned, plenty of HP, multi-round. */
     const CLOAK_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
         attack: 5000,
         crit: 0,
         critDamage: 0,
@@ -4831,8 +4880,16 @@ describe('H1 Task 10 integration — Arcane Siege activates with a live shield',
                 })
             );
 
-            const boosted = withShield.rawTotals.direct;
-            const baseline = withoutShield.rawTotals.direct;
+            // SP-4b-2b: read the carrier's damage per-victim (M3) — the cast resolves positionally
+            // onto the real placed enemy, so `rawTotals.direct` (the legacy dummy sink) is 0 in
+            // both arms. Measured at 39d463f1: boosted 11 500 / baseline 10 000 on that scalar;
+            // identical values now appear in `perTargetDealt`, keyed by the carrier. `dealtBy`
+            // filters to the carrier, so the shield ally's own 1-attack hit is excluded and the
+            // +15% ratio below stays exact.
+            const boosted = dealtBy(withShield.rounds, FOCUS_ID);
+            const baseline = dealtBy(withoutShield.rounds, FOCUS_ID);
+            expect(withShield.rawTotals.direct).toBe(0);
+            expect(withoutShield.rawTotals.direct).toBe(0);
 
             // Sanity: the carrier actually dealt damage in both runs.
             expect(baseline).toBeGreaterThan(0);

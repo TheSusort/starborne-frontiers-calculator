@@ -23,6 +23,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // A team actor whose PASSIVE carries a reactive self-shield: on its OWN start-of-turn it gains
 // a Shield equal to 10% of its Max HP. trigger 'start-of-turn' is a LIVE trigger, so this
@@ -48,6 +49,7 @@ const REACTIVE_SELF_SHIELD_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy(),
     // Focus does NO damage and IS the heal target — it just sits; it is NOT the shield owner.
     attack: 0,
     crit: 0,

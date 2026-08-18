@@ -73,6 +73,17 @@ const HEALER: HealerStats = {
     speed: 100,
 };
 
+/**
+ * ⚠️ `enemies: []` DOES NOT MEAN "no opponent" since SP-4b-2b. The adapter synthesizes one inert
+ * PRACTICE TARGET for an empty roster — a default enemy card with `attack: 0` and no kit
+ * (defence 5,000 / hp 40,000, `id: 'practice-target'`). Read that as "nothing shoots back", which is
+ * what every scenario below relies on, NOT as "no actor on the other side": the practice target takes
+ * a turn, ticks DoTs applied to it, appears in `perTargetDealt`, and CAN BE KILLED.
+ *
+ * Scenarios whose healing is pure `basis:'hp'` are unaffected. The ones that touch a damage basis
+ * (9, 10, 11) were rebased off the old dummy sink's 10,000 defence / 1,000,000 HP — see the ⚠️ block
+ * on each. Where a comment below says "no enemies", it means this input shape.
+ */
 const BASE = (overrides: Partial<HealingSimulationInput> = {}): HealingSimulationInput => ({
     healer: HEALER,
     chargeCount: 0,
@@ -422,31 +433,58 @@ describe('healingGoldenParity', () => {
     });
 
     // ── Scenario 9: Magnolia shape (standing damage-leech, all-scope) ─────────
-    // HAND-VERIFIED (damage-leech spec §4). The healer IS the focus + heal target, no
-    // enemies → all leech-heal is overheal (deficit 0). Active slot = a 100% damage cast
-    // (1 hit, crit 0) + a 1-turn Inferno (tier 100, 1 stack). Passive slot = a standing
-    // leech `{ type:'heal', basis:'damage-dealt', pct:20, leechScope:'all', target:'self' }`.
-    // The leech is HOOK-OWNED (passive damage-dealt) → simplified fold: healModifier + crit
-    // only (healMod 0, crit 0 → bare raw = credit × 20%). 'all' scope leeches BOTH direct
-    // and the Inferno tick.
+    // HAND-VERIFIED (damage-leech spec §4). The healer IS the focus + heal target → all leech-heal
+    // is overheal (deficit 0). Active slot = a 100% damage cast (1 hit, crit 0) + a 1-turn Inferno
+    // (tier 100, 1 stack). Passive slot = a standing leech
+    // `{ type:'heal', basis:'damage-dealt', pct:20, leechScope:'all', target:'self' }`. The leech is
+    // HOOK-OWNED (passive damage-dealt) → simplified fold: healModifier + crit only (healMod 0,
+    // crit 0 → bare raw = credit × 20%).
     //
-    // Damage constants (effectiveAttack 5000, dummy defence 10000 → postDefenseFactor
-    // 1 − dr(10000)/100 = 0.2579415898443159):
-    //   cast direct        = 5000 × 100% × 0.2579415898443159 = 1289.7079492215796
+    // ⚠️ REBASED IN SP-4b-2b. `enemies: []` no longer falls through to the dummy sink; the adapter
+    // synthesizes an inert PRACTICE TARGET (defence 5,000 / hp 40,000, attack 0). Three
+    // consequences, all measured:
+    //
+    // Damage constants (effectiveAttack 5000, practice-target defence 5000 → postDefenseFactor
+    // 1 − dr(5000)/100 = 0.4165593651036698; was 0.2579415898443159 at the sink's defence 10000):
+    //   cast direct        = 5000 × 100% × 0.4165593651036698 = 2082.796825518349
     //   Inferno tick       = 1 stack × (100/100) × 5000 × dotMult 1 × affinityMult 1 = 5000
+    //     — UNCHANGED by the rebase: inferno scales off the APPLIER's effective attack
+    //       (engine.ts:1066, `ctx.effectiveAttack` in the inferno `tickByTier`), not the victim's
+    //       HP. Corrosion is the one that reads an HP basis, and it ALREADY reads the practice
+    //       target's own max HP (`enemyHp: recipientMaxHp(actor.id)` at the per-victim positional
+    //       DoT-tick branch, engine.ts:8836) — 40,000 here, not the sink's
+    //       1,000,000; that branch is the one this fixture's `perTargetDealt` assertion proves runs.
     //
-    // Per-round timeline (identical every round — full HP, Inferno re-applied at duration 1):
-    //   • Focus turn (speed 100, acts first): the cast deals direct 1289.708 to the dummy →
-    //     creditDamage('attacker','direct',1289.708) procs the leech at CREDIT time:
-    //       cast leech raw = 1289.7079492215796 × 20% = 257.94158984431596 (→ 258).
-    //     Then the Inferno (duration 1) is applied to the dummy's container.
-    //   • Dummy enemy turn (speed 0, acts last): ticks the Inferno (5000) →
-    //     creditDamage('attacker','inferno',5000) procs the SAME leech ('all' scope) at the
-    //     ENEMY turn (correct survival timing — a DoT-tick leech lands during the enemy turn):
-    //       inferno leech raw = 5000 × 20% = 1000.
-    //   ⇒ directHeal = 257.9416 + 1000 = 1257.9416 (→ 1258). Full HP → effectiveHealing 0,
-    //     overheal 1257.9416 (→ 1258). hotHeal 0, shield 0, incomingDamage 0.
-    //   cumulativeHealing: R1 1258, R2 2516, R3 3774, …
+    // Per-round timeline (rounds 1-6; Inferno re-applied every round at duration 1):
+    //   • Focus turn (speed 100, acts first): the cast deals direct 2082.797 to the practice target
+    //     → creditDamage('attacker','direct',2082.797) procs the leech at CREDIT time:
+    //       cast leech raw = 2082.796825518349 × 20% = 416.5593651036698 (→ 417).
+    //     Then the Inferno (duration 1) is applied to the practice target's container.
+    //   • Practice-target turn (speed 50, acts last): ticks the Inferno for 5000 — it DOES land, and
+    //     `perTargetDealt` proves it (R1 = 6289.708 = cast 1289.708 + inferno 5000 at the old basis;
+    //     7082.797 = 2082.797 + 5000 now).
+    //     ✅ AND THE LEECH PAYS OUT ON IT: inferno-tick leech = 5000 × 20% = 1000.
+    //     This term briefly read 0 when Task 2 first rebased the fixture, which exposed a
+    //     PRE-EXISTING engine defect (not the rebase): a `leechScope:'all'` standing leech paid ZERO
+    //     on DoT-tick damage against ANY real positioned enemy, because the per-victim positional
+    //     DoT-tick branch procced neither leech hook. FIXED in SP-4b-2b Task 2b — that branch's
+    //     `credit` callback now calls `procStandingLeechesPerVictim` (engine.ts, the per-victim
+    //     tick's credit callback; fenced by `src/utils/combat/__tests__/positionalDotLeech.test.ts`
+    //     on BOTH sides). The term is back at exactly its pre-SP-4b-2b value of 1000, because
+    //     inferno scales off the APPLIER's effective attack (5000), not the victim — measured at
+    //     39d463f1: directHeal 1258/round = cast 258 + inferno 1000.
+    //   ⇒ directHeal = 416.5594 + 1000 = 1416.5594 (→ 1417) per round. Full HP → effectiveHealing 0,
+    //     overheal 1416.5594 (→ 1417). hotHeal 0, shield 0, incomingDamage 0 (attack 0).
+    //   • Rounds 7-10 are ZERO: the practice target is KILLABLE and dies in round 6 —
+    //     2082.797 + 5000 = 7082.797/round vs hp 40,000 (6 × 7082.797 = 42,496.8 > 40,000). Round 6
+    //     still heals, because the cast lands before the death.
+    //   ⚠️ INERT TAIL: 4 of this golden's 10 snapshotted rounds (7-10) observe a dead opponent and
+    //     read all-zero for that reason alone, not because anything broke. The six LIVE rounds
+    //     (1-6) are what stays pinned above; the zero rows exist only so the snapshot proves the
+    //     run doesn't error out or resurrect the target after death.
+    //   cumulativeHealing (raws summed UNROUNDED, rounded last): 1417, 2833, 4250, 5666, 7083, 8499,
+    //     then flat. totalDirectHeal = 6 × 1416.5594 = 8499.36 → 8499 (12579 pre-SP-4b-2b, where the
+    //     dummy never died so all 10 rounds paid at the sink's defence-10000 cast basis).
     const scenario9Input = () =>
         BASE({
             rounds: 10,
@@ -497,12 +535,23 @@ describe('healingGoldenParity', () => {
 
     snap('Magnolia shape (standing damage-leech all-scope: cast + Inferno tick)', scenario9Input);
 
-    // Supplementary in-code assertion for scenario 9: round-1 directHeal is the cast-leech
-    // (258) + the Inferno-tick leech (1000) folded into the focus bucket → 1258.
-    it('scenario 9: round-1 directHeal is exactly 1258 (cast 258 + inferno 1000)', () => {
+    // Supplementary in-code assertion for scenario 9: round-1 directHeal is BOTH leech terms.
+    // Hand-derived, not read off the snapshot:
+    //   cast leech    = 0.2 × 2082.796825518349 = 416.5593651036698
+    //   inferno leech = 0.2 × 5000              = 1000            (SP-4b-2b Task 2b)
+    //   → 1416.5594 → 1417.
+    // It was `1258` (cast 258 + inferno 1000) while `enemies: []` fell through to the dummy: the cast
+    // term was REBASED by the practice target's defence 5,000 (258 → 417), while the inferno term
+    // round-trips at exactly 1000 — it briefly read 0 between Task 2 and Task 2b, which is how the
+    // pre-existing positional leech gap was found. See the ⚠️ block on `scenario9Input` above.
+    it('scenario 9: round-1 directHeal is exactly 1417 (cast leech 417 + inferno-tick leech 1000)', () => {
         idCounter = 0;
         const result = simulateHealing(scenario9Input());
-        expect(result.rounds[0].directHeal).toBe(1258);
+        expect(result.rounds[0].directHeal).toBe(1417);
+        // ANTI-VACUITY: the inferno DOES tick on the practice target for 5,000 — so the 1000 term
+        // inside the figure above is the leech reading a REAL tick, not a coincidence of rounding.
+        const dealt = result.rounds[0].perTargetDealt?.attacker?.['practice-target'];
+        expect(dealt).toBeCloseTo(2082.796825518349 + 5000, 6);
     });
 
     // ── Scenario 10: Tithonus/Pallas shape (all-allies noCrit cast rider) ─────
@@ -515,9 +564,15 @@ describe('healingGoldenParity', () => {
     // for every recipient (per-recipient directHeal credit). CONSUMPTION now fans out as well:
     // the adapter passes `perRecipientHealApply: true`, so every recipient the caster reaches
     // (here BOTH 'attacker' and t1) absorbs its own share — it no longer spends the whole heal on
-    // the single configured heal target, and that widening is why this snapshot moved. No enemies →
-    // everyone stays full → all overheal. Spot-checked for plausibility (routed-cast
-    // heal-conservation; no NaN; cumulative monotonic).
+    // the single configured heal target, and that widening is why this snapshot moved. Nothing shoots
+    // back → everyone stays full → all overheal.
+    //
+    // REBASED IN SP-4b-2b, and this scenario is the CLEAN isolation of that rebase: the 7% rider is
+    // the only moving part, so `directHeal` per round went 181 → 292 purely because the practice
+    // target's defence 5,000 lifts the cast from 1289.708 to 2082.797 (0.07 × 1289.708 = 90 → 0.07 ×
+    // 2082.797 = 146, ×2 recipients). No killable component: with no DoT the target takes 2082.797 a
+    // round against 40,000 HP, i.e. 19.2 rounds, so it survives the whole 10-round window.
+    // Spot-checked for plausibility (routed-cast heal-conservation; no NaN; cumulative monotonic).
     snap('Tithonus/Pallas shape (all-allies noCrit cast rider, routed to a team target)', () => {
         const team: TeamActorInput = {
             id: 't1',
@@ -566,77 +621,121 @@ describe('healingGoldenParity', () => {
     // schedule). rounds 4 → the charged slot fires ONLY on round 3. The charged slot carries a
     // 100% damage cast + an accumulate-detonate `{ turns:1, pct:100 }` (Echoing Burst): applied
     // on the round-3 focus turn (roundsRemaining 1), it gathers ALL players' round-3 direct and
-    // bursts on the round-3 dummy turn, crediting the DETONATION channel. Two passive standing
+    // bursts on the round-3 opposing turn, crediting the DETONATION channel. Two passive standing
     // leeches scoped to detonation only — one ally (5%) + one self (5%) — therefore proc ONLY on
     // round 3 (the burst round); the direct channel on rounds 1/2/4 is skipped by the scope
-    // guard. Healer is focus + heal target, full HP → all overheal. Spot-checked for plausibility.
+    // guard. Healer is focus + heal target, full HP → all overheal.
+    //
+    // ⚠️ THIS SCENARIO NOW HEALS NOTHING AT ALL, and that is a KNOWN ENGINE GAP this fixture stopped
+    // hiding — not a rebase. It used to credit 129 on round 3. A `leechScope:'detonation'` standing
+    // leech pays ZERO against a real positioned enemy, and always has: running this exact scenario
+    // against an explicit enemy at the sink's own stats (defence 10000 / hp 1,000,000) on the
+    // PRE-SP-4b-2b adapter also gives `[0,0,0,0]`, and so does the practice target's own stat block.
+    // So the 129 only ever existed on the dummy path, which SP-4b-2b's practice target replaced. The
+    // code gap is real, but — unlike scenario 9's inferno-tick leech, which WAS production-reachable
+    // (Magnolia's own standing `'all'`-scope self leech, plus the same shape injected by gear via
+    // `buildEquipmentAbilities.ts:52`) and is therefore FIXED in SP-4b-2b Task 2b — this fixture's
+    // `leechScope:'detonation'` STANDING leech is
+    // probably corpus-UNREACHABLE: its only real-ship producer is Valkyrie's Echoing Burst leech
+    // (`skillTextParser.ts` ~4335-4338), which is `on-bomb-detonated` and therefore REACTIVE, so it
+    // is partitioned out of `standingLeeches` before it can ever reach this gap — engine.ts:3937-3940
+    // says so explicitly ("no corpus ship reaches it here … Valkyrie's `ally` one is
+    // `on-bomb-detonated`, so it is reactive and never enters this map"). So this half is a real code
+    // gap with no known live-production instance, not a second confirmed regression. DELIBERATELY
+    // LEFT UNFIXED (owner ruling, SP-4b-2b Task 2b), and tripwired instead — see the "KNOWN GAP
+    // (tripwire)" describe in `src/utils/combat/__tests__/positionalDotLeech.test.ts`, which goes RED
+    // the moment a positional burst starts paying a detonation-scoped standing leech.
+    // The snapshot is kept (rather than the test deleted)
+    // because `perTargetDealt` still pins that the cast itself lands per-victim every round.
+    // Spot-checked for plausibility.
+    const scenario11Input = (): HealingSimulationInput =>
+        BASE({
+            rounds: 4,
+            chargeCount: 2,
+            startCharged: false,
+            healer: { ...HEALER, hp: 10000 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100, hits: 1 },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'charged',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100, hits: 1 },
+                            }),
+                            ab({
+                                type: 'accumulate-detonate',
+                                target: 'enemy',
+                                config: { type: 'accumulate-detonate', turns: 1, pct: 100 },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'ally',
+                                trigger: 'on-cast',
+                                config: {
+                                    type: 'heal',
+                                    pct: 5,
+                                    basis: 'damage-dealt',
+                                    leechScope: 'detonation',
+                                },
+                            }),
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                config: {
+                                    type: 'heal',
+                                    pct: 5,
+                                    basis: 'damage-dealt',
+                                    leechScope: 'detonation',
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        });
+
     snap(
         'Valkyrie shape (accumulate-detonate burst → detonation-scope leeches, burst round only)',
-        () =>
-            BASE({
-                rounds: 4,
-                chargeCount: 2,
-                startCharged: false,
-                healer: { ...HEALER, hp: 10000 },
-                healTargetId: 'healer',
-                shipSkills: {
-                    slots: [
-                        {
-                            slot: 'active',
-                            abilities: [
-                                ab({
-                                    type: 'damage',
-                                    target: 'enemy',
-                                    config: { type: 'damage', multiplier: 100, hits: 1 },
-                                }),
-                            ],
-                        },
-                        {
-                            slot: 'charged',
-                            abilities: [
-                                ab({
-                                    type: 'damage',
-                                    target: 'enemy',
-                                    config: { type: 'damage', multiplier: 100, hits: 1 },
-                                }),
-                                ab({
-                                    type: 'accumulate-detonate',
-                                    target: 'enemy',
-                                    config: { type: 'accumulate-detonate', turns: 1, pct: 100 },
-                                }),
-                            ],
-                        },
-                        {
-                            slot: 'passive',
-                            abilities: [
-                                ab({
-                                    type: 'heal',
-                                    target: 'ally',
-                                    trigger: 'on-cast',
-                                    config: {
-                                        type: 'heal',
-                                        pct: 5,
-                                        basis: 'damage-dealt',
-                                        leechScope: 'detonation',
-                                    },
-                                }),
-                                ab({
-                                    type: 'heal',
-                                    target: 'self',
-                                    trigger: 'on-cast',
-                                    config: {
-                                        type: 'heal',
-                                        pct: 5,
-                                        basis: 'damage-dealt',
-                                        leechScope: 'detonation',
-                                    },
-                                }),
-                            ],
-                        },
-                    ],
-                },
-            })
+        scenario11Input
     );
+
+    // TRIPWIRE for scenario 11's all-zero healing, mirroring scenario 9's positive guard. A snapshot
+    // of zeros is the weakest possible pin: it reads identically whether the leech gap is the cause
+    // (the claim) or the BURST never fired at all (a fixture that observes nothing). This asserts
+    // both halves separately — the zero AND the burst — so the pair can only stay green while the
+    // gap is what it is documented to be. Deliberately magnitude-free on the burst side: it pins
+    // that round 3 delivered STRICTLY MORE than a plain-cast round, which is the charged cast plus
+    // the detonation, without re-encoding numbers the snapshot already owns.
+    it('scenario 11 (KNOWN GAP): the burst really fires, and the detonation-scope leech still pays 0', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario11Input());
+        // The gap: nothing is healed in ANY round, burst round included.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 0]);
+        // ANTI-VACUITY: round 3 (index 2) is the burst round and delivers more damage than an
+        // active-only round, so there WAS a detonation amount for the leech to read 5% of.
+        const dealt = (i: number) => result.rounds[i].perTargetDealt?.attacker?.['practice-target'];
+        expect(dealt(0)).toBeGreaterThan(0);
+        expect(dealt(2)).toBeGreaterThan(dealt(0)!);
+    });
 
     // ── Scenario 12: Quixilver as heal target (rider shield + taken shield) ───
     // HAND-VERIFIED (damage-leech spec §5). The healer IS the focus + heal target (hp 10000,
@@ -650,8 +749,11 @@ describe('healingGoldenParity', () => {
     //     attack damage × 25%, applied AFTER the attack's shield-first drain.
     //   • One enemy attacker (attack 4000, crit 0, speed 50) → acts AFTER the healer (speed 100).
     //
-    // Damage constants (effectiveAttack 5000, dummy defence 10000 → postDefenseFactor
-    // 0.2579415898443159; enemy reduction 0 at defence 0):
+    // Damage constants (effectiveAttack 5000, defence 10000 → postDefenseFactor
+    // 0.2579415898443159; enemy reduction 0 at defence 0). That 10000 is the adapter's LEGACY-SINK
+    // DEFAULT, not the dummy: this scenario supplies a real enemy card that leaves `defence`
+    // unspecified, so it inherits `LEGACY_SINK_DEFENCE`. Unaffected by SP-4b-2b, which only changes
+    // what an EMPTY roster fights:
     //   cast direct  = 5000 × 100% × 0.2579415898443159 = 1289.7079492215796
     //   shield rider = 1289.7079492215796 × 20% = 257.94158984431596
     //   enemy hit    = 4000 (defence 0 → no reduction)

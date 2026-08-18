@@ -38,6 +38,12 @@ import {
     resolveHealingPlayerPlacement,
     uncoveredAllyIds,
 } from '../../utils/calculators/healingPlacement';
+import {
+    DEFAULT_ENEMY_DEFENCE,
+    DEFAULT_ENEMY_HP,
+    DEFAULT_ENEMY_SECURITY,
+    DEFAULT_ENEMY_SPEED,
+} from '../../utils/calculators/healingDefaultEnemy';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -64,25 +70,17 @@ import { SEO_CONFIG } from '../../constants/seo';
 
 const HEAL_TARGET_ID = 'heal-target';
 
-/**
- * Manual-entry defaults for an enemy attacker's OWN stats (spec decision 3).
+/** The stat block a manually-added enemy starts from, placed at the Nth default enemy cell.
  *
- * None of these may be 0. An `hp` of 0 makes an enemy that is already destroyed, so the healer's
- * cast delivers nothing to it and every `basis:'damage-dealt'` heal/shield rider silently pays out
- * zero; a `security` of 0 would make the healer's outbound debuffs land strictly MORE often than
- * they did before the run became positional. These mirror the adapter's legacy-sink numbers closely
- * enough that a freshly-added enemy behaves like the old punching bag — just placed, and killable.
- */
-const DEFAULT_ENEMY_HP = 40000;
-const DEFAULT_ENEMY_DEFENCE = 5000;
-const DEFAULT_ENEMY_SECURITY = 100;
-
-/** The stat block a manually-added enemy starts from, placed at the Nth default enemy cell. */
+ *  The stats themselves live in `healingDefaultEnemy.ts` because the adapter needs the same numbers
+ *  for the PRACTICE TARGET it synthesizes when the roster is empty — see that module for why none of
+ *  them may be 0. `attack` and `hacking` stay here: they are the two the practice target does not
+ *  share (it has no attack, and an absent hacking already defaults to the engine's 200). */
 const defaultEnemyStats = (index: number) => ({
     attack: 4000,
     crit: 0,
     critDamage: 0,
-    speed: 50,
+    speed: DEFAULT_ENEMY_SPEED,
     hacking: 200,
     chargeCount: 0,
     startCharged: false,
@@ -375,15 +373,19 @@ const HealingCalculatorPage: React.FC = () => {
         ]);
     };
 
-    // ⚠️ FLOORED AT ONE ENEMY, same shape as `removeTeamShip` below — and for a bigger reason than
-    // tidiness. An EMPTY roster has no positioned opponent, so `selectTurnTarget` falls back to the
-    // engine's vestigial DUMMY (a fixed 10,000-defence / 1,000,000-HP sink that never dies): every
-    // `basis:'damage-dealt'` rider silently rebases off that 10,000 and `perTargetDealt` disappears
-    // (measured: totalDirectHeal 3,876 with one real enemy at defence 1,000 → 1,290 with none — a 3x
-    // move from a single click on a fresh page). The remove button is also hidden for the last enemy,
-    // so this guard is the belt to that braces.
+    // An empty roster is allowed: it means "nothing shoots back", and the adapter synthesizes an
+    // inert PRACTICE TARGET for it (`healingEngineAdapter.practiceTarget`) so the run reads as pure
+    // healing output with everything overhealed.
+    //
+    // History, and why the practice target carries a real defence rather than 0: before SP-4b-2b an
+    // empty roster fell to the engine's vestigial dummy — a fixed 10,000-defence / 1,000,000-HP sink
+    // that never dies — so every `basis:'damage-dealt'` rider silently rebased off that 10,000 and
+    // `perTargetDealt` disappeared. Measured at the time: totalDirectHeal 3,876 with one real enemy
+    // at defence 1,000 → 1,290 with none, a 3x move from a single click on a fresh page. The practice
+    // target carries the same numbers this page's own default card does, so emptying the roster now
+    // changes only the damage coming at you.
     const removeEnemy = (id: string) => {
-        setEnemies((prev) => (prev.length <= 1 ? prev : prev.filter((e) => e.id !== id)));
+        setEnemies((prev) => prev.filter((e) => e.id !== id));
     };
 
     const selectEnemyShip = (id: string, ship: Ship) => {

@@ -22,6 +22,7 @@ import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { CombatActor } from '../state';
 import { dotFamilyCounts } from '../../abilities/roundContext';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -131,6 +132,13 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
         }) as TeamActor;
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        // SP-4b-2b: a real opponent for the ally-inflicted Corrosion to land on. The DEFAULT
+        // 500k HP is deliberate and safe here: corrosion MAGNITUDE scales with the victim's own
+        // `recipientMaxHp` in the per-victim positional tick, but this fixture asserts only the
+        // entry's family/tier/unremovable/remainingRounds — never a damage number — so the HP
+        // choice cannot move any assertion. The focus has attack 0 and the ally 100 over a single
+        // round, so the opponent trivially survives.
+        enemyAttackers: bareEnemy(),
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -163,7 +171,7 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
                 hacking: 1000, // rate = min(1, 0.1*1000/100) = 1 → guaranteed conversion
                 critDamage: 1000, // critPowerFactor = min(1, 1000/100) = 1 → guaranteed extend
                 __testTapActors: (actors) => {
-                    enemyActor = actors.find((a) => a.id === 'enemy');
+                    enemyActor = actors.find((a) => a.id === BARE_ENEMY_ID);
                 },
             })
         );
@@ -197,7 +205,7 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
                 hacking: 0,
                 critDamage: 0,
                 __testTapActors: (actors) => {
-                    enemyActor = actors.find((a) => a.id === 'enemy');
+                    enemyActor = actors.find((a) => a.id === BARE_ENEMY_ID);
                 },
             })
         );
@@ -214,7 +222,7 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
 });
 
 describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna converts an enemy ally's Corrosion on a player ship", () => {
-    it('the player focus actor ends up with the Acidic Decay stack, not the dummy enemy', () => {
+    it('the player focus actor ends up with the Acidic Decay stack, not the opposing roster', () => {
         const enemyBelladonna: EnemyAttacker = {
             id: 'enemy-belladonna',
             stats: {
@@ -274,12 +282,21 @@ describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna convert
         };
 
         let playerActor: CombatActor | undefined;
-        let dummyEnemyActor: CombatActor | undefined;
+        let opposingActors: CombatActor[] = [];
         runCombat({
             ...input,
             __testTapActors: (actors) => {
                 playerActor = actors.find((a) => a.id === 'attacker');
-                dummyEnemyActor = actors.find((a) => a.id === 'enemy');
+                // SP-4b-2b: the negative control used to be the vestigial `enemy` sink (the focus's
+                // only offensive target back when no roster was supplied). Now that the roster is
+                // real, the control is the roster ITSELF — and it is looked up by id so a typo or a
+                // renamed actor fails loudly instead of resolving to `undefined` and letting a
+                // `?? []` default make the assertion vacuously true.
+                opposingActors = ['enemy-corrosion-ally', 'enemy-belladonna'].map((id) => {
+                    const a = actors.find((x) => x.id === id);
+                    if (!a) throw new Error(`negative control actor '${id}' is not in the run`);
+                    return a;
+                });
             },
         });
         if (!playerActor) throw new Error('__testTapActors never handed out the player actor');
@@ -290,9 +307,12 @@ describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna convert
         expect(entry.unremovable).toBe(true);
         expect(entry.tier).toBe(6);
 
-        // The dummy enemy (the player's OWN offensive target, untouched by this scenario) never
-        // receives the conversion — proves the executor resolved the REAL victim (the player
-        // actor), not the fixed ctx.enemy/corrosionEntries closures.
-        expect(dummyEnemyActor?.corrosionEntries ?? []).toHaveLength(0);
+        // Neither opposing actor (the player's OWN offensive target among them, untouched by this
+        // scenario) receives the conversion — proves the executor resolved the REAL victim (the
+        // player actor), not the fixed ctx.enemy/corrosionEntries closures.
+        expect(opposingActors).toHaveLength(2);
+        for (const a of opposingActors) {
+            expect(a.corrosionEntries).toHaveLength(0);
+        }
     });
 });

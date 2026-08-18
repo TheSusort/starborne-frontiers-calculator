@@ -4,7 +4,7 @@
  * C3 (Demolisher's adjacent-enemy splash) anchors its fan-out on `victimId`.
  *
  * Covers the two most structurally distinct emit paths:
- *   1. Natural countdown-0 burst via `processBombs` (non-positional DPS-dummy enemy turn) —
+ *   1. Natural countdown-0 burst via `processBombs` (non-positional single-opponent enemy turn) —
  *      mirrors `engine.events.test.ts`'s Case 5 harness (`baseInput`/`collect`).
  *   2. Attacker-turn `detonate()` aggregate bomb branch (legacy non-positional path) — mirrors
  *      `detonationRecipe.test.ts`'s "legacy (no positional)" harness.
@@ -20,9 +20,10 @@ import { createStatusEngine } from '../statusEngine';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { AffinityName } from '../../../types/ship';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
-// Path 1: natural countdown-0 detonation via processBombs (enemy turn, DPS dummy).
+// Path 1: natural countdown-0 detonation via processBombs (enemy turn, single real opponent).
 // ---------------------------------------------------------------------------
 
 let idCounter = 0;
@@ -54,6 +55,12 @@ const bombSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    // SP-4b-2b: a real opponent is now required. This is a DAMAGE fixture (15000 attack, 120%
+    // active + bomb bursts over 4 rounds) so it takes the 10M-HP form — the 500k default is not a
+    // survival guarantee and a mid-sim death would cut the bomb cycle short. `enemyDefense: 8000`
+    // is carried onto the roster entry's own `stats.defence`; the fight-wide scalar is inert (M6).
+    // The opponent has 0 attack, so it draws no RNG and the crit stream is unchanged.
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 8000 } }),
     attack: 15000,
     crit: 50,
     critDamage: 150,
@@ -87,7 +94,7 @@ const collectBombDetonated = (input: CombatEngineInput) => {
 };
 
 describe('bomb-detonated victimId — processBombs natural countdown-0 path', () => {
-    it("stamps victimId as the bombed enemy's id ('enemy', the DPS dummy), distinct from actorId (the applier, 'attacker')", () => {
+    it("stamps victimId as the bombed enemy's own id, distinct from actorId (the applier, 'attacker')", () => {
         const events = collectBombDetonated(baseInput({ numRounds: 4 }));
 
         const bombDetonated = events.filter((e) => e.type === 'bomb-detonated');
@@ -95,7 +102,11 @@ describe('bomb-detonated victimId — processBombs natural countdown-0 path', ()
         for (const e of bombDetonated) {
             if (e.type !== 'bomb-detonated') throw new Error('unreachable');
             expect(e.actorId).toBe('attacker');
-            expect(e.victimId).toBe('enemy');
+            // M1: the bombed enemy is the real roster entry. Pre-SP-4b-2b this was the vestigial
+            // `enemy` sink, which is what the run reached when no roster was supplied at all. The
+            // property under test is unchanged: victimId is the BOMBED enemy and actorId is the
+            // APPLIER, so the two are still asserted independently and are still different ids.
+            expect(e.victimId).toBe(BARE_ENEMY_ID);
         }
     });
 });

@@ -26,6 +26,7 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { StatusEngine } from '../statusEngine';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
 // SP-D Anemone triage probe / enemyDotCount.test.ts parser block.
@@ -78,6 +79,9 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (player si
         idc = 0;
         let engine: StatusEngine | undefined;
         runCombat({
+            // SP-4b-2b: a real opponent for the seeded DoTs to accrue on. Inert and huge-HP so the
+            // 1000-attack focus cannot kill it across the two rounds the gate needs.
+            enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
             attack: 1000,
             crit: 0,
             critDamage: 0,
@@ -224,6 +228,9 @@ describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runti
     it('even with 3 pre-existing generic DoT entries, Stasis does NOT land (Acidic Decay family count is 0 today)', () => {
         idc = 0;
         const result = runCombat({
+            // SP-4b-2b: a real opponent for the seeded DoTs to accrue on. Inert and huge-HP so the
+            // 1000-attack focus cannot kill it across the two rounds the gate needs.
+            enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
             attack: 1000,
             crit: 0,
             critDamage: 0,
@@ -246,6 +253,12 @@ describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runti
             hp: 1_000_000_000,
             speed: 100,
         });
+        // ANTI-VACUITY: this is a bare negative assertion, so it is only meaningful if the charged
+        // cast carrying the gated Stasis clause actually FIRED in round 2. Without this, a fixture
+        // that never reached the charged skill at all (wrong cadence, dead opponent, a throw
+        // swallowed upstream) would pass for reasons unrelated to the gate.
+        expect(result.rounds[1].action).toBe('charged');
+
         const round2Names = result.rounds[1].activeEnemyDebuffs.map((d) => d.buffName);
         // SP-E enables this once the Acidic Decay DoT family actually exists.
         expect(round2Names).not.toContain('Stasis');

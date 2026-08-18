@@ -261,6 +261,7 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         }) as EnemyAttacker;
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 0,
         crit: 0,
         critDamage: 0,

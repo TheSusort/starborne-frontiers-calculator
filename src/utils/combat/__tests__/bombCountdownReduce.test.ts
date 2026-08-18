@@ -376,6 +376,7 @@ const bomb = (
 });
 
 const REGRESSION_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 100,
     crit: 0,
     critDamage: 0,

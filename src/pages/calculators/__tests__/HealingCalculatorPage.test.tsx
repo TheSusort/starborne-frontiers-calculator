@@ -114,34 +114,42 @@ describe('HealingCalculatorPage', () => {
         expect(screen.getByText('About the Simulation')).toBeInTheDocument();
     });
 
-    // ── The enemy roster is FLOORED AT ONE ──────────────────────────────────────
+    // ── The enemy roster has NO floor ───────────────────────────────────────────
     //
-    // ⚠️ THIS TEST USED TO PIN THE OPPOSITE ('…reduces the count to 0'), which is how the regression
-    // stayed invisible. An EMPTY roster leaves the healing run with no positioned opponent, so
-    // `selectTurnTarget` falls back to the engine's vestigial DUMMY — the fixed 10,000-defence /
-    // 1,000,000-HP sink that never dies — and every `basis:'damage-dealt'` rider silently rebases off
-    // that 10,000 while `perTargetDealt` disappears (measured: totalDirectHeal 3,876 against one real
-    // enemy at defence 1,000 → 1,290 with none). One click on a fresh page was enough, which also
-    // falsified the adapter's documented claim that the dummy is unreachable from the app.
-    it('the enemy roster is floored at one: the last enemy has no remove button', () => {
+    // ⚠️ THIS TEST HAS PINNED BOTH ANSWERS IN TURN, so read the history before changing it again.
+    // Originally it pinned 'removing the last enemy reduces the count to 0' while an empty roster
+    // silently fell through to the engine's vestigial DUMMY — the fixed 10,000-defence /
+    // 1,000,000-HP sink — which rebased every `basis:'damage-dealt'` rider off that 10,000 and made
+    // `perTargetDealt` disappear (measured: totalDirectHeal 3,876 against one real enemy at defence
+    // 1,000 → 1,290 with none). It was then flipped to pin a floor at one, which closed that door.
+    // SP-4b-2b removes the door instead: `simulateHealing` synthesizes an inert PRACTICE TARGET for
+    // an empty roster, carrying the page's own default card stats, so emptying the roster changes
+    // only the incoming damage. The floor is therefore gone again — but for a reason, not by
+    // oversight. Re-flooring the page is only correct if the adapter stops synthesizing.
+    //
+    // The end-to-end consequence (an emptied roster still produces a rendered result) lives in
+    // `HealingCalculatorPage.zeroEnemies.test.tsx`; this test owns the CONTROL.
+    it('every enemy card is removable, including the last one', () => {
         render(
             <MemoryRouter>
                 <HealingCalculatorPage />
             </MemoryRouter>
         );
-        // One seeded enemy, and NO way to delete it.
+        // One seeded enemy, and it CAN be deleted.
         expect(screen.getByText(/Enemy Team \(1\)/)).toBeInTheDocument();
-        expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
+        expect(screen.getAllByLabelText('Remove enemy')).toHaveLength(1);
 
-        // ANTI-VACUITY: the button is conditional, not simply missing. Add a second enemy and both
-        // cards gain one — otherwise this test would stay green if the control were deleted outright.
+        // ANTI-VACUITY: one button per card, so the control is really per-card rather than a single
+        // stray element that happens to match.
         fireEvent.click(screen.getByText('+ Add enemy'));
         expect(screen.getByText(/Enemy Team \(2\)/)).toBeInTheDocument();
         expect(screen.getAllByLabelText('Remove enemy')).toHaveLength(2);
 
-        // Removing gets back to one — and the floor closes the door again.
+        // All the way down to zero — the state that used to be unreachable.
         fireEvent.click(screen.getAllByLabelText('Remove enemy')[1]);
         expect(screen.getByText(/Enemy Team \(1\)/)).toBeInTheDocument();
+        fireEvent.click(screen.getByLabelText('Remove enemy'));
+        expect(screen.getByText(/Enemy Team \(0\)/)).toBeInTheDocument();
         expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
     });
 

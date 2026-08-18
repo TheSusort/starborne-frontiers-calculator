@@ -132,6 +132,7 @@ const VICTIM_SLOT: Position = 'M4';
 const FOCUS_SLOT: Position = 'M2';
 
 const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -284,6 +285,7 @@ const enemyAlly = (
     }) as EnemyAttacker;
 
 const ENEMY_SIDE_BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: ENEMY_ATTACK, // player focus attack → the hit landing on the enemy ally.
     crit: 0,
     critDamage: 0,

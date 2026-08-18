@@ -111,6 +111,7 @@ const enemyVictim = (id: string, position: Position, attack = 0): EnemyAttacker 
 // Focus attacker at M4 with a basic attack + optional outgoing-amplification passive, targeting
 // `front` (origin-only) → anchors the front-most enemy at M4. Healing mode builds the enemy roster.
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 5000,
     crit: 0,
     critDamage: 50,

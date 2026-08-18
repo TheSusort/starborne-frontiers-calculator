@@ -6,6 +6,7 @@ import type { Ship } from '../../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { StatusEngine } from '../statusEngine';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
 // SP-D — Berserker's Marauder Rage II passive ("gains Marauder Rage II for 3 turns when
@@ -245,8 +246,8 @@ describe('SP-D: enemies-hit-this-cast live gate — Berserker Marauder Rage II (
 // Tygr's self-charge-gain ("If it damages 2 or more enemies, it adds 1 charge to its Charged
 // Skill") — the OTHER seam (playerTurn.ts's on-cast `ctx`, gating a `type:'charge'` payload
 // ability via gateFiringAbilities, distinct from Berserker's reactive-drain seam above). DPS
-// mode has no multi-target concept → the gate defaults to 1 hit → not met (Tygr genuinely
-// doesn't add charge against a single target); a positional splash hitting 2+ enemies meets it.
+// A single opponent damages exactly one enemy → the 2+ gate is not met (Tygr genuinely doesn't add
+// charge against a single target); a positional splash hitting 2+ enemies meets it.
 // ---------------------------------------------------------------------------
 const TYGR_ACTIVE =
     'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down II</unit-skill> for 2 turns. If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
@@ -268,6 +269,11 @@ const tygrShipSkills = (): ShipSkills =>
 
 const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
     const result = runCombat({
+        // SP-4b-2b: the no-`enemyPositions` case is the single-opponent shape. A roster is now
+        // required, so it gets the shared inert opponent and the boundary supplies the default
+        // front-enemy/origin-only axes — one enemy damaged, so the 2+ gate is still NOT met.
+        // (The `enemyPositions` branch below overrides this with its own placed roster.)
+        enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,
         crit: 0,
         critDamage: 0,
@@ -313,7 +319,7 @@ const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
 const BASELINE_CADENCE = 1;
 
 describe('SP-D: enemies-hit-this-cast live gate — Tygr self-charge-gain', () => {
-    it('single-target DPS mode: the gate defaults to 1 hit → NOT met, no ability charge gained', () => {
+    it('single opponent, default targeting axes: only 1 enemy damaged → NOT met, no ability charge gained', () => {
         expect(tygrChargesAfterRound1()).toBe(BASELINE_CADENCE);
     });
 

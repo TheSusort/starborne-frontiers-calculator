@@ -35,6 +35,7 @@ import { ShipSkills, Ability } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
 // Harness helpers (mirrored from equipmentAbilities.integration.test.ts)
@@ -92,6 +93,11 @@ const activeInferno: Ability = {
 
 /** Base engine input: neutral stats, enemy never dies, no crit/affinity variance. */
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    // SP-4b-2b: a real opponent. DAMAGE fixture (5000 attack over 5 rounds plus DoT ticks) so it
+    // takes the 10M-HP form — "enemy never dies" is load-bearing here, since a mid-sim death would
+    // silently drop tick rounds out of every total this file sums. `enemyDefense: 0` is carried onto
+    // the roster entry's own stats.defence; the fight-wide scalar is inert positionally (M6).
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 0 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -256,11 +262,13 @@ describe('Gear-set DoT pair — Burner applies Inferno on attack (real registry)
 
         // Burner fires once per damage-delivering SUB-ATTACK (once per turn for the single-hit
         // cast this fixture drives) → at least one inferno application, attributed to
-        // the Burner ship ('attacker') and landing on the attack target ('enemy').
+        // the Burner ship ('attacker') and landing on the attack target.
+        // M1: that target is the real roster entry now that a roster is required; it was the
+        // vestigial `enemy` sink only because the fixture supplied no opponent.
         expect(infernoApplied.length).toBeGreaterThan(0);
         for (const ev of infernoApplied) {
             expect(ev.sourceId).toBe('attacker');
-            expect(ev.targetId).toBe('enemy');
+            expect(ev.targetId).toBe(BARE_ENEMY_ID);
         }
         // And those applications actually tick damage on the enemy.
         expect(infernoTick).toBeGreaterThan(0);

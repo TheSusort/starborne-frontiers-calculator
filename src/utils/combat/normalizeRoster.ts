@@ -92,8 +92,22 @@ function withTargeting<T extends { target?: ParsedTarget; pattern?: ParsedPatter
 }
 
 export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInput {
+    // The contract (SP-4b-2b): every run has at least one opponent. This is a validation guard
+    // rather than an accommodation on purpose — the boundary is the ONE place that accommodates an
+    // under-specified input, and synthesizing a sink here is what kept the dummy alive.
+    // `enemyAttackers` is typed as required on `CombatEngineInput`, but an `as CombatEngineInput`
+    // cast at a call site defeats that compile-time check, so a fixture can still reach this line
+    // with the field missing entirely rather than empty — the runtime guard must catch `undefined`
+    // as well as `[]`, or those callers get a bare `TypeError` instead of this named contract error.
+    if (!input.enemyAttackers?.length) {
+        throw new Error(
+            'normalizeCombatRoster: enemyAttackers is empty — every run needs at least one ' +
+                'opponent (SP-4b-2b). A caller with no enemy to model should synthesize an inert ' +
+                'one, as healingEngineAdapter.practiceTarget does.'
+        );
+    }
     const teamActors = input.teamActors ?? [];
-    const enemyAttackers = input.enemyAttackers ?? [];
+    const enemyAttackers = input.enemyAttackers;
 
     // Player side: the focus attacker is index 0 (the anchor), team actors follow in input order.
     const playerSlots = placeSide(
@@ -104,15 +118,14 @@ export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInp
     );
     const [focusSlot, ...teamSlots] = playerSlots;
 
-    // Enemy side: its own board, resolved separately.
-    const enemySlots = enemyAttackers.length
-        ? placeSide(
-              enemyAttackers.map((e) => e.position),
-              DEFAULT_ENEMY_SLOT,
-              (i) => defaultEnemySlot(i + 1),
-              resolveEnemySlots
-          )
-        : [];
+    // Enemy side: its own board, resolved separately. `enemyAttackers` is provably non-empty here
+    // (the guard above), so this always takes the `placeSide` branch — no `: []` fallback needed.
+    const enemySlots = placeSide(
+        enemyAttackers.map((e) => e.position),
+        DEFAULT_ENEMY_SLOT,
+        (i) => defaultEnemySlot(i + 1),
+        resolveEnemySlots
+    );
 
     return {
         ...withTargeting(input),
@@ -125,13 +138,11 @@ export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInp
                   })),
               }
             : {}),
-        ...(input.enemyAttackers
-            ? {
-                  enemyAttackers: input.enemyAttackers.map((e, i) => ({
-                      ...withTargeting(e),
-                      position: enemySlots[i],
-                  })),
-              }
-            : {}),
+        // `enemyAttackers` is provably truthy here (the guard above), so — unlike `teamActors`,
+        // which is genuinely optional — there is no `: {}` branch to fall back to.
+        enemyAttackers: enemyAttackers.map((e, i) => ({
+            ...withTargeting(e),
+            position: enemySlots[i],
+        })),
     };
 }

@@ -25,6 +25,7 @@ import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers (mirrors decrementUnification.test.ts)
@@ -87,6 +88,11 @@ const collect = (input: CombatEngineInput): CombatEvent[] => {
 
 /** Shared minimal DPS-mode base (no healTargetId). */
 const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    // SP-4b-2b: a real opponent. This is a DAMAGE fixture (5000 attack for up to 5 rounds) so it
+    // takes the 10M-HP form; the 500k default is not a survival guarantee and a mid-sim death would
+    // truncate the buff-lifecycle rounds this file counts. `enemyDefense: 0` is carried onto the
+    // roster entry's own stats.defence (the fight-wide scalar is inert positionally, M6).
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 0 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,

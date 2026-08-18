@@ -179,6 +179,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
     /** Base input: focus 'attacker' (Bulwark owner) at M2; healing mode; the heal target is the
      *  ally that the enemy hits, so the `attacked` event names that ally as the damaged target. */
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 1,
         crit: 0,
         critDamage: 0,
@@ -297,6 +298,7 @@ describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of r
     /** Base input: focus 'attacker' (Doomsayer owner); healing mode; two enemies with DIFFERENT
      *  attack so the highest-attack selection is unambiguous. */
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 1,
         crit: 0,
         critDamage: 0,

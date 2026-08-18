@@ -5,6 +5,7 @@ import { parsePattern } from '../../targetingParser';
 import type { ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // Pattern-Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
 // So: healer at M3, ON-footprint ally at M4, OFF-footprint ally at M1.
@@ -79,6 +80,10 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
 });
 
 const BASE = (): CombatEngineInput => ({
+    // SP-4b-2b: every run needs a real opponent. `attack: 0` + heal-only kit means the inert
+    // 500k-HP default survives the whole sim. `enemyDefense`/`enemyHp` are INERT positionally
+    // (M6) and are kept only because no assertion derives a number from them.
+    enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -233,6 +238,11 @@ describe('SP-3b Task 7 (review fix): flag-off fence covers HoT + leech + reactiv
         });
 
     const HOT_LEECH_REACTIVE_BASE = (): CombatEngineInput => ({
+        // SP-4b-2b: this focus DOES deal damage (5000 attack, `damageAb` every round), so it gets
+        // the 10M-HP form — the 500k default is not a survival guarantee and a mid-sim death
+        // reshapes the run. `enemyDefense: 0` is carried onto the roster entry's own
+        // `stats.defence` so damage magnitudes stay what they were; the fight-wide scalar is inert.
+        enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 0 } }),
         attack: 5000,
         crit: 0,
         critDamage: 0,

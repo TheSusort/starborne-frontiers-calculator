@@ -38,6 +38,10 @@ const HEALER: HealerStats = {
     speed: 100,
 };
 
+/** `enemies: []` means "nothing shoots back", not "no actor opposite": since SP-4b-2b the adapter
+ *  synthesizes one inert PRACTICE TARGET for an empty roster (`attack: 0`, no kit, defence 5,000 /
+ *  hp 40,000). Every assertion in this file held across that change unchanged — including
+ *  `empty enemies: no intake`, since attack 0 still means no intake. */
 const BASE = (overrides: Partial<HealingSimulationInput> = {}): HealingSimulationInput => ({
     healer: HEALER,
     chargeCount: 0,

@@ -126,6 +126,7 @@ describe('Wave 8 Task 12: Zeolite purges a buff when damaging a Defender (engine
         }) as EnemyAttacker;
 
     const focusInput = (): CombatEngineInput => ({
+        enemyAttackers: [],
         attack: 10_000,
         crit: 0,
         critDamage: 0,

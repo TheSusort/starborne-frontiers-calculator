@@ -125,6 +125,7 @@ const enemyHitter = (id: string, attack: number, speed = 1000): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 1,
     crit: 0,
     critDamage: 0,

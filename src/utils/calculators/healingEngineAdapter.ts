@@ -17,6 +17,12 @@ import {
     resolveEnemySlots,
     resolveHealingPlayerPlacement,
 } from './healingPlacement';
+import {
+    DEFAULT_ENEMY_DEFENCE,
+    DEFAULT_ENEMY_HP,
+    DEFAULT_ENEMY_SECURITY,
+    DEFAULT_ENEMY_SPEED,
+} from './healingDefaultEnemy';
 
 export interface HealerStats {
     hp: number;
@@ -58,7 +64,8 @@ export interface EnemyAttackerInput {
          *  (`effectiveStatsOf`'s `?? 0` exists but has no landing reader.) So the default is a
          *  belt-and-braces no-op here, kept explicit so the sink's numbers all live in one place —
          *  unlike `hp`/`defence` above, whose engine defaults genuinely ARE 0
-         *  (engine.ts:668,718). */
+         *  (engine.ts:675-676 and :726-727, the two `defence: e.stats.defence ?? 0` /
+         *  `hp: e.stats.hp ?? 0` pairs in the enemy-actor constructors). */
         security?: number;
     };
     chargeCount: number;
@@ -184,7 +191,9 @@ export interface HealingRoundData {
     /** Per-victim damage this round, `attackerId → victimId → damage`, forwarded from RoundData.
      *  Present only on a positional run. This is the ONLY reliable proof the per-victim apply ran:
      *  with a target but no pattern the cast still resolves onto the real enemy and still produces a
-     *  plausible damage number, while `perTargetDealt` comes back EMPTY (engine.ts:8344). */
+     *  plausible damage number, while `perTargetDealt` comes back EMPTY (engine.ts:4174,
+     *  `const roundPerTargetDealt = new Map<...>()`, which "stays EMPTY when roundPerTargetDamage
+     *  is empty (non-positional rounds)" and is then omitted from RoundData altogether). */
     perTargetDealt?: Record<string, Record<string, number>>;
     /** Per-recipient breakdown (SP-3b Task 7): keyed by the ally a repair LANDED ON, forwarded from
      *  `HealingRoundEngine.perRecipient` — the counterpart to the source-keyed `perActor` the
@@ -254,10 +263,62 @@ export interface HealingSimulationResult {
  */
 export const FOCUS_ID = 'attacker';
 
+/** The id the synthesized opponent carries. Exported so tests can assert on it by name. */
+export const PRACTICE_TARGET_ID = 'practice-target';
+
+/**
+ * "No enemies" is a legitimate healing scenario — the user wants to read pure output, where every
+ * heal is overheal. The engine requires a non-empty roster (SP-4b-2b), so the adapter represents
+ * that scenario as ONE inert opponent: a default enemy card with `attack: 0` and no kit. The
+ * difference between it and a real card is precisely that it does not act.
+ *
+ * It is killable, exactly as a real default card is. A healer whose cast carries a damage clause
+ * can destroy it and spend the rest of the window with no targetable opponent — the same shape as
+ * killing your only real enemy today, and SP-4c removes the sink underneath both.
+ *
+ * HP stays at the card default rather than being inflated to make it immortal, because an HP-scaled
+ * damage channel is exactly what a huge number would distort: corrosion is `min(enemyHp, 500_000)`
+ * per 1% per stack (engine.ts:1054) and detonation is `min(victimHp, 500_000)` (detonation.ts:106).
+ * Both already read the real VICTIM's own max HP today: corrosion's per-victim positional DoT-tick
+ * branch passes `enemyHp: recipientMaxHp(actor.id)` (engine.ts:8836, that exact line) — the only
+ * site that credits a DoT tick per-victim (`creditDealt(sourceId, actor.id, dealt)`,
+ * engine.ts:8921) — and that is the branch the practice target actually runs, since it sits in
+ * `baseHpById` via `enemyAttackerActors` (engine.ts:2809, `const baseHpById = new Map<string,
+ * number>([`, whose entries include `...enemyAttackerActors.map((a) => [a.id, a.stats.hp])`). The
+ * bare fight-wide `enemyHp` scalar only reaches `tickDoTs` through the vestigial dummy branch
+ * (engine.ts:9554, `} else if (actor.kind === 'enemy' && actor.id === enemy.id) {`), which the
+ * practice target never takes. So inflating this HP to make the target
+ * immortal would immediately multiply every corrosion tick against it by the same ratio — e.g. 40,000
+ * → 500,000 is 12.5×. Inferno is unaffected either way: measured at 5,000 against a 1,000,000-HP
+ * victim and a 40,000-HP one alike, because it scales off the APPLIER's attack (engine.ts:1066,
+ * `ctx.effectiveAttack` inside the inferno `tickByTier`), not HP.
+ *
+ * `hacking` is deliberately absent rather than zeroed: absent means the engine's own 200, which is
+ * what the page's card seeds, and a kitless actor lands no debuffs either way. Targeting axes are
+ * absent for the same reason a manual card's are — `normalizeCombatRoster` fills front/base.
+ */
+const practiceTarget = (): EnemyAttackerInput => ({
+    id: PRACTICE_TARGET_ID,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        speed: DEFAULT_ENEMY_SPEED,
+        defence: DEFAULT_ENEMY_DEFENCE,
+        hp: DEFAULT_ENEMY_HP,
+        security: DEFAULT_ENEMY_SECURITY,
+    },
+    chargeCount: 0,
+    startCharged: false,
+});
+
 /**
  * Thin adapter over the combat engine (`src/utils/combat/engine.ts`) running in HEALING
  * mode. Mirrors `simulateDPS`: it derives the engine's input from the public healing input —
- * the heal-target id mapping, the debuff landing chance (hacking vs a fixed dummy security),
+ * the heal-target id mapping, the debuff landing chance (the healer's hacking vs the VICTIM's
+ * security — per-enemy since SP-3, defaulted to `LEGACY_SINK_SECURITY` when the card leaves it
+ * unspecified, which is every card the UI produces; the fight-wide `enemySecurity` scalar only
+ * still gates a whiffed cast against the vestigial dummy),
  * the static defPen/dot self-buff fold, the charged-skill widening, and the per-team-actor
  * walk (shared `deriveTeamEngineActors`) — then calls `runCombat` and assembles the public
  * result from the additive `healing` block.
@@ -273,7 +334,8 @@ export const FOCUS_ID = 'attacker';
  * whichever actor IS the heal target, because the positional path re-resolves every matchup from
  * raw affinities per victim and ignores the pre-resolved scalars. When the healer self-heals, that
  * raw affinity lands on the FOCUS actor, where the engine also reads it as `attackerAffinity`
- * (engine.ts:2088) — so the healer's OWN offensive matchup vs each enemy goes live, and its damage
+ * (engine.ts:2251, `attackerAffinity: input.affinity,` on the focus runtime) — so the healer's OWN
+ * offensive matchup vs each enemy goes live, and its damage
  * cast (and any `damage-dealt` rider off it) swings ±25%. When healing an ALLY the focus carries no
  * affinity at all, so the healer's offence stays neutral. The clean long-term shape is a dedicated
  * `healerAffinity` input rather than borrowing `healTargetAffinity` for two jobs; until then the
@@ -299,21 +361,41 @@ export const FOCUS_ID = 'attacker';
  * game-faithful and deliberately not softened — correct default placement (`healingPlacement.ts`,
  * via `defaultHealTargetSlot`) is the only mitigation.
  *
- * The vestigial dummy is the opponent only where positional resolution yields nothing: when
- * `enemies` is EMPTY, when the roster holds no targetable member (every enemy at max hp 0), or when
- * a placed actor's target resolves to no living victim — the mid-run whiff window — since
- * `selectTurnTarget` ends in `selected ?? legacyVictim`. Note "target/pattern missing" has dropped
- * off that list: the boundary fills both, so an actor with no axes is no longer one of the ways in.
- * See the LEGACY_SINK_* comment below.
+ * The vestigial dummy is the opponent only where positional resolution yields nothing: when the
+ * roster holds no targetable member (every enemy at max hp 0), or when a placed actor's target
+ * resolves to no living victim — the mid-run whiff window — since `selectTurnTarget` ends in
+ * `selected ?? legacyVictim`. Two entries have dropped off that list: "target/pattern missing"
+ * (the boundary fills both, so an actor with no axes is no longer a way in) and an EMPTY roster
+ * (see the next paragraph). See the LEGACY_SINK_* comment below.
  *
- * `enemies: []` is a TEST-ONLY shape, and that is now ENFORCED rather than merely asserted: the page
- * seeds one enemy and FLOORS the roster at one (`removeEnemy` refuses to empty it and the last card's
- * remove button is withheld — `HealingCalculatorPage.tsx` / `EnemyAttackersPanel.tsx`). It was not
- * enforced when this comment first claimed it: every card carried an unconditional remove button, so
- * one click on a fresh page emptied the roster and handed the run to the dummy — totalDirectHeal
- * 3,876 → 1,290 (the sink's 10,000 defence rebasing a `damage-dealt` rider), with `perTargetDealt`
- * going undefined. If a future page control can empty the roster again, the claim in this paragraph
- * is what breaks first.
+ * `enemies: []` is a SUPPORTED shape and reaches this function from production: it means "nothing
+ * shoots back", and `effectiveEnemies` turns it into ONE inert PRACTICE TARGET (`practiceTarget`
+ * above) so the run reads as pure healing output with everything overhealed. The page no longer
+ * floors its roster at one — the floor existed only because an empty roster used to be handed to
+ * the dummy, and the practice target removed that reason.
+ *
+ * History, and why the practice target carries a real defence rather than 0: while the empty case
+ * fell to the dummy, every `basis:'damage-dealt'` rider silently rebased off the sink's fixed
+ * 10,000 defence and `perTargetDealt` disappeared — measured totalDirectHeal 3,876 with one real
+ * enemy at defence 1,000 → 1,290 with none, a 3x move from a single click on a fresh page. The
+ * practice target reuses the page's default card numbers (`healingDefaultEnemy.ts`) precisely so
+ * that emptying the roster changes only the incoming damage, not the STAT BASIS of the healer's own
+ * output.
+ *
+ * The claim is exact equality, not merely "same stat basis": swapping a 0-attack default card for
+ * the practice target changes only the incoming damage (0 either way here), never the healer's own
+ * output — verified under a seeded RNG (`setupKeyedTestRng`) at healer crit 0, 50 and 100, all three
+ * giving byte-identical `totalDirectHeal` AND per-round series between the two runs (see
+ * `healingPracticeTarget.test.ts`'s `it.each([0, 50, 100])` stat-basis case, which asserts both).
+ * Measured there at `critDamage: 100` — 6,248 / [2083, 2083, 2083] at crit 0, 16,662 /
+ * [4166, 4166, 8331] at crit 50, 24,994 / [8331, 8331, 8331] at crit 100 — so the sweep spans a
+ * no-crit, a MIXED and an always-crit profile. A live `critDamage` is load-bearing to that: with
+ * `critDamage: 0` a crit multiplies by 1 and all three crit settings collapse onto the same 6,248,
+ * which would make the sweep three copies of one case rather than three profiles. Reproducing that equality
+ * at all requires a seeded harness: production draws are unseeded `Math.random`
+ * (`rateAccumulator.ts:11-14`), so two live page runs are never expected to match — the equality is
+ * a property of the simulation given the same random stream, not a promise about two independent
+ * clicks.
  *
  * The ally-side substitution below is the other half of the same claim: a support healer's ACTIVE
  * target is ally-side, which resolves to no opposing victim at all.
@@ -334,23 +416,25 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         healTargetAffinity,
     } = input;
 
-    // SP-3: the healer's `damage` cast now lands on a REAL positioned enemy whenever an enemy
-    // roster is supplied, which is exactly what F7's `basis:'damage-dealt'` riders needed — that
-    // finding was conditional on the run being non-positional, not permanent. Production always
-    // supplies at least one enemy: `HealingCalculatorPage` seeds one and FLOORS the roster at one
-    // (`removeEnemy` refuses to empty it and the last card's remove button is withheld), so the dummy
-    // punching bag is unreachable from the app. That floor is load-bearing for this paragraph, and it
-    // did not exist when the paragraph was first written — the last enemy carried a live remove
-    // button, and one click rebased every `damage-dealt` rider onto the sink's 10,000 defence
-    // (measured totalDirectHeal 3,876 → 1,290). The ally-side target substitution further down is the
-    // other half of the same claim.
+    // An empty roster means "nothing shoots back", not "hand the run to the dummy". Every reader
+    // below MUST use this, not `enemies` — there are four (the three slot-resolution arguments
+    // and the map).
+    const effectiveEnemies = enemies.length ? enemies : [practiceTarget()];
+
+    // SP-3: the healer's `damage` cast now lands on a REAL positioned enemy, which is exactly what
+    // F7's `basis:'damage-dealt'` riders needed — that finding was conditional on the run being
+    // non-positional, not permanent. Since SP-4b-2b that holds for EVERY run: `effectiveEnemies`
+    // above guarantees a non-empty roster, so an empty input fights the practice target rather than
+    // the dummy and the sink's defence is no longer the basis for anything. The ally-side target
+    // substitution further down is the other half of the same claim.
     //
     // These scalars are the LEGACY SINK, and they now do DOUBLE duty:
     //
-    //  1. they still describe the dummy, which is the only opponent when `enemies` is EMPTY (a
-    //     test-only shape today). Do NOT "tidy" them to 0/huge: with no real roster the sink's
-    //     defence is still the basis for every `damage-dealt` rider, its security still gates the
-    //     healer's outbound debuffs, and `enemySpeed 0` still pins it last in the turn order;
+    //  1. they still describe the dummy, which is reachable only through the residual whiff window
+    //     (`selectTurnTarget`'s `selected ?? legacyVictim`) — no longer through an empty roster. Do
+    //     NOT "tidy" them to 0/huge while that window exists: the sink's defence is still the basis
+    //     for a `damage-dealt` rider on a whiffed cast, its security still gates the healer's
+    //     outbound debuffs, and `enemySpeed 0` still pins it last in the turn order;
     //  2. they are the per-enemy DEFAULTS for a real enemy that leaves `defence`/`hp`/`security`
     //     unspecified — which is every caller the UI produces today, since the enemy panel only
     //     collects attack/crit/critDamage/speed/hacking. Defaulting matters, and NOT to the
@@ -500,11 +584,11 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // when every enemy is explicitly placed (nothing is invented to lose to) and when none is (there
     // is no explicit cell to protect), so the common healing-page shapes are unchanged.
     const enemySlots = resolveEnemySlots(
-        enemies.map((e, i) => e.position ?? defaultEnemySlot(i)),
-        enemies.flatMap((e, i) => (i !== 0 && e.position !== undefined ? [i] : [])),
-        enemies[0]?.position !== undefined
+        effectiveEnemies.map((e, i) => e.position ?? defaultEnemySlot(i)),
+        effectiveEnemies.flatMap((e, i) => (i !== 0 && e.position !== undefined ? [i] : [])),
+        effectiveEnemies[0]?.position !== undefined
     );
-    const engineEnemyAttackers = enemies.map((e, i) => {
+    const engineEnemyAttackers = effectiveEnemies.map((e, i) => {
         const aff = computeAffinityModifiers(e.affinity, healTargetAffinity);
         return {
             ...e,

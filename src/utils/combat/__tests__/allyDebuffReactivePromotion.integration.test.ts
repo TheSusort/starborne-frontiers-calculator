@@ -23,6 +23,7 @@ import { createEventBus, CombatEvent } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -179,6 +180,9 @@ describe('Oleander (player-side) — RoT routes to the inflicting ally, capped o
         }) as TeamActor;
 
     const BASE = (): CombatEngineInput => ({
+        // SP-4b-2b: a real opponent for the allies to debuff. Inert (0 attack) and never dies:
+        // the whole side deals ≤200 over one round against 500,000 HP.
+        enemyAttackers: bareEnemy(),
         attack: 100,
         crit: 0,
         critDamage: 0,
@@ -402,6 +406,9 @@ const hayyanTeamActor = (): TeamActor =>
     }) as TeamActor;
 
 const HAYYAN_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    // SP-4b-2b default only — every call site below overrides this with the specific debuffer/DoT
+    // enemy it needs. Kept real so the base cannot throw at the normalization boundary.
+    enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
     critDamage: 0,

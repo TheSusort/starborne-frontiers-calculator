@@ -213,6 +213,7 @@ const noopActive: ShipSkills['slots'][number] = {
 };
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -318,6 +319,7 @@ const enemyVoron = (id: string): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const BASE_ENEMY_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
+    enemyAttackers: [],
     attack: DIRECT_HIT, // the player focus attack → the hit landing on the enemy Voron.
     crit: 0,
     critDamage: 0,

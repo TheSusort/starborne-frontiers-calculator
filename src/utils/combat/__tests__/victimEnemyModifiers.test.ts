@@ -33,6 +33,7 @@ import type { SelectedGameBuff } from '../../../types/calculator';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // A timed scheduled Defense Down: fires on 'active' turns, duration 3.
 // skillSource='active' + skillDuration=3 → timed entry (not always-active/accumulating).
@@ -95,6 +96,7 @@ const damageWithDebuffSlot = (): ShipSkills['slots'][number] => ({
 
 // Minimal focus attacker (no positioning) that fires its active slot (so sourceFired fires 'active').
 const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 1000,
     crit: 0,
     critDamage: 0,

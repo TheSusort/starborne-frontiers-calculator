@@ -3,6 +3,8 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { CombatStatBlock, TeamActorInput } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -14,8 +16,13 @@ const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => 
 });
 
 // Focus deals 100% damage and gains a +100% Attack start-of-round self-buff GATED on
-// lowest-speed-ally. The buff couples into the same round's outgoing damage, so directDamage
-// doubles (20000) only on rounds the gate passes; otherwise it stays at base 10000.
+// lowest-speed-ally. The buff couples into the same round's outgoing damage, so the focus's
+// round-1 damage-dealt doubles (20000) only on rounds the gate passes; otherwise it stays at
+// base 10000.
+//
+// SP-4b-2b (M3): the three `runCombat` cases below now fight a real, positioned enemy, so the
+// scalar `RoundData.directDamage` channel is 0 and the credit lands per-victim. They read the
+// focus's round-1 payout off `perTargetDealt` instead; the pinned integers are unchanged.
 const skill = (): ShipSkills => ({
     slots: [
         {
@@ -46,6 +53,7 @@ const skill = (): ShipSkills => ({
 });
 
 const BASE = (o: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 10000,
     crit: 0,
     critDamage: 0,
@@ -73,7 +81,7 @@ describe('lowest-speed-ally live gate', () => {
     it('single attacker (no team) → focus is trivially slowest → buff fires (damage doubles)', () => {
         idc = 0;
         const r = runCombat(BASE({ speed: 100 }));
-        expect(r.rounds[0].directDamage).toBe(20000);
+        expect(dealtBy([r.rounds[0]], 'attacker')).toBe(20000);
     });
 
     it('focus is the slowest on the team → buff fires', () => {
@@ -93,7 +101,7 @@ describe('lowest-speed-ally live gate', () => {
                 ],
             })
         );
-        expect(r.rounds[0].directDamage).toBe(20000);
+        expect(dealtBy([r.rounds[0]], 'attacker')).toBe(20000);
     });
 
     it('a teammate is slower than focus → focus is NOT lowest → buff gated off (base damage)', () => {
@@ -113,7 +121,7 @@ describe('lowest-speed-ally live gate', () => {
                 ],
             })
         );
-        expect(r.rounds[0].directDamage).toBe(10000);
+        expect(dealtBy([r.rounds[0]], 'attacker')).toBe(10000);
     });
 });
 

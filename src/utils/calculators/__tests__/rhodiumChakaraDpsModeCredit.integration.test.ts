@@ -40,9 +40,10 @@
  * `simulateDPS` now ALWAYS builds a real, positioned enemy (`enemy-1`), so the four `simulateDPS`
  * tests below no longer take the dummy-fallback branch this file was written against — they take
  * the POSITIONAL branch, where `enemyWithMostBuffs` is `onceByOwner(() => mostBuffsAmong(
- * enemyAttackerActors))` (engine.ts:7860-7862, gated on `hasPositionedEnemyRoster`, now true).
- * Against a single UNBUFFED enemy `mostBuffsAmong` returns `undefined` (engine.ts:7767 —
- * `return bestCount > 0 ? best : undefined`, the deliberate "no buffs anywhere → no most-buffs
+ * enemyAttackerActors))` (engine.ts:8348, `? onceByOwner(() => mostBuffsAmong(enemyAttackerActors))`,
+ * gated on `hasPositionedEnemyRoster`, now true).
+ * Against a single UNBUFFED enemy `mostBuffsAmong` returns `undefined` (engine.ts:8250,
+ * `return bestCount > 0 ? best : undefined;`, the deliberate "no buffs anywhere → no most-buffs
  * target" rule), so Rhodium's proc found no target and dropped entirely: `directDamage` read 0.
  *
  * The repair is to make the fixture exercise the mechanic it NAMES rather than to re-pin 0. Each
@@ -55,15 +56,30 @@
  *
  * EVERY EXPECTED NUMBER IS UNCHANGED (ATTACK × 0.8 per round; kill on round 1 at enemyHp 5000):
  * the proc is back on the same amount, now landing on a real enemy instead of the dummy sink.
- * The FIRST test (the `__testTapCreditDamage` probe) still drives `runCombat` directly with NO
- * `enemyAttackers` and `mode: 'healing'`, so it still covers the surviving dummy-fallback branch
- * (`hasPositionedEnemyRoster === false`) and is unchanged.
+ *
+ * ─── SP-4b-2b migration (repair wave D) ──────────────────────────────────────────────────────
+ * The FIRST test used to drive `runCombat` directly with NO `enemyAttackers`, which is how it kept
+ * covering the dummy-fallback branch (`hasPositionedEnemyRoster === false`). An empty roster is now
+ * a validation error at the normalization boundary, and ANY roster makes that branch unreachable —
+ * so the branch it covered is gone, not merely re-shaped. It follows the same two moves 2a already
+ * applied to its four siblings, for the same reasons:
+ *   • it supplies `buffedEnemyRoster()`, because against a single UNBUFFED enemy `mostBuffsAmong`
+ *     returns `undefined` and Rhodium's proc DROPS ENTIRELY rather than shifting — so an unbuffed
+ *     fixture would read 0 and be a pin on the drop, not on the mechanic this file names. The
+ *     dummy-fallback era made that selector trivially satisfiable, which is why this fixture never
+ *     had to buff anything before;
+ *   • it reads the per-victim `perTargetDealt` channel instead of `__testTapCreditDamage`. On a
+ *     positional run a reactive-damage proc books through `applyReactiveDamage` -> `creditDealt`,
+ *     not through the credit-only `creditDamage` chokepoint the tap observes — measured: the tap
+ *     sees 0 while `perTargetDealt` carries the full amount. The pinned number is unchanged
+ *     (ATTACK x 0.8 = 8000).
  */
 import { describe, it, expect } from 'vitest';
 import { simulateDPS, DPSSimulationInput, SYNTHESIZED_DPS_ENEMY_ID } from '../dpsSimulator';
 import { runCombat, CombatEngineInput } from '../../combat/engine';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ship } from '../../../types/ship';
+import { dealtBy, dealtEntries } from '../../combat/__testutils__/perTargetDealt';
 
 // Verbatim from docs/ship-skills.csv (Rhodium, second_passive_skill_text — the R2/refit-active
 // slot getShipSkillRows resolves for a 2-refit ship). Matches reactiveDamagePositionalHp.test.ts.
@@ -96,18 +112,14 @@ function chakaraShipSkills(withPassive: boolean) {
     return buildShipAbilities(chakara);
 }
 
-/** Sums every `direct`-channel creditDamage call attributed to `sourceId` across the whole run
- *  (mirrors reactiveDamageMitigation.integration.test.ts's `creditedDirectDamageFor`). */
-const creditedDirectDamageFor = (sourceId: string, input: CombatEngineInput): number => {
-    let total = 0;
-    runCombat({
-        ...input,
-        __testTapCreditDamage: (id, channel, amount) => {
-            if (id === sourceId && channel === 'direct') total += amount;
-        },
-    });
-    return total;
-};
+/** Sums every unit of damage `sourceId` is credited with dealing across the whole run.
+ *
+ *  SP-4b-2b: this used to tap `__testTapCreditDamage`, which observes the credit-only
+ *  `creditDamage` chokepoint. That is the NON-positional channel; a positional run books a
+ *  reactive-damage proc through `applyReactiveDamage` -> `creditDealt` and the tap sees nothing.
+ *  `perTargetDealt` is the live channel and carries the identical amount. */
+const creditedDirectDamageFor = (sourceId: string, input: CombatEngineInput): number =>
+    dealtBy(runCombat(input).rounds, sourceId);
 
 const ATTACK = 10_000;
 
@@ -161,10 +173,12 @@ const rhodiumRun = (enemyHp: number, rounds: number) =>
         enemyAttackers: buffedEnemyRoster(enemyHp),
     });
 
-/** DPS-mode input (no `enemyAttackers`) carrying the given ship's parsed abilities. The active
- *  skill is 0%-damage by construction (both ships' texts above) — any credited direct damage is
- *  unambiguously the reactive proc. */
+/** Direct-`runCombat` input carrying the given ship's parsed abilities, against the buffed
+ *  positioned enemy Rhodium's `enemy-most-buffs` selector needs (see the SP-4b-2b note in the file
+ *  header). The active skill is 0%-damage by construction (both ships' texts above) — any credited
+ *  direct damage is unambiguously the reactive proc. */
 const buildDpsInput = (shipSkills: ReturnType<typeof rhodiumShipSkills>): CombatEngineInput => ({
+    enemyAttackers: buffedEnemyRoster(1_000_000_000),
     attack: ATTACK,
     crit: 0,
     critDamage: 0,
@@ -191,13 +205,18 @@ const buildDpsInput = (shipSkills: ReturnType<typeof rhodiumShipSkills>): Combat
 });
 
 describe('SP-M M1 Task 7b review: Rhodium/Chakara reactive damage credits the DPS-mode damage metric', () => {
-    it("Rhodium's end-of-round most-buffed-enemy proc no longer silently drops in DPS mode — creditDamage fires with the mitigated 80% amount (regression probe via __testTapCreditDamage)", () => {
+    it("Rhodium's end-of-round most-buffed-enemy proc no longer silently drops in DPS mode — the proc fires and books the mitigated 80% amount (regression probe via perTargetDealt)", () => {
         const credited = creditedDirectDamageFor('attacker', buildDpsInput(rhodiumShipSkills()));
         // Pre-fix: enemyWithMostBuffs(ownerId) resolved to `undefined` off the empty
-        // enemyAttackerActors roster → triggers.ts's damage arm returned early → creditDamage was
-        // NEVER called → credited === 0. Post-fix: the selector falls back to the live dummy
-        // `enemy.id`, so the proc fires and credits ATTACK × 0.8 (noCrit, 0 defense).
+        // enemyAttackerActors roster → triggers.ts's damage arm returned early → the proc was
+        // NEVER booked → credited === 0. Post-fix the selector resolves the buffed positioned
+        // enemy, so the proc fires and books ATTACK × 0.8 (noCrit, 0 defense).
         expect(credited).toBeCloseTo(ATTACK * 0.8, 6);
+        // Non-vacuity: the selector really did resolve a target (and exactly one), rather than the
+        // amount arriving from some other source. The victim is the roster entry, not the sink.
+        const entries = dealtEntries(runCombat(buildDpsInput(rhodiumShipSkills())).rounds);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].victimId).toBe(SYNTHESIZED_DPS_ENEMY_ID);
     });
 
     it("Rhodium's end-of-round proc surfaces in the PUBLIC simulateDPS summary (round-tail ordering fix)", () => {
