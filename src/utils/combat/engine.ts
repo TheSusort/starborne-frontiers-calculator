@@ -7034,6 +7034,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                         sourceId,
                         (perActorDetonation.get(sourceId) ?? 0) + damage
                     );
+                    // Site 2 of the leech-channel class (spec §3): the burst channel now pays the
+                    // applier's standing damage-dealt leech. `'detonation'` is the channel, so a
+                    // `leechScope:'detonation'` leech pays HERE and only here, and an `'all'` one
+                    // pays here too — the pre-positional path did both via
+                    // `creditDamage(sourceId, 'detonation', damage)`.
+                    //
+                    // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
+                    // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
+                    // reads "directly damaged as a primary target"). Standing direction only.
+                    procStandingLeechesPerVictim(sourceId, damage, 'detonation');
                 },
             });
 
@@ -7070,6 +7080,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                         sourceId,
                         (perActorDetonation.get(sourceId) ?? 0) + damage
                     );
+                    // Site 2 of the leech-channel class (spec §3): the burst channel now pays the
+                    // applier's standing damage-dealt leech. `'detonation'` is the channel, so a
+                    // `leechScope:'detonation'` leech pays HERE and only here, and an `'all'` one
+                    // pays here too — the pre-positional path did both via
+                    // `creditDamage(sourceId, 'detonation', damage)`.
+                    //
+                    // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
+                    // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
+                    // reads "directly damaged as a primary target"). Standing direction only.
+                    procStandingLeechesPerVictim(sourceId, damage, 'detonation');
                 },
             });
         };

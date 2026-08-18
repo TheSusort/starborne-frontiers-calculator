@@ -626,27 +626,26 @@ describe('healingGoldenParity', () => {
     // round 3 (the burst round); the direct channel on rounds 1/2/4 is skipped by the scope
     // guard. Healer is focus + heal target, full HP → all overheal.
     //
-    // ⚠️ THIS SCENARIO NOW HEALS NOTHING AT ALL, and that is a KNOWN ENGINE GAP this fixture stopped
-    // hiding — not a rebase. It used to credit 129 on round 3. A `leechScope:'detonation'` standing
-    // leech pays ZERO against a real positioned enemy, and always has: running this exact scenario
-    // against an explicit enemy at the sink's own stats (defence 10000 / hp 1,000,000) on the
-    // PRE-SP-4b-2b adapter also gives `[0,0,0,0]`, and so does the practice target's own stat block.
-    // So the 129 only ever existed on the dummy path, which SP-4b-2b's practice target replaced. The
-    // code gap is real, but — unlike scenario 9's inferno-tick leech, which WAS production-reachable
-    // (Magnolia's own standing `'all'`-scope self leech, plus the same shape injected by gear via
-    // `buildEquipmentAbilities.ts:52`) and is therefore FIXED in SP-4b-2b Task 2b — this fixture's
-    // `leechScope:'detonation'` STANDING leech is
-    // probably corpus-UNREACHABLE: its only real-ship producer is Valkyrie's Echoing Burst leech
-    // (`skillTextParser.ts` ~4335-4338), which is `on-bomb-detonated` and therefore REACTIVE, so it
-    // is partitioned out of `standingLeeches` before it can ever reach this gap — engine.ts:3937-3940
-    // says so explicitly ("no corpus ship reaches it here … Valkyrie's `ally` one is
-    // `on-bomb-detonated`, so it is reactive and never enters this map"). So this half is a real code
-    // gap with no known live-production instance, not a second confirmed regression. DELIBERATELY
-    // LEFT UNFIXED (owner ruling, SP-4b-2b Task 2b), and tripwired instead — see the "KNOWN GAP
-    // (tripwire)" describe in `src/utils/combat/__tests__/positionalDotLeech.test.ts`, which goes RED
-    // the moment a positional burst starts paying a detonation-scoped standing leech.
-    // The snapshot is kept (rather than the test deleted)
-    // because `perTargetDealt` still pins that the cast itself lands per-victim every round.
+    // FIXED (SP-4b-2b Task 2 of the leech-channel-class PR, Site 2 — the bomb/accumulator burst):
+    // `applyPositionedTimedBurst`'s two `creditDetonation` callbacks now each call
+    // `procStandingLeechesPerVictim(sourceId, damage, 'detonation')`, so a `leechScope:'detonation'`
+    // standing leech pays on the burst channel again — the pre-positional path paid it via
+    // `creditDamage(sourceId, 'detonation', damage)`.
+    //
+    // --- round-3 arithmetic ---
+    // The charged-slot damage cast deals attack 5000 vs the practice target's defence 5000 →
+    // 2082.796825518349 direct (same figure as rounds 1/2/4's active cast, since it's an identical
+    // ability). The accumulate-detonate gathers 100% of ALL players' round-3 direct — which, at
+    // this fixture's positioning, is exactly that one cast's damage — and bursts for
+    // 2082.796825518349 more on the practice target's own turn (round 3's `perTargetDealt` of
+    // 4165.593651036698 is the cast plus the burst, confirming the burst really landed).
+    // Two detonation-scoped 5% standing leeches (one `target:'ally'` routed to the heal target, one
+    // `target:'self'` routed to the caster — both resolve to the same actor here) each pay
+    // 2082.796825518349 × 0.05 = 104.13984127591745; summed, 208.2796825518349, which
+    // `healingEngineAdapter`'s `Math.round` display rounding turns into round 3's `directHeal: 208`.
+    // Rounds 1/2/4 are active-only (no burst) and the leeches are detonation-scoped, so the direct
+    // channel is skipped by the scope guard → 0 on those rounds, matching `[0, 0, 208, 0]`.
+    // Healer is focus + heal target, full HP → all overheal.
     // Spot-checked for plausibility.
     const scenario11Input = (): HealingSimulationInput =>
         BASE({
@@ -718,23 +717,23 @@ describe('healingGoldenParity', () => {
         scenario11Input
     );
 
-    // TRIPWIRE for scenario 11's all-zero healing, mirroring scenario 9's positive guard. A snapshot
-    // of zeros is the weakest possible pin: it reads identically whether the leech gap is the cause
-    // (the claim) or the BURST never fired at all (a fixture that observes nothing). This asserts
-    // both halves separately — the zero AND the burst — so the pair can only stay green while the
-    // gap is what it is documented to be. Deliberately magnitude-free on the burst side: it pins
-    // that round 3 delivered STRICTLY MORE than a plain-cast round, which is the charged cast plus
-    // the detonation, without re-encoding numbers the snapshot already owns.
-    it('scenario 11 (KNOWN GAP): the burst really fires, and the detonation-scope leech still pays 0', () => {
+    // Supplementary in-code assertion for scenario 11, mirroring scenario 9's positive guard: pins
+    // BOTH halves separately — the burst really fired, AND the two detonation-scoped leeches paid
+    // out from it — so the pair can only stay green for the reason documented above, not because
+    // the burst silently never happened.
+    it('scenario 11: round-3 directHeal is exactly 208 (two 5% detonation-scope leeches off a 2082.796825518349 burst)', () => {
         idCounter = 0;
         const result = simulateHealing(scenario11Input());
-        // The gap: nothing is healed in ANY round, burst round included.
-        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 0]);
-        // ANTI-VACUITY: round 3 (index 2) is the burst round and delivers more damage than an
-        // active-only round, so there WAS a detonation amount for the leech to read 5% of.
+        // Only the burst round (index 2) pays; rounds 1/2/4 are active-only, so the
+        // detonation-scoped leeches' scope guard skips their direct-channel damage.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 208, 0]);
+        // ANTI-VACUITY: round 3 (index 2) is the burst round and delivers exactly double an
+        // active-only round's damage — the charged cast (2082.796825518349) PLUS the burst
+        // (100% of that same figure, gathered by the accumulate-detonate) — so there really was a
+        // detonation amount for the leeches to read 5% of twice.
         const dealt = (i: number) => result.rounds[i].perTargetDealt?.attacker?.['practice-target'];
-        expect(dealt(0)).toBeGreaterThan(0);
-        expect(dealt(2)).toBeGreaterThan(dealt(0)!);
+        expect(dealt(0)).toBeCloseTo(2082.796825518349, 6);
+        expect(dealt(2)).toBeCloseTo(2 * 2082.796825518349, 6);
     });
 
     // ── Scenario 12: Quixilver as heal target (rider shield + taken shield) ───

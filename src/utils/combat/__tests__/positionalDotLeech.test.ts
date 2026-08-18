@@ -382,68 +382,37 @@ describe("SP-4b-2b Task 2b — a leechScope:'all' standing leech pays out on a p
 });
 
 /**
- * KNOWN GAP TRIPWIRE — a standing leech pays ZERO off a positional bomb/accumulator burst.
+ * Site 2 of the leech-channel class (spec §3): a standing damage-dealt leech pays out on a
+ * POSITIONAL bomb / accumulator burst.
  *
- * DELIBERATELY NOT FIXED HERE (owner ruling, SP-4b-2b Task 2b) — the burst channel's routing is
- * its own scope decision for a follow-up task, not a comment fix.
+ * WAS A TRIPWIRE, NOW A REGRESSION TEST. `applyPositionedTimedBurst` applied burst damage via
+ * `applyVictimDamage` inside `processBombs`' `creditDetonation` callback and never reached a leech
+ * proc, so the burst channel paid NOTHING regardless of the leech's scope — a regression against
+ * the pre-positional path, which paid via `creditDamage(sourceId, 'detonation', damage)`.
  *
- * ⚠️ LINE NUMBERS BELOW ARE HINTS, NOT ADDRESSES — every one is paired with the SYMBOL it points
- * at, because engine.ts is ~10,700 lines and these citations have gone stale twice already (once
- * inside the very commit that wrote them, when the same commit's other edits shifted the file).
- * Search the symbol; trust the number only if it matches.
+ * BOTH scopes are asserted, because the gap was channel-wide rather than scope-specific:
+ *   • `leechScope:'detonation'` (Valkyrie's shape) — pays ONLY here, so this is its only payout.
+ *   • `leechScope:'all'` (Magnolia, Valerian, the Leech gear set) — production-reachable, and the
+ *     reason this was a user-facing bug rather than a corpus-inert one.
  *
- * THE REAL MECHANISM (corrected — a prior version of this comment misattributed the zero to a
- * scope guard; it does not come from one). `applyPositionedTimedBurst` (engine.ts:6995, `const applyPositionedTimedBurst = (`) applies a
- * burst's damage via `applyVictimDamage` directly, inside `processBombs`' `creditDetonation`
- * callback, and never calls `procLeechesForVictim` — the seam that would reach either leech proc.
- * So the positional burst channel reaches NEITHER `procStandingLeechesPerVictim` NOR
- * `procTakenLeechesPerVictim`, regardless of the leech's `scope`. The `scope === 'detonation'`
- * `continue` inside `procStandingLeechesPerVictim` (engine.ts:3926,
- * `if (e.scope === 'detonation') continue;`) is never even reached from this
- * path — it cannot be what produces the zero below, because nothing calls either proc from the
- * burst channel in the first place. (The two procs are called from `procLeechesForVictim`
- * (engine.ts:4064-4065, the adjacent `procStandingLeechesPerVictim(actorId, damage);` /
- * `procTakenLeechesPerVictim(victim, damage, outcome);` pair) and from that helper's three call
- * sites (engine.ts:9162, 9441, 10245, each a `procLeechesForVictim(actor.id, victim, …)`), plus
- * one direct positional-DoT-tick call to the standing proc (engine.ts:8885,
- * `procStandingLeechesPerVictim(sourceId, damage);`) — none of them the
- * burst channel.) Deleting that scope guard entirely would leave this test exactly as green as it
- * is today.
- *
- * SO THE GAP IS WIDER THAN THE `'detonation'` SCOPE THIS FIXTURE HAPPENS TO USE. A
- * production-REACHABLE `leechScope:'all'` standing leech — Magnolia's self leech, and the Leech
- * gear set via `buildEquipmentAbilities.ts` — ALSO pays zero on a positional bomb/accumulator
- * burst, where on the old dummy path it paid via `creditDamage(sourceId, 'detonation', damage)`
- * (engine.ts:9601 and :9614, both `creditDamage(sourceId, 'detonation', damage),`). This is the identical "procs no leeches in either direction" gap the
- * engine already documents for the sibling passive-slot-damage-footprint helper — see its
- * "KNOWN GAPS … (a) IT PROCS NO LEECHES, IN EITHER DIRECTION" block (engine.ts:6557,
- * `KNOWN GAPS — both real, both corpus-bounded today`) for the
- * fuller shape of the defect class.
- *
- * WHY *THIS FIXTURE* STAYS CORPUS-UNREACHABLE EVEN SO: it uses a `leechScope:'detonation'` leech
- * so the assertion is unambiguous, and that scope's only producer — the "Echoing Burst explodes"
- * parse (Valkyrie) — triggers `on-bomb-detonated`, so the reactive partition pulls it out of
- * `castSkills` before the `standingLeeches` scan ever sees it (engine.ts:3940, the
- * "`on-bomb-detonated`, so it is reactive and never enters this map" note). No shipped
- * ship registers a detonation-scoped STANDING leech today. The underlying burst-channel gap it
- * stands in for is not similarly corpus-bounded — see the `'all'`-scope exposure above.
- *
- * THE POINT OF THIS TEST: it pins the zero so that fixing the burst channel — routing it through
- * `procLeechesForVictim`, for either scope — is a deliberate, reviewed decision rather than a
- * silent side effect. Because the gap is channel-wide, that fix will also change the payout of a
- * `leechScope:'all'` leech on a burst (Magnolia, the Leech gear set); read this comment before
- * updating either expectation.
+ * The incoming direction is deliberately NOT asserted: a burst does not proc the victim's
+ * damage-taken leech (owner ruling, spec §2.2 — Malvex reads "directly damaged as a primary
+ * target"). That is why this site calls the standing proc directly and never
+ * `procLeechesForVictim`.
  */
-describe('KNOWN GAP (tripwire): a detonation-scoped standing leech pays zero on a positional burst', () => {
-    it('a positioned enemy’s timed bomb bursts, and the focus’s detonation-scoped leech still credits 0', () => {
+describe('Site 2 — a standing leech pays out on a positional bomb burst', () => {
+    it.each([
+        ['detonation' as const, 1200],
+        ['all' as const, 1200],
+    ])('a %s-scoped 20%% leech credits %d off a 6000 burst', (scope, expected) => {
         idc = 0;
-        // enemy-back at M2 is outside the firing footprint and carries a timed bomb applied by the
-        // focus: 2 stacks × 3000 = 6000, countdown 1 → it bursts at enemy-back's own turn-start in
-        // round 1. The focus carries a 20% standing leech scoped to 'detonation'. If a detonation
-        // channel existed positionally this would credit 6000 × 0.20 = 1200; it credits 0.
+        // enemy-back at M2 is outside the Line-Range-1 firing footprint (M4 + M3), so nothing but
+        // the burst touches it. A timed bomb applied by the focus: 2 stacks × 3000 = 6000,
+        // countdown 1 → bursts at enemy-back's own turn-start in round 1. A 20% leech on 6000
+        // dealt → directHeal 1200 (crit 0 / healModifier 0 → no fold).
         const result = runCombat(
             BASE({
-                shipSkills: { slots: [basicSlot(), leechSlot(20, 'detonation')] },
+                shipSkills: { slots: [basicSlot(), leechSlot(20, scope)] },
                 enemyAttackers: [
                     enemyAt('enemy-front', 'M4', 1_000_000_000),
                     enemyAt('enemy-back', 'M2', 1_000_000),
@@ -456,10 +425,13 @@ describe('KNOWN GAP (tripwire): a detonation-scoped standing leech pays zero on 
             })
         );
 
-        // ANTI-VACUITY, load-bearing: the burst REALLY landed on the positioned enemy. Without this
-        // the zero below would be indistinguishable from "no detonation happened".
+        // ANTI-VACUITY, load-bearing: the burst really landed on the positioned enemy. Without it
+        // a zero payout would be indistinguishable from "no detonation happened".
         expect(result.rounds[0].perTargetDamage?.['enemy-back']).toBe(6000);
-        // …and the detonation-scoped standing leech paid nothing: THE KNOWN GAP.
-        expect(sumHeal(result, 'directHeal', 'attacker')).toBe(0);
+        // ANTI-VACUITY: attack 0 → the firing hit dealt nothing, so no direct-channel leech can
+        // contribute and the whole figure below is the burst leech.
+        expect(result.rounds[0].perTargetDamage?.['enemy-front']).toBe(0);
+
+        expect(sumHeal(result, 'directHeal', 'attacker')).toBeCloseTo(expected, 6);
     });
 });
