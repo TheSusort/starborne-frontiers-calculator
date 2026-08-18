@@ -60,7 +60,6 @@ import {
     __getDummySinkCreditCount,
     __resetDummySinkCreditCount,
 } from '../engine';
-import type { CombatEngineInput } from '../engine';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
 // Fixtures live in __testutils__, NOT in the other test file. Importing from a `.test.ts`
 // module executes its `describe` blocks as an import side effect — the suites would run twice,
@@ -74,31 +73,12 @@ import {
     BARE_ALLY_ID,
     SECOND_BARE_ENEMY_ID,
 } from '../__testutils__/bareRosterFixture';
-import { createEventBus } from '../events';
+import { collectTurns } from '../__testutils__/turnOrderTap';
 
 /** `bareInput` fires one 100%-multiplier damage ability off a 10 000 attack, zero crit. */
 const PER_CAST = 10_000;
 /** `bareInput().numRounds`. */
 const BARE_ROUNDS = 2;
-
-/** Run with an event tap so each case can prove its path actually ran. */
-const collect = (input: CombatEngineInput) => {
-    const bus = createEventBus();
-    // Turn order per round, in emission order, and every death in the run — the two positive
-    // signals the cases below use to show they reached the path they name.
-    const turnsByRound = new Map<number, string[]>();
-    const destroyedIds: string[] = [];
-    bus.on('turn-started', (e) => {
-        turnsByRound.set(e.round, [...(turnsByRound.get(e.round) ?? []), e.actorId]);
-    });
-    bus.on('ship-destroyed', (e) => destroyedIds.push(e.actorId));
-    const result = runCombat({ ...input, bus });
-    return {
-        result,
-        actorsThatTookTurns: (round: number): string[] => turnsByRound.get(round) ?? [],
-        destroyed: (): string[] => destroyedIds,
-    };
-};
 
 /** Who this attacker is recorded as having damaged this round, and for how much. */
 const dealtBy = (
@@ -121,7 +101,7 @@ describe('dummy reachability after normalization', () => {
     });
 
     it('FOCUS DAMAGE: the focus attacker resolves a real victim, never the fallback', () => {
-        const { result, actorsThatTookTurns } = collect(bareInput());
+        const { result, actorsThatTookTurns } = collectTurns(bareInput());
 
         // The path ran: the focus took a turn every round and its cast is recorded against the
         // REAL roster member — not the dummy, which is not even in the turn order any more.
@@ -137,7 +117,7 @@ describe('dummy reachability after normalization', () => {
         // Damage is deliberately excluded (attack 0, empty kit) so this case observes the walked
         // TURN itself — the `actor.kind === 'team'` branch of the turn loop — with no cast to
         // confound it. Its damage-carrying twin is the next case.
-        const { result, actorsThatTookTurns } = collect({
+        const { result, actorsThatTookTurns } = collectTurns({
             ...bareInput(),
             teamActors: [bareAlly()],
         });
@@ -154,7 +134,7 @@ describe('dummy reachability after normalization', () => {
     it('WALKED-TEAM DAMAGE: the ally cast site resolves a real victim too', () => {
         // The walked-team cast site is a SEPARATE site from the focus's (its own selectTurnTarget
         // call, its own `teamPositional` gate), so the focus case above does not cover it.
-        const { result } = collect({
+        const { result } = collectTurns({
             ...bareInput(),
             teamActors: [bareAlly({ attack: 7_000 })],
         });
@@ -173,7 +153,7 @@ describe('dummy reachability after normalization', () => {
         // different object entirely (the heal target, a real player actor), so the player-side
         // cases say nothing about this direction. The enemy is given a real attack + kit: a
         // 0-attack positioned enemy is stream-inert and would evidence nothing.
-        const { result, actorsThatTookTurns } = collect({
+        const { result, actorsThatTookTurns } = collectTurns({
             ...bareInput(),
             enemyAttackers: attackingEnemy(),
         });
@@ -191,7 +171,7 @@ describe('dummy reachability after normalization', () => {
         // SP-4c has to handle rather than expect a zero from. 5 000 max HP dies to the round-1
         // cast; `resolvesPositionalVictim` keys on MAX hp, so rounds 2-3 stay positional, select
         // nobody, and whiff against the corpse instead of teleporting onto the dummy.
-        const { result, destroyed } = collect({
+        const { result, destroyed } = collectTurns({
             ...bareInput(),
             numRounds: 3,
             enemyAttackers: bareEnemy({ stats: { hp: 5_000 } }),
@@ -213,7 +193,7 @@ describe('dummy reachability after normalization', () => {
         // Two placed members; the front one dies to the round-1 cast and selection must walk to the
         // survivor behind it. Distinct from the corpse case: here a living victim still exists, so
         // even the CONSULTATION count must stay zero.
-        const { result, destroyed } = collect({
+        const { result, destroyed } = collectTurns({
             ...bareInput(),
             numRounds: 3,
             enemyAttackers: [
