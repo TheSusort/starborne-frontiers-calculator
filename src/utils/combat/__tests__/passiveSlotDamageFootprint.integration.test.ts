@@ -510,8 +510,13 @@ describe('SP-4b-2 D6 — the passive-slot instance is a real direct-damage intak
     });
 });
 
-/** Measured at this task's implementation (see the task report): the passive-slot instance's
- *  delivered damage in this fixture, over `BASE`'s single round against one positioned enemy.
+/** DERIVED BY CONSTRUCTION, not read off a run: the passive-slot instance's delivered damage in this
+ *  fixture. `FOCUS_ATTACK` (1000) × the instance's 100% multiplier, with `defence`, `enemyDefense`
+ *  and `crit` all 0 in `BASE` — so no mitigation, no crit term, no affinity — over `BASE`'s single
+ *  round against exactly ONE positioned enemy, i.e. one full-share hit and no covered halving.
+ *  The same arithmetic at the 50% multiplier gives the 500 that
+ *  "an 'all-enemies' passive under a SINGLE-TARGET cast reaches every enemy, credited per victim"
+ *  already derives inline in the first describe of this file.
  *  Pinned as a literal so a change in the instance's magnitude fails loudly here. */
 const PASSIVE_INSTANCE_DAMAGE = 1000;
 /** 20% of the above — the standing leech's payout. Written as the arithmetic, not a bare number,
@@ -567,7 +572,8 @@ describe('Site 4 — the passive-slot damage instance pays a standing leech', ()
             },
         });
 
-        // TWO INDEPENDENT PINNED NUMBERS, both measured (see Step 2 of the task brief). Asserting
+        // TWO INDEPENDENT PINNED NUMBERS, both hand-derived from the fixture (see the constants
+        // above: 1000 × 100% by construction, and 20% of it). Asserting
         // the leech as `delivered * 0.2` would derive the expectation from the run's own output —
         // the run could then halve both numbers together and stay green, which is the
         // fixture-vacuity shape the Global Constraints forbid. Pinning both means either one

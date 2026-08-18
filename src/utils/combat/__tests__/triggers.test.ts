@@ -1653,7 +1653,7 @@ describe('Phase 3 reactive triggers', () => {
     // in each variant (blocked above 50%, fires below), so an always-on regression fails the
     // negative arm and a still-dead gate fails the positive one.
     // ----------------------------------------------------------------------
-    it('review wave 1: an hp-threshold with NO hpSubject field gates exactly like hpSubject "enemy"', () => {
+    it('M10: an hp-threshold with NO hpSubject field gates exactly like hpSubject "enemy"', () => {
         const hpGate = (hpSubject?: 'enemy'): Ability['conditions'][number] => ({
             subject: 'hp-threshold',
             derivable: true,
@@ -1743,7 +1743,7 @@ describe('Phase 3 reactive triggers', () => {
     // exactly one buff available to purge — which is what makes the negative arm meaningful: no
     // purge fires there even though a purgeable buff is present (asserted, not assumed).
     // ----------------------------------------------------------------------
-    it('review wave 1: a purge reactive gated on "enemy below 50%" purges only once the enemy is really below 50%', () => {
+    it('M10: a purge reactive gated on "enemy below 50%" purges only once the enemy is really below 50%', () => {
         const purgeSkills = (): ShipSkills => ({
             slots: [
                 {
@@ -1861,7 +1861,7 @@ describe('Phase 3 reactive triggers', () => {
     // Payout is derived, not `> 0`: the proc's multiplier is 50 against the active's 150, through
     // the same mitigated pipeline, so the round it fires in deals exactly base + base/3.
     // ----------------------------------------------------------------------
-    it('review wave 1: a single-target damage reactive gated on "enemy below 50%" fires only on a real below-50% victim', () => {
+    it('M10: a single-target damage reactive gated on "enemy below 50%" fires only on a real below-50% victim', () => {
         const singleTargetGatedProc = (): ShipSkills => ({
             slots: [
                 {
@@ -1908,8 +1908,21 @@ describe('Phase 3 reactive triggers', () => {
             focusDealtInRound(r.result.rounds.find((rd) => rd.round === 1)!);
 
         // NEGATIVE ARM — an enemy that stays above 50%: round 1 is the bare 150% hit, nothing else.
+        //
+        // HAND-DERIVED, not `> 0` and not read off the run. One hit through `victimHitDamage`
+        // (victimDamage.ts), with `roleScale` 1 (the anchor's own cell) and no buffs anywhere:
+        //   preCritDamage = attack 15 000 × multiplier 150% = 22 500, over `hits: 1`
+        //   crit term     = 1 + critDamage 150/100 = 2.5   (crit 100 → this hit always crits)
+        //   effectiveDef  = enemy defence 8 000 × (1 − defensePenetration 10/100) = 7 200
+        //   mitigation    = 1 − calculateDamageReduction(7200)/100, and
+        //                   calculateDamageReduction(d) = 88.3505 · exp(−((4.5552 − log10 d)/1.3292)²)
+        //                                              = 67.06466018307192 % at d = 7 200
+        //   damage        = 22 500 × 2.5 × (1 − 0.6706466018307192) = 18 526.128647022044
+        // No rounding anywhere on this path (`victimHitDamage` returns a float and the per-victim
+        // credit stores it as-is), hence the exact fractional pin.
+        const BASE_HIT = 18_526.128647022044;
         const tanky = round1(run(10_000_000));
-        expect(tanky).toBeGreaterThan(0);
+        expect(tanky).toBeCloseTo(BASE_HIT, 6);
 
         // POSITIVE ARM — the crit hit itself takes a 30 000-HP enemy to 38%, so the drain's
         // re-check passes and the 50%-multiplier proc lands in the SAME round: exactly a third

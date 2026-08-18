@@ -1878,7 +1878,36 @@ function dispatchType(intent: Intent): Ability['config']['type'] {
  *  later arm's subject (the condition stays in `kept` AND is re-checked per target), and it
  *  OVER-COLLECTS the earlier arms' own drops into the per-target route, where they mean something
  *  else entirely (see each arm's `perVictim: NO_CONDITIONS` note). Deriving both halves inside the
- *  same chain makes both failures impossible by construction. */
+ *  same chain makes both failures impossible by construction.
+ *
+ *  ⚠️ KNOWN LIMITATION — SPLITTING A CONDITION OUT OF AN OR-RUN CHANGES THE GATE'S BOOLEAN SHAPE,
+ *  not just its membership.
+ *  MECHANISM: `conditionsMet` (src/utils/abilities/evaluateConditions.ts) does NOT evaluate a flat
+ *  AND. It calls `groupConditions`, which collects CONSECUTIVE `anyOf` conditions into one OR-run
+ *  and gives every non-`anyOf` condition its own singleton group, then requires
+ *  `groups.every((g) => g.some(conditionMet))`. Position in the array is therefore load-bearing, and
+ *  removing one element re-groups everything around it. Both halves here are then ANDed (the `kept`
+ *  gate must pass AND the branch's per-target re-check must pass), so:
+ *    • PULLING AN `anyOf` MEMBER OUT OF A RUN → the gate newly BLOCKS. `[self-buff X (anyOf),
+ *      hp-threshold enemy below-50% (anyOf)]` is ONE group, i.e. `X or below-50%`. After the split
+ *      `kept = [X]` → `X`, `perVictim = [below-50%]` → `below-50%`, and the two are ANDed:
+ *      `X and below-50%`. An ability that fired on either now needs both.
+ *    • PULLING A NON-`anyOf` CONDITION OUT FROM BETWEEN TWO RUNS → the gate newly FIRES.
+ *      `[A (anyOf), B (anyOf), H (hp-threshold enemy below-50%, not anyOf), C (anyOf), D (anyOf)]`
+ *      is `(A|B) and H and (C|D)`. Scrubbing H makes A,B,C,D consecutive, so `kept` collapses into
+ *      the single run `A|B|C|D`; with the re-check the net gate is `(A|B|C|D) and H` — strictly
+ *      WEAKER than the original, e.g. A alone now passes where it previously also needed C or D.
+ *  REACHABILITY: parser-UNREACHABLE — `skillTextParser` never sets `anyOf` on an `hp-threshold`, so
+ *  no shipped kit and no golden fixture can reach it. But it IS authorable in the in-app ability
+ *  editor, which is precisely the population M10 exists to serve, so it is not hypothetical.
+ *  NOT INTRODUCED BY M10: the identical hazard already existed for the pre-existing `enemy-debuff`
+ *  scrub on `damage` + `all-enemies`. M10 WIDENED it to `debuff`, `purge` and single-target
+ *  `damage`.
+ *  WHAT A REAL FIX NEEDS: preserve OR-run boundaries across the split instead of partitioning a flat
+ *  set — e.g. move a whole `anyOfGroupIndices` run together, or carry group identity into `perVictim`
+ *  so each half re-groups the way the author wrote it. DELIBERATELY NOT ATTEMPTED HERE: it changes
+ *  which conditions gate where, so it needs an owner ruling on the intended semantics and its own
+ *  tests. Out of scope for this change. */
 function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     // The self hp-threshold on an on-hp-threshold-crossed ability is TRIGGER CONFIG (the listener
     // read N from it), NOT a drain-time gate. The crossing already proved the threshold; re-gating
@@ -1928,8 +1957,21 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     //   `debuff` — `perVictimOk(applicationTargetId)` inside the application loop (NOT on
     //              `counterTargetId`, which the on-crit route never stamps).
     //   `purge`  — `perVictimOk(targetId)`.
-    // An ally/self-facing shape (`buff`, `heal`, `shield`, `cleanse`, `counter`, …) resolves no
-    // opposing victim through `perVictimOk`, so its enemy gate stays GLOBAL and is never dropped.
+    // EVERY OTHER SHAPE KEEPS ITS ENEMY GATE GLOBAL — and NOT because it resolves no opposing
+    // victim. Several plainly do: the `counter` branch resolves its victim from
+    // `eventCtx.counterTargetId`, and the `dot` / `convert-dot` branches land on a real victim via
+    // `landDotOn`. All three are enemy-facing. The real reason they are left out is the OTHER half
+    // of this function's promise: NO PER-TARGET RE-CHECK SITE EXISTS IN THOSE BRANCHES YET. Adding
+    // them here without one would not fix a dead gate, it would make that gate ALWAYS-ON — strictly
+    // worse than today, where a non-self `hp-threshold` on a `counter` / `dot` / `convert-dot` is
+    // still evaluated against the vestigial positional `enemyHpPct` and is therefore
+    // dead-but-FAILS-CLOSED: unfixed, never over-firing.
+    // SO: ADDING A SHAPE TO THE `dt === …` TEST BELOW IS ONLY SAFE ONCE THAT SHAPE'S BRANCH CALLS
+    // `perVictimOk` (or a named dedicated re-check) on the target it actually resolves. Do not
+    // "tidy" `dot`, `convert-dot` or `counter` into the list because they look enemy-facing —
+    // enemy-facing with no re-check is exactly the dangerous combination. The genuinely
+    // ally/self-facing shapes (`buff`, `heal`, `shield`, `cleanse`) resolve no opposing victim at
+    // all, so for them the question does not arise either way.
     // ARM ORDERING: an `on-hp-threshold-crossed` intent, or an on-deal-damage `purge`, takes an
     // earlier arm and never reaches here — such an intent's non-self hp-threshold stays in `kept`
     // (still gating globally, dead on a positional run, as before this change) and, because that

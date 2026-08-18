@@ -313,9 +313,18 @@ describe("SP-4b-2b Task 2b — a leechScope:'all' standing leech pays out on a p
 
     it('a detonation-scoped leech stays inert on a DoT tick (the DoT channel is not the detonation channel)', () => {
         idc = 0;
+        // RETAINED, THOUGH SUPERSEDED: the 'SCOPE GUARD' case below runs this exact fixture as one
+        // of its two arms and asserts the same two numbers, so this test's coverage is a strict
+        // subset of it. Kept because it is the cheapest single-arm reproduction of the original
+        // report and costs nothing to run; SCOPE GUARD is the one that discriminates, since it pairs
+        // the 0 with a same-fixture 'all'-scoped payout.
+        //
         // Same fixture as the player case, with the leech scoped to 'detonation'. The tick still
         // lands, but a detonation-scoped leech must NOT pay out on it — the scope gate is preserved
-        // by routing through procStandingLeechesPerVictim (which skips scope 'detonation').
+        // by routing through procStandingLeechesPerVictim, whose gate is
+        // `e.scope === 'detonation' && channel !== 'detonation'`: it skips a 'detonation'-scoped
+        // leech only on a NON-detonation channel (a corrosion tick, here), and pays it on the
+        // 'detonation' channel itself (site 2's burst arm).
         const result = runCombat(
             BASE({
                 shipSkills: { slots: [basicSlot(), leechSlot(20, 'detonation')] },
