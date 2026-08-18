@@ -29,8 +29,13 @@
  * rather than silently dropped:
  *   • the early `break` that TERMINATED the run on the kill (engine.ts:11115) is gated on
  *     `dpsEnemyTarget`, so the run now plays out its full `numRounds`. Past the kill the focus
- *     falls back onto the legacy dummy victim and books NO credit (engine.ts:5876 skips
- *     `creditDamage` whenever a roster exists), which is what the credit-window case asserts.
+ *     falls back onto the legacy dummy victim and books NO credit (engine.ts:9130's
+ *     `if (!positional) { creditDamage(...) }` skips the direct-cast credit call whenever the
+ *     cast resolves positionally — which it does here, since `resolvesPositionalVictim` is keyed
+ *     on MAX hp and stays true even after the kill — NOT engine.ts:5876, which is the reactive-proc
+ *     credit skip inside `applyReactiveDamage`, gated on `hasPositionedEnemyRoster`, a different
+ *     path from the direct-cast credit this sentence is about), which is what the credit-window
+ *     case asserts.
  *   • `result.enemyOutcome` reads the singular `enemy`, i.e. the immortal sink. Its production
  *     successor is `simulateDPS`'s own `ship-destroyed` re-derivation (dpsSimulator.ts:796),
  *     covered by `dpsSynthesizedEnemy` / `dpsMultiEnemyFinalHp` / `dpsRealEnemyReactions`. The

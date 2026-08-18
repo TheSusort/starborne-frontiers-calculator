@@ -267,21 +267,34 @@ describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes o
 });
 
 /**
- * DPS invariance: the DPS calculator's single-opponent mode calls `runCombat` DIRECTLY with no
- * `position`/`pattern`/`mode: 'battle'`, so the run stays NON-positional (engine.ts:9025 gates
- * `positional` on `target` AND `pattern`, not on the roster), `targetId` is never threaded, and
- * `adjacentEnemyIdsFor` is never supplied. The splash fan-out's own guard
- * (`targetId !== undefined && adjacentEnemyIdsFor`) means it can never fire here — so a
- * `target-and-adjacent-enemies` Inferno DoT must produce BYTE-IDENTICAL `dot-applied` events to the
- * SAME DoT with plain `target: 'enemy'` (this is the real DPS-page shape; dpsSimulator.ts calls
- * runCombat the same way).
+ * Single-entry roster: `bareEnemy({ stats: { hp: 1_000_000_000 } })` gives the run exactly one
+ * real, targetable opposing actor, and `normalizeCombatRoster`'s `withTargeting`
+ * (normalizeRoster.ts:86-92) fills BOTH targeting axes for every run through the boundary — so
+ * this run IS positional (engine.ts:9025's `positional` gate calls `resolvesPositionalVictim`,
+ * satisfied here since the roster's one member has max hp > 0). `targetId` IS threaded (as
+ * `BARE_ENEMY_ID`), and `adjacentEnemyIdsFor` IS supplied unconditionally (engine.ts:7104).
  *
- * SP-4b-2b: the sole opponent used to be the vestigial `enemy` sink, reached by passing no
- * `enemyAttackers`. That is now illegal at the normalization boundary, so this passes a real
- * one-entry roster and the DoT recipient id moved `'enemy'` → `BARE_ENEMY_ID` (M1). The
- * byte-identity claim — the whole point of the fixture — is unaffected.
+ * The splash fan-out's guard (`targetId !== undefined && adjacentEnemyIdsFor`,
+ * playerTurn.ts:3160) therefore DOES fire — it just finds no OTHER roster member to return as a
+ * neighbour, since this roster has only one opposing actor. That is why a
+ * `target-and-adjacent-enemies` Inferno DoT still produces BYTE-IDENTICAL `dot-applied` events to
+ * the same DoT with plain `target: 'enemy'`: the splash loop runs zero iterations, not because it
+ * "can never fire" here.
+ *
+ * SP-4b-2b: this block used to exercise the DPS calculator's real NON-positional single-opponent
+ * shape — no `enemyAttackers` at all, `targetId` never threaded, `adjacentEnemyIdsFor` never
+ * supplied. An empty roster is now a validation error at the boundary, and the fixture's
+ * replacement roster (one targetable member) makes the run positional instead of reproducing the
+ * old shape. The 0-max-hp "pressure source" roster that keeps other fixtures in this suite
+ * genuinely non-positional (e.g. `accumulatorGather.integration.test.ts`) was tried here too: it
+ * does restore the legacy non-positional path, but that path resolves the sole opponent to the
+ * vestigial `enemy` dummy, not `BARE_ENEMY_ID` — adopting it would mean re-pinning the assertion
+ * below (`targetId === BARE_ENEMY_ID`) rather than re-deriving it. So the original DPS-invariance
+ * / non-positional coverage is NOT preserved here; what remains is the byte-identity claim above,
+ * now demonstrated on a single-real-enemy positional run instead. Real non-positional
+ * single-opponent coverage would need a fresh fixture — out of scope for this fix.
  */
-describe('Ship-kit W5 Task B2: DPS invariance (single opponent, non-positional)', () => {
+describe('Ship-kit W5 Task B2: single-entry roster edge case (positional, no neighbours to fan out to)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
         enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,

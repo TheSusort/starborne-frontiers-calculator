@@ -242,23 +242,37 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
 });
 
 /**
- * DPS invariance: the DPS calculator's single-opponent mode calls `runCombat` DIRECTLY with no
- * `position`/`pattern`/`mode: 'battle'`, so the run stays NON-positional (engine.ts:9025 gates
- * `positional` on `target` AND `pattern`, not on the roster) and `targetId` is never threaded onto
- * the turn args. This is the DPS page's real non-positional shape (dpsSimulator.ts calls runCombat
- * the same way), NOT `simulateBattle` (which always sets `mode: 'battle'` and gives every enemy a
- * real position). A plain `enemy`-target debuff still lands on that single opponent in this mode
- * (the legacy `targetId === undefined && !positionalLanding → [undefined]` fallback resolves the
- * sole opposing actor as victim) — `target-and-adjacent-enemies` must match that (one recipient, no
- * neighbours to fan out to); `adjacent-enemies` must apply to nobody (no primary-target anchor to
- * resolve neighbours from).
+ * Single-entry roster: `bareEnemy({ stats: { hp: 1_000_000_000 } })` gives the run exactly one
+ * real, targetable opposing actor, and `normalizeCombatRoster`'s `withTargeting`
+ * (normalizeRoster.ts:86-92) fills BOTH targeting axes for every run through the boundary — so
+ * this run IS positional. `engine.ts:9025`'s `positional` gate (and its `willApplyPositionally`
+ * prediction at engine.ts:8942) calls `resolvesPositionalVictim`, which IS satisfied here: the
+ * roster's one member has max hp > 0 (`isTargetableRosterMember`, positionalBinding.ts:36).
+ * `targetId` IS threaded onto the turn args, as `BARE_ENEMY_ID` — not left unset, and not the
+ * vestigial `enemy` dummy.
  *
- * SP-4b-2b: the sole opponent used to be the vestigial `enemy` sink, reached by passing no
- * `enemyAttackers` at all. That is now illegal at the normalization boundary, so the fixture passes
- * a real one-entry roster and the recipient id moved `'enemy'` → `BARE_ENEMY_ID` (M1). The mechanic
- * under test — exactly one recipient, no fan-out — is unchanged.
+ * Both mechanics still land the same way they did before this correction, but for a different,
+ * purely structural reason: `target-and-adjacent-enemies` resolves to exactly one recipient (the
+ * anchor itself) because `adjacentEnemyIdsFor` (engine.ts:7104, always supplied on a resolved
+ * anchor) finds no OTHER roster member to return as a neighbour — not because of any
+ * non-positional "no anchor" fallback (the anchor IS defined). `adjacent-enemies` applies to
+ * nobody for the same reason (an empty neighbour set), not because there is no primary-target
+ * anchor to resolve neighbours from.
+ *
+ * SP-4b-2b: this block used to exercise the DPS calculator's real NON-positional single-opponent
+ * shape — no `enemyAttackers` at all, `targetId` never threaded, landing via the legacy
+ * `targetId === undefined && !positionalLanding → [undefined]` fallback. An empty roster is now a
+ * validation error at the boundary, and the fixture's replacement roster (one targetable member)
+ * makes the run positional instead of reproducing the old shape. The one roster shape that DOES
+ * stay genuinely non-positional — the 0-max-hp "pressure source" used elsewhere in this suite
+ * (e.g. `accumulatorGather.integration.test.ts`) — was tried here too: it restores the legacy
+ * fallback, but that fallback resolves to the vestigial `enemy` dummy, not `BARE_ENEMY_ID`, so
+ * adopting it would mean re-pinning the assertion below rather than just re-deriving it. So the
+ * original DPS-invariance / non-positional coverage is NOT preserved by this block; what remains
+ * is the single-real-enemy positional edge case described above. Real non-positional
+ * single-opponent coverage would need a fresh fixture — out of scope for this fix.
  */
-describe('Ship-kit W5 Task A3: DPS invariance (single opponent, non-positional)', () => {
+describe('Ship-kit W5 Task A3: single-entry roster edge case (positional, no neighbours to fan out to)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
         enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,
@@ -293,12 +307,12 @@ describe('Ship-kit W5 Task A3: DPS invariance (single opponent, non-positional)'
         return debuffsApplied.filter((e) => e.buffName === DEBUFF_NAME);
     };
 
-    it('adjacent-enemies applies to nobody (no real board, no anchor to fan neighbours from)', () => {
+    it('adjacent-enemies applies to nobody (no OTHER roster member to resolve as a neighbour)', () => {
         const applied = runDummy(adjacentOnlyCaster('atk'));
         expect(applied).toHaveLength(0);
     });
 
-    it("target-and-adjacent-enemies applies to exactly the sole opponent — today's plain-`enemy` behaviour", () => {
+    it('target-and-adjacent-enemies applies to exactly the sole opponent — the anchor itself, no neighbours to fan out to', () => {
         const applied = runDummy(targetAndAdjacentCaster('atk'));
         expect(applied).toHaveLength(1);
         // M1: the recipient is the real roster entry, not the vestigial `enemy` sink.
