@@ -535,3 +535,37 @@ says so; the measurement is a ticket.
 - `enemyBuffSelfDebuffGate.test.ts` — twelve `directDamage` assertions are live only because an
   `as EnemyAttacker` cast hides the required `stats.hp`; supplying it flips all twelve to the
   positional channel. Own ticket; prefer dropping the casts so `tsc` demands `hp`.
+Task 8: complete (commit e840e85e + fix wave 1e05ae06; review "NEEDS FIXES" -> fixed).
+  GATES: 494 moved .snap lines / 0 unclassified across 4 named mechanisms (M-A perTargetDealt now
+  present 147; M-B rider rebase off defence 5,000 vs the sink's 10,000, 263; M-D the practice target is
+  KILLABLE -> zero-heal rounds, 60; M-E the known detonation-scope leech gap as an all-zero scenario,
+  24) — the reviewer re-derived the sum as 494 and confirmed each mechanism against the snapshot and
+  the constants. SCOPE stated: only 5 .snap files exist and none covers a direct runCombat fixture, so
+  the gate is load-bearing only for the 3 production callers.
+  tsc 0 · eslint 0 · 528 files / 5853 tests · oracle 147 swept / 146 symmetric / 2 findings / 13-13-13
+  with the ledger JSON BYTE-IDENTICAL before and after (stated as a COMPARISON, not a re-baseline) ·
+  .snap status clean · browser-verified /healing at Enemy Team (0) and /damage, real numbers.
+  ⭐⭐ THE MOST IMPORTANT LESSON OF THE WHOLE PR — A CONFIDENT SUBAGENT "FINDING" WAS FABRICATED BY A
+  HARNESS BUG, AND THE REVIEWER KILLED IT WITH THE CONTROL THE AUTHOR NEVER RAN.
+  Task 8 reported the PR's own design premise FALSE ("emptying the roster changes only incoming damage"
+  -> "false for any healer with nonzero crit"), with two measured series and a named mechanism (the
+  opponent's actor id feeding an id-keyed per-victim RNG stream). All of it was wrong:
+   - Re-running WITH a re-seed before each run: IDENTICAL at crit 0 (3332/3332), 50 (5207/5207) and
+     100 (7498/7498).
+   - THE MISSING CONTROL: two runs of the SAME config with NO re-seed reproduce the identical
+     permutation-shaped divergence. The "finding" was an un-re-seeded harness artefact.
+   - The mechanism does not exist: every crit/landing/proc gate is OWNER-keyed
+     (`makeRateGate(`${focusActorId}:active-crit`)`, engine.ts:2104), invariant across the two runs.
+   - The browser numbers could never have supported it: keyedProvider is TEST-ONLY and production rng
+     is plain Math.random (rateAccumulator.ts:17-18,39-40), so 478 vs 483 is unseeded variance with no
+     same-config control.
+  NET EFFECT IF UNCAUGHT: a TRUE claim weakened into a FALSE one in production source, contradicting
+  the passing test that asserts the exact equality, plus a PHANTOM hand-off written into the tracked
+  ledger for SP-4c to inherit. Withdrawn in 1e05ae06 (history kept, marked WITHDRAWN).
+  ⭐ GENERALISE: before believing "X differs from Y", run X-vs-X. A comparison harness without a
+  same-input control cannot distinguish a real difference from its own nondeterminism. And a
+  page-level equality claim is uncheckable in production here at all, because production is unseeded.
+  ⭐ Also falsified by this task (kept as UNCONFIRMED, ticketed): hitMitigation.ts's inertness argument
+  rested on `enemyAttackers` distinguishing callers, which this epic ended. Whether simulateDPS's
+  selfBuffs auto-fill reaches the scheduled channel is UNVERIFIED — if reachable it is silently inert
+  in production. Its own note now states what would settle it.
