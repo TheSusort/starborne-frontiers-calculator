@@ -18,7 +18,7 @@ import { SelectedGameBuff } from '../../../types/calculator';
 import { createStatusEngine } from '../statusEngine';
 import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
 import type { CombatActor } from '../state';
-import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 import { dealtBy } from '../__testutils__/perTargetDealt';
 import type { RoundData } from '../../calculators/dpsSimulator';
 
@@ -1638,6 +1638,284 @@ describe('Phase 3 reactive triggers', () => {
         expect(landedIn(1)).toBe(false);
         // POSITIVE ARM — enemy below 50%: the gate passes. This is the assertion the bug broke.
         expect(landedIn(3)).toBe(true);
+    });
+
+    // ----------------------------------------------------------------------
+    // Review wave 1, Finding 3 case 1 — the dead set is `hpSubject !== 'self'`, which INCLUDES an
+    // ABSENT `hpSubject`, not just `'enemy'`: `evaluateConditions`'s `evalHpThreshold` routes
+    // anything that is neither `'self'` nor `'target'` to `ctx.enemyHpPct`. A fix scoped to the
+    // literal `'enemy'` string would under-fix, and the ONE corpus ability on this path (Judge)
+    // is emitted with no `hpSubject` field at all (`buildShipAbilities.ts`
+    // `parseHpThresholdCondition`), so the absent form is the SHIPPED form.
+    //
+    // Same fixture as the M10 test above, run twice — once with `hpSubject: 'enemy'`, once with the
+    // field omitted — and the two per-round vectors must be IDENTICAL. Both arms are load-bearing
+    // in each variant (blocked above 50%, fires below), so an always-on regression fails the
+    // negative arm and a still-dead gate fails the positive one.
+    // ----------------------------------------------------------------------
+    it('review wave 1: an hp-threshold with NO hpSubject field gates exactly like hpSubject "enemy"', () => {
+        const hpGate = (hpSubject?: 'enemy'): Ability['conditions'][number] => ({
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: 50,
+            ...(hpSubject !== undefined ? { hpSubject } : {}),
+        });
+
+        const landedVector = (hpSubject?: 'enemy'): boolean[] => {
+            const skills = (): ShipSkills => ({
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'debuff',
+                                target: 'enemy',
+                                trigger: 'on-crit',
+                                conditions: [hpGate(hpSubject)],
+                                config: {
+                                    type: 'debuff',
+                                    buffName: 'Below50 Shred',
+                                    stacks: 1,
+                                    parsedEffects: { defense: -30 },
+                                    isStackable: false,
+                                    application: 'inflict',
+                                    duration: 2,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            });
+            const { result } = collectEvents(
+                baseInput({
+                    shipSkills: skills(),
+                    hasChargedSkill: false,
+                    chargeCount: 0,
+                    crit: 100,
+                    enemyAttackers: bareEnemy({ stats: { hp: 100_000, defence: 8000 } }),
+                    numRounds: 4,
+                })
+            );
+            // ANTI-VACUITY: every round landed a real hit, so the HP trajectory really happened.
+            for (const round of result.rounds) {
+                expect(focusDealtInRound(round)).toBeGreaterThan(0);
+            }
+            return result.rounds.map((r) =>
+                r.activeEnemyDebuffs.some((b) => b.buffName === 'Below50 Shred')
+            );
+        };
+
+        const explicitEnemy = landedVector('enemy');
+        const absentSubject = landedVector();
+
+        // The whole point: an omitted `hpSubject` is gated identically, round for round.
+        expect(absentSubject).toEqual(explicitEnemy);
+        // And it is really the M10 discrimination, not two matching all-false vectors: same
+        // trajectory as the M10 test above (81.5% → 62.9% → 44.4% → 21.1%). NEGATIVE ARM first.
+        expect(absentSubject[0]).toBe(false);
+        expect(absentSubject[1]).toBe(false);
+        // POSITIVE ARM. idx 2 stays unasserted for the same round-entry-snapshot reason as M10.
+        expect(absentSubject[3]).toBe(true);
+    });
+
+    // ----------------------------------------------------------------------
+    // Review wave 1, Finding 3 case 2 — the `purge` branch's `perVictimOk(targetId)` re-check.
+    //
+    // Shape: an `on-attacked` reactive purge gated on "enemy below 50% HP". `on-attacked` is used
+    // deliberately, and it is the only usable trigger family here:
+    //  • it stamps `counterTargetId: e.attackerId`, so the purge routes to the REAL attacking
+    //    enemy rather than the vestigial dummy sink (`ctx.enemyId`), which is what gives the
+    //    re-check a real victim to read;
+    //  • `on-crit` would NOT work — that listener stamps `critVictimIds` only for `debuff` config
+    //    types and deliberately never `counterTargetId`, so a purge intent would resolve the sink;
+    //  • `on-deal-damage` would NOT work either — a purge on that trigger takes the EARLIER
+    //    (Zeolite `enemy-type`) arm of `splitDrainGateConditions`, which returns
+    //    `perVictim: NO_CONDITIONS`, so its hp-threshold keeps gating globally by design.
+    //
+    // The enemy re-grants itself Attack Up at the top of every one of its turns, so there is always
+    // exactly one buff available to purge — which is what makes the negative arm meaningful: no
+    // purge fires there even though a purgeable buff is present (asserted, not assumed).
+    // ----------------------------------------------------------------------
+    it('review wave 1: a purge reactive gated on "enemy below 50%" purges only once the enemy is really below 50%', () => {
+        const purgeSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'purge',
+                            target: 'enemy',
+                            trigger: 'on-attacked',
+                            conditions: [
+                                {
+                                    subject: 'hp-threshold',
+                                    derivable: true,
+                                    hpComparator: 'below',
+                                    hpPercent: 50,
+                                    hpSubject: 'enemy',
+                                },
+                            ],
+                            config: { type: 'purge', count: 1 },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        // The enemy: grants itself Attack Up (duration 99 — it never lapses on its own, so a
+        // missing buff can only be a purge) and then hits the focus, which is what raises the
+        // `attacked` event the reactive listens to.
+        const buffingAttacker = (hp: number) =>
+            bareEnemy({
+                stats: { hp, defence: 8000, attack: 5000, speed: 10 },
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'buff',
+                                    target: 'self',
+                                    config: {
+                                        type: 'buff',
+                                        buffName: 'Attack Up',
+                                        parsedEffects: { attack: 10 },
+                                        stacks: 1,
+                                        isStackable: false,
+                                        duration: 99,
+                                    },
+                                }),
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 100 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            });
+
+        const run = (hp: number) => {
+            const bus = createEventBus();
+            const purges: { targetId: string; round: number }[] = [];
+            const buffGrants: number[] = [];
+            bus.on('purge-performed', (e) => purges.push({ targetId: e.targetId, round: e.round }));
+            bus.on('buff-applied', (e) => {
+                if (e.buffName === 'Attack Up' && e.actorId === BARE_ENEMY_ID)
+                    buffGrants.push(e.round);
+            });
+            const result = runCombat({
+                ...baseInput({
+                    shipSkills: purgeSkills(),
+                    hasChargedSkill: false,
+                    chargeCount: 0,
+                    crit: 0,
+                    hp: 10_000_000, // the focus must survive being attacked for the whole run
+                    enemyAttackers: buffingAttacker(hp),
+                    numRounds: 4,
+                }),
+                bus,
+            });
+            return { purges, buffGrants, result };
+        };
+
+        // CONTROL / NEGATIVE ARM — an enemy that never drops below 50%: no purge at all, even
+        // though it granted itself a purgeable buff on every one of its turns.
+        const tanky = run(10_000_000);
+        expect(tanky.buffGrants.length).toBe(4);
+        expect(tanky.purges).toEqual([]);
+
+        // POSITIVE ARM — 40 000 HP under a deterministic 7 410.45/round (crit 0) = 18.53%/round of
+        // focus damage, and the focus acts BEFORE the enemy, so the enemy's HP when its attack
+        // raises the reaction is 81.5% / 62.9% / 44.4% / 25.9%. Exactly the last TWO of the four
+        // reactions pass the gate, and both purge the REAL enemy (not the dummy sink).
+        const squishy = run(40_000);
+        expect(squishy.buffGrants.length).toBe(4);
+        expect(squishy.purges).toEqual([
+            { targetId: BARE_ENEMY_ID, round: 3 },
+            { targetId: BARE_ENEMY_ID, round: 4 },
+        ]);
+    });
+
+    // ----------------------------------------------------------------------
+    // Review wave 1, Finding 3 case 3 — the SINGLE-TARGET `damage` branch's `victimIds` filter
+    // (`intent.ability.target !== 'all-enemies'`). Same rule as fix C above, but on the
+    // single-target route: `target: 'enemy'` + `on-crit` stamps neither `critVictimIds` (debuff
+    // configs only) nor `counterTargetId`, so the branch resolves the first living opposing actor
+    // — a REAL victim, whose own live HP the filter now reads.
+    //
+    // Payout is derived, not `> 0`: the proc's multiplier is 50 against the active's 150, through
+    // the same mitigated pipeline, so the round it fires in deals exactly base + base/3.
+    // ----------------------------------------------------------------------
+    it('review wave 1: a single-target damage reactive gated on "enemy below 50%" fires only on a real below-50% victim', () => {
+        const singleTargetGatedProc = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy', // NOT 'all-enemies' — the path fix C does not cover
+                            trigger: 'on-crit',
+                            conditions: [
+                                {
+                                    subject: 'hp-threshold',
+                                    derivable: true,
+                                    hpComparator: 'below',
+                                    hpPercent: 50,
+                                    hpSubject: 'enemy',
+                                },
+                            ],
+                            config: { type: 'damage', multiplier: 50 },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const run = (hp: number) =>
+            collectEvents(
+                baseInput({
+                    shipSkills: singleTargetGatedProc(),
+                    hasChargedSkill: false,
+                    chargeCount: 0,
+                    crit: 100, // every active turn crits → the on-crit trigger fires
+                    enemyAttackers: bareEnemy({ stats: { hp, defence: 8000 } }),
+                    numRounds: 1,
+                })
+            );
+        const round1 = (r: ReturnType<typeof run>) =>
+            focusDealtInRound(r.result.rounds.find((rd) => rd.round === 1)!);
+
+        // NEGATIVE ARM — an enemy that stays above 50%: round 1 is the bare 150% hit, nothing else.
+        const tanky = round1(run(10_000_000));
+        expect(tanky).toBeGreaterThan(0);
+
+        // POSITIVE ARM — the crit hit itself takes a 30 000-HP enemy to 38%, so the drain's
+        // re-check passes and the 50%-multiplier proc lands in the SAME round: exactly a third
+        // more damage than the base hit alone.
+        const squishy = round1(run(30_000));
+        expect(squishy).toBeCloseTo(tanky + tanky / 3, 5);
     });
 });
 
