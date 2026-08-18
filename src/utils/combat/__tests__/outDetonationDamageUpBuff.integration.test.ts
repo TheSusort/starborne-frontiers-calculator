@@ -20,9 +20,20 @@
  *   - bomb (SNAPSHOT path): the modifier is captured onto `PendingBomb.detonationDamageModifier`
  *     at APPLICATION time (playerTurn.ts's `applyNewDoTs`) and read back from that snapshot at
  *     burst, regardless of the holder's modifier at burst time.
- * Both bursts surface on the same non-positional aggregate `dot-detonated` event (engine.ts
- * folds `result.total = bomb + inferno + corrosion` there — `bomb-detonated` fires too for the
- * bomb portion alone, but summing that ALONGSIDE `dot-detonated` would double-count it).
+ * The two paths do NOT share one event on a positional run: container detonation surfaces on the
+ * aggregate `dot-detonated`, while a bomb burst surfaces ONLY on `bomb-detonated`. Both fold into
+ * `result.rawTotals.detonation`, which is what this file measures — one channel, no double-count,
+ * and byte-identical to the pre-branch numbers on both paths.
+ *
+ * SP-4b-2b: the run now fights a real, positioned enemy, which makes every cast here carry a
+ * plain 100%-damage clause (`basicDamage()`). That is not decoration — a DETONATE-ONLY cast
+ * resolves nobody on a positional run and its detonation is dropped entirely, so without the
+ * damage clause all three cases measure 0 (a green-and-vacuous trap the ratio assertions would
+ * NOT have caught, since 0/0 is NaN and the `> 0` guard is what fires). Every ship in the corpus
+ * that takes this parser path carries damage in the same clause, so the damage clause is the
+ * CORPUS-FAITHFUL shape, not a workaround. The pinned ratios are unchanged (+45%), and the
+ * absolute burst totals are byte-identical to the pre-branch run: corrosion 120000 -> 174000,
+ * bomb 600 -> 870.
  *
  * ROUND SHAPE: the buff-grant, the DoT-apply, and the detonate-dot all sit in the SAME active
  * slot, recast every round. `detonate-dot` resolves BEFORE that round's own apply (playerTurn.ts
@@ -34,10 +45,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
-import { createEventBus, type CombatEvent } from '../events';
 import { BUFFS } from '../../../constants/buffs';
 import { parseBuffEffects } from '../../calculators/buffParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 const BUFF_NAME = 'Out. Detonation Damage Up III';
 const EXPECTED_PCT = 45;
@@ -63,6 +74,17 @@ const detonationBuff = (): Ability => {
         },
     };
 };
+
+/** A plain 100% active damage clause. Required so the cast RESOLVES a positional victim — see
+ *  the SP-4b-2b note in the file header. */
+const basicDamage = (): Ability => ({
+    id: 'basic-damage',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100 },
+});
 
 /** Applies a corrosion DoT, then detonates it on a later cast (live path). */
 const applyCorrosion = (): Ability => ({
@@ -109,7 +131,7 @@ const activeSlot = (abilities: Ability[]): ShipSkills['slots'][number] => ({
 });
 
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: ATTACK,
     crit: 0,
     critDamage: 0,
@@ -135,18 +157,15 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     ...overrides,
 });
 
-/** Total damage credited across the run via the non-positional aggregate `dot-detonated`
- *  event — which already sums bomb + inferno + corrosion for a given round (engine.ts folds
- *  `result.total` there), so this single listener covers both paths without double-counting
- *  the bomb-only `bomb-detonated` event that fires alongside it. */
+/** Total detonation damage credited across the run.
+ *
+ *  SP-4b-2b: this used to sum the aggregate `dot-detonated` event, on the reasoning that engine.ts
+ *  folds `bomb + inferno + corrosion` into it. That is a NON-positional property. On a positional
+ *  run a bomb burst emits `bomb-detonated` and no `dot-detonated` at all, so the old listener read
+ *  0 for the whole snapshot-path case. `rawTotals.detonation` is the one channel both paths fold
+ *  into, and it reproduces the pre-branch magnitudes exactly. */
 function detonationTotal(input: CombatEngineInput): number {
-    const bus = createEventBus();
-    let total = 0;
-    bus.on('dot-detonated', (e: Extract<CombatEvent, { type: 'dot-detonated' }>) => {
-        total += e.damage;
-    });
-    runCombat({ ...input, bus });
-    return total;
+    return runCombat(input).rawTotals.detonation;
 }
 
 describe('Out. Detonation Damage Up III scales detonation bursts', () => {
@@ -154,44 +173,59 @@ describe('Out. Detonation Damage Up III scales detonation bursts', () => {
         const withoutBuff = detonationTotal(
             BASE({
                 shipSkills: {
-                    slots: [activeSlot([applyCorrosion(), detonateCorrosion()])],
+                    slots: [activeSlot([basicDamage(), applyCorrosion(), detonateCorrosion()])],
                 },
             })
         );
-        expect(withoutBuff).toBeGreaterThan(0);
+        // Absolute pin (byte-identical to the pre-branch, dummy-sink run): two 60000 corrosion
+        // bursts. `> 0` alone would not notice the detonate-only zero this file walked into.
+        expect(withoutBuff).toBe(120000);
     });
 
     it('scales the burst by exactly +45% when the buff is held (live detonationMult path)', () => {
         const withoutBuff = detonationTotal(
             BASE({
                 shipSkills: {
-                    slots: [activeSlot([applyCorrosion(), detonateCorrosion()])],
+                    slots: [activeSlot([basicDamage(), applyCorrosion(), detonateCorrosion()])],
                 },
             })
         );
         const withBuff = detonationTotal(
             BASE({
                 shipSkills: {
-                    slots: [activeSlot([detonationBuff(), applyCorrosion(), detonateCorrosion()])],
+                    slots: [
+                        activeSlot([
+                            detonationBuff(),
+                            basicDamage(),
+                            applyCorrosion(),
+                            detonateCorrosion(),
+                        ]),
+                    ],
                 },
             })
         );
-        expect(withoutBuff).toBeGreaterThan(0);
+        expect(withoutBuff).toBe(120000);
+        expect(withBuff).toBe(174000);
         expect(withBuff / withoutBuff).toBeCloseTo(1 + EXPECTED_PCT / 100, 6);
     });
 
     it('scales a bomb applied while holding the buff by exactly +45% (PendingBomb snapshot path)', () => {
         const withoutBuff = detonationTotal(
-            BASE({ shipSkills: { slots: [activeSlot([applyBomb(), detonateBomb()])] } })
+            BASE({
+                shipSkills: { slots: [activeSlot([basicDamage(), applyBomb(), detonateBomb()])] },
+            })
         );
         const withBuff = detonationTotal(
             BASE({
                 shipSkills: {
-                    slots: [activeSlot([detonationBuff(), applyBomb(), detonateBomb()])],
+                    slots: [
+                        activeSlot([detonationBuff(), basicDamage(), applyBomb(), detonateBomb()]),
+                    ],
                 },
             })
         );
-        expect(withoutBuff).toBeGreaterThan(0);
+        expect(withoutBuff).toBe(600);
+        expect(withBuff).toBe(870);
         expect(withBuff / withoutBuff).toBeCloseTo(1 + EXPECTED_PCT / 100, 6);
     });
 });

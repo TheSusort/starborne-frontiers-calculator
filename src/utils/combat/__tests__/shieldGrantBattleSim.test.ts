@@ -18,6 +18,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // A team actor whose active skill grants a Shield equal to 25% of its Max HP to ALL ALLIES.
 // recipientsFor('all-allies') → playerIds = ['attacker', 'team1'], so the pool must land on
@@ -41,7 +42,7 @@ const SHIELD_ALL_ALLIES_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy(),
     // Focus does NO damage and IS the heal target — it just sits and receives the team shield.
     attack: 0,
     crit: 0,

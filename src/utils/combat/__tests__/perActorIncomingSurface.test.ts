@@ -21,6 +21,7 @@ import { ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatStatBlock } from '../../../types/calculator';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -139,11 +140,18 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
     enemyAttackers: [enemyAttackerAt('enemy-aoe', 'M4', pattern)],
 });
 
-// A purely NON-positional battle: a focus attacker hitting the (real, destructible) DPS enemy,
-// no positions/teamActors/enemyAttackers. SP-U U5: the enemy now takes the round's dealt damage
-// through the shared per-victim funnel, so it records its OWN intake into the per-actor map.
+// A minimal single-opponent battle: a focus attacker hitting ONE real enemy, no positions given
+// on the player side and no teamActors. SP-U U5: the enemy takes the round's dealt damage through
+// the shared per-victim funnel, so it records its OWN intake into the per-actor map.
+//
+// SP-4b-2b: this used to pass NO enemy roster at all, which made the singular vestigial `enemy`
+// the target (`dpsEnemyTarget`) and the bucket key `'enemy'`. An empty roster is now a validation
+// error, and with any roster present the sink is bypassed entirely — measured: the sink records NO
+// per-actor intake at all, even via the 0-max-HP "pressure source" shape. So the U5 property has
+// MOVED to the real opponent rather than vanished, and the bucket key moves with it (M1). The
+// pinned 5000 is unchanged.
 const NON_POSITIONAL: CombatEngineInput = {
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
     attack: 5_000,
     crit: 0,
     critDamage: 0,
@@ -182,14 +190,17 @@ describe('PR7 Task 6 — perActorIncoming surfaced on RoundData', () => {
         expect(round.perActorIncoming?.['pl-front']?.incoming).toBeGreaterThan(0);
     });
 
-    it("a NON-positional DPS round records the real enemy target's own intake (SP-U U5)", () => {
+    it("a single-opponent DPS round records the real enemy target's own intake (SP-U U5)", () => {
         const result = runCombat(NON_POSITIONAL);
         const round = result.rounds[0];
         // The DPS enemy is a real, destructible target: this round's 5000 direct damage lands
-        // through the shared sink → the enemy carries its own per-victim intake bucket.
+        // through the shared funnel → the enemy carries its own per-victim intake bucket.
         expect(round.perActorIncoming).toBeDefined();
-        expect(round.perActorIncoming?.enemy?.incoming).toBe(5000);
-        expect(round.perActorIncoming?.enemy?.shieldAbsorbed).toBe(0);
-        expect(round.perActorIncoming?.enemy?.barrierAbsorbed).toBe(0);
+        expect(round.perActorIncoming?.[BARE_ENEMY_ID]?.incoming).toBe(5000);
+        expect(round.perActorIncoming?.[BARE_ENEMY_ID]?.shieldAbsorbed).toBe(0);
+        expect(round.perActorIncoming?.[BARE_ENEMY_ID]?.barrierAbsorbed).toBe(0);
+        // The vestigial sink took nothing — the intake really is booked against the real actor
+        // and not double-booked on both.
+        expect(round.perActorIncoming?.enemy).toBeUndefined();
     });
 });

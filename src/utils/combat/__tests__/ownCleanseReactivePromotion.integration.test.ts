@@ -32,6 +32,7 @@ import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -173,7 +174,7 @@ const debuffEnemy = (id: string): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const MORAO_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -491,7 +492,7 @@ const allyBTeamActor = (): TeamActor =>
     }) as TeamActor;
 
 const CULTIVATOR_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
     critDamage: 0,

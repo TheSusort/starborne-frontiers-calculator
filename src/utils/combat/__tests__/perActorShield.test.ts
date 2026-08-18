@@ -18,6 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -48,7 +49,7 @@ const selfShield = (pct: number) =>
 // Tank = focus actor 'attacker', speed 100 (acts BEFORE the speed-50 enemy each round),
 // defence 0 (intake == enemy attack), no crit anywhere → deterministic.
 const TANK = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,

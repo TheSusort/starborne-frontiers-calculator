@@ -5,6 +5,7 @@ import { CombatActor } from '../state';
 import { runCombat, CombatEngineInput } from '../engine';
 import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { TeamActorInput } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 describe('shield-applied event + on-shield-applied trigger (H3.5 definitions)', () => {
     it('includes on-shield-applied in LIVE_TRIGGERS', () => {
@@ -41,7 +42,7 @@ describe('shield-applied event + on-shield-applied trigger (H3.5 definitions)', 
 // ---------------------------------------------------------------------------
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy(),
     // Focus does NO damage and IS the heal target — it just sits and receives shield.
     attack: 0,
     crit: 0,

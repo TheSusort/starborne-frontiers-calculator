@@ -21,6 +21,7 @@ import { createStatusEngine } from '../statusEngine';
 import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ── Shared fixtures ────────────────────────────────────────────────────────────
 
@@ -43,7 +44,12 @@ const TEAM_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a run needs an opponent. `enemyDefense: 5000` below is the vestigial fight-wide
+    // scalar (M6, inert on a positional run), so the same 5000 is carried onto the roster entry's
+    // own `stats.defence` where it is actually live. Nothing here measures damage — this file taps
+    // actor construction — but keeping the two in step means a later damage assertion added to
+    // this fixture is not silently facing a 0-defence enemy.
+    enemyAttackers: bareEnemy({ stats: { defence: 5000, hp: 10_000_000 } }),
     attack: 10000,
     crit: 50,
     critDamage: 150,

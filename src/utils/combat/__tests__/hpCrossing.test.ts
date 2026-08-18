@@ -18,6 +18,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability } from '../../../types/abilities';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import {
     registerReactiveListeners,
     executeIntent,
@@ -68,7 +69,10 @@ const cheatDeathBuff = () => ({
  * damaging (empty skills) so the only HP-intake is the enemy attacks / DoT ticks.
  */
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a run needs an opponent. Every case that measures HP intake overrides this with
+    // its own `manualEnemy`; the inert default just satisfies the contract for the cases that do
+    // not (0 attack, so it changes nobody's HP).
+    enemyAttackers: bareEnemy(),
     attack: 1000,
     crit: 0,
     critDamage: 0,
@@ -761,22 +765,24 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         expect(grants[0].round).toBe(2);
     });
 
-    // ── DPS-mode inertness: no healTargetId → the crossing trigger is fully dormant ──
-    // An attacker-only run (DPS mode, no enemyAttackers, no healTargetId) carrying the same
-    // crossing-buff passive. The trigger partitions to REACTIVE (isReactiveAbility →
-    // buff + live trigger), so it is NOT seeded by seedPassiveTimedStatuses → no phantom
-    // round-1 grant. And with no heal target there is no tank-side hp-changed to fire it →
-    // zero Reinforced buff-applied across the whole DPS run.
-    it('DPS-mode inertness: attacker-only run grants NO Reinforced (no round-1 phantom seed, no crossing fire)', () => {
+    // ── DPS-mode: the reactive crossing passive is never PRE-SEEDED ──────────────────────────
+    // The crossing-buff passive partitions to REACTIVE (isReactiveAbility → buff + live trigger),
+    // so `seedPassiveTimedStatuses` must NOT seed it. On an attacker-only DPS run facing an inert
+    // opponent nothing ever crosses, so the ONLY way a Reinforced grant could appear is a phantom
+    // round-1 seed — which makes this negative directly falsifiable (a seeding regression turns it
+    // red immediately, with zero damage in the run).
+    it('DPS-mode: no round-1 phantom seed — an UNDAMAGED attacker-only run grants NO Reinforced', () => {
         idCounter = 0;
         const bus = createEventBus();
         const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        const hpChanged: Extract<CombatEvent, { type: 'hp-changed' }>[] = [];
         bus.on('buff-applied', (e) => buffApplied.push(e));
+        bus.on('hp-changed', (e) => hpChanged.push(e));
         const result = runCombat(
             healBase({
                 numRounds: 3,
                 hp: 10_000,
-                // DPS mode: NO healTargetId, NO enemyAttackers.
+                // DPS mode: NO healTargetId. Opponent present but inert (0 attack).
                 healTargetId: undefined,
                 mode: 'dps',
                 enemyHp: 10_000_000,
@@ -789,10 +795,50 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
 
         // DPS mode → no healing block at all.
         expect(result.healing).toBeUndefined();
-        // The crossing-buff passive is reactive → not seeded → NO phantom round-1 grant,
-        // and no hp-changed in DPS mode → never fires. Zero Reinforced across the whole run.
+        // Premise: the focus took no HP intake, so no crossing could have fired.
+        expect(hpChanged.filter((e) => e.targetId === 'attacker')).toHaveLength(0);
+        // Therefore zero Reinforced == no phantom seed.
+        expect(buffApplied.filter((e) => e.buffName === 'Reinforced')).toHaveLength(0);
+    });
+
+    // ── DPS-mode: a REAL crossing DOES fire the reaction ─────────────────────────────────────
+    // SP-4b-2b FINDING. The case above used to double as a claim that the crossing trigger is
+    // "fully dormant in DPS mode" because "there is no tank-side hp-changed in DPS mode". That
+    // premise was never tested — it was masked by the fixture running with NO enemy attackers, so
+    // nothing was hitting the focus. Facing the SAME 6500-attack enemy as the Tycho/Kafa cases
+    // above, the DPS-mode focus DOES emit a tank-side hp-changed, DOES cross below 40%, and the
+    // crossing reaction DOES grant Reinforced. Pinned here so the real behaviour is on record.
+    it('DPS-mode: a real downward crossing fires the reaction (the old "dormant in DPS mode" premise was masked by having no attacker)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        const hpChanged: Extract<CombatEvent, { type: 'hp-changed' }>[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e));
+        bus.on('hp-changed', (e) => hpChanged.push(e));
+        runCombat(
+            healBase({
+                numRounds: 3,
+                hp: 10_000,
+                healTargetId: undefined,
+                mode: 'dps',
+                enemyHp: 10_000_000,
+                enemyAttackers: [manualEnemy('atk1', 6500)],
+                shipSkills: {
+                    slots: [{ slot: 'passive', abilities: [crossingBuff(false)] }],
+                },
+                bus,
+            })
+        );
+
+        const downwardCrossings = hpChanged.filter(
+            (e) => e.targetId === 'attacker' && e.oldPct >= 40 && e.newPct < 40
+        );
+        expect(downwardCrossings).toHaveLength(1);
+        expect(downwardCrossings[0].round).toBe(1);
+
         const grants = buffApplied.filter((e) => e.buffName === 'Reinforced');
-        expect(grants).toHaveLength(0);
+        expect(grants).toHaveLength(1);
+        expect(grants[0].round).toBe(1);
     });
 });
 

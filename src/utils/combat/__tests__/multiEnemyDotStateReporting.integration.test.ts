@@ -41,6 +41,7 @@ import type { ActiveDoTStack, PendingBomb, CombatActor } from '../state';
 import type { ShipSkills, Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 const HUGE_HP = 1_000_000_000;
 
@@ -114,7 +115,12 @@ const damageKit = (multiplier: number): ShipSkills => ({
 /** Focus attacker with no damage skill: the row's DoT-state fields are the only thing under test,
  *  and a zero-damage focus keeps every enemy alive for the whole window. */
 const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
-    enemyAttackers: [],
+    // SP-4b-2b: a run needs an opponent. Every positional case overrides this with its own
+    // `inertEnemy` roster; the default is the documented 0-MAX-HP "pressure source" that the
+    // legacy-sink case below depends on (see its comment). The id is deliberately NOT the shared
+    // fixture's default `e1` — this file uses `'e1'` for a specific positioned carrier, and
+    // reusing it would conflate two different actors across the file.
+    enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -207,9 +213,15 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
     });
 
     it('a NON-positional run still reports the dummy sink (legacy path unchanged)', () => {
-        // No `enemyAttackers` → the dummy `enemy` is the sole opponent and stays in the turn
-        // order, exactly as before this fix. The carrier list is then [enemy], so the reads are
-        // byte-identical to the old closure.
+        // The dummy `enemy` is the DoT carrier and stays in the turn order, exactly as before this
+        // fix. The carrier list is then [enemy], so the reads are byte-identical to the old closure.
+        //
+        // SP-4b-2b: this used to get there by passing NO roster. A roster is now required, and
+        // omitting `target`/`pattern` does NOT keep a run non-positional (`normalizeCombatRoster`
+        // fills both). The remaining non-positional shape is BASE's 0-MAX-HP "pressure source":
+        // `resolvesPositionalVictim` finds nobody targetable (positionalBinding.ts:60-70), so the
+        // carrier list stays [enemy] and every number below is unchanged. (SP-4c must revisit this
+        // case when it deletes the dummy.)
         const row = runCombat({
             ...BASE,
             shipSkills: { slots: [] },

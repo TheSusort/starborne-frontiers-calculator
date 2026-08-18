@@ -38,6 +38,7 @@ import type { CombatActor, PendingBomb, PendingAccumulator } from '../state';
 import type { CombatStatBlock } from '../../../types/calculator';
 import type { CombatEvent } from '../events';
 import { createEventBus } from '../events';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -159,7 +160,14 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
 // Non-positional BASE: a single focus dummy enemy, NO position/target/pattern/enemyAttackers — the
 // legacy focus-dummy timed path. Timed containers are seeded on the focus dummy ('enemy').
 const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a run needs an opponent, and merely omitting `target`/`pattern` does NOT keep one
+    // non-positional (`normalizeCombatRoster`'s `withTargeting` fills both). The remaining
+    // non-positional shape is the documented 0-MAX-HP "pressure source": `resolvesPositionalVictim`
+    // finds nobody targetable (positionalBinding.ts:60-70), so the cast stays on the legacy dummy
+    // sink and every number in the cases below is byte-identical to the pre-branch run. The id is
+    // deliberately distinct from the shared fixture's default so it cannot be confused with a
+    // positioned carrier elsewhere in this file. (SP-4c must revisit these cases with the dummy.)
+    enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: FOCUS_ATTACK,
     crit: 0,
     critDamage: 0,
@@ -399,17 +407,28 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
         expect(allyTurns.length).toBe(1);
     });
 
-    it('case 6: REGRESSION (non-positional) — a player-actor timed container is INERT at the player turn (legacy focus-dummy path unchanged)', () => {
+    it('case 6: the legacy focus-dummy timed path is unchanged, and the focus OWN container now bursts alongside it', () => {
         idc = 0;
-        // PIN — MUST PASS today. No position/target/pattern/enemyAttackers → the focus is
-        // non-positional. We tap the PLAYER focus 'attacker' with a timed bomb. Without the B2
-        // burst (and even with it — it is gated on isPositional), the non-positional player turn does
-        // NOT burst the focus's own container. We separately seed the focus DUMMY ('enemy') with a
-        // bomb to confirm the legacy focus-dummy timed path is unchanged (bursts on the dummy's turn).
+        // PIN. We tap the PLAYER focus 'attacker' with a timed bomb AND the focus DUMMY ('enemy')
+        // with another, to hold the legacy focus-dummy timed path (bursts on the dummy's turn) next
+        // to the per-victim player path.
+        //
+        // SP-4b-2b — WHAT MOVED, AND WHY. This case used to assert that the focus's OWN container is
+        // INERT, on the premise that a run with no position/target/pattern/enemyAttackers leaves the
+        // focus NON-positional and the B2 burst is gated on `isPositional`. That premise no longer
+        // exists: `normalizeCombatRoster` ASSIGNS the focus a slot (DEFAULT_ATTACKER_SLOT) and
+        // assigns every roster member one too, so `isPositional(focus.position, opposingRoster)` is
+        // now a TAUTOLOGY below the boundary — there is no legal input that makes it false. The
+        // focus's bomb therefore bursts, measured at 7000 in round 2, and that is pinned below
+        // rather than absorbed. The legacy half of the case is untouched: the dummy's bomb still
+        // bursts for exactly 3000 on the dummy's turn in round 2.
+        //
+        // BASE is the 0-MAX-HP pressure source (see its comment), which is what keeps the legacy
+        // focus-dummy path — as opposed to a positional victim — in play at all. (SP-4c revisits it.)
         const { events, result } = collect(
             NONPOS_BASE({
                 __testTapActors: (actors: CombatActor[]) => {
-                    // Player focus actor's own container — must NOT burst (no positional path).
+                    // Player focus actor's own container — bursts on its own turn (see above).
                     actors
                         .find((a) => a.id === 'attacker')
                         ?.pendingBombs.push(timedBomb(1000, 7, 2, 'enemy-applier'));
@@ -421,21 +440,28 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
             })
         );
 
-        // The player focus actor's bomb did NOT burst via any positional path (no per-victim surface).
-        for (const round of result.rounds) {
-            expect(round.perTargetDamage?.['attacker']).toBeUndefined();
-            expect(round.perActorDetonation?.['enemy-applier']).toBeUndefined();
-        }
+        // The player focus actor's own 7 x 1000 container bursts through the per-victim surface, on
+        // its own turn in round 2, credited to its applier — the behaviour that replaced this
+        // case's original "INERT" claim.
+        expect(result.rounds[0].perTargetDamage?.['attacker']).toBeUndefined();
+        expect(result.rounds[1].perTargetDamage?.['attacker']).toBe(7000);
+        expect(result.rounds[0].perActorDetonation?.['enemy-applier']).toBeUndefined();
+        expect(result.rounds[1].perActorDetonation?.['enemy-applier']).toBe(7000);
 
         // Legacy focus-dummy path unchanged: round 1 no burst, round 2 burst 3000 via detonationDamage.
         expect(result.rounds[0].detonationDamage).toBe(0);
         expect(result.rounds[1].detonationDamage).toBe(3000);
 
-        // Exactly one bomb-detonated (the dummy's), in round 2, attributed to the applier, damage 3000.
-        // The focus actor's 7 × 1000 bomb produced NO event.
+        // Two bomb-detonated events: the focus's own per-victim burst and the dummy's legacy one.
+        // The legacy one is asserted in full below — unchanged shape, round, applier and damage.
         const bombDet = events.filter((e) => e.type === 'bomb-detonated');
-        expect(bombDet.length).toBe(1);
-        expect(bombDet[0]).toMatchObject({
+        expect(bombDet.length).toBe(2);
+        expect(
+            bombDet.filter((e) => e.type === 'bomb-detonated' && e.victimId === 'attacker')
+        ).toHaveLength(1);
+        const legacy = bombDet.filter((e) => e.type === 'bomb-detonated' && e.victimId === 'enemy');
+        expect(legacy).toHaveLength(1);
+        expect(legacy[0]).toMatchObject({
             actorId: 'attacker',
             round: 2,
             damage: 3000,
@@ -508,48 +534,38 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
         expect(playerBombDet[0].stacks).toBe(enemyBombDet[0].stacks);
     });
 
-    it('case 7: GATE-NEGATIVE — a positioned player WITH a timed container but enemyAttackers EMPTY does NOT burst', () => {
+    // ── case 7: the `isPositional` half of the gate is UNREACHABLE below the boundary ─────────
+    //
+    // This case used to make the burst gate's second conjunct false by passing `enemyAttackers: []`
+    // while keeping a positioned focus with a timed container, and asserted no burst. SP-4b-2b
+    // removed that input class in two independent ways:
+    //   1. an empty roster is a validation error at `normalizeCombatRoster` (the assertion below);
+    //   2. even a NON-empty roster cannot make `isPositional` false any more — the boundary assigns
+    //      EVERY roster member a slot, so `opposing.some(a => a.position !== undefined)` always
+    //      holds, and it assigns the focus one too, so the first conjunct always holds. Measured in
+    //      case 6: with the 0-MAX-HP pressure source (the last non-positional shape there is) the
+    //      focus's own timed container BURSTS. `isPositional` is now a tautology for a player actor.
+    //
+    // So there is no fixture shape left that exercises the gate's `isPositional`-false branch, and
+    // the original non-vacuity check (temporarily dropping the conjunct made this case burst 4000)
+    // cannot be reproduced. What IS still testable is the gate's OTHER conjunct — a positioned
+    // player with NO timed container never bursts — which cases 1-5 cover by construction. This
+    // case therefore keeps only the claim that still has a premise: the input it relied on is
+    // rejected by name. (SP-4c: when the dummy goes, re-read the gate; if `isPositional` is still
+    // in it, it is dead code.)
+    it('case 7: the empty-roster shape this gate-negative relied on is rejected at the boundary', () => {
         idc = 0;
-        // GATE PIN — the `isPositional` half. The new per-positioned-player burst is gated on
-        //   hasTimedContainers && isPositional(actor.position, opposingRoster)
-        // where opposingRoster = enemyAttackerActors for a player actor. isPositional(pos, opposing)
-        // = !!pos && opposing.some(a => a.position !== undefined). We make the SECOND conjunct false
-        // while keeping everything else true:
-        //   • The focus 'attacker' HAS a board position (M4) → first conjunct satisfied.
-        //   • It DOES carry a timed bomb → hasTimedContainers true.
-        //   • It DOES take its own turn every round.
-        //   • The ONLY thing false: enemyAttackers is EMPTY → enemyAttackerActors has no positioned
-        //     actor → isPositional false → the burst is suppressed.
-        //
-        // NON-VACUITY CHECK (performed during development): temporarily editing the closure's gate to
-        // `if (!hasTimedContainers) return;` (dropping the isPositional conjunct) makes THIS case burst
-        // 4000 and the assertions below fail. After confirming, the flip was REVERTED. So this pin is
-        // genuinely gated on isPositional, not vacuous.
-        const { events, result } = collect(
-            POSITIONAL_BASE({
-                enemyAttackers: [], // positioned focus, but NO positioned enemy → isPositional false
-                __testTapActors: (actors: CombatActor[]) => {
-                    actors
-                        .find((a) => a.id === 'attacker')
-                        ?.pendingBombs.push(timedBomb(1000, 4, 2, 'enemy-applier'));
-                },
-            })
-        );
-
-        // The focus actor took a turn each of the 2 rounds (reached the turn body / the gate).
-        const focusTurns = events.filter(
-            (e) => e.type === 'turn-started' && e.actorId === 'attacker'
-        );
-        expect(focusTurns.length).toBeGreaterThanOrEqual(2);
-
-        // The timed bomb did NOT burst via the per-positioned path in EITHER round.
-        for (const round of result.rounds) {
-            expect(round.perTargetDamage?.['attacker']).toBeUndefined();
-            expect(round.perActorDetonation?.['enemy-applier']).toBeUndefined();
-        }
-
-        // And NO bomb-detonated event fired at all.
-        const bombDet = events.filter((e) => e.type === 'bomb-detonated');
-        expect(bombDet.length).toBe(0);
+        expect(() =>
+            collect(
+                POSITIONAL_BASE({
+                    enemyAttackers: [],
+                    __testTapActors: (actors: CombatActor[]) => {
+                        actors
+                            .find((a) => a.id === 'attacker')
+                            ?.pendingBombs.push(timedBomb(1000, 4, 2, 'enemy-applier'));
+                    },
+                })
+            )
+        ).toThrow(/enemyAttackers is empty/);
     });
 });

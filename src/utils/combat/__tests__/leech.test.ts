@@ -4,6 +4,8 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import { createEventBus, CombatEvent } from '../events';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task 6: standing-leech credit hook (engine.ts procStandingLeeches).
@@ -26,7 +28,12 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
 });
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a run needs an opponent. The id is deliberately NOT the shared fixture's default
+    // `e1` — the enemy-side blocks further down build their OWN attackers with `id: 'e1'` and
+    // filter events on that string, and reusing it here would conflate two different actors.
+    // 10M HP so a multi-round damage fixture never destroys it mid-run (which would change the
+    // shape of the fight and silently shorten the leech window).
+    enemyAttackers: bareEnemy({ id: 'leech-target', stats: { hp: 10_000_000 } }),
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -154,14 +161,22 @@ describe('standing-leech hook — damage-dealt passive', () => {
             })
         );
         // Round 1 has only direct (corrosion applied this round ticks on the enemy turn too).
-        // For each round, the leech directHeal must equal (direct + corrosion) × 0.20 — i.e.
-        // the corrosion portion of the round's credited damage is leeched at tick time.
+        // For each round, the leech directHeal must equal the round's whole credited damage
+        // × 0.20 — i.e. the corrosion portion is leeched at tick time, not just the direct hit.
+        //
+        // M3: `row.directDamage` is 0 on a positional run (the scalar channel is dead), so the
+        // round's credited total is read off the per-victim channel instead. Measured against the
+        // base commit, the per-round pairs are byte-identical either way: 30000/6000, 55000/11000,
+        // 80000/16000.
         for (let r = 1; r <= 3; r++) {
             const row = result.rounds[r - 1];
-            const credited = row.directDamage + row.corrosionDamage;
+            const credited = dealtBy([row], 'attacker');
             expect(roundHeal(result, r, 'directHeal')).toBeCloseTo(credited * 0.2, 4);
-            // Corrosion must actually be ticking (so the test exercises the tick path).
+            // Corrosion must actually be ticking (so the test exercises the tick path), and it must
+            // be a real SHARE of the credited total — otherwise the equality above could hold on
+            // the direct hit alone and say nothing about the tick.
             expect(row.corrosionDamage).toBeGreaterThan(0);
+            expect(credited).toBeGreaterThan(row.corrosionDamage * 0.99);
         }
     });
 
@@ -170,8 +185,20 @@ describe('standing-leech hook — damage-dealt passive', () => {
         idCounter = 0;
         // Two entries (ally → heal target, self → owner). With attacker as the heal target
         // both recipients resolve to 'attacker', so directHeal is credited twice per burst.
+        //
+        // SP-4b-2b — WHY THIS CASE KEEPS THE LEGACY SINK. A detonation-scope standing leech pays
+        // out through the `creditDamage` chokepoint. On a POSITIONAL run the burst is booked on the
+        // per-victim channel instead and the leech proc is not reached, so the leech pays ZERO on a
+        // positional detonation burst. That is a known, deliberately-unfixed engine gap with an
+        // owner ruling to address it in its own PR — so this case must not be re-pinned to 0 and
+        // must not chase the fix. It instead keeps the channel it was written against, via the
+        // documented 0-MAX-HP "pressure source" roster: `resolvesPositionalVictim` finds nobody
+        // targetable (positionalBinding.ts:60-70), the burst stays on the sink, and the numbers are
+        // byte-identical to the pre-branch run. (Revisit when the detonation-leech gap is closed;
+        // SP-4c must revisit it when it deletes the dummy.)
         const result = runCombat(
             BASE({
+                enemyAttackers: bareEnemy({ id: 'leech-pressure-source', stats: { hp: 0 } }),
                 numRounds: 4,
                 hp: 10_000,
                 healTargetId: 'attacker',

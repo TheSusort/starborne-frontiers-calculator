@@ -18,6 +18,8 @@ import { createEventBus } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 
 // Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
 // SP-C Cobalt triage probe / statVsTarget.test.ts parser block.
@@ -42,9 +44,13 @@ const cobaltShipSkills = (): ShipSkills =>
     ({ slots: [{ slot: 'active', abilities: cobaltActiveAbilities() }] }) as ShipSkills;
 
 describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () => {
-    it('player-side Cobalt: the 25%-max-HP bonus lands when its own maxHp exceeds the (dummy) enemy maxHp', () => {
+    it('player-side Cobalt: the 25%-max-HP bonus lands when its own maxHp exceeds the opponent maxHp', () => {
         const makeInput = (hp: number, enemyHp: number): CombatEngineInput => ({
-            enemyAttackers: [],
+            // SP-4b-2b: the gate compares Cobalt's max HP against ITS ACTUAL VICTIM's max HP.
+            // On a positional run that victim is the roster entry, not the `enemyHp` scalar
+            // (M6 — the scalar is inert), so the pool moves onto the roster entry's own
+            // `stats.hp` and `enemyHp` is kept in step purely so the two never disagree.
+            enemyAttackers: bareEnemy({ stats: { hp: enemyHp } }),
             attack: 1000,
             crit: 0,
             critDamage: 0,
@@ -72,8 +78,13 @@ describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () =
         // reduction). The 25%-of-50000-maxHp bonus (12500) is far larger — a clean signal.
         const advantaged = runCombat(makeInput(50000, 18000));
         const disadvantaged = runCombat(makeInput(10000, 18000));
-        expect(advantaged.rounds[0].directDamage).toBeGreaterThan(10_000);
-        expect(disadvantaged.rounds[0].directDamage).toBeLessThan(3_000);
+        // M3: the scalar `directDamage` channel is dead on a positional run — read Cobalt's own
+        // per-victim payout instead.
+        expect(dealtBy([advantaged.rounds[0]], 'attacker')).toBeGreaterThan(10_000);
+        expect(dealtBy([disadvantaged.rounds[0]], 'attacker')).toBeLessThan(3_000);
+        // …and the disadvantaged run still landed its BASE hit, so `< 3_000` is a statement about
+        // the bonus being gated off and not about the cast doing nothing at all.
+        expect(dealtBy([disadvantaged.rounds[0]], 'attacker')).toBeGreaterThan(0);
     });
 
     it('enemy-side Cobalt: the SAME gate fires when Cobalt is the ENEMY attacker (team-symmetry)', () => {
@@ -197,7 +208,10 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
         // RoundData.activeEnemyDebuffs (the reliable per-round landed-debuff source used
         // elsewhere in this suite) proves the real effect landed, not just the event.
         const makeInput = (critDamage: number): CombatEngineInput => ({
-            enemyAttackers: [],
+            // SP-4b-2b: the gate compares crit power against the ACTUAL victim. `bareEnemy()`
+            // carries critDamage 0, exactly like the dummy it replaces, so the gate arithmetic
+            // below is unchanged.
+            enemyAttackers: bareEnemy({ stats: { hp: 1_000_000 } }),
             attack: 1000,
             crit: 0,
             critDamage,
@@ -221,13 +235,13 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
             speed: 100,
         });
 
-        // The DPS-dummy enemy always has critDamage 0 (no enemy crit-power config) — any
-        // positive self critDamage exceeds it.
+        // The opposing roster entry has critDamage 0 (as the dummy did) — any positive self
+        // critDamage exceeds it.
         const advantaged = runCombat(makeInput(200));
         const advantagedNames = advantaged.rounds[0].activeEnemyDebuffs.map((d) => d.buffName);
         expect(advantagedNames).toContain('Stasis');
 
-        // Gate-flip control: self critDamage 0 vs the dummy's hardcoded 0 → NOT strictly
+        // Gate-flip control: self critDamage 0 vs the opponent's 0 → NOT strictly
         // greater → Stasis absent (Crit Rate Down II, the unconditional co-debuff, still lands).
         const disadvantaged = runCombat(makeInput(0));
         const disadvantagedNames = disadvantaged.rounds[0].activeEnemyDebuffs.map(
@@ -263,11 +277,15 @@ const chakaraShipSkills = (): ShipSkills =>
     ({ slots: [{ slot: 'active', abilities: chakaraActiveAbilities() }] }) as ShipSkills;
 
 describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', () => {
-    it('the charge gain lands only when the (dummy) enemy is faster than Chakara', () => {
+    it('the charge gain lands only when the opponent is faster than Chakara', () => {
         // chargeCount kept high so the ship never actually reaches its charged skill (stays on
         // 'active' every round) — isolating the charge-count delta as the only observable signal.
         const makeInput = (speed: number, enemySpeed: number): CombatEngineInput => ({
-            enemyAttackers: [],
+            // SP-4b-2b: "all damaged enemies have more Speed than this Unit" is evaluated against
+            // the ACTUAL damaged enemies, so the comparison speed moves onto the roster entry's
+            // own `stats.speed`. The `enemySpeed` scalar below is the vestigial fight-wide one
+            // (M6, inert positionally) and is kept in step only so the two never disagree.
+            enemyAttackers: bareEnemy({ stats: { speed: enemySpeed, hp: 1_000_000 } }),
             attack: 1000,
             crit: 0,
             critDamage: 0,

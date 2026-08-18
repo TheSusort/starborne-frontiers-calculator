@@ -23,6 +23,7 @@ import { emptyPreFightModifiers } from '../preFight';
 import type { PreFightCombatModifiers } from '../preFight';
 import { ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
+import { bareEnemy as inertOpponent, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 const preFight = (overrides: Partial<PreFightCombatModifiers>): PreFightCombatModifiers => ({
     ...emptyPreFightModifiers(),
@@ -79,7 +80,10 @@ describe('F3 — createActor pre-fight shield seeding', () => {
 const emptySkills = (): ShipSkills => ({ slots: [{ slot: 'active', abilities: [] }] });
 
 const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a run needs an opponent. Imported ALIASED — this file already owns a local
+    // `bareEnemy(crit, pf)` further down with a different signature (the crit-family mirror's
+    // attacker), and shadowing it would silently retarget those four cases.
+    enemyAttackers: inertOpponent(),
     attack: 1000,
     crit: 0,
     critDamage: 0,
@@ -125,8 +129,13 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             enemyDefenseModifier: 0,
             incomingDamageModifier: -5,
         });
-        // …and does NOT bleed onto other actors (the dummy enemy has no preFight).
+        // …and does NOT bleed onto other actors: neither the vestigial dummy sink nor the real
+        // positioned opponent has any preFight of its own.
         expect(captured!('enemy')).toEqual({
+            enemyDefenseModifier: 0,
+            incomingDamageModifier: 0,
+        });
+        expect(captured!(BARE_ENEMY_ID)).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
         });

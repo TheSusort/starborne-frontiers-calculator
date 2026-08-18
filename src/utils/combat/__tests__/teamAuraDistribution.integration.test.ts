@@ -35,6 +35,7 @@ import type { Position } from '../../../types/encounters';
 import type { CombatStatBlock } from '../../../types/calculator';
 import type { CombatEvent } from '../events';
 import { createEventBus } from '../events';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -157,7 +158,7 @@ const auraSourceTeamActor = (id: string, aura: Ability): TeamActorEngineInput =>
     teamAlly(id, 0, passiveOnly(aura));
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
     critDamage: 0,

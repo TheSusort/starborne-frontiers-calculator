@@ -36,6 +36,7 @@ import type { CombatActor, ActiveDoTStack } from '../state';
 import type { CombatStatBlock } from '../../../types/calculator';
 import type { CombatEvent } from '../events';
 import { createEventBus } from '../events';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -143,7 +144,14 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
 // Non-positional BASE: a single focus dummy enemy, NO position/target/pattern/enemyAttackers — the
 // legacy DPS path. DoT containers are seeded on the focus dummy ('enemy') for the dummy-tick path.
 const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    enemyAttackers: [],
+    // SP-4b-2b: a run needs an opponent, and merely omitting `target`/`pattern` does NOT keep one
+    // non-positional (`normalizeCombatRoster`'s `withTargeting` fills both). The remaining
+    // non-positional shape is the documented 0-MAX-HP "pressure source": `resolvesPositionalVictim`
+    // finds nobody targetable (positionalBinding.ts:60-70), so the cast stays on the legacy dummy
+    // sink and every number in the cases below is byte-identical to the pre-branch run. The id is
+    // deliberately distinct from the shared fixture's default so it cannot be confused with a
+    // positioned carrier elsewhere in this file. (SP-4c must revisit these cases with the dummy.)
+    enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: FOCUS_ATTACK,
     crit: 0,
     critDamage: 0,
