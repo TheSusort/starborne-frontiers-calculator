@@ -389,8 +389,12 @@ describe('Cobalt Out. Damage Up II — engine consumption (recurring, every turn
     // SP-4c-2a (B1): `dummySink()` (buildInput's default enemy) carries no `stats.hp`, so the
     // targetable-HP floor (normalizeRoster.ts) now raises it to MIN_TARGETABLE_MAX_HP and the run
     // is positional — the scalar `directDamage` credit is suppressed in favour of the per-victim
-    // map. Read the per-victim channel (summed across the single victim) and fall back to the
-    // scalar when it is absent, the same migration as allyChargeGrant.test.ts's `roundDealt`.
+    // map. Read the per-victim channel only — NO scalar fallback. Every call below goes through
+    // `buildInput` without an `enemyAttackers` override, so every run in this file uses the same
+    // always-positional `dummySink()`; a fallback to the scalar channel would never fire and would
+    // only mask a future regression (the deleted non-positional shape returning) by silently
+    // reading a stale 0 instead of failing loudly. Matches the stricter, fallback-free shape in
+    // `enemyTeamRouting.test.ts`'s `playerDealt`.
     const runFocusDamage = (withBuff: boolean): number[] => {
         const abilities = resolvePassiveAbilities(COBALT_P2).filter(
             (a) =>
@@ -403,9 +407,7 @@ describe('Cobalt Out. Damage Up II — engine consumption (recurring, every turn
         );
         return r.rounds.map((round) => {
             const perVictim = round.perTargetDealt?.['attacker'];
-            return perVictim
-                ? Object.values(perVictim).reduce((sum, v) => sum + v, 0)
-                : round.directDamage;
+            return perVictim ? Object.values(perVictim).reduce((sum, v) => sum + v, 0) : 0;
         });
     };
 

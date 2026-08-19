@@ -152,12 +152,15 @@ const totalIncoming = (r: ReturnType<typeof runCombat>): number =>
  * SP-4c-2a (B1): `enemyHitter(...)` carries no `stats.hp`, so the targetable-HP floor
  * (normalizeRoster.ts) now raises it to MIN_TARGETABLE_MAX_HP and the run is positional — the
  * scalar `totalRoundDamage`/`directDamage` credits are suppressed to 0 in favour of the
- * per-victim map. Sum the per-victim channel (across every victim the focus dealt to) and fall
- * back to the scalar when it is absent.
+ * per-victim map. Sum the per-victim channel only — NO scalar fallback. Every enemy fixture in
+ * this file is `enemyHitter(...)`, so every run is positional; a fallback would be dead and would
+ * only mask a future regression (the deleted non-positional shape returning) by silently reading
+ * a stale 0 instead of failing loudly. Matches the stricter, fallback-free shape already used by
+ * `dealtBySource` below and by `enemyTeamRouting.test.ts`'s `playerDealt`.
  */
 const playerDealt = (round: RoundData): number => {
     const perVictim = round.perTargetDealt?.['attacker'];
-    return perVictim ? Object.values(perVictim).reduce((sum, v) => sum + v, 0) : round.directDamage;
+    return perVictim ? Object.values(perVictim).reduce((sum, v) => sum + v, 0) : 0;
 };
 
 /**
