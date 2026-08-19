@@ -28,7 +28,8 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { splashDamageForBomb } from '../bombSplash';
 import type { PendingBomb } from '../state';
-import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
+import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { normalizeCombatRoster, MIN_TARGETABLE_MAX_HP } from '../normalizeRoster';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -234,30 +235,39 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
         expect(round.perActorSplash?.['enemy-a']).toBeUndefined(); // A was the first to die
     });
 
-    // ─── (c) Non-positional no-op ─────────────────────────────────────────────
-    // No ships have board positions. A ship has pendingBombs and dies.
-    // The victim.position gate (Task 1) must prevent any splash.
-    // SP-4c-2a CHANGED WHAT THIS CASE PROVES (coverage reduced, documented rather than papered
-    // over). It used to pin "a dying bombed ship with no position produces no splash": the ONLY
-    // way to reach an enemy actor with `position === undefined` was the documented "pressure
-    // source" roster (`bareEnemy({ stats: { hp: 0 } })`) — 0 max HP kept `resolvesPositionalVictim`
-    // from finding anyone targetable, so the cast fell back to the legacy scalar `enemy` dummy
-    // sink, which `normalizeCombatRoster` never auto-places.
+    // ─── (c) Non-positional no-op — TRIPWIRE, premise unconstructible ────────────
     //
-    // The targetable-HP floor (`normalizeRoster.ts`, `MIN_TARGETABLE_MAX_HP`) closes that shape:
-    // the same 0-max-HP enemy is now raised to 1,000,000 HP, so (a) it IS auto-placed, like every
-    // enemy attacker unconditionally is, and (b) it survives the fixture's 5000-damage hit outright
-    // (5000 ≪ 1,000,000) — confirmed by standalone repro against the real engine: `perTargetDealt`
-    // names the real actor (`BARE_ENEMY_ID`) for 5000, and no `ship-destroyed` fires. So this case
-    // no longer exercises "position undefined blocks the splash gate" at all — there is no longer
-    // any enemy-side shape with an undefined position (every enemy attacker is unconditionally
-    // auto-placed post-floor), and this fixture's victim does not even die any more. What remains
-    // is "no splash" for a DIFFERENT, weaker reason (no death), which is already covered by
-    // "a bombed enemy that SURVIVES the hit does not splash" above. The position-undefined-blocks
-    // premise has no substitute case in this file post-floor — flagged as a real coverage loss.
-    it('(c) [coverage-reduced] the former 0-max-HP pressure source is now floored, positioned, and survives the hit — no splash, but no longer because of the position gate', () => {
-        idc = 0;
-        const noPositionInput: CombatEngineInput = {
+    // (a) THE CLAIM THIS USED TO PIN. "A dying bombed ship with no position produces no splash" —
+    // the `victim.position !== undefined` conjunct at the splash gate (engine.ts ~:5253) blocking
+    // it. The ONLY way to reach an enemy-side splash VICTIM with `position === undefined` was the
+    // documented "pressure source" roster (`bareEnemy({ stats: { hp: 0 } })`): 0 max HP kept
+    // `resolvesPositionalVictim` from finding anyone targetable, so the cast fell back to the
+    // legacy scalar `'enemy'` dummy sink as the victim — and that dummy (`createActor({ id: 'enemy'
+    // }, ...)`, engine.ts ~:1932) is the ONE actor in the whole engine created without a `position`
+    // (`normalizeCombatRoster` auto-places every real roster member; the dummy is built separately
+    // and never passed through it), so it alone could carry `position === undefined` as a victim.
+    //
+    // (b) WHY THE CONSTRUCTIVE PATH IS NOW CLOSED. The targetable-HP floor (`normalizeRoster.ts`,
+    // `MIN_TARGETABLE_MAX_HP`) raises the same 0-max-HP enemy to 1,000,000 HP unconditionally, so
+    // `resolvesPositionalVictim` now finds it targetable and the cast never falls back to the
+    // dummy — the bomb always resolves against the real, auto-placed roster member instead
+    // (confirmed by standalone repro: `perTargetDealt` names the real actor for the firing hit, and
+    // the dummy is never touched). There is no longer any input that reaches an enemy-side splash
+    // victim with `position === undefined`.
+    //
+    // (c) EXPECTED, NOT ACCIDENTAL. The dummy actor itself (cluster A) is deleted outright in rung
+    // 4c-2d, at which point no actor anywhere can ever carry `position === undefined` again — the
+    // `victim.position !== undefined` conjunct becomes permanently tautological. This coverage loss
+    // is authorised by the same ruling as `dummyEnemyTurnGate.test.ts` and
+    // `perVictimDotTick.integration.test.ts`'s GATE RETENTION case.
+    //
+    // (d) TRIPWIRE. Assert the premise is unconstructible: the roster this fixture asks for (0 max
+    // HP) arrives at the engine already floored to a targetable value. If the floor is ever removed
+    // or gains an escape hatch, this fails and flags that the old "position undefined blocks the
+    // splash gate" claim needs re-deriving (and re-testing against the real gate) before rung
+    // 4c-2d can delete it safely.
+    it('TRIPWIRE: the "position-undefined splash victim" premise is gone — the floor arrives already targetable', () => {
+        const input: CombatEngineInput = {
             enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 5000,
             crit: 0,
@@ -266,7 +276,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             chargeCount: 0,
             shipSkills: { slots: [bombAndStrike()] },
             enemyDefense: 0,
-            enemyHp: 5000, // dies to first hit → bomb is pending at death
+            enemyHp: 5000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -281,22 +291,14 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             hp: 1_000_000_000,
             healTargetId: 'attacker',
             mode: 'healing',
-            // The 0-max-HP enemy is floored to 1,000,000 HP (SP-4c-2a) — it is auto-placed and
-            // survives this hit, so this is no longer the "no position" shape (see comment above).
         };
 
-        const result = runCombat(noPositionInput);
-        const round = result.rounds[0];
-
-        // ANTI-VACUITY: prove the cast really landed on the real, now-positioned roster member
-        // (per-victim channel, named by its real id) rather than silently hitting nothing.
-        expect(round.perTargetDealt?.['attacker']?.[BARE_ENEMY_ID]).toBe(5000);
-        expect(round.directDamage).toBe(0);
-
-        // No splash — but now because the victim SURVIVED (1,000,000 HP ≫ 5000 damage), not
-        // because its position was undefined. Same outcome, different and weaker mechanism; see
-        // the coverage-loss note above.
-        expect(round.perActorSplash).toBeUndefined();
+        const floored = normalizeCombatRoster(input);
+        expect(floored.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
+        // Every enemy attacker is auto-placed regardless of hp (SP-4b-1); the floor is what makes
+        // it TARGETABLE, which is what keeps `resolvesPositionalVictim` from ever falling back to
+        // the position-less dummy as a splash victim.
+        expect(floored.enemyAttackers[0].position).toBeDefined();
     });
 
     // ─── (d) Multi-bomb / multi-ally ─────────────────────────────────────────
