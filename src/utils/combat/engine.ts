@@ -1756,10 +1756,12 @@ export function __resetLegacyVictimFallbackCount(): void {
  * fallback to consult, so folding these turns into that counter would make its name false.
  *
  * It is not a credit counter either — nothing is booked on a no-victim turn by construction (the
- * damage assembly is victim-fenced, so the cast deals literal 0). 4c-2c/4c-2d gate on
- * `dummySinkCreditCount`; this one exists so `dummyReachability`'s vacuity guard keeps a MOVING
- * number to assert once `consulted` drops to 0 on the player side — a guard that can only read a
- * counter which is always 0 proves nothing.
+ * damage assembly is victim-fenced, so the cast deals literal 0). SP-4c-2c made it the SOLE holder
+ * of a job it previously only shared: this counter IS `dummyReachability.test.ts`'s vacuity guard.
+ * That file's every other reading is a 0, and a zero from a counter wired to nothing proves nothing,
+ * so exactly one case there must read a MOVING number off a live path — and since 4c-2c retired the
+ * dummy's turn (which killed the only route that could move the former credit counter, deleted in
+ * that rung), this is the number it reads.
  *
  * Module-level and NOT reset per run: `__resetNoVictimPlayerTurnCount` is the test's job.
  */
@@ -1769,61 +1771,6 @@ export function __getNoVictimPlayerTurnCount(): number {
 }
 export function __resetNoVictimPlayerTurnCount(): void {
     noVictimPlayerTurnCount = 0;
-}
-/**
- * TEST-ONLY instrumentation, and the COMPANION to `legacyVictimFallbackCount` above. Counts rounds
- * in which damage was actually **BOOKED AGAINST** the vestigial dummy `enemy` — i.e. its HP
- * declined — as opposed to rounds in which the fallback object was merely CONSULTED.
- *
- * WHY BOTH EXIST, and what each one reads TODAY. This block is where `noVictimPlayerTurnCount` sends
- * the next rung ("4c-2c/4c-2d gate on the credit counter"), so it is kept current rather than
- * appended to.
- *  • CONSULTED (`legacyVictimFallbackCount`) is now an ENEMY-SIDE-ONLY reading — SP-4c-2b stopped the
- *    player side consulting anything (see that counter's own doc, which is the authority).
- *    ⚠️ HISTORICAL, and the same retraction that block carries: this bullet used to say the counter is
- *    non-zero for the mid-run **whiff window** and therefore "a global zero there is unreachable".
- *    That residue was PLAYER-side and is gone twice over — SP-4c-1 (#329) ends the fight at the end of
- *    the turn that wipes a side, and the whole-suite measurement on `b22d2870` found no whiffing
- *    enemy-targeted player cast at all. `dummyReachability.test.ts` now asserts `consulted: 0` on the
- *    very shape that used to produce the window. Do not plan around a whiff residue; there is none.
- *  • CREDITED (this counter) is non-zero when the scalar channel actually drained the dummy's HP.
- *    ⚠️ NOT "exactly when `resolvesPositionalVictim` is false for the whole run", which this bullet
- *    used to claim: that named the never-targetable roster as the ONLY route, and SP-4c-2a's
- *    `MIN_TARGETABLE_MAX_HP` floor made that shape unbuildable at the normalization boundary. There
- *    are TWO live routes, and the surviving one is the route that paragraph never mentioned:
- *      1. a roster placed but holding no targetable member (every member at max `hp === 0`) —
- *         BOUNDARY-FLOORED since 4c-2a, so unreachable through any legal input;
- *      2. the DUMMY'S OWN DoT-tick turn, which reads the containers the dummy actor itself carries
- *         and credits the applier's scalar channel. This is the live one:
- *         `dummyReachability.test.ts`'s LIVENESS case reaches it off an ally-side active target and
- *         reads `credited: BARE_ROUNDS`. Retiring that turn is 4c-2c's job.
- *    **This is still the number SP-4c can gate on**, but read it as "no SHIPPED caller reaches the
- *    sink" rather than "the sink is unreachable" — route 2 is constructible today.
- *
- * WHERE IT IS INCREMENTED, and why that is the only live site. The dummy's HP is landed in exactly
- * two places, both at the round tail:
- *  1. the `dpsEnemyTarget` branch (`applyVictimDamage(roundEnemyDamage, enemy, …)`), where `enemy`
- *     is the REAL destructible DPS target rather than a vestigial sink. That branch is
- *     `enemyAttackerInputs.length === 0`, and since SP-4b-2b `normalizeCombatRoster` THROWS on an
- *     empty roster before `runCombat` reads it — so the branch is unreachable by contract and is
- *     deliberately NOT instrumented (a call there would be dead code). Re-open that path and it
- *     needs its own `noteDummySinkCredit`.
- *  2. the vestigial-sink `else` branch (`enemy.currentHp = enemyHp - enemyHpDecline`), which is the
- *     live one and carries the call.
- * The player-side `TurnBindings.applyToVictim` is NOT a candidate, despite looking like one: it
- * only ever receives victims drawn from `opposingRoster` (`enemyAttackerActors`), and the dummy is
- * built separately and is not a member — so it can never be the victim there. The enemy-side
- * binding's `legacyVictim` is the HEAL TARGET, a real player actor, and crediting it is not a dummy
- * credit at all; nothing on that side is counted here.
- *
- * Module-level and NOT reset per run: `__resetDummySinkCreditCount` is the test's job.
- */
-let dummySinkCreditCount = 0;
-export function __getDummySinkCreditCount(): number {
-    return dummySinkCreditCount;
-}
-export function __resetDummySinkCreditCount(): void {
-    dummySinkCreditCount = 0;
 }
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
@@ -2822,9 +2769,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     // actor is positioned with an enemy-side parsed target. What that buys today is narrow and no
     // longer about absorbing damage: the dummy's turn exists only to TICK THE DoT CONTAINERS THE
     // DUMMY ITSELF CARRIES, and the one route that still fills them is the legacy DoT-tick site (see
-    // `dummySinkCreditCount`'s doc, route 2, and `dummyReachability`'s LIVENESS case, which is
-    // exactly this shape: an ally-side active target falsifies conjunct 2, the dummy keeps its turn,
-    // and its corrosion ticks). So the gate's live meaning is "skip a turn that would tick nothing
+    // `dummyReachability`'s LIVENESS case, which is exactly this shape: an ally-side active target
+    // falsifies conjunct 2, the dummy keeps its turn, and its corrosion ticks). So the gate's live
+    // meaning is "skip a turn that would tick nothing
     // and only leak a phantom `enemy` line into the log". 4c-2c owns retiring it; nothing here
     // requires it to stay.
     //
@@ -2855,16 +2802,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // containers from the player side since SP-4c-2b — so there is no DoT/bomb left to strand and no
     // "MUST" here. The member predicate is still the right one; only its justification changed.
     const hasPositionedEnemyRoster = enemyAttackerActors.some(isTargetableRosterMember);
-    const dummyEnemyIsVestigial =
-        hasPositionedEnemyRoster &&
-        allPlayerActors.every((a) => {
-            const t = a.kind === 'attacker' ? input.target : teamTargetById.get(a.id);
-            return a.position != null && t?.side === 'enemy';
-        });
-    // The turn-order roster: the dummy `enemy` is dropped when vestigial (positional sim).
-    const turnOrderActors = dummyEnemyIsVestigial
-        ? allActors.filter((a) => a.id !== enemy.id)
-        : allActors;
+    // SP-4c-2c: the dummy `enemy` is in NO turn order, unconditionally. It is still a member of
+    // allActors/allActorsById (4c-2d deletes the actor itself); it simply never acts. Measured on
+    // f1bce838: this moves 2 tests in 2 files, zero goldens, and the oracle stays at 147/146/2.
+    const turnOrderActors = allActors.filter((a) => a.id !== enemy.id);
 
     // Task 7 — NAMES-ONLY condition-context sources for `enemy-buff` / `self-debuff` gates.
     // These read buff/debuff NAMES from the status engine; they NEVER fold effects (effects
@@ -4354,8 +4295,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // effective speed every step, so a Speed Up/Down applied mid-round reorders the remaining
         // unacted actors automatically (no re-sort hook). Dead actors keep their seeded pending=1
         // — the death-skip below consumes it via a plain `continue` (identical to the old loop
-        // visiting then continue-ing). The dummy `enemy` (no speed buffs) keeps its DoT-tick turn
-        // in DPS/non-positional mode; a fully-positional sim drops it (dummyEnemyIsVestigial).
+        // visiting then continue-ing). The dummy `enemy` is NOT here on any run: SP-4c-2c dropped it
+        // from `turnOrderActors` unconditionally, so it never takes a turn and never ticks anything.
         const roundActors = turnOrderActors;
         const pending = new Map<string, number>(roundActors.map((a) => [a.id, 1]));
         const pendingOf = (id: string) => pending.get(id) ?? 0;
@@ -11050,8 +10991,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // side-wide `DEFAULT_ENEMY_TARGET` ('__enemy__') store — `upsertBuff` hardcodes that
         // target — never into a per-actor store. Its only decrement was the no-argument
         // `decrementEnemy()` overload in the Post-Turn block above, reachable ONLY on the dummy
-        // actor's own turn (`isDummyEnemy`). Once a real positioned enemy roster exists the dummy
-        // is dropped from the turn order (`dummyEnemyIsVestigial`), so that call never ran and a
+        // actor's own turn (`isDummyEnemy`). Under the since-retired `dummyEnemyIsVestigial` gate a
+        // fully-positional run dropped the dummy from the turn order, so that call never ran and a
         // timed scheduled debuff, once landed, persisted for the rest of the run. Measured against
         // 841e1bc0 on the same fixture and seed: `hasDebuff` per round was [t,t,f,t,t] and became
         // [t,t,t,t,t]; the landing DRAW was unaffected, only the DECAY.
@@ -11061,16 +11002,19 @@ export function runCombat(rawInput: CombatEngineInput): {
         // many enemy actors are on the board. Hooking it to an enemy actor's Post-Turn instead
         // would fire once per enemy and burn a 2-round debuff in a single round on a 2-enemy board.
         //
-        // CANNOT DOUBLE-FIRE with the dummy's own Post-Turn call: the two are mutually exclusive by
-        // construction. `turnOrderActors` drops the dummy iff `dummyEnemyIsVestigial`, and the dummy
-        // is explicitly exempt from the dead-actor `continue` guard, so it always takes its turn
-        // when it is in the order. Non-vestigial (non-positional) runs therefore never reach this
-        // line and stay byte-identical.
+        // CANNOT DOUBLE-FIRE with the dummy's own Post-Turn call, and since SP-4c-2c the reason is
+        // structural rather than a mutual-exclusion argument: the dummy is dropped from
+        // `turnOrderActors` unconditionally, so it takes no turn on ANY run and its Post-Turn
+        // `decrementEnemy()` is unreachable. This statement is now the SOLE decrement of the
+        // side-wide bucket, and it runs on every round of every run. (It used to be conditional on
+        // the retired `dummyEnemyIsVestigial` — the two switches had to land together for exactly
+        // this reason: dropping the turn while leaving the gate false here would have decremented
+        // the bucket nowhere at all.)
         //
         // POSITION: the earliest round boundary after the turn loop. The row's
         // `activeEnemyDebuffs` is a snapshot taken during the focus attacker's TURN
         // (`lastAttackerTurn.landedEnemyDebuffs`), so this decrement lands after that read — the
-        // same ordering the dummy's Post-Turn produced when it acted after the attacker.
+        // same ordering the dummy's Post-Turn produced back when it acted after the attacker.
         //
         // actorId on `buff-expired`: `enemy.id`. The sentinel bucket is a SIDE-WIDE store with no
         // single carrier, so attributing its expiry to one positioned enemy would be the same lie
@@ -11078,10 +11022,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // id this identical bucket already emits under on non-positional runs, so the event stream
         // keeps one stable identity for the bucket across modes and matches the pre-regression
         // (841e1bc0) stream exactly. `buff-expired` has no reactive listeners — it is log-only.
-        if (dummyEnemyIsVestigial) {
-            for (const buffName of statusEngine.decrementEnemy().expired) {
-                bus.emit({ type: 'buff-expired', actorId: enemy.id, round: r, buffName });
-            }
+        for (const buffName of statusEngine.decrementEnemy().expired) {
+            bus.emit({ type: 'buff-expired', actorId: enemy.id, round: r, buffName });
         }
 
         // The row's attacker fields come from the LAST focus turn this round. Rounds
@@ -11237,12 +11179,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // resolve. Kept on the legacy scalar decline + coarse integer hp-changed tap
             // (byte-identical) — it NEVER dies or terminates the run (its HP is billions).
             const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
-            // SP-4b-2b Task 7: the ONE live site where damage is BOOKED against the dummy. Keyed on
-            // THIS round's own contribution, not the cumulative total — `enemyHpDecline` stays > 0
-            // for every later round once anything has ever been booked, which would read as a fresh
-            // credit each round. `cumulativeDamage`/`cumulativeTeamDamage` were advanced by exactly
-            // these two terms above, so the delta is exact. See `__getDummySinkCreditCount`.
-            if (totalRoundDamage + teamRoundDamage > 0) dummySinkCreditCount++;
+            // SP-4c-2c DELETED THE INSTRUMENTATION THAT SAT HERE (`dummySinkCreditCount++`), and the
+            // reason is worth keeping: retiring the dummy's turn removed the last route that could
+            // make it move. Measured with a console.error at this line over the whole suite — 0 hits
+            // in 532 files, where the pre-rung tree hit it twice. A counter whose zero cannot be
+            // falsified is not evidence, so it went rather than becoming 4c-2d's vacuous gate.
+            // PRECISION, because the counter's own doc drew this line and it still holds: that is
+            // "no shape the suite can build reaches here", NOT "this line is unreachable". It is the
+            // round-tail scalar branch, not the dummy's turn body, so any future change that routes
+            // scalar damage lights it up again.
             enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline);
             const newEnemyHpPctInt =
                 enemyHp > 0 ? Math.round(Math.max(0, 100 * (1 - enemyHpDecline / enemyHp))) : 100;

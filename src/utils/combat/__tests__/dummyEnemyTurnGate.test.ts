@@ -157,15 +157,20 @@ describe('dummy enemy turn gate', () => {
     // The claim this pair restores is the one this file was written for and which SP-4c-2a's first
     // pass wrongly conceded as unconstructible: the dummy still takes its tick turn while a player
     // actor could still fall back to it.
-    it('a player actor with an ALLY-side target: the dummy enemy still takes its tick turn', () => {
+    it('a player actor with an ALLY-side target: the dummy STILL takes no turn', () => {
         idc = 0;
-        // The focus is a support ship: positioned at M4, active target ALLY-side. Conjunct 2 of
-        // `dummyEnemyIsVestigial` (`t?.side === 'enemy'`) is therefore false → the AND is false →
-        // the dummy is NOT dropped from the turn order and emits `turn-started` on its own turn.
-        // (Derivation of the bound: every actor in the turn order takes one turn per round, so with
-        // BASE's `numRounds: 1` this is a single dummy turn. The original assertion this restores
-        // was `> 0`, which is kept: extra-action grants could legitimately add turns, and the
-        // load-bearing claim is "the dummy is in the turn order at all".)
+        // SP-4c-2c INVERTED THIS CASE, and it is now the file's most load-bearing one.
+        //
+        // Until this rung the reading was `> 0`: the focus is a support ship (positioned at M4,
+        // active target ALLY-side), so conjunct 2 of the retired `dummyEnemyIsVestigial`
+        // (`t?.side === 'enemy'`) was false, the AND was false, and the dummy stayed in the turn
+        // order to tick its containers. That was the LAST shape in which the dummy acted.
+        //
+        // The gate is gone: `turnOrderActors` now drops the dummy unconditionally. This case and
+        // its enemy-side twin below are therefore a MATCHED PAIR reading the same 0 through the
+        // two branches of the retired gate — which is exactly what makes them a tripwire against
+        // the gate being reintroduced. Keep BOTH: a single case could be satisfied by a
+        // reintroduced gate that happened to pick the branch it exercises.
         const count = enemyTurnStartedCount(
             BASE({
                 healTargetId: 'attacker',
@@ -176,7 +181,7 @@ describe('dummy enemy turn gate', () => {
                 enemyAttackers: [basicEnemyAt('enemy-front', 'M4')],
             })
         );
-        expect(count).toBeGreaterThan(0);
+        expect(count).toBe(0);
     });
 
     it('positional team-vs-team: the dummy enemy is excluded from the turn order', () => {
