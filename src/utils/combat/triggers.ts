@@ -3407,14 +3407,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // TWO CONSEQUENCES of moving it, both deliberate, both measured as moving nothing (the only
         // caller is `pestilenceEnemyCleanseCorrosion.integration`):
         //  1. DRAW CARDINALITY for this branch goes from 1 to N.
-        //  2. THE BLOCK-DEBUFF RESIST EMIT IS NOW CONDITIONAL on the victim's own draw. This note
-        //     used to end "(no RNG → order-safe)", which was a claim about an RNG-FREE loop and is
-        //     no longer true: the draw sits BEFORE the immunity check, so a block-carrying victim
-        //     only surfaces its `blockDebuffResist` when its own landing draw passes, where one
-        //     shared draw previously gated all of them together. That order is kept rather than
-        //     inverted because the landing roll is the earlier question — an inflict that never
-        //     landed has nothing for immunity to block, and emitting a block-resist for it would
-        //     report an application that was never going to arrive.
+        //  2. THE LOOP IS NO LONGER RNG-FREE, so this note's retained "(no RNG → order-safe)" tail
+        //     had to go: it was a claim about a loop that only checked immunity. What is PRESERVED is
+        //     the block-debuff behaviour, and deliberately so — the immunity check still runs BEFORE
+        //     the draw (see the loop body), so a Block-Debuff victim auto-resists, emits its
+        //     `blockDebuffResist` unconditionally exactly as before, and consumes NO gate draw. That
+        //     ordering matches both siblings (the `debuff` branch's `&&` short-circuit and the
+        //     single-victim DoT path's early return), and it is what keeps this branch's only
+        //     behavioural change the per-victim CHANCE rather than the draw schedule.
         const cleansedEnemyIds = intent.eventCtx?.cleansedEnemyIds;
         if (
             intent.ability.target === 'all-enemies' &&
@@ -3424,11 +3424,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             for (const cid of cleansedEnemyIds) {
                 const victim = ctx.actorById?.(cid);
                 const victimId = victim?.id ?? cid;
-                const liveLanding =
-                    ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId) ??
-                    owner.liveDebuffLandingChance ??
-                    1;
-                if (!owner.debuffLandingGate(liveLanding)) continue;
+                // IMMUNITY BEFORE THE DRAW, aligned with BOTH siblings (final review, minor 4). The
+                // sibling `debuff` branch folds immunity into its landing condition via an `&&`
+                // short-circuit, and the single-victim DoT path below returns before its draw — so the
+                // engine's established rule is "a Block-Debuff victim auto-resists and no gate is
+                // drawn for it". My first draft of this loop drew first, on the argument that the
+                // landing roll is the earlier question. That argument is defensible in isolation but
+                // it made this the ONLY site of its kind, and it had a measurable cost: a
+                // block-carrying victim consumed up to N-1 draws that the old single pre-branch draw
+                // never took, shifting the owner's gate schedule for reasons unrelated to the fix.
+                // Aligned instead of documented-as-divergent: consistency with two siblings beats a
+                // local rationale, and it keeps this branch's only intended change the per-victim
+                // CHANCE rather than the draw schedule.
                 if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
                     emitBlockDebuffResist(
                         ctx.bus,
@@ -3439,6 +3446,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     );
                     continue;
                 }
+                const liveLanding =
+                    ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId) ??
+                    owner.liveDebuffLandingChance ??
+                    1;
+                if (!owner.debuffLandingGate(liveLanding)) continue;
                 landDotOn(victim, victimId);
             }
             return;

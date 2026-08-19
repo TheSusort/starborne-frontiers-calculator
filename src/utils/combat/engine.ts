@@ -1775,16 +1775,30 @@ export function __resetNoVictimPlayerTurnCount(): void {
  * in which damage was actually **BOOKED AGAINST** the vestigial dummy `enemy` — i.e. its HP
  * declined — as opposed to rounds in which the fallback object was merely CONSULTED.
  *
- * WHY BOTH EXIST. The two readings come apart, and only this one can be required to be zero:
- *  • CONSULTED (`legacyVictimFallbackCount`) is non-zero for the mid-run **whiff window** — a
- *    roster that WAS targetable and has since been killed. Selection hands back the dummy, the
- *    apply gate stays positional, nothing is booked. That residue is deliberate behaviour SP-4c is
- *    not deleting, so a global zero there is unreachable.
- *  • CREDITED (this counter) is non-zero only when the scalar channel actually drained the dummy's
- *    HP — which happens exactly when `resolvesPositionalVictim` is false for the whole run, i.e.
- *    the roster is placed but holds no targetable member (every member at max `hp === 0`, the
- *    "pressure source" shape). **This is the number SP-4c can gate on:** zero across every shape
- *    means the dummy absorbed nothing and deleting it loses no accounting.
+ * WHY BOTH EXIST, and what each one reads TODAY. This block is where `noVictimPlayerTurnCount` sends
+ * the next rung ("4c-2c/4c-2d gate on the credit counter"), so it is kept current rather than
+ * appended to.
+ *  • CONSULTED (`legacyVictimFallbackCount`) is now an ENEMY-SIDE-ONLY reading — SP-4c-2b stopped the
+ *    player side consulting anything (see that counter's own doc, which is the authority).
+ *    ⚠️ HISTORICAL, and the same retraction that block carries: this bullet used to say the counter is
+ *    non-zero for the mid-run **whiff window** and therefore "a global zero there is unreachable".
+ *    That residue was PLAYER-side and is gone twice over — SP-4c-1 (#329) ends the fight at the end of
+ *    the turn that wipes a side, and the whole-suite measurement on `b22d2870` found no whiffing
+ *    enemy-targeted player cast at all. `dummyReachability.test.ts` now asserts `consulted: 0` on the
+ *    very shape that used to produce the window. Do not plan around a whiff residue; there is none.
+ *  • CREDITED (this counter) is non-zero when the scalar channel actually drained the dummy's HP.
+ *    ⚠️ NOT "exactly when `resolvesPositionalVictim` is false for the whole run", which this bullet
+ *    used to claim: that named the never-targetable roster as the ONLY route, and SP-4c-2a's
+ *    `MIN_TARGETABLE_MAX_HP` floor made that shape unbuildable at the normalization boundary. There
+ *    are TWO live routes, and the surviving one is the route that paragraph never mentioned:
+ *      1. a roster placed but holding no targetable member (every member at max `hp === 0`) —
+ *         BOUNDARY-FLOORED since 4c-2a, so unreachable through any legal input;
+ *      2. the DUMMY'S OWN DoT-tick turn, which reads the containers the dummy actor itself carries
+ *         and credits the applier's scalar channel. This is the live one:
+ *         `dummyReachability.test.ts`'s LIVENESS case reaches it off an ally-side active target and
+ *         reads `credited: BARE_ROUNDS`. Retiring that turn is 4c-2c's job.
+ *    **This is still the number SP-4c can gate on**, but read it as "no SHIPPED caller reaches the
+ *    sink" rather than "the sink is unreachable" — route 2 is constructible today.
  *
  * WHERE IT IS INCREMENTED, and why that is the only live site. The dummy's HP is landed in exactly
  * two places, both at the round tail:
@@ -2781,16 +2795,38 @@ export function runCombat(rawInput: CombatEngineInput): {
     // (it stays in allActors/allActorsById as the `legacyVictim` fallback object — only the turn
     // order drops it). The gate mirrors selectTurnTarget's success predicate statically: real
     // positioned enemies exist AND every player actor is positioned with an ENEMY-side parsed
-    // target (positions + parsed targets are fixed for the whole battle). If ANY player could
-    // fall back to the dummy sink, keep it in the turn order so its accumulated DoTs still tick.
-    // STATICALLY is the operative word (SP-4b-1 §4B): the two halves are NOT required to agree
-    // per turn, and deliberately do not. `resolvePositionalTarget` is liveness-aware, so once a
-    // targetable roster has been WIPED mid-battle the static gate still reads positional while
-    // selection returns null — the whiff window. That divergence is intended (the cast whiffs
-    // against corpses rather than teleporting onto the dummy); what §4B fixed was the two
-    // disagreeing on a roster that was NEVER targetable, where the damage reached no channel.
-    // NOT gated on healPipelineActive / enemyAttackers.length — the healing calculator sets healTargetId
-    // and can supply bare (non-positioned) enemies where the dummy is still the offense sink.
+    // target (positions + parsed targets are fixed for the whole battle).
+    //
+    // ── HISTORICAL, all of it — the paragraph below states the LIVE rationale ──────────────────
+    // Every sentence in this stretch was written when the player side could fall back to the dummy.
+    // Since SP-4c-2b none can, so each is now either vacuous or false; they are kept because they
+    // explain the gate's SHAPE, and marked because 4c-2c — whose whole job is retiring this turn —
+    // will read them as instructions otherwise.
+    //  • "If ANY player could fall back to the dummy sink, keep it in the turn order so its
+    //    accumulated DoTs still tick." VACUOUS: no player can fall back any more, so the antecedent
+    //    is never satisfied and this reason never fires.
+    //  • "`resolvePositionalTarget` is liveness-aware, so once a targetable roster has been WIPED
+    //    mid-battle the static gate still reads positional while selection returns null — the whiff
+    //    window. That divergence is intended (the cast whiffs against corpses rather than teleporting
+    //    onto the dummy)." The STATICALLY-vs-per-turn point still holds, but the whiff window it
+    //    illustrates is GONE: SP-4c-1 ends the match at the end of the turn that wipes a side, so no
+    //    player turn runs against an all-dead roster. What §4B fixed (the two halves disagreeing on a
+    //    roster that was NEVER targetable) is also unreachable — 4c-2a floors that shape.
+    //  • "NOT gated on healPipelineActive / enemyAttackers.length — the healing calculator sets
+    //    healTargetId and can supply bare (non-positioned) enemies where the dummy is still the
+    //    offense sink." The gating fact is still true; its REASON is false — the dummy is nobody's
+    //    offense sink, and since SP-3b the healing calculator supplies a real enemy roster.
+    //
+    // ── LIVE RATIONALE, the only paragraph to act on ───────────────────────────────────────────
+    // The gate drops the dummy's TURN when a real targetable enemy roster exists AND every player
+    // actor is positioned with an enemy-side parsed target. What that buys today is narrow and no
+    // longer about absorbing damage: the dummy's turn exists only to TICK THE DoT CONTAINERS THE
+    // DUMMY ITSELF CARRIES, and the one route that still fills them is the legacy DoT-tick site (see
+    // `dummySinkCreditCount`'s doc, route 2, and `dummyReachability`'s LIVENESS case, which is
+    // exactly this shape: an ally-side active target falsifies conjunct 2, the dummy keeps its turn,
+    // and its corrosion ticks). So the gate's live meaning is "skip a turn that would tick nothing
+    // and only leak a phantom `enemy` line into the log". 4c-2c owns retiring it; nothing here
+    // requires it to stay.
     //
     // SP-M M1 (Task 9b fix): the first conjunct is extracted as `hasPositionedEnemyRoster` — "does
     // a real, positioned opposing-enemy roster exist" — because the reactive target resolvers
@@ -2810,10 +2846,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     // SP-4b-1 §4B: "positioned" here means positioned AND a viable target (`isTargetableRosterMember`
     // — max hp > 0), the same member predicate `resolvesPositionalVictim` (the cast/apply gates)
-    // is built from — NOT `isPositional`, which asks only "is a board in play". A roster of 0-HP
-    // pressure sources can never absorb a cast, so the dummy is still the offense sink and MUST stay
-    // in the turn order — dropping it would strand every DoT/bomb routed into its containers, which
-    // is the same "credited to no channel" defect one layer down.
+    // is built from — NOT `isPositional`, which asks only "is a board in play".
+    // ⚠️ HISTORICAL, and the sentence 4c-2c is most likely to be stopped by: this used to end "A
+    // roster of 0-HP pressure sources can never absorb a cast, so the dummy is still the offense sink
+    // and MUST stay in the turn order — dropping it would strand every DoT/bomb routed into its
+    // containers." Both halves are dead. The 0-max-HP pressure-source roster is UNBUILDABLE since
+    // SP-4c-2a floored it at the normalization boundary, and nothing routes into the dummy's
+    // containers from the player side since SP-4c-2b — so there is no DoT/bomb left to strand and no
+    // "MUST" here. The member predicate is still the right one; only its justification changed.
     const hasPositionedEnemyRoster = enemyAttackerActors.some(isTargetableRosterMember);
     const dummyEnemyIsVestigial =
         hasPositionedEnemyRoster &&

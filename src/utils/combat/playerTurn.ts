@@ -1237,12 +1237,34 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const hasVictim = enemy !== undefined;
 
     /** The victim-derived STAT slice of a gate context — the owner-vs-target comparison subjects
-     *  (Bayah's crit-power gate, Cobalt's, Chakara's speed gate). Empty when there is no victim:
-     *  all three fields are optional with a documented default (`?? 0` at roundContext.ts:158-162,
-     *  evaluateConditions.ts), so omitting them answers "there is no target to compare against"
-     *  rather than inventing one with zeroed stats. Spread ONLY into the two contexts that carry
-     *  these fields today (preDebuffGateCtx and `ctx`) — adding them to postDebuffGateCtx or
-     *  modifierCtx would change which gates those contexts can resolve. */
+     *  (Bayah's crit-power gate, Cobalt's HP gate, Chakara's speed gate). Empty when there is no
+     *  victim. Spread ONLY into the two contexts that carry these fields today (preDebuffGateCtx and
+     *  `ctx`) — adding them to postDebuffGateCtx or modifierCtx would change which gates those
+     *  contexts can resolve.
+     *
+     *  ⚠️ NAMED RESIDUAL — omission does NOT answer "there is no target". An earlier version of this
+     *  doc claimed it did ("rather than inventing one with zeroed stats"); that was wrong, and it was
+     *  the only one of this rung's three phantoms that a comment actively denied. All three fields are
+     *  optional with a `?? 0` default (`evaluateConditions.ts`'s `stat-vs-target` arm,
+     *  roundContext.ts:158-162), and `stat-vs-target` resolves
+     *  `statComparator === 'lt' ? self < target : self > target`. So with the slice empty the target
+     *  reads **0**, and a **`gt`** comparator is TRUE against nobody — the same shape as the
+     *  `enemyHpPct: 100` residual, an invented weakling rather than an absent enemy.
+     *
+     *  REACHABLE, unlike the other two: this slice is spread into `ctx` (further down), which
+     *  `gateFiringAbilities` uses to gate heal/shield/buff/charge payloads. That consumer is
+     *  deliberately NOT victim-fenced — the repair must land on a no-victim turn — so the gate really
+     *  does evaluate. Nothing suppresses it.
+     *
+     *  CORPUS-INERT ON ONE LEG ONLY, which is weaker than residuals (b)/(c) and worth stating plainly.
+     *  Exactly three corpus ships carry `stat-vs-target`, measured over parsed abilities:
+     *    • Bayah   (charged control + debuff, crit-power, `gt`) — phantom-satisfiable
+     *    • Cobalt  (active additional-damage, hp, `gt`)         — phantom-satisfiable
+     *    • Chakara (active charge, speed, `lt`)                 — SAFE: `self < 0` is never true
+     *  The single leg holding it inert is that none of the three is an ally-target ship (§A.2), so
+     *  none can take a no-victim turn. `noVictimResidualTripwires.test.ts` case (c) fails the day one
+     *  does. The fix when that happens: make `ConditionContext.targetSpeed`/`targetCurrentHp`/
+     *  `targetCritPower` carry an explicit absent-target answer instead of `?? 0`. */
     const victimStatGateCtx = (v: CombatActor | undefined) =>
         v !== undefined
             ? {
@@ -1258,7 +1280,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  as it stood before the cast. Harmless for the boolean — removing 30% of a positive pool
      *  leaves 70% of it, still positive — so pre- and post-strip agree; see the shield-strip site
      *  for the ordering. Empty when there is no victim: `enemyShielded` defaults false
-     *  (triggers.ts:1779, roundContext.ts:151), so omission answers "there is no enemy to be
+     *  (triggers.ts:1793, roundContext.ts:151), so omission answers "there is no enemy to be
      *  shielded". This is the field the ghost was lying about (plan §A.5). */
     const victimShieldGateCtx = (v: CombatActor | undefined) =>
         v !== undefined ? { enemyShielded: v.shieldPool > 0 } : {};
@@ -1504,6 +1526,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : application === 'apply'
               ? !landingAtDisadvantage
               : debuffLandingGate(liveLandingChance);
+    /** The CAST path's per-victim landing decision (the positional apply loop's victims).
+     *
+     *  DELIBERATELY NOT THE SAME as the reactive path's `reactiveLandingChanceFor` (engine.ts), and a
+     *  future reader should not "unify" them: this one honours `affinityModsVsVictim` — the
+     *  `forceOutgoingAdvantage` / defensive-override resolution — because those are TURN-SCOPED CAST
+     *  concepts, live only while this actor's own cast is resolving. The reactive resolver
+     *  deliberately takes the base `computeAffinityModifiers` matchup instead, matching its own
+     *  sibling (the reactive `'apply'` arm's `getAffinityMatchup`), because a reaction fires outside
+     *  any cast and has no override in scope. Same formula, different affinity input, on purpose. */
     const landsDebuffOnVictim = (
         application: 'inflict' | 'apply' | undefined,
         victim: CombatActor
@@ -2673,6 +2704,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (const ctrl of controlAbilitiesFromSkill(gatedSkill)) {
         if (ctrl.config.type !== 'control') continue;
         if (ctrl.target === 'enemy') {
+            // SP-4c-2b (final review, IMPORTANT 2): NO VICTIM ⇒ nothing was controlled, so there is
+            // no success to announce. This site was a MISSED SITE, not a ruled residual — contract §B
+            // class 2 says "fence the enclosing clause, not the emit" and this loop is simply absent
+            // from that table. Fencing it here (a `continue`, i.e. the clause) rather than at the
+            // `bus.emit` is that rule applied.
+            //
+            // WHY IT COULD NOT BE LEFT: on a no-victim turn NOTHING below suppresses this emit.
+            // `targetImmuneToDebuffs` is fenced to `false` (nobody is carrying Block Debuff against a
+            // cast with no target), and `resistedEnemyDebuffNames` can only carry ability-sourced
+            // names via `landStatusOnRecipients`, whose loop is itself victim-fenced — so only the
+            // SCHEDULED resist list can populate it, and that covers scheduled statuses, not the
+            // ability-sourced control this loop reads. The ghost path at least suppressed the event
+            // whenever the paired named status lost its landing roll; without a fence the rung would
+            // have moved this from a PROBABILISTIC phantom to an ALWAYS-ON one, and the event is not
+            // inert — it wakes `on-stasis-applied` reactions.
+            //
+            // `ctrl.target === 'enemy'` scoping is load-bearing: a SELF-targeted control (Taunt) has
+            // nothing to do with the opposing side and must keep emitting on a no-victim turn.
+            if (!hasVictim) continue;
             // Standalone control with no named status: only Block-Debuff immunity gates it.
             if (targetImmuneToDebuffs) continue;
             // Paired named status resisted (affinity / landing-roll) → suppress the success event.
