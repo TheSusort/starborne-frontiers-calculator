@@ -123,6 +123,21 @@ describe('withAssumedCalibration', () => {
         const free = withAssumedCalibration(makeGear(), false);
         expect(mine.mainStat).toEqual(free.mainStat);
     });
+
+    it('calibrates 5-star differently from 6-star when bonuses diverge', () => {
+        // hp/flat has value5Star: 1.525 and value6Star: 1.5 (multiply type)
+        const hp5 = withAssumedCalibration(
+            makeGear({ stars: 5, mainStat: { name: 'hp', value: 4000, type: 'flat' } }),
+            false
+        );
+        expect(hp5.mainStat).toEqual({ name: 'hp', value: 6100, type: 'flat' });
+
+        const hp6 = withAssumedCalibration(
+            makeGear({ stars: 6, mainStat: { name: 'hp', value: 4000, type: 'flat' } }),
+            false
+        );
+        expect(hp6.mainStat).toEqual({ name: 'hp', value: 6000, type: 'flat' });
+    });
 });
 
 // ---------------------------------------------------------------------------
