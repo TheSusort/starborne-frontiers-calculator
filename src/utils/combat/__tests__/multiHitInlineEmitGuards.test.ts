@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 import type { CombatEvent } from '../events';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
 import { createActor } from '../state';
+import type { CombatActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
@@ -90,8 +91,16 @@ function makeRuntime(skills: ShipSkills): PlayerActorRuntime {
     };
 }
 
-/** Minimal PlayerTurnArgs bound to a single non-positional enemy. */
-function makeArgs(runtime: PlayerActorRuntime, bus = createEventBus()): PlayerTurnArgs {
+/** Minimal PlayerTurnArgs bound to a single non-positional enemy.
+ *
+ *  SP-4c-2b widened `PlayerTurnArgs.enemy` to optional (absent = no victim this turn), but every
+ *  test in this file is about the BOUND-VICTIM emit loop, so this fixture keeps it REQUIRED in its
+ *  return type. That is what lets the tests below reach into `args.enemy` directly instead of
+ *  asserting it non-null at each use. */
+function makeArgs(
+    runtime: PlayerActorRuntime,
+    bus = createEventBus()
+): PlayerTurnArgs & { enemy: CombatActor } {
     const enemy = createActor({
         id: 'enemy',
         side: 'enemy',
