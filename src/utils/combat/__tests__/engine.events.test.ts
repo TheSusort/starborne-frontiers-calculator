@@ -468,13 +468,17 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
     // SP-4b-2b — WHAT MOVED AND WHY THE FIXTURE, NOT THE ASSERTION, WAS REWRITTEN. This used to
     // express the rule with a SCHEDULED `enemyDebuffs` entry and the top-level `enemySpeed` scalar.
     // Neither can express it any more, and both for the same reason: they describe the DUMMY.
-    //   • `enemySpeed` is the dummy's speed, and a positional run drops the dummy from the turn
-    //     order — so it no longer reorders anything (measured: `enemySpeed: 150` left the order
-    //     attacker-first and the expiry at round 2).
-    //   • a SCHEDULED debuff lives in the side-wide `__enemy__` sentinel bucket, which a positional
-    //     run decrements ONCE PER ROUND at the round boundary (engine.ts, the
-    //     `dummyEnemyIsVestigial` decrementEnemy block) precisely BECAUSE the dummy has no turn to
-    //     hang the decrement on. A round-boundary decrement is by construction speed-independent.
+    //   • `enemySpeed` is the dummy's speed, and the dummy is dropped from the turn order — a
+    //     positional run only when this was written, EVERY run since SP-4c-2c — so it no longer
+    //     reorders anything (measured: `enemySpeed: 150` left the order attacker-first and the
+    //     expiry at round 2).
+    //   • a SCHEDULED debuff lives in the side-wide `__enemy__` sentinel bucket, which EVERY run
+    //     decrements ONCE PER ROUND at the round boundary (engine.ts, the round-tail
+    //     `decrementEnemy()` block) precisely BECAUSE the dummy has no turn to hang the decrement
+    //     on. That was positional-run-only when this note was written, gated on the since-deleted
+    //     `dummyEnemyIsVestigial`; SP-4c-2c retired the dummy's turn outright, so the round-tail
+    //     block is now the sole decrement site on every run. A round-boundary decrement is by
+    //     construction speed-independent.
     // So the rule is now expressed where it still lives: an ABILITY-applied timed debuff on the
     // REAL enemy, whose OWN speed decides turn order. Same rule, same expected rounds (2 and 3),
     // and the carrier the expiry reports is the real enemy instead of the vestigial dummy.

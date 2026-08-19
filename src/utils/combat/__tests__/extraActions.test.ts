@@ -115,10 +115,11 @@ describe('extraActions', () => {
     // extra turn (no one remains) → acts again.
     //
     // SP-4b-2a: the turn-taking opponent is now the REAL, positioned enemy this run synthesizes
-    // (`SYNTHESIZED_DPS_ENEMY_ID` === 'enemy-1'), not the vestigial dummy sink (id 'enemy'),
-    // whose turn is gated out as vestigial (`dummyEnemyIsVestigial`, engine.ts). Only the id
-    // moved: the synthesized enemy is built from the SAME `enemySpeed` scalar these two runs
-    // set, so both speed-rank orderings below are unchanged.
+    // (`SYNTHESIZED_DPS_ENEMY_ID` === 'enemy-1'), not the vestigial dummy sink (id 'enemy'), which
+    // takes no turn at all — SP-4c-2c drops it from `turnOrderActors` unconditionally (the
+    // `dummyEnemyIsVestigial` gate that used to decide this is deleted). Only the id moved: the
+    // synthesized enemy is built from the SAME `enemySpeed` scalar these two runs set, so both
+    // speed-rank orderings below are unchanged.
     it('extra turn inserted at speed position among remaining actors', () => {
         // Faster attacker: [attacker, attacker, enemy]
         const busFaster = createEventBus();

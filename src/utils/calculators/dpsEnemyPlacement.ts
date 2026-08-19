@@ -29,9 +29,11 @@ export const DEFAULT_ENEMY_SLOT: Position = 'M4';
  *
  * Position alone does NOT route a cast. `selectTurnTarget` requires
  * `resolvesPositionalVictim(actor.position, opposingRoster) && target` — with no ParsedTarget it
- * short-circuits to `legacyVictim` (the dummy), however well-positioned the roster is. The same
- * missing target also keeps the dummy in the turn order, because `dummyEnemyIsVestigial` checks
- * `t?.side === 'enemy'`. That short-circuit is now UNREACHABLE for anything entering through
+ * short-circuits to `legacyVictim` (the dummy), however well-positioned the roster is. (A missing
+ * target USED to keep the dummy in the turn order too, via the `dummyEnemyIsVestigial` gate's
+ * `t?.side === 'enemy'` conjunct; that gate was deleted in SP-4c-2c and the dummy now takes no turn
+ * on any run, so only the targeting short-circuit remains.) That short-circuit is now UNREACHABLE
+ * for anything entering through
  * `runCombat`: the boundary fills this target on the first line, so no actor below it is
  * target-less, and `selectTurnTarget` is a closure inside `runCombat` with no other entry point.
  * The mechanism stays documented because it is the REASON the boundary exists — not because a

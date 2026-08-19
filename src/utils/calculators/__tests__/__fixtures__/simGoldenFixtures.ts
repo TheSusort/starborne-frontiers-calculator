@@ -909,20 +909,28 @@ export function perVictimAffinityAoe(): BattleSimulationInput {
 //     re-charge and re-cast every round, giving Frontline's counterTargetId reactive a live
 //     victim across the whole 8-round window.
 //
-// Frontline's ACTIVE here is a plain damage cast (not its in-game ally-heal), deliberately —
-// giving Frontline (or ANY player-side ship in this roster) an ally-targeted heal active flips
-// `engine.ts`'s `dummyEnemyIsVestigial` gate to false (its "every player actor has an enemy-side
-// parsed target" conjunct), which reroutes Judge's/Incinerator's `livingOpposingActorIds` to the
-// vestigial dummy `enemy` instead of the real enemy roster — silently zeroing their AoE reactive
-// in ANY roster that also carries a healer. Confirmed by direct engine inspection while building
+// Frontline's ACTIVE here is a plain damage cast (not its in-game ally-heal), deliberately.
+//
+// ⚠️ THE REASON BELOW IS HISTORY — the workaround is kept, its justification is spent. It described
+// a gap that has since been closed TWICE: SP-M M1 Task 9b re-gated the reactive resolvers on
+// `hasPositionedEnemyRoster` (so a healer no longer misroutes them), and SP-4c-2c deleted the
+// `dummyEnemyIsVestigial` gate outright. Restoring Frontline's in-game ally-heal here would now be
+// a fixture-churn decision, not a correctness one. Kept verbatim only because it records how the
+// gap was found:
+//
+// giving Frontline (or ANY player-side ship in this roster) an ally-targeted heal active flipped
+// `engine.ts`'s then-live `dummyEnemyIsVestigial` gate to false (its "every player actor has an
+// enemy-side parsed target" conjunct), which rerouted Judge's/Incinerator's `livingOpposingActorIds`
+// to the vestigial dummy `enemy` instead of the real enemy roster — silently zeroing their AoE
+// reactive in ANY roster that also carried a healer. Confirmed by direct engine inspection while building
 // this fixture (not merely inferred): the SAME Judge/Incinerator ships that fire correctly in
 // isolation stopped firing the instant a heal-casting ally (any heal ability, any attack value)
 // joined the team, and start-of-round/end-of-round log entries came back once the healer's active
-// was swapped for a damage cast. This is a genuine pre-existing gap in the Task 7b DPS-mode-safe
-// dummy-fallback (it conflates "no real positioned enemy roster" with "not every player targets
+// was swapped for a damage cast. That was a genuine pre-existing gap in the Task 7b DPS-mode-safe
+// dummy-fallback (it conflated "no real positioned enemy roster" with "not every player targets
 // the enemy side", and a support ship's ally-heal falls into the second, much more common, case)
-// — out of scope to fix here; only Frontline's OWN passive (the mechanic under test) is affected
-// by this workaround, not its in-game kit identity. Reported as a concern in the task report.
+// — out of scope at the time, and SINCE FIXED by Task 9b. Only Frontline's OWN passive (the
+// mechanic under test) is affected by this workaround, not its in-game kit identity.
 // ===========================================================================
 
 const RDP_FRONTLINE_R2_TEXT =

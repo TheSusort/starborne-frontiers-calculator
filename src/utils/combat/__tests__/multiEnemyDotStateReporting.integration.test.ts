@@ -227,13 +227,15 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
         // `resolvesPositionalVictim` found nobody targetable (positionalBinding.ts:69-79).
         //
         // SP-4c-2a's targetable-HP floor closes THAT shape too — the same 0-max-HP enemy is now
-        // raised to MIN_TARGETABLE_MAX_HP, `hasPositionedEnemyRoster` is constant true, and
-        // `dummyEnemyIsVestigial` flips true: the dummy is dropped from the TURN ORDER, so its
-        // own per-victim DoT tick (which normally runs during its turn, decrementing
-        // `ticksRemaining`) no longer fires this round. This is a REAL BEHAVIOUR CHANGE, not test
-        // drift: `ticksRemaining` is now ONE MORE than before (5 vs 4, 9 vs 8) because the one
-        // tick that used to happen this round didn't. The counts/stacks themselves are unaffected
-        // — only the decrement timing moved.
+        // raised to MIN_TARGETABLE_MAX_HP and `hasPositionedEnemyRoster` is constant true, which
+        // flipped the then-live `dummyEnemyIsVestigial` gate true and dropped the dummy from the
+        // TURN ORDER. SP-4c-2c has since deleted that gate and dropped the dummy UNCONDITIONALLY,
+        // so the reading below no longer depends on the roster's HP at all: the dummy's own
+        // per-victim DoT tick (which used to run during its turn, decrementing `ticksRemaining`)
+        // never fires on any run. That was a REAL BEHAVIOUR CHANGE at 4c-2a, not test drift:
+        // `ticksRemaining` is ONE MORE than before the floor (5 vs 4, 9 vs 8) because the one tick
+        // that used to happen this round didn't. The counts/stacks themselves are unaffected — only
+        // the decrement timing moved, and 4c-2c did not move it again.
         const row = runCombat({
             ...BASE,
             shipSkills: { slots: [] },

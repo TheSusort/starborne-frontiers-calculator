@@ -322,8 +322,14 @@ describe('the shapes that used to reach the dummy sink', () => {
 
     it('LIVENESS: the no-victim player turn is what keeps this file honest now', () => {
         // THIS FILE'S VACUITY GUARD, re-homed for the third and final time — and the change of
-        // SUBJECT is the point. Every other case here reads 0, and a zero from a reading wired to
-        // nothing means nothing, so exactly one case must read non-zero off a live path.
+        // SUBJECT is the point, so be precise about what the non-zero below actually buys (the
+        // header states this too; do not let the two drift). It is a DIFFERENT COUNTER from the one
+        // every zero in this file reads: this case reads `__getNoVictimPlayerTurnCount`, the zeros
+        // read `__getLegacyVictimFallbackCount`. So the non-zero proves that the FIXTURE RUNS A LIVE
+        // PATH — the zeros are not coming from cases that never ran — and nothing more. The
+        // CONSULTATION counter's own liveness is pinned CROSS-FILE, at
+        // `damageChannelAccounting.integration.test.ts:422`, the only reading in the corpus that
+        // moves it off 0.
         //
         // WHAT MOVED IN SP-4c-2c. This case used to prove `__getDummySinkCreditCount` could move,
         // via the dummy's own DoT-tick turn — the one route SP-4c-2a's floor did not close. That

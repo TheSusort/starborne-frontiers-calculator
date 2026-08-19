@@ -9,9 +9,11 @@
  * `creditDamage` is never called at all — a regression vs pre-SP-M behavior (these procs used to
  * target the DPS dummy `enemy` via the plain `target:'enemy'` fallback and always credited).
  *
- * Fix (engine.ts playerDrainCtx): `enemyWithMostBuffs`/`enemyWithHighestSpeed` now fall back to
- * the live dummy `enemy.id` when `dummyEnemyIsVestigial` is false (DPS mode) — mirroring Task 7's
- * existing `livingOpposingActorIds` dummy-aware binding for Judge/Incinerator's all-enemies proc.
+ * Fix (engine.ts playerDrainCtx): `enemyWithMostBuffs`/`enemyWithHighestSpeed` fall back to the live
+ * dummy `enemy.id` when there is no positioned enemy roster — mirroring Task 7's `livingOpposingActorIds`
+ * dummy-aware binding for Judge/Incinerator's all-enemies proc. (The fix originally keyed on
+ * `dummyEnemyIsVestigial`; Task 9b re-keyed it to `hasPositionedEnemyRoster`, and SP-4c-2c deleted
+ * the old gate entirely.)
  *
  * Both ships use their real corpus passive text (docs/ship-skills.csv), matching the positional
  * fixtures in reactiveDamagePositionalHp.test.ts verbatim.

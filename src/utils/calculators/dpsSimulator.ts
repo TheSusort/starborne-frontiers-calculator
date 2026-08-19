@@ -134,9 +134,10 @@ export interface DPSSimulationInput {
     /** Pre-parsed targeting preference for the focus attacker. Also optional since SP-4b-1 — the
      *  boundary fills an absent one with `DEFAULT_FRONT_ENEMY_TARGET`. Without that fill,
      *  `selectTurnTarget` (which requires `resolvesPositionalVictim(...) && target`) would
-     *  short-circuit to `legacyVictim` (the dummy) however well-positioned the roster is, and
-     *  `dummyEnemyIsVestigial` (which checks `t?.side === 'enemy'`) would keep the dummy in the
-     *  turn order — which is precisely why the boundary fills it. */
+     *  short-circuit to `legacyVictim` (the dummy) however well-positioned the roster is — which is
+     *  precisely why the boundary fills it. (It would ALSO have kept the dummy in the turn order via
+     *  the `dummyEnemyIsVestigial` gate's `t?.side === 'enemy'` conjunct; that gate was deleted in
+     *  SP-4c-2c and the dummy now takes no turn on any run, so that half no longer applies.) */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
      *  positional apply site. A single-target 1v1 wants shape 'base', which is exactly what the
