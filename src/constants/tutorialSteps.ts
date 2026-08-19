@@ -113,7 +113,7 @@ const AUTOGEAR_SETTINGS_TUTORIAL: TutorialGroup = {
             targetId: 'autogear-advanced-options',
             title: 'Advanced options',
             description:
-                'Filters that change which gear is available to the optimizer (ignore equipped, ignore unleveled, use upgraded stats, complete sets, optimize implants, include calibrated). Click to expand.',
+                'Filters that change which gear is available to the optimizer, and how it is scored (ignore equipped, ignore unleveled, use upgraded stats, complete sets, optimize implants, include calibrated, assume all gear is calibrated). Click to expand.',
         },
     ],
 };
