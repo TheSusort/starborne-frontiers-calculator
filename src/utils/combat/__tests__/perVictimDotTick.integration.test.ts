@@ -834,7 +834,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
     //     this epic already closed: "no opt-out flag for legacy fixtures — an escape hatch
     //     preserves the exact fork 4c needs gone"); or
     //   • `isTargetableRosterMember` is re-keyed from STATIC `stats.hp` to live `currentHp`
-    //     (positionalBinding.ts:35-37) — a corpse would then read as untargetable and reopen the
+    //     (positionalBinding.ts:45) — a corpse would then read as untargetable and reopen the
     //     shape from the other end, which the max-HP assertion here would not otherwise notice.
     it('TRIPWIRE: the ENEMY-side divergence shape (positioned-but-unhittable enemy) is gone — every positioned enemy arrives already hittable', () => {
         const input = POSITIONAL_BASE({

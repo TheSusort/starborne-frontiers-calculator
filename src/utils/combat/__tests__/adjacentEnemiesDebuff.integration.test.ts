@@ -247,7 +247,7 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
  * (normalizeRoster.ts:86-92) fills BOTH targeting axes for every run through the boundary — so
  * this run IS positional. The `positional` gate (engine.ts:9113, `const positional =`) — and its
  * `willApplyPositionally` prediction (engine.ts:9030, `const willApplyPositionally =`) — calls `resolvesPositionalVictim`, which IS satisfied here: the
- * roster's one member has max hp > 0 (`isTargetableRosterMember`, positionalBinding.ts:36).
+ * roster's one member has max hp > 0 (`isTargetableRosterMember`, positionalBinding.ts:45).
  * `targetId` IS threaded onto the turn args, as `BARE_ENEMY_ID` — not left unset, and not the
  * vestigial `enemy` dummy.
  *

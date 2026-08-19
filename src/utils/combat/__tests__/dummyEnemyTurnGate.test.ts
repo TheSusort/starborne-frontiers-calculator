@@ -200,7 +200,7 @@ describe('dummy enemy turn gate', () => {
     //   • the floor is removed or gains an escape hatch (`withTargetableHp` in normalizeRoster.ts,
     //     which today floors unconditionally); or
     //   • `isTargetableRosterMember` is re-keyed from STATIC `stats.hp` to live `currentHp`
-    //     (positionalBinding.ts:35-37) — a corpse would then read as untargetable and reopen the
+    //     (positionalBinding.ts:45) — a corpse would then read as untargetable and reopen the
     //     shape from the other end, which the HP assertion here would not otherwise notice.
     it('TRIPWIRE: the 0-max-HP route into the not-fully-positional branch is gone — the floor arrives already hittable', () => {
         const floored = normalizeCombatRoster(BASE());

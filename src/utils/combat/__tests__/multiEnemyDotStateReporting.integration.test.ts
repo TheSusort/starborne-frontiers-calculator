@@ -224,7 +224,7 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
         // SP-4b-2b: this used to get there by passing NO roster. A roster is now required, and
         // omitting `target`/`pattern` does NOT keep a run non-positional (`normalizeCombatRoster`
         // fills both). The remaining non-positional shape was BASE's 0-MAX-HP "pressure source":
-        // `resolvesPositionalVictim` found nobody targetable (positionalBinding.ts:60-70).
+        // `resolvesPositionalVictim` found nobody targetable (positionalBinding.ts:69-79).
         //
         // SP-4c-2a's targetable-HP floor closes THAT shape too — the same 0-max-HP enemy is now
         // raised to MIN_TARGETABLE_MAX_HP, `hasPositionedEnemyRoster` is constant true, and

@@ -199,8 +199,8 @@ describe('standing-leech hook — damage-dealt passive', () => {
         // `leech-pressure-source` to MIN_TARGETABLE_MAX_HP, so the run IS positional now and the
         // burst goes down the per-victim path — measured: `cumulativeDamage` stays 0 every round
         // (the legacy scalar sink books nothing), `perTargetDamage['leech-pressure-source']` reads
-        // 20 000 on each burst round (10 000 firing hit + 10 000 burst), and the row's
-        // `detonationDamage` reads that 10 000 through the `focusPositionalDetonation` fold.
+        // 10 000 on each burst round (5 000 firing hit + 5 000 burst), and the row's
+        // `detonationDamage` reads that 5 000 through the `focusPositionalDetonation` fold.
         //
         // The assertions below survive the move, and are not weakened by it: they are RATIOS
         // against the row's own `detonationDamage` rather than integers pinned to one channel, and

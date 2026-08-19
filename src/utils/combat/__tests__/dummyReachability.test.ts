@@ -370,7 +370,7 @@ describe('sink CREDITS are distinct from fallback CONSULTATIONS', () => {
         //    credit), and each of `bareInput().numRounds` rounds books one tick → BARE_ROUNDS.
         //  • CONSULTED increments once per selection that fell through to `tb.legacyVictim`.
         //    `resolvePositionalTarget` returns null for an ally-side target unconditionally
-        //    ("Ally-side targets do not resolve through the opposing list", positionalBinding.ts:125-128),
+        //    ("Ally-side targets do not resolve through the opposing list", positionalBinding.ts:144-147),
         //    and the focus takes one turn per round → BARE_ROUNDS. The roster member's own turns do
         //    NOT contribute: the boundary gives it the enemy-side front default, which resolves
         //    against the (targetable, 1 000 000 max HP) focus.
