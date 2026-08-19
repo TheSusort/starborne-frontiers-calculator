@@ -86,8 +86,11 @@ export const EnemySettingsPanel: React.FC<EnemySettingsPanelProps> = ({
                     <Input
                         label="Enemy HP"
                         type="number"
+                        min="1"
                         value={enemyHp}
-                        onChange={(e) => onEnemyHpChange(parseInt(e.target.value) || 0)}
+                        onChange={(e) =>
+                            onEnemyHpChange(Math.max(1, parseInt(e.target.value) || 1))
+                        }
                     />
                     <Input
                         label="Enemy Security"
