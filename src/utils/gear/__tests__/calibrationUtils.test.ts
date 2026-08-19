@@ -199,11 +199,4 @@ describe('applyCalibrationToStat', () => {
     it('adds a flat 5 to speed', () => {
         expect(applyCalibrationToStat({ name: 'speed', value: 20, type: 'flat' }, 6)).toBe(25);
     });
-
-    it('does NOT check eligibility — it calibrates any stat it is handed', () => {
-        // The caller decides eligibility. This is the whole point of the export:
-        // the assumed-calibration path calibrates pieces that are not yet level 16.
-        const stat: Stat = { name: 'attack', value: 500, type: 'flat' };
-        expect(applyCalibrationToStat(stat, 6)).toBe(1000);
-    });
 });

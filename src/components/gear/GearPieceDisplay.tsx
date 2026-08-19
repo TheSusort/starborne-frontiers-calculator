@@ -14,7 +14,6 @@ import {
     getCalibratedMainStat,
 } from '../../utils/gear/calibrationCalculator';
 import { calculateUpgradeCost } from '../../utils/gear/potentialCalculator';
-import { assumedCalibrationEligible } from '../../utils/gear/assumedCalibration';
 import { applyCalibrationToStat } from '../../utils/gear/calibrationUtils';
 
 interface Props {
@@ -121,9 +120,10 @@ export const GearPieceDisplay = memo(
         const displayMainStat = useMemo(() => {
             if (!gear.mainStat) return null;
             // Autogear's assumed-calibration mode: show what the optimizer
-            // scored. Uses the relaxed predicate so a sub-16 piece under "Use
-            // upgraded stats" previews too — isCalibrationEligible would reject it.
-            if (assumedCalibration && assumedCalibrationEligible(gear, true)) {
+            // scored. Eligibility is the caller's responsibility — GearSuggestions
+            // already gates with assumedCalibrationEligible(gear, useUpgradedStats)
+            // before ever setting assumedCalibration={true}, so we trust the prop here.
+            if (assumedCalibration) {
                 return {
                     ...gear.mainStat,
                     value: applyCalibrationToStat(gear.mainStat, gear.stars),

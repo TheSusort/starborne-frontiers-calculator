@@ -258,10 +258,11 @@ describe('clearScoreCache', () => {
         expect(high).toBeGreaterThan(low);
     });
 
-    it('clears every cache that feeds the score, not just the score map', () => {
-        // Guards the real failure mode: a cache added to this module that
-        // clearScoreCache() forgets to clear. Two clears with different stats
-        // either side must produce two different answers.
+    it('produces a stable score across repeated clears with identical gear stats', () => {
+        // Repeated scoring of the same gear stats after independent cache
+        // clears must agree with each other, while a changed stat after a
+        // clear must still produce a different score (no stale value leaks
+        // through).
         clearScoreCache();
         const first = score(2000);
         clearScoreCache();
