@@ -2755,7 +2755,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     //    the gate is dead with the gate; do not resurrect one from an older comment or commit.
     //
     // SP-4c-2d deletes the actor itself, and with it this comment, `dotCarrierActors`'s first member,
-    // the `legacyVictim` binding and the `isDummyEnemy` sites below.
+    // the `legacyVictim` binding and the `isDummyEnemy` sites below (`:8861`, `:8865`, `:10977`).
+    // ⚠️ AND — the LARGEST item on that inventory, the one a grep for `isDummyEnemy` will NOT find
+    // because it spells the condition inline — the 82-line dead turn body
+    // `} else if (actor.kind === 'enemy' && actor.id === enemy.id) {` opening at `:9955` and
+    // running to its closing brace on `:10036`: the `tickDoTs` / `processBombs` /
+    // `processAccumulators` calls that were the dummy's entire turn, plus their commentary. It is
+    // ⛔-bannered in place rather than deleted; 4c-2d removes the arm entire.
     //
     // SP-M M1 (Task 9b fix): the reactive target resolvers below gate on `hasPositionedEnemyRoster`
     // — "does a real, positioned opposing-enemy roster exist" — and this is the extraction that gave
@@ -8843,8 +8849,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 //        would change nothing for the dummy: it is not in the turn order to begin
                 //        with, and its Post-Turn `decrementEnemy()` moved to the round tail in this
                 //        same rung.
-                //    Retained for reference, since `dpsEnemyTarget`'s own doc points here: the
-                //    terminal `break` near the end of the round loop is
+                //    Retained for reference because this block is what `:1949`'s "never dies"
+                //    gloss and the terminal `break` at `:11685` are explained against. The
+                //    pointer runs THAT way only — `dpsEnemyTarget`'s own doc (`:2539`) mentions
+                //    neither this guard, nor this exemption, nor that `break`. The terminal `break`
+                //    near the end of the round loop is
                 //    `if (dpsEnemyTarget && enemy.destroyedRound !== undefined) break;`, and on any
                 //    run with a supplied enemy roster (sim, healing, and since SP-4b-2a every
                 //    DPS-calculator run) the dummy never dies at all, so `destroyedRound` is never
@@ -8974,9 +8983,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // creditDamage (no cumulativeDamage double-feed against the dummy HP overwrite).
                 //
                 // OUTSIDE every `if (!isTurnBlocked)` stasis gate (this prologue precedes all
-                // kind-branches) → a STASISED victim STILL ticks, matching the heal-target/dummy
-                // precedent and the E5-symmetry invariant. Moving this inside a stasis gate would
-                // wrongly silence a stasised victim's DoTs.
+                // kind-branches) → a STASISED victim STILL ticks, matching the heal-target
+                // precedent and the E5-symmetry invariant. (It read "heal-target/dummy" until
+                // SP-4c-2c; there is no dummy half of that precedent any more — the dummy takes no
+                // turn, so it ticks nothing, stasised or otherwise.) Moving this inside a stasis
+                // gate would wrongly silence a stasised victim's DoTs.
                 if (actor.id !== enemy.id) {
                     const isHealTarget = !!healTarget && actor.id === healTarget.id;
                     if (isHealTarget) {
@@ -9981,13 +9992,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }),
                         credit: (sourceId, dotType, damage) =>
                             creditDamage(sourceId, dotType, damage),
-                        // PR I4b: the dummy sink `enemy` is the ticking victim.
+                        // PR I4b: the dummy sink `enemy` WAS the ticking victim (past tense — this
+                        // callback is never invoked; see the dead-branch banner above).
                         dotMultFor: (ctx) => victimDotMult(ctx, enemy),
                     });
 
-                    // Bombs: per-entry burst credited to the applier's detonation channel,
-                    // using the applier's snapshotted affinityMult. bomb-detonated actorId is
-                    // the applier (per-actor attribution).
+                    // ⛔ (still inside the dead branch — see the banner at `:9957`.) DESCRIPTION OF
+                    // A PATH THAT NO LONGER RUNS: bombs WERE per-entry burst credited to the
+                    // applier's detonation channel, using the applier's snapshotted affinityMult;
+                    // `bomb-detonated` actorId WAS the applier (per-actor attribution).
                     processBombs({
                         pendingBombs,
                         emitBombDetonated: (actorId, stacks, damage) =>
@@ -10003,18 +10016,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                             creditDamage(sourceId, 'detonation', damage),
                     });
 
-                    // Accumulators: the gather INPUT is the summed direct damage of ALL players
-                    // this round (spec: Echoing Burst gathers all players' direct); each burst is
-                    // credited to its applier's detonation channel.
-                    // SP-4b-2 D1: the same two-channel read the positioned-burst site uses, with
-                    // the dummy sink's accumulating side spelled out — the players. Moves together
-                    // with that site (team symmetry is LOCKED for this pair).
+                    // ⛔ (still inside the dead branch — see the banner at `:9957`.) DESCRIPTION OF
+                    // A PATH THAT NO LONGER RUNS: the gather INPUT WAS the summed direct damage of
+                    // ALL players that round (spec: Echoing Burst gathers all players' direct); each
+                    // burst WAS credited to its applier's detonation channel.
+                    // SP-4b-2 D1: it WAS the same two-channel read the positioned-burst site uses,
+                    // with the dummy sink's accumulating side spelled out — the players. The "moves
+                    // together with that site" pairing (team symmetry LOCKED) described this arm
+                    // while it ran; with the arm dead there is nothing left here to keep in step.
                     processAccumulators({
                         pendingAccumulators,
                         gatheredDirect: directDealtBy(allPlayerActors),
                         creditDetonation: (sourceId, damage) =>
                             creditDamage(sourceId, 'detonation', damage),
                     });
+                    // ⛔ END OF THE DEAD BRANCH (banner at `:9957`). Nothing between that banner
+                    // and this line has executed on any run since SP-4c-2c; 4c-2d deletes the whole
+                    // arm with the actor.
                 } else if (actor.kind === 'enemy') {
                     // ====================================================================
                     // ENEMY ATTACKER TURN (healing mode) — a bare-stat offense actor that
@@ -11041,7 +11059,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         // `finalHpPct` told when it silently described only `enemyAttackers[0]`. `enemy.id` is the
         // id this identical bucket emitted under from the dummy's own Post-Turn before SP-4c-2c
         // retired that turn, so keeping it here holds ONE stable identity for the bucket across
-        // modes and across the rung, and matches the pre-regression (841e1bc0) stream exactly.
+        // modes and across the rung: the pre-regression (841e1bc0) stream carries this same
+        // `actorId` on this emission. IDENTITY only — 841e1bc0 predates this rung, so on a
+        // differential fixture the emission's POSITION in the stream DID move (see the paragraph
+        // above); this is NOT a claim that the stream is otherwise unchanged.
         // `buff-expired` has no reactive listeners — it is log-only.
         for (const buffName of statusEngine.decrementEnemy().expired) {
             bus.emit({ type: 'buff-expired', actorId: enemy.id, round: r, buffName });
