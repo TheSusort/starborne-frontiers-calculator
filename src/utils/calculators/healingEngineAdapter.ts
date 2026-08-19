@@ -885,8 +885,13 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             totalShieldAbsorbed: Math.round(totalShieldAbsorbedRaw),
             totalBarrierAbsorbed: Math.round(totalBarrierAbsorbedRaw),
             totalIncomingDamage: Math.round(totalIncomingRaw),
+            // SP-4c-1: divide by the ELAPSED rounds (`rows.length`), not the configured window
+            // (`numRounds`). A healing run can now end early — a wiped side terminates the match —
+            // and dividing by the window under-reports the pace of a short fight. This is the same
+            // fix dpsSimulator already carries under SP-U U6; runs that survive the window are
+            // unaffected, since rows.length === numRounds there.
             avgHealingPerRound:
-                numRounds > 0 ? Math.round((totalDirectRaw + totalHotRaw) / numRounds) : 0,
+                rows.length > 0 ? Math.round((totalDirectRaw + totalHotRaw) / rows.length) : 0,
             ...(healing?.destroyedRound !== undefined
                 ? { destroyedRound: healing.destroyedRound }
                 : {}),

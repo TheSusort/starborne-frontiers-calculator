@@ -155,6 +155,36 @@ const POS_TEAM: Position = 'M3';
 const POS_ENEMY_FRONT: Position = 'M4';
 const POS_ENEMY_BACK: Position = 'M1';
 
+/**
+ * SP-4c-1: an inert SURVIVOR for rosters whose only real enemy is deliberately killed mid-fixture.
+ *
+ * The cases below kill their sole enemy on purpose — a 1-HP disable-bot that must not live to
+ * re-apply its debuff. Since SP-4c-1 that kill WIPES the enemy side and ends the match, cutting the
+ * run short of the rounds the case is about. This bystander keeps a living member on the board and
+ * changes nothing else: 0 attack and no skills make it RNG-stream-inert, and speed 1 puts it last
+ * in every turn order.
+ */
+const bystanderEnemyAt = (id: string, position: Position): EnemyAttacker =>
+    ({
+        id,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1,
+            security: 0,
+            hacking: 0,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: { slots: [] },
+    }) as EnemyAttacker;
+
 // ── Run helper (collects all relevant events) ─────────────────────────────────────────────
 
 const INTERESTING_TYPES: CombatEvent['type'][] = [
@@ -307,6 +337,9 @@ describe('D-PR13 Task 2 — Disable turn-skip: (ii) Disable(2) decrements on ski
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // end the match and cut this case short of the rounds it is about).
+                bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
                     id: 'disable-bot',
                     stats: {
@@ -833,6 +866,9 @@ describe('D-PR13 Task 4 — cleanse-resume: a cleansed Disable restores the focu
                 teamCleanserAt('cleanser', POS_TEAM, 200),
             ],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // end the match and cut this case short of the rounds it is about).
+                bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
                     id: 'disable-bot',
                     stats: {

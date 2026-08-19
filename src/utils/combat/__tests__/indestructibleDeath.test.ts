@@ -140,8 +140,11 @@ const run = (input: CombatEngineInput) => {
 
 describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
     // attack 10000 × 100% → 10000 dmg/round vs a 25000 pool → the enemy's HP crosses 0 in R3, so
-    // it dies in round 3. The run itself plays all 6 rounds (see the header: the terminating
-    // `break` is `dpsEnemyTarget`-gated), but NO credit is booked after the kill.
+    // it dies in round 3 — and since SP-4c-1 that kill WIPES the enemy side, so the match ends on
+    // that turn and the run reports exactly 3 rounds. That RESTORES the `toHaveLength(3)` this
+    // case originally pinned: it only became 6 when the terminating `break` went `dpsEnemyTarget`-
+    // gated and therefore dead. The credit claim is unchanged either way — nothing is booked after
+    // the kill, which is now true because there is nothing after the kill.
     it('per-victim credit covers ONLY the rounds up to the kill', () => {
         const result = run(dpsBase({ attack: 10000, numRounds: 6 }, 25_000));
 
@@ -149,13 +152,13 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         // pinned on the scalar channel before the roster became real (M3).
         expect(dealtBy(result.rounds, 'attacker')).toBe(30000);
 
-        // …and it is booked in exactly the first three rounds: rounds 4-6 credit nothing, which is
-        // what the old `expect(result.rounds).toHaveLength(3)` was really observing.
+        // …and it is booked in exactly the first three rounds — which are now ALL the rounds there
+        // are, the match having ended on the killing turn.
         const creditedRounds = result.rounds.filter(
             (rd) => (rd.perTargetDealt?.attacker?.[BARE_ENEMY_ID] ?? 0) > 0
         );
         expect(creditedRounds.map((rd) => rd.round)).toEqual([1, 2, 3]);
-        expect(result.rounds).toHaveLength(6);
+        expect(result.rounds).toHaveLength(3);
 
         // The scalar totals are dead the moment a roster exists — the DIRECT-CAST credit skip at
         // engine.ts:9218 (`if (!positional) {` around `creditDamage(...)`), which is the site the

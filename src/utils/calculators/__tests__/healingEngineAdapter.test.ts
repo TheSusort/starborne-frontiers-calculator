@@ -54,6 +54,47 @@ const BASE = (overrides: Partial<HealingSimulationInput> = {}): HealingSimulatio
 });
 
 describe('simulateHealing adapter', () => {
+    it('averages healing over the ELAPSED rounds when the run ends early', () => {
+        idCounter = 0;
+        // A 5-round window whose lone enemy dies in round 1. The healer's active slot heals FIRST
+        // and then attacks — clauses resolve in written order, so the round-1 heal lands before the
+        // kill ends the match. HEALER.attack is 5 000 against a 1 000-HP enemy, so one cast wipes
+        // the roster.
+        //
+        // The discriminator is the DIVISOR, not the total: the run is one round long and healed
+        // 1 000. Dividing by the elapsed round gives 1 000; dividing by the configured window of 5
+        // gives 200, which is what this reported before SP-4c-1 made early endings possible.
+        const result = simulateHealing(
+            BASE({
+                rounds: 5,
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 0, crit: 0, critDamage: 0, speed: 10, hp: 1_000 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    },
+                ],
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 10, basis: 'hp' },
+                    }),
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                ]),
+            })
+        );
+
+        expect(result.rounds).toHaveLength(1);
+        expect(result.summary.totalHealing).toBe(1000);
+        expect(result.summary.avgHealingPerRound).toBe(1000);
+    });
+
     // ── Test 1: plain heal cadence shape ─────────────────────────────────────
     it('plain self-heal: buckets, cumulative, and summary totals are consistent', () => {
         idCounter = 0;

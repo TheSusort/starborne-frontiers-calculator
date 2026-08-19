@@ -4100,6 +4100,31 @@ export function runCombat(rawInput: CombatEngineInput): {
     // round onto charge-changed events without rebuilding their parent object each round.
     let currentRound = 0;
 
+    // SP-4c-1: the match ends when one side has no living member — the game rule (owner,
+    // 2026-08-18): "when there's no more enemies, the match will end mid round, after the turn
+    // that kills the last opposing ship ends."
+    //
+    // READS THE ROSTERS, NOT `actorsBySide`. The vestigial dummy `enemy` is `side: 'enemy'` with
+    // billions of HP, so `actorsBySide('enemy')` can never be wiped while it exists and this rule
+    // would silently never fire on the enemy side. SP-4c-2 deletes the dummy, at which point the
+    // two formulations converge and this note goes with it.
+    //
+    // KEYED ON `destroyedRound`, NOT ON `currentHp <= 0`. The rule is "the last opposing ship was
+    // KILLED", and `recordDestroyed` stamps `destroyedRound` on exactly that event. The two
+    // readings come apart on an actor that was NEVER ALIVE — one built with max hp 0, which starts
+    // at `currentHp === 0` without ever having been destroyed. That shape is everywhere in the
+    // fixture corpus: the focus attacker's `hp` is optional and most direct-engine fixtures omit
+    // it (it was unobservable while nothing could kill the focus), and the 0-max-HP "pressure
+    // source" roster is a deliberate non-positional trick. Reading `currentHp <= 0` as death
+    // declared those sides wiped on turn 1 and ended 346 tests' runs after a single round.
+    //
+    // A never-alive side is therefore NOT a wipe, and the run continues exactly as before — which
+    // is also the honest reading: nothing was killed.
+    const sideIsWiped = (): boolean =>
+        enemyAttackerActors.every((a) => a.destroyedRound !== undefined) ||
+        allPlayerActors.every((a) => a.destroyedRound !== undefined);
+    let matchOver = false;
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
@@ -8597,6 +8622,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                 return undefined;
             };
             for (let actor = selectNext(); actor; actor = selectNext()) {
+                // SP-4c-1: a side can be wiped OUTSIDE a turn. Both the start-of-round drain
+                // (drain point (a), above) and the previous round's end-of-round drain credit real
+                // damage — Rhodium, Grif, FrontLine, Chakara and Incinerator all carry passives
+                // that fire there. Without this check the loop would go on to select an actor and
+                // let it cast into an empty board, reintroducing exactly the whiff this rule
+                // deletes. Checked BEFORE the turn body, so no actor acts after the wipe.
+                if (sideIsWiped()) {
+                    matchOver = true;
+                    break;
+                }
                 if (++selectionGuard > MAX_SELECTION_TICKS) {
                     throw new Error(
                         `combat round ${r}: turn selection did not terminate (pending actions not draining)`
@@ -10644,6 +10679,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Drain intents enqueued by end-of-turn triggers before the next actor acts.
                 drainIntentsFor('player');
                 drainIntentsFor('enemy');
+
+                // SP-4c-1: AFTER the turn ends (including its drains, so an on-death reactive
+                // that revives or kills still counts), check for a wipe. Breaking HERE — rather
+                // than at the round boundary — is what makes termination turn-granular: the
+                // remaining actors in this round's order do not act. The round's row is still
+                // assembled and pushed below from the partial round, so the wiping turn's damage
+                // IS reported. The enclosing `finally` resets `inTurnLoop` on this break, exactly
+                // as its own comment anticipated ("a future early exit added to the round loop can
+                // no longer leave inTurnLoop stuck true").
+                if (sideIsWiped()) {
+                    matchOver = true;
+                    break;
+                }
             }
         } finally {
             // The turn loop is closed: no live queue remains. The reset lives in `finally` so it
@@ -10721,7 +10769,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // runs and credits that damage; the run then terminates just after the row is pushed
             // (see the focus-death exit beside the enemy-death one below), mirroring how the
             // enemy-death path ends AT the kill round rather than before it.
-            if (attacker.destroyedRound !== undefined) pushSynthesizedFocusSkipTurn();
+            //
+            // SP-4c-1 adds a SECOND way to reach zero focus turns, on a LIVING focus: the match
+            // ended earlier in this round's turn walk (a team actor or an enemy landed the kill
+            // that wiped a side before the focus's turn came up). The remedy is identical and for
+            // the identical reason — the round's per-round maps still hold the earlier actors'
+            // damage, and breaking out before assembly would discard it — so the same synthesized
+            // skip turn supplies the row's provenance. Without this the round-assembly guard below
+            // throws on a living focus, which is what it is there to catch.
+            if (attacker.destroyedRound !== undefined || matchOver) pushSynthesizedFocusSkipTurn();
         }
         if (!focusTurns.length) {
             // Still genuinely impossible: a LIVING focus actor is always queued.
@@ -11290,6 +11346,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         // rounds past it). Gated on `dpsEnemyTarget` so the vestigial sim/healing sink (which
         // never dies) never cuts a real battle short. The turn-loop finally already reset
         // inTurnLoop, so this early exit is safe (see that finally's rationale).
+        // SP-4c-1: a side was wiped during this round's turn walk. The row is already pushed, so
+        // the wiping round is reported in full and the run ends here. Placed with the other two
+        // exits and independent of both: this one fires in EVERY mode, whereas the focus-death
+        // exit below is DPS-only (two-team and healing runs legitimately continue past the focus's
+        // death — twoTeamBattle.test.ts and healingGoldenParity both pin that).
+        // Re-evaluated rather than reading the flag alone: the round-ended drain and the
+        // post-round death drain both run AFTER the turn loop, so a side can be wiped between the
+        // last turn and here. The row for this round is already pushed either way.
+        if (matchOver || sideIsWiped()) break;
         if (dpsEnemyTarget && enemy.destroyedRound !== undefined) break;
         // Focus-death exit, sibling of the enemy-death one above. The focus attacker can now be
         // killed (a real positioned enemy attacks back), and in a DPS-style run it never acts again —
