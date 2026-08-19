@@ -31,6 +31,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { normalizeCombatRoster, MIN_TARGETABLE_MAX_HP } from '../normalizeRoster';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -118,12 +119,29 @@ const enemyTurnStartedCount = (input: CombatEngineInput): number => {
 };
 
 describe('dummy enemy turn gate', () => {
-    it('DPS mode (no TARGETABLE enemies): the dummy enemy takes its tick turn', () => {
-        idc = 0;
-        // BASE's roster is a 0-max-HP pressure source (see its note) and there is no healTargetId,
-        // so nothing on the board can absorb the focus's cast → the dummy `enemy` IS the target
-        // (DPS calc) and stays in the turn order.
-        expect(enemyTurnStartedCount(BASE())).toBeGreaterThan(0);
+    // RULING (SP-4c-2a, already decided — see task brief): this test used to pin "DPS mode (no
+    // TARGETABLE enemies): the dummy enemy takes its tick turn" — the ONE way to reach that claim
+    // was BASE's 0-max-HP "pressure source" roster, which `dummyEnemyIsVestigial`'s first conjunct
+    // (`enemyAttackerActors.some(isTargetableRosterMember)`, i.e. max hp > 0) read as
+    // not-fully-positional, keeping the dummy in the turn order.
+    //
+    // The targetable-HP floor (normalizeRoster.ts, MIN_TARGETABLE_MAX_HP) closes that constructive
+    // path CATEGORICALLY: every enemy attacker arrives at the engine already hittable, so
+    // `enemyAttackerActors.some(isTargetableRosterMember)` is now a tautology and there is no
+    // longer any input that makes the dummy's turn-order gate take its NOT-fully-positional
+    // branch. This is the same class of closure as `perVictimDotTick.integration.test.ts`'s GATE
+    // RETENTION case (SP-4c-2a Task 4's B6 ruling) — structurally unconstructible, not numerically
+    // stale — and this file's own pre-existing "SP-4c HAND-OFF" comment above already named the
+    // reason the coverage loss is EXPECTED rather than accidental: the dummy's turn-order gate
+    // (`dummyEnemyIsVestigial`) is deleted outright, along with the dummy itself, in rung 4c-2d.
+    //
+    // TRIPWIRE: assert the premise is unconstructible — the roster this fixture asks for (0 max
+    // HP) arrives at the engine already floored and hittable. If the floor is ever removed or
+    // gains an escape hatch, this fails and flags that the old claim (and the gate it pinned) may
+    // need to be re-examined before deletion.
+    it('TRIPWIRE: DPS mode\'s "no TARGETABLE enemies" premise is gone — the floor arrives already hittable', () => {
+        const floored = normalizeCombatRoster(BASE());
+        expect(floored.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
     });
 
     it('positional team-vs-team: the dummy enemy is excluded from the turn order', () => {
