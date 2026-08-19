@@ -1,9 +1,17 @@
 /**
  * SP-4c-2c — the two consequences of retiring the dummy `enemy`'s turn.
  *
- * Neither is a bug and neither is reachable from any production input: nothing routes into the
- * dummy's containers since SP-4c-2b (the player side gets `tgt: undefined`, and the dummy is not a
- * member of `opposingRoster`, so it can never be a victim). Both are pinned because SP-4c-2d deletes
+ * Neither is a bug, and neither is reachable by any SHIPPED KIT — which is a weaker and more
+ * accurate claim than "no production route exists". SP-4c-2b closed only the PLAYER-TURN route into
+ * the dummy's containers (the player side gets `tgt: undefined`, and the dummy is not a member of
+ * `opposingRoster`, so it can never be resolved as a victim). A REACTIVE route survives: the dummy's
+ * containers are handed to `drainQueue` as `ctx.*`, and `triggers.ts`'s `landDotOn` pushes into
+ * `(victim?.corrosionEntries ?? ctx.corrosionEntries)` whenever a reactive DoT intent's `eventCtx`
+ * stamps neither `victimId` nor `counterTargetId`. That route is inert by CORPUS, enumerated: of the
+ * 16 reactive (non-`on-cast`) DoT abilities across 148 ships x 3 refits, on 6 ships (Crocus,
+ * Pestilence, Ruiner, Shepherd, Warden, Wisteria), every listener stamps one of those fields. So the
+ * tap below is how the shape is reached today — but a future kit could reach it for real, and
+ * SP-4c-2d must rule on what happens then (spec §9.8). Both are pinned because SP-4c-2d deletes
  * the actor and must know exactly what it is deleting — an undocumented behaviour discovered during
  * a pure-deletion rung reads as that rung's regression.
  *

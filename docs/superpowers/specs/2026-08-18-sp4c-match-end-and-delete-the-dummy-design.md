@@ -629,3 +629,48 @@ exactly such an overstatement here — that `turn-started`/`turn-ended` pair was
 every positional run *before* this rung, by 4c-2a and 4c-2b. Writing it would credit this rung with a
 fix the ladder had already shipped, which is the same error §9.1's stale churn cell made in the other
 direction.
+
+### 9.8 A LIVE write route into the dummy's containers survives — 4c-2d must rule on it
+
+Three comments on this branch claimed nothing in production can write into the dummy's DoT/bomb
+containers. **That claim was an overstatement of exactly the class §0.2 of this rung's plan warns
+against**, and the whole-branch review measured it false. The stated reason (`tgt: undefined` on the
+player side since 4c-2b, plus the dummy not being a member of `opposingRoster`) closes only the
+PLAYER-TURN route. A second route is live:
+
+- `engine.ts` aliases `enemy.corrosionEntries` / `enemy.pendingBombs` and passes those aliases into
+  `drainQueue` as `ctx.corrosionEntries` / `ctx.pendingBombs`;
+- `triggers.ts`'s `landDotOn` pushes into `(victim?.corrosionEntries ?? ctx.corrosionEntries)`
+  whenever the reactive intent's `eventCtx` stamps neither `victimId` nor `counterTargetId` (the
+  `routedVictimId` resolution).
+
+Measured with a parser-legal `type:'dot'` / `trigger:'start-of-round'` / `target:'enemy'` ability on a
+positional run whose team includes an ally-targeting ally — the shape whose liveness the retired gate
+used to depend on:
+
+| | `dot-applied` | ticks | `corrosionDamage` | stacks |
+| --- | --- | --- | --- | --- |
+| pre-branch `f1bce838` | `targetId='enemy'` | 25000 x3 | `[25000,25000,25000,0]` | `[1,1,0,0]` |
+| post-branch | `targetId='enemy'` | none | `[0,0,0,0]` | `[1,1,1,1]` |
+
+So retiring the turn **silently deletes real damage for that shape** — it is not a no-op in general,
+only in the corpus.
+
+**Why it is not a blocking bug, by enumeration rather than argument.** Across all 148 ships x 3 refit
+levels there are **16 reactive (non-`on-cast`) DoT abilities on 6 ships** — Crocus
+(`on-ally-crit-dot`), Pestilence (`on-enemy-cleansed`), Ruiner (`on-enemy-repaired`), Shepherd and
+Warden (`on-attacked`), Wisteria (`on-self-crit-dot`). **Every one of those listeners stamps
+`victimId` or `counterTargetId`**, so no shipped kit reaches the fallback. That is why no golden and
+no oracle finding moved. The three comments have been corrected in place to say **"no SHIPPED kit
+reaches it", not "no production route exists"** — the same line §0.2 drew for the deleted credit
+counter ("corpus-dead", not "structurally unreachable").
+
+**The hand-off: 4c-2d must DECIDE.** With the turn retired, that fallback now writes into a ghost
+that never ticks and never expires while still being reported — so 4c-2d has to choose whether the
+victimless reactive arm **resolves a real victim** (e.g. the sentinel-free positional roster) or
+**drops the application outright**. Either is defensible; leaving it to fall into a deleted actor's
+containers is not. The decision is **corpus-inert today but a real behaviour change for any future
+kit that reaches it**, so it must be recorded as a ruling rather than absorbed silently into the
+deletion. This is closely related to **open issue #334** (a victimless reactive arm aiming at the
+sentinel), which §8's hand-off already nominated 4c-2d to force a decision on — same seam, same rung;
+decide them together.

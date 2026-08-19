@@ -2642,11 +2642,26 @@ export function runCombat(rawInput: CombatEngineInput): {
      *     false. The dummy takes NO turn on any run (`turnOrderActors` drops it unconditionally),
      *     so anything in its containers is FROZEN — it never ticks, never expires, and is still
      *     summed into every round's report: exactly the phantom shape the first bullet excludes.
-     *     That is tolerable only because nothing writes there: no production route has filled the
-     *     dummy's containers since SP-4c-2b (the player side gets `tgt: undefined`, and the dummy
-     *     is not a member of `opposingRoster`, so it can never be a victim), so in practice they
-     *     are empty and this bullet's admission reports nothing at all. A TEST TAP can still fill
-     *     them, and `retiredDummyTurn.test.ts`'s first case pins exactly that strand (measured:
+     *     That is tolerable only because no SHIPPED KIT writes there — NOT because no production
+     *     route exists. State it at that precision, because two routes must be distinguished:
+     *       • the PLAYER-TURN route is genuinely closed since SP-4c-2b (the player side gets
+     *         `tgt: undefined`, and the dummy is not a member of `opposingRoster`, so it can never
+     *         be resolved as a victim);
+     *       • the REACTIVE route is still LIVE. The dummy's own containers are aliased above
+     *         (`const corrosionEntries = enemy.corrosionEntries`, likewise `pendingBombs`) and
+     *         handed to `drainQueue` as `ctx.*`; `triggers.ts`'s `landDotOn` pushes into
+     *         `(victim?.corrosionEntries ?? ctx.corrosionEntries)` — i.e. HERE, onto the ghost —
+     *         whenever a reactive DoT intent's `eventCtx` stamps neither `victimId` nor
+     *         `counterTargetId` (see the `routedVictimId` resolution in `triggers.ts`).
+     *     That fallback is inert by CORPUS, not by construction, and the corpus was enumerated:
+     *     across 148 ships x 3 refit levels there are 16 reactive (non-`on-cast`) DoT abilities on
+     *     6 ships (Crocus, Pestilence, Ruiner, Shepherd, Warden, Wisteria), and every one of their
+     *     listeners stamps `victimId` or `counterTargetId`. So no shipped kit reaches the fallback
+     *     and in practice these containers are empty — but a FUTURE kit that reached it would have
+     *     its DoT silently stranded here instead of ticking on a real enemy. SP-4c-2d must rule on
+     *     that (spec §9.8; related to open issue #334).
+     *     A TEST TAP fills them the same way, and
+     *     `retiredDummyTurn.test.ts`'s first case pins exactly that strand (measured:
      *     0 corrosion damage a round, 1 stack reported every round, forever).
      *     The `|| a.id === enemy.id` disjunct is now REDUNDANT rather than load-bearing: the
      *     dummy is never destroyed on any run with a supplied roster, so `destroyedRound === undefined`
@@ -9969,10 +9984,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // single-writer assignment.
                     //
                     // CONSEQUENCE, measured and pinned by `retiredDummyTurn.test.ts`'s first case:
-                    // anything a test tap pushes into the dummy's containers is now STRANDED — it
-                    // never ticks here, never expires, and is still summed into every round's report
-                    // by `dotCarrierActors`/`dotCarrierReports`. No production route fills those
-                    // containers (SP-4c-2b), so in practice they are empty.
+                    // anything pushed into the dummy's containers is now STRANDED — it never ticks
+                    // here, never expires, and is still summed into every round's report by
+                    // `dotCarrierActors`/`dotCarrierReports`.
+                    //
+                    // Say who can push, precisely: no SHIPPED KIT can, but a production write route
+                    // survives. SP-4c-2b closed only the PLAYER-TURN route (`tgt: undefined`, dummy
+                    // not in `opposingRoster`). The REACTIVE route is live — these same containers
+                    // are handed to `drainQueue` as `ctx.*`, and `triggers.ts`'s `landDotOn` pushes
+                    // to `(victim?.corrosionEntries ?? ctx.corrosionEntries)` when a reactive DoT
+                    // intent's `eventCtx` stamps neither `victimId` nor `counterTargetId`. It is
+                    // corpus-dead rather than unreachable: all 16 reactive DoT abilities in the
+                    // corpus (6 ships) stamp one of those fields, so in practice the containers are
+                    // empty. Full route and corpus evidence: the `dotCarrierReports` comment above.
                     // ====================================================================
                     tickDoTs({
                         corrosionEntries,
