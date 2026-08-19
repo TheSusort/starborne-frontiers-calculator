@@ -8,6 +8,7 @@ exports[`kit fingerprints > AEGIS 1`] = `
     "buff:active",
     "charge-changed",
     "shield",
+    "shield:charged",
   ],
   "richEnemy": [
     "buff",
@@ -15,6 +16,7 @@ exports[`kit fingerprints > AEGIS 1`] = `
     "buff:active",
     "charge-changed",
     "shield",
+    "shield:charged",
   ],
   "wounded": [
     "buff",
@@ -22,6 +24,7 @@ exports[`kit fingerprints > AEGIS 1`] = `
     "buff:active",
     "charge-changed",
     "shield",
+    "shield:charged",
   ],
 }
 `;
@@ -1134,19 +1137,22 @@ exports[`kit fingerprints > Hermes 1`] = `
     "buff",
     "buff-expired",
     "charge-changed",
-    "heal",
+    "heal:active",
+    "heal:charged",
   ],
   "richEnemy": [
     "buff",
     "buff-expired",
     "charge-changed",
-    "heal",
+    "heal:active",
+    "heal:charged",
   ],
   "wounded": [
     "buff",
     "buff-expired",
     "charge-changed",
-    "heal",
+    "heal:active",
+    "heal:charged",
   ],
 }
 `;
@@ -1996,6 +2002,7 @@ exports[`kit fingerprints > Mender 1`] = `
     "buff:charged",
     "charge-changed",
     "heal",
+    "heal:active",
   ],
   "wounded": [
     "charge-changed",

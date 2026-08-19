@@ -1329,6 +1329,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (plan §B): `enemyHpPct` below then still answers 100 — "a healthy enemy" — because
     // `PlayerRoundCtx.enemyHpPct` is required. Byte-identical to the ghost's reading (§A.4: the
     // decline is always 0 on these turns), but not yet honest; a separate rung widens it.
+    // MEASURED CORPUS-INERT, so nobody can observe the phantom 100 today. The gate that would read
+    // it is `hp-threshold` with `hpComparator: 'above'` and `hpSubject` 'enemy'/default, and a scan
+    // of all 147 corpus ships' parsed abilities (165 hp-threshold conditions) found ZERO of them:
+    // the only enemy-subject HP gates in the corpus are `below`, and a `below` gate against 100
+    // reads FALSE — which is the correct "there is no enemy" answer anyway. Pinned by
+    // `noVictimResidualTripwires.test.ts`, which fails loudly the day a kit adds such a gate. The
+    // fix sites when that happens are `PlayerRoundCtx.enemyHpPct` (this file, ~248, make it
+    // optional) and this derivation.
     const enemyHpDecline = hasVictim ? Math.max(0, enemyHp - enemy.currentHp) : 0;
     const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
 
@@ -1659,7 +1667,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // is accepted as-is: the side-wide scheduled `__enemy__` channel legitimately survives as a
     // modelling assumption, the fold is inert today (a no-victim cast deals no damage, so the only
     // reachable effect is the round's display list and `landedEnemyDebuffCount`), and fencing it
-    // would risk unmeasured movement. Belongs to Task 5's measurement scope, not this rung's.
+    // would risk unmeasured movement.
+    // MEASURED, and the answer is ZERO. "Belongs to Task 5's measurement scope" is now discharged:
+    // a console.error probe on this fold and on the `timedAbilityEnemy` loop below, run over the
+    // WHOLE suite (531 files / 5,882 tests), fired 0 times — nothing folds from the phantom
+    // `__enemy__` store on a no-victim turn anywhere. So the modelling assumption is not merely
+    // sanctioned, it is unexercised, and this fold is provably a no-op on these turns.
     // The same ruling covers the `timedAbilityEnemy` loop further down (see its own note).
     //
     // Combined scheduled enemy effect/landed/resisted lists. Recurring/always/
@@ -2103,7 +2116,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // and this loop still folds those statuses. Accepted as-is for the same three reasons as the
     // scheduled-timed fold (see the note above `scheduledEnemy`): the side-wide `__enemy__` channel
     // is a sanctioned modelling assumption, the fold is inert today, and fencing it risks unmeasured
-    // movement. Task 5 measures it; do not fence it here.
+    // movement. MEASURED at zero over the whole suite — see the full note above `scheduledEnemy`,
+    // which carries the probe result for both folds. Do not fence it here.
     for (const s of timedAbilityEnemy) {
         landedAbilityEnemy.push(s.active);
         abilityEnemyEffects.push(payloadToSelectedBuff(s.payload));

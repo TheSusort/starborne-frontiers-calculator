@@ -1710,20 +1710,29 @@ function convertHitToSelfDot(
  * returned `tb.legacyVictim` because no living positional victim resolved. That is strictly weaker
  * than "the legacy sink was **CREDITED**", and the two come apart. A consultation is followed by a
  * scalar credit only when the roster was never targetable (every placed opposing actor at max
- * `hp === 0`) or empty. It is followed by **no credit at all** in the KNOWN NON-ZERO RESIDUE: the
- * mid-run **whiff window** — a roster that WAS targetable and has since been killed, where the apply
- * gate correctly goes positional, finds no anchor and books nothing, while the scalar credit is
- * suppressed because the positional branch was taken. Measured on the shared bare roster, 4 rounds:
- * an enemy at max hp 5 000 dies to the round-1 cast and rounds 2-4 each take the fallback with
- * `rawTotals.cumulative === 0` — 3 takes, 0 credited. That whiff is deliberate, documented
- * behaviour (see the focus cast site's "the correct behaviour is for the attacker to WHIFF" and
- * `damageChannelAccounting.integration.test.ts`), not a defect to be fixed.
+ * `hp === 0`) or empty.
  *
- * CONSEQUENCE FOR SP-4c: do NOT treat "this counter is zero for every run" as the entry condition —
- * zero is unreachable while the whiff window exists, and SP-4c is not deleting the whiff. Consulting
- * is the right thing to count precisely BECAUSE it is what keeps `legacyVictim` reachable and
- * therefore undeletable. SP-4c must handle that path explicitly — giving the whiff a non-dummy way
- * to express "no living victim" — rather than expecting a zero here.
+ * ⚠️ SP-4c-2b NARROWED THIS COUNTER TO THE **ENEMY SIDE**. `selectTurnTarget` now returns
+ * `tgt: undefined` for a player actor that resolved nobody, WITHOUT touching this counter, and
+ * increments `noVictimPlayerTurnCount` (below) instead. That is not bookkeeping taste: this
+ * counter's whole definition is "the fallback object was CONSULTED", and after 4c-2b the player
+ * side has no fallback object to consult — folding those turns in here would make the name false.
+ * So a player-side no-victim turn is invisible to this counter BY DESIGN; read the new one.
+ * The dummy ghost is still the player side's `tb.legacyVictim` (4c-2d deletes it), it is simply
+ * never handed out anymore.
+ *
+ * WHAT THAT LEAVES HERE: enemy-side consultations of `legacyVictim: healTarget` — 1,341 measured
+ * rows on `b22d2870`, where the heal anchor is itself undefined and the enemy turn takes its
+ * cadence-only skip. Re-homing that anchor is SP-4e's job.
+ *
+ * HISTORICAL NOTE (do not act on it). This block used to name the mid-run **whiff window** — a
+ * roster that WAS targetable and has since been killed — as a KNOWN NON-ZERO RESIDUE of
+ * consultations without credits, and warned SP-4c not to expect a zero here. That residue was
+ * PLAYER-side, and it is gone twice over: SP-4c-1 (#329) ends the fight at the end of the turn that
+ * wipes a side, so no player turn runs against an all-dead roster, and the whole-suite Proxy
+ * measurement on `b22d2870` found 3,206 player-side fallback rows of which **100% had an ally-side
+ * parsed target** and zero were a whiffing enemy-targeted cast (contract §A.1). Whatever remains of
+ * that shape now routes to `noVictimPlayerTurnCount`, not here.
  *
  * Module-level and NOT reset per run: `__resetLegacyVictimFallbackCount` is the test's job.
  */
@@ -1733,6 +1742,27 @@ export function __getLegacyVictimFallbackCount(): number {
 }
 export function __resetLegacyVictimFallbackCount(): void {
     legacyVictimFallbackCount = 0;
+}
+/**
+ * TEST-ONLY. Counts PLAYER turns that resolved **NO VICTIM** (SP-4c-2b) — an ally-targeted cast with
+ * nobody on the opposing side to anchor on. Distinct from `legacyVictimFallbackCount` above, which by
+ * its own definition counts CONSULTATIONS of a fallback object: after 4c-2b the player side has no
+ * fallback to consult, so folding these turns into that counter would make its name false.
+ *
+ * It is not a credit counter either — nothing is booked on a no-victim turn by construction (the
+ * damage assembly is victim-fenced, so the cast deals literal 0). 4c-2c/4c-2d gate on
+ * `dummySinkCreditCount`; this one exists so `dummyReachability`'s vacuity guard keeps a MOVING
+ * number to assert once `consulted` drops to 0 on the player side — a guard that can only read a
+ * counter which is always 0 proves nothing.
+ *
+ * Module-level and NOT reset per run: `__resetNoVictimPlayerTurnCount` is the test's job.
+ */
+let noVictimPlayerTurnCount = 0;
+export function __getNoVictimPlayerTurnCount(): number {
+    return noVictimPlayerTurnCount;
+}
+export function __resetNoVictimPlayerTurnCount(): void {
+    noVictimPlayerTurnCount = 0;
 }
 /**
  * TEST-ONLY instrumentation, and the COMPANION to `legacyVictimFallbackCount` above. Counts rounds
@@ -2687,7 +2717,18 @@ export function runCombat(rawInput: CombatEngineInput): {
         return liveDebuffLandingChance(statusEngine, selfBuffLookup, owner, victim, damageModifier);
     };
 
-    // The dummy `enemy` is the player-offense sink for a run with no targetable opposing roster.
+    // ⚠️ AMENDED BY SP-4c-2b, read this first: the dummy is NO LONGER a player-offense sink at all.
+    // `selectTurnTarget` stopped handing it out on the player side — a player actor that resolves
+    // nobody now gets `tgt: undefined` and runs a no-victim turn (see that function and
+    // `noVictimPlayerTurnCount`). So every "the player falls back to the dummy sink" claim in the
+    // paragraph below is HISTORY, kept because it explains why the turn-order gate is shaped the way
+    // it is. What survives verbatim: the dummy is still built, still a member of
+    // allActors/allActorsById, still the enemy side's structural counterpart, and still takes its own
+    // DoT-tick turn when this gate says it is not vestigial. Retiring that turn is 4c-2c's job and
+    // deleting the actor is 4c-2d's; NEITHER is done here, which is why this gate is unchanged and
+    // `dummyEnemyTurnGate.test.ts` still passes untouched through this rung.
+    //
+    // The dummy `enemy` WAS the player-offense sink for a run with no targetable opposing roster.
     // (Historically that meant "DPS-calc / non-positional mode" — accurate when this was written,
     // stale now: since SP-1/SP-3b both calculators supply a REAL enemy roster, and since SP-4b-1
     // `normalizeCombatRoster` places and targets every actor, so the sink is reached only through
@@ -7240,6 +7281,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                           }
                       )
                     : null;
+            // SP-4c-2b: the PLAYER side no longer falls back to the dummy ghost. An ally-targeted
+            // cast resolves nobody on the opposing side (contract §A.1: 100% of the 3,206 measured
+            // fallback rows have an ally-side parsed target), and the honest answer is "no victim"
+            // — the turn still RUNS (both player call sites below run it rather than skipping, so
+            // the repair/buff still lands); every victim-derived read answers "there is no enemy"
+            // instead of reading a ghost's neutral stats. The ENEMY side keeps
+            // `legacyVictim: healTarget`; re-homing that anchor is 4e's job, not this rung's.
+            if (selected == null && a.side === 'player') {
+                noVictimPlayerTurnCount++;
+                return { tgt: undefined };
+            }
             if (selected == null) legacyVictimFallbackCount++;
             return { tgt: selected ?? tb.legacyVictim };
         };
@@ -7247,7 +7299,22 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Unified runPlayerTurn argument builder (bySide unification PR6a). Produces the
         // full arg object for any side, folding the per-side divergence through
         // turnBindings(side) + runtimeFor(actor). targetId / healEventOnly are present
-        // ONLY for the enemy side (player sites omit both → byte-identical). The selfHpPct
+        // ONLY for the enemy side — but SP-4c-2b adds a THIRD state, so "player omits both" is
+        // now true for TWO different reasons and a reader must not collapse them:
+        //   (1) player WITH a victim (a real positional enemy): `targetId` IS emitted — the
+        //       `tgt.id !== enemy.id` guard passes. `healEventOnly` stays false (player binding).
+        //   (2) player with the GHOST as victim: the historical shape this banner described.
+        //       `targetId` omitted because the guard compared equal to the dummy's id, routing
+        //       the ability-status writes to the global `__enemy__` store. UNREACHABLE since
+        //       4c-2b — selectTurnTarget never returns the ghost on the player side anymore.
+        //   (3) player with NO victim (4c-2b, an ally-targeted cast): `targetId` omitted because
+        //       there is nobody to key a per-victim store by, together with the whole
+        //       victim-derived spread below (`enemy`, the five containers, enemyDefense/enemyHp,
+        //       targetRepairedThisRound, targetEffectiveAttack, enemyDebuffNames). That is a
+        //       different reason from (2), not the same trick: (2) said "the victim is a ghost
+        //       whose id is not a real store key", (3) says "there is no victim". Consumers must
+        //       read it as "no enemy", never as "an enemy with neutral stats" (contract §B).
+        // `healEventOnly` remains enemy-side-only in all three. The selfHpPct
         // denom is unified to runtimeFor(actor).hp (proven equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
         const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
@@ -9517,6 +9584,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // SP-D: record this cast's footprint size (aoeVictimIds — undefined in
                             // DPS/non-positional mode → default 1) for the enemies-hit-this-cast
                             // drain-time gate.
+                            // SP-4c-2b NAMED RESIDUAL, measured inert TWICE OVER: on a no-victim turn
+                            // `aoeVictimIds` is undefined (§A.4 — the ghost never had a position, so
+                            // it already was), so this books **1** for a cast that hit NOBODY. Left
+                            // alone deliberately. (1) Only two corpus ships gate on
+                            // `enemies-hit-this-cast` — Berserker (passive) and Tygr (active) — and
+                            // NEITHER is one of the 24 ally-target ships, so no shipped ship can both
+                            // take a no-victim turn and read this. (2) Both gates are `gte 2`/`gte 3`,
+                            // which a phantom 1 does not satisfy even if one could. Pinned by
+                            // `noVictimResidualTripwires.test.ts`; the honest value would be 0.
                             enemiesHitThisCastByActor.set(
                                 actor.id,
                                 focusTurnArgs.aoeVictimIds?.length ?? 1
