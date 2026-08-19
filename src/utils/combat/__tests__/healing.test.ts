@@ -1127,16 +1127,24 @@ describe('healing mode — enemy attackers and target intake', () => {
         // R1: 5000 − 3000 = 2000. R2: 2000 − 3000 → 0 (destroyed round 2).
         expect(result.healing!.destroyedRound).toBe(2);
         const dpsRounds = result.rounds;
-        expect(dpsRounds).toHaveLength(4);
+        // SP-4c-1: TWO rounds, not four. The focus healer is the heal target AND the entire player
+        // side here (no teamActors), so its round-2 death wipes that side and the match ends on
+        // that turn. The window asked for 4; the fight lasted 2. What this case still guarantees —
+        // and what it was really written to guarantee — is that the death round assembles a sane
+        // row instead of throwing.
+        expect(dpsRounds).toHaveLength(2);
         // Action/charge fields are sane (no crash, no NaN).
         for (const r of dpsRounds) {
             expect(['active', 'charged']).toContain(r.action);
             expect(Number.isFinite(r.charges)).toBe(true);
         }
-        // Post-death: target HP flatlines at 0, no further intake.
+        // The death round itself REPORTS rather than being dropped: the row exists and carries the
+        // lethal intake. (`targetHpPctStart` is captured at the round TOP, so round 2 still reads
+        // the 40% the target entered on — the death is inside that round, which is why the intake
+        // is the observable here and the flatline is not.)
         const rounds = result.healing!.rounds;
-        expect(rounds[2].incomingDamage).toBe(0);
-        expect(rounds[3].targetHpPctStart).toBeCloseTo(0, 6);
+        expect(rounds).toHaveLength(2);
+        expect(rounds[1].incomingDamage).toBeGreaterThan(0);
     });
 
     // ── Test 5b: a turn-start DoT tick that KILLS the tank skips its turn ──────
@@ -2826,6 +2834,38 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 // Cheat Death is granted by the parsed kit (recurring self-buff ability),
                 // NOT seeded as a top-level input selfBuff.
                 selfBuffs: [],
+                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // Death already spent in R1), and alone it IS the whole player side — that wipe
+                // would end the match at R2 and rob this case of the R3 row its no-re-seed claim
+                // needs. 0 attack, no skills, speed 1 → RNG-stream-inert, acts last, draws nothing.
+                teamActors: [
+                    {
+                        id: 'survivor',
+                        speed: 1,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 0,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 0,
+                                hp: 1_000_000_000,
+                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
                 shipSkills: yazidSkills,
             })
@@ -2871,6 +2911,38 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 mode: 'healing',
                 bus,
                 selfBuffs: [],
+                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // Death already spent in R1), and alone it IS the whole player side — that wipe
+                // would end the match at R2 and rob this case of the R3 row its no-re-seed claim
+                // needs. 0 attack, no skills, speed 1 → RNG-stream-inert, acts last, draws nothing.
+                teamActors: [
+                    {
+                        id: 'survivor',
+                        speed: 1,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 0,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 0,
+                                hp: 1_000_000_000,
+                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
                 shipSkills: yazidSkills,
             })
@@ -3024,6 +3096,38 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 mode: 'healing',
                 bus,
                 selfBuffs: [], // granted by the parsed kit, NOT seeded as a top-level input buff
+                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // Death already spent in R1), and alone it IS the whole player side — that wipe
+                // would end the match at R2 and rob this case of the R3 row its no-re-seed claim
+                // needs. 0 attack, no skills, speed 1 → RNG-stream-inert, acts last, draws nothing.
+                teamActors: [
+                    {
+                        id: 'survivor',
+                        speed: 1,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 0,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 0,
+                                hp: 1_000_000_000,
+                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
                 shipSkills: yazidSkills,
             })
@@ -3084,6 +3188,38 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 mode: 'healing',
                 bus,
                 selfBuffs: [cheatDeathBuff()],
+                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // Death already spent in R1), and alone it IS the whole player side — that wipe
+                // would end the match at R2 and rob this case of the R3 row its "chip stays
+                // hidden" claim needs. 0 attack, no skills, speed 1 → inert and last in order.
+                teamActors: [
+                    {
+                        id: 'survivor',
+                        speed: 1,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 0,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 0,
+                                hp: 1_000_000_000,
+                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
                 shipSkills: { slots: [] },
             })

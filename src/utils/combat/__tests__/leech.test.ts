@@ -1256,6 +1256,39 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                 bus,
                 // Focus is damage-only (no self-heal) → once dead it stays dead.
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+                // SP-4c-1: an inert SURVIVING ally. The heal target here is the focus, and alone it
+                // IS the whole player side — its round-1 death would WIPE that side and end the
+                // match, leaving one round and making the "no late applications" filter below
+                // trivially empty (a vacuous green). With a survivor the enemy keeps acting for all
+                // 4 rounds, so the claim is tested against a run that really continued.
+                teamActors: [
+                    {
+                        id: 'survivor',
+                        speed: 1,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 0,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 0,
+                                hp: 1_000_000_000,
+                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
                 enemyAttackers: [
                     {
                         id: 'e1',
@@ -1308,11 +1341,16 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
         // NO debuff is applied in rounds where the target entered dead (rounds 2+).
         const destroyed = result.healing?.destroyedRound;
         expect(destroyed).toBe(1);
-        // No debuff-applied in any round AFTER the target died (rounds 2, 3, 4): the dead-target
-        // guard skips runPlayerTurn (the sole application site) for those turns.
+        // No debuff-applied ON THE DEAD TARGET in any round after it died (rounds 2, 3, 4): the
+        // dead-target guard skips runPlayerTurn (the sole application site) for those turns.
+        //
+        // SP-4c-1 scoped this to `targetId`. The surviving ally keeps the run going, and the enemy
+        // retargets onto IT — so late applications DO occur now, just never on the corpse. An
+        // unscoped filter would either fail on the ally's debuff or, on a one-round run, pass
+        // while observing nothing at all.
         const lateApplications = (
             applied as Extract<CombatEvent, { type: 'debuff-applied' }>[]
-        ).filter((e) => e.round > destroyed!);
+        ).filter((e) => e.round > destroyed! && e.targetId === 'attacker');
         expect(lateApplications.length).toBe(0);
         // Cadence still advanced while dead: by round 3 the enemy banked 2 charges (t1, t2) and
         // would fire its charged slot on t3. We can't read incoming (target dead → 0 damage),

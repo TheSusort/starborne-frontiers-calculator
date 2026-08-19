@@ -97,7 +97,16 @@ const positionalKillBase = (
     pattern: basePattern(),
     // One positioned enemy attacker at the focus's targeted cell (M4), HP 5000 → dies to the
     // 5000 firing-hit in round 1. Overridable per test.
-    enemyAttackers: [enemyAt('enemy-front', 'M4', 5000)],
+    // SP-4c-1: TWO members, not one. The front dies to the round-1 firing hit — that is the
+    // on-enemy-destroyed trigger these cases are about — and a survivor at the back keeps the kill
+    // from WIPING the enemy side, which would end the match on that turn and take the granted
+    // extra action (and rounds 2-4) with it. The survivor is 0-attack and effectively immortal
+    // (1e9 HP vs a 5 000 hit), so later rounds still produce NO new kill and therefore no new
+    // grant — which is exactly what the post-round-1 assertions claim.
+    enemyAttackers: [
+        enemyAt('enemy-front', 'M4', 5000),
+        enemyAt('enemy-back', 'M1', 1_000_000_000),
+    ],
     ...overrides,
 });
 

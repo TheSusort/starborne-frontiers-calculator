@@ -167,25 +167,29 @@ describe('dummy reachability after normalization', () => {
     });
 
     it('CORPSE TARGETING: the whiff CONSULTS the fallback but books nothing against it', () => {
-        // The one shape that legitimately consults the fallback mid-run, and therefore the shape
-        // SP-4c has to handle rather than expect a zero from. 5 000 max HP dies to the round-1
-        // cast; `resolvesPositionalVictim` keys on MAX hp, so rounds 2-3 stay positional, select
-        // nobody, and whiff against the corpse instead of teleporting onto the dummy.
+        // THIS SHAPE NO LONGER EXISTS, and that is what the case now pins. It used to be the one
+        // shape that legitimately consulted the fallback mid-run — 5 000 max HP dies to the
+        // round-1 cast, and because `resolvesPositionalVictim` keys on MAX hp, rounds 2-3 stayed
+        // positional, selected nobody, and whiffed against the corpse.
+        //
+        // SP-4c-1 deleted the window instead of accounting for it: killing the roster WIPES the
+        // enemy side, so the match ends on that turn and there are no rounds 2-3 to whiff in. The
+        // fallback is therefore never consulted here at all.
         const { result, destroyed } = collectTurns({
             ...bareInput(),
             numRounds: 3,
             enemyAttackers: bareEnemy({ stats: { hp: 5_000 } }),
         });
 
-        // The path ran: the victim really was killed, and really was still being targeted after.
+        // The path ran: the victim really was killed, and the killing round really did book.
         expect(destroyed()).toEqual([BARE_ENEMY_ID]);
         expect(dealtBy(result, 1, 'attacker')).toEqual({ [BARE_ENEMY_ID]: PER_CAST });
-        expect(result.rounds[1].perTargetDealt).toBeUndefined();
-        expect(result.rounds[2].perTargetDealt).toBeUndefined();
+        // The run ENDS there — the load-bearing assertion. Without it, a change that resurrects
+        // the whiff rounds would leave every other expectation here still passing.
+        expect(result.rounds).toHaveLength(1);
 
-        // CONSULTED once per whiff round — non-zero, and correctly so.
-        expect(__getLegacyVictimFallbackCount()).toBe(2);
-        // ...but nothing was CREDITED to it. This is the whole reason the second counter exists.
+        // Neither counter moves: no whiff round means no consultation, and no credit either.
+        expect(__getLegacyVictimFallbackCount()).toBe(0);
         expect(__getDummySinkCreditCount()).toBe(0);
     });
 
@@ -260,16 +264,24 @@ describe('sink CREDITS are distinct from fallback CONSULTATIONS', () => {
         expect(counters()).toEqual({ consulted: 0, credited: 0 });
     });
 
-    it('the whiff window separates them: CONSULTED without being CREDITED', () => {
-        // The pair of readings that forbids SP-4c from gating on the consultations counter. Same
-        // shape as CORPSE TARGETING above, asserted here as the CONTRAST with the pressure source:
-        // identical fallback consultations (one per dead round), opposite credit readings.
+    it('the whiff window is GONE, so the two counters no longer come apart', () => {
+        // HISTORY, because it changes what SP-4c-2 may gate on. This case used to read
+        // `{ consulted: 2, credited: 0 }` — the mid-run whiff window, the one shape that consulted
+        // the fallback without ever crediting it. That reading is why SP-4c was told to gate its
+        // deletion on the CREDIT counter and never on the consultations counter.
+        //
+        // SP-4c-1 removed the window (the kill ends the match), so this shape now reads 0/0. The
+        // ONLY remaining consumer of the fallback is the 0-max-HP pressure source directly above,
+        // which both consults AND credits — a never-alive actor is never destroyed, so it is not a
+        // wipe and its run continues. The counters therefore no longer diverge on any reachable
+        // shape, and either one would serve as SP-4c-2's gate. The credit counter remains the
+        // correct choice regardless: it is the one that means "the dummy absorbed nothing".
         runCombat({
             ...bareInput(),
             numRounds: 3,
             enemyAttackers: bareEnemy({ stats: { hp: 5_000 } }),
         });
 
-        expect(counters()).toEqual({ consulted: 2, credited: 0 });
+        expect(counters()).toEqual({ consulted: 0, credited: 0 });
     });
 });

@@ -151,6 +151,40 @@ const offensiveEnemyAt = (
         shipSkills: { slots: [skills] },
     }) as EnemyAttacker;
 
+/**
+ * SP-4c-1: an inert SURVIVOR for rosters whose only real enemy is deliberately killed mid-fixture.
+ *
+ * Several cases here kill their sole enemy on purpose — a 1-HP stasis-bot that must not live to
+ * re-apply its debuff. Since SP-4c-1 that kill WIPES the enemy side and ends the match, cutting the
+ * run short of the rounds the case is about. This bystander keeps a living member on the board so
+ * the run continues, without changing anything else: 0 attack and no skills make it
+ * RNG-stream-inert (it draws nothing), and speed 1 puts it last in every turn order.
+ *
+ * Placed at POS_ENEMY_BACK so a `front` selection keeps resolving to the real enemy while that
+ * enemy lives; once it dies the focus retargets onto this bystander, which is the same
+ * death-retargeting the engine already does and is what the post-kill rounds are meant to observe.
+ */
+const bystanderEnemyAt = (id: string, position: Position): EnemyAttacker =>
+    ({
+        id,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1,
+            security: 0,
+            hacking: 0,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: { slots: [] },
+    }) as EnemyAttacker;
+
 /** A walked team actor. attackOverride defaults to 0 (no offense). */
 const teamAttackerAt = (
     id: string,
@@ -478,6 +512,9 @@ describe('B2 Task 3 — Stasis turn-skip: (iii) Stasis(2) decrements on skipped 
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // end the match and cut this case short of the rounds it is about).
+                bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
                     id: 'stasis-bot',
                     stats: {
@@ -578,6 +615,9 @@ describe('B2 Task 3 — Stasis turn-skip: (iv) other timed statuses still decrem
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // end the match and cut this case short of the rounds it is about).
+                bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
                     id: 'stasis-dd-enemy',
                     stats: {
@@ -750,6 +790,9 @@ describe('B2 Task 3 — Stasis turn-skip: (vi) player stasised by enemy — roun
             pattern: basePattern(),
             teamActors: [teamAttackerAt('player-team', POS_TEAM, 150, 10000)],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // end the match and cut this case short of the rounds it is about).
+                bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 // Fast enemy at POS_ENEMY_FRONT fires `front` (hits the focus at M4).
                 // hacking:200, security:0 on focus → landing chance 1.0. hp:1 → killed by player-team.
                 {
@@ -1496,6 +1539,9 @@ describe('B3 Task 2 — direct-damage break', () => {
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // end the match and cut this case short of the rounds it is about).
+                bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
                     id: 'stasis-dot-bot',
                     stats: {
@@ -2172,6 +2218,9 @@ describe('B3 Task 2 — direct-damage break', () => {
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // end the match and cut this case short of the rounds it is about).
+                bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
                     id: 'std-enemy',
                     stats: {

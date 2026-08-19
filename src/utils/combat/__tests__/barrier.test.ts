@@ -419,14 +419,18 @@ describe('Barrier duration semantics (lock)', () => {
 
         const rounds = result.healing!.rounds;
 
-        // NON-VACUOUS: the attacks actually land as incoming damage in R1-R3 (R4 the tank is
-        // already dead → no further intake).
+        // NON-VACUOUS: the attacks actually land as incoming damage in R1-R3.
         expect(rounds.slice(0, 3).every((rd) => rd.incomingDamage === 6500)).toBe(true);
 
         // LOCK: a duration:1 Barrier granted reactively (post-attack, during the enemy turn) is
         // decremented to expiry by the tank's own same-turn post-turn decrement → it never
         // survives into an intake. barrierAbsorbed is 0 in EVERY round.
-        expect(rounds.map((rd) => rd.barrierAbsorbed)).toEqual([0, 0, 0, 0]);
+        //
+        // SP-4c-1: THREE rounds, not four. The tank is the entire player side here, so the round-3
+        // death wipes it and the match ends on that turn — the run no longer reports a fourth,
+        // already-dead round. The zero-block claim is unchanged; it now spans the rounds that
+        // actually happened.
+        expect(rounds.map((rd) => rd.barrierAbsorbed)).toEqual([0, 0, 0]);
 
         // The spent Barrier LINGERS one round in the round-overview (R2 shows it) even though it
         // blocked nothing — names-only display, distinct from the blocked total above.

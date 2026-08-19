@@ -618,26 +618,33 @@ const whiffedCast = (skill: ShipSkills['slots'][number]): CombatEngineInput => (
 describe('R5(i) — a cast that landed on NOBODY reports zero delivered, and fires no rider', () => {
     afterEach(() => resetRateGateRng());
 
-    it('a 3-hit cast whose only enemy died before it acted lands ZERO Infernos, though its display damage stays positive', () => {
-        const { infernos, display, delivered, subIndices } = observe(
-            whiffedCast(attackSkill(3)),
-            'attacker'
-        );
-        // FIXTURE GUARD (see the header's ANTI-VACUITY note): the two bases must DISAGREE here, or
-        // the Inferno assertion is satisfied for the wrong reason. ONE cast-wide row carrying the
-        // whole cast's pre-funnel aggregate, and no sub-attack identity — that IS the fallback.
-        expect(display).toEqual([3 * SLICE]);
-        expect(subIndices).toEqual([undefined]);
-        // Pre-fix: [undefined] → the guard fell through to `damage` (30000). Post-fix: [0].
-        expect(delivered).toEqual([0]);
-        // Pre-fix: 1. Nothing was struck, so nothing rides.
-        expect(infernos).toBe(0);
-    });
+    // ⚠️ SP-4c-1 MADE THIS SHAPE UNREACHABLE — read before "fixing" the tripwire below.
+    //
+    // R5(i)'s subject is the CAST-WIDE whiff fallback: one `ability-performed` row carrying the
+    // whole cast's pre-funnel aggregate with no sub-attack identity, emitted when a cast resolves
+    // against a roster with nobody living. Reaching it requires the roster to be dead WHILE a cast
+    // still resolves — and SP-4c-1 ends the match at the end of the turn that empties the roster,
+    // so no later turn can cast into the corpses.
+    //
+    // The engine guard it pinned (delivered = 0, no rider) is DELIBERATELY KEPT in production: it
+    // is a correctness floor, not dead weight, and an unreachable guard is the cheap half of the
+    // trade. What is gone is the ability to exercise it end-to-end.
+    //
+    // NOT substitutable by a self-kill: if the focus's own sub-attack 1 kills, sub-attacks 2-3
+    // take the PER-SUB-ATTACK whiff path and emit their own rows — a different branch, which the
+    // multi-hit suites already cover. Only a whole-cast miss produces the cast-wide row.
+    //
+    // The tripwire below fails the day the shape becomes reachable again, which is the signal to
+    // restore the two original assertions from git history (they read:
+    // `display === [3 * SLICE]`, `subIndices === [undefined]`, `delivered === [0]`, `infernos === 0`).
+    it('TRIPWIRE: the whiffed-cast shape now ENDS the match instead — the focus never casts', () => {
+        const { display, delivered, infernos } = observe(whiffedCast(attackSkill(3)), 'attacker');
 
-    it('a 1-hit whiffed cast also fires no rider — the payout is not a multi-hit artefact', () => {
-        const { infernos, display, delivered } = observe(whiffedCast(attackSkill(1)), 'attacker');
-        expect(display).toEqual([SLICE]);
-        expect(delivered).toEqual([0]);
+        // The faster ally kills the only enemy, wiping the side, so the match ends on the ALLY's
+        // turn and the slow focus never acts at all. No cast → no rows on either basis.
+        expect(display).toEqual([]);
+        expect(delivered).toEqual([]);
+        // Still the R5(i) claim, trivially: nothing was struck, so nothing rides.
         expect(infernos).toBe(0);
     });
 

@@ -924,6 +924,25 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
                 },
             ] as TeamActorEngineInput[],
             enemyAttackers: [
+                // SP-4c-1: an inert survivor so the kill-switch death below is not a WIPE, which
+                // would end the match before the 2-turn DoT can tick.
+                {
+                    id: 'bystander-enemy',
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'B1',
+                    target: targetFront,
+                    pattern: basicPattern,
+                    shipSkills: { slots: [] },
+                },
                 {
                     id: 'enemy-1',
                     stats: {
@@ -988,6 +1007,38 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
             position: 'M4',
             target: targetFront,
             pattern: basicPattern,
+            // SP-4c-1: the focus dies to the kill-switch reflection, and alone it IS the whole
+            // player side — that wipe now ends the match before the DoT can tick. An inert ally
+            // (0 attack, no skills, speed 1) keeps the side alive and draws nothing.
+            teamActors: [
+                {
+                    id: 'bystander-ally',
+                    speed: 1,
+                    chargeCount: 0,
+                    startCharged: false,
+                    selfBuffs: [],
+                    enemyDebuffs: [],
+                    position: 'B1',
+                    walk: {
+                        shipSkills: { slots: [] },
+                        stats: {
+                            attack: 0,
+                            crit: 0,
+                            critDamage: 0,
+                            defensePenetration: 0,
+                            hacking: 0,
+                            defence: 0,
+                            hp: 1_000_000_000,
+                        },
+                        selfDotModifier: 0,
+                        defensePenetrationBuff: 0,
+                        affinityDamageModifier: 0,
+                        affinityCritCap: 100,
+                        affinityCritPenalty: 0,
+                        hasChargedSkill: false,
+                    },
+                },
+            ],
             enemyAttackers: [
                 {
                     id: 'enemy-front', // direct-hit victim — front column (M4), kill-switch reflector.

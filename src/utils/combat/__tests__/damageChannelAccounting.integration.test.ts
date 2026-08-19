@@ -134,14 +134,23 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         expect(__getLegacyVictimFallbackCount()).toBe(0);
     });
 
-    it('killing a targetable roster mid-run whiffs — the ONE legitimate neither-channel state', () => {
-        // 5 000 HP dies to the round-1 cast. Rounds 2-4 have nothing living to hit, so they are a
-        // deliberate no-op against a corpse (see deathFallback.integration.test.ts). This is the
-        // ONLY shape allowed to book into neither channel, and it books because the cast DEALT
-        // nothing — not because an accounted-for number was dropped between the two.
+    it('killing a targetable roster ENDS the match — the neither-channel state is now unreachable', () => {
+        // 5 000 HP dies to the round-1 cast. This case used to be the ONE legitimate
+        // neither-channel state: rounds 2-4 had nothing living to hit and booked into neither
+        // channel because the cast dealt nothing (the mid-run "whiff window").
+        //
+        // SP-4c-1 DELETED that window rather than accounting for it. The kill wipes the enemy side,
+        // so the match ends on that turn and rounds 2-4 never happen — there is no round left that
+        // could book into neither channel. The invariant this file guards is therefore STRICTLY
+        // STRONGER than it was: not "one shape is allowed to book nothing", but "no shape does".
+        //
+        // The 1-length assertion is the load-bearing one. Without it a future change that
+        // resurrects the whiff rounds would repopulate them with zeros and every other assertion
+        // here would still pass.
         const result = runCombat(rosterWithEnemyHp(5_000));
 
-        expect(result.rounds.map(positionalIn)).toEqual([PER_CAST, 0, 0, 0]);
+        expect(result.rounds.map(positionalIn)).toEqual([PER_CAST]);
+        expect(result.rounds).toHaveLength(1);
         expect(result.rawTotals.cumulative).toBe(0);
     });
 
@@ -362,15 +371,19 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
         // structural gate would have let the same 10 000 read as legacy damage as well.
         const result = runCombat(playerSideWithMaxHp(5_000));
 
-        expect(result.rounds.map(enemyPositionalIn)).toEqual([PER_CAST, PER_CAST, 0, 0]);
+        // SP-4c-1: TWO rounds, not four. The round-2 kill wipes the player side, so the match ends
+        // on that turn — the retargeting claim below is untouched (it lives entirely in rounds 1-2),
+        // and what disappears is only the pair of empty whiff rounds that used to trail it.
+        expect(result.rounds).toHaveLength(2);
+        expect(result.rounds.map(enemyPositionalIn)).toEqual([PER_CAST, PER_CAST]);
         expect(result.rounds[0].perTargetDealt!['e1']).toEqual({ ally: PER_CAST });
         expect(result.rounds[1].perTargetDealt!['e1']).toEqual({ [HEAL_TARGET_ID]: PER_CAST });
         // The heal target's round-2 intake is the SAME 10 000 the per-victim channel booked.
-        expect(result.healing!.rounds.map((r) => r.incomingDamage)).toEqual([0, PER_CAST, 0, 0]);
+        expect(result.healing!.rounds.map((r) => r.incomingDamage)).toEqual([0, PER_CAST]);
         expect(
             result.healing!.rounds.map((r, i) => enemyLegacyIn(result.rounds[i], r.incomingDamage))
-        ).toEqual([0, 0, 0, 0]);
-        // Rounds 3-4 are the whiff: the whole player side is dead.
+        ).toEqual([0, 0]);
+        // The round-2 death is what ends the run: the whole player side is dead.
         expect(result.healing!.destroyedRound).toBe(2);
     });
 

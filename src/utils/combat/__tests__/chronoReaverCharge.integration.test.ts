@@ -490,6 +490,33 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
     const parsedFront: ParsedTarget = { raw: 'front', side: 'enemy', selection: 'front' };
     const basePattern: ParsedPattern = { raw: 'base', shape: 'base', range: 0, modifiers: {} };
 
+    /**
+     * SP-4c-1: an inert SURVIVOR. `stasisBot` is killed in round 1 by design so Stasis is never
+     * re-applied; since SP-4c-1 that kill WIPES the enemy side and ends the match at round 1,
+     * which would cut this 8-round charge ledger to a single row. 0 attack + no skills make this
+     * RNG-stream-inert, and speed 1 puts it last in every turn order.
+     */
+    const bystander = (): EnemyAttacker =>
+        ({
+            id: 'bystander',
+            position: 'M1' as Position,
+            target: parsedFront,
+            pattern: basePattern,
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 1,
+                security: 0,
+                hacking: 0,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: { slots: [] },
+        }) as EnemyAttacker;
+
     const stasisBot = (turns: number): EnemyAttacker =>
         ({
             id: 'stasis-bot',
@@ -648,7 +675,7 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
             ...buildStasisInput({
                 passiveAbilities: [cr],
                 teamActors: [killer()],
-                enemyAttackers: [stasisBot(3)],
+                enemyAttackers: [stasisBot(3), bystander()],
             }),
             __testTapIsStasised: (fn) => {
                 isStasisedTap = fn;
