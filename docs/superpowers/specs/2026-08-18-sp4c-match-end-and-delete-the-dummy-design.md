@@ -387,7 +387,7 @@ clamp**. Clear that field on the DPS page and the run gets a 0-max-HP enemy → 
 false → the whole fight drains into the invisible dummy and `perTargetDealt` is `undefined` for every
 round. Since SP-1, `simulateDPS` derives its total *from* `perTargetDealt` (`dpsSimulator.ts:684`), so
 **the page reports 0 DPS**. The same shape the 54 fixture files use, reachable from the UI. 7.2.1's
-floor fixes it at the engine; the input also gets a clamp so the user sees the HP they will fight.
+floor fixes it at the engine, and that is the WHOLE fix: the input gets `min="1"` as a browser hint only. A handler clamp was shipped and then reverted — a clamped `hp: 1` dies in round 1 under §3.1's wipe rule, misrepresenting every multi-round mechanic, and a second clamp in the UI is a second accommodation site. §7.2.1's boundary is the single one.
 
 ### 7.4 The re-split
 

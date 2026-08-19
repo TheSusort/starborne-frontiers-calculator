@@ -9,7 +9,8 @@
  * Four responsibilities, and deliberately no fifth:
  *   (a) auto-placement       — a deterministic slot for any actor with `position == null`
  *   (b) targeting synthesis  — DEFAULT_FRONT_ENEMY_TARGET + DEFAULT_BASE_PATTERN when ABSENT
- *   (c) targetable HP        — a max HP of 0/absent is floored so every enemy is a hittable ship
+ *   (c) targetable HP        — a NON-POSITIVE or absent enemy max HP is floored, so every enemy
+ *                              attacker is a hittable ship
  *   (d) nothing else         — it does not invent enemies, fill in other stats, or choose a mode
  *
  * Pure: the caller's input object and its nested arrays are never mutated.
@@ -103,7 +104,7 @@ function withTargeting<T extends { target?: ParsedTarget; pattern?: ParsedPatter
 export const MIN_TARGETABLE_MAX_HP = 1_000_000;
 
 /**
- * Responsibility (d): every enemy attacker is a HITTABLE ship.
+ * Responsibility (c): every enemy attacker is a HITTABLE ship.
  *
  * `isTargetableRosterMember` (positional + max hp > 0) is what `hasPositionedEnemyRoster` is built
  * from, and a roster holding no targetable member is the ONE shape that still reached the vestigial
@@ -116,10 +117,18 @@ export const MIN_TARGETABLE_MAX_HP = 1_000_000;
  * rules are behaviourally identical on the corpus — and the uniform one retires the whole class
  * instead of one instance, with no `if` for a later rung to have to reason about.
  *
- * ENEMY SIDE ONLY. The focus attacker's `hp` is deliberately untouched: most direct-engine fixtures
- * omit it, so the focus starts at `currentHp === 0` having never been destroyed. Reading that as a
- * corpse is the mistake that failed 346 tests during 4c-1 (spec §3.3), and nothing asks
- * `isTargetableRosterMember` about a player actor.
+ * ENEMY SIDE ONLY, for two independent reasons.
+ *  1. The focus attacker's `hp` is legitimately 0: most direct-engine fixtures omit it, so the focus
+ *     starts at `currentHp === 0` having never been destroyed. Reading that as a corpse is the
+ *     mistake that failed 346 tests during 4c-1 (spec §3.3).
+ *  2. `isTargetableRosterMember` IS asked about player actors, so flooring them would close a
+ *     divergence that must stay open. `resolvesPositionalVictim` calls
+ *     `opposingLiving.some(isTargetableRosterMember)` (`positionalBinding.ts:102`), and for an
+ *     ENEMY-side actor `opposingLiving` is the PLAYER roster — so a 0-max-HP focus plus 0-max-HP
+ *     allies is still `isPositional` true / `resolvesPositionalVictim` false. That mirror is what
+ *     `perVictimDotTick.integration.test.ts`'s GATE RETENTION case pins, and it is why the two
+ *     predicates must stay distinct rather than collapsing once the enemy side is floored. See
+ *     `resolvesPositionalVictim`'s own doc for the same statement from the other direction.
  */
 function withTargetableHp<T extends { stats: { hp?: number } }>(actor: T): T {
     const hp = actor.stats.hp;

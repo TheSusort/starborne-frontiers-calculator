@@ -31,7 +31,7 @@
 | `src/utils/combat/__tests__/normalizeRoster.test.ts` | **Modify.** Unit tests for the floor — the compensating control for the liveness guard Task 2 retires. |
 | `src/utils/combat/__tests__/dummyReachability.test.ts` | **Modify.** Invert the pressure-source case (its premise becomes illegal) and update the file header. |
 | ~54 fixture files under `src/utils/combat/__tests__/` and `src/utils/calculators/__tests__/` | **Modify.** Churn repair, bucketed by cause in Task 3. Enumerated by the suite, not in advance. |
-| `src/components/calculator/EnemySettingsPanel.tsx` | **Modify.** Clamp the Enemy HP input so the user sees the HP they will fight. |
+| `src/components/calculator/EnemySettingsPanel.tsx` | **Modify.** Add `min="1"` to the Enemy HP input as a browser hint. (Task 5 originally clamped the handler too; that was REVERTED — see the amendment note at the end.) |
 | `src/constants/changelog.ts` | **Modify.** `UNRELEASED_CHANGES` entry for the 0-DPS fix. |
 
 `engine.ts` is deliberately **not** in this table. If a task tempts you to edit it, the fix belongs in a later rung — say so rather than reaching for it.
@@ -76,7 +76,7 @@ cannot be zero-movement as specced. Plan for rung 4c-2a included."
 - Consumes: nothing from earlier tasks.
 - Produces: `export const MIN_TARGETABLE_MAX_HP: number` (value `1_000_000`) from `src/utils/combat/normalizeRoster.ts`. Task 2 imports it.
 
-**Why 1,000,000 and why only the enemy side.** `healingEngineAdapter.ts:453` already fills an *absent* enemy HP with `LEGACY_SINK_HP = 1_000_000`; this floor applies the same number to an explicit `0`, so the boundary and the adapter agree. The focus attacker's own `hp` is **not** floored: most direct-engine fixtures omit it, so the focus legitimately starts at `currentHp === 0` without ever having been destroyed — that is exactly the trap that cost 4c-1 346 red tests (spec §3.3), and `isTargetableRosterMember` is only ever asked about enemy attackers anyway.
+**Why 1,000,000 and why only the enemy side.** `healingEngineAdapter.ts:453` already fills an *absent* enemy HP with `LEGACY_SINK_HP = 1_000_000`; this floor applies the same number to an explicit `0`, so the boundary and the adapter agree. The focus attacker's own `hp` is **not** floored: most direct-engine fixtures omit it, so the focus legitimately starts at `currentHp === 0` without ever having been destroyed — that is exactly the trap that cost 4c-1 346 red tests (spec §3.3). And flooring the player side would CLOSE a divergence that must stay open: `resolvesPositionalVictim` calls `opposingLiving.some(isTargetableRosterMember)`, and for an ENEMY-side actor `opposingLiving` is the PLAYER roster — so `isTargetableRosterMember` IS asked about player actors. (An earlier draft of this line claimed it never was. That was false, and CodeRabbit caught the same false claim in the shipped comment — see the amendment note at the end of this plan.)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -211,7 +211,7 @@ Expected: no output from either.
 
 - [ ] **Step 6: Commit**
 
-The full suite is NOT green yet — that is Tasks 3–4's job — so this commit needs `--no-verify`, and it is the ONLY commit in this plan permitted to use it. Say so in the message body.
+The full suite is NOT green yet — that is Tasks 3–4's job — so this commit takes `--no-verify` under the Global Constraints' stated exemption for Tasks 0–4. Say in the message body what is still red and which task restores green.
 
 ```bash
 git add src/utils/combat/normalizeRoster.ts src/utils/combat/__tests__/normalizeRoster.test.ts
@@ -338,7 +338,7 @@ Suite still red from Task 1's floor; repaired in Tasks 3-4."
 ### Task 3: Measure and bucket the churn
 
 **Files:**
-- Create: `/private/tmp/claude-501/-Users-kennethsusort-PersonalProjects-starborne-frontiers-calculator/e4aae180-9a4d-4e24-a0bc-880f71ab593f/scratchpad/sp4c2a-churn.md` (working inventory — NOT committed)
+- Create: `$SCRATCH/sp4c2a-churn.md`, where `SCRATCH` is your own scratch directory — `SCRATCH=$(mktemp -d)` if you have none (working inventory — NOT committed)
 
 **Interfaces:**
 - Consumes: the floor from Task 1.
@@ -349,7 +349,7 @@ This task writes no production code. Its deliverable is the inventory, because T
 - [ ] **Step 1: Capture the failure list**
 
 ```bash
-SCRATCH=/private/tmp/claude-501/-Users-kennethsusort-PersonalProjects-starborne-frontiers-calculator/e4aae180-9a4d-4e24-a0bc-880f71ab593f/scratchpad
+SCRATCH="${SCRATCH:-$(mktemp -d)}"
 npx vitest run --reporter=basic > "$SCRATCH/post-floor.txt" 2>&1
 tail -8 "$SCRATCH/post-floor.txt"
 grep -n "FAIL\|✗\|×" "$SCRATCH/post-floor.txt" | head -100
@@ -422,7 +422,7 @@ Expected: `Test Files 529 passed (529)` / `Tests 5867 passed (5867)` or higher o
 `dummyReachability.test.ts` asserting 0 only covers the shapes it constructs. Re-run the measurement that found the 412 credits, so the gate is a measurement and not a reading (spec §7.5):
 
 ```bash
-SCRATCH=/private/tmp/claude-501/-Users-kennethsusort-PersonalProjects-starborne-frontiers-calculator/e4aae180-9a4d-4e24-a0bc-880f71ab593f/scratchpad
+SCRATCH="${SCRATCH:-$(mktemp -d)}"
 cp src/utils/combat/engine.ts "$SCRATCH/engine.gate.bak"
 python3 - <<'PY'
 p = 'src/utils/combat/engine.ts'
@@ -468,20 +468,26 @@ In `src/components/calculator/EnemySettingsPanel.tsx`, the Enemy HP `Input` (cur
                         type="number"
                         min="1"
                         value={enemyHp}
-                        onChange={(e) =>
-                            onEnemyHpChange(Math.max(1, parseInt(e.target.value) || 1))
-                        }
+                        onChange={(e) => onEnemyHpChange(parseInt(e.target.value) || 0)}
                     />
 ```
 
-`min="1"` alone is not enough — it is advisory in a `number` input and does not stop a typed or pasted `0`, which is why the clamp is in the handler too. The sibling Enemy Defense field keeps `|| 0`: 0 defence is a legitimate value.
+**Add `min="1"` only — do NOT clamp the handler.** An earlier draft of this step also wrapped the
+handler in `Math.max(1, …)`; it was written, shipped, and then REVERTED during the final review round,
+for three measured reasons: the engine floor alone already fixes the 0-DPS bug (`enemyHp: 0` yields 5
+rounds / 38,763 damage, identical to an explicit 1,000,000); a clamped `hp: 1` dies in round 1 under
+4c-1's wipe rule, misrepresenting every multi-round mechanic; and it introduced a sticky-leading-digit
+hazard (delete-then-retype `500000` gave `1500000`). A second clamp in the UI is a second
+accommodation site, which contradicts this rung's own thesis that there is exactly ONE.
+
+The sibling Enemy Defense field keeps `|| 0`: 0 defence is a legitimate value.
 
 - [ ] **Step 2: Add the changelog entry**
 
 Append to `UNRELEASED_CHANGES` in `src/constants/changelog.ts`. The surrounding entries are **full explanatory paragraphs**, not one-liners — they say what was wrong, what the user saw, and what changed. Match that, and keep to the no-emojis-in-UI-text rule:
 
 ```
-'DPS calculator: an enemy with no HP no longer reports zero damage. Clearing the Enemy HP field, or setting it to 0, produced an enemy that could not be hit at all — every attack passed through it, so the damage total came back as zero and the whole run looked broken. An enemy with no HP set is now treated as a real ship with substantial health, and the HP field no longer accepts 0. The same applies to the combat simulator and the healing calculator, where an enemy left without HP is now a genuine target rather than an invisible one.',
+'DPS calculator: an enemy with no HP no longer reports zero damage. Clearing the Enemy HP field, or setting it to 0, produced an enemy that could not be hit at all — every attack passed through it, so the damage total came back as zero and the whole run looked broken. An enemy with no HP set is now treated as a real ship with substantial health. The same applies to the combat simulator and the healing calculator, where an enemy left without HP is now a genuine target rather than an invisible one.',
 ```
 
 - [ ] **Step 3: Verify**
@@ -491,7 +497,7 @@ Expected: green, no output from `tsc`/`eslint`. If no test file covers that pane
 
 - [ ] **Step 4: Verify in the real app**
 
-Run `npm start` (**not** `npm run dev` — that script does not exist), open the DPS calculator, clear the Enemy HP field, and confirm two things: the field refuses to sit at 0, and the DPS number is non-zero. Report what you saw. This is the only step in the plan that exercises the bug the way a user hits it.
+Run `npm start` (**not** `npm run dev` — that script does not exist), open the DPS calculator, clear the Enemy HP field, and confirm the DPS number is non-zero (the engine floor is what makes it so — the field itself may sit at 0). Report what you saw. This is the only step in the plan that exercises the bug the way a user hits it.
 
 - [ ] **Step 5: Commit**
 
@@ -543,3 +549,44 @@ Body must carry: the §7 measurement table (what was claimed vs what was measure
 **Type consistency:** `MIN_TARGETABLE_MAX_HP` is named identically in Tasks 1 and 2. `withTargetableHp` composes with `withTargeting` (both generic and return `T`; the enemy-attacker type satisfies both constraints). `stats.hp` is `hp?: number` on `CombatEngineInput['enemyAttackers'][number]`, so the floor checks `undefined` **and** `<= 0` — the absent case is real, not defensive.
 
 **Known residual:** `dummyReachability.test.ts` ends this rung with no internal vacuity guard (Task 2 documents it, with `normalizeRoster.test.ts` as the compensating control). That is a deliberate, recorded trade, not an oversight — and it resolves in 4c-2d when the counters are deleted.
+
+---
+
+## Amendment (2026-08-19, post-execution) — what this plan got wrong
+
+Recorded here because a plan is read by later rungs, and a plan that still describes what was
+*intended* rather than what *shipped* is the same stale-prose defect this rung kept paying for.
+
+**1. The plan's own false claim, caught by CodeRabbit on PR #330.** Task 1's rationale said
+"`isTargetableRosterMember` is only ever asked about enemy attackers anyway", and that wording reached
+the shipped comment in `normalizeRoster.ts`. It is **false**: `resolvesPositionalVictim` calls
+`opposingLiving.some(isTargetableRosterMember)`, and for an ENEMY-side actor `opposingLiving` is the
+PLAYER roster. Two of my own review rounds missed it. The enemy-only floor is still correct, but for
+a second and stronger reason: flooring the player side would CLOSE the player-side divergence, which
+must stay open (it is what `perVictimDotTick`'s GATE RETENTION mirror pins).
+
+**2. The UI clamp was reverted.** Task 5 originally clamped the Enemy HP handler to a minimum of 1.
+Measured during the final review: the engine floor alone already fixes the 0-DPS bug, `hp: 1` dies in
+round 1 under 4c-1's wipe rule, and the clamp created a sticky-leading-digit input hazard. Only
+`min="1"` shipped. Task 5's text above has been corrected.
+
+**3. B2/B3/B4 never occurred; B0 and B6 were not predicted.** The five predicted churn buckets
+over-fitted: the DoT-magnitude and HP%-gate churn never materialised at a 1,000,000 floor, while an
+in-file fence (B0) and a structurally-unconstructible premise (B6) did. Actual: B1 24 tests / 16
+files, B5 2, B0 1, B6 1.
+
+**4. The B6 ruling I made mid-execution was wrong and had to be partly undone.** I ruled that "an
+enemy positioned but not a valid victim" was unconstructible and converted three tests to tripwires.
+`dummyEnemyIsVestigial` is an **AND**, and the floor closes only its first conjunct — an ally-side
+parsed target still falsifies the second. My own probe data (3,128 turns at `vest=false hasPos=true`)
+had already shown this. Two of the three were restored; only `bombSplashOnDeath` case (c) was a real
+loss. **A conjunctive gate is closed only when every conjunct is.**
+
+**5. Deferred, with CodeRabbit's Major on the record.** `RoundData.teamDamage` omits positional
+walked-team damage, so it underreports. Confirmed pre-existing (the summing loop dates from
+`0650e6a6`, 2026-06-05; `engine.ts` is untouched by this branch) and tripwired at 0 rather than
+fixed, because the remedy is an engine behaviour change to a UI-facing field and needs its own churn
+story. Tracked as a follow-up issue, not just as PR prose.
+
+Full execution history, including the four false-comment rounds: `.superpowers/sdd/progress.md`
+(git-ignored scratch) and the PR #330 body.
