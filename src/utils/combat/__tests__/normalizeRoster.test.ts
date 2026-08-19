@@ -356,7 +356,18 @@ describe('normalizeCombatRoster — fenced in both directions', () => {
             target,
             pattern,
             teamActors: [{ id: 't1', position: 'T2', target, pattern }] as never,
-            enemyAttackers: [{ ...enemyInput('e1', 'T2'), target, pattern }],
+            enemyAttackers: [
+                {
+                    ...enemyInput('e1', 'T2'),
+                    // Explicit and already above MIN_TARGETABLE_MAX_HP, so the targetable-HP floor
+                    // (responsibility (c)) has nothing to raise here — this input's enemy is
+                    // ALREADY a hittable ship, keeping "fully-positioned, fully-targeted" honest as
+                    // "nothing is invented when everything is given."
+                    stats: { ...enemyInput('e1', 'T2').stats, hp: MIN_TARGETABLE_MAX_HP },
+                    target,
+                    pattern,
+                },
+            ],
         });
         const out = normalizeCombatRoster(input);
         expect(out).toEqual(input);
