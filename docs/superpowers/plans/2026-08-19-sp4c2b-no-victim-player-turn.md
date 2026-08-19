@@ -29,10 +29,12 @@ Measured on `b22d2870` by instrumenting `selectTurnTarget`'s fallback and runnin
 
 | rows | `target.selection` | shipped equivalent |
 | --- | --- | --- |
-| 2,297 | `team` | `activeTarget: allies` (16 ships) |
+| 2,311 | `team` | `activeTarget: allies` (16 ships) |
 | 622 | `others` | `other-allies` (4 ships) |
 | 195 | `all` | `all-allies` (3 ships) |
 | 78 | `self` | `self` (1 ship) |
+
+The four rows sum to 3,206. **14 of the 2,311 `team` rows are the mixed/no-skill cases** broken out separately in §A.7 (13 whose firing skill also carries a damage/enemy-facing ability, plus 1 with no firing skill at all) — an earlier draft of this table listed `team` as 2,297, i.e. the `needsVictim=false` subset only, which made the column sum to 3,192 and disagree with the measured total. CodeRabbit caught the arithmetic on #332.
 
 There is **not one row** where an enemy-targeted player cast failed to resolve — 4c-2a's `MIN_TARGETABLE_MAX_HP` floor guarantees a targetable enemy roster. So the player-side fallback is *only* ever a nominal anchor for a cast that has no enemy by construction.
 
@@ -94,7 +96,7 @@ const hasVictim = enemy !== undefined;
 
 | class | sites in `playerTurn.ts` | the no-victim answer |
 | --- | --- | --- |
-| **1. Gate context** | `1612-1614`, `1643`, `2042`, `2152`, `2420-2422`, `2454` | **Omit the field**, via TWO helpers — see the ⚠️ below. | All are already optional with documented defaults: `targetSpeed?`/`targetCurrentHp?`/`targetCritPower?` (`roundContext.ts:101,160` → `?? 0`; `evaluateConditions.ts:92,199`), `enemyShielded?` (`triggers.ts:1779` → default `false`). Use the conditional-spread idiom `buildTurnArgs` already uses for `targetId`. |
+| **1. Gate context** | `1612-1614`, `1643`, `2042`, `2152`, `2420-2422`, `2454` | **Omit the field**, via TWO helpers — see the ⚠️ below. All are already optional with documented defaults: `targetSpeed?`/`targetCurrentHp?`/`targetCritPower?` (`roundContext.ts:101,160` → `?? 0`; `evaluateConditions.ts:92,199`), `enemyShielded?` (`triggers.ts:1793` → default `false`). Use the conditional-spread idiom `buildTurnArgs` already uses for `targetId`. |
 | **2. Application victim ids** | `1281`, `1292`, `2929`, `3044`, `3070`, `3102`, `3121`, `4165` | Nothing to apply to → **fence the enclosing clause/loop, not the emit**. A guard at the emit would produce an application event with no victim. |
 | **3. Damage & affinity scalars** | `1268`, `1371`, `1389` | `enemyHpDecline` → `0`; affinity → `enemy?.affinity ?? 'antimatter'` (byte-identical per A.4); `targetCarriesBlockDebuff` → `false`. |
 | **4. Victim lookup fallbacks** | `1730`, `3315`, `3339` | Drop the `vid === enemy.id ? enemy : undefined` arm — with no victim there are no vids (A.4: `position` always `undefined` ⇒ `opposingVictimById` already `undefined`). |
