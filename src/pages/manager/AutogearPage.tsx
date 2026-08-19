@@ -51,6 +51,10 @@ import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
+import {
+    withAssumedCalibration,
+    makeAssumedCalibrationGetter,
+} from '../../utils/gear/assumedCalibration';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
 import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
@@ -709,6 +713,15 @@ export const AutogearPage: React.FC = () => {
                     return !shipConfig.ignoreUnleveled || gear.level > 0;
                 });
 
+            // "Assume all gear is calibrated": score every calibration-eligible
+            // piece as if calibrated to this ship. This array feeds the fast
+            // path's gear registry; the getter below feeds the slow path.
+            const scoredInventory = shipConfig.assumeCalibrated
+                ? availableInventory.map((gear) =>
+                      withAssumedCalibration(gear, shipConfig.useUpgradedStats)
+                  )
+                : availableInventory;
+
             // Pre-filter implants to keep only top candidates per slot
             // This dramatically reduces the search space for the genetic algorithm
             // Always include currently equipped implants so GA can decide to keep or swap
@@ -717,12 +730,12 @@ export const AutogearPage: React.FC = () => {
             );
             const filteredInventory = shipConfig.optimizeImplants
                 ? filterTopImplantsPerSlot(
-                      availableInventory,
+                      scoredInventory,
                       shipConfig.statPriorities,
                       equippedImplantIds,
                       shipConfig.statBonuses
                   )
-                : availableInventory;
+                : scoredInventory;
             performanceTracker.endTimer('FilterInventory');
 
             // eslint-disable-next-line no-console
@@ -734,7 +747,13 @@ export const AutogearPage: React.FC = () => {
             // calculateTotalStats applies the calibration bonus only when
             // gear.calibration.shipId === the target ship's id, so no reversal
             // is needed here.
-            const getGearForShip = shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece;
+            const baseGearGetter = shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece;
+            // Assumed calibration wraps OUTSIDE the upgraded-stats getter, so
+            // the bonus lands on the simulated level-16 main stat rather than
+            // the level-0 one.
+            const getGearForShip = shipConfig.assumeCalibrated
+                ? makeAssumedCalibrationGetter(baseGearGetter, shipConfig.useUpgradedStats)
+                : baseGearGetter;
 
             performanceTracker.startTimer('FindOptimalGear');
             const strategyResult: AutogearResult = await Promise.resolve(
@@ -793,7 +812,7 @@ export const AutogearPage: React.FC = () => {
             const currentStats = calculateTotalStats(
                 ship.baseStats,
                 ship.equipment,
-                shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece,
+                getGearForShip,
                 ship.refits,
                 ship.implants,
                 getEngineeringStatsForShipType(ship.type),
@@ -803,7 +822,7 @@ export const AutogearPage: React.FC = () => {
             const suggestedStats = calculateTotalStats(
                 ship.baseStats,
                 suggestedEquipment,
-                shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece,
+                getGearForShip,
                 ship.refits,
                 suggestedImplants,
                 getEngineeringStatsForShipType(ship.type),
