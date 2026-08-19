@@ -22,6 +22,7 @@ import {
 } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
+import { clearScoreCache } from '../../utils/autogear/scoring';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
 import { GEAR_SETS, SHIP_TYPES, ShipTypeName, getLimitStatLabel } from '../../constants';
@@ -518,6 +519,16 @@ export const AutogearPage: React.FC = () => {
                 return upgrade ? ({ ...piece, mainStat: upgrade.mainStat } as GearPiece) : piece;
             };
         }
+
+        // Drop memoised scores from any previous run. The scoreCache key
+        // describes equipment IDS, not the gear's stats, so a run whose gear
+        // stats differ from the last one ("Use upgraded stats", "Assume all
+        // gear is calibrated", or a gear piece edited since) would otherwise
+        // read stale scores. Only GeneticStrategy clears it itself; TwoPass,
+        // SetFirst and BeamSearch do not. Clearing once per team run (not per
+        // ship) keeps all within-run caching intact — the key already includes
+        // ship.id, so cross-ship reuse was negligible.
+        clearScoreCache();
 
         const startTime = performance.now();
         // eslint-disable-next-line no-console
