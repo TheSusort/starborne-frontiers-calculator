@@ -386,6 +386,11 @@ describe('Cobalt second passive — charge AND Out. Damage Up II coexist (no cla
 // it is granted — every turn, not every other turn. (The CHARGE half is excluded from this drain
 // and still banks post-cast, so the Part 1/Part 2 charge ledgers are unchanged.)
 describe('Cobalt Out. Damage Up II — engine consumption (recurring, every turn)', () => {
+    // SP-4c-2a (B1): `dummySink()` (buildInput's default enemy) carries no `stats.hp`, so the
+    // targetable-HP floor (normalizeRoster.ts) now raises it to MIN_TARGETABLE_MAX_HP and the run
+    // is positional — the scalar `directDamage` credit is suppressed in favour of the per-victim
+    // map. Read the per-victim channel (summed across the single victim) and fall back to the
+    // scalar when it is absent, the same migration as allyChargeGrant.test.ts's `roundDealt`.
     const runFocusDamage = (withBuff: boolean): number[] => {
         const abilities = resolvePassiveAbilities(COBALT_P2).filter(
             (a) =>
@@ -396,7 +401,12 @@ describe('Cobalt Out. Damage Up II — engine consumption (recurring, every turn
         const r = runCombat(
             buildInput({ chargeCount: 0, numRounds: 4, passiveAbilities: abilities })
         );
-        return r.rounds.map((round) => round.directDamage);
+        return r.rounds.map((round) => {
+            const perVictim = round.perTargetDealt?.['attacker'];
+            return perVictim
+                ? Object.values(perVictim).reduce((sum, v) => sum + v, 0)
+                : round.directDamage;
+        });
     };
 
     it('the buff boosts EVERY turn (pre-cast grant ordering)', () => {

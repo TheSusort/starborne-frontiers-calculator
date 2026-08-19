@@ -274,9 +274,23 @@ const totalShield = (r: ReturnType<typeof runCombat>): number =>
         (sum, rd) => sum + (rd.perActor.get('attacker')?.shield ?? 0),
         0
     );
-/** The FOCUS's cumulative direct damage — the reactive 80% credit folds into directDamage. */
+/**
+ * The FOCUS's cumulative direct damage — the reactive 80% credit folds into directDamage.
+ *
+ * SP-4c-2a (B1): `buffingChargedEnemy` carries no `stats.hp`, so the targetable-HP floor
+ * (normalizeRoster.ts) now raises it to MIN_TARGETABLE_MAX_HP and the run is positional — the
+ * scalar `directDamage` credit is suppressed in favour of the per-victim map. Sum the per-victim
+ * channel (across every victim the focus dealt to that round) and fall back to the scalar when
+ * absent, the same migration as allyChargeGrant.test.ts's `roundDealt`.
+ */
 const focusCumulativeDamage = (r: ReturnType<typeof runCombat>): number =>
-    r.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
+    r.rounds.reduce((sum, rd) => {
+        const perVictim = rd.perTargetDealt?.['attacker'];
+        const dealt = perVictim
+            ? Object.values(perVictim).reduce((s, v) => s + v, 0)
+            : rd.directDamage;
+        return sum + dealt;
+    }, 0);
 
 // ─── 1. Curator purge-on-enemy-charged ──────────────────────────────────────────────────
 

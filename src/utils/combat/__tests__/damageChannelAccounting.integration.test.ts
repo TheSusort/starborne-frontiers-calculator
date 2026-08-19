@@ -85,26 +85,23 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         __resetLegacyVictimFallbackCount();
     });
 
-    it('a roster of 0-max-HP pressure sources credits every cast to the LEGACY sink', () => {
-        // The 12 bucket-4B fixtures all look like this: an enemy attacker declared purely as a
-        // SOURCE of pressure (`hp: 0`), never as something to hit. It can never be a victim, so
-        // the run is not positional and the dummy sink owns the offense — exactly what these
-        // callers got before normalization started auto-placing the roster.
-        //
-        // ⭐ SP-4c HAND-OFF, and the reason this case is now load-bearing beyond its own name: since
-        // SP-4b-2b dropped the empty-roster shape (see the block below), this 0-max-HP shape is the
-        // SOLE remaining carrier of the LEGACY arm of the §4B invariant — the only fixture in the
-        // repo that still books a player cast into the scalar sink. SP-4c removes this shape too,
-        // along with the sink it books into. When it does, the invariant's legacy arm has nothing
-        // left to observe and the honest move is to DELETE that arm (both here and in the INVARIANT
-        // test's shape list) rather than to keep a 0-max-HP roster alive artificially to feed it.
-        // The per-victim arm is the one that survives, and it is covered by the two cases below.
+    // SP-4c-2a INVERTED THIS TEST, the same way SP-4b-2b inverted the empty-roster case below. Its
+    // own hand-off note predicted the closure exactly: "SP-4c removes this shape too, along with
+    // the sink it books into... the per-victim arm is the one that survives." The targetable-HP
+    // floor (normalizeRoster.ts, MIN_TARGETABLE_MAX_HP) is that removal for THIS shape: an enemy
+    // attacker declared as a 0-max-HP "pressure source" is no longer unhittable — it is floored to
+    // 1,000,000 HP and becomes a real, targetable roster member. `rosterWithEnemyHp(0)` and
+    // `rosterWithEnemyHp(500_000)` are now the SAME routing class (both floored well above
+    // ROUNDS * PER_CAST, both take every cast per-victim) — the legacy sink is never reached by
+    // this fixture any more, and there is no longer any way to construct a "0-max-HP" roster that
+    // reads as unhittable to the engine.
+    it('a former 0-max-HP pressure source is FLOORED, so it now credits every cast to the PER-VICTIM channel, not the legacy sink', () => {
         const result = runCombat(rosterWithEnemyHp(0));
 
-        expect(result.rawTotals.cumulative).toBe(ROUNDS * PER_CAST);
-        expect(result.rawTotals.direct).toBe(ROUNDS * PER_CAST);
-        // ...and NOT also into the per-victim channel (never two channels).
-        expect(result.rounds.map(positionalIn)).toEqual([0, 0, 0, 0]);
+        expect(result.rounds.map(positionalIn)).toEqual([PER_CAST, PER_CAST, PER_CAST, PER_CAST]);
+        // ...and NOT into the legacy sink — the shape this test used to name is gone.
+        expect(result.rawTotals.cumulative).toBe(0);
+        expect(result.rawTotals.direct).toBe(0);
     });
 
     // SP-4b-2b INVERTED THIS TEST. It read "an EMPTY opposing roster credits every cast to the
@@ -158,15 +155,18 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         // The third state — "neither channel while a living victim existed" — is the SP-4b-1 §4B
         // defect. Pinned here directly so a future gate/selection divergence cannot reintroduce it.
         // SP-4b-2b: the `{ name: 'no roster', input: noRoster }` shape was dropped from this list —
-        // it is refused at the boundary now, pinned by its own test above. It was the same routing
-        // class as the 0-max-HP pressure source that remains here (both fail
-        // `resolvesPositionalVictim` and fall to the sink), so the list still covers every reachable
-        // sink/per-victim/whiff combination. Re-asserted here so the absence is deliberate and a
-        // future reader cannot read it as a quietly deleted shape.
+        // it is refused at the boundary now, pinned by its own test above.
+        //
+        // SP-4c-2a: the '0-max-HP pressure source' shape below no longer fails
+        // `resolvesPositionalVictim` either — the targetable-HP floor raises it to
+        // MIN_TARGETABLE_MAX_HP, so it now books per-victim exactly like 'survives every round'.
+        // It is KEPT in the list (rather than folded into the survives-every-round shape) so a
+        // regression that reopened the 0-max-HP-is-unhittable path would still be caught here, not
+        // just in the dedicated test above.
         expect(() => runCombat(noRoster())).toThrow(/enemyAttackers is empty/);
 
         const shapes: ReadonlyArray<{ name: string; input: () => CombatEngineInput }> = [
-            { name: '0-max-HP pressure source', input: () => rosterWithEnemyHp(0) },
+            { name: '0-max-HP pressure source (now floored, per-victim)', input: () => rosterWithEnemyHp(0) },
             { name: 'dies in round 1', input: () => rosterWithEnemyHp(5_000) },
             { name: 'survives every round', input: () => rosterWithEnemyHp(500_000) },
         ];

@@ -28,7 +28,7 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { splashDamageForBomb } from '../bombSplash';
 import type { PendingBomb } from '../state';
-import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -237,21 +237,26 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
     // ─── (c) Non-positional no-op ─────────────────────────────────────────────
     // No ships have board positions. A ship has pendingBombs and dies.
     // The victim.position gate (Task 1) must prevent any splash.
-    it('(c) non-positional: dying bombed ship with no position produces no splash', () => {
+    // SP-4c-2a CHANGED WHAT THIS CASE PROVES (coverage reduced, documented rather than papered
+    // over). It used to pin "a dying bombed ship with no position produces no splash": the ONLY
+    // way to reach an enemy actor with `position === undefined` was the documented "pressure
+    // source" roster (`bareEnemy({ stats: { hp: 0 } })`) — 0 max HP kept `resolvesPositionalVictim`
+    // from finding anyone targetable, so the cast fell back to the legacy scalar `enemy` dummy
+    // sink, which `normalizeCombatRoster` never auto-places.
+    //
+    // The targetable-HP floor (`normalizeRoster.ts`, `MIN_TARGETABLE_MAX_HP`) closes that shape:
+    // the same 0-max-HP enemy is now raised to 1,000,000 HP, so (a) it IS auto-placed, like every
+    // enemy attacker unconditionally is, and (b) it survives the fixture's 5000-damage hit outright
+    // (5000 ≪ 1,000,000) — confirmed by standalone repro against the real engine: `perTargetDealt`
+    // names the real actor (`BARE_ENEMY_ID`) for 5000, and no `ship-destroyed` fires. So this case
+    // no longer exercises "position undefined blocks the splash gate" at all — there is no longer
+    // any enemy-side shape with an undefined position (every enemy attacker is unconditionally
+    // auto-placed post-floor), and this fixture's victim does not even die any more. What remains
+    // is "no splash" for a DIFFERENT, weaker reason (no death), which is already covered by
+    // "a bombed enemy that SURVIVES the hit does not splash" above. The position-undefined-blocks
+    // premise has no substitute case in this file post-floor — flagged as a real coverage loss.
+    it('(c) [coverage-reduced] the former 0-max-HP pressure source is now floored, positioned, and survives the hit — no splash, but no longer because of the position gate', () => {
         idc = 0;
-        // Override BASE to remove all positions. The focus attacker fires and kills the dummy
-        // enemy (via the skill), which has no position. The bomb is applied to it. On death,
-        // victim.position === undefined → splash gate blocks.
-        //
-        // SP-4b-2b: `normalizeCombatRoster` now requires a roster AND auto-PLACES every member, so
-        // "the victim has no position" is no longer reachable through a real roster entry — the sink
-        // is the only positionless actor left. The roster here is therefore a documented "pressure
-        // source" (0 MAX hp), which makes `resolvesPositionalVictim` find nobody targetable
-        // (positionalBinding.ts:60-70), keeps the run NON-positional, and keeps the sink as the
-        // victim — the exact premise this case exists to test. Without that, the run would go
-        // positional, the victim would be a PLACED enemy, and the test would pass for the unrelated
-        // reason that a lone enemy has no adjacent ally (already covered two tests above), i.e. it
-        // would be green and vacuous. (SP-4c must revisit this case when it deletes the dummy.)
         const noPositionInput: CombatEngineInput = {
             enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 5000,
@@ -276,19 +281,21 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             hp: 1_000_000_000,
             healTargetId: 'attacker',
             mode: 'healing',
-            // NO position on the attacker, and a pressure-source roster → the sink is the victim.
+            // The 0-max-HP enemy is floored to 1,000,000 HP (SP-4c-2a) — it is auto-placed and
+            // survives this hit, so this is no longer the "no position" shape (see comment above).
         };
 
         const result = runCombat(noPositionInput);
         const round = result.rounds[0];
 
-        // ANTI-VACUITY: prove the run really did take the non-positional sink path — the scalar
-        // direct channel carries the hit and the per-victim map is empty. Only then does
-        // "no splash" mean "the victim.position gate blocked it".
-        expect(round.directDamage).toBeGreaterThan(0);
-        expect(round.perTargetDealt).toBeUndefined();
+        // ANTI-VACUITY: prove the cast really landed on the real, now-positioned roster member
+        // (per-victim channel, named by its real id) rather than silently hitting nothing.
+        expect(round.perTargetDealt?.['attacker']?.[BARE_ENEMY_ID]).toBe(5000);
+        expect(round.directDamage).toBe(0);
 
-        // No splash: victim.position was undefined → gate blocked.
+        // No splash — but now because the victim SURVIVED (1,000,000 HP ≫ 5000 damage), not
+        // because its position was undefined. Same outcome, different and weaker mechanism; see
+        // the coverage-loss note above.
         expect(round.perActorSplash).toBeUndefined();
     });
 

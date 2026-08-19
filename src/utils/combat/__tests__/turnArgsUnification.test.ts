@@ -20,6 +20,7 @@ import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import type { RoundData } from '../../calculators/dpsSimulator';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -145,11 +146,42 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
 const totalIncoming = (r: ReturnType<typeof runCombat>): number =>
     r.healing!.rounds.reduce((sum, round) => sum + round.incomingDamage, 0);
 
+/**
+ * The FOCUS's own dealt damage for one round.
+ *
+ * SP-4c-2a (B1): `enemyHitter(...)` carries no `stats.hp`, so the targetable-HP floor
+ * (normalizeRoster.ts) now raises it to MIN_TARGETABLE_MAX_HP and the run is positional — the
+ * scalar `totalRoundDamage`/`directDamage` credits are suppressed to 0 in favour of the
+ * per-victim map. Sum the per-victim channel (across every victim the focus dealt to) and fall
+ * back to the scalar when it is absent.
+ */
+const playerDealt = (round: RoundData): number => {
+    const perVictim = round.perTargetDealt?.['attacker'];
+    return perVictim ? Object.values(perVictim).reduce((sum, v) => sum + v, 0) : round.directDamage;
+};
+
+/**
+ * A given source actor's dealt damage for one round, read off the per-victim channel.
+ *
+ * SP-4c-2a: the same positional shift applies to a WALKED-TEAM actor's credit — under a
+ * positional run its direct credit goes through `creditPositionalDirect` (the Echoing Burst
+ * gather basis), which does NOT fold into the `teamDamage` display scalar (discovered via
+ * standalone repro against the real engine: `teamDamage` reads 0 while `perTargetDealt['team1']`
+ * correctly reads the dealt amount) — the same asymmetry documented in
+ * perVictimWalkedTeamDetonation.integration.test.ts for the detonation channel. Read the
+ * per-victim channel directly rather than the scalar `teamDamage`.
+ */
+const dealtBySource = (round: RoundData, sourceId: string): number => {
+    const perVictim = round.perTargetDealt?.[sourceId];
+    return perVictim ? Object.values(perVictim).reduce((sum, v) => sum + v, 0) : 0;
+};
+
 const playerOutgoing = (r: ReturnType<typeof runCombat>) =>
     r.rounds.map((round) => ({
         totalRoundDamage: round.totalRoundDamage,
         cumulativeDamage: round.cumulativeDamage,
         directDamage: round.directDamage,
+        dealt: playerDealt(round),
     }));
 
 describe('PR6a — collapsed runPlayerTurn path resolves per-side bindings', () => {
@@ -164,12 +196,12 @@ describe('PR6a — collapsed runPlayerTurn path resolves per-side bindings', () 
 
         // Player credit path (focus): the focus attacker's damage row is NON-ZERO — buildTurnArgs
         // routed its hit through the player applyToVictim (applyOutgoingToEnemy) → a player damage row.
-        expect(result.rounds.some((round) => round.directDamage > 0)).toBe(true);
-        expect(result.rounds.some((round) => round.totalRoundDamage > 0)).toBe(true);
+        expect(result.rounds.some((round) => playerDealt(round) > 0)).toBe(true);
 
-        // Team credit path (walked team): the team actor's damage lands in the teamDamage bucket
-        // (NON-ZERO), never folded into the focus row — proving its turn resolved player-side bindings.
-        expect(result.rounds.some((round) => (round.teamDamage ?? 0) > 0)).toBe(true);
+        // Team credit path (walked team): the team actor's damage lands in the per-victim channel
+        // under its OWN id (NON-ZERO), never folded into the focus row — proving its turn resolved
+        // player-side bindings. (Not `round.teamDamage` — see `dealtBySource`'s comment.)
+        expect(result.rounds.some((round) => dealtBySource(round, 'team1') > 0)).toBe(true);
 
         // Enemy intake path: the enemy attacker's hit lands as INCOMING damage on the heal target
         // (NON-ZERO) — proving the enemy turn resolved enemyTurnBindings.applyToVictim
@@ -201,8 +233,8 @@ describe('PR6a — collapsed runPlayerTurn path resolves per-side bindings', () 
         // NON-VACUITY (player side): the player team actually DEALS damage in both runs, so the
         // equality below is a real leak detector — a leaked enemy Attack Up would raise the player
         // output and break the toEqual.
-        expect(withBuff.rounds.some((round) => round.totalRoundDamage > 0)).toBe(true);
-        expect(noBuff.rounds.some((round) => round.totalRoundDamage > 0)).toBe(true);
+        expect(withBuff.rounds.some((round) => playerDealt(round) > 0)).toBe(true);
+        expect(noBuff.rounds.some((round) => playerDealt(round) > 0)).toBe(true);
 
         // NO CROSS-SIDE LEAK: the player's outgoing damage rows are byte-identical whether or not
         // the enemy buffed itself — the enemy self-buff never reached a player store.

@@ -301,9 +301,30 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
         enemyAttackers: [enemy],
     });
 
-    // The focus' first charged round: directDamage exceeds 2× the round-1 (active) hit.
-    const firstChargedRound = (rounds: { directDamage: number }[]): number =>
-        rounds.findIndex((r) => r.directDamage > rounds[0].directDamage * 2);
+    // SP-4c-2a (B1): `stealthEnemy()`/`plainEnemy()` carry no `stats.hp`, so the targetable-HP
+    // floor (normalizeRoster.ts) now raises them to MIN_TARGETABLE_MAX_HP — these runs are
+    // positional, and a positional cast suppresses the scalar `directDamage` credit in favour of
+    // the per-victim map (confirmed via standalone repro against the real engine: `perTargetDealt`
+    // populated, `directDamage` 0 every round). Read the per-victim channel and fall back to the
+    // scalar only when it is absent (kept for the one still-passing test below that already
+    // constructs an explicit-hp, pre-positional enemy).
+    const roundDealt = (r: {
+        directDamage: number;
+        perTargetDealt?: Record<string, Record<string, number>>;
+    }): number => {
+        const perVictim = r.perTargetDealt?.['attacker'];
+        return perVictim
+            ? Object.values(perVictim).reduce((sum, v) => sum + v, 0)
+            : r.directDamage;
+    };
+
+    // The focus' first charged round: dealt damage exceeds 2× the round-1 (active) hit.
+    const firstChargedRound = (
+        rounds: {
+            directDamage: number;
+            perTargetDealt?: Record<string, Record<string, number>>;
+        }[]
+    ): number => rounds.findIndex((r) => roundDealt(r) > roundDealt(rounds[0]) * 2);
 
     it('gate OFF (no enemy Stealth): the start-of-round grant does NOT accelerate the focus', () => {
         // Gate ON reference (enemy holds Stealth) vs gate OFF (plain enemy). Same +2 grant,

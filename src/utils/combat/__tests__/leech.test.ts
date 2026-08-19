@@ -1079,8 +1079,12 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
         //          enemy buff → directDamage = 10000.
         // Round 2: the enemy's self-buff is live (granted round 1, 99-turn) → gate fires →
         //          +100% attack → directDamage = 20000.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        //
+        // SP-4c-2a (B1): `e1` carries no `stats.hp`, so the targetable-HP floor now raises it to
+        // MIN_TARGETABLE_MAX_HP and the run is positional — read the per-victim channel via
+        // `dealtBy`, the same helper this file's Test 2 (M3) already uses for the identical shift.
+        expect(dealtBy([result.rounds[0]], 'attacker')).toBe(10000);
+        expect(dealtBy([result.rounds[1]], 'attacker')).toBe(20000);
     });
 
     // ── NO DOUBLE-FOLD: the enemy's self-buff effect is folded EXACTLY once ──────────
@@ -1233,8 +1237,12 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
         );
         // Round 1: focus acts before the enemy lands the debuff → gate sees no self-debuff →
         //          10000. Round 2: the debuff is live on the tank → gate fires → 20000.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        //
+        // SP-4c-2a (B1): `e1` carries no `stats.hp`, so the targetable-HP floor now raises it to
+        // MIN_TARGETABLE_MAX_HP and the run is positional — read the per-victim channel via
+        // `dealtBy`, same migration as the enemy-buff-gate case above.
+        expect(dealtBy([result.rounds[0]], 'attacker')).toBe(10000);
+        expect(dealtBy([result.rounds[1]], 'attacker')).toBe(20000);
     });
 
     // ── PRELIMINARY (6b review): dead-target guard ──────────────────────────────────

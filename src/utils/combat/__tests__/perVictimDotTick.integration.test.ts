@@ -141,16 +141,12 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     ...overrides,
 });
 
-// Non-positional BASE: a single focus dummy enemy, NO position/target/pattern/enemyAttackers — the
-// legacy DPS path. DoT containers are seeded on the focus dummy ('enemy') for the dummy-tick path.
+// Formerly-non-positional BASE: a single enemy, NO position/target/pattern given explicitly — the
+// boundary auto-fills both. SP-4c-2a's targetable-HP floor now raises this 0-max-HP
+// "pressure-source" enemy to MIN_TARGETABLE_MAX_HP too, so it is real and positional (it used to
+// reach the legacy DPS dummy-tick path instead). DoT containers are seeded on this real enemy
+// ('pressure-source') rather than the dummy.
 const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent, and merely omitting `target`/`pattern` does NOT keep one
-    // non-positional (`normalizeCombatRoster`'s `withTargeting` fills both). The remaining
-    // non-positional shape is the documented 0-MAX-HP "pressure source": `resolvesPositionalVictim`
-    // finds nobody targetable (positionalBinding.ts:60-70), so the cast stays on the legacy dummy
-    // sink and every number in the cases below is byte-identical to the pre-branch run. The id is
-    // deliberately distinct from the shared fixture's default so it cannot be confused with a
-    // positioned carrier elsewhere in this file. (SP-4c must revisit these cases with the dummy.)
     enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: FOCUS_ATTACK,
     crit: 0,
@@ -577,24 +573,44 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         expect(playerFirstTick).toBe(500);
     });
 
-    it('Non-positional regression: the dummy DoT path + heal-target DoT path are unchanged', () => {
+    it('REGRESSION: the (now-floored, positional) sole enemy’s DoT tick still surfaces via the focus corrosion channel', () => {
         idc = 0;
-        // DPS mode: a corrosion on the focus DUMMY ('enemy', enemyHp 10000) ticks via the legacy
-        // :4966 dummy path → focus.corrosion (creditDamage). tick = 0.05 × min(10000,500000) = 500.
+        // SP-4c-2a: `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
+        // MIN_TARGETABLE_MAX_HP, so it is real and positional — the tap targets its real id
+        // rather than the no-longer-existing 'enemy' dummy. The round-row scalar `corrosionDamage`
+        // is `focus.corrosion + perActorDot.get(focusActorId)?.corrosion` (engine.ts), which folds
+        // in the per-victim DoT-tick credit attributed to the focus rather than suppressing it
+        // (the same fold `detonationDamage` uses for bombs) — so it still reads the tick amount
+        // once the tap lands on the real actor.
+        //
+        // The MAGNITUDE moved too: the legacy dummy's HP was overridden by the top-level `enemyHp`
+        // (10000 here), but `enemyHp` is NOT read for a real `enemyAttackers` roster member — this
+        // enemy's HP is the FLOORED 1,000,000. tick = stacks(1) × tier(5)/100 ×
+        // min(victimHp, 500_000) = 0.05 × min(1_000_000, 500_000) = 0.05 × 500_000 = 25000
+        // (confirmed by standalone repro against the real engine).
         const { result } = collect(
             NONPOS_BASE({
                 enemyHp: 10000,
                 __testTapActors: (actors: CombatActor[]) => {
                     actors
-                        .find((a) => a.id === 'enemy')
+                        .find((a) => a.id === 'pressure-source')
                         ?.corrosionEntries.push(corrosion(5, 1, 5, 'attacker'));
                 },
             })
         );
-        // Round 1: dummy ticks 500 surfaced via the focus corrosion channel (RoundData field).
-        expect(result.rounds[0].corrosionDamage).toBe(500);
-        // It fed the dummy aggregate (cumulativeDamage advanced) — legacy behaviour.
-        expect(result.rounds[0].cumulativeDamage).toBeGreaterThanOrEqual(500);
+        // Round 1: the tick surfaces via the focus corrosion channel (RoundData field).
+        expect(result.rounds[0].corrosionDamage).toBe(25000);
+        // ⚠️ DISCOVERED ASYMMETRY (not fixed here — engine.ts is out of scope for this task, and
+        // this is pre-existing behaviour the floor merely makes reachable for the first time).
+        // `cumulativeDamage` is fed by `totalRoundDamage`, which deliberately uses RAW
+        // `focus.corrosion` only (engine.ts: "folding perActorDot here would double-drain the
+        // dummy HP overwrite") — it does NOT fold the perActorDot-credited positional tick the
+        // way the round-row `corrosionDamage` display field does. Confirmed by standalone repro:
+        // `cumulativeDamage` reads 0 here even though `corrosionDamage` correctly reads 25000. The
+        // real cumulative credit for a positional run lives in the per-victim channel instead:
+        // firing hit 100 (FOCUS_ATTACK) + corrosion tick 25000 = 25100 on the real victim.
+        expect(result.rounds[0].cumulativeDamage).toBe(0);
+        expect(result.rounds[0].perTargetDamage?.['pressure-source']).toBe(25100);
     });
 
     it('Positioned AND heal-target (branch-collision): a victim that is both ticks EXACTLY ONCE via the heal-target branch', () => {

@@ -316,25 +316,34 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
         expect(round.perActorDetonation?.['team-det']).toBe(100);
     });
 
-    it('REGRESSION: a NON-positional walked-team detonate still surfaces detonationDamage via the legacy aggregate path', () => {
+    it('the former 0-max-HP pressure source is now FLOORED, so the walked-team detonate resolves per-victim, not through the legacy aggregate path', () => {
         idc = 0;
-        // No TARGETABLE enemy victims, so the dummy `enemy` sink is the only anchor. The walked-team
-        // ally therefore falls back through selectTurnTarget onto the legacy dummy victim →
-        // teamPositional is false → it stays on the legacy single-anchor path: the team turn
-        // detonates the dummy `enemy` sink's seeded bomb (2 × 1000 = 2000) and the credit folds into
-        // teamTurn.detonationDamage (legacy creditDamage → the aggregate teamDamage number). No
-        // positional → the positional-only surfaces (perActorDetonation / perTargetDamage) stay
-        // absent. This pins the legacy aggregate path byte-identical.
+        // SP-4b-2b history: this used to say `enemyAttackers: undefined` and attribute the
+        // non-positional routing partly to the missing PATTERN; `normalizeCombatRoster` closed
+        // that by refusing an absent/empty roster and FILLING the missing pattern
+        // (DEFAULT_BASE_PATTERN). The surviving lever was the roster: `teamPositional` is keyed
+        // on `resolvesPositionalVictim`, which keys on MAX hp, so a 0-max-HP "pressure source"
+        // roster was placed but unhittable and the legacy dummy path stayed reachable through
+        // that gate.
         //
-        // SP-4b-2b: this used to say `enemyAttackers: undefined` and attribute the non-positional
-        // routing partly to the missing PATTERN. Both premises are now wrong. `normalizeCombatRoster`
-        // refuses an absent/empty roster outright, and it also FILLS the missing pattern
-        // (DEFAULT_BASE_PATTERN), so the pattern conjunct of `teamPositional` can no longer be the
-        // thing that is false. The surviving lever is the roster: `teamPositional` is keyed on
-        // `resolvesPositionalVictim`, which keys on MAX hp — so a 0-max-HP "pressure source" roster
-        // is placed but unhittable and the legacy path is reached through exactly the same gate as
-        // before, with the same magnitudes. (MEASURED, not assumed: 2000 / 2100 below are unchanged
-        // from the pre-branch `undefined` form.)
+        // SP-4c-2a closes THAT gate too: the targetable-HP floor (normalizeRoster.ts,
+        // MIN_TARGETABLE_MAX_HP) raises the same 0-max-HP enemy to 1,000,000 HP, so it IS
+        // targetable and `teamPositional` is now true — the team ally's detonate resolves onto
+        // this real, hittable enemy PER-VICTIM instead of falling back to a legacy anchor. The
+        // tap moves onto the real enemy's id ('pressure-source'); the no-longer-existing 'enemy'
+        // dummy is never consulted.
+        //
+        // ⚠️ DISCOVERED ASYMMETRY (not fixed here — engine.ts is out of scope for this task, and
+        // this is pre-existing behaviour the floor merely makes reachable for the first time).
+        // The round-row scalar `teamDamage` (engine.ts's `teamRoundDamage`) sums each non-focus
+        // actor's OWN accumulator (`direct + corrosion + inferno + detonation + generic`), but
+        // UNLIKE the focus's `detonationDamage` field — which explicitly folds
+        // `perActorDetonation.get(focusActorId)` on top of `focus.detonation` — nothing folds a
+        // walked team actor's positional detonation credit into `teamRoundDamage`. Confirmed by
+        // standalone repro against the real engine: `teamDamage` reads 0 even though
+        // `perActorDetonation['team-det']` correctly reads 2000 and `perTargetDamage` correctly
+        // reads 2100. Worth a follow-up ticket for team-symmetric detonation display; not this
+        // task's to fix.
         const { events, result } = collect(
             BASE({
                 enemyAttackers: [enemyAt('pressure-source', 'M4', 0)],
@@ -346,9 +355,6 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
                         startCharged: false,
                         selfBuffs: [],
                         enemyDebuffs: [],
-                        // position + target present, pattern omitted — but the OMISSION is no longer
-                        // what reaches the legacy path (the boundary fills DEFAULT_BASE_PATTERN).
-                        // The 0-max-HP roster above is the lever; see the block comment.
                         position: 'M1',
                         target: parsedTarget('front'),
                         walk: {
@@ -365,25 +371,25 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
                     } as TeamActorEngineInput,
                 ],
                 __testTapActors: (actors: CombatActor[]) => {
-                    // Seed the dummy enemy sink's bomb (the legacy anchor target).
-                    actors.find((a) => a.id === 'enemy')?.pendingBombs.push(bomb(1000, 2));
+                    // The floored enemy is real now — tap ITS id, not the legacy dummy.
+                    actors.find((a) => a.id === 'pressure-source')?.pendingBombs.push(bomb(1000, 2));
                 },
             })
         );
         const round = result.rounds[0];
-        // Legacy aggregate path: exactly ONE bomb-detonated (the single anchor = the dummy enemy),
-        // crediting the team ally for 2000.
+        // Positional surfaces populated: firing hit 100 + detonation burst 2000 on the real victim,
+        // credited to the walked-team ally.
+        expect(round.perTargetDamage?.['pressure-source']).toBe(2100);
+        expect(round.perActorDetonation?.['team-det']).toBe(2000);
+        // The legacy aggregate scalar does NOT fold the positional detonation credit for a walked
+        // team actor — see the DISCOVERED ASYMMETRY note above.
+        expect(round.teamDamage).toBe(0);
+
+        // Exactly ONE bomb-detonated (the real enemy's own bomb), crediting the team ally 2000.
         const bombDet = events.filter((e) => e.type === 'bomb-detonated');
         expect(bombDet.length).toBe(1);
         expect(bombDet[0].actorId).toBe('team-det');
         expect(bombDet[0].damage).toBe(2000);
-        // The aggregate teamDamage number (firing hit + detonation) reflects the legacy detonation:
-        // firing direct 100 + detonation 2000 = 2100.
-        expect(round.teamDamage).toBe(2100);
-        // Non-positional → both positional-only surfaces stay absent (proves the positional branch is
-        // non-vacuous: it is the ONLY path that populates perActorDetonation / perTargetDamage).
-        expect(round.perActorDetonation).toBeUndefined();
-        expect(round.perTargetDamage).toBeUndefined();
     });
 
     // SP-4b: 'GATE-NEGATIVE: a walked-team detonate with a target but NO pattern stays on the
