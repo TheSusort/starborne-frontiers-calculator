@@ -359,11 +359,17 @@ describe('normalizeCombatRoster — fenced in both directions', () => {
             enemyAttackers: [
                 {
                     ...enemyInput('e1', 'T2'),
-                    // Explicit and already above MIN_TARGETABLE_MAX_HP, so the targetable-HP floor
-                    // (responsibility (c)) has nothing to raise here — this input's enemy is
-                    // ALREADY a hittable ship, keeping "fully-positioned, fully-targeted" honest as
-                    // "nothing is invented when everything is given."
-                    stats: { ...enemyInput('e1', 'T2').stats, hp: MIN_TARGETABLE_MAX_HP },
+                    // An ARBITRARY positive hp (12_345), deliberately NOT MIN_TARGETABLE_MAX_HP.
+                    // `withTargetableHp` is fill-if-absent-or-<=0, not a `Math.max` clamp, so any
+                    // positive value already leaves the input untouched — the floor has nothing to
+                    // raise here regardless of which positive number is chosen. Picking an arbitrary
+                    // value rather than the floor's own constant keeps this fence honest as "nothing
+                    // is invented when everything is given" even if the fill logic is ever tightened
+                    // into a clamp: a fixture pinned to the floor's exact value would keep passing
+                    // under a clamp (which also leaves it untouched, being already at the minimum),
+                    // silently losing its ability to catch that change. An arbitrary value fails
+                    // loudly under a clamp instead, because a clamp WOULD raise it.
+                    stats: { ...enemyInput('e1', 'T2').stats, hp: 12_345 },
                     target,
                     pattern,
                 },
