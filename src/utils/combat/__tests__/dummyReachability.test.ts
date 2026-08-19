@@ -25,6 +25,19 @@
  *    damage was actually BOOKED against the dummy — its HP declined. The two come apart, and the
  *    "credits are distinct from consultations" block below pins them apart on purpose.
  *
+ * 3. **VACUITY — the credit counter is proved to MOVE.** Every case below except one reads
+ *    `credited: 0`, and a zero from a counter wired to nothing is indistinguishable from a zero
+ *    that means something. Rungs 4c-2b/4c-2c plan to gate their deletions on "credits === 0", so
+ *    that distinction is load-bearing rather than hygiene. The `LIVENESS` case supplies it: it
+ *    books a real scalar credit against the dummy and reads BOTH counters back at DERIVED values.
+ *    The route it uses is the ALLY-SIDE active target described in the next section — the one
+ *    `dummyEnemyIsVestigial` conjunct SP-4c-2a's HP floor did NOT make tautological. Belt and
+ *    braces: `normalizeRoster.test.ts`'s floor cases prove the un-floored roster cannot be built,
+ *    and each case here still asserts something POSITIVE about the path it claims (a
+ *    `turn-started`, a `perTargetDealt` row naming the victim, a `ship-destroyed`, a changed victim
+ *    id) so a zero from a case that never ran its path stays impossible. The counters go away
+ *    entirely in SP-4c-2d.
+ *
  * ── WHAT SP-4c STILL HAS TO HANDLE ────────────────────────────────────────────────────────────
  *
  * NOTHING, on the player side's REACHABILITY — but the fallback is still CONSULTED, and by a
@@ -34,7 +47,13 @@
  * killed roster produces no whiff rounds (see the CORPSE TARGETING case). The 0-max-HP PRESSURE
  * SOURCE is gone too: SP-4c-2a floors it at the boundary (see the inverted case below). Both were
  * quoted as the reason 4c must gate on the CREDIT counter rather than the consultations counter,
- * and both are now closed — measured 0 credits corpus-wide.
+ * and both are now closed — the whole SHIPPED corpus measures 0 credits.
+ *
+ * "0 credits corpus-wide" is a statement about the shipped corpus, NOT about what an input can do:
+ * the legacy dummy DoT-tick site (engine.ts:9697) still books scalar credit whenever the dummy is in
+ * the turn order and carries DoT containers, and the `LIVENESS` case below constructs exactly that
+ * and reads a non-zero credit count. Rung 4c-2b/4c-2c must therefore read "credits === 0" as "no
+ * SHIPPED caller reaches the sink", not as "the sink is unreachable".
  *
  * What remains, and what rung 4c-2b owns, is scoped to the PLAYER side's `legacyVictim` — the
  * dummy `enemy` this whole file is about. `selectTurnTarget` increments the shared consultation
@@ -55,20 +74,13 @@
  * only by design — see `damageChannelAccounting.integration.test.ts`'s "a never-targetable PLAYER
  * roster is a CORPSE" case, which still reads a non-zero consultation count against that binding.
  *
- * ⚠️ THIS FILE NO LONGER CARRIES ITS OWN VACUITY GUARD. Every shape it can construct reads 0/0, so
- * a counter silently wired to nothing would leave all six cases green. The compensating control is
- * external and deliberate: `normalizeRoster.test.ts`'s floor cases prove the un-floored shape
- * cannot be built, and each case here still asserts something POSITIVE about the path it claims (a
- * `turn-started`, a `perTargetDealt` row naming the victim, a `ship-destroyed`, a changed victim
- * id) so a zero from a case that never ran its path stays impossible. The counters go away entirely
- * in SP-4c-2d.
- *
  * HISTORICAL, kept as a gloss because it explains the current shape. 4b-1 could only pin "a run
  * with a NON-EMPTY enemy roster never takes the fallback". 4b-2b then refused the empty roster at
  * the normalization boundary, which inverted the old second test ("STILL takes it with an empty
  * roster") into a throw-assertion — and cost this file its own vacuity guard, because that test's
  * `> 0` reading was the only thing proving the consultations counter was wired to anything. Task 7
- * re-homed a liveness proof here (see "the counter is LIVE" below); the sibling reading in
+ * re-homed a liveness proof onto the 0-max-HP pressure-source roster; SP-4c-2a's floor retired THAT
+ * shape in turn, and the `LIVENESS` case below is the third and current home. The sibling reading in
  * `damageChannelAccounting.integration.test.ts` remains as corroboration, no longer as the only
  * evidence.
  */
@@ -267,10 +279,11 @@ describe('sink CREDITS are distinct from fallback CONSULTATIONS', () => {
         // focus's whole output drained into the dummy's scalar channel.
         //
         // The boundary now floors that member to MIN_TARGETABLE_MAX_HP, so the shape is gone: the
-        // cast resolves a real victim and books per-victim. Every reachable shape in this file
-        // therefore reads 0/0, and the liveness proof has moved OUT of this file — to
-        // `normalizeRoster.test.ts`'s floor cases, which prove the un-floored shape cannot be
-        // constructed. The counters are deleted outright in SP-4c-2d.
+        // cast resolves a real victim and books per-victim. The liveness proof moved to the
+        // `LIVENESS` case below, which reaches the scalar channel by a route the floor does not
+        // touch (the legacy dummy DoT tick, via an ally-side active target) rather than by an
+        // unhittable roster. `normalizeRoster.test.ts`'s floor cases additionally prove the
+        // un-floored shape cannot be constructed. The counters are deleted outright in SP-4c-2d.
         const result = runCombat({
             ...bareInput(),
             enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
@@ -303,6 +316,67 @@ describe('sink CREDITS are distinct from fallback CONSULTATIONS', () => {
         expect(counters()).toEqual({ consulted: 0, credited: 0 });
     });
 
+    it('LIVENESS: the credit counter increments when the scalar branch actually books', () => {
+        // THIS FILE'S VACUITY GUARD, re-homed. Every other case here reads `credited: 0`, and a
+        // zero from a counter silently wired to nothing is indistinguishable from a zero that means
+        // something — the exact defect class rungs 4c-2b/4c-2c would inherit if they gated on
+        // "credits === 0" with no proof the counter can move.
+        //
+        // THE ROUTE, and why the floor does not close it. `dummySinkCreditCount++` fires at the
+        // round tail when `totalRoundDamage + teamRoundDamage > 0` (engine.ts:10908), i.e. when the
+        // SCALAR channel booked something. The floor closes the *direct-damage* route into that
+        // channel (a positional cast books per-victim instead), but it does not touch the LEGACY
+        // DUMMY DoT-TICK site (engine.ts:9697, `credit: (sourceId, dotType, damage) =>
+        // creditDamage(sourceId, dotType, damage)`), which is inside the dummy's own turn branch
+        // (`actor.kind === 'enemy' && actor.id === enemy.id`) and ticks the containers the dummy
+        // actor itself carries (`const corrosionEntries = enemy.corrosionEntries`, engine.ts:2412).
+        //
+        // Reaching the dummy's turn needs `dummyEnemyIsVestigial` false, and its SECOND conjunct is
+        // still falsifiable: an ALLY-SIDE parsed active target (engine.ts:2680-2686 — see
+        // `dummyEnemyTurnGate.test.ts`, which pins that gate directly). The boundary FILLS an absent
+        // target but never SUBSTITUTES an ally-side one, so the shape survives normalization.
+        const DUMMY_HP = 10_000;
+        const result = runCombat({
+            ...bareInput(),
+            // Ally-side active target → conjunct 2 false → the dummy stays in the turn order.
+            position: 'M4',
+            target: { raw: 'ally-team', side: 'ally', selection: 'team' },
+            pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
+            // The legacy dummy's HP is the top-level `enemyHp`, and it is also the corrosion base.
+            enemyHp: DUMMY_HP,
+            __testTapActors: (actors) => {
+                actors
+                    .find((a) => a.id === 'enemy')
+                    ?.corrosionEntries.push({
+                        tier: 5,
+                        stacks: 1,
+                        remainingRounds: 5, // outlives BARE_ROUNDS, so both rounds tick
+                        sourceId: 'attacker', // the focus really acts, so tickDoTs has its ctx
+                    });
+            },
+        });
+
+        // DERIVATION of the scalar amount (engine.ts's tickDoTs, corrosion arm):
+        //   tick = stacks × (tier/100) × min(enemyHp, 500_000) × dotMult × affinityMult
+        //        = 1 × (5/100) × min(10_000, 500_000) × 1 × 1  = 0.05 × 10_000 = 500
+        // credited to the focus's SCALAR corrosion channel, which is a `totalRoundDamage` term
+        // (`focus.direct + focus.corrosion + …`, engine.ts:10839). The ally-side target makes the
+        // focus's cast whiff, so 500 is the whole of `totalRoundDamage` — nothing else contributes.
+        const PER_ROUND_TICK = 0.05 * DUMMY_HP;
+        expect(result.rounds[0].corrosionDamage).toBe(PER_ROUND_TICK);
+
+        // BOTH counters moved, each by a DERIVED amount:
+        //  • CREDITED increments ONCE PER ROUND in which the scalar total is positive (not once per
+        //    credit), and each of `bareInput().numRounds` rounds books one tick → BARE_ROUNDS.
+        //  • CONSULTED increments once per selection that fell through to `tb.legacyVictim`.
+        //    `resolvePositionalTarget` returns null for an ally-side target unconditionally
+        //    ("Ally-side targets do not resolve through the opposing list", positionalBinding.ts:125-128),
+        //    and the focus takes one turn per round → BARE_ROUNDS. The roster member's own turns do
+        //    NOT contribute: the boundary gives it the enemy-side front default, which resolves
+        //    against the (targetable, 1 000 000 max HP) focus.
+        expect(counters()).toEqual({ consulted: BARE_ROUNDS, credited: BARE_ROUNDS });
+    });
+
     it('the whiff window is GONE, so the two counters no longer come apart', () => {
         // HISTORY, because it changes what SP-4c-2 may gate on. This case used to read
         // `{ consulted: 2, credited: 0 }` — the mid-run whiff window, the one shape that consulted
@@ -314,12 +388,16 @@ describe('sink CREDITS are distinct from fallback CONSULTATIONS', () => {
         // too — a never-alive actor is never destroyed, so it was not a wipe and its run continued,
         // consulting AND crediting every round. SP-4c-2a closed that shape as well, by flooring it
         // at the normalization boundary before the engine ever sees it (see the case above, and
-        // `MIN_TARGETABLE_MAX_HP` in `normalizeRoster.ts`). Both of this file's divergence sources
-        // are gone, so every player-side shape it can construct reads 0/0, and either counter would
-        // serve as SP-4c-2's gate on THIS file's evidence alone. The credit counter remains the
-        // correct choice regardless — it is the one that means "the dummy absorbed nothing", and it
-        // stays correct once other files' shapes (e.g. the enemy-side heal-target fallback) are
-        // considered too.
+        // `MIN_TARGETABLE_MAX_HP` in `normalizeRoster.ts`). Both of the divergence sources THIS
+        // CASE'S shape could produce are therefore gone, and it reads 0/0.
+        //
+        // That is emphatically NOT "nothing reaches the sink any more": the `LIVENESS` case above
+        // reads BARE_ROUNDS/BARE_ROUNDS off an ally-side active target, whose route into the scalar
+        // channel (the legacy dummy DoT tick) the floor does not touch. The two counters therefore
+        // still agree on that shape as well as on this one, so neither reading distinguishes them —
+        // but the credit counter remains SP-4c-2's correct gate regardless: it is the one that means
+        // "the dummy absorbed nothing", and it stays correct once other files' shapes (e.g. the
+        // enemy-side heal-target fallback) are considered too.
         runCombat({
             ...bareInput(),
             numRounds: 3,
