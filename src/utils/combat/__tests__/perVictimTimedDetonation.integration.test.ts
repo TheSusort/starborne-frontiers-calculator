@@ -328,7 +328,10 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
         // SP-4c-2a: `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
         // MIN_TARGETABLE_MAX_HP (normalizeRoster.ts), so this run is positional too — the tap
         // targets the real, now-floored enemy (its real id, 'pressure-source') rather than the
-        // no-longer-existing 'enemy' dummy. The invariant is unchanged: the round-row scalar
+        // legacy 'enemy' dummy sink. That dummy still exists (engine.ts still creates it
+        // unconditionally) but is inert on a positional run — dropped from the turn order and never
+        // credited — so tapping it here would observe nothing. Its deletion is rung 4c-2d's job.
+        // The invariant is unchanged: the round-row scalar
         // `detonationDamage` is `focus.detonation + perActorDetonation[focusActorId]` (engine.ts),
         // which folds in the focus's positional detonation credit rather than suppressing it like
         // `directDamage` — so it still reads the RAW burst once the tap lands on the real actor.

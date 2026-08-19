@@ -420,8 +420,11 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
         //
         // SP-4c-2a — WHAT MOVED AGAIN. `NONPOS_BASE`'s 0-MAX-HP "pressure-source" enemy (see its
         // comment) is now floored to MIN_TARGETABLE_MAX_HP too, so it is a real, positional roster
-        // member rather than the legacy dummy — the tap targets its real id ('pressure-source'),
-        // not the no-longer-existing 'enemy'. The round-row scalar `detonationDamage` is
+        // member — the tap targets its real id ('pressure-source') rather than the legacy 'enemy'
+        // dummy sink. That dummy still exists (engine.ts still creates it unconditionally) but is
+        // inert on a positional run — dropped from the turn order and never credited — so tapping
+        // it here would observe nothing. Its deletion is rung 4c-2d's job. The round-row scalar
+        // `detonationDamage` is
         // `focus.detonation + perActorDetonation[focusActorId]` (engine.ts): the focus's own cast
         // contributes 0 (no on-cast detonation ability here) and `perActorDetonation['attacker']`
         // (the pressure-source's burst, sourced by 'attacker') is still 3000 — the invariant this

@@ -234,8 +234,10 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
     // targetable-HP floor (`normalizeRoster.ts`, MIN_TARGETABLE_MAX_HP) now raises that enemy to
     // 1,000,000 HP unconditionally, so it is a real, hittable roster member and the run IS
     // positional — the non-positional shape this test used to pin is gone (SP-4c-2a Task 1). The
-    // tap moves onto the real enemy (`BARE_ENEMY_ID`, not the now-nonexistent `'enemy'` dummy) and
-    // the read moves to the per-victim channel, the same migration as
+    // legacy `'enemy'` dummy actor still exists (engine.ts still creates it unconditionally) but is
+    // inert on a positional run — dropped from the turn order and never credited — so the tap moves
+    // onto the real enemy (`BARE_ENEMY_ID`) instead. The dummy's deletion is rung 4c-2d's job. The
+    // read moves to the per-victim channel, the same migration as
     // "a positional cast contributes to the gather EXACTLY once" above.
     it('a run that used to be a NON-positional pressure source is now positional, and the accumulator gathers through the per-victim channel', () => {
         const result = runCombat({
@@ -262,8 +264,9 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
             hp: 1_000_000_000,
             healModifier: 0,
             __testTapActors: (actors: CombatActor[]) => {
-                // The floor makes this enemy real and hittable, so the accumulator sits on ITS id,
-                // not the legacy dummy (`'enemy'`, which no longer exists on this path).
+                // The floor makes this enemy real and hittable, so the accumulator sits on ITS id.
+                // The legacy dummy (`'enemy'`) still exists but is inert here — dropped from the
+                // turn order and never credited on a positional run — so it would receive nothing.
                 actors
                     .find((a) => a.id === BARE_ENEMY_ID)
                     ?.pendingAccumulators.push(accumulator(0, 100, 1, 'attacker'));

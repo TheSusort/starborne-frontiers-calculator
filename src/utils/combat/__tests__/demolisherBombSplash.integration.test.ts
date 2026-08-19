@@ -321,7 +321,10 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
         // enemy is now raised to 1,000,000 HP, so the run IS positional. That does not disturb the
         // claim under test — a single-member enemy roster still has no adjacent same-side actor
         // regardless of position — it only moves the bomb tap onto the real, now-floored enemy
-        // (`BARE_ENEMY_ID`) instead of the no-longer-existing `'enemy'` dummy.
+        // (`BARE_ENEMY_ID`) instead of the legacy `'enemy'` dummy sink. That dummy still exists
+        // (engine.ts still creates it unconditionally) but is inert on a positional run — dropped
+        // from the turn order and never credited — so tapping it here would observe nothing. Its
+        // deletion is rung 4c-2d's job.
         const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
             enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 1000,
@@ -352,7 +355,9 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
                 NONPOS_BASE({
                     shipSkills: casterShipSkills(),
                     __testTapActors: (actors: CombatActor[]) => {
-                        actors.find((a) => a.id === BARE_ENEMY_ID)?.pendingBombs.push(bomb('attacker'));
+                        actors
+                            .find((a) => a.id === BARE_ENEMY_ID)
+                            ?.pendingBombs.push(bomb('attacker'));
                     },
                 })
             );
@@ -367,7 +372,9 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
                     // without the splash reactive ability wired.
                     shipSkills: { slots: [] } as ShipSkills,
                     __testTapActors: (actors: CombatActor[]) => {
-                        actors.find((a) => a.id === BARE_ENEMY_ID)?.pendingBombs.push(bomb('attacker'));
+                        actors
+                            .find((a) => a.id === BARE_ENEMY_ID)
+                            ?.pendingBombs.push(bomb('attacker'));
                     },
                 }),
                 bus,

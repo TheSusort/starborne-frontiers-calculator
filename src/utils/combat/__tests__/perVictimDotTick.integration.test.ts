@@ -577,8 +577,11 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
     it('REGRESSION: the (now-floored, positional) sole enemy’s DoT tick still surfaces via the focus corrosion channel', () => {
         idc = 0;
         // SP-4c-2a: `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
-        // MIN_TARGETABLE_MAX_HP, so it is real and positional — the tap targets its real id
-        // rather than the no-longer-existing 'enemy' dummy. The round-row scalar `corrosionDamage`
+        // MIN_TARGETABLE_MAX_HP, so it is real and positional — the tap targets its real id rather
+        // than the legacy 'enemy' dummy sink. That dummy still exists (engine.ts still creates it
+        // unconditionally) but is inert on a positional run — dropped from the turn order and never
+        // credited — so tapping it here would observe nothing. Its deletion is rung 4c-2d's job.
+        // The round-row scalar `corrosionDamage`
         // is `focus.corrosion + perActorDot.get(focusActorId)?.corrosion` (engine.ts), which folds
         // in the per-victim DoT-tick credit attributed to the focus rather than suppressing it
         // (the same fold `detonationDamage` uses for bombs) — so it still reads the tick amount

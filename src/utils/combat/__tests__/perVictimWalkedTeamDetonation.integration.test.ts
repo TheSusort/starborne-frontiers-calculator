@@ -330,8 +330,10 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
         // MIN_TARGETABLE_MAX_HP) raises the same 0-max-HP enemy to 1,000,000 HP, so it IS
         // targetable and `teamPositional` is now true — the team ally's detonate resolves onto
         // this real, hittable enemy PER-VICTIM instead of falling back to a legacy anchor. The
-        // tap moves onto the real enemy's id ('pressure-source'); the no-longer-existing 'enemy'
-        // dummy is never consulted.
+        // tap moves onto the real enemy's id ('pressure-source'); the legacy 'enemy' dummy sink
+        // still exists (engine.ts still creates it unconditionally) but is inert on a positional
+        // run — dropped from the turn order and never credited — so it is never consulted here.
+        // Its deletion is rung 4c-2d's job.
         //
         // ⚠️ DISCOVERED ASYMMETRY (not fixed here — engine.ts is out of scope for this task, and
         // this is pre-existing behaviour the floor merely makes reachable for the first time).
@@ -372,7 +374,9 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
                 ],
                 __testTapActors: (actors: CombatActor[]) => {
                     // The floored enemy is real now — tap ITS id, not the legacy dummy.
-                    actors.find((a) => a.id === 'pressure-source')?.pendingBombs.push(bomb(1000, 2));
+                    actors
+                        .find((a) => a.id === 'pressure-source')
+                        ?.pendingBombs.push(bomb(1000, 2));
                 },
             })
         );

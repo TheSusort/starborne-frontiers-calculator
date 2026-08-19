@@ -233,7 +233,10 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
     // `focus.detonation + perActorDetonation[focusActorId]` (engine.ts, round assembly) — it folds
     // in the focus's positional detonation credit rather than being suppressed like `directDamage`
     // — so it still reads the RAW burst once the tap targets the real, now-floored enemy
-    // (`BARE_ENEMY_ID`) instead of the no-longer-existing `'enemy'` dummy.
+    // (`BARE_ENEMY_ID`) instead of the legacy `'enemy'` dummy sink. That dummy still exists
+    // (engine.ts still creates it unconditionally) but is inert on a positional run — dropped from
+    // the turn order and never credited — so tapping it here would observe nothing. Its deletion is
+    // rung 4c-2d's job.
     // ────────────────────────────────────────────────────────────────────────────
     it('Case 2: the bombed enemy under Out. Damage Up (+50%) bursts its bomb at the RAW value', () => {
         const bus = createEventBus();
@@ -283,8 +286,9 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
             hp: 1_000_000_000,
             bus,
             __testTapActors: (actors: CombatActor[]) => {
-                // The floored enemy is real and hittable now — tap ITS id, not the legacy
-                // `'enemy'` dummy sink, which no longer exists on this path.
+                // The floored enemy is real and hittable now — tap ITS id. The legacy `'enemy'`
+                // dummy sink still exists but is inert here (dropped from the turn order, never
+                // credited on a positional run), so it would receive nothing.
                 actors
                     .find((a) => a.id === BARE_ENEMY_ID)
                     ?.pendingBombs.push(timedBomb(1000, 3, 2, 'attacker'));
