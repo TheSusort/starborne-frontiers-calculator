@@ -1644,6 +1644,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               emitDebuffResisted(buffName, enemy.id)
           )
         : [];
+    // DELIBERATELY NOT FENCED ON THE VICTIM (SP-4c-2b, ruled by the owner at review): unlike the
+    // recurring fold above, `foldTimedEnemyDebuffs` reads scheduled TIMED statuses already sitting
+    // in the store, and on a no-victim turn `targetId` is undefined so the statusEngine resolves
+    // them against DEFAULT_ENEMY_TARGET — i.e. they still fold from the phantom-target store. That
+    // is accepted as-is: the side-wide scheduled `__enemy__` channel legitimately survives as a
+    // modelling assumption, the fold is inert today (a no-victim cast deals no damage, so the only
+    // reachable effect is the round's display list and `landedEnemyDebuffCount`), and fencing it
+    // would risk unmeasured movement. Belongs to Task 5's measurement scope, not this rung's.
+    // The same ruling covers the `timedAbilityEnemy` loop further down (see its own note).
+    //
     // Combined scheduled enemy effect/landed/resisted lists. Recurring/always/
     // accum first, then timed — matching the original snapshot() iteration order
     // (alwaysSnap, accumSnap, timed map) so the all-landing golden fixtures keep
@@ -2080,6 +2090,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Timed ability statuses: unconditionally landed (gated at application in the timed
     // loop above). NO debuff-applied here — already emitted at the application site above
     // (Phase 3 retiming: discrete-infliction-only, not per-round while the window is active).
+    // DELIBERATELY NOT FENCED ON THE VICTIM (SP-4c-2b, ruled by the owner at review): with no victim
+    // `targetId` is undefined, so `timedAbilityStatuses` above read the DEFAULT_ENEMY_TARGET store
+    // and this loop still folds those statuses. Accepted as-is for the same three reasons as the
+    // scheduled-timed fold (see the note above `scheduledEnemy`): the side-wide `__enemy__` channel
+    // is a sanctioned modelling assumption, the fold is inert today, and fencing it risks unmeasured
+    // movement. Task 5 measures it; do not fence it here.
     for (const s of timedAbilityEnemy) {
         landedAbilityEnemy.push(s.active);
         abilityEnemyEffects.push(payloadToSelectedBuff(s.payload));
@@ -2829,9 +2845,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         : 1;
     const passiveDamage =
         effectiveAttack * (passiveMultiplier / 100) * passiveCritMultiplier * nonCritFactor;
-    const directDamage = preCritDamage * postDefenseFactor + passiveDamage;
-    const secondaryDamage = secondaryStatValue * postDefenseFactor;
-    const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
+    // SP-4c-2b: A CAST WITH NO VICTIM DEALS NO DAMAGE — full stop (owner's ruling). Fencing the
+    // EMIT was not enough: `enemyDefense` is absent on a no-victim turn and resolves to 0, so
+    // `effectiveDefense` → `damageReduction` → `nonCritFactor` → `postDefenseFactor` would carry
+    // these three magnitudes out as REAL numbers answering "an enemy with no defence" — the exact
+    // disguised-ghost shape this rung deletes — and the CALLER folds them into the round
+    // accumulator regardless of any event guard. It also zeroes the `% of damage dealt` support
+    // basis below (`castDeliveredDamage ?? directDamage`), which is the same ruling applied to a
+    // repair scaled off damage that never happened.
+    // WHY THE THREE ASSIGNMENTS AND NOT A POINT FURTHER UP: the whole chain from `effectiveDefense`
+    // (:2472) down to `passiveDamage` above consists of intermediate FACTORS whose only consumers
+    // are these three lines (grep-verified: `effectiveDefense`, `damageReduction`, `nonCritFactor`,
+    // `postDefenseFactor`, `preCritDamage` and `passiveDamage` appear nowhere else), so no phantom
+    // magnitude escapes past this point and each returned number is fenced where it is produced
+    // rather than zeroed after the fact. `detonationDamage` is fenced at its own branch (:3147).
+    // Corpus-inert today — no shipped ally-target ship carries a damage clause (plan §A.2) — so
+    // this is zero movement.
+    const directDamage = hasVictim ? preCritDamage * postDefenseFactor + passiveDamage : 0;
+    const secondaryDamage = hasVictim ? secondaryStatValue * postDefenseFactor : 0;
+    const conditionalDamage = hasVictim
+        ? effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor
+        : 0;
 
     // ability-performed: emitted below, once per SUB-ATTACK when not deferred to the engine (and
     // stopping early if the bound target is already dead — the R5 whiff guard) — see the loop's
@@ -2853,8 +2887,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const deferAbilityPerformed = args.deferAbilityPerformedToEngine === true && hasDamageAbility;
     // SP-4c-2b: `hasVictim` fences the whole emitting block, not the emit inside it — every
     // `ability-performed` here NAMES the victim it was performed against, and with no victim the
-    // attack did not happen to anybody. The cast's `directDamage` total is unaffected (it is
-    // computed above and returned regardless), exactly as for the R5 whiff break inside the loop.
+    // attack did not happen to anybody.
+    //
+    // RULED CORRECT (owner, SP-4c-2b review): "a heal is not an attack, but a heal can still crit,
+    // so it should fire the 'critically repaired' rider and not the 'critically hit an enemy'
+    // rider." The engine already splits exactly that way, so this fence lands on the right side of
+    // it: `on-crit` / `on-ally-crit` ride THIS event and are per-ATTACK, documented "critically
+    // hits an enemy" (triggers.ts:308, :434, :789) — losing them off an ally-targeted support cast
+    // is the INTENDED consequence, not collateral. The repair-crit rider is untouched:
+    // `on-ally-critically-repaired` rides `heal-performed` and reads its own `critHits`
+    // (triggers.ts:722-731), which the heal block below still emits. Hermes carries both riders and
+    // is therefore the case to name: after this rung its ally-targeted repair still fires the
+    // critically-repaired rider and no longer fires the critically-hit-an-enemy one.
+    //
+    // The cast's `directDamage` is 0 on this path (fenced at the assembly above), so nothing is
+    // silently applied without an event either.
     if (!deferAbilityPerformed && hasVictim) {
         // PR5 (multi-hit full-walk epic): ONE event per SUB-ATTACK, matching the positional
         // path's interleaved emission (engine.ts `emitDeferredAbilityPerformed`, per sub-attack
@@ -3189,7 +3236,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // draw is taken. Fenced HERE, at the whole primary-DoT clause, rather than at the three
         // events inside it (`dot-applied` and the two resist emits all name their victim).
         // `dotsLanded` is vacuously true with no draw taken — the same reading the
-        // no-DoTs-configured case gets in the else branch below.
+        // no-DoTs-configured case gets in the else branch below. `true` is only honest because the
+        // REPORTED list is emptied to match at the return (`dotsConfig:` there); see that comment
+        // for why `false` would be worse than `true` and why emptying the list is the real answer.
         dotsLanded = true;
     } else if (dotsConfig.length > 0 && targetImmuneToDebuffs) {
         dotsLanded = false;
@@ -4260,7 +4309,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         roundCrit,
         hitCrits,
         enemyHpPct,
-        dotsConfig,
+        // SP-4c-2b: a no-victim cast inflicted no DoT on anybody, so the round row reports NONE —
+        // neither landed nor resisted. Both engine derivations read this pair, and each is wrong if
+        // only `dotsLanded` is touched: `appliedDoTs: dotsConfig` (engine.ts:11240) would display
+        // this cast's configured DoTs as applied, and the resisted-DoT derivation
+        // (`!dotsLanded && dotsConfig.length > 0`, engine.ts:10163) would surface them as RESISTED
+        // if `dotsLanded` were flipped to false — a resist implies a target that resisted. Emptying
+        // the LIST makes both answer "nothing happened" and leaves `dotsLanded` immaterial, which is
+        // exactly the reading a cast with no DoT clauses already gets.
+        dotsConfig: hasVictim ? dotsConfig : [],
         dotsLanded,
         activeSelfBuffs: activeSelfBuffsForRound,
         landedEnemyDebuffs,
