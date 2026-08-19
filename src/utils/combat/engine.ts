@@ -9141,17 +9141,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // HP decline is no longer passed in (PR6b): runPlayerTurn derives it from the
                             // struck victim's currentHp (max − currentHp), so the dummy-sink and real-victim
                             // cases both read `tgt` uniformly — no separate decline ternary here.
+                            // SP-4c-2b AMENDS the two paragraphs above: there is now a THIRD case, and in
+                            // it `tgt` is NOT a full CombatActor but absent. See the note under the call.
                             const { tgt } = selectTurnTarget(actor);
-                            // The player side's legacy victim is the always-present dummy `enemy`
-                            // sink, so `tgt` is never undefined here — this is a type-narrowing
-                            // no-op (selectTurnTarget widened for the enemy side in SP-U U5 R6).
-                            if (tgt === undefined) continue;
+                            // SP-4c-2b: `tgt` is undefined when this cast targets an ALLY — there is
+                            // no opposing victim to resolve. The turn still RUNS (a repair/buff must
+                            // land); only the victim-derived context is absent. Skipping here would
+                            // permanently silence all 24 shipped ally-target support ships.
                             // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
                             // only when the victim was stasised at hit time. The actual statusEngine
                             // removal happens AFTER drainIntentsFor('player')/drainIntentsFor('enemy') (below).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis, the
                             // victim is never recorded → no break-mark, no stasisBreakPending entry.
-                            const tgtWasStasised = !actor.doesntBreakStasis && isStasised(tgt.id);
+                            // SP-4c-2b: no victim ⇒ no hit ⇒ nothing to break out of Stasis, so the
+                            // hook is never injected (the honest no-victim answer is `false`, not
+                            // "the dummy was not stasised").
+                            const tgtWasStasised =
+                                !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             // §4.5: `stasisHitVictims` collects ids of victims stasised at hit time.
                             // Resolved AFTER runPlayerTurn returns (when inflictedEnemyDebuffs is available)
                             // to compute the re-apply check, then stored in `stasisBreakPending` for the
@@ -9161,8 +9167,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // The full `positional` gate below adds `turn.positionalScalars != null`
                             // (⟺ a damage ability fired). runPlayerTurn suppresses its inline
                             // ability-performed emit ONLY when this flag AND hasDamageAbility both
-                            // hold — so the suppression condition matches the `positional` gate
-                            // EXACTLY. A non-damage cast keeps its inline emit (flag ignored).
+                            // hold — so the suppression condition matches the `positional` gate for
+                            // every turn that HAS a victim. A non-damage cast keeps its inline emit
+                            // (flag ignored).
+                            // SP-4c-2b: this flag is deliberately NOT victim-fenced, even though the
+                            // `positional` gate below now is. (1) Fencing it would buy nothing: with no
+                            // victim runPlayerTurn emits no `ability-performed` on EITHER arm — the
+                            // inline emit and the deferred payload are both fenced on its own
+                            // `hasVictim` (playerTurn.ts `if (!deferAbilityPerformed && hasVictim)` and
+                            // the `deferredAbilityPerformed` spread) — so the gate divergence cannot
+                            // lose an event. (2) Fencing it would COST: the same flag selects the
+                            // cast's landing/crit resolution shape (`positionalLanding` in
+                            // playerTurn.ts), so flipping it on a no-victim turn would move that turn's
+                            // RNG draws and with them the schedule of every later application.
                             const willApplyPositionally =
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
@@ -9246,7 +9263,26 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // enter the positional branch on pattern/target/scalars alone and let the
                             // per-hit live re-resolution own the whiff. (Credit suppression below pairs with
                             // this: the per-victim apply is the ONLY damage path here.)
+                            //
+                            // SP-4c-2b: `tgt !== undefined` IS now a precondition, and it does not
+                            // reopen the phantom-damage hole the paragraph above guards. The two cases
+                            // are different. That hazard is an anchor that RESOLVED and then died,
+                            // where routing back to a live sink would book damage against a corpse.
+                            // `tgt === undefined` means this cast has no opposing victim AT ALL — an
+                            // ally-targeted repair/buff/shield (plan §A.1: 100% of the player-side
+                            // fallback rows) — so there is no anchor for the driver to walk from:
+                            // `sel.tgt` is its per-victim `primaryId` and its covered-Stasis
+                            // exclusion, and `stagePassiveSlotHit` reads the anchor's position for its
+                            // footprint. Nor can the `!positional` arm below book a phantom lump in the
+                            // apply's place: runPlayerTurn fences its own damage assembly on
+                            // `hasVictim`, so `turn.directDamage` is literally 0 and that arm credits
+                            // 0. A mixed cast's enemy-facing clause therefore goes INERT on an
+                            // ally-targeted turn — the ruled consequence of the no-victim option
+                            // (plan §A.7), fixture-only today (13 rows, zero shipped ships).
+                            // The fence lives in the GATE, i.e. above every RNG draw the driver and
+                            // the staged passive-slot instance would otherwise take.
                             const positional =
+                                tgt !== undefined &&
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null &&
@@ -9467,22 +9503,29 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // CombatActors, so every per-target binding derives from `tgt` uniformly.
                             // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
                             // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
+                            // SP-4c-2b AMENDS that "both branches are full CombatActors" claim, exactly
+                            // as at the focus site: a third case has no victim at all.
                             const { tgt } = selectTurnTarget(actor);
-                            // Player side's legacy victim is the always-present dummy `enemy` sink →
-                            // `tgt` is never undefined here (type-narrowing no-op; selectTurnTarget
-                            // widened for the enemy side in SP-U U5 R6).
-                            if (tgt === undefined) continue;
+                            // SP-4c-2b: `tgt` is undefined when this cast targets an ALLY — there is
+                            // no opposing victim to resolve. The turn still RUNS (a repair/buff must
+                            // land); only the victim-derived context is absent. Skipping here would
+                            // permanently silence all 24 shipped ally-target support ships.
                             const teamPattern = teamWillFireCharged
                                 ? parsedChargedPatternFor(actor)
                                 : parsedPatternFor(actor);
                             // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
                             // the victim is never recorded → no break-mark, no stasisBreakPending.
+                            // SP-4c-2b: mirror of the focus site — no victim ⇒ no hit ⇒ no break.
                             const teamTgtWasStasised =
-                                !actor.doesntBreakStasis && isStasised(tgt.id);
+                                !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             const teamTurnStasisHitVictims = new Set<string>();
                             // Task 5 (per-victim crit signal): predict positional apply (mirror of the
                             // focus site) so runPlayerTurn defers its inline ability-performed emit.
+                            // SP-4c-2b: NOT victim-fenced, for the two reasons spelled out at the focus
+                            // site's own `willApplyPositionally` — no event is lost (runPlayerTurn's own
+                            // `hasVictim` already suppresses both emit arms) and fencing it would move
+                            // the no-victim turn's landing/crit RNG draws.
                             const teamWillApplyPositionally =
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
@@ -9530,7 +9573,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // it there is no apply to perform (the then-shipped positionalSelection C2 test
                             // set position+target only, never a pattern, so it kept the legacy single-sink
                             // credit and never entered this branch; the boundary now fills the pattern).
+                            // SP-4c-2b: victim-fenced exactly as the focus gate is — an ally-targeted
+                            // cast has no opposing anchor to walk a footprint from, and the
+                            // `!teamPositional` arm cannot book a phantom lump in its place because
+                            // runPlayerTurn fences `directDamage` to 0 with no victim. See the focus
+                            // site's `positional` for the full argument (incl. why this is NOT the
+                            // `selectedEnemy != null` precondition that was deliberately omitted).
                             const teamPositional =
+                                tgt !== undefined &&
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null &&
