@@ -10,6 +10,7 @@ import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { StarToggleButton } from '../starred/StarToggleButton';
 import { HardRequirementViolation } from '../../utils/autogear/AutogearStrategy';
 import { getLimitStatLabel } from '../../constants/stats';
+import { assumedCalibrationEligible } from '../../utils/gear/assumedCalibration';
 
 interface GearSuggestionsProps {
     suggestions: GearSuggestion[];
@@ -20,6 +21,8 @@ interface GearSuggestionsProps {
     onLockEquipment: (ship: Ship) => Promise<void>;
     ship?: Ship;
     useUpgradedStats: boolean;
+    /** Autogear's "assume all gear is calibrated" mode was on for this run. */
+    assumeCalibrated?: boolean;
     onLockShip?: (shipId: string) => void;
     isPrinting?: boolean;
     optimizeImplants?: boolean;
@@ -38,6 +41,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     onLockEquipment,
     ship,
     useUpgradedStats,
+    assumeCalibrated = false,
     onLockShip,
     isPrinting = false,
     optimizeImplants = false,
@@ -51,6 +55,13 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     const getSuggestionForSlot = (slotName: GearSlotName) => {
         return suggestions.find((s) => s.slotName === slotName);
     };
+
+    /** True when this piece was scored on a calibration it does not yet have. */
+    const isAssumedCalibration = (gear: GearPiece | undefined) =>
+        !!gear &&
+        assumeCalibrated &&
+        assumedCalibrationEligible(gear, useUpgradedStats) &&
+        gear.calibration?.shipId !== ship?.id;
 
     const hasImplantSuggestions = () => {
         return suggestions.some((s) => s.slotName.startsWith('implant_'));
@@ -106,6 +117,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                         <div className="grid grid-cols-3 gap-2 card w-fit mx-auto">
                             {GEAR_SLOT_ORDER.map((slotName) => {
                                 const suggestion = getSuggestionForSlot(slotName);
+                                const slotGear = suggestion
+                                    ? getGearPiece(suggestion.gearId)
+                                    : undefined;
                                 return (
                                     <div
                                         key={slotName}
@@ -113,11 +127,8 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                     >
                                         <GearSlot
                                             slotKey={slotName}
-                                            gear={
-                                                suggestion
-                                                    ? getGearPiece(suggestion.gearId)
-                                                    : undefined
-                                            }
+                                            gear={slotGear}
+                                            assumedCalibration={isAssumedCalibration(slotGear)}
                                             hoveredGear={hoveredGear}
                                             onHover={onHover}
                                             onLockShip={onLockShip}
@@ -144,6 +155,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             onLockShip={onLockShip}
                                             excludeLockShipId={ship?.id}
                                             suggestedForShipId={ship?.id}
+                                            assumedCalibration={isAssumedCalibration(gear)}
                                         />
                                     </div>
                                 );

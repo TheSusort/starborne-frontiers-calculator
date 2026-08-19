@@ -14,6 +14,8 @@ import {
     getCalibratedMainStat,
 } from '../../utils/gear/calibrationCalculator';
 import { calculateUpgradeCost } from '../../utils/gear/potentialCalculator';
+import { assumedCalibrationEligible } from '../../utils/gear/assumedCalibration';
+import { applyCalibrationToStat } from '../../utils/gear/calibrationUtils';
 
 interface Props {
     gear: GearPiece;
@@ -30,6 +32,10 @@ interface Props {
     small?: boolean;
     /** Show calibrated main stat value even if not actively calibrated */
     showCalibratedPreview?: boolean;
+    /** Autogear's "assume all gear is calibrated" mode scored this piece as if
+     *  calibrated to the suggested ship, though it is not. Renders the
+     *  calibrated main stat plus a marker saying calibration is required. */
+    assumedCalibration?: boolean;
     /** When set, determines calibration-active status based on this ship
      *  instead of the currently-equipped ship. Used in autogear suggestions
      *  so that calibrated gear shows base stats when suggested for a
@@ -52,6 +58,7 @@ export const GearPieceDisplay = memo(
         className = '',
         small = false,
         showCalibratedPreview = false,
+        assumedCalibration = false,
         suggestedForShipId,
         showSetName = false,
     }: Props) => {
@@ -113,11 +120,20 @@ export const GearPieceDisplay = memo(
         // Get the main stat to display - use calibrated if calibration is active or preview requested
         const displayMainStat = useMemo(() => {
             if (!gear.mainStat) return null;
+            // Autogear's assumed-calibration mode: show what the optimizer
+            // scored. Uses the relaxed predicate so a sub-16 piece under "Use
+            // upgraded stats" previews too — isCalibrationEligible would reject it.
+            if (assumedCalibration && assumedCalibrationEligible(gear, true)) {
+                return {
+                    ...gear.mainStat,
+                    value: applyCalibrationToStat(gear.mainStat, gear.stars),
+                };
+            }
             if ((isCalibrationActive || showCalibratedPreview) && isCalibrationEligible(gear)) {
                 return getCalibratedMainStat(gear);
             }
             return gear.mainStat;
-        }, [gear, isCalibrationActive, showCalibratedPreview]);
+        }, [gear, isCalibrationActive, showCalibratedPreview, assumedCalibration]);
 
         const handleRemove = useCallback(() => {
             onRemove?.(gear.id);
@@ -314,24 +330,31 @@ export const GearPieceDisplay = memo(
                                 <div className="space-y-1">
                                     <StatDisplay
                                         stats={
-                                            isCalibrationActive && !showCalibratedPreview
+                                            isCalibrationActive &&
+                                            !showCalibratedPreview &&
+                                            !assumedCalibration
                                                 ? [gear.mainStat as Stat]
                                                 : [displayMainStat as Stat]
                                         }
                                         upgradedStats={
                                             isCalibrationActive &&
                                             !showCalibratedPreview &&
+                                            !assumedCalibration &&
                                             displayMainStat
                                                 ? [displayMainStat]
                                                 : upgrade?.mainStat &&
                                                     !isMaxLevel &&
-                                                    !showCalibratedPreview
+                                                    !showCalibratedPreview &&
+                                                    !assumedCalibration
                                                   ? [upgrade.mainStat as Stat]
                                                   : undefined
                                         }
                                     />
                                 </div>
                             </div>
+                        )}
+                        {assumedCalibration && !isCalibrationActive && (
+                            <div className="text-xs text-amber-400">Requires calibration</div>
                         )}
                         {/* Implant Description */}
                         {isImplant &&
@@ -457,7 +480,11 @@ export const GearPieceDisplay = memo(
         if (
             prevProps.gear.id !== nextProps.gear.id ||
             prevProps.mode !== nextProps.mode ||
-            prevProps.showDetails !== nextProps.showDetails
+            prevProps.showDetails !== nextProps.showDetails ||
+            // Both change the displayed main stat without changing the gear
+            // object, so the card must re-render when either flips.
+            prevProps.showCalibratedPreview !== nextProps.showCalibratedPreview ||
+            prevProps.assumedCalibration !== nextProps.assumedCalibration
         ) {
             return false;
         }

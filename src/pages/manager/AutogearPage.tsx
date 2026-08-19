@@ -1267,6 +1267,7 @@ export const AutogearPage: React.FC = () => {
                                                     }
                                                     ship={ship}
                                                     useUpgradedStats={shipConfig.useUpgradedStats}
+                                                    assumeCalibrated={shipConfig.assumeCalibrated}
                                                     isPrinting={isPrinting}
                                                     optimizeImplants={shipConfig.optimizeImplants}
                                                     onToggleStarred={toggleStarred}
