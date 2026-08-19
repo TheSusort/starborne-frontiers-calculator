@@ -51,6 +51,9 @@ const SOFT_ENEMY_ID = 'e-soft';
 const HARD_ENEMY_ID = 'e-hard';
 /** The focus's base hacking. Both arms are derived from it, so it appears once. */
 const FOCUS_HACKING = 100;
+/** `numRounds` for every run here. Named because the victimless-arm case asserts one inflict PER
+ *  ROUND — see there for why the exact count, not merely a non-zero one, is the load-bearing claim. */
+const ROUNDS = 6;
 
 /**
  * The Flamel shape, reduced to its mechanism: a passive-slot reactive debuff that fires when this
@@ -114,6 +117,67 @@ const twoEnemiesOfDifferentSecurity = (): CombatEngineInput['enemyAttackers'] =>
         },
     }));
 
+/**
+ * FIX 5 (review wave 1): the SUPPORT-ONLY variant of the kit above — same `on-attacked` inflict, but
+ * its cast targets ALLIES and carries no damage ability. This is the shape that blocked the task:
+ * such a ship resolves NO victim on its own turn (SP-4c-2b), so it is the only shape that can be hit
+ * by a poisoned publication or by the reactive roll being priced against a phantom.
+ *
+ * `target: 'ally'` + `type: 'heal'` reproduces Flamel/Makoli: a pure supporter whose retaliation
+ * nevertheless has a real victim (whoever shot it).
+ */
+const supportOnlyRetaliatoryKit = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'support-cast',
+                    type: 'heal',
+                    target: 'ally',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                },
+            ],
+        },
+        ...retaliatoryDebuffKit().slots.filter((s) => s.slot === 'passive'),
+    ],
+});
+
+/**
+ * A support-only focus whose reactive inflict fires on `start-of-round` and therefore threads NO
+ * victim — the Judge/Chakara trigger shape. Used by the victimless-arm case: it is what drives
+ * `triggers.ts` into its `?? ctx.enemy.id` fallthrough, where the dummy sentinel would otherwise be
+ * priced as a real defender.
+ */
+const victimlessReactiveKit = (): ShipSkills => ({
+    slots: [
+        ...supportOnlyRetaliatoryKit().slots.filter((s) => s.slot === 'active'),
+        {
+            slot: 'passive',
+            abilities: [
+                {
+                    id: 'victimless-inflict',
+                    type: 'debuff',
+                    target: 'enemy',
+                    trigger: 'start-of-round',
+                    conditions: [],
+                    config: {
+                        type: 'debuff',
+                        buffName: 'Speed Down I',
+                        stacks: 1,
+                        parsedEffects: { speed: -10 },
+                        isStackable: false,
+                        application: 'inflict',
+                        duration: 2,
+                    },
+                },
+            ],
+        },
+    ],
+});
+
 const input = (): CombatEngineInput => ({
     attack: 1_000,
     crit: 0,
@@ -121,7 +185,7 @@ const input = (): CombatEngineInput => ({
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: retaliatoryDebuffKit(),
-    numRounds: 6,
+    numRounds: ROUNDS,
     selfBuffs: [],
     enemyDebuffs: [],
     selfDotModifier: 0,
@@ -138,13 +202,28 @@ const input = (): CombatEngineInput => ({
 });
 
 /**
+ * The support-only run: same board, same passive, but the focus's cast targets its own allies, so
+ * `selectTurnTarget` resolves NO victim for it every turn (SP-4c-2b). `target`/`pattern` are what put
+ * it on the ally-side axis — the same knobs `dummyReachability`'s LIVENESS case uses.
+ */
+const supportInput = (): CombatEngineInput => ({
+    ...input(),
+    shipSkills: supportOnlyRetaliatoryKit(),
+    position: 'M4',
+    target: { raw: 'ally-team', side: 'ally', selection: 'team' },
+    pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
+});
+
+/**
  * Runs the fixture and counts the focus's `debuff-applied` / `debuff-resisted` emissions per victim.
  *
  * Read off the EVENT BUS, not `runCombat`'s return value: the resisted/applied split is an event, and
  * the round summaries only carry the aggregate lists. The engine treats a supplied bus as a
  * write-only tap (engine.ts ~1886), so tapping it cannot perturb the run.
  */
-const retaliationsByVictim = (): Record<string, { applied: number; resisted: number }> => {
+const retaliationsByVictim = (
+    build: () => CombatEngineInput = input
+): Record<string, { applied: number; resisted: number }> => {
     const acc: Record<string, { applied: number; resisted: number }> = {
         [SOFT_ENEMY_ID]: { applied: 0, resisted: 0 },
         [HARD_ENEMY_ID]: { applied: 0, resisted: 0 },
@@ -158,7 +237,7 @@ const retaliationsByVictim = (): Record<string, { applied: number; resisted: num
         };
     bus.on('debuff-applied', note('applied'));
     bus.on('debuff-resisted', note('resisted'));
-    runCombat({ ...input(), bus });
+    runCombat({ ...build(), bus });
     return acc;
 };
 
@@ -192,6 +271,80 @@ describe('SP-4c-2b: a reactive infliction rolls against ITS OWN victim', () => {
         const attemptsHard = byVictim[HARD_ENEMY_ID].applied + byVictim[HARD_ENEMY_ID].resisted;
         expect(attemptsSoft).toBeGreaterThan(0);
         expect(attemptsHard).toBeGreaterThan(0);
+    });
+
+    it('THE ACUTE SHAPE: an ally-targeting supporter, which resolves NO cast victim, still retaliates', () => {
+        // FIX 5 (review wave 1). Every case above gives the focus a damage kit, so it always resolves
+        // a cast victim — which means none of them exercises the shape that BLOCKED this rung: a
+        // support ship whose ally-targeted cast resolves nobody (SP-4c-2b), publishes a landing
+        // chance of 0 for that turn, and then retaliates against whoever shot it. That is Flamel and
+        // Makoli, and until now its only evidence was a manual log dump. The goldens cannot see it:
+        // `realKitFingerprints` records a token SET and Flamel already emits both `debuff` and
+        // `debuff-resisted`, so the set is unchanged whether its passive works or is dead.
+        //
+        // WHAT THIS CASE FENCES, verified by mutation rather than asserted — an earlier draft of this
+        // comment claimed three landmines and two of them were WRONG, which is worth recording since
+        // the same over-claim is easy to make again:
+        //   ✓ THE ORIGINAL DEFECT — reverting the per-victim resolver so the reactive path falls back
+        //     to the published chance turns this case RED (measured).
+        //   ✗ NOT the poisoned publication on its own: removing the `hasVictim` guard at the write
+        //     site leaves this case GREEN, because the resolver prices the real victim and never
+        //     reads the published value.
+        //   ✗ NOT the ghost-pricing guard on its own: removing it leaves this case GREEN, because an
+        //     `on-attacked` retaliation stamps `counterTargetId`, so a REAL victim always resolves and
+        //     the `?? ctx.enemy.id` fallthrough is never taken.
+        // Those last two are fenced by the NEXT case, which is built on the arm that does reach them.
+        const byVictim = retaliationsByVictim(supportInput);
+
+        // The zero-security attacker is still at a saturated chance of 1, so a working passive lands
+        // EVERY retaliation. `> 0` is the load-bearing claim (the passive is alive at all); `resisted
+        // === 0` additionally pins that the chance is the victim's own and not a phantom's.
+        expect(byVictim[SOFT_ENEMY_ID].applied).toBeGreaterThan(0);
+        expect(byVictim[SOFT_ENEMY_ID].resisted).toBe(0);
+
+        // And the per-victim split still holds for a caster that never had a cast victim to cache a
+        // chance from — the reactive roll is sourced entirely from the reactive victim.
+        expect(byVictim[HARD_ENEMY_ID].applied).toBe(0);
+        expect(byVictim[HARD_ENEMY_ID].resisted).toBeGreaterThan(0);
+    });
+
+    it('THE VICTIMLESS REACTIVE ARM: an inflict that resolves nobody is not priced against the ghost', () => {
+        // The arm the previous case cannot reach, and the one the review flagged as unmeasured. A
+        // `start-of-round` reactive threads no victim at all (no `victimId`, no `counterTargetId`), so
+        // `triggers.ts` takes its `applicationTargetId ?? ctx.enemy.id` fallthrough and the inflict is
+        // aimed at the DUMMY SENTINEL. Combined with a support-only focus — whose own cast resolves no
+        // victim either — this is the only shape in which BOTH remaining guards are load-bearing:
+        //
+        //   * `reactiveLandingChanceFor` must REFUSE to price the sentinel. The dummy is still a
+        //     member of `allActorsById` (4c-2d deletes it), so without the refusal the lookup succeeds
+        //     and the roll is measured against `stats.security ?? 100` — a phantom defender that, at
+        //     corpus hacking, clamps the chance to 0 and never lands. That is a STRONGER lie than the
+        //     cached value this rung replaced.
+        //   * the publication must be GUARDED on `hasVictim`. With the sentinel refused, the roll
+        //     falls back to `owner.liveDebuffLandingChance ?? 1`; if a no-victim turn were still
+        //     allowed to publish its 0 there, this inflict would read that 0 — the original Flamel
+        //     defect, arriving through the fallback instead of the primary path.
+        //
+        // VERIFIED BY MUTATION, both arms: deleting the sentinel refusal in
+        // `reactiveLandingChanceFor` turns this case red, and deleting the `hasVictim` guard at the
+        // publication site turns it red too. Removing that publication guard is exactly the kind of
+        // thing a future rung could do by accident — 4c-2d deletes the dummy, which changes what
+        // resolves here — and both guards are otherwise "measured inert" with nothing enforcing them.
+        const inflicted: string[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => {
+            if (e.sourceId === 'attacker') inflicted.push(e.targetId);
+        });
+        runCombat({ ...supportInput(), shipSkills: victimlessReactiveKit(), bus });
+
+        // The inflict fires and lands. Its target is the sentinel, which is the honest reading of
+        // "this reaction named nobody" — what matters is that it is not silently resisted forever.
+        // ONE PER ROUND, and the exact count is what makes this case fence the publication guard
+        // rather than merely the sentinel guard. A `> 0` assertion is satisfied by ROUND 1 ALONE,
+        // which fires BEFORE the focus has taken its first turn and therefore before anything could
+        // have been published — so it stays green even with the guard removed (measured). Requiring
+        // every round forces rounds 2..N, which are the ones that read the published value.
+        expect(inflicted).toEqual(Array.from({ length: ROUNDS }, () => 'enemy'));
     });
 
     it('THE REGRESSION: one cached chance cannot produce both outcomes', () => {

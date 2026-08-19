@@ -3396,15 +3396,25 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // triggering event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
         // Corrosion II … on all cleansed enemies"), mirroring the all-enemies-over-aoeVictimIds
         // pattern but keyed off the reactive event's actual cleansed ids — NOT the single-victim /
-        // dummy sink. The per-victim Block-Debuff resist is checked inside the loop (no RNG →
-        // order-safe).
+        // dummy sink. The per-victim Block-Debuff resist is checked inside the loop.
         // SP-4c-2b MOVED THE LANDING DRAW INSIDE THE LOOP. It used to be ONE draw gating the whole
         // fire, against the owner's cached turn-target chance. Under the per-target ruling there is
         // no single "the enemy" for a fan-out to measure itself against, so each recipient now draws
         // its own gate at its OWN hacking-vs-security chance — which is exactly what the sibling
         // `debuff` branch already does ("One draw PER TARGET, matching the established per-victim
-        // precedent"). This DOES change the draw cardinality for this branch from 1 to N; measured
-        // as moving nothing (the only caller is `pestilenceEnemyCleanseCorrosion.integration`).
+        // precedent").
+        //
+        // TWO CONSEQUENCES of moving it, both deliberate, both measured as moving nothing (the only
+        // caller is `pestilenceEnemyCleanseCorrosion.integration`):
+        //  1. DRAW CARDINALITY for this branch goes from 1 to N.
+        //  2. THE BLOCK-DEBUFF RESIST EMIT IS NOW CONDITIONAL on the victim's own draw. This note
+        //     used to end "(no RNG → order-safe)", which was a claim about an RNG-FREE loop and is
+        //     no longer true: the draw sits BEFORE the immunity check, so a block-carrying victim
+        //     only surfaces its `blockDebuffResist` when its own landing draw passes, where one
+        //     shared draw previously gated all of them together. That order is kept rather than
+        //     inverted because the landing roll is the earlier question — an inflict that never
+        //     landed has nothing for immunity to block, and emitting a block-resist for it would
+        //     report an application that was never going to arrive.
         const cleansedEnemyIds = intent.eventCtx?.cleansedEnemyIds;
         if (
             intent.ability.target === 'all-enemies' &&

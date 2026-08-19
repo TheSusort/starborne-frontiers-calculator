@@ -435,8 +435,21 @@ export interface PlayerActorRuntime {
      *  started resolving no victim at all (it then published 0 and silenced the owner's reactive
      *  inflicts entirely — Flamel's on-damaged Stasis). The reactive path now resolves its own
      *  per-victim chance through `TriggerDrainContext.liveDebuffLandingChanceFor` and passes it in as
-     *  `targetLandingChance` below; this field survives only as the neutral fallback for a caller
-     *  with no victim in hand. */
+     *  `targetLandingChance`; this field survives only as the fallback for a caller with no REAL
+     *  victim in hand.
+     *
+     *  WHO ACTUALLY READS IT, measured over the whole suite rather than assumed — an earlier draft of
+     *  this doc guessed wrong in both directions. NONE of the three cast-path closures reads it
+     *  (`runPlayerTurn` replaces the status engine's landing hook every turn with its own live
+     *  closure, which computes from `enemy` directly). The live readers are the reactive fallbacks,
+     *  reached when `liveDebuffLandingChanceFor` declines to price a victim: an id absent from
+     *  `allActorsById`, or the DUMMY SENTINEL, which the resolver refuses on purpose (pricing an
+     *  inflict aimed at nobody against a ghost's default security of 100 would never land — a
+     *  stronger lie than this field ever told). Measured: 3 such rows in the suite, 0 on shipped kits.
+     *
+     *  ONLY EVER WRITTEN FROM A TURN THAT HAD A VICTIM (see the guard at the write site). A no-victim
+     *  turn deliberately publishes nothing, so this field can never hold the 0 that caused the
+     *  original Flamel defect. */
     liveDebuffLandingChance?: number;
     selfDotModifier: number;
     defensePenetrationBuff: number;
@@ -1511,10 +1524,36 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         );
         return debuffLandingGate(chance);
     };
-    // Publish the live chance onto the runtime so the REACTIVE (triggers.ts) path — which draws
-    // the OWNER's landing gate via owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1) —
-    // uses the same live value. Always set now (the live path is unconditional).
-    runtime.liveDebuffLandingChance = liveLandingChance;
+    // Publish this turn's chance onto the runtime. It is a CAST-PATH value: the chance THIS actor's
+    // own turn target resists, for THIS turn.
+    //
+    // ⚠️ WHAT THIS COMMENT USED TO SAY, and why both halves are now false. It read: "so the REACTIVE
+    // (triggers.ts) path — which draws the OWNER's landing gate via
+    // `owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1)` — uses the same live value.
+    // Always set now (the live path is unconditional)."
+    //  1. The reactive path no longer draws against this value. It resolves its OWN per-victim
+    //     chance (`TriggerDrainContext.liveDebuffLandingChanceFor`) against the enemy it is actually
+    //     inflicting on, and only falls back here when that resolver declines. Sharing a cast-derived
+    //     number with the reactive path was the DEFECT, not the design: an enemy shoots Flamel, and
+    //     the roll must be Flamel's hacking vs THAT ship's security, not vs whatever Flamel last
+    //     aimed its own skill at.
+    //  2. It is no longer unconditional — see the `hasVictim` guard on the line below.
+    //
+    // FIX 2 (review wave 1) — THE GUARD, and why it is load-bearing rather than tidy. With no victim
+    // `liveLandingChance` is correctly 0 ("there is no enemy whose security to beat"), but publishing
+    // that 0 poisons every later reader of the field. That is precisely how the Flamel defect
+    // happened: an ally-targeted supporter published 0 and its on-damaged retaliation then
+    // auto-resisted forever. Fixing the reactive path removed today's reader, but leaving the write
+    // in place leaves the mine armed for a LATER rung — when 4c-2d deletes the dummy actor and the
+    // resolver's remaining fallbacks change shape, the `?? owner.liveDebuffLandingChance` tail in
+    // triggers.ts goes live again and reads this 0, restoring the defect in a rung whose author has
+    // no reason to look here. So a no-victim turn publishes NOTHING and the field keeps the last
+    // chance this actor computed against a real victim.
+    //
+    // GUARD rather than DROP the write: the field still has readers (the reactive fallbacks), and
+    // dropping it would push those rows from a real cast-derived chance to a flat `?? 1` — new
+    // movement for no gain. The guard suppresses only the poisoned value.
+    if (hasVictim) runtime.liveDebuffLandingChance = liveLandingChance;
     // Point the status engine's sourceFired landing hook at THIS actor's live closure for the
     // duration of this turn (it is invoked synchronously inside sourceFired below).
     statusEngine.setLandsTimedEnemyApplication((buff) =>

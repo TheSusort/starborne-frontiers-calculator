@@ -1,10 +1,19 @@
 /**
  * Dummy `enemy` turn gate.
  *
- * The engine carries a vestigial dummy `enemy` actor (id 'enemy') that is the player-offense
- * damage sink in DPS-calc mode. In a POSITIONAL team-vs-team sim it is not a real combatant —
- * every player resolves a real positioned enemy target, so the dummy never receives anything and
- * its DoT-tick turn is a pure no-op that only leaked a phantom "enemy" line into the combat log.
+ * The engine carries a vestigial dummy `enemy` actor (id 'enemy'). It USED TO BE the player-offense
+ * damage sink in DPS-calc mode; SP-4c-2b ended that — `selectTurnTarget` no longer hands it to a
+ * player actor at all (a player that resolves nobody now gets `tgt: undefined` and runs a no-victim
+ * turn), and `engine.ts`'s own construction note now opens with "the dummy is NO LONGER a
+ * player-offense sink at all". What the dummy still is: a member of `allActors`/`allActorsById`, the
+ * enemy side's structural counterpart, and the owner of a DoT-tick turn — which is the ONLY thing
+ * this file is about. In a POSITIONAL team-vs-team sim that turn is a pure no-op that only leaked a
+ * phantom "enemy" line into the combat log.
+ *
+ * SP-4c-2b DID NOT TOUCH THIS GATE, and that is deliberate rather than incidental: the gate governs
+ * the dummy's TURN ORDER, which belongs to rung 4c-2c (retiring the turn) and 4c-2d (deleting the
+ * actor). Every case below was verified to pass unchanged through 4c-2b — only this header needed
+ * refreshing, because it described the sink role the engine has since disowned.
  *
  * This test pins the gate: the dummy `enemy` takes a turn (emits turn-started) ONLY when the
  * battle is NOT fully positional. In a positional-complete battle it is excluded from the turn

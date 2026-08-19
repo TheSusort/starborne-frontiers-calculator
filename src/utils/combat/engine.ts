@@ -1721,9 +1721,15 @@ function convertHitToSelfDot(
  * The dummy ghost is still the player side's `tb.legacyVictim` (4c-2d deletes it), it is simply
  * never handed out anymore.
  *
- * WHAT THAT LEAVES HERE: enemy-side consultations of `legacyVictim: healTarget` — 1,341 measured
- * rows on `b22d2870`, where the heal anchor is itself undefined and the enemy turn takes its
- * cadence-only skip. Re-homing that anchor is SP-4e's job.
+ * WHAT THAT LEAVES HERE: enemy-side consultations of `legacyVictim: healTarget`, which split TWO
+ * ways on `b22d2870` and both halves count here — an earlier draft of this paragraph named only the
+ * first, which understated the counter by a fifth:
+ *   • 1,341 rows where the heal anchor is itself undefined, so the consultation yields no victim and
+ *     the enemy turn takes its cadence-only skip;
+ *   • ~335 rows that resolve to the heal target itself — a REAL player actor, not a dummy at all,
+ *     which is why this counter's zero was never the enemy side's exit condition.
+ * `dummyReachability.test.ts`'s own header carries the same two numbers; keep them in agreement.
+ * Re-homing that anchor is SP-4e's job.
  *
  * HISTORICAL NOTE (do not act on it). This block used to name the mid-run **whiff window** — a
  * roster that WAS targetable and has since been killed — as a KNOWN NON-ZERO RESIDUE of
@@ -2473,6 +2479,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // APPLIER's ctx (effectiveAttack for inferno; dotMult/affinityMult for both) via this map.
     // The focus actor's ctx feeds the row exactly as the old single `lastAttackerCtx` did. An
     // entry whose applier has not yet acted this run (faster-enemy round 1) has no ctx → skip.
+    //
+    // ⚠️ KNOWN INSTANCE of the CROSS-TURN-CACHE class, recorded here so it is findable — SP-4c-2b
+    // review sweep, deliberately NOT fixed. This map is a per-turn snapshot that outlives its turn,
+    // and `tickDoTs` reads `ctx.affinityMult` off it to scale a DoT ticking on a victim that is
+    // usually NOT the victim that ctx was computed against. That is structurally the same mistake as
+    // `PlayerActorRuntime.liveDebuffLandingChance` (see its own doc, and the reactive-landing fix in
+    // `reactiveLandingChanceFor`): a value derived from THIS turn's target, later applied to a
+    // DIFFERENT target. The honest reading would resolve the applier-vs-TICKING-VICTIM matchup, the
+    // way `dotMultFor` already resolves the per-victim dotMult.
+    // WHY IT IS INERT TODAY and therefore out of scope: the only actors whose turn can lack a real
+    // victim are the ally-targeting supporters, and for them §A.4 measured the ghost's `affinity` as
+    // always `undefined` — so the no-victim answer (`'antimatter'`, neutral) is byte-identical to what
+    // the ghost produced. Nothing observable changed; the latent wrongness predates this rung.
+    // The other two fields read there (`ctx.dotMult`, `ctx.effectiveAttack`) are self-derived and fine.
     const lastTurnCtxByActor = new Map<string, PlayerRoundCtx>();
     // SP-D: per-actor count of enemies DAMAGED by that actor's most recent cast this round,
     // for the `enemies-hit-this-cast` gate at REACTIVE drain time (Berserker's Marauder Rage,
@@ -2705,9 +2725,30 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  `selfBuffLookup` is the engine's GLOBAL buffName→effects expansion table — the same one
      *  `effectiveStatsOf` is called with for every actor elsewhere in this file (turn-order speed,
      *  Protection carrier defence), not the per-runtime map (which is empty for team/enemy actors
-     *  by design). Undefined for an unresolvable id, which routes the caller to its old fallback. */
+     *  by design).
+     *
+     *  RETURNS UNDEFINED in two cases, and the second is not the obvious one: (1) an id that is not
+     *  in the map at all, and (2) the DUMMY SENTINEL, which very much IS in the map — see the guard
+     *  below for why resolving it would be worse than not pricing at all. Both route the caller to
+     *  its own fallback. An earlier draft of this line claimed undefined was returned "for an
+     *  unresolvable id", which was wrong about exactly the id that matters. */
     const reactiveLandingChanceFor = (ownerId: string, victimId: string): number | undefined => {
         const owner = allActorsById.get(ownerId);
+        // FIX 1 (review wave 1): REFUSE to price the dummy sentinel. Two reactive arms fall through
+        // to `ctx.enemy.id` when no real victim was threaded (`applicationTargetId ?? ctx.enemy.id`
+        // and `victim?.id ?? ctx.enemy.id` in triggers.ts — e.g. Burner's on-deal-damage, which
+        // carries no victimId), and the dummy is deliberately still a member of `allActorsById`
+        // (4c-2d deletes it). So without this guard the lookup SUCCEEDS and the roll gets priced
+        // against a phantom: `liveDebuffLandingChance` reads `defender.stats.security ?? 100`, and
+        // the dummy's security is whatever `enemySecurity` was — `undefined` for most callers, i.e.
+        // **100**, which for corpus hacking clamps the chance to 0 and never lands. That is a
+        // STRONGER lie than the cached value this rung replaced, not a weaker one, and it is exactly
+        // the failure mode the owner rejected. An inflict aimed at nobody real must not be handed a
+        // ghost's security: return undefined and let the caller take its documented fallback.
+        // MEASURED before fixing: 3 rows in the whole suite (all from `allyCritDot.test.ts`, whose
+        // input sets `enemySecurity: 0` so they happened to price at chance 1 rather than 0), and
+        // ZERO rows on shipped kits — the 147-ship fingerprint corpus never reaches these arms.
+        if (victimId === enemy.id) return undefined;
         const victim = allActorsById.get(victimId);
         if (!owner || !victim) return undefined;
         const { damageModifier } = computeAffinityModifiers(
