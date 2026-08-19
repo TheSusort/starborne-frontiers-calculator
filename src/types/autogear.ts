@@ -46,6 +46,8 @@ export interface SavedAutogearConfig {
     algorithm: AutogearAlgorithm;
     optimizeImplants?: boolean;
     includeCalibratedGear?: boolean;
+    /** Score every calibration-eligible piece as if calibrated to this ship. */
+    assumeCalibrated?: boolean;
     useArenaModifiers?: boolean;
     excludedImplantTypes?: string[];
     fleetBuffs?: FleetBuff[];

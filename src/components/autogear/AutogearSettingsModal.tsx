@@ -23,6 +23,7 @@ interface AutogearSettingsModalProps {
     tryToCompleteSets: boolean;
     optimizeImplants: boolean;
     includeCalibratedGear: boolean;
+    assumeCalibrated: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -51,6 +52,7 @@ interface AutogearSettingsModalProps {
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
     onIncludeCalibratedGearChange: (value: boolean) => void;
+    onAssumeCalibratedChange: (value: boolean) => void;
     onResetConfig: () => void;
     activeSeason?: ArenaSeason | null;
     useArenaModifiers?: boolean;

@@ -160,6 +160,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: boolean;
                 optimizeImplants: boolean;
                 includeCalibratedGear: boolean;
+                assumeCalibrated: boolean;
                 useArenaModifiers: boolean;
                 excludedImplantTypes: string[];
                 fleetBuffs: FleetBuff[];
@@ -310,6 +311,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: false,
                 optimizeImplants: false,
                 includeCalibratedGear: false,
+                assumeCalibrated: false,
                 useArenaModifiers: false,
                 excludedImplantTypes: [],
                 fleetBuffs: [],
@@ -604,6 +606,7 @@ export const AutogearPage: React.FC = () => {
                 tryToCompleteSets: shipConfig.tryToCompleteSets,
                 optimizeImplants: shipConfig.optimizeImplants,
                 includeCalibratedGear: shipConfig.includeCalibratedGear,
+                assumeCalibrated: shipConfig.assumeCalibrated,
                 useArenaModifiers: shipConfig.useArenaModifiers,
                 fleetBuffs: shipConfig.fleetBuffs,
                 excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
@@ -1501,6 +1504,9 @@ export const AutogearPage: React.FC = () => {
                     includeCalibratedGear={
                         shipSettings ? getShipConfig(shipSettings.id).includeCalibratedGear : false
                     }
+                    assumeCalibrated={
+                        shipSettings ? getShipConfig(shipSettings.id).assumeCalibrated : false
+                    }
                     onShipSelect={(ship) => {
                         if (selectedShips.length > 0) {
                             handleShipSelect(ship, 0);
@@ -1702,6 +1708,11 @@ export const AutogearPage: React.FC = () => {
                             updateShipConfig(shipSettings.id, { includeCalibratedGear });
                         }
                     }}
+                    onAssumeCalibratedChange={(assumeCalibrated) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { assumeCalibrated });
+                        }
+                    }}
                     activeSeason={activeSeason}
                     useArenaModifiers={
                         shipSettings ? getShipConfig(shipSettings.id).useArenaModifiers : false
@@ -1727,6 +1738,7 @@ export const AutogearPage: React.FC = () => {
                                 showSecondaryRequirements: false,
                                 optimizeImplants: false,
                                 includeCalibratedGear: false,
+                                assumeCalibrated: false,
                                 useArenaModifiers: false,
                                 excludedImplantTypes: [],
                                 fleetBuffs: [],

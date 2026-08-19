@@ -70,6 +70,7 @@ interface AutogearSettingsProps {
     tryToCompleteSets: boolean;
     optimizeImplants: boolean;
     includeCalibratedGear: boolean;
+    assumeCalibrated: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -98,6 +99,7 @@ interface AutogearSettingsProps {
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
     onIncludeCalibratedGearChange: (value: boolean) => void;
+    onAssumeCalibratedChange: (value: boolean) => void;
     availableImplantTypes?: { key: string; name: string; label: string }[];
     excludedImplantTypes?: string[];
     onSetExcludedImplantTypes?: (keys: string[]) => void;
@@ -255,6 +257,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     tryToCompleteSets,
     optimizeImplants,
     includeCalibratedGear,
+    assumeCalibrated,
     onRoleSelect,
     onAddPriority,
     onUpdatePriority,
@@ -279,6 +282,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onTryToCompleteSetsChange,
     onOptimizeImplantsChange,
     onIncludeCalibratedGearChange,
+    onAssumeCalibratedChange,
     availableImplantTypes = [],
     excludedImplantTypes = [],
     onSetExcludedImplantTypes = () => {},
@@ -336,8 +340,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
         (tryToCompleteSets ? 1 : 0) +
         (optimizeImplants ? 1 : 0) +
         (includeCalibratedGear ? 1 : 0) +
+        (assumeCalibrated ? 1 : 0) +
         (activeSeason && useArenaModifiers ? 1 : 0);
-    const advancedTotal = activeSeason ? 7 : 6;
+    const advancedTotal = activeSeason ? 8 : 7;
 
     return (
         <div className="space-y-4">
@@ -1073,6 +1078,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 checked={includeCalibratedGear}
                                 onChange={onIncludeCalibratedGearChange}
                                 helpLabel="When enabled, gear calibrated to other ships will be included in the search. These will be scored using base stats (without calibration bonus)."
+                            />
+                            <Checkbox
+                                id="assumeCalibrated"
+                                label="Assume all gear is calibrated"
+                                checked={assumeCalibrated}
+                                onChange={onAssumeCalibratedChange}
+                                helpLabel="When enabled, every calibration-eligible piece (5-6 star, level 16) is scored as if it were calibrated to this ship, so gear competes on its ceiling instead of on whichever ship holds its calibration today. Combine with 'Include calibrated gear' to also re-use gear currently calibrated to another ship. With 'Use upgraded stats' on, gear below level 16 is included too. Suggested pieces that need calibrating are marked in the results."
                             />
                             {activeSeason && (
                                 <div className="space-y-2">
