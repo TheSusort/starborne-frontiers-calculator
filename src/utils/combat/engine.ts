@@ -9171,15 +9171,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // every turn that HAS a victim. A non-damage cast keeps its inline emit
                             // (flag ignored).
                             // SP-4c-2b: this flag is deliberately NOT victim-fenced, even though the
-                            // `positional` gate below now is. (1) Fencing it would buy nothing: with no
-                            // victim runPlayerTurn emits no `ability-performed` on EITHER arm — the
-                            // inline emit and the deferred payload are both fenced on its own
+                            // `positional` gate below now is. (1) Fencing it would buy nothing for the
+                            // event: with no victim runPlayerTurn emits no `ability-performed` on EITHER
+                            // arm — the inline emit and the deferred payload are both fenced on its own
                             // `hasVictim` (playerTurn.ts `if (!deferAbilityPerformed && hasVictim)` and
-                            // the `deferredAbilityPerformed` spread) — so the gate divergence cannot
-                            // lose an event. (2) Fencing it would COST: the same flag selects the
-                            // cast's landing/crit resolution shape (`positionalLanding` in
-                            // playerTurn.ts), so flipping it on a no-victim turn would move that turn's
-                            // RNG draws and with them the schedule of every later application.
+                            // the `deferredAbilityPerformed` spread) — so the divergence cannot lose an
+                            // event. (2) Fencing it would COST: the same flag selects the cast's
+                            // landing/crit resolution shape (`positionalLanding` in playerTurn.ts, which
+                            // chooses between `realAffinityCappedCrit` and `cappedCrit`), so flipping it
+                            // on a no-victim turn would move that turn's RNG draws and with them the
+                            // schedule of every later application.
+                            //
+                            // THE DIVERGENCE HAS A SECOND CONSUMER, and it is not an event — say so here
+                            // because (1) alone reads as if `ability-performed` were the only thing
+                            // riding this gate. `deferredCastSupport` (playerTurn.ts, set by
+                            // `if (deferAbilityPerformed && hasCastDamageDealtRider)`) is pinned to the
+                            // SAME unfenced condition, while its resolver's basis `castDelivered` follows
+                            // the FENCED `positional` gate below. So a mixed cast (§A.7) reaches
+                            // `resolveCastSupport?.(castDelivered ?? turn.directDamage)` on the FALLBACK
+                            // arm — a branch the comment at that call used to describe as unreachable.
+                            // It is reachable now, its answer is correct (basis 0 for a cast that hit
+                            // nobody), and the corrected reasoning lives at that call site.
                             const willApplyPositionally =
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
@@ -9235,6 +9247,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 pendingResisted.length = 0;
                             }
 
+                            // AMENDED BY SP-4c-2b at the end of this comment: the gate below now DOES
+                            // carry a victim precondition, so read that amendment before trusting the
+                            // "DELIBERATELY no `selectedEnemy != null` precondition" paragraph.
                             // Positional APPLY (Task 8b, GATED). When the focus attacker is positional,
                             // carries a parsed target, AND its firing hit produced scalars (a damage
                             // ability fired → turn.positionalScalars is set), drive the per-victim apply
@@ -9360,9 +9375,28 @@ export function runCombat(rawInput: CombatEngineInput): {
                             flushDeferredEnemyApplications(turn.deferredEnemyApplications);
                             // Same seam, same reason: a cast whose repair/shield scales off the damage
                             // it dealt could not resolve until that damage existed. No-op unless this
-                            // cast deferred. The `?? turn.directDamage` fallback is unreachable while
-                            // deferral is pinned to the positional gate, and is there so a future
-                            // divergence degrades to the old basis instead of silently dropping the repair.
+                            // cast deferred. The `?? turn.directDamage` fallback was written as
+                            // unreachable-while-deferral-is-pinned-to-the-positional-gate, and is there so
+                            // a future divergence degrades to the old basis instead of silently dropping
+                            // the repair.
+                            //
+                            // SP-4c-2b: that divergence has ARRIVED — the fallback is now REACHABLE, and
+                            // it is the second consumer of the gate split documented at
+                            // `willApplyPositionally` above. The two sides of the pin no longer move
+                            // together on a no-victim turn: DEFERRAL follows `deferAbilityPerformed`
+                            // (= the unfenced `willApplyPositionally` AND hasDamageAbility, playerTurn.ts),
+                            // which carries NO `hasVictim` term, while `castDelivered` follows the
+                            // victim-FENCED `positional` gate and therefore stays undefined. So an
+                            // ally-targeted cast that also carries a damage ability and a firing-slot
+                            // `damage-dealt` repair/shield rider (plan §A.7's mixed casts — fixture-only,
+                            // 13 rows, zero shipped ships) defers its support pass and then lands HERE on
+                            // the fallback arm.
+                            // The fallback's answer is the CORRECT one, which is why the behaviour is
+                            // deliberately left alone: `turn.directDamage` is fenced to literal 0 with no
+                            // victim, so the support pass still RUNS (the repair is not dropped) and
+                            // resolves off a basis of 0 — a damage-dealt-scaled repair on a cast that hit
+                            // nobody correctly repairs nothing. Do not "restore the pin" by fencing
+                            // `willApplyPositionally`: that would move the turn's crit draws (see its note).
                             turn.resolveCastSupport?.(castDelivered ?? turn.directDamage);
 
                             // Fold the focus turn's numeric damage into the round accumulator.
@@ -9558,6 +9592,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 }
                             }
 
+                            // AMENDED BY SP-4c-2b at the end of this comment: the gate below now DOES
+                            // carry a victim precondition (mirror of the focus site).
                             // Positional APPLY (Task 8b, GATED) — mirror of the focus site, keyed to THIS
                             // team actor's own position / parsed target (teamTargetById) / parsed pattern
                             // (teamPatternById). Drives the per-victim apply loop against the LIVE enemy
@@ -9648,6 +9684,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
                             // Clause order — mirror of the focus site (see flushDeferredEnemyApplications).
                             flushDeferredEnemyApplications(teamTurn.deferredEnemyApplications);
+                            // SP-4c-2b: the `?? teamTurn.directDamage` fallback below is REACHABLE on a
+                            // no-victim turn — do NOT read the focus site's pre-SP-4c-2b claim that
+                            // deferral is pinned to the positional gate, which this rung falsified at both
+                            // sites. Deferral follows the unfenced `teamWillApplyPositionally`;
+                            // `teamCastDelivered` follows the victim-fenced `teamPositional` and stays
+                            // undefined, so an ally-targeted mixed cast with a firing-slot `damage-dealt`
+                            // rider resolves its support off a Task-2-zeroed `directDamage` — the support
+                            // pass still runs and correctly repairs 0. Full argument at the focus site's
+                            // own `resolveCastSupport` call (search `the fallback is now REACHABLE`).
                             teamTurn.resolveCastSupport?.(
                                 teamCastDelivered ?? teamTurn.directDamage
                             );

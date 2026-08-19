@@ -4153,8 +4153,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
         // Defer iff the cast carries a `damage-dealt` rider AND the engine will resolve this cast
         // positionally. Pinned to `deferAbilityPerformed` — the SAME condition that already hands
-        // `ability-performed` to the engine — so the two can never disagree about whether a cast
-        // is engine-resolved, and the engine has exactly one place to invoke both.
+        // `ability-performed` to the engine — so the engine has exactly one place to invoke both.
+        //
+        // SP-4c-2b CORRECTS the rest of that claim: the two CAN now disagree about whether a cast is
+        // engine-resolved, on a no-victim turn (an ally-targeted cast — engine.ts's two player call
+        // sites). `deferAbilityPerformed` carries no `hasVictim` term, so this deferral still fires;
+        // but the engine victim-FENCED its `positional` apply gate, so the basis it feeds back
+        // (`castDelivered`) is undefined and the call lands on its `?? turn.directDamage` fallback.
+        // That fallback is the correct answer rather than a degradation: `directDamage` is fenced to 0
+        // with no victim, so the support pass still runs and a damage-dealt-scaled repair on a cast
+        // that hit nobody repairs 0. Do NOT re-pin the two by adding `hasVictim` to
+        // `deferAbilityPerformed` or to the engine's `willApplyPositionally`: that flag also selects
+        // `positionalLanding` below, so it would move the turn's crit draws.
         //
         // A cast rider is FIRING-SLOT only: a passive-slot `damage-dealt` heal is a standing leech
         // that `isHookOwned` already routed away from `healAbilities`, and it is procced per victim
