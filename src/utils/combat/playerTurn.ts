@@ -425,11 +425,18 @@ export interface PlayerActorRuntime {
     /** Caster heal-modifier stat (healing calc). Default 0. */
     healModifier: number;
     // Per-actor adapter-derived rates
-    /** LIVE per-target debuff-landing chance (0..1) for THIS actor, set at turn start by
-     *  runPlayerTurn from current effective hacking-vs-target-security + affinity (A2 Task 4).
-     *  Read by the REACTIVE (triggers.ts) landing path via the runtime's landing closure /
-     *  debuffLandingGate so an owner's reactive inflictions draw against the live chance too.
-     *  Undefined until the actor's first turn — callers use `?? 1` as a neutral default. */
+    /** LIVE debuff-landing chance (0..1) for THIS actor against ITS OWN TURN TARGET, set at turn
+     *  start by runPlayerTurn from current effective hacking-vs-that-target's-security + affinity
+     *  (A2 Task 4). Undefined until the actor's first turn — callers use `?? 1` as a neutral default.
+     *
+     *  ⚠️ SP-4c-2b: this is a CAST-path value and the REACTIVE path must not use it as a standing
+     *  per-owner rate. It is a number derived from THIS turn's target being read against a DIFFERENT
+     *  target later, which was wrong in kind and became wrong in effect once an ally-targeted cast
+     *  started resolving no victim at all (it then published 0 and silenced the owner's reactive
+     *  inflicts entirely — Flamel's on-damaged Stasis). The reactive path now resolves its own
+     *  per-victim chance through `TriggerDrainContext.liveDebuffLandingChanceFor` and passes it in as
+     *  `targetLandingChance` below; this field survives only as the neutral fallback for a caller
+     *  with no victim in hand. */
     liveDebuffLandingChance?: number;
     selfDotModifier: number;
     defensePenetrationBuff: number;
@@ -458,7 +465,8 @@ export interface PlayerActorRuntime {
     chargedHealCritGate: RateGate;
     landsTimedEnemyApplication: (
         application?: 'inflict' | 'apply',
-        targetAffinity?: AffinityName
+        targetAffinity?: AffinityName,
+        targetLandingChance?: number
     ) => boolean;
     // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
     selfBuffLookup: Map<string, SelectedGameBuff[]>;

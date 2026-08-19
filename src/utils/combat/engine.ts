@@ -30,7 +30,7 @@ import {
     skillNeedsOpposingVictim,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
-import { foldActorBuffTotals, effectiveStatsOf } from './effectiveStats';
+import { foldActorBuffTotals, effectiveStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -748,7 +748,8 @@ export function buildEnemyPlayerActorRuntime(
         extendChanceGate: enemyExtendChanceGate,
         landsTimedEnemyApplication: (
             application?: 'inflict' | 'apply',
-            targetAffinity?: AffinityName
+            targetAffinity?: AffinityName,
+            targetLandingChance?: number
         ): boolean =>
             application === 'apply'
                 ? // Target-aware (Task A): when the ACTUAL target's affinity is supplied, re-resolve
@@ -759,7 +760,14 @@ export function buildEnemyPlayerActorRuntime(
                   targetAffinity !== undefined
                     ? getAffinityMatchup(e.affinity, targetAffinity) !== 'disadvantage'
                     : !affinityDisadvantage
-                : enemyDebuffLandingGate(runtime.liveDebuffLandingChance ?? 1), // fresh timed inflictions draw against this enemy's LIVE hacking-vs-security landing chance (?? 1 — neutral guard for a read before the owner's first turn)
+                : // SP-4c-2b: `targetLandingChance` is THIS victim's own hacking-vs-security chance,
+                  // supplied by the reactive path (which knows the victim it is inflicting on).
+                  // Falling back to `runtime.liveDebuffLandingChance` keeps the cast path — whose
+                  // turn target IS the actor's own — byte-identical, and keeps a caller with no
+                  // victim in hand on the old neutral guard.
+                  enemyDebuffLandingGate(
+                      targetLandingChance ?? runtime.liveDebuffLandingChance ?? 1
+                  ),
         selfBuffLookup: new Map(),
         enemyDebuffLookup,
     };
@@ -2125,7 +2133,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // forward reference is safe. `?? 1` is a neutral guard for a read before the first turn.
     const landsTimedEnemyApplication = (
         application?: 'inflict' | 'apply',
-        targetAffinity?: AffinityName
+        targetAffinity?: AffinityName,
+        targetLandingChance?: number
     ): boolean =>
         application === 'apply'
             ? // Target-aware (Task A): when the ACTUAL target's affinity is supplied, re-resolve the
@@ -2135,7 +2144,11 @@ export function runCombat(rawInput: CombatEngineInput): {
               targetAffinity !== undefined
                 ? getAffinityMatchup(input.affinity, targetAffinity) !== 'disadvantage'
                 : !affinityDisadvantage
-            : debuffLandingGate(attackerRuntime.liveDebuffLandingChance ?? 1);
+            : // SP-4c-2b: per-victim chance when the caller knows its victim (the reactive path);
+              // the cached turn-target chance otherwise (the cast path, byte-identical).
+              debuffLandingGate(
+                  targetLandingChance ?? attackerRuntime.liveDebuffLandingChance ?? 1
+              );
 
     // Boost gear set: per-owner buff-duration extension. Built from the RAW ShipSkills (which
     // already carry the BOOST passive merged by buildShipAbilitiesWithEquipment at the page
@@ -2307,7 +2320,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // so the forward reference is safe. `?? 1` is a neutral guard for a pre-first-turn read.
         const teamLandsTimedEnemyApplication = (
             application?: 'inflict' | 'apply',
-            targetAffinity?: AffinityName
+            targetAffinity?: AffinityName,
+            targetLandingChance?: number
         ): boolean =>
             application === 'apply'
                 ? // Target-aware (mirrors the attacker closure): when the ACTUAL target's affinity
@@ -2317,7 +2331,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                   targetAffinity !== undefined
                     ? getAffinityMatchup(w.affinity, targetAffinity) !== 'disadvantage'
                     : !teamAffinityDisadvantage
-                : teamDebuffLandingGate(runtime.liveDebuffLandingChance ?? 1);
+                : // SP-4c-2b: mirrors the attacker closure — per-victim chance from the reactive
+                  // path, cached turn-target chance for the cast path.
+                  teamDebuffLandingGate(
+                      targetLandingChance ?? runtime.liveDebuffLandingChance ?? 1
+                  );
         const runtime: PlayerActorRuntime = {
             actor: teamActor,
             focus: teamActor.id === focusActorId, // always false today (focus = attacker)
@@ -2631,6 +2649,43 @@ export function runCombat(rawInput: CombatEngineInput): {
     // dummy enemy and every enemy attacker, so a reactive granter on EITHER side
     // resolves. Used by grantExtraAction; companion actorsBySide lands in PR3.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
+
+    /** SP-4c-2b: the landing chance the REACTIVE path needs — `ownerId`'s live effective hacking vs
+     *  `victimId`'s live effective security, with the two actors' own affinity matchup applied.
+     *
+     *  WHY THIS EXISTS. Every reactive inflict already knew its victim (`debuffTargetId` /
+     *  `victimId` in triggers.ts) but drew its landing gate against
+     *  `PlayerActorRuntime.liveDebuffLandingChance` — a number the owner computed on ITS OWN turn,
+     *  for ITS OWN turn target. An enemy shoots Flamel; Flamel's passive inflicts Speed Down +
+     *  Stasis on THAT enemy, so the roll is Flamel's hacking vs THAT ship's security. Reading a
+     *  cached cast-derived value was wrong in kind, and became wrong in effect when SP-4c-2b let an
+     *  ally-targeted cast resolve NO victim: the cached chance then went to 0 and auto-resisted
+     *  every reactive inflict the owner would ever make (measured on Flamel: 138 landings → 0).
+     *
+     *  TEAM-SYMMETRIC BY CONSTRUCTION: both ids are looked up in the combat-wide `allActorsById`,
+     *  so a player owner inflicting on an enemy and an enemy owner inflicting on a player take the
+     *  identical path (the same reason `affinityOf`/`actorById` are wired from this map).
+     *
+     *  AFFINITY SCOPE, deliberately narrow: the base `computeAffinityModifiers` matchup, with no
+     *  `forceOutgoingAdvantage` / defensive-override consultation. That matches the sibling reactive
+     *  'apply' arm, which resolves `getAffinityMatchup(rawAffinity, targetAffinity)` and likewise
+     *  ignores overrides — those are turn-scoped cast concepts, not reactive ones. The cast path's
+     *  `affinityModsVsVictim` DOES honour them; the two are intentionally not unified here.
+     *
+     *  `selfBuffLookup` is the engine's GLOBAL buffName→effects expansion table — the same one
+     *  `effectiveStatsOf` is called with for every actor elsewhere in this file (turn-order speed,
+     *  Protection carrier defence), not the per-runtime map (which is empty for team/enemy actors
+     *  by design). Undefined for an unresolvable id, which routes the caller to its old fallback. */
+    const reactiveLandingChanceFor = (ownerId: string, victimId: string): number | undefined => {
+        const owner = allActorsById.get(ownerId);
+        const victim = allActorsById.get(victimId);
+        if (!owner || !victim) return undefined;
+        const { damageModifier } = computeAffinityModifiers(
+            owner.affinity ?? 'antimatter',
+            victim.affinity ?? 'antimatter'
+        );
+        return liveDebuffLandingChance(statusEngine, selfBuffLookup, owner, victim, damageModifier);
+    };
 
     // The dummy `enemy` is the player-offense sink for a run with no targetable opposing roster.
     // (Historically that meant "DPS-calc / non-positional mode" — accurate when this was written,
@@ -8239,6 +8294,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
                         // precomputed-vs-representative static disadvantage flag.
                         affinityOf: (id) => allActorsById.get(id)?.affinity,
+                        // SP-4c-2b: the OTHER half of Task A's per-target seam. Task A made the
+                        // reactive 'apply' arm read the actual target's AFFINITY; the 'inflict' arm
+                        // and the reactive DoT were still drawing against the owner's cached
+                        // `liveDebuffLandingChance` — a chance the owner computed for ITS OWN turn
+                        // target. This resolves the roll the reactive path actually needs: the
+                        // owner's live effective hacking vs THIS victim's live effective security.
+                        // Same combat-wide `allActorsById` source as affinityOf/actorById, so it is
+                        // team-symmetric for free (either id may be on either side).
+                        liveDebuffLandingChanceFor: (ownerId, victimId) =>
+                            reactiveLandingChanceFor(ownerId, victimId),
                         // SP-E, Task E4: resolve any actor (either side) by id — the convert-dot
                         // executor uses this to find the ACTUAL victim of an ally's DoT
                         // application (eventCtx.victimId) instead of the fixed enemy/
