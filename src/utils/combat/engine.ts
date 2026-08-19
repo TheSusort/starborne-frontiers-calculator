@@ -7195,7 +7195,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // ONLY for the enemy side (player sites omit both → byte-identical). The selfHpPct
         // denom is unified to runtimeFor(actor).hp (proven equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
-        const buildTurnArgs = (a: CombatActor, tgt: CombatActor) => {
+        const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
@@ -7219,13 +7219,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 : parsedPatternFor(a);
             const aoeTarget = parsedTargetFor(a); // parse-completeness guard only (not a footprint arg)
             const aoeVictimIds =
-                aoePattern != null && aoeTarget != null && tgt.position != null
+                aoePattern != null && aoeTarget != null && tgt?.position != null
                     ? footprintVictims(aoePattern, tgt.position, tb.opposingRoster).map(
                           (h) => h.victim.id
                       )
                     : undefined;
             const opposingVictimById =
-                tgt.position != null ? new Map(tb.opposingRoster.map((v) => [v.id, v])) : undefined;
+                tgt?.position != null
+                    ? new Map(tb.opposingRoster.map((v) => [v.id, v]))
+                    : undefined;
             // I6: resolve the enemy-most-buffs selector target for an ON-CAST purge (Lodolite's
             // charged skill). mostBuffsAmong (§C2b-2, Rhodium) previously only fed the REACTIVE
             // purge path (triggers.ts's ctx.enemyWithMostBuffs, for end-of-round/on-attacked
@@ -7238,7 +7240,6 @@ export function runCombat(rawInput: CombatEngineInput): {
             const enemyMostBuffsId = mostBuffsAmong(tb.opposingRoster);
             return {
                 runtime: rt,
-                enemy: tgt,
                 enemyMostBuffsId,
                 // PR10 (buff steal): THIS caster's own living adjacent allies, resolved fresh
                 // per turn from its own side's roster — same adjacentAllyIdsFor helper
@@ -7255,6 +7256,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // adjacent enemies, team-symmetric for free (bySide handles both directions).
                 adjacentEnemyIdsFor: (anchorId: string): string[] =>
                     bySide(isEnemySide(anchorId) ? 'enemy' : 'player').adjacentAllyIdsFor(anchorId),
+                // SP-4c-2b: every victim-derived member lives in this ONE conditional spread.
+                // `tgt` is absent exactly when an ally-targeted cast resolved nobody on the
+                // opposing side (contract.md §B) — omitting these fields (rather than emitting
+                // an empty/zero placeholder) is what routes the consumer to its documented
+                // "no enemy" defaults (`?? []` / `?? 0` / `!== undefined` guards in playerTurn.ts),
+                // instead of resurrecting the dummy ghost this rung deletes.
+                ...(tgt
+                    ? {
+                          enemy: tgt,
+                          corrosionEntries: tgt.corrosionEntries,
+                          infernoEntries: tgt.infernoEntries,
+                          genericDoTEntries: tgt.genericDoTEntries,
+                          pendingBombs: tgt.pendingBombs,
+                          pendingAccumulators: tgt.pendingAccumulators,
+                          enemyDefense: tb.victimDefenceFor(tgt),
+                          enemyHp: tb.victimMaxHpFor(tgt),
+                          targetRepairedThisRound: repairedThisRound.has(tgt.id),
+                          targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt)
+                              .attack,
+                      }
+                    : {}),
                 // B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route
                 // to the resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId;
                 // the aggregate ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows
@@ -7262,15 +7284,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // dummy `enemy` sink (tgt.id === enemy.id), leave targetId unset so the __enemy__ path
                 // (DPS/healing) is byte-identical. Scheduled channel stays global __enemy__ (upsertBuff
                 // hardcoded). Enemy side unchanged (victim always a real actor).
-                ...(a.side === 'enemy' || tgt.id !== enemy.id ? { targetId: tgt.id } : {}),
+                // SP-4c-2b: the guard keeps its `tgt.id !== enemy.id` form for the WITH-victim
+                // case; a no-victim turn (`tgt` undefined) omits targetId, which is exactly what
+                // this guard already produced when `tgt` was the ghost (§A.4: the ghost's `id`
+                // measured always `'enemy'`, so the guard was already false on these turns).
+                ...(tgt && (a.side === 'enemy' || tgt.id !== enemy.id) ? { targetId: tgt.id } : {}),
                 statusEngine,
-                corrosionEntries: tgt.corrosionEntries,
-                infernoEntries: tgt.infernoEntries,
-                genericDoTEntries: tgt.genericDoTEntries,
-                pendingBombs: tgt.pendingBombs,
-                pendingAccumulators: tgt.pendingAccumulators,
-                enemyDefense: tb.victimDefenceFor(tgt),
-                enemyHp: tb.victimMaxHpFor(tgt),
                 enemyType: tb.enemyTypeArg,
                 bus,
                 round: r,
@@ -7285,10 +7304,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // actor, this still tracks the heal target. Per-actor target-HP% is deferred to a
                 // later phase; inert today (bare enemies have no `hpSubject:'target'` gate).
                 targetHpPct: healTargetHpPctNow(),
-                // C2b-3: was the STRUCK victim (tgt) repaired this round? Per-actor-correct
-                // (unlike targetHpPct, which always reports the heal target). DPS dummy / un-
-                // repaired enemy → false → byte-identical (the purge block guards on targetId).
-                targetRepairedThisRound: repairedThisRound.has(tgt.id),
+                // SP-4c-2b: `targetRepairedThisRound` (was the STRUCK victim `tgt` repaired this
+                // round? — C2b-3) moved into the victim-derived conditional block above; a
+                // no-victim turn omits it and `playerTurn.ts` defaults the destructure to `false`.
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 // Sub-project I, PR I5: count (not union) of opposing actors holding Stealth,
                 // for Selenite's "for every enemy with Stealth" count-scaling. Same per-turn
@@ -7302,7 +7320,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // resolution), this key is OMITTED entirely so buildRoundContext leaves
                 // enemyDebuffNames undefined (the DPS-parity sentinel) and the round contexts
                 // fall back to the legacy name-agnostic enemyDebuffCount path — byte-identical.
-                ...(a.side === 'enemy' || tgt.id !== enemy.id
+                // SP-4c-2b: also omitted when `tgt` is absent (no victim this turn) — same
+                // "no enemy" answer as the DPS-dummy case.
+                ...(tgt && (a.side === 'enemy' || tgt.id !== enemy.id)
                     ? { enemyDebuffNames: enemyDebuffNamesForTarget(tgt) }
                     : {}),
                 selfDebuffNames: ownerDebuffNames(a.id),
@@ -7329,14 +7349,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...((a.id === focusActorId || a.side === 'enemy' || a.kind === 'team') &&
                 aoePattern != null &&
                 aoeTarget != null &&
-                tgt.position != null
+                tgt?.position != null
                     ? { positional: true }
                     : {}),
-                // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility) and
-                // a per-(owner,ability) deterministic proc closure. Both are READ only when the
-                // actor's passive slot carries an outgoing-amplification ability → byte-identical
-                // for every fixture without one (rollOutgoingProc never invoked).
-                targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt).attack,
+                // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility),
+                // for a per-(owner,ability) deterministic proc closure. `targetEffectiveAttack`
+                // moved into the victim-derived conditional block above (SP-4c-2b) — READ only
+                // when the actor's passive slot carries an outgoing-amplification ability →
+                // byte-identical for every fixture without one (rollOutgoingProc never invoked).
                 rollOutgoingProc: (abilityId: string, chance: number) =>
                     rollRateGate(procChanceGates, `${a.id}:${abilityId}`, chance),
                 activePattern: parsedPatternFor(a),
