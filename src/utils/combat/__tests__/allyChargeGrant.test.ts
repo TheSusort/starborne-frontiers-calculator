@@ -301,9 +301,26 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
         enemyAttackers: [enemy],
     });
 
-    // The focus' first charged round: directDamage exceeds 2× the round-1 (active) hit.
-    const firstChargedRound = (rounds: { directDamage: number }[]): number =>
-        rounds.findIndex((r) => r.directDamage > rounds[0].directDamage * 2);
+    // SP-4c-2a (B1): `stealthEnemy()`/`plainEnemy()` carry no `stats.hp`, so the targetable-HP
+    // floor (normalizeRoster.ts) now raises them to MIN_TARGETABLE_MAX_HP — these runs are
+    // positional, and a positional cast suppresses the scalar `directDamage` credit in favour of
+    // the per-victim map (confirmed via standalone repro against the real engine: `perTargetDealt`
+    // populated, `directDamage` 0 every round). Read the per-victim channel only — NO scalar
+    // fallback. The "pre-positional enemy" test below (explicit `hp: 5000` AND `position: 'M4'`)
+    // is ALSO fully positional post-floor, so it too routes through `perTargetDealt`; a fallback
+    // to the scalar channel would be dead on every case in this file, and if the deleted
+    // non-positional shape ever came back it would silently keep observing 0 via the fallback
+    // instead of failing loudly. Matches the stricter, fallback-free shape in
+    // `enemyTeamRouting.test.ts`'s `playerDealt`.
+    const roundDealt = (r: { perTargetDealt?: Record<string, Record<string, number>> }): number => {
+        const perVictim = r.perTargetDealt?.['attacker'];
+        return perVictim ? Object.values(perVictim).reduce((sum, v) => sum + v, 0) : 0;
+    };
+
+    // The focus' first charged round: dealt damage exceeds 2× the round-1 (active) hit.
+    const firstChargedRound = (
+        rounds: { perTargetDealt?: Record<string, Record<string, number>> }[]
+    ): number => rounds.findIndex((r) => roundDealt(r) > roundDealt(rounds[0]) * 2);
 
     it('gate OFF (no enemy Stealth): the start-of-round grant does NOT accelerate the focus', () => {
         // Gate ON reference (enemy holds Stealth) vs gate OFF (plain enemy). Same +2 grant,

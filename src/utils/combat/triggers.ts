@@ -4076,12 +4076,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // living opposing actor — NEVER the vestigial DPS-dummy sink (ctx.enemy.id), which
             // stays alive whenever the team fields an ally-targeting ship (healer) and would
             // otherwise leak a phantom "→ enemy" line into the log (repeated once per fire).
-            // `livingOpposingActorIds` is gated on hasPositionedEnemyRoster (returns [] when no
-            // TARGETABLE opposing roster exists), so such a run still falls back to the dummy sink —
-            // its intended role. "Pure DPS-calc mode" was the shorthand when this was written and no
-            // longer names that case: since SP-1 the DPS page supplies a real, positioned enemy and
-            // since SP-4b-1 the normalization boundary places it, so the fallback now means an
-            // absent roster or one made only of 0-max-HP pressure sources.
+            // `livingOpposingActorIds` can still hand back [] — it is gated on
+            // hasPositionedEnemyRoster AND filters out actors carrying a `destroyedRound` — so a run
+            // can still fall through to the dummy sink, its intended role. "Pure DPS-calc mode" was
+            // the shorthand when this was written and no longer names that case: since SP-1 the DPS
+            // page supplies a real, positioned enemy and since SP-4b-1 the normalization boundary
+            // places it. Neither do the two shapes this note used to name next — both are now
+            // impossible below the boundary: SP-4b-2b REFUSES an absent/empty roster, and SP-4c-2a's
+            // `MIN_TARGETABLE_MAX_HP` floor (`withTargetableHp` in normalizeRoster.ts) makes
+            // hasPositionedEnemyRoster constant true, so a roster made only of 0-max-HP pressure
+            // sources cannot be constructed either. What is LEFT is the DESTROYED-roster case: every
+            // opposing actor already carries a `destroyedRound`, so the filter empties the list. No
+            // claim is made here about whether a shipped run reaches it; the arm goes with the dummy
+            // in SP-4c-2d regardless.
             const opposing = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
             victimIds = [opposing.length > 0 ? opposing[0] : ctx.enemy.id];
         }

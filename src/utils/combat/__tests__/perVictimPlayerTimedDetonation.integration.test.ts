@@ -157,16 +157,12 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     ...overrides,
 });
 
-// Non-positional BASE: a single focus dummy enemy, NO position/target/pattern/enemyAttackers — the
-// legacy focus-dummy timed path. Timed containers are seeded on the focus dummy ('enemy').
+// Formerly-non-positional BASE: a single enemy, NO position/target/pattern given explicitly — the
+// boundary auto-fills both. SP-4c-2a's targetable-HP floor now raises this 0-max-HP
+// "pressure-source" enemy to MIN_TARGETABLE_MAX_HP too, so this enemy is real and positional
+// (it used to reach the legacy focus-dummy timed path instead). Timed containers are seeded on
+// this real enemy ('pressure-source') rather than the dummy.
 const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent, and merely omitting `target`/`pattern` does NOT keep one
-    // non-positional (`normalizeCombatRoster`'s `withTargeting` fills both). The remaining
-    // non-positional shape is the documented 0-MAX-HP "pressure source": `resolvesPositionalVictim`
-    // finds nobody targetable (positionalBinding.ts:60-70), so the cast stays on the legacy dummy
-    // sink and every number in the cases below is byte-identical to the pre-branch run. The id is
-    // deliberately distinct from the shared fixture's default so it cannot be confused with a
-    // positioned carrier elsewhere in this file. (SP-4c must revisit these cases with the dummy.)
     enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: FOCUS_ATTACK,
     crit: 0,
@@ -407,24 +403,32 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
         expect(allyTurns.length).toBe(1);
     });
 
-    it('case 6: the legacy focus-dummy timed path is unchanged, and the focus OWN container now bursts alongside it', () => {
+    it('case 6: the (now-floored, positional) sole enemy’s timed path is unchanged, and the focus OWN container now bursts alongside it', () => {
         idc = 0;
-        // PIN. We tap the PLAYER focus 'attacker' with a timed bomb AND the focus DUMMY ('enemy')
-        // with another, to hold the legacy focus-dummy timed path (bursts on the dummy's turn) next
-        // to the per-victim player path.
+        // PIN. We tap the PLAYER focus 'attacker' with a timed bomb AND NONPOS_BASE's sole enemy
+        // ('pressure-source') with another, to hold that enemy's own-turn timed path next to the
+        // per-victim player path.
         //
-        // SP-4b-2b — WHAT MOVED, AND WHY. This case used to assert that the focus's OWN container is
-        // INERT, on the premise that a run with no position/target/pattern/enemyAttackers leaves the
-        // focus NON-positional and the B2 burst is gated on `isPositional`. That premise no longer
-        // exists: `normalizeCombatRoster` ASSIGNS the focus a slot (DEFAULT_ATTACKER_SLOT) and
-        // assigns every roster member one too, so `isPositional(focus.position, opposingRoster)` is
-        // now a TAUTOLOGY below the boundary — there is no legal input that makes it false. The
-        // focus's bomb therefore bursts, measured at 7000 in round 2, and that is pinned below
-        // rather than absorbed. The legacy half of the case is untouched: the dummy's bomb still
-        // bursts for exactly 3000 on the dummy's turn in round 2.
+        // SP-4b-2b — WHAT MOVED, AND WHY (then). This case used to assert that the focus's OWN
+        // container is INERT, on the premise that a run with no position/target/pattern/
+        // enemyAttackers leaves the focus NON-positional and the B2 burst is gated on
+        // `isPositional`. That premise no longer exists: `normalizeCombatRoster` ASSIGNS the focus
+        // a slot (DEFAULT_ATTACKER_SLOT) and assigns every roster member one too, so
+        // `isPositional(focus.position, opposingRoster)` is now a TAUTOLOGY below the boundary —
+        // there is no legal input that makes it false. The focus's bomb therefore bursts, measured
+        // at 7000 in round 2, and that is pinned below rather than absorbed.
         //
-        // BASE is the 0-MAX-HP pressure source (see its comment), which is what keeps the legacy
-        // focus-dummy path — as opposed to a positional victim — in play at all. (SP-4c revisits it.)
+        // SP-4c-2a — WHAT MOVED AGAIN. `NONPOS_BASE`'s 0-MAX-HP "pressure-source" enemy (see its
+        // comment) is now floored to MIN_TARGETABLE_MAX_HP too, so it is a real, positional roster
+        // member — the tap targets its real id ('pressure-source') rather than the legacy 'enemy'
+        // dummy sink. That dummy still exists (engine.ts still creates it unconditionally) but is
+        // inert on a positional run — dropped from the turn order and never credited — so tapping
+        // it here would observe nothing. Its deletion is rung 4c-2d's job. The round-row scalar
+        // `detonationDamage` is
+        // `focus.detonation + perActorDetonation[focusActorId]` (engine.ts): the focus's own cast
+        // contributes 0 (no on-cast detonation ability here) and `perActorDetonation['attacker']`
+        // (the pressure-source's burst, sourced by 'attacker') is still 3000 — the invariant this
+        // half of the case pins is unaffected by the source actor becoming real and positional.
         const { events, result } = collect(
             NONPOS_BASE({
                 __testTapActors: (actors: CombatActor[]) => {
@@ -432,9 +436,9 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
                     actors
                         .find((a) => a.id === 'attacker')
                         ?.pendingBombs.push(timedBomb(1000, 7, 2, 'enemy-applier'));
-                    // Legacy focus-dummy timed path: 3 × 1000 bomb on the dummy → bursts round 2.
+                    // The sole enemy's own timed path: 3 × 1000 bomb → bursts round 2.
                     actors
-                        .find((a) => a.id === 'enemy')
+                        .find((a) => a.id === 'pressure-source')
                         ?.pendingBombs.push(timedBomb(1000, 3, 2, 'attacker'));
                 },
             })
@@ -448,18 +452,21 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
         expect(result.rounds[0].perActorDetonation?.['enemy-applier']).toBeUndefined();
         expect(result.rounds[1].perActorDetonation?.['enemy-applier']).toBe(7000);
 
-        // Legacy focus-dummy path unchanged: round 1 no burst, round 2 burst 3000 via detonationDamage.
+        // The sole enemy's own timed path is unchanged: round 1 no burst, round 2 burst 3000 via
+        // detonationDamage.
         expect(result.rounds[0].detonationDamage).toBe(0);
         expect(result.rounds[1].detonationDamage).toBe(3000);
 
-        // Two bomb-detonated events: the focus's own per-victim burst and the dummy's legacy one.
-        // The legacy one is asserted in full below — unchanged shape, round, applier and damage.
+        // Two bomb-detonated events: the focus's own per-victim burst and the enemy's.
+        // The enemy's is asserted in full below — unchanged shape, round, applier and damage.
         const bombDet = events.filter((e) => e.type === 'bomb-detonated');
         expect(bombDet.length).toBe(2);
         expect(
             bombDet.filter((e) => e.type === 'bomb-detonated' && e.victimId === 'attacker')
         ).toHaveLength(1);
-        const legacy = bombDet.filter((e) => e.type === 'bomb-detonated' && e.victimId === 'enemy');
+        const legacy = bombDet.filter(
+            (e) => e.type === 'bomb-detonated' && e.victimId === 'pressure-source'
+        );
         expect(legacy).toHaveLength(1);
         expect(legacy[0]).toMatchObject({
             actorId: 'attacker',
@@ -543,8 +550,9 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
     //   2. even a NON-empty roster cannot make `isPositional` false any more — the boundary assigns
     //      EVERY roster member a slot, so `opposing.some(a => a.position !== undefined)` always
     //      holds, and it assigns the focus one too, so the first conjunct always holds. Measured in
-    //      case 6: with the 0-MAX-HP pressure source (the last non-positional shape there is) the
-    //      focus's own timed container BURSTS. `isPositional` is now a tautology for a player actor.
+    //      case 6: with the 0-MAX-HP pressure source — which was the last non-positional shape at
+    //      the time, and which SP-4c-2a's floor has since retired outright — the focus's own timed
+    //      container BURSTS. `isPositional` is now a tautology for a player actor.
     //
     // So there is no fixture shape left that exercises the gate's `isPositional`-false branch, and
     // the original non-vacuity check (temporarily dropping the conjunct made this case burst 4000)

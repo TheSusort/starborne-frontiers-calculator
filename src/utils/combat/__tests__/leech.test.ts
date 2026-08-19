@@ -186,19 +186,27 @@ describe('standing-leech hook — damage-dealt passive', () => {
         // Two entries (ally → heal target, self → owner). With attacker as the heal target
         // both recipients resolve to 'attacker', so directHeal is credited twice per burst.
         //
-        // SP-4b-2b — WHY THIS CASE KEEPS THE LEGACY SINK. A detonation-scope standing leech pays
-        // out through the `creditDamage` chokepoint. At the time this test was written, a
-        // POSITIONAL run booked the burst on the per-victim channel instead and never reached the
-        // leech proc at all — that was item 2 of the leech-channel gap class (see the canonical
-        // comment above `procStandingLeechesPerVictim`, engine.ts:3901,
-        // `procStandingLeechesPerVictim`). That instance is now FIXED: both of
-        // `applyPositionedTimedBurst`'s `creditDetonation` callbacks call this proc with
-        // `channel: 'detonation'`. This case still deliberately does not exercise that path,
-        // though — it keeps the documented 0-MAX-HP "pressure source" roster, where
-        // `resolvesPositionalVictim` (positionalBinding.ts:79, `resolvesPositionalVictim`) finds
-        // nobody targetable, so the burst still lands on the legacy sink and the numbers stay
-        // byte-identical to the pre-branch run. SP-4c must revisit this case when it deletes the
-        // dummy/sink path entirely, since the channel this case pins against will stop existing.
+        // HISTORY — THIS CASE USED TO KEEP THE LEGACY SINK, AND NO LONGER DOES. A detonation-scope
+        // standing leech pays out through the `creditDamage` chokepoint. At the time this test was
+        // written, a POSITIONAL run booked the burst on the per-victim channel instead and never
+        // reached the leech proc at all — item 2 of the leech-channel gap class (see the canonical
+        // comment above `procStandingLeechesPerVictim`, engine.ts:3901). That instance is FIXED:
+        // both of `applyPositionedTimedBurst`'s `creditDetonation` callbacks call this proc with
+        // `channel: 'detonation'`. SP-4b-2b kept this case off the positional path anyway, via the
+        // 0-MAX-HP "pressure source" roster that `resolvesPositionalVictim` found untargetable.
+        //
+        // SP-4c-2a closed that route: `withTargetableHp` (normalizeRoster.ts) floors
+        // `leech-pressure-source` to MIN_TARGETABLE_MAX_HP, so the run IS positional now and the
+        // burst goes down the per-victim path — measured: `cumulativeDamage` stays 0 every round
+        // (the legacy scalar sink books nothing), `perTargetDamage['leech-pressure-source']` reads
+        // 10 000 on each burst round (5 000 firing hit + 5 000 burst), and the row's
+        // `detonationDamage` reads that 5 000 through the `focusPositionalDetonation` fold.
+        //
+        // The assertions below survive the move, and are not weakened by it: they are RATIOS
+        // against the row's own `detonationDamage` rather than integers pinned to one channel, and
+        // the leech-channel fix named above is exactly what keeps the payout wired on this path —
+        // so the case now covers the positional leech route instead of the legacy one. What is NO
+        // LONGER true is the old note's "byte-identical to the pre-branch run".
         const result = runCombat(
             BASE({
                 enemyAttackers: bareEnemy({ id: 'leech-pressure-source', stats: { hp: 0 } }),
@@ -1079,8 +1087,12 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
         //          enemy buff → directDamage = 10000.
         // Round 2: the enemy's self-buff is live (granted round 1, 99-turn) → gate fires →
         //          +100% attack → directDamage = 20000.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        //
+        // SP-4c-2a (B1): `e1` carries no `stats.hp`, so the targetable-HP floor now raises it to
+        // MIN_TARGETABLE_MAX_HP and the run is positional — read the per-victim channel via
+        // `dealtBy`, the same helper this file's Test 2 (M3) already uses for the identical shift.
+        expect(dealtBy([result.rounds[0]], 'attacker')).toBe(10000);
+        expect(dealtBy([result.rounds[1]], 'attacker')).toBe(20000);
     });
 
     // ── NO DOUBLE-FOLD: the enemy's self-buff effect is folded EXACTLY once ──────────
@@ -1233,8 +1245,12 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
         );
         // Round 1: focus acts before the enemy lands the debuff → gate sees no self-debuff →
         //          10000. Round 2: the debuff is live on the tank → gate fires → 20000.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        //
+        // SP-4c-2a (B1): `e1` carries no `stats.hp`, so the targetable-HP floor now raises it to
+        // MIN_TARGETABLE_MAX_HP and the run is positional — read the per-victim channel via
+        // `dealtBy`, same migration as the enemy-buff-gate case above.
+        expect(dealtBy([result.rounds[0]], 'attacker')).toBe(10000);
+        expect(dealtBy([result.rounds[1]], 'attacker')).toBe(20000);
     });
 
     // ── PRELIMINARY (6b review): dead-target guard ──────────────────────────────────

@@ -15,18 +15,20 @@
  *
  * Crit is forced off everywhere → every credited value is an exact integer.
  *
- * Two cases, mirroring the two bomb paths:
- *   (1) POSITIONAL per-victim detonation — a positioned team victim self-buffs Inc. Damage
- *       Down II (-30%) on its OWN turn, then a pre-seeded timed bomb bursts on that same turn
- *       against its OWN HP. The burst is recorded in perTargetDamage[victim]; we assert it
- *       equals the RAW seeded burst (NOT burst × (1 − 0.30)). Mirrors
- *       selfIncomingBuffFold.integration.test.ts (self-buff up at hit time) +
- *       perVictimTimedDetonation.integration.test.ts (timed burst on the victim's own turn).
- *   (2) NON-positional focus-dummy `processBombs` — the focus dummy enemy carries an
+ * Two cases, both positional (SP-4c-2a's targetable-HP floor closed the "0-max-HP pressure
+ * source" shape Case 2 used to use to stay non-positional — see its own comment below):
+ *   (1) POSITIONAL per-victim detonation on a player-side victim — a positioned team victim
+ *       self-buffs Inc. Damage Down II (-30%) on its OWN turn, then a pre-seeded timed bomb
+ *       bursts on that same turn against its OWN HP. The burst is recorded in
+ *       perTargetDamage[victim]; we assert it equals the RAW seeded burst (NOT burst ×
+ *       (1 − 0.30)). Mirrors selfIncomingBuffFold.integration.test.ts (self-buff up at hit
+ *       time) + perVictimTimedDetonation.integration.test.ts (timed burst on the victim's own
+ *       turn).
+ *   (2) POSITIONAL per-victim detonation on an enemy-side actor — the enemy carries an
  *       "Out. Damage Up" enemy debuff (incomingDamage +50, which WOULD scale a direct hit)
  *       AND a pre-seeded timed bomb. We assert the bomb surfaces via `detonationDamage` at its
  *       RAW seeded value (NOT burst × 1.50), proving the enemy-debuff modifier never reaches
- *       the legacy focus-dummy bomb path either.
+ *       the bomb path either.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -37,7 +39,7 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor, PendingBomb } from '../state';
 import type { CombatEvent } from '../events';
-import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
@@ -218,19 +220,25 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
     });
 
     // ────────────────────────────────────────────────────────────────────────────
-    // Case 2 — NON-positional processBombs bypasses the enemy-debuff modifier
+    // Case 2 — processBombs bypasses the enemy-debuff modifier
     //
     // SP-4b-2b: this used to run with NO enemy roster, so the bomb sat on the vestigial `enemy`
     // sink and the run was non-positional by construction. A roster is now required, and merely
-    // omitting `target`/`pattern` is NOT enough to stay non-positional — `normalizeCombatRoster`
-    // FILLS both with defaults. The remaining non-positional shape is the documented "pressure
-    // source" roster (every opposing member has 0 MAX hp, so `resolvesPositionalVictim` finds nobody
-    // targetable — positionalBinding.ts:60-70), which is what this case now uses. That keeps Case 2
-    // structurally distinct from Case 1 — the whole reason the file has two cases is that
-    // `processBombs` and the positional per-victim burst are different code paths — and keeps the
-    // bomb on the sink, exactly where it was. (SP-4c must revisit this case when it deletes the dummy.)
+    // omitting `target`/`pattern` was not enough to stay non-positional — `normalizeCombatRoster`
+    // FILLS both with defaults — so this case used the "pressure source" roster (every opposing
+    // member at 0 MAX hp, so `resolvesPositionalVictim` found nobody targetable) to keep it
+    // non-positional. SP-4c-2a's targetable-HP floor closes that shape: a 0-max-HP enemy attacker
+    // is now floored to MIN_TARGETABLE_MAX_HP and IS targetable, so this run is positional too.
+    // That does not disturb the invariant under test: the round-row scalar `detonationDamage` is
+    // `focus.detonation + perActorDetonation[focusActorId]` (engine.ts, round assembly) — it folds
+    // in the focus's positional detonation credit rather than being suppressed like `directDamage`
+    // — so it still reads the RAW burst once the tap targets the real, now-floored enemy
+    // (`BARE_ENEMY_ID`) instead of the legacy `'enemy'` dummy sink. That dummy still exists
+    // (engine.ts still creates it unconditionally) but is inert on a positional run — dropped from
+    // the turn order and never credited — so tapping it here would observe nothing. Its deletion is
+    // rung 4c-2d's job.
     // ────────────────────────────────────────────────────────────────────────────
-    it('Case 2 (non-positional): the bombed sink under Out. Damage Up (+50%) bursts its bomb at the RAW value', () => {
+    it('Case 2: the bombed enemy under Out. Damage Up (+50%) bursts its bomb at the RAW value', () => {
         const bus = createEventBus();
         const bombEvents: CombatEvent[] = [];
         bus.on('bomb-detonated', (e) => bombEvents.push(e as CombatEvent));
@@ -253,7 +261,8 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
         // countdown decrements: round 1 → 1 (no burst), round 2 → 0 (BURST). Raw burst = 3000.
         // IF the +50% incoming modifier leaked into processBombs the burst would be 4500. Lock 3000.
         const result = runCombat({
-            // 0 MAX hp → a "pressure source" roster → the run stays NON-positional (see above).
+            // 0 MAX hp is now floored to MIN_TARGETABLE_MAX_HP (SP-4c-2a) — this enemy IS
+            // targetable, so the run is positional (see comment above).
             enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 0,
             crit: 0,
@@ -277,8 +286,11 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
             hp: 1_000_000_000,
             bus,
             __testTapActors: (actors: CombatActor[]) => {
+                // The floored enemy is real and hittable now — tap ITS id. The legacy `'enemy'`
+                // dummy sink still exists but is inert here (dropped from the turn order, never
+                // credited on a positional run), so it would receive nothing.
                 actors
-                    .find((a) => a.id === 'enemy')
+                    .find((a) => a.id === BARE_ENEMY_ID)
                     ?.pendingBombs.push(timedBomb(1000, 3, 2, 'attacker'));
             },
         });

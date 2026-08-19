@@ -270,11 +270,24 @@ describe('enemy-team cross-enemy cast buff routing (PR2)', () => {
 
         // Same player-side observable the PR1 leak test (T4.4) used: the player attacker's OWN
         // outgoing damage (result.rounds — the damage it deals into the enemy HP pool).
+        //
+        // SP-4c-2a (B1): `supporterEnemy`/`plainEnemy` carry no `stats.hp`, so the targetable-HP
+        // floor (normalizeRoster.ts) now raises them to MIN_TARGETABLE_MAX_HP and the run is
+        // positional — the scalar `totalRoundDamage`/`cumulativeDamage`/`directDamage` credits are
+        // suppressed to 0 in favour of the per-victim map, which would make BOTH the anti-vacuity
+        // guard below and the leak-detecting `toEqual` vacuously true (0 === 0 either way). Add the
+        // per-victim channel (summed across every victim the player dealt to) to the comparison
+        // struct so it stays a real leak detector, and read it for the guard too.
+        const playerDealt = (round: (typeof withBuff)['rounds'][number]) => {
+            const perVictim = round.perTargetDealt?.['attacker'];
+            return perVictim ? Object.values(perVictim).reduce((sum, v) => sum + v, 0) : 0;
+        };
         const playerDamage = (r: ReturnType<typeof runCombat>) =>
             r.rounds.map((round) => ({
                 totalRoundDamage: round.totalRoundDamage,
                 cumulativeDamage: round.cumulativeDamage,
                 directDamage: round.directDamage,
+                dealt: playerDealt(round),
             }));
 
         // NON-VACUITY (enemy side): the enemy incoming DID change between the two runs (all-allies
@@ -282,8 +295,8 @@ describe('enemy-team cross-enemy cast buff routing (PR2)', () => {
         expect(total(withBuff)).toBeGreaterThan(total(selfControl));
         // NON-VACUITY (player side): the player actually DEALS damage, so the equality below is a
         // real leak detector — a leaked enemy Attack Up would raise this and break the toEqual.
-        expect(withBuff.rounds.some((round) => round.totalRoundDamage > 0)).toBe(true);
-        expect(selfControl.rounds.some((round) => round.totalRoundDamage > 0)).toBe(true);
+        expect(withBuff.rounds.some((round) => playerDealt(round) > 0)).toBe(true);
+        expect(selfControl.rounds.some((round) => playerDealt(round) > 0)).toBe(true);
 
         // Player-side outgoing damage is byte-identical — the enemy all-allies buff never leaked
         // across onto a player store.

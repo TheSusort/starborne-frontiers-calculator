@@ -85,26 +85,23 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         __resetLegacyVictimFallbackCount();
     });
 
-    it('a roster of 0-max-HP pressure sources credits every cast to the LEGACY sink', () => {
-        // The 12 bucket-4B fixtures all look like this: an enemy attacker declared purely as a
-        // SOURCE of pressure (`hp: 0`), never as something to hit. It can never be a victim, so
-        // the run is not positional and the dummy sink owns the offense — exactly what these
-        // callers got before normalization started auto-placing the roster.
-        //
-        // ⭐ SP-4c HAND-OFF, and the reason this case is now load-bearing beyond its own name: since
-        // SP-4b-2b dropped the empty-roster shape (see the block below), this 0-max-HP shape is the
-        // SOLE remaining carrier of the LEGACY arm of the §4B invariant — the only fixture in the
-        // repo that still books a player cast into the scalar sink. SP-4c removes this shape too,
-        // along with the sink it books into. When it does, the invariant's legacy arm has nothing
-        // left to observe and the honest move is to DELETE that arm (both here and in the INVARIANT
-        // test's shape list) rather than to keep a 0-max-HP roster alive artificially to feed it.
-        // The per-victim arm is the one that survives, and it is covered by the two cases below.
+    // SP-4c-2a INVERTED THIS TEST, the same way SP-4b-2b inverted the empty-roster case below. Its
+    // own hand-off note predicted the closure exactly: "SP-4c removes this shape too, along with
+    // the sink it books into... the per-victim arm is the one that survives." The targetable-HP
+    // floor (normalizeRoster.ts, MIN_TARGETABLE_MAX_HP) is that removal for THIS shape: an enemy
+    // attacker declared as a 0-max-HP "pressure source" is no longer unhittable — it is floored to
+    // 1,000,000 HP and becomes a real, targetable roster member. `rosterWithEnemyHp(0)` and
+    // `rosterWithEnemyHp(500_000)` are now the SAME routing class (both floored well above
+    // ROUNDS * PER_CAST, both take every cast per-victim) — the legacy sink is never reached by
+    // this fixture any more, and there is no longer any way to construct a "0-max-HP" roster that
+    // reads as unhittable to the engine.
+    it('a former 0-max-HP pressure source is FLOORED, so it now credits every cast to the PER-VICTIM channel, not the legacy sink', () => {
         const result = runCombat(rosterWithEnemyHp(0));
 
-        expect(result.rawTotals.cumulative).toBe(ROUNDS * PER_CAST);
-        expect(result.rawTotals.direct).toBe(ROUNDS * PER_CAST);
-        // ...and NOT also into the per-victim channel (never two channels).
-        expect(result.rounds.map(positionalIn)).toEqual([0, 0, 0, 0]);
+        expect(result.rounds.map(positionalIn)).toEqual([PER_CAST, PER_CAST, PER_CAST, PER_CAST]);
+        // ...and NOT into the legacy sink — the shape this test used to name is gone.
+        expect(result.rawTotals.cumulative).toBe(0);
+        expect(result.rawTotals.direct).toBe(0);
     });
 
     // SP-4b-2b INVERTED THIS TEST. It read "an EMPTY opposing roster credits every cast to the
@@ -112,15 +109,19 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
     // The empty roster is now refused at the normalization boundary, so the premise is illegal by
     // contract and no roster line can repair it.
     //
-    // WHAT STOPPED BEING COVERED, and what survives: nothing about the ACCOUNTING. The mechanic
-    // this test observed — "a run with no targetable opponent credits the whole cast to the legacy
-    // sink and nothing to the per-victim channel" — is asserted identically, on the same four
-    // rounds and the same 10 000 per cast, by "a roster of 0-max-HP pressure sources credits every
-    // cast to the LEGACY sink" directly above, and by that shape's entry in the INVARIANT test
-    // below. `resolvesPositionalVictim` keys on MAX hp, so an unhittable roster and an absent one
-    // reach the sink through the identical gate; the two cases were always the same routing class
-    // spelled two ways. What is genuinely gone is only the SPELLING — the emptiness itself — and
-    // that is what this assertion now pins.
+    // WHAT STOPPED BEING COVERED. When this note was written, nothing about the ACCOUNTING: the
+    // mechanic this test observed — "a run with no targetable opponent credits the whole cast to
+    // the legacy sink and nothing to the per-victim channel" — was asserted identically, on the same
+    // four rounds and the same 10 000 per cast, by the 0-max-HP pressure-source case directly above,
+    // because `resolvesPositionalVictim` keys on MAX hp and an unhittable roster reached the sink
+    // through the identical gate. The two were the same routing class spelled two ways, and only the
+    // SPELLING (the emptiness itself) was gone.
+    //
+    // SP-4c-2a then floored the pressure source too, so that sibling is inverted as well and BOTH
+    // spellings of "credits the LEGACY sink" are now unbuildable on the player side. The legacy-sink
+    // ARM of the §4B invariant is consequently no longer covered by any player-side case here — by
+    // design, since deleting the dummy in 4c-2d deletes the arm. What this assertion pins is the
+    // refusal itself.
     it('an EMPTY opposing roster is REFUSED — the sink is not reachable that way any more', () => {
         expect(() => runCombat(noRoster())).toThrow(/enemyAttackers is empty/);
     });
@@ -158,15 +159,21 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         // The third state — "neither channel while a living victim existed" — is the SP-4b-1 §4B
         // defect. Pinned here directly so a future gate/selection divergence cannot reintroduce it.
         // SP-4b-2b: the `{ name: 'no roster', input: noRoster }` shape was dropped from this list —
-        // it is refused at the boundary now, pinned by its own test above. It was the same routing
-        // class as the 0-max-HP pressure source that remains here (both fail
-        // `resolvesPositionalVictim` and fall to the sink), so the list still covers every reachable
-        // sink/per-victim/whiff combination. Re-asserted here so the absence is deliberate and a
-        // future reader cannot read it as a quietly deleted shape.
+        // it is refused at the boundary now, pinned by its own test above.
+        //
+        // SP-4c-2a: the '0-max-HP pressure source' shape below no longer fails
+        // `resolvesPositionalVictim` either — the targetable-HP floor raises it to
+        // MIN_TARGETABLE_MAX_HP, so it now books per-victim exactly like 'survives every round'.
+        // It is KEPT in the list (rather than folded into the survives-every-round shape) so a
+        // regression that reopened the 0-max-HP-is-unhittable path would still be caught here, not
+        // just in the dedicated test above.
         expect(() => runCombat(noRoster())).toThrow(/enemyAttackers is empty/);
 
         const shapes: ReadonlyArray<{ name: string; input: () => CombatEngineInput }> = [
-            { name: '0-max-HP pressure source', input: () => rosterWithEnemyHp(0) },
+            {
+                name: '0-max-HP pressure source (now floored, per-victim)',
+                input: () => rosterWithEnemyHp(0),
+            },
             { name: 'dies in round 1', input: () => rosterWithEnemyHp(5_000) },
             { name: 'survives every round', input: () => rosterWithEnemyHp(500_000) },
         ];
@@ -223,8 +230,13 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
  * THE ONE STRUCTURAL ASYMMETRY, and why the mirror is not assertion-for-assertion identical.
  * `TurnBindings.legacyVictim` is a DIFFERENT KIND OF OBJECT on the two sides:
  *   • player side → the dummy `enemy`, an indestructible wall (`hp 1_000_000_000`, never records
- *     destroyed). A never-targetable enemy roster therefore still has somewhere to book, which is
- *     what makes the player-side "0-max-HP pressure sources credit the LEGACY sink" case possible.
+ *     destroyed). A never-targetable enemy roster therefore still had somewhere to book, which is
+ *     what USED to make a player-side "0-max-HP pressure sources credit the LEGACY sink" case
+ *     possible. SP-4c-2a's floor (`withTargetableHp` in normalizeRoster.ts) removed the premise: no
+ *     enemy roster is never-targetable any more, and that case is now the inverted
+ *     "a former 0-max-HP pressure source is FLOORED … credits the PER-VICTIM channel" case below.
+ *     The asymmetry itself is unchanged and still explains the mirror's shape — the two sides'
+ *     `legacyVictim` objects remain different kinds of thing.
  *   • enemy side → the HEAL TARGET, a real player actor drawn from
  *     `allPlayerActors = [attacker, ...teamCombatActors]`.
  * Because the heal target is itself a roster member, "every placed player member at max hp 0"
@@ -246,8 +258,10 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
  * of the four mirror tests, and mutating the two team gates to `false` kills the walked-team one. The
  * enemy-side ROUTING is pinned; what cannot be pinned is the liveness half of the predicate, because
  * the enemy has no indestructible sink to book into. That asymmetry is a fact about the dummy, and it
- * is the SP-4c/4d ladder's problem: deleting the dummy gives the PLAYER side the same missing sink,
- * at which point the player-side "credits the LEGACY sink" cases above stop being expressible too.
+ * is the SP-4c/4d ladder's problem — and SP-4c-2a has already taken the first step for the reason
+ * above: the player-side "credits the LEGACY sink" shape is unbuildable now that every enemy
+ * attacker arrives hittable, so those cases are inverted rather than deleted (see below), and
+ * deleting the dummy in 4c-2d retires the channel they used to name.
  *
  * The enemy side's two channels, and why the second is a subtraction: the per-victim channel is
  * `perTargetDealt[enemyId][victimId]` exactly as on the player side, but the legacy channel is the
@@ -388,8 +402,11 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
     });
 
     it('a never-targetable PLAYER roster is a CORPSE, so the enemy whiffs — not a dropped credit', () => {
-        // The literal mirror of "0-max-HP pressure sources credit the LEGACY sink" CANNOT credit a
-        // sink, and the reason is structural, not a defect: the enemy's `legacyVictim` IS the heal
+        // The literal mirror of the player side's old "0-max-HP pressure sources credit the LEGACY
+        // sink" claim CANNOT credit a sink, and the reason is structural, not a defect — and it is
+        // also why this case SURVIVES while its player-side original was inverted by SP-4c-2a's
+        // floor: the floor is enemy-side only, so a max-HP-0 PLAYER roster is still constructible.
+        // The enemy's `legacyVictim` IS the heal
         // target, which is itself one of the max-HP-0 members. So this shape books into neither
         // channel — and the assertions below prove that zero is case (b), a whiff against a corpse,
         // rather than the §4B defect (an accounted-for number falling between the channels).

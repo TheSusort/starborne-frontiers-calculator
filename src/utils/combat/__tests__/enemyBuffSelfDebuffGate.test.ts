@@ -273,22 +273,19 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
  * `directDamage` in the four `GRANT_BASE`-default tests below would have compared 0 to 0 — green,
  * and blind to the buff-to-damage coupling that is the whole instrument here.
  *
- * NOTE for later waves: the tests further down that pass their OWN `enemyAttackers` still read
- * `directDamage` and still pass. That is NOT an inconsistency in this helper — those fixtures build
- * their enemies through an `as EnemyAttacker` cast that omits `stats.hp` entirely, so the roster has
- * no TARGETABLE member (`resolvesPositionalVictim`, keyed on MAX hp), the run stays NON-positional,
- * and the scalar channel is still the live one for them. Their 10000-vs-20000 contrast is real, so
- * they are left alone here, but the missing `hp` is a latent fixture defect worth fixing on purpose
- * rather than by accident.
+ * ⭐ HAND-OFF CLOSED (SP-4c-2a). The note used to live here read: the tests further down that pass
+ * their OWN `enemyAttackers` (via `provokeEnemy`/`tauntEnemy`, all built through an
+ * `as EnemyAttacker` cast that omits `stats.hp`) stayed on the NON-positional scalar channel,
+ * because the roster had no TARGETABLE member (`resolvesPositionalVictim`, keyed on MAX hp) — and
+ * it predicted that giving them an explicit `hp` would flip all ten of their `directDamage`
+ * assertions onto the positional channel, "re-derived onto `focusDealt`/`perTargetDealt`", and
+ * that this "collides with SP-4c: [they] currently exercise the scalar sink, which 4c deletes."
  *
- * ⭐ HAND-OFF (SP-4b-2b Task 8, deliberately NOT fixed here). Twelve `directDamage` assertions in
- * this file are live only BECAUSE of that omission — an `as EnemyAttacker` cast silences the
- * required `stats.hp`, which is the same cast-hides-a-required-field class repair wave E fixed in
- * `shieldBasisSecondaryDamage`. Supplying `hp` flips those twelve to the positional channel, so
- * every one of them has to be re-derived onto `focusDealt`/`perTargetDealt`; that is a fixture
- * migration with twelve numbers to re-measure, not a comment. It also collides with SP-4c: those
- * twelve currently exercise the scalar sink, which 4c deletes. Do it as its own ticket, and prefer
- * dropping the casts (so `tsc` demands `hp`) over adding `hp` at each site.
+ * SP-4c-2a's targetable-HP floor (`normalizeRoster.ts`, `MIN_TARGETABLE_MAX_HP`) did exactly that
+ * — unconditionally, without anyone touching this file's fixtures. Every `provokeEnemy`/
+ * `tauntEnemy` build is now floored and positional, and their ten `directDamage` assertions (Task
+ * 6 Provoke-live, item 11 Taunt-live, Task 9b's three hacking cases) have been migrated onto
+ * `focusDealt` below, the same helper the GRANT_BASE-default tests already used.
  */
 const focusDealt = (round: RoundData): number => Math.round(dealtBy([round], 'attacker'));
 
@@ -441,8 +438,14 @@ describe('status-grant gate path — LIVE self-debuff/Provoke positive (Task 6)'
         // Round 2: Provoke is live on the tank → ownerDebuffNamesFor returns ['Provoke'] →
         //          engine threads it as selfDebuffNames → gate passes → +100% attack self-buff
         //          is GRANTED and couples into the same round's outgoing damage → 20000.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        //
+        // SP-4c-2a (B1): `provokeEnemy()` carries no `stats.hp`, so the targetable-HP floor
+        // (normalizeRoster.ts) now raises it to MIN_TARGETABLE_MAX_HP and the run is positional —
+        // exactly the shift this file's own hand-off comment (above `focusDealt`) predicted.
+        // Read the per-victim channel via the same `focusDealt` helper the GRANT_BASE-default
+        // tests above already use.
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(20000);
     });
 });
 
@@ -519,8 +522,12 @@ describe('status-grant gate path — LIVE enemy-buff/Taunt positive (item 11)', 
         // Round 2: the enemy holds Taunt → playerEnemyBuffNames() returns ['Taunt'] → engine
         //          threads it as enemyBuffNames → gate passes → +100% attack self-buff is
         //          GRANTED and couples into the same round's outgoing damage → 20000.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        //
+        // SP-4c-2a (B1): `tauntEnemy()` carries no `stats.hp`, so the targetable-HP floor now
+        // raises it to MIN_TARGETABLE_MAX_HP and the run is positional. Read the per-victim
+        // channel via `focusDealt`, same migration as the Provoke-live case above.
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(20000);
     });
 });
 
@@ -608,26 +615,30 @@ describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Ta
             })
         );
 
+    // SP-4c-2a (B1): `provokeEnemy(...)` carries no `stats.hp` (hacking is the only optional
+    // stat), so the targetable-HP floor raises it to MIN_TARGETABLE_MAX_HP and the run is
+    // positional. Read the per-victim channel via `focusDealt` in all three cases below, same
+    // migration as the Task 6 Provoke-live case above.
     it('hacking 0 → landing 0 → TIMED Provoke NEVER lands → gated grant never fires', () => {
         idCounter = 0;
         const result = runWith(provokeEnemy(0));
         // Provoke resisted every round → tank never Provoked → +100% attack grant never fires.
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(10000);
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(10000);
     });
 
     it('hacking 200 → landing 1 → TIMED Provoke ALWAYS lands → gated grant fires round 2', () => {
         idCounter = 0;
         const result = runWith(provokeEnemy(200));
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(20000);
     });
 
     it('omitted hacking → defaults to 200 → 100% landing (byte-identical to Task 6)', () => {
         idCounter = 0;
         const result = runWith(provokeEnemy(undefined));
-        expect(result.rounds[0].directDamage).toBe(10000);
-        expect(result.rounds[1].directDamage).toBe(20000);
+        expect(focusDealt(result.rounds[0])).toBe(10000);
+        expect(focusDealt(result.rounds[1])).toBe(20000);
     });
 });
 

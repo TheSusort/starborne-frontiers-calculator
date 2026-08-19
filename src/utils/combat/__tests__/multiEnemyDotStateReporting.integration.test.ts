@@ -116,10 +116,13 @@ const damageKit = (multiplier: number): ShipSkills => ({
  *  and a zero-damage focus keeps every enemy alive for the whole window. */
 const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
     // SP-4b-2b: a run needs an opponent. Every positional case overrides this with its own
-    // `inertEnemy` roster; the default is the documented 0-MAX-HP "pressure source" that the
-    // legacy-sink case below depends on (see its comment). The id is deliberately NOT the shared
-    // fixture's default `e1` — this file uses `'e1'` for a specific positioned carrier, and
-    // reusing it would conflate two different actors across the file.
+    // `inertEnemy` roster. The default was written as the documented 0-MAX-HP "pressure source",
+    // which is how the dummy-sink case below used to stay non-positional; SP-4c-2a's floor
+    // (`withTargetableHp` in normalizeRoster.ts) raises it to MIN_TARGETABLE_MAX_HP, so that case
+    // no longer depends on it being unhittable and reads the changed behaviour instead (see its
+    // comment). The `hp: 0` is kept only so the shape stays recognisable in git history. The id is
+    // deliberately NOT the shared fixture's default `e1` — this file uses `'e1'` for a specific
+    // positioned carrier, and reusing it would conflate two different actors across the file.
     enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: 0,
     crit: 0,
@@ -212,16 +215,25 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
         ]);
     });
 
-    it('a NON-positional run still reports the dummy sink (legacy path unchanged)', () => {
-        // The dummy `enemy` is the DoT carrier and stays in the turn order, exactly as before this
-        // fix. The carrier list is then [enemy], so the reads are byte-identical to the old closure.
+    it('BEHAVIOUR CHANGE (SP-4c-2a): the dummy sink still REPORTS its containers, but no longer TICKS them (dropped from the turn order)', () => {
+        // The dummy `enemy` actor object still exists and still carries the seeded containers —
+        // the D3 reporting fields (activeCorrosionStacks/activeDoTStates/...) walk every
+        // enemy-side actor's containers regardless of turn participation, so the dummy is still
+        // COUNTED here.
         //
         // SP-4b-2b: this used to get there by passing NO roster. A roster is now required, and
         // omitting `target`/`pattern` does NOT keep a run non-positional (`normalizeCombatRoster`
-        // fills both). The remaining non-positional shape is BASE's 0-MAX-HP "pressure source":
-        // `resolvesPositionalVictim` finds nobody targetable (positionalBinding.ts:60-70), so the
-        // carrier list stays [enemy] and every number below is unchanged. (SP-4c must revisit this
-        // case when it deletes the dummy.)
+        // fills both). The remaining non-positional shape was BASE's 0-MAX-HP "pressure source":
+        // `resolvesPositionalVictim` found nobody targetable (positionalBinding.ts:69-79).
+        //
+        // SP-4c-2a's targetable-HP floor closes THAT shape too — the same 0-max-HP enemy is now
+        // raised to MIN_TARGETABLE_MAX_HP, `hasPositionedEnemyRoster` is constant true, and
+        // `dummyEnemyIsVestigial` flips true: the dummy is dropped from the TURN ORDER, so its
+        // own per-victim DoT tick (which normally runs during its turn, decrementing
+        // `ticksRemaining`) no longer fires this round. This is a REAL BEHAVIOUR CHANGE, not test
+        // drift: `ticksRemaining` is now ONE MORE than before (5 vs 4, 9 vs 8) because the one
+        // tick that used to happen this round didn't. The counts/stacks themselves are unaffected
+        // — only the decrement timing moved.
         const row = runCombat({
             ...BASE,
             shipSkills: { slots: [] },
@@ -235,8 +247,8 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
         expect(row.activeCorrosionStacks).toBe(6);
         expect(row.activeBombCount).toBe(1);
         expect(row.activeDoTStates).toEqual([
-            { type: 'corrosion', tier: 9, stacks: 6, ticksRemaining: 4 },
-            { type: 'bomb', tier: 100, stacks: 1, ticksRemaining: 8 },
+            { type: 'corrosion', tier: 9, stacks: 6, ticksRemaining: 5 },
+            { type: 'bomb', tier: 100, stacks: 1, ticksRemaining: 9 },
         ]);
     });
 

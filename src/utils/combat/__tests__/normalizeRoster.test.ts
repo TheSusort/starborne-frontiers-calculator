@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeCombatRoster } from '../normalizeRoster';
+import { normalizeCombatRoster, MIN_TARGETABLE_MAX_HP } from '../normalizeRoster';
 import {
     DEFAULT_ATTACKER_SLOT,
     DEFAULT_ENEMY_SLOT,
@@ -356,9 +356,76 @@ describe('normalizeCombatRoster — fenced in both directions', () => {
             target,
             pattern,
             teamActors: [{ id: 't1', position: 'T2', target, pattern }] as never,
-            enemyAttackers: [{ ...enemyInput('e1', 'T2'), target, pattern }],
+            enemyAttackers: [
+                {
+                    ...enemyInput('e1', 'T2'),
+                    // An ARBITRARY positive hp (12_345), deliberately NOT MIN_TARGETABLE_MAX_HP.
+                    // `withTargetableHp` is fill-if-absent-or-<=0, not a `Math.max` clamp, so any
+                    // positive value already leaves the input untouched — the floor has nothing to
+                    // raise here regardless of which positive number is chosen. Picking an arbitrary
+                    // value rather than the floor's own constant keeps this fence honest as "nothing
+                    // is invented when everything is given" even if the fill logic is ever tightened
+                    // into a clamp: a fixture pinned to the floor's exact value would keep passing
+                    // under a clamp (which also leaves it untouched, being already at the minimum),
+                    // silently losing its ability to catch that change. An arbitrary value fails
+                    // loudly under a clamp instead, because a clamp WOULD raise it.
+                    stats: { ...enemyInput('e1', 'T2').stats, hp: 12_345 },
+                    target,
+                    pattern,
+                },
+            ],
         });
         const out = normalizeCombatRoster(input);
         expect(out).toEqual(input);
+    });
+});
+
+describe('normalizeCombatRoster — targetable HP floor', () => {
+    const zeroHpEnemy = (id: string) => ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, speed: 10, hp: 0 },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    it('floors an explicit 0 max HP to MIN_TARGETABLE_MAX_HP', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [zeroHpEnemy('e1')] }));
+        expect(out.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
+    });
+
+    it('floors an ABSENT max HP too — the boundary default was 0', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [enemyInput('e1')] }));
+        expect(out.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
+    });
+
+    it('leaves a real max HP untouched', () => {
+        const real = { ...zeroHpEnemy('e1'), stats: { ...zeroHpEnemy('e1').stats, hp: 5_000 } };
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [real] }));
+        expect(out.enemyAttackers[0].stats.hp).toBe(5_000);
+    });
+
+    it('floors EVERY member of an all-zero roster, not just the anchor', () => {
+        const out = normalizeCombatRoster(
+            baseInput({ enemyAttackers: [zeroHpEnemy('e1'), zeroHpEnemy('e2')] })
+        );
+        expect(out.enemyAttackers.map((e) => e.stats.hp)).toEqual([
+            MIN_TARGETABLE_MAX_HP,
+            MIN_TARGETABLE_MAX_HP,
+        ]);
+    });
+
+    it('does NOT floor the focus attacker — hp 0 is legitimate there', () => {
+        const out = normalizeCombatRoster(
+            baseInput({ hp: 0, enemyAttackers: [zeroHpEnemy('e1')] })
+        );
+        expect(out.hp).toBe(0);
+    });
+
+    it('is pure — the caller’s nested stats object is never mutated', () => {
+        const input = baseInput({ enemyAttackers: [zeroHpEnemy('e1')] });
+        const before = input.enemyAttackers[0].stats.hp;
+        normalizeCombatRoster(input);
+        expect(input.enemyAttackers[0].stats.hp).toBe(before);
+        expect(before).toBe(0);
     });
 });

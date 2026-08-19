@@ -6,10 +6,12 @@
  * the engine may accommodate an under-specified input — that is the whole point of having a
  * boundary, and it is what lets SP-4c delete the dummy and its seven clusters of fallbacks.
  *
- * Three responsibilities, and deliberately no fourth:
+ * Four responsibilities, and deliberately no fifth:
  *   (a) auto-placement       — a deterministic slot for any actor with `position == null`
  *   (b) targeting synthesis  — DEFAULT_FRONT_ENEMY_TARGET + DEFAULT_BASE_PATTERN when ABSENT
- *   (c) nothing else         — it does not invent enemies, fill in stats, or choose a mode
+ *   (c) targetable HP        — a NON-POSITIVE or absent enemy max HP is floored, so every enemy
+ *                              attacker is a hittable ship
+ *   (d) nothing else         — it does not invent enemies, fill in other stats, or choose a mode
  *
  * Pure: the caller's input object and its nested arrays are never mutated.
  */
@@ -91,6 +93,50 @@ function withTargeting<T extends { target?: ParsedTarget; pattern?: ParsedPatter
     };
 }
 
+/**
+ * The max HP an enemy attacker is raised to when the caller supplied none or supplied `<= 0`.
+ *
+ * `1_000_000` is not a fresh invention: `healingEngineAdapter`'s `LEGACY_SINK_HP` already fills an
+ * ABSENT enemy HP with exactly this number, for exactly this reason ("a 0-HP enemy silently zeroes
+ * every damage-dealt rider"). Its `??` misses an EXPLICIT 0, which is what 288 of the 307 measured
+ * all-zero-roster runs pass. Same number here, one layer lower, catching both.
+ */
+export const MIN_TARGETABLE_MAX_HP = 1_000_000;
+
+/**
+ * Responsibility (c): every enemy attacker is a HITTABLE ship.
+ *
+ * `isTargetableRosterMember` (positional + max hp > 0) is what `hasPositionedEnemyRoster` is built
+ * from, and a roster holding no targetable member is the ONE shape that still reached the vestigial
+ * dummy's scalar sink — measured at 412 credits across 26 files on `main` @ `8d2c2a61`, every one of
+ * them this shape. Flooring here makes `hasPositionedEnemyRoster` constant `true` below the
+ * boundary, so the positional path is taken on every run and player damage books per-victim.
+ *
+ * UNIFORM, not conditional on the side being untargetable. The census found 3,004 runCombat
+ * invocations and ZERO mixed rosters (a 0-max-HP member alongside a targetable one), so the two
+ * rules are behaviourally identical on the corpus — and the uniform one retires the whole class
+ * instead of one instance, with no `if` for a later rung to have to reason about.
+ *
+ * ENEMY SIDE ONLY, for two independent reasons.
+ *  1. The focus attacker's `hp` is legitimately 0: most direct-engine fixtures omit it, so the focus
+ *     starts at `currentHp === 0` having never been destroyed. Reading that as a corpse is the
+ *     mistake that failed 346 tests during 4c-1 (spec §3.3).
+ *  2. `isTargetableRosterMember` IS asked about player actors, so flooring them would close a
+ *     divergence that must stay open. `resolvesPositionalVictim` calls
+ *     `opposingLiving.some(isTargetableRosterMember)` (`positionalBinding.ts:102`), and for an
+ *     ENEMY-side actor `opposingLiving` is the PLAYER roster — so a 0-max-HP focus plus 0-max-HP
+ *     allies is still `isPositional` true / `resolvesPositionalVictim` false. That mirror is what
+ *     `perVictimDotTick.integration.test.ts`'s GATE RETENTION case pins, and it is why the two
+ *     predicates must stay distinct rather than collapsing once the enemy side is floored. See
+ *     `resolvesPositionalVictim`'s own doc for the same statement from the other direction.
+ */
+function withTargetableHp<T extends { stats: { hp?: number } }>(actor: T): T {
+    const hp = actor.stats.hp;
+    return hp !== undefined && hp > 0
+        ? actor
+        : { ...actor, stats: { ...actor.stats, hp: MIN_TARGETABLE_MAX_HP } };
+}
+
 export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInput {
     // The contract (SP-4b-2b): every run has at least one opponent. This is a validation guard
     // rather than an accommodation on purpose — the boundary is the ONE place that accommodates an
@@ -141,7 +187,7 @@ export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInp
         // `enemyAttackers` is provably truthy here (the guard above), so — unlike `teamActors`,
         // which is genuinely optional — there is no `: {}` branch to fall back to.
         enemyAttackers: enemyAttackers.map((e, i) => ({
-            ...withTargeting(e),
+            ...withTargetableHp(withTargeting(e)),
             position: enemySlots[i],
         })),
     };

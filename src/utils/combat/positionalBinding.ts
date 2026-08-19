@@ -30,7 +30,16 @@ export interface ActorTargetingStatus {
  * has since been killed keeps the run positional, so the cast whiffs against the corpse rather
  * than teleporting back onto the legacy dummy sink and recording phantom damage (see the
  * `DELIBERATELY no selectedEnemy != null precondition` note at engine.ts's focus cast site, and
- * `deathFallback.integration.test.ts`).
+ * `deathFallback.integration.test.ts`). That choice is now load-bearing in a second way: re-keying
+ * it to `currentHp` would reopen the "placed but unhittable" shape from the corpse end, undoing
+ * SP-4c-2a's floor — which is why the tripwires that assert the shape is gone name this line too.
+ *
+ * WHICH SIDE CAN STILL BE UNTARGETABLE (SP-4c-2a). `normalizeCombatRoster`'s `withTargetableHp`
+ * floors every ENEMY attacker's max HP to `MIN_TARGETABLE_MAX_HP`, so `false` from this predicate is
+ * unreachable for an enemy actor below the boundary. The floor is ENEMY-SIDE ONLY by design (see its
+ * own note: the focus's `hp` must stay untouched or a never-alive focus reads as a corpse), so a
+ * PLAYER actor with max hp 0 still reads `false` — the shape a caller can still build, and the one
+ * `perVictimDotTick.integration.test.ts`'s player-side GATE RETENTION case is written against.
  */
 export function isTargetableRosterMember(a: CombatActor): boolean {
     return a.position !== undefined && a.stats.hp > 0;
@@ -68,6 +77,16 @@ export function isPositional(
  * Before the SP-4b-1 normalization boundary, "nobody carries a position" was the de-facto signal
  * for "this roster is pressure, not targets", so the mismatch was unreachable. Normalization
  * auto-places every actor, so the signal now has to be asked for explicitly.
+ *
+ * SP-4c-2a NARROWED WHERE THAT DIVERGENCE IS STILL REACHABLE, and the direction matters when reading
+ * the gates built on this. `withTargetableHp` floors every ENEMY attacker's max HP, so for an
+ * OPPOSING ROSTER OF ENEMIES this predicate now agrees with `isPositional` on every input a caller
+ * can construct — the shape described above is retired, and the tripwires in
+ * `dummyEnemyTurnGate.test.ts` / `perVictimDotTick.integration.test.ts` /
+ * `bombSplashOnDeath.integration.test.ts` pin it as such. The floor is enemy-side only, so for an
+ * OPPOSING ROSTER OF PLAYERS (what an enemy-side caller passes) the divergence is fully intact: a
+ * 0-max-HP focus plus 0-max-HP allies is still `isPositional` true / `resolvesPositionalVictim`
+ * false. Keeping the two predicates distinct is therefore still live, not merely historical.
  *
  * Keyed on MAX hp, so an actor KILLED mid-battle still keeps the run positional and the cast
  * whiffs against the corpse instead of teleporting back onto the legacy dummy sink and recording

@@ -86,6 +86,15 @@ export const EnemySettingsPanel: React.FC<EnemySettingsPanelProps> = ({
                     <Input
                         label="Enemy HP"
                         type="number"
+                        // `min` is a browser-level HINT only (it reaches the DOM because `Input`
+                        // spreads `...props`); the handler deliberately does NOT clamp. The engine's
+                        // normalization boundary is the ONE place that accommodates an
+                        // under-specified input — `MIN_TARGETABLE_MAX_HP` in normalizeRoster.ts
+                        // floors an absent or zero enemy max HP — and a second clamp here would be a
+                        // second accommodation site, the worse of the two: `Math.max(1, …)` turns a
+                        // cleared field into `hp: 1`, which the wipe rule ends in round 1, and it
+                        // makes a leading digit sticky (delete-then-retype 500000 yields 1500000).
+                        min="1"
                         value={enemyHp}
                         onChange={(e) => onEnemyHpChange(parseInt(e.target.value) || 0)}
                     />

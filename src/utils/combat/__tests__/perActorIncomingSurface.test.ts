@@ -147,9 +147,12 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
 // SP-4b-2b: this used to pass NO enemy roster at all, which made the singular vestigial `enemy`
 // the target (`dpsEnemyTarget`) and the bucket key `'enemy'`. An empty roster is now a validation
 // error, and with any roster present the sink is bypassed entirely — measured: the sink records NO
-// per-actor intake at all, even via the 0-max-HP "pressure source" shape. So the U5 property has
-// MOVED to the real opponent rather than vanished, and the bucket key moves with it (M1). The
-// pinned 5000 is unchanged.
+// per-actor intake at all. (That measurement was taken against the 0-max-HP "pressure source" shape
+// as well as a normal roster; SP-4c-2a has since retired that shape — `withTargetableHp` in
+// normalizeRoster.ts floors every enemy attacker's max HP — so it is not even constructible now,
+// which only narrows the ways the sink could be reached.) So the U5 property has MOVED to the real
+// opponent rather than vanished, and the bucket key moves with it (M1). The pinned 5000 is
+// unchanged.
 const NON_POSITIONAL: CombatEngineInput = {
     enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
     attack: 5_000,

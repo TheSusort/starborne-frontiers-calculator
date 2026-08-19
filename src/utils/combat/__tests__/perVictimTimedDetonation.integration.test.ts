@@ -160,16 +160,14 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     ...overrides,
 });
 
-// Non-positional BASE: a single focus dummy enemy, NO position/target/pattern/enemyAttackers — the
-// legacy `:4794` focus-dummy timed path. Timed containers are seeded on the focus dummy ('enemy').
+// Formerly-non-positional BASE: a single enemy, NO position/target/pattern given explicitly —
+// SP-4b-2b's `normalizeCombatRoster` auto-fills both, and SP-4c-2a's targetable-HP floor now
+// raises this 0-max-HP "pressure-source" enemy to MIN_TARGETABLE_MAX_HP, so this run is
+// positional too (it used to reach the legacy `:4794` focus-dummy timed path instead). Timed
+// containers are seeded on this real, now-floored enemy ('pressure-source') rather than the
+// dummy. The id is deliberately distinct from the shared fixture's default so it cannot be
+// confused with a positioned carrier elsewhere in this file.
 const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent, and merely omitting `target`/`pattern` does NOT keep one
-    // non-positional (`normalizeCombatRoster`'s `withTargeting` fills both). The remaining
-    // non-positional shape is the documented 0-MAX-HP "pressure source": `resolvesPositionalVictim`
-    // finds nobody targetable (positionalBinding.ts:60-70), so the cast stays on the legacy dummy
-    // sink and every number in the cases below is byte-identical to the pre-branch run. The id is
-    // deliberately distinct from the shared fixture's default so it cannot be confused with a
-    // positioned carrier elsewhere in this file. (SP-4c must revisit these cases with the dummy.)
     enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: FOCUS_ATTACK,
     crit: 0,
@@ -325,17 +323,25 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
         expect(midTurns.length).toBe(1);
     });
 
-    it('REGRESSION (non-positional): a timed bomb on the focus dummy bursts EXACTLY as today', () => {
+    it('REGRESSION: a timed bomb on the (now-floored, positional) sole enemy bursts EXACTLY as today', () => {
         idc = 0;
-        // No position/target/pattern/enemyAttackers → the legacy `:4794` focus-dummy timed path.
-        // Seed a 3 × 1000 timed bomb (countdown 2) on the focus dummy ('enemy'). On the dummy's
-        // OWN turn the countdown decrements: round 1 → 1 (no burst), round 2 → 0 (BURST = 3000).
-        // This is the existing behaviour PR2 must NOT disturb — it should PASS now.
+        // SP-4c-2a: `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
+        // MIN_TARGETABLE_MAX_HP (normalizeRoster.ts), so this run is positional too — the tap
+        // targets the real, now-floored enemy (its real id, 'pressure-source') rather than the
+        // legacy 'enemy' dummy sink. That dummy still exists (engine.ts still creates it
+        // unconditionally) but is inert on a positional run — dropped from the turn order and never
+        // credited — so tapping it here would observe nothing. Its deletion is rung 4c-2d's job.
+        // The invariant is unchanged: the round-row scalar
+        // `detonationDamage` is `focus.detonation + perActorDetonation[focusActorId]` (engine.ts),
+        // which folds in the focus's positional detonation credit rather than suppressing it like
+        // `directDamage` — so it still reads the RAW burst once the tap lands on the real actor.
+        // Seed a 3 × 1000 timed bomb (countdown 2). On its OWN turn the countdown decrements:
+        // round 1 → 1 (no burst), round 2 → 0 (BURST = 3000).
         const { events, result } = collect(
             NONPOS_BASE({
                 __testTapActors: (actors: CombatActor[]) => {
                     actors
-                        .find((a) => a.id === 'enemy')
+                        .find((a) => a.id === 'pressure-source')
                         ?.pendingBombs.push(timedBomb(1000, 3, 2, 'attacker'));
                 },
             })
@@ -343,7 +349,7 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
 
         // Round 1: bomb decremented only, detonationDamage 0.
         expect(result.rounds[0].detonationDamage).toBe(0);
-        // Round 2: burst 3000 surfaced via the focus dummy's detonation channel (RoundData field).
+        // Round 2: burst 3000 surfaced via the detonation channel (RoundData field).
         expect(result.rounds[1].detonationDamage).toBe(3000);
 
         // Exactly one bomb-detonated, in round 2, attributed to the applier, damage 3000.
