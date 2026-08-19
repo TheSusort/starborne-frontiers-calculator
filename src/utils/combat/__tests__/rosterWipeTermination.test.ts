@@ -108,4 +108,57 @@ describe('roster-wipe termination', () => {
         expect(destroyed()).toContain('attacker');
         expect(result.rounds.length).toBeGreaterThan(1);
     });
+    it('START-OF-ROUND KILL: a wipe outside any turn ends the round before an actor acts', () => {
+        // CodeRabbit #329: the wipe check sits at the end of a TURN, but damage can also land
+        // outside one — start-of-round and end-of-round reactive drains both credit damage
+        // (Rhodium, Grif, FrontLine, Chakara and Incinerator all carry such passives). If a drain
+        // empties a side, the turn loop must not go on to select an actor.
+        //
+        // Enemy at 25 000. Start-of-round hit 10 000, cast 10 000:
+        //   R1: drain → 15 000, focus cast → 5 000.
+        //   R2: drain → DEAD, before any actor is selected.
+        // So round 2 must contain NO turns at all.
+        const { result, actorsThatTookTurns, destroyed } = collectTurns({
+            ...bareInput(),
+            numRounds: 4,
+            enemyAttackers: bareEnemy({ stats: { hp: 25_000 } }),
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'a1',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 100 },
+                            },
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            {
+                                id: 'p1',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'start-of-round',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 100 },
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+
+        expect(destroyed()).toContain(BARE_ENEMY_ID);
+        // The focus acted in round 1 (proves the fixture ran), but NOT in round 2 — the
+        // start-of-round drain wiped the side before selection.
+        expect(actorsThatTookTurns(1)).toContain('attacker');
+        expect(actorsThatTookTurns(2)).toEqual([]);
+        expect(result.rounds).toHaveLength(2);
+    });
 });

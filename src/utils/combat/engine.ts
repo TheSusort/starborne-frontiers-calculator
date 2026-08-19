@@ -8622,6 +8622,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                 return undefined;
             };
             for (let actor = selectNext(); actor; actor = selectNext()) {
+                // SP-4c-1: a side can be wiped OUTSIDE a turn. Both the start-of-round drain
+                // (drain point (a), above) and the previous round's end-of-round drain credit real
+                // damage — Rhodium, Grif, FrontLine, Chakara and Incinerator all carry passives
+                // that fire there. Without this check the loop would go on to select an actor and
+                // let it cast into an empty board, reintroducing exactly the whiff this rule
+                // deletes. Checked BEFORE the turn body, so no actor acts after the wipe.
+                if (sideIsWiped()) {
+                    matchOver = true;
+                    break;
+                }
                 if (++selectionGuard > MAX_SELECTION_TICKS) {
                     throw new Error(
                         `combat round ${r}: turn selection did not terminate (pending actions not draining)`
@@ -11341,7 +11351,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         // exits and independent of both: this one fires in EVERY mode, whereas the focus-death
         // exit below is DPS-only (two-team and healing runs legitimately continue past the focus's
         // death — twoTeamBattle.test.ts and healingGoldenParity both pin that).
-        if (matchOver) break;
+        // Re-evaluated rather than reading the flag alone: the round-ended drain and the
+        // post-round death drain both run AFTER the turn loop, so a side can be wiped between the
+        // last turn and here. The row for this round is already pushed either way.
+        if (matchOver || sideIsWiped()) break;
         if (dpsEnemyTarget && enemy.destroyedRound !== undefined) break;
         // Focus-death exit, sibling of the enemy-death one above. The focus attacker can now be
         // killed (a real positioned enemy attacks back), and in a DPS-style run it never acts again —
