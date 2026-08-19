@@ -1640,6 +1640,20 @@ export interface IntentExecContext {
      *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
      *  flag, byte-identical for single-opponent fixtures). */
     affinityOf?: (actorId: string) => AffinityName | undefined;
+    /** SP-4c-2b: the LIVE debuff-landing chance (0..1) for `ownerId`'s infliction against
+     *  `victimId` — the applier's effective hacking vs THAT victim's effective security, with the
+     *  two actors' own affinity matchup applied. The reactive path's landing roll must be measured
+     *  against the enemy it is actually inflicting on ("an enemy shoots Flamel; Flamel's passive
+     *  inflicts Speed Down + Stasis on IT"), not against `PlayerActorRuntime.liveDebuffLandingChance`
+     *  — a chance the owner computed for ITS OWN turn target on some earlier turn. That reuse was
+     *  wrong in kind from the start and became wrong in effect once SP-4c-2b let an ally-targeted
+     *  cast resolve NO victim: the cached value then went to 0 and auto-resisted every reactive
+     *  inflict the owner would ever make.
+     *
+     *  Engine-populated from the same combat-wide `allActorsById` map `affinityOf`/`actorById` use.
+     *  Returns undefined when either id does not resolve. Optional — absent in unit-test ctxs, where
+     *  every consumer falls back to the old cached-chance chain and stays byte-identical. */
+    liveDebuffLandingChanceFor?: (ownerId: string, victimId: string) => number | undefined;
     /** Any actor's CURRENT effective attack (base folded with its live buffs), for a reactive
      *  that must snapshot the owner's attack before the owner has taken a turn this run and so has
      *  no `lastTurnCtxByActor` entry. The reactive bomb applier is the only consumer: a faster
@@ -3228,9 +3242,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // the applier's precomputed-vs-representative static flag). affinityOf is absent in
             // unit-test ctxs → undefined target affinity → static fallback (byte-identical for
             // single-opponent).
+            // SP-4c-2b: the third argument closes the other half of the same per-target seam the
+            // second one opened. Task A made the 'apply' arm resolve against the ACTUAL target's
+            // AFFINITY; the 'inflict' arm was still drawing against the owner's cached
+            // `liveDebuffLandingChance` — its own turn TARGET's security, from an unrelated earlier
+            // turn. Now it draws against THIS victim's security (owner hacking vs `debuffTargetId`
+            // security, affinity matchup applied). Undefined delegate (unit ctxs) → the closure's
+            // `?? liveDebuffLandingChance ?? 1` chain → byte-identical.
             if (
                 !blockedByImmunity &&
-                owner.landsTimedEnemyApplication(cfg.application, ctx.affinityOf?.(debuffTargetId))
+                owner.landsTimedEnemyApplication(
+                    cfg.application,
+                    ctx.affinityOf?.(debuffTargetId),
+                    ctx.liveDebuffLandingChanceFor?.(intent.ownerId, debuffTargetId)
+                )
             ) {
                 ctx.statusEngine.applyTimedAbilityStatus(
                     ctx.round,
@@ -3371,19 +3396,46 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // triggering event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
         // Corrosion II … on all cleansed enemies"), mirroring the all-enemies-over-aoeVictimIds
         // pattern but keyed off the reactive event's actual cleansed ids — NOT the single-victim /
-        // dummy sink. ONE landing draw gates the whole fire (like the single-victim path below);
-        // the per-victim Block-Debuff resist is checked inside the loop (no RNG → order-safe).
+        // dummy sink. The per-victim Block-Debuff resist is checked inside the loop.
+        // SP-4c-2b MOVED THE LANDING DRAW INSIDE THE LOOP. It used to be ONE draw gating the whole
+        // fire, against the owner's cached turn-target chance. Under the per-target ruling there is
+        // no single "the enemy" for a fan-out to measure itself against, so each recipient now draws
+        // its own gate at its OWN hacking-vs-security chance — which is exactly what the sibling
+        // `debuff` branch already does ("One draw PER TARGET, matching the established per-victim
+        // precedent").
+        //
+        // TWO CONSEQUENCES of moving it, both deliberate, both measured as moving nothing (the only
+        // caller is `pestilenceEnemyCleanseCorrosion.integration`):
+        //  1. DRAW CARDINALITY for this branch goes from 1 to N.
+        //  2. THE LOOP IS NO LONGER RNG-FREE, so this note's retained "(no RNG → order-safe)" tail
+        //     had to go: it was a claim about a loop that only checked immunity. What is PRESERVED is
+        //     the block-debuff behaviour, and deliberately so — the immunity check still runs BEFORE
+        //     the draw (see the loop body), so a Block-Debuff victim auto-resists, emits its
+        //     `blockDebuffResist` unconditionally exactly as before, and consumes NO gate draw. That
+        //     ordering matches both siblings (the `debuff` branch's `&&` short-circuit and the
+        //     single-victim DoT path's early return), and it is what keeps this branch's only
+        //     behavioural change the per-victim CHANCE rather than the draw schedule.
         const cleansedEnemyIds = intent.eventCtx?.cleansedEnemyIds;
         if (
             intent.ability.target === 'all-enemies' &&
             cleansedEnemyIds &&
             cleansedEnemyIds.length > 0
         ) {
-            const liveLanding = owner.liveDebuffLandingChance ?? 1;
-            if (!owner.debuffLandingGate(liveLanding)) return;
             for (const cid of cleansedEnemyIds) {
                 const victim = ctx.actorById?.(cid);
                 const victimId = victim?.id ?? cid;
+                // IMMUNITY BEFORE THE DRAW, aligned with BOTH siblings (final review, minor 4). The
+                // sibling `debuff` branch folds immunity into its landing condition via an `&&`
+                // short-circuit, and the single-victim DoT path below returns before its draw — so the
+                // engine's established rule is "a Block-Debuff victim auto-resists and no gate is
+                // drawn for it". My first draft of this loop drew first, on the argument that the
+                // landing roll is the earlier question. That argument is defensible in isolation but
+                // it made this the ONLY site of its kind, and it had a measurable cost: a
+                // block-carrying victim consumed up to N-1 draws that the old single pre-branch draw
+                // never took, shifting the owner's gate schedule for reasons unrelated to the fix.
+                // Aligned instead of documented-as-divergent: consistency with two siblings beats a
+                // local rationale, and it keeps this branch's only intended change the per-victim
+                // CHANCE rather than the draw schedule.
                 if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
                     emitBlockDebuffResist(
                         ctx.bus,
@@ -3394,6 +3446,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     );
                     continue;
                 }
+                const liveLanding =
+                    ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId) ??
+                    owner.liveDebuffLandingChance ??
+                    1;
+                if (!owner.debuffLandingGate(liveLanding)) continue;
                 landDotOn(victim, victimId);
             }
             return;
@@ -3430,10 +3487,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             return;
         }
         // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
-        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate). Reads the
-        // LIVE per-target chance (A2 Task 4, set each turn by runPlayerTurn); `?? 1` is a neutral
-        // guard (the owner applied this DoT on its own turn → the field is set).
-        const liveLanding = owner.liveDebuffLandingChance ?? 1;
+        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate).
+        // SP-4c-2b: that chance is now resolved against THIS DoT's own victim (`victimId`, resolved
+        // just above), not read off the owner's cached turn-target chance. Same correction as the
+        // sibling `debuff` branch, same reason: a reactive DoT lands on the enemy the triggering
+        // event carries, so its landing roll must be that enemy's hacking-vs-security. The
+        // `?? owner.liveDebuffLandingChance ?? 1` tail keeps unit ctxs (no delegate) byte-identical
+        // and keeps the old neutral guard for a read before the owner's first turn.
+        const liveLanding =
+            ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId) ??
+            owner.liveDebuffLandingChance ??
+            1;
         if (!owner.debuffLandingGate(liveLanding)) return;
         landDotOn(victim, victimId);
         return;

@@ -30,7 +30,7 @@ import {
     skillNeedsOpposingVictim,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
-import { foldActorBuffTotals, effectiveStatsOf } from './effectiveStats';
+import { foldActorBuffTotals, effectiveStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -748,7 +748,8 @@ export function buildEnemyPlayerActorRuntime(
         extendChanceGate: enemyExtendChanceGate,
         landsTimedEnemyApplication: (
             application?: 'inflict' | 'apply',
-            targetAffinity?: AffinityName
+            targetAffinity?: AffinityName,
+            targetLandingChance?: number
         ): boolean =>
             application === 'apply'
                 ? // Target-aware (Task A): when the ACTUAL target's affinity is supplied, re-resolve
@@ -759,7 +760,14 @@ export function buildEnemyPlayerActorRuntime(
                   targetAffinity !== undefined
                     ? getAffinityMatchup(e.affinity, targetAffinity) !== 'disadvantage'
                     : !affinityDisadvantage
-                : enemyDebuffLandingGate(runtime.liveDebuffLandingChance ?? 1), // fresh timed inflictions draw against this enemy's LIVE hacking-vs-security landing chance (?? 1 — neutral guard for a read before the owner's first turn)
+                : // SP-4c-2b: `targetLandingChance` is THIS victim's own hacking-vs-security chance,
+                  // supplied by the reactive path (which knows the victim it is inflicting on).
+                  // Falling back to `runtime.liveDebuffLandingChance` keeps the cast path — whose
+                  // turn target IS the actor's own — byte-identical, and keeps a caller with no
+                  // victim in hand on the old neutral guard.
+                  enemyDebuffLandingGate(
+                      targetLandingChance ?? runtime.liveDebuffLandingChance ?? 1
+                  ),
         selfBuffLookup: new Map(),
         enemyDebuffLookup,
     };
@@ -1702,20 +1710,35 @@ function convertHitToSelfDot(
  * returned `tb.legacyVictim` because no living positional victim resolved. That is strictly weaker
  * than "the legacy sink was **CREDITED**", and the two come apart. A consultation is followed by a
  * scalar credit only when the roster was never targetable (every placed opposing actor at max
- * `hp === 0`) or empty. It is followed by **no credit at all** in the KNOWN NON-ZERO RESIDUE: the
- * mid-run **whiff window** — a roster that WAS targetable and has since been killed, where the apply
- * gate correctly goes positional, finds no anchor and books nothing, while the scalar credit is
- * suppressed because the positional branch was taken. Measured on the shared bare roster, 4 rounds:
- * an enemy at max hp 5 000 dies to the round-1 cast and rounds 2-4 each take the fallback with
- * `rawTotals.cumulative === 0` — 3 takes, 0 credited. That whiff is deliberate, documented
- * behaviour (see the focus cast site's "the correct behaviour is for the attacker to WHIFF" and
- * `damageChannelAccounting.integration.test.ts`), not a defect to be fixed.
+ * `hp === 0`) or empty.
  *
- * CONSEQUENCE FOR SP-4c: do NOT treat "this counter is zero for every run" as the entry condition —
- * zero is unreachable while the whiff window exists, and SP-4c is not deleting the whiff. Consulting
- * is the right thing to count precisely BECAUSE it is what keeps `legacyVictim` reachable and
- * therefore undeletable. SP-4c must handle that path explicitly — giving the whiff a non-dummy way
- * to express "no living victim" — rather than expecting a zero here.
+ * ⚠️ SP-4c-2b NARROWED THIS COUNTER TO THE **ENEMY SIDE**. `selectTurnTarget` now returns
+ * `tgt: undefined` for a player actor that resolved nobody, WITHOUT touching this counter, and
+ * increments `noVictimPlayerTurnCount` (below) instead. That is not bookkeeping taste: this
+ * counter's whole definition is "the fallback object was CONSULTED", and after 4c-2b the player
+ * side has no fallback object to consult — folding those turns in here would make the name false.
+ * So a player-side no-victim turn is invisible to this counter BY DESIGN; read the new one.
+ * The dummy ghost is still the player side's `tb.legacyVictim` (4c-2d deletes it), it is simply
+ * never handed out anymore.
+ *
+ * WHAT THAT LEAVES HERE: enemy-side consultations of `legacyVictim: healTarget`, which split TWO
+ * ways on `b22d2870` and both halves count here — an earlier draft of this paragraph named only the
+ * first, which understated the counter by a fifth:
+ *   • 1,341 rows where the heal anchor is itself undefined, so the consultation yields no victim and
+ *     the enemy turn takes its cadence-only skip;
+ *   • ~335 rows that resolve to the heal target itself — a REAL player actor, not a dummy at all,
+ *     which is why this counter's zero was never the enemy side's exit condition.
+ * `dummyReachability.test.ts`'s own header carries the same two numbers; keep them in agreement.
+ * Re-homing that anchor is SP-4e's job.
+ *
+ * HISTORICAL NOTE (do not act on it). This block used to name the mid-run **whiff window** — a
+ * roster that WAS targetable and has since been killed — as a KNOWN NON-ZERO RESIDUE of
+ * consultations without credits, and warned SP-4c not to expect a zero here. That residue was
+ * PLAYER-side, and it is gone twice over: SP-4c-1 (#329) ends the fight at the end of the turn that
+ * wipes a side, so no player turn runs against an all-dead roster, and the whole-suite Proxy
+ * measurement on `b22d2870` found 3,206 player-side fallback rows of which **100% had an ally-side
+ * parsed target** and zero were a whiffing enemy-targeted cast (contract §A.1). Whatever remains of
+ * that shape now routes to `noVictimPlayerTurnCount`, not here.
  *
  * Module-level and NOT reset per run: `__resetLegacyVictimFallbackCount` is the test's job.
  */
@@ -1727,20 +1750,55 @@ export function __resetLegacyVictimFallbackCount(): void {
     legacyVictimFallbackCount = 0;
 }
 /**
+ * TEST-ONLY. Counts PLAYER turns that resolved **NO VICTIM** (SP-4c-2b) — an ally-targeted cast with
+ * nobody on the opposing side to anchor on. Distinct from `legacyVictimFallbackCount` above, which by
+ * its own definition counts CONSULTATIONS of a fallback object: after 4c-2b the player side has no
+ * fallback to consult, so folding these turns into that counter would make its name false.
+ *
+ * It is not a credit counter either — nothing is booked on a no-victim turn by construction (the
+ * damage assembly is victim-fenced, so the cast deals literal 0). 4c-2c/4c-2d gate on
+ * `dummySinkCreditCount`; this one exists so `dummyReachability`'s vacuity guard keeps a MOVING
+ * number to assert once `consulted` drops to 0 on the player side — a guard that can only read a
+ * counter which is always 0 proves nothing.
+ *
+ * Module-level and NOT reset per run: `__resetNoVictimPlayerTurnCount` is the test's job.
+ */
+let noVictimPlayerTurnCount = 0;
+export function __getNoVictimPlayerTurnCount(): number {
+    return noVictimPlayerTurnCount;
+}
+export function __resetNoVictimPlayerTurnCount(): void {
+    noVictimPlayerTurnCount = 0;
+}
+/**
  * TEST-ONLY instrumentation, and the COMPANION to `legacyVictimFallbackCount` above. Counts rounds
  * in which damage was actually **BOOKED AGAINST** the vestigial dummy `enemy` — i.e. its HP
  * declined — as opposed to rounds in which the fallback object was merely CONSULTED.
  *
- * WHY BOTH EXIST. The two readings come apart, and only this one can be required to be zero:
- *  • CONSULTED (`legacyVictimFallbackCount`) is non-zero for the mid-run **whiff window** — a
- *    roster that WAS targetable and has since been killed. Selection hands back the dummy, the
- *    apply gate stays positional, nothing is booked. That residue is deliberate behaviour SP-4c is
- *    not deleting, so a global zero there is unreachable.
- *  • CREDITED (this counter) is non-zero only when the scalar channel actually drained the dummy's
- *    HP — which happens exactly when `resolvesPositionalVictim` is false for the whole run, i.e.
- *    the roster is placed but holds no targetable member (every member at max `hp === 0`, the
- *    "pressure source" shape). **This is the number SP-4c can gate on:** zero across every shape
- *    means the dummy absorbed nothing and deleting it loses no accounting.
+ * WHY BOTH EXIST, and what each one reads TODAY. This block is where `noVictimPlayerTurnCount` sends
+ * the next rung ("4c-2c/4c-2d gate on the credit counter"), so it is kept current rather than
+ * appended to.
+ *  • CONSULTED (`legacyVictimFallbackCount`) is now an ENEMY-SIDE-ONLY reading — SP-4c-2b stopped the
+ *    player side consulting anything (see that counter's own doc, which is the authority).
+ *    ⚠️ HISTORICAL, and the same retraction that block carries: this bullet used to say the counter is
+ *    non-zero for the mid-run **whiff window** and therefore "a global zero there is unreachable".
+ *    That residue was PLAYER-side and is gone twice over — SP-4c-1 (#329) ends the fight at the end of
+ *    the turn that wipes a side, and the whole-suite measurement on `b22d2870` found no whiffing
+ *    enemy-targeted player cast at all. `dummyReachability.test.ts` now asserts `consulted: 0` on the
+ *    very shape that used to produce the window. Do not plan around a whiff residue; there is none.
+ *  • CREDITED (this counter) is non-zero when the scalar channel actually drained the dummy's HP.
+ *    ⚠️ NOT "exactly when `resolvesPositionalVictim` is false for the whole run", which this bullet
+ *    used to claim: that named the never-targetable roster as the ONLY route, and SP-4c-2a's
+ *    `MIN_TARGETABLE_MAX_HP` floor made that shape unbuildable at the normalization boundary. There
+ *    are TWO live routes, and the surviving one is the route that paragraph never mentioned:
+ *      1. a roster placed but holding no targetable member (every member at max `hp === 0`) —
+ *         BOUNDARY-FLOORED since 4c-2a, so unreachable through any legal input;
+ *      2. the DUMMY'S OWN DoT-tick turn, which reads the containers the dummy actor itself carries
+ *         and credits the applier's scalar channel. This is the live one:
+ *         `dummyReachability.test.ts`'s LIVENESS case reaches it off an ally-side active target and
+ *         reads `credited: BARE_ROUNDS`. Retiring that turn is 4c-2c's job.
+ *    **This is still the number SP-4c can gate on**, but read it as "no SHIPPED caller reaches the
+ *    sink" rather than "the sink is unreachable" — route 2 is constructible today.
  *
  * WHERE IT IS INCREMENTED, and why that is the only live site. The dummy's HP is landed in exactly
  * two places, both at the round tail:
@@ -2125,7 +2183,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // forward reference is safe. `?? 1` is a neutral guard for a read before the first turn.
     const landsTimedEnemyApplication = (
         application?: 'inflict' | 'apply',
-        targetAffinity?: AffinityName
+        targetAffinity?: AffinityName,
+        targetLandingChance?: number
     ): boolean =>
         application === 'apply'
             ? // Target-aware (Task A): when the ACTUAL target's affinity is supplied, re-resolve the
@@ -2135,7 +2194,11 @@ export function runCombat(rawInput: CombatEngineInput): {
               targetAffinity !== undefined
                 ? getAffinityMatchup(input.affinity, targetAffinity) !== 'disadvantage'
                 : !affinityDisadvantage
-            : debuffLandingGate(attackerRuntime.liveDebuffLandingChance ?? 1);
+            : // SP-4c-2b: per-victim chance when the caller knows its victim (the reactive path);
+              // the cached turn-target chance otherwise (the cast path, byte-identical).
+              debuffLandingGate(
+                  targetLandingChance ?? attackerRuntime.liveDebuffLandingChance ?? 1
+              );
 
     // Boost gear set: per-owner buff-duration extension. Built from the RAW ShipSkills (which
     // already carry the BOOST passive merged by buildShipAbilitiesWithEquipment at the page
@@ -2307,7 +2370,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // so the forward reference is safe. `?? 1` is a neutral guard for a pre-first-turn read.
         const teamLandsTimedEnemyApplication = (
             application?: 'inflict' | 'apply',
-            targetAffinity?: AffinityName
+            targetAffinity?: AffinityName,
+            targetLandingChance?: number
         ): boolean =>
             application === 'apply'
                 ? // Target-aware (mirrors the attacker closure): when the ACTUAL target's affinity
@@ -2317,7 +2381,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                   targetAffinity !== undefined
                     ? getAffinityMatchup(w.affinity, targetAffinity) !== 'disadvantage'
                     : !teamAffinityDisadvantage
-                : teamDebuffLandingGate(runtime.liveDebuffLandingChance ?? 1);
+                : // SP-4c-2b: mirrors the attacker closure — per-victim chance from the reactive
+                  // path, cached turn-target chance for the cast path.
+                  teamDebuffLandingGate(
+                      targetLandingChance ?? runtime.liveDebuffLandingChance ?? 1
+                  );
         const runtime: PlayerActorRuntime = {
             actor: teamActor,
             focus: teamActor.id === focusActorId, // always false today (focus = attacker)
@@ -2425,6 +2493,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // APPLIER's ctx (effectiveAttack for inferno; dotMult/affinityMult for both) via this map.
     // The focus actor's ctx feeds the row exactly as the old single `lastAttackerCtx` did. An
     // entry whose applier has not yet acted this run (faster-enemy round 1) has no ctx → skip.
+    //
+    // ⚠️ KNOWN INSTANCE of the CROSS-TURN-CACHE class, recorded here so it is findable — SP-4c-2b
+    // review sweep, deliberately NOT fixed. This map is a per-turn snapshot that outlives its turn,
+    // and `tickDoTs` reads `ctx.affinityMult` off it to scale a DoT ticking on a victim that is
+    // usually NOT the victim that ctx was computed against. That is structurally the same mistake as
+    // `PlayerActorRuntime.liveDebuffLandingChance` (see its own doc, and the reactive-landing fix in
+    // `reactiveLandingChanceFor`): a value derived from THIS turn's target, later applied to a
+    // DIFFERENT target. The honest reading would resolve the applier-vs-TICKING-VICTIM matchup, the
+    // way `dotMultFor` already resolves the per-victim dotMult.
+    // WHY IT IS INERT TODAY and therefore out of scope: the only actors whose turn can lack a real
+    // victim are the ally-targeting supporters, and for them §A.4 measured the ghost's `affinity` as
+    // always `undefined` — so the no-victim answer (`'antimatter'`, neutral) is byte-identical to what
+    // the ghost produced. Nothing observable changed; the latent wrongness predates this rung.
+    // The other two fields read there (`ctx.dotMult`, `ctx.effectiveAttack`) are self-derived and fine.
     const lastTurnCtxByActor = new Map<string, PlayerRoundCtx>();
     // SP-D: per-actor count of enemies DAMAGED by that actor's most recent cast this round,
     // for the `enemies-hit-this-cast` gate at REACTIVE drain time (Berserker's Marauder Rage,
@@ -2632,7 +2714,76 @@ export function runCombat(rawInput: CombatEngineInput): {
     // resolves. Used by grantExtraAction; companion actorsBySide lands in PR3.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
 
-    // The dummy `enemy` is the player-offense sink for a run with no targetable opposing roster.
+    /** SP-4c-2b: the landing chance the REACTIVE path needs — `ownerId`'s live effective hacking vs
+     *  `victimId`'s live effective security, with the two actors' own affinity matchup applied.
+     *
+     *  WHY THIS EXISTS. Every reactive inflict already knew its victim (`debuffTargetId` /
+     *  `victimId` in triggers.ts) but drew its landing gate against
+     *  `PlayerActorRuntime.liveDebuffLandingChance` — a number the owner computed on ITS OWN turn,
+     *  for ITS OWN turn target. An enemy shoots Flamel; Flamel's passive inflicts Speed Down +
+     *  Stasis on THAT enemy, so the roll is Flamel's hacking vs THAT ship's security. Reading a
+     *  cached cast-derived value was wrong in kind, and became wrong in effect when SP-4c-2b let an
+     *  ally-targeted cast resolve NO victim: the cached chance then went to 0 and auto-resisted
+     *  every reactive inflict the owner would ever make (measured on Flamel: 138 landings → 0).
+     *
+     *  TEAM-SYMMETRIC BY CONSTRUCTION: both ids are looked up in the combat-wide `allActorsById`,
+     *  so a player owner inflicting on an enemy and an enemy owner inflicting on a player take the
+     *  identical path (the same reason `affinityOf`/`actorById` are wired from this map).
+     *
+     *  AFFINITY SCOPE, deliberately narrow: the base `computeAffinityModifiers` matchup, with no
+     *  `forceOutgoingAdvantage` / defensive-override consultation. That matches the sibling reactive
+     *  'apply' arm, which resolves `getAffinityMatchup(rawAffinity, targetAffinity)` and likewise
+     *  ignores overrides — those are turn-scoped cast concepts, not reactive ones. The cast path's
+     *  `affinityModsVsVictim` DOES honour them; the two are intentionally not unified here.
+     *
+     *  `selfBuffLookup` is the engine's GLOBAL buffName→effects expansion table — the same one
+     *  `effectiveStatsOf` is called with for every actor elsewhere in this file (turn-order speed,
+     *  Protection carrier defence), not the per-runtime map (which is empty for team/enemy actors
+     *  by design).
+     *
+     *  RETURNS UNDEFINED in two cases, and the second is not the obvious one: (1) an id that is not
+     *  in the map at all, and (2) the DUMMY SENTINEL, which very much IS in the map — see the guard
+     *  below for why resolving it would be worse than not pricing at all. Both route the caller to
+     *  its own fallback. An earlier draft of this line claimed undefined was returned "for an
+     *  unresolvable id", which was wrong about exactly the id that matters. */
+    const reactiveLandingChanceFor = (ownerId: string, victimId: string): number | undefined => {
+        const owner = allActorsById.get(ownerId);
+        // FIX 1 (review wave 1): REFUSE to price the dummy sentinel. Two reactive arms fall through
+        // to `ctx.enemy.id` when no real victim was threaded (`applicationTargetId ?? ctx.enemy.id`
+        // and `victim?.id ?? ctx.enemy.id` in triggers.ts — e.g. Burner's on-deal-damage, which
+        // carries no victimId), and the dummy is deliberately still a member of `allActorsById`
+        // (4c-2d deletes it). So without this guard the lookup SUCCEEDS and the roll gets priced
+        // against a phantom: `liveDebuffLandingChance` reads `defender.stats.security ?? 100`, and
+        // the dummy's security is whatever `enemySecurity` was — `undefined` for most callers, i.e.
+        // **100**, which for corpus hacking clamps the chance to 0 and never lands. That is a
+        // STRONGER lie than the cached value this rung replaced, not a weaker one, and it is exactly
+        // the failure mode the owner rejected. An inflict aimed at nobody real must not be handed a
+        // ghost's security: return undefined and let the caller take its documented fallback.
+        // MEASURED before fixing: 3 rows in the whole suite (all from `allyCritDot.test.ts`, whose
+        // input sets `enemySecurity: 0` so they happened to price at chance 1 rather than 0), and
+        // ZERO rows on shipped kits — the 147-ship fingerprint corpus never reaches these arms.
+        if (victimId === enemy.id) return undefined;
+        const victim = allActorsById.get(victimId);
+        if (!owner || !victim) return undefined;
+        const { damageModifier } = computeAffinityModifiers(
+            owner.affinity ?? 'antimatter',
+            victim.affinity ?? 'antimatter'
+        );
+        return liveDebuffLandingChance(statusEngine, selfBuffLookup, owner, victim, damageModifier);
+    };
+
+    // ⚠️ AMENDED BY SP-4c-2b, read this first: the dummy is NO LONGER a player-offense sink at all.
+    // `selectTurnTarget` stopped handing it out on the player side — a player actor that resolves
+    // nobody now gets `tgt: undefined` and runs a no-victim turn (see that function and
+    // `noVictimPlayerTurnCount`). So every "the player falls back to the dummy sink" claim in the
+    // paragraph below is HISTORY, kept because it explains why the turn-order gate is shaped the way
+    // it is. What survives verbatim: the dummy is still built, still a member of
+    // allActors/allActorsById, still the enemy side's structural counterpart, and still takes its own
+    // DoT-tick turn when this gate says it is not vestigial. Retiring that turn is 4c-2c's job and
+    // deleting the actor is 4c-2d's; NEITHER is done here, which is why this gate is unchanged and
+    // `dummyEnemyTurnGate.test.ts` still passes untouched through this rung.
+    //
+    // The dummy `enemy` WAS the player-offense sink for a run with no targetable opposing roster.
     // (Historically that meant "DPS-calc / non-positional mode" — accurate when this was written,
     // stale now: since SP-1/SP-3b both calculators supply a REAL enemy roster, and since SP-4b-1
     // `normalizeCombatRoster` places and targets every actor, so the sink is reached only through
@@ -2644,16 +2795,38 @@ export function runCombat(rawInput: CombatEngineInput): {
     // (it stays in allActors/allActorsById as the `legacyVictim` fallback object — only the turn
     // order drops it). The gate mirrors selectTurnTarget's success predicate statically: real
     // positioned enemies exist AND every player actor is positioned with an ENEMY-side parsed
-    // target (positions + parsed targets are fixed for the whole battle). If ANY player could
-    // fall back to the dummy sink, keep it in the turn order so its accumulated DoTs still tick.
-    // STATICALLY is the operative word (SP-4b-1 §4B): the two halves are NOT required to agree
-    // per turn, and deliberately do not. `resolvePositionalTarget` is liveness-aware, so once a
-    // targetable roster has been WIPED mid-battle the static gate still reads positional while
-    // selection returns null — the whiff window. That divergence is intended (the cast whiffs
-    // against corpses rather than teleporting onto the dummy); what §4B fixed was the two
-    // disagreeing on a roster that was NEVER targetable, where the damage reached no channel.
-    // NOT gated on healPipelineActive / enemyAttackers.length — the healing calculator sets healTargetId
-    // and can supply bare (non-positioned) enemies where the dummy is still the offense sink.
+    // target (positions + parsed targets are fixed for the whole battle).
+    //
+    // ── HISTORICAL, all of it — the paragraph below states the LIVE rationale ──────────────────
+    // Every sentence in this stretch was written when the player side could fall back to the dummy.
+    // Since SP-4c-2b none can, so each is now either vacuous or false; they are kept because they
+    // explain the gate's SHAPE, and marked because 4c-2c — whose whole job is retiring this turn —
+    // will read them as instructions otherwise.
+    //  • "If ANY player could fall back to the dummy sink, keep it in the turn order so its
+    //    accumulated DoTs still tick." VACUOUS: no player can fall back any more, so the antecedent
+    //    is never satisfied and this reason never fires.
+    //  • "`resolvePositionalTarget` is liveness-aware, so once a targetable roster has been WIPED
+    //    mid-battle the static gate still reads positional while selection returns null — the whiff
+    //    window. That divergence is intended (the cast whiffs against corpses rather than teleporting
+    //    onto the dummy)." The STATICALLY-vs-per-turn point still holds, but the whiff window it
+    //    illustrates is GONE: SP-4c-1 ends the match at the end of the turn that wipes a side, so no
+    //    player turn runs against an all-dead roster. What §4B fixed (the two halves disagreeing on a
+    //    roster that was NEVER targetable) is also unreachable — 4c-2a floors that shape.
+    //  • "NOT gated on healPipelineActive / enemyAttackers.length — the healing calculator sets
+    //    healTargetId and can supply bare (non-positioned) enemies where the dummy is still the
+    //    offense sink." The gating fact is still true; its REASON is false — the dummy is nobody's
+    //    offense sink, and since SP-3b the healing calculator supplies a real enemy roster.
+    //
+    // ── LIVE RATIONALE, the only paragraph to act on ───────────────────────────────────────────
+    // The gate drops the dummy's TURN when a real targetable enemy roster exists AND every player
+    // actor is positioned with an enemy-side parsed target. What that buys today is narrow and no
+    // longer about absorbing damage: the dummy's turn exists only to TICK THE DoT CONTAINERS THE
+    // DUMMY ITSELF CARRIES, and the one route that still fills them is the legacy DoT-tick site (see
+    // `dummySinkCreditCount`'s doc, route 2, and `dummyReachability`'s LIVENESS case, which is
+    // exactly this shape: an ally-side active target falsifies conjunct 2, the dummy keeps its turn,
+    // and its corrosion ticks). So the gate's live meaning is "skip a turn that would tick nothing
+    // and only leak a phantom `enemy` line into the log". 4c-2c owns retiring it; nothing here
+    // requires it to stay.
     //
     // SP-M M1 (Task 9b fix): the first conjunct is extracted as `hasPositionedEnemyRoster` — "does
     // a real, positioned opposing-enemy roster exist" — because the reactive target resolvers
@@ -2673,10 +2846,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     // SP-4b-1 §4B: "positioned" here means positioned AND a viable target (`isTargetableRosterMember`
     // — max hp > 0), the same member predicate `resolvesPositionalVictim` (the cast/apply gates)
-    // is built from — NOT `isPositional`, which asks only "is a board in play". A roster of 0-HP
-    // pressure sources can never absorb a cast, so the dummy is still the offense sink and MUST stay
-    // in the turn order — dropping it would strand every DoT/bomb routed into its containers, which
-    // is the same "credited to no channel" defect one layer down.
+    // is built from — NOT `isPositional`, which asks only "is a board in play".
+    // ⚠️ HISTORICAL, and the sentence 4c-2c is most likely to be stopped by: this used to end "A
+    // roster of 0-HP pressure sources can never absorb a cast, so the dummy is still the offense sink
+    // and MUST stay in the turn order — dropping it would strand every DoT/bomb routed into its
+    // containers." Both halves are dead. The 0-max-HP pressure-source roster is UNBUILDABLE since
+    // SP-4c-2a floored it at the normalization boundary, and nothing routes into the dummy's
+    // containers from the player side since SP-4c-2b — so there is no DoT/bomb left to strand and no
+    // "MUST" here. The member predicate is still the right one; only its justification changed.
     const hasPositionedEnemyRoster = enemyAttackerActors.some(isTargetableRosterMember);
     const dummyEnemyIsVestigial =
         hasPositionedEnemyRoster &&
@@ -7185,6 +7362,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                           }
                       )
                     : null;
+            // SP-4c-2b: the PLAYER side no longer falls back to the dummy ghost. An ally-targeted
+            // cast resolves nobody on the opposing side (contract §A.1: 100% of the 3,206 measured
+            // fallback rows have an ally-side parsed target), and the honest answer is "no victim"
+            // — the turn still RUNS (both player call sites below run it rather than skipping, so
+            // the repair/buff still lands); every victim-derived read answers "there is no enemy"
+            // instead of reading a ghost's neutral stats. The ENEMY side keeps
+            // `legacyVictim: healTarget`; re-homing that anchor is 4e's job, not this rung's.
+            if (selected == null && a.side === 'player') {
+                noVictimPlayerTurnCount++;
+                return { tgt: undefined };
+            }
             if (selected == null) legacyVictimFallbackCount++;
             return { tgt: selected ?? tb.legacyVictim };
         };
@@ -7192,10 +7380,25 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Unified runPlayerTurn argument builder (bySide unification PR6a). Produces the
         // full arg object for any side, folding the per-side divergence through
         // turnBindings(side) + runtimeFor(actor). targetId / healEventOnly are present
-        // ONLY for the enemy side (player sites omit both → byte-identical). The selfHpPct
+        // ONLY for the enemy side — but SP-4c-2b adds a THIRD state, so "player omits both" is
+        // now true for TWO different reasons and a reader must not collapse them:
+        //   (1) player WITH a victim (a real positional enemy): `targetId` IS emitted — the
+        //       `tgt.id !== enemy.id` guard passes. `healEventOnly` stays false (player binding).
+        //   (2) player with the GHOST as victim: the historical shape this banner described.
+        //       `targetId` omitted because the guard compared equal to the dummy's id, routing
+        //       the ability-status writes to the global `__enemy__` store. UNREACHABLE since
+        //       4c-2b — selectTurnTarget never returns the ghost on the player side anymore.
+        //   (3) player with NO victim (4c-2b, an ally-targeted cast): `targetId` omitted because
+        //       there is nobody to key a per-victim store by, together with the whole
+        //       victim-derived spread below (`enemy`, the five containers, enemyDefense/enemyHp,
+        //       targetRepairedThisRound, targetEffectiveAttack, enemyDebuffNames). That is a
+        //       different reason from (2), not the same trick: (2) said "the victim is a ghost
+        //       whose id is not a real store key", (3) says "there is no victim". Consumers must
+        //       read it as "no enemy", never as "an enemy with neutral stats" (contract §B).
+        // `healEventOnly` remains enemy-side-only in all three. The selfHpPct
         // denom is unified to runtimeFor(actor).hp (proven equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
-        const buildTurnArgs = (a: CombatActor, tgt: CombatActor) => {
+        const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
@@ -7219,13 +7422,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 : parsedPatternFor(a);
             const aoeTarget = parsedTargetFor(a); // parse-completeness guard only (not a footprint arg)
             const aoeVictimIds =
-                aoePattern != null && aoeTarget != null && tgt.position != null
+                aoePattern != null && aoeTarget != null && tgt?.position != null
                     ? footprintVictims(aoePattern, tgt.position, tb.opposingRoster).map(
                           (h) => h.victim.id
                       )
                     : undefined;
             const opposingVictimById =
-                tgt.position != null ? new Map(tb.opposingRoster.map((v) => [v.id, v])) : undefined;
+                tgt?.position != null
+                    ? new Map(tb.opposingRoster.map((v) => [v.id, v]))
+                    : undefined;
             // I6: resolve the enemy-most-buffs selector target for an ON-CAST purge (Lodolite's
             // charged skill). mostBuffsAmong (§C2b-2, Rhodium) previously only fed the REACTIVE
             // purge path (triggers.ts's ctx.enemyWithMostBuffs, for end-of-round/on-attacked
@@ -7238,7 +7443,6 @@ export function runCombat(rawInput: CombatEngineInput): {
             const enemyMostBuffsId = mostBuffsAmong(tb.opposingRoster);
             return {
                 runtime: rt,
-                enemy: tgt,
                 enemyMostBuffsId,
                 // PR10 (buff steal): THIS caster's own living adjacent allies, resolved fresh
                 // per turn from its own side's roster — same adjacentAllyIdsFor helper
@@ -7255,6 +7459,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // adjacent enemies, team-symmetric for free (bySide handles both directions).
                 adjacentEnemyIdsFor: (anchorId: string): string[] =>
                     bySide(isEnemySide(anchorId) ? 'enemy' : 'player').adjacentAllyIdsFor(anchorId),
+                // SP-4c-2b: every victim-derived member lives in this ONE conditional spread.
+                // `tgt` is absent exactly when an ally-targeted cast resolved nobody on the
+                // opposing side (contract.md §B) — omitting these fields (rather than emitting
+                // an empty/zero placeholder) is what routes the consumer to its documented
+                // "no enemy" defaults (`?? []` / `?? 0` / `!== undefined` guards in playerTurn.ts),
+                // instead of resurrecting the dummy ghost this rung deletes.
+                ...(tgt
+                    ? {
+                          enemy: tgt,
+                          corrosionEntries: tgt.corrosionEntries,
+                          infernoEntries: tgt.infernoEntries,
+                          genericDoTEntries: tgt.genericDoTEntries,
+                          pendingBombs: tgt.pendingBombs,
+                          pendingAccumulators: tgt.pendingAccumulators,
+                          enemyDefense: tb.victimDefenceFor(tgt),
+                          enemyHp: tb.victimMaxHpFor(tgt),
+                          targetRepairedThisRound: repairedThisRound.has(tgt.id),
+                          targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt)
+                              .attack,
+                      }
+                    : {}),
                 // B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route
                 // to the resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId;
                 // the aggregate ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows
@@ -7262,15 +7487,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // dummy `enemy` sink (tgt.id === enemy.id), leave targetId unset so the __enemy__ path
                 // (DPS/healing) is byte-identical. Scheduled channel stays global __enemy__ (upsertBuff
                 // hardcoded). Enemy side unchanged (victim always a real actor).
-                ...(a.side === 'enemy' || tgt.id !== enemy.id ? { targetId: tgt.id } : {}),
+                // SP-4c-2b: the guard keeps its `tgt.id !== enemy.id` form for the WITH-victim
+                // case; a no-victim turn (`tgt` undefined) omits targetId, which is exactly what
+                // this guard already produced when `tgt` was the ghost (§A.4: the ghost's `id`
+                // measured always `'enemy'`, so the guard was already false on these turns).
+                ...(tgt && (a.side === 'enemy' || tgt.id !== enemy.id) ? { targetId: tgt.id } : {}),
                 statusEngine,
-                corrosionEntries: tgt.corrosionEntries,
-                infernoEntries: tgt.infernoEntries,
-                genericDoTEntries: tgt.genericDoTEntries,
-                pendingBombs: tgt.pendingBombs,
-                pendingAccumulators: tgt.pendingAccumulators,
-                enemyDefense: tb.victimDefenceFor(tgt),
-                enemyHp: tb.victimMaxHpFor(tgt),
                 enemyType: tb.enemyTypeArg,
                 bus,
                 round: r,
@@ -7285,10 +7507,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // actor, this still tracks the heal target. Per-actor target-HP% is deferred to a
                 // later phase; inert today (bare enemies have no `hpSubject:'target'` gate).
                 targetHpPct: healTargetHpPctNow(),
-                // C2b-3: was the STRUCK victim (tgt) repaired this round? Per-actor-correct
-                // (unlike targetHpPct, which always reports the heal target). DPS dummy / un-
-                // repaired enemy → false → byte-identical (the purge block guards on targetId).
-                targetRepairedThisRound: repairedThisRound.has(tgt.id),
+                // SP-4c-2b: `targetRepairedThisRound` (was the STRUCK victim `tgt` repaired this
+                // round? — C2b-3) moved into the victim-derived conditional block above; a
+                // no-victim turn omits it and `playerTurn.ts` defaults the destructure to `false`.
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 // Sub-project I, PR I5: count (not union) of opposing actors holding Stealth,
                 // for Selenite's "for every enemy with Stealth" count-scaling. Same per-turn
@@ -7302,7 +7523,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // resolution), this key is OMITTED entirely so buildRoundContext leaves
                 // enemyDebuffNames undefined (the DPS-parity sentinel) and the round contexts
                 // fall back to the legacy name-agnostic enemyDebuffCount path — byte-identical.
-                ...(a.side === 'enemy' || tgt.id !== enemy.id
+                // SP-4c-2b: also omitted when `tgt` is absent (no victim this turn) — same
+                // "no enemy" answer as the DPS-dummy case.
+                ...(tgt && (a.side === 'enemy' || tgt.id !== enemy.id)
                     ? { enemyDebuffNames: enemyDebuffNamesForTarget(tgt) }
                     : {}),
                 selfDebuffNames: ownerDebuffNames(a.id),
@@ -7329,14 +7552,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...((a.id === focusActorId || a.side === 'enemy' || a.kind === 'team') &&
                 aoePattern != null &&
                 aoeTarget != null &&
-                tgt.position != null
+                tgt?.position != null
                     ? { positional: true }
                     : {}),
-                // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility) and
-                // a per-(owner,ability) deterministic proc closure. Both are READ only when the
-                // actor's passive slot carries an outgoing-amplification ability → byte-identical
-                // for every fixture without one (rollOutgoingProc never invoked).
-                targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt).attack,
+                // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility),
+                // for a per-(owner,ability) deterministic proc closure. `targetEffectiveAttack`
+                // moved into the victim-derived conditional block above (SP-4c-2b) — READ only
+                // when the actor's passive slot carries an outgoing-amplification ability →
+                // byte-identical for every fixture without one (rollOutgoingProc never invoked).
                 rollOutgoingProc: (abilityId: string, chance: number) =>
                     rollRateGate(procChanceGates, `${a.id}:${abilityId}`, chance),
                 activePattern: parsedPatternFor(a),
@@ -8219,6 +8442,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
                         // precomputed-vs-representative static disadvantage flag.
                         affinityOf: (id) => allActorsById.get(id)?.affinity,
+                        // SP-4c-2b: the OTHER half of Task A's per-target seam. Task A made the
+                        // reactive 'apply' arm read the actual target's AFFINITY; the 'inflict' arm
+                        // and the reactive DoT were still drawing against the owner's cached
+                        // `liveDebuffLandingChance` — a chance the owner computed for ITS OWN turn
+                        // target. This resolves the roll the reactive path actually needs: the
+                        // owner's live effective hacking vs THIS victim's live effective security.
+                        // Same combat-wide `allActorsById` source as affinityOf/actorById, so it is
+                        // team-symmetric for free (either id may be on either side).
+                        liveDebuffLandingChanceFor: (ownerId, victimId) =>
+                            reactiveLandingChanceFor(ownerId, victimId),
                         // SP-E, Task E4: resolve any actor (either side) by id — the convert-dot
                         // executor uses this to find the ACTUAL victim of an ally's DoT
                         // application (eventCtx.victimId) instead of the fixed enemy/
@@ -9121,17 +9354,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // HP decline is no longer passed in (PR6b): runPlayerTurn derives it from the
                             // struck victim's currentHp (max − currentHp), so the dummy-sink and real-victim
                             // cases both read `tgt` uniformly — no separate decline ternary here.
+                            // SP-4c-2b AMENDS the two paragraphs above: there is now a THIRD case, and in
+                            // it `tgt` is NOT a full CombatActor but absent. See the note under the call.
                             const { tgt } = selectTurnTarget(actor);
-                            // The player side's legacy victim is the always-present dummy `enemy`
-                            // sink, so `tgt` is never undefined here — this is a type-narrowing
-                            // no-op (selectTurnTarget widened for the enemy side in SP-U U5 R6).
-                            if (tgt === undefined) continue;
+                            // SP-4c-2b: `tgt` is undefined when this cast targets an ALLY — there is
+                            // no opposing victim to resolve. The turn still RUNS (a repair/buff must
+                            // land); only the victim-derived context is absent. Skipping here would
+                            // permanently silence all 24 shipped ally-target support ships.
                             // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
                             // only when the victim was stasised at hit time. The actual statusEngine
                             // removal happens AFTER drainIntentsFor('player')/drainIntentsFor('enemy') (below).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis, the
                             // victim is never recorded → no break-mark, no stasisBreakPending entry.
-                            const tgtWasStasised = !actor.doesntBreakStasis && isStasised(tgt.id);
+                            // SP-4c-2b: no victim ⇒ no hit ⇒ nothing to break out of Stasis, so the
+                            // hook is never injected (the honest no-victim answer is `false`, not
+                            // "the dummy was not stasised").
+                            const tgtWasStasised =
+                                !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             // §4.5: `stasisHitVictims` collects ids of victims stasised at hit time.
                             // Resolved AFTER runPlayerTurn returns (when inflictedEnemyDebuffs is available)
                             // to compute the re-apply check, then stored in `stasisBreakPending` for the
@@ -9141,8 +9380,31 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // The full `positional` gate below adds `turn.positionalScalars != null`
                             // (⟺ a damage ability fired). runPlayerTurn suppresses its inline
                             // ability-performed emit ONLY when this flag AND hasDamageAbility both
-                            // hold — so the suppression condition matches the `positional` gate
-                            // EXACTLY. A non-damage cast keeps its inline emit (flag ignored).
+                            // hold — so the suppression condition matches the `positional` gate for
+                            // every turn that HAS a victim. A non-damage cast keeps its inline emit
+                            // (flag ignored).
+                            // SP-4c-2b: this flag is deliberately NOT victim-fenced, even though the
+                            // `positional` gate below now is. (1) Fencing it would buy nothing for the
+                            // event: with no victim runPlayerTurn emits no `ability-performed` on EITHER
+                            // arm — the inline emit and the deferred payload are both fenced on its own
+                            // `hasVictim` (playerTurn.ts `if (!deferAbilityPerformed && hasVictim)` and
+                            // the `deferredAbilityPerformed` spread) — so the divergence cannot lose an
+                            // event. (2) Fencing it would COST: the same flag selects the cast's
+                            // landing/crit resolution shape (`positionalLanding` in playerTurn.ts, which
+                            // chooses between `realAffinityCappedCrit` and `cappedCrit`), so flipping it
+                            // on a no-victim turn would move that turn's RNG draws and with them the
+                            // schedule of every later application.
+                            //
+                            // THE DIVERGENCE HAS A SECOND CONSUMER, and it is not an event — say so here
+                            // because (1) alone reads as if `ability-performed` were the only thing
+                            // riding this gate. `deferredCastSupport` (playerTurn.ts, set by
+                            // `if (deferAbilityPerformed && hasCastDamageDealtRider)`) is pinned to the
+                            // SAME unfenced condition, while its resolver's basis `castDelivered` follows
+                            // the FENCED `positional` gate below. So a mixed cast (§A.7) reaches
+                            // `resolveCastSupport?.(castDelivered ?? turn.directDamage)` on the FALLBACK
+                            // arm — a branch the comment at that call used to describe as unreachable.
+                            // It is reachable now, its answer is correct (basis 0 for a cast that hit
+                            // nobody), and the corrected reasoning lives at that call site.
                             const willApplyPositionally =
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
@@ -9198,6 +9460,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 pendingResisted.length = 0;
                             }
 
+                            // AMENDED BY SP-4c-2b at the end of this comment: the gate below now DOES
+                            // carry a victim precondition, so read that amendment before trusting the
+                            // "DELIBERATELY no `selectedEnemy != null` precondition" paragraph.
                             // Positional APPLY (Task 8b, GATED). When the focus attacker is positional,
                             // carries a parsed target, AND its firing hit produced scalars (a damage
                             // ability fired → turn.positionalScalars is set), drive the per-victim apply
@@ -9226,7 +9491,26 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // enter the positional branch on pattern/target/scalars alone and let the
                             // per-hit live re-resolution own the whiff. (Credit suppression below pairs with
                             // this: the per-victim apply is the ONLY damage path here.)
+                            //
+                            // SP-4c-2b: `tgt !== undefined` IS now a precondition, and it does not
+                            // reopen the phantom-damage hole the paragraph above guards. The two cases
+                            // are different. That hazard is an anchor that RESOLVED and then died,
+                            // where routing back to a live sink would book damage against a corpse.
+                            // `tgt === undefined` means this cast has no opposing victim AT ALL — an
+                            // ally-targeted repair/buff/shield (plan §A.1: 100% of the player-side
+                            // fallback rows) — so there is no anchor for the driver to walk from:
+                            // `sel.tgt` is its per-victim `primaryId` and its covered-Stasis
+                            // exclusion, and `stagePassiveSlotHit` reads the anchor's position for its
+                            // footprint. Nor can the `!positional` arm below book a phantom lump in the
+                            // apply's place: runPlayerTurn fences its own damage assembly on
+                            // `hasVictim`, so `turn.directDamage` is literally 0 and that arm credits
+                            // 0. A mixed cast's enemy-facing clause therefore goes INERT on an
+                            // ally-targeted turn — the ruled consequence of the no-victim option
+                            // (plan §A.7), fixture-only today (13 rows, zero shipped ships).
+                            // The fence lives in the GATE, i.e. above every RNG draw the driver and
+                            // the staged passive-slot instance would otherwise take.
                             const positional =
+                                tgt !== undefined &&
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null &&
@@ -9304,9 +9588,28 @@ export function runCombat(rawInput: CombatEngineInput): {
                             flushDeferredEnemyApplications(turn.deferredEnemyApplications);
                             // Same seam, same reason: a cast whose repair/shield scales off the damage
                             // it dealt could not resolve until that damage existed. No-op unless this
-                            // cast deferred. The `?? turn.directDamage` fallback is unreachable while
-                            // deferral is pinned to the positional gate, and is there so a future
-                            // divergence degrades to the old basis instead of silently dropping the repair.
+                            // cast deferred. The `?? turn.directDamage` fallback was written as
+                            // unreachable-while-deferral-is-pinned-to-the-positional-gate, and is there so
+                            // a future divergence degrades to the old basis instead of silently dropping
+                            // the repair.
+                            //
+                            // SP-4c-2b: that divergence has ARRIVED — the fallback is now REACHABLE, and
+                            // it is the second consumer of the gate split documented at
+                            // `willApplyPositionally` above. The two sides of the pin no longer move
+                            // together on a no-victim turn: DEFERRAL follows `deferAbilityPerformed`
+                            // (= the unfenced `willApplyPositionally` AND hasDamageAbility, playerTurn.ts),
+                            // which carries NO `hasVictim` term, while `castDelivered` follows the
+                            // victim-FENCED `positional` gate and therefore stays undefined. So an
+                            // ally-targeted cast that also carries a damage ability and a firing-slot
+                            // `damage-dealt` repair/shield rider (plan §A.7's mixed casts — fixture-only,
+                            // 13 rows, zero shipped ships) defers its support pass and then lands HERE on
+                            // the fallback arm.
+                            // The fallback's answer is the CORRECT one, which is why the behaviour is
+                            // deliberately left alone: `turn.directDamage` is fenced to literal 0 with no
+                            // victim, so the support pass still RUNS (the repair is not dropped) and
+                            // resolves off a basis of 0 — a damage-dealt-scaled repair on a cast that hit
+                            // nobody correctly repairs nothing. Do not "restore the pin" by fencing
+                            // `willApplyPositionally`: that would move the turn's crit draws (see its note).
                             turn.resolveCastSupport?.(castDelivered ?? turn.directDamage);
 
                             // Fold the focus turn's numeric damage into the round accumulator.
@@ -9362,6 +9665,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // SP-D: record this cast's footprint size (aoeVictimIds — undefined in
                             // DPS/non-positional mode → default 1) for the enemies-hit-this-cast
                             // drain-time gate.
+                            // SP-4c-2b NAMED RESIDUAL, measured inert TWICE OVER: on a no-victim turn
+                            // `aoeVictimIds` is undefined (§A.4 — the ghost never had a position, so
+                            // it already was), so this books **1** for a cast that hit NOBODY. Left
+                            // alone deliberately. (1) Only two corpus ships gate on
+                            // `enemies-hit-this-cast` — Berserker (passive) and Tygr (active) — and
+                            // NEITHER is one of the 24 ally-target ships, so no shipped ship can both
+                            // take a no-victim turn and read this. (2) Both gates are `gte 2`/`gte 3`,
+                            // which a phantom 1 does not satisfy even if one could. Pinned by
+                            // `noVictimResidualTripwires.test.ts`; the honest value would be 0.
                             enemiesHitThisCastByActor.set(
                                 actor.id,
                                 focusTurnArgs.aoeVictimIds?.length ?? 1
@@ -9447,22 +9759,29 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // CombatActors, so every per-target binding derives from `tgt` uniformly.
                             // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
                             // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
+                            // SP-4c-2b AMENDS that "both branches are full CombatActors" claim, exactly
+                            // as at the focus site: a third case has no victim at all.
                             const { tgt } = selectTurnTarget(actor);
-                            // Player side's legacy victim is the always-present dummy `enemy` sink →
-                            // `tgt` is never undefined here (type-narrowing no-op; selectTurnTarget
-                            // widened for the enemy side in SP-U U5 R6).
-                            if (tgt === undefined) continue;
+                            // SP-4c-2b: `tgt` is undefined when this cast targets an ALLY — there is
+                            // no opposing victim to resolve. The turn still RUNS (a repair/buff must
+                            // land); only the victim-derived context is absent. Skipping here would
+                            // permanently silence all 24 shipped ally-target support ships.
                             const teamPattern = teamWillFireCharged
                                 ? parsedChargedPatternFor(actor)
                                 : parsedPatternFor(actor);
                             // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
                             // the victim is never recorded → no break-mark, no stasisBreakPending.
+                            // SP-4c-2b: mirror of the focus site — no victim ⇒ no hit ⇒ no break.
                             const teamTgtWasStasised =
-                                !actor.doesntBreakStasis && isStasised(tgt.id);
+                                !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             const teamTurnStasisHitVictims = new Set<string>();
                             // Task 5 (per-victim crit signal): predict positional apply (mirror of the
                             // focus site) so runPlayerTurn defers its inline ability-performed emit.
+                            // SP-4c-2b: NOT victim-fenced, for the two reasons spelled out at the focus
+                            // site's own `willApplyPositionally` — no event is lost (runPlayerTurn's own
+                            // `hasVictim` already suppresses both emit arms) and fencing it would move
+                            // the no-victim turn's landing/crit RNG draws.
                             const teamWillApplyPositionally =
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
@@ -9495,6 +9814,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 }
                             }
 
+                            // AMENDED BY SP-4c-2b at the end of this comment: the gate below now DOES
+                            // carry a victim precondition (mirror of the focus site).
                             // Positional APPLY (Task 8b, GATED) — mirror of the focus site, keyed to THIS
                             // team actor's own position / parsed target (teamTargetById) / parsed pattern
                             // (teamPatternById). Drives the per-victim apply loop against the LIVE enemy
@@ -9510,7 +9831,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // it there is no apply to perform (the then-shipped positionalSelection C2 test
                             // set position+target only, never a pattern, so it kept the legacy single-sink
                             // credit and never entered this branch; the boundary now fills the pattern).
+                            // SP-4c-2b: victim-fenced exactly as the focus gate is — an ally-targeted
+                            // cast has no opposing anchor to walk a footprint from, and the
+                            // `!teamPositional` arm cannot book a phantom lump in its place because
+                            // runPlayerTurn fences `directDamage` to 0 with no victim. See the focus
+                            // site's `positional` for the full argument (incl. why this is NOT the
+                            // `selectedEnemy != null` precondition that was deliberately omitted).
                             const teamPositional =
+                                tgt !== undefined &&
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null &&
@@ -9578,6 +9906,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
                             // Clause order — mirror of the focus site (see flushDeferredEnemyApplications).
                             flushDeferredEnemyApplications(teamTurn.deferredEnemyApplications);
+                            // SP-4c-2b: the `?? teamTurn.directDamage` fallback below is REACHABLE on a
+                            // no-victim turn — do NOT read the focus site's pre-SP-4c-2b claim that
+                            // deferral is pinned to the positional gate, which this rung falsified at both
+                            // sites. Deferral follows the unfenced `teamWillApplyPositionally`;
+                            // `teamCastDelivered` follows the victim-fenced `teamPositional` and stays
+                            // undefined, so an ally-targeted mixed cast with a firing-slot `damage-dealt`
+                            // rider resolves its support off a Task-2-zeroed `directDamage` — the support
+                            // pass still runs and correctly repairs 0. Full argument at the focus site's
+                            // own `resolveCastSupport` call (search `the fallback is now REACHABLE`).
                             teamTurn.resolveCastSupport?.(
                                 teamCastDelivered ?? teamTurn.directDamage
                             );

@@ -394,7 +394,7 @@ floor fixes it at the engine, and that is the WHOLE fix: the input gets `min="1"
 | Rung | Story | Churn |
 | --- | --- | --- |
 | **4c-2a** | The targetable-roster contract: floor 0-max-HP enemy attackers at the boundary | The 54 all-zero-roster files; drives the credit gate to 0. Fixes §7.3 |
-| **4c-2b** | The no-victim player turn: `selectTurnTarget` returns `tgt: undefined` on the player side instead of `tb.legacyVictim`, as the enemy side already does (1,341 measured rows prove that path works) | The 4,188 consultations; both §2.3 context guards drop here |
+| **4c-2b** ✅ SHIPPED | The no-victim player turn: `selectTurnTarget` returns `tgt: undefined` on the player side, and the two player call sites **RUN the turn anyway** — the enemy side's cadence-only skip is NOT the template (a skip silences all 24 shipped ally-target support ships). Both §2.3 guards drop for free: the ghost's id was always `'enemy'`, so they already omitted `targetId`/`enemyDebuffNames` on these turns | **3,206** player consultations, all ally-side (2,311 `allies` / 622 `other-allies` / 195 `all-allies` / 78 `self`; 14 of the 2,311 are §A.7's mixed/no-skill cases) — NOT 4,188, which predates 4c-2a and lumped both sides together. Golden movement: **3 fingerprints** (AEGIS/Hermes/Mender), one mechanism |
 | **4c-2c** | Drop the dummy from the turn order unconditionally; the D5 scheduled decrement becomes unconditional | The 3,883 no-op turn events across 73 files, 3 of them golden suites |
 | **4c-2d** | Pure deletion: the actor + clusters A/B/D/E/F/G, `SENTINEL_ENEMY_ACTOR_ID` per §4.3 | **Zero movement** — now genuinely, because a–c moved everything |
 
@@ -409,3 +409,57 @@ suite run, and per-file aggregation from vitest's stderr headers — ~25 seconds
 for the rest of the ladder: *a claim about whether a path is reachable is a measurement, not a reading.*
 The counter-based gate in §4.4 was itself an attempt at this, and it failed because it was quoted from
 a doc comment instead of being run.
+
+
+---
+
+## 8. AMENDMENT (2026-08-19) — what 4c-2b actually cost, and what it hands to 4c-2c/4d/4e
+
+Plan: `docs/superpowers/plans/2026-08-19-sp4c2b-no-victim-player-turn.md`. Measured facts and the
+site-by-site contract: `.superpowers/sdd/sp4c2b-contract.md` (§A). Ledger: `.superpowers/sdd/progress.md`.
+
+**§7.4's one-line description of 4c-2b was materially incomplete in two ways.**
+
+**8.1 The literal instruction was a bug.** "Returns `tgt: undefined` on the player side, as the enemy
+side already does" met an existing `if (tgt === undefined) continue;` at both player call sites. The
+enemy side's handling is a **cadence-only skip**, and copying it would have silenced every one of the
+**24 shipped ally-target ships** — every healer, shielder and buffer — from its first cast onward. The
+player side must RUN the turn with no victim. The rung therefore needed four zero-movement commits
+building that path (`runPlayerTurn` tolerating an absent victim, `buildTurnArgs` omitting the
+victim-derived args, the call sites no longer skipping) before the two-line switch could land.
+
+**8.2 A second owner ruling was required mid-rung.** Fencing the victim-derived computation exposed a
+defect: `runtime.liveDebuffLandingChance` is derived from THIS turn's target but **published as
+standing state** and later consumed for a DIFFERENT target. Fenced to 0 on a no-victim turn, it
+silenced a supporter's own REACTIVE debuffs permanently — visibly for Flamel, silently for Makoli
+(whose gate needs sub-40% HP the fixtures never reach). **Owner ruling: an inflict rolls against the
+enemy it is actually hitting** (per-victim security; the per-victim affinity was already threaded), and
+that fix ships in this rung as its own commit. Generalisable defect shape: *fencing a computed value is
+only safe if the value is not also published.*
+
+**8.3 What 4c-2c must know.** Two doc blocks were correcting each other; both were fixed here, but the
+reason matters. `engine.ts`'s dummy-turn-order rationale still asserted "the dummy **is still the
+offense sink** and MUST stay in the turn order — dropping it would strand every DoT/bomb routed into
+its containers." Nothing routes there from the player side any more, and 4c-2a made the 0-max-HP shape
+unbuildable. A `HISTORY` banner had been added above the paragraph but scoped narrower than the
+falsehoods under it, which laundered the rest. **A history banner must be scoped to what it actually
+disclaims.** The live rationale now sits in its own paragraph.
+
+**8.4 The credit counter is still the gate, and it is still non-zero.** `dummyReachability`'s
+`LIVENESS` case credits `BARE_ROUNDS` via the **dummy's own DoT-tick turn** — a route §4.4's
+"exactly when every member is at max hp 0" description never mentioned (it is now corrected). That
+credit is 4c-2c's remaining work; 4c-2b deliberately did not touch it. `consulted` now reads 0 on
+that shape, and player-side no-victim turns are counted separately by `noVictimPlayerTurnCount` —
+`legacyVictimFallbackCount` is enemy-side-only by definition now, so folding the two would make its
+name false.
+
+**8.5 The rule is enforced on ONE SIDE ONLY — 4e must close this with the SAME rule.**
+`engine.ts`'s enemy call site still `continue`s on `tgt === undefined`, so an **enemy-side**
+ally-targeted supporter with no heal anchor is silenced — precisely the outcome §8.1 exists to prevent.
+1,341 measured rows. This was latent before 4c-2b and is now a visible asymmetry in the contract.
+
+**8.6 Residuals, all measured corpus-inert and tripwired.** A no-victim turn still answers
+`enemyHpPct` = 100, `enemiesHitThisCast` = 1, and `targetSpeed/targetCurrentHp/targetCritPower`
+= 0 (so a `stat-vs-target` **`gt`** gate reads TRUE against nobody — Bayah and Cobalt are the only
+`gt` readers, neither ally-target). All three want ONE rung that widens the condition context to give
+an honest absent-subject answer. Zero enemy-HP-**above** gates exist in the 147-ship corpus.
