@@ -66,8 +66,13 @@ export function isCalibrationEligible(gear: GearPiece): boolean {
 
 /**
  * Calculate the calibrated value for a stat.
+ *
+ * NOTE: performs NO eligibility check — it calibrates whatever stat it is handed.
+ * The checked entry point is getCalibratedMainStat(). This unchecked form exists
+ * for the autogear "assume all gear is calibrated" mode, which deliberately
+ * calibrates pieces that are not eligible today (see assumedCalibration.ts).
  */
-function calculateCalibratedStatValue(stat: Stat, stars: number): number {
+export function applyCalibrationToStat(stat: Stat, stars: number): number {
     const bonus = CALIBRATION_BONUSES[stat.name]?.[stat.type];
     if (!bonus) {
         // Default to percentage point addition for unknown stats
@@ -144,6 +149,6 @@ export function getCalibratedMainStat(gear: GearPiece): Stat | null {
 
     return {
         ...baseStat,
-        value: calculateCalibratedStatValue(baseStat, gear.stars),
+        value: applyCalibrationToStat(baseStat, gear.stars),
     };
 }
