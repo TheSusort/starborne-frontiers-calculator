@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeCombatRoster } from '../normalizeRoster';
+import { normalizeCombatRoster, MIN_TARGETABLE_MAX_HP } from '../normalizeRoster';
 import {
     DEFAULT_ATTACKER_SLOT,
     DEFAULT_ENEMY_SLOT,
@@ -360,5 +360,55 @@ describe('normalizeCombatRoster — fenced in both directions', () => {
         });
         const out = normalizeCombatRoster(input);
         expect(out).toEqual(input);
+    });
+});
+
+describe('normalizeCombatRoster — targetable HP floor', () => {
+    const zeroHpEnemy = (id: string) => ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, speed: 10, hp: 0 },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    it('floors an explicit 0 max HP to MIN_TARGETABLE_MAX_HP', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [zeroHpEnemy('e1')] }));
+        expect(out.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
+    });
+
+    it('floors an ABSENT max HP too — the boundary default was 0', () => {
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [enemyInput('e1')] }));
+        expect(out.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
+    });
+
+    it('leaves a real max HP untouched', () => {
+        const real = { ...zeroHpEnemy('e1'), stats: { ...zeroHpEnemy('e1').stats, hp: 5_000 } };
+        const out = normalizeCombatRoster(baseInput({ enemyAttackers: [real] }));
+        expect(out.enemyAttackers[0].stats.hp).toBe(5_000);
+    });
+
+    it('floors EVERY member of an all-zero roster, not just the anchor', () => {
+        const out = normalizeCombatRoster(
+            baseInput({ enemyAttackers: [zeroHpEnemy('e1'), zeroHpEnemy('e2')] })
+        );
+        expect(out.enemyAttackers.map((e) => e.stats.hp)).toEqual([
+            MIN_TARGETABLE_MAX_HP,
+            MIN_TARGETABLE_MAX_HP,
+        ]);
+    });
+
+    it('does NOT floor the focus attacker — hp 0 is legitimate there', () => {
+        const out = normalizeCombatRoster(
+            baseInput({ hp: 0, enemyAttackers: [zeroHpEnemy('e1')] })
+        );
+        expect(out.hp).toBe(0);
+    });
+
+    it('is pure — the caller’s nested stats object is never mutated', () => {
+        const input = baseInput({ enemyAttackers: [zeroHpEnemy('e1')] });
+        const before = input.enemyAttackers[0].stats.hp;
+        normalizeCombatRoster(input);
+        expect(input.enemyAttackers[0].stats.hp).toBe(before);
+        expect(before).toBe(0);
     });
 });
