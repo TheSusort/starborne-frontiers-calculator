@@ -17,8 +17,10 @@
  *   • with any roster at all the singular `enemy` is a vestigial immortal sink — it never emits
  *     ship-destroyed, never terminates the run, and `enemyOutcome` describes IT, so it reads
  *     `survived: true / roundsToKill: undefined` no matter what dies;
- *   • the "pressure source" (0-MAX-hp roster) trick that keeps other fixtures non-positional does
- *     NOT help here — it keeps the cast on the sink, but the sink is still immortal.
+ *   • the "pressure source" (0-MAX-hp roster) trick that USED to keep other fixtures non-positional
+ *     would not have helped here anyway — it kept the cast on the sink, but the sink is still
+ *     immortal. SP-4c-2a has since retired the trick outright (`withTargetableHp` in
+ *     normalizeRoster.ts floors every enemy attacker's max HP), so it is not even constructible.
  *
  * So U5's surface has MOVED rather than vanished, and this file follows it: every case below now
  * measures the REAL, POSITIONED enemy, whose max HP carries the pool `enemyHp` used to hold. Four

@@ -186,19 +186,27 @@ describe('standing-leech hook — damage-dealt passive', () => {
         // Two entries (ally → heal target, self → owner). With attacker as the heal target
         // both recipients resolve to 'attacker', so directHeal is credited twice per burst.
         //
-        // SP-4b-2b — WHY THIS CASE KEEPS THE LEGACY SINK. A detonation-scope standing leech pays
-        // out through the `creditDamage` chokepoint. At the time this test was written, a
-        // POSITIONAL run booked the burst on the per-victim channel instead and never reached the
-        // leech proc at all — that was item 2 of the leech-channel gap class (see the canonical
-        // comment above `procStandingLeechesPerVictim`, engine.ts:3901,
-        // `procStandingLeechesPerVictim`). That instance is now FIXED: both of
-        // `applyPositionedTimedBurst`'s `creditDetonation` callbacks call this proc with
-        // `channel: 'detonation'`. This case still deliberately does not exercise that path,
-        // though — it keeps the documented 0-MAX-HP "pressure source" roster, where
-        // `resolvesPositionalVictim` (positionalBinding.ts:79, `resolvesPositionalVictim`) finds
-        // nobody targetable, so the burst still lands on the legacy sink and the numbers stay
-        // byte-identical to the pre-branch run. SP-4c must revisit this case when it deletes the
-        // dummy/sink path entirely, since the channel this case pins against will stop existing.
+        // HISTORY — THIS CASE USED TO KEEP THE LEGACY SINK, AND NO LONGER DOES. A detonation-scope
+        // standing leech pays out through the `creditDamage` chokepoint. At the time this test was
+        // written, a POSITIONAL run booked the burst on the per-victim channel instead and never
+        // reached the leech proc at all — item 2 of the leech-channel gap class (see the canonical
+        // comment above `procStandingLeechesPerVictim`, engine.ts:3901). That instance is FIXED:
+        // both of `applyPositionedTimedBurst`'s `creditDetonation` callbacks call this proc with
+        // `channel: 'detonation'`. SP-4b-2b kept this case off the positional path anyway, via the
+        // 0-MAX-HP "pressure source" roster that `resolvesPositionalVictim` found untargetable.
+        //
+        // SP-4c-2a closed that route: `withTargetableHp` (normalizeRoster.ts) floors
+        // `leech-pressure-source` to MIN_TARGETABLE_MAX_HP, so the run IS positional now and the
+        // burst goes down the per-victim path — measured: `cumulativeDamage` stays 0 every round
+        // (the legacy scalar sink books nothing), `perTargetDamage['leech-pressure-source']` reads
+        // 20 000 on each burst round (10 000 firing hit + 10 000 burst), and the row's
+        // `detonationDamage` reads that 10 000 through the `focusPositionalDetonation` fold.
+        //
+        // The assertions below survive the move, and are not weakened by it: they are RATIOS
+        // against the row's own `detonationDamage` rather than integers pinned to one channel, and
+        // the leech-channel fix named above is exactly what keeps the payout wired on this path —
+        // so the case now covers the positional leech route instead of the legacy one. What is NO
+        // LONGER true is the old note's "byte-identical to the pre-branch run".
         const result = runCombat(
             BASE({
                 enemyAttackers: bareEnemy({ id: 'leech-pressure-source', stats: { hp: 0 } }),

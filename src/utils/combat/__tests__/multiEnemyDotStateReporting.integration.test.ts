@@ -116,10 +116,13 @@ const damageKit = (multiplier: number): ShipSkills => ({
  *  and a zero-damage focus keeps every enemy alive for the whole window. */
 const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
     // SP-4b-2b: a run needs an opponent. Every positional case overrides this with its own
-    // `inertEnemy` roster; the default is the documented 0-MAX-HP "pressure source" that the
-    // legacy-sink case below depends on (see its comment). The id is deliberately NOT the shared
-    // fixture's default `e1` — this file uses `'e1'` for a specific positioned carrier, and
-    // reusing it would conflate two different actors across the file.
+    // `inertEnemy` roster. The default was written as the documented 0-MAX-HP "pressure source",
+    // which is how the dummy-sink case below used to stay non-positional; SP-4c-2a's floor
+    // (`withTargetableHp` in normalizeRoster.ts) raises it to MIN_TARGETABLE_MAX_HP, so that case
+    // no longer depends on it being unhittable and reads the changed behaviour instead (see its
+    // comment). The `hp: 0` is kept only so the shape stays recognisable in git history. The id is
+    // deliberately NOT the shared fixture's default `e1` — this file uses `'e1'` for a specific
+    // positioned carrier, and reusing it would conflate two different actors across the file.
     enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: 0,
     crit: 0,

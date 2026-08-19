@@ -264,14 +264,20 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
  * shape — no `enemyAttackers` at all, `targetId` never threaded, landing via the legacy
  * `targetId === undefined && !positionalLanding → [undefined]` fallback. An empty roster is now a
  * validation error at the boundary, and the fixture's replacement roster (one targetable member)
- * makes the run positional instead of reproducing the old shape. The one roster shape that DOES
- * stay genuinely non-positional — the 0-max-hp "pressure source" used elsewhere in this suite
- * (e.g. `accumulatorGather.integration.test.ts`) — was tried here too: it restores the legacy
- * fallback, but that fallback resolves to the vestigial `enemy` dummy, not `BARE_ENEMY_ID`, so
- * adopting it would mean re-pinning the assertion below rather than just re-deriving it. So the
- * original DPS-invariance / non-positional coverage is NOT preserved by this block; what remains
- * is the single-real-enemy positional edge case described above. Real non-positional
- * single-opponent coverage would need a fresh fixture — out of scope for this fix.
+ * makes the run positional instead of reproducing the old shape. The 0-max-hp "pressure source"
+ * roster was tried here as a substitute AT THE TIME, and rejected: it restored the legacy fallback
+ * then, but that fallback resolved to the vestigial `enemy` dummy, not `BARE_ENEMY_ID`, so adopting
+ * it would have meant re-pinning the assertion below rather than just re-deriving it.
+ *
+ * SP-4c-2a then retired the substitute OUTRIGHT, so it is no longer an option for anyone:
+ * `withTargetableHp` (normalizeRoster.ts, `MIN_TARGETABLE_MAX_HP`) floors every enemy attacker's
+ * max HP unconditionally, so no roster reaches the engine unhittable. The exemplar this note used
+ * to name for the trick, `accumulatorGather.integration.test.ts`, is itself a positional run now
+ * ("a run that used to be a NON-positional pressure source is now positional").
+ *
+ * So the original DPS-invariance / non-positional coverage is NOT preserved by this block, and
+ * cannot be re-created by a fresh fixture either: there is no non-positional shape left below the
+ * boundary. What remains is the single-real-enemy positional edge case described above.
  */
 describe('Ship-kit W5 Task A3: single-entry roster edge case (positional, no neighbours to fan out to)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {

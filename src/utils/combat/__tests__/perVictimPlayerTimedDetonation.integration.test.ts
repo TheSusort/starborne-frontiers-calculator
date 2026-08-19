@@ -550,8 +550,9 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
     //   2. even a NON-empty roster cannot make `isPositional` false any more — the boundary assigns
     //      EVERY roster member a slot, so `opposing.some(a => a.position !== undefined)` always
     //      holds, and it assigns the focus one too, so the first conjunct always holds. Measured in
-    //      case 6: with the 0-MAX-HP pressure source (the last non-positional shape there is) the
-    //      focus's own timed container BURSTS. `isPositional` is now a tautology for a player actor.
+    //      case 6: with the 0-MAX-HP pressure source — which was the last non-positional shape at
+    //      the time, and which SP-4c-2a's floor has since retired outright — the focus's own timed
+    //      container BURSTS. `isPositional` is now a tautology for a player actor.
     //
     // So there is no fixture shape left that exercises the gate's `isPositional`-false branch, and
     // the original non-vacuity check (temporarily dropping the conjunct made this case burst 4000)
