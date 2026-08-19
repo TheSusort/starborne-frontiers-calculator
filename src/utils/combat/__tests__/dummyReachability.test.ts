@@ -36,11 +36,24 @@
  * quoted as the reason 4c must gate on the CREDIT counter rather than the consultations counter,
  * and both are now closed — measured 0 credits corpus-wide.
  *
- * What remains, and what rung 4c-2b owns: an ALLY-TARGETING player actor consults the fallback on
- * every turn, because `resolvePositionalTarget` returns null for an ally-side parsed target and
- * selection falls through. Measured at 4,188 player-side consultations across the suite on `main`
- * @ `8d2c2a61` — the real keystone, and NOT the whiff window this header used to name. The fix is
- * the one the enemy side already has: return `tgt: undefined` and let the turn skip its attack.
+ * What remains, and what rung 4c-2b owns, is scoped to the PLAYER side's `legacyVictim` — the
+ * dummy `enemy` this whole file is about. `selectTurnTarget` increments the shared consultation
+ * counter at ONE site for BOTH sides, but the two `TurnBindings.legacyVictim` objects it feeds are
+ * not the same kind of thing (see `TurnBindings` in `engine.ts`): the player side's is the dummy;
+ * the enemy side's is `healTarget`, a real player actor, not a dummy at all. On the player side, an
+ * ALLY-TARGETING player actor consults the fallback on every turn, because `resolvePositionalTarget`
+ * returns null for an ally-side parsed target and selection falls through. Measured at 4,188
+ * player-side (dummy) consultations across the suite on `main` @ `8d2c2a61` — the real keystone for
+ * THIS rung, and NOT the whiff window this header used to name. The fix is the one the enemy side
+ * already has: return `tgt: undefined` and let the turn skip its attack.
+ *
+ * The enemy-side reading is a DIFFERENT number behind the same counter, and it is not this rung's
+ * job: 1,341 consultations resolve to no victim at all and 335 resolve to the heal target itself.
+ * Retiring `legacyVictim: healTarget` is rung 4e's job, not 4c's — per the epic spec §4.2, "the
+ * enemy-side `legacyVictim: healTarget`. Not a dummy: it is the healing calculator's anchor." A
+ * max-HP-0 PLAYER roster is correspondingly NOT closed by SP-4c-2a's floor, which is enemy-side
+ * only by design — see `damageChannelAccounting.integration.test.ts`'s "a never-targetable PLAYER
+ * roster is a CORPSE" case, which still reads a non-zero consultation count against that binding.
  *
  * ⚠️ THIS FILE NO LONGER CARRIES ITS OWN VACUITY GUARD. Every shape it can construct reads 0/0, so
  * a counter silently wired to nothing would leave all six cases green. The compensating control is
@@ -297,11 +310,16 @@ describe('sink CREDITS are distinct from fallback CONSULTATIONS', () => {
         // deletion on the CREDIT counter and never on the consultations counter.
         //
         // SP-4c-1 removed the window (the kill ends the match), so this shape now reads 0/0. The
-        // ONLY remaining consumer of the fallback is the 0-max-HP pressure source directly above,
-        // which both consults AND credits — a never-alive actor is never destroyed, so it is not a
-        // wipe and its run continues. The counters therefore no longer diverge on any reachable
-        // shape, and either one would serve as SP-4c-2's gate. The credit counter remains the
-        // correct choice regardless: it is the one that means "the dummy absorbed nothing".
+        // 0-max-HP pressure source directly above used to be the divergence case that mattered here
+        // too — a never-alive actor is never destroyed, so it was not a wipe and its run continued,
+        // consulting AND crediting every round. SP-4c-2a closed that shape as well, by flooring it
+        // at the normalization boundary before the engine ever sees it (see the case above, and
+        // `MIN_TARGETABLE_MAX_HP` in `normalizeRoster.ts`). Both of this file's divergence sources
+        // are gone, so every player-side shape it can construct reads 0/0, and either counter would
+        // serve as SP-4c-2's gate on THIS file's evidence alone. The credit counter remains the
+        // correct choice regardless — it is the one that means "the dummy absorbed nothing", and it
+        // stays correct once other files' shapes (e.g. the enemy-side heal-target fallback) are
+        // considered too.
         runCombat({
             ...bareInput(),
             numRounds: 3,
