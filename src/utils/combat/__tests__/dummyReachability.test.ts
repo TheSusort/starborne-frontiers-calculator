@@ -30,12 +30,19 @@
  *    gets `tgt: undefined` and runs a NO-VICTIM turn — so a player-side consultation is structurally
  *    impossible and the zeros here are claims about the enemy-side binding.
  *
- * 3. **VACUITY — one case must read non-zero, and it does.** Every case above reads 0, and a zero
- *    from a reading wired to nothing is indistinguishable from a zero that means something. The
- *    `LIVENESS` case is this file's guard: it reads `__getNoVictimPlayerTurnCount()` at BARE_ROUNDS
- *    off an ally-side active target, and additionally observes that the dummy takes no turn. Belt
- *    and braces: `normalizeRoster.test.ts`'s floor cases prove the un-floored 0-max-HP roster cannot
- *    be built, and `noVictimPlayerTurn.test.ts` pins the no-victim contract directly.
+ * 3. **VACUITY — split across TWO counters, and say which is which.** Every case above reads 0, and
+ *    a zero from a reading wired to nothing is indistinguishable from a zero that means something.
+ *    Two separate guards answer that, because the zeros and the non-zero are DIFFERENT counters:
+ *      • the `LIVENESS` case reads `__getNoVictimPlayerTurnCount()` at BARE_ROUNDS off an ally-side
+ *        active target (and additionally observes that the dummy takes no turn). What its non-zero
+ *        proves is that the FIXTURE RUNS A LIVE PATH — the zeros are not coming from cases that
+ *        never ran. It says nothing about `__getLegacyVictimFallbackCount`, which is the counter
+ *        every zero here reads.
+ *      • that CONSULTATION counter's own liveness is pinned CROSS-FILE, at
+ *        `damageChannelAccounting.integration.test.ts:422` (see §"WHAT SP-4c STILL HAS TO HANDLE"
+ *        below) — the only reading in the corpus that moves it off 0.
+ *    Belt and braces: `normalizeRoster.test.ts`'s floor cases prove the un-floored 0-max-HP roster
+ *    cannot be built, and `noVictimPlayerTurn.test.ts` pins the no-victim contract directly.
  *
  * ── THE CREDIT COUNTER WAS DELETED IN SP-4c-2c ────────────────────────────────────────────────
  *

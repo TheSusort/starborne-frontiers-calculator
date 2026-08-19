@@ -1757,11 +1757,13 @@ export function __resetLegacyVictimFallbackCount(): void {
  *
  * It is not a credit counter either — nothing is booked on a no-victim turn by construction (the
  * damage assembly is victim-fenced, so the cast deals literal 0). SP-4c-2c made it the SOLE holder
- * of a job it previously only shared: this counter IS `dummyReachability.test.ts`'s vacuity guard.
- * That file's every other reading is a 0, and a zero from a counter wired to nothing proves nothing,
- * so exactly one case there must read a MOVING number off a live path — and since 4c-2c retired the
- * dummy's turn (which killed the only route that could move the former credit counter, deleted in
- * that rung), this is the number it reads.
+ * of a job it previously only shared: it is the only MOVING number `dummyReachability.test.ts` can
+ * read in-file, since 4c-2c retired the dummy's turn (which killed the only route that could move
+ * the former credit counter, deleted in that rung). Be precise about what that buys, because the
+ * two counters are easy to conflate: every ZERO in that file reads `legacyVictimFallbackCount`, not
+ * this one, so this non-zero proves only that the FIXTURE RUNS A LIVE PATH — the zeros are not
+ * coming from cases that never ran. The CONSULTATION counter's own liveness is pinned cross-file at
+ * `damageChannelAccounting.integration.test.ts:422`.
  *
  * Module-level and NOT reset per run: `__resetNoVictimPlayerTurnCount` is the test's job.
  */

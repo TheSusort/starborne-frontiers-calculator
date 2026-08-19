@@ -137,14 +137,23 @@ const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     ...over,
 });
 
-const enemyTurnStartedCount = (input: CombatEngineInput): number => {
+/**
+ * The ordered ids of every actor that emitted `turn-started`, NOT a count of one id.
+ *
+ * Deliberately a ROSTER and not a counter: a counter keyed on `'enemy'` reads 0 both when the dummy
+ * is correctly absent AND when the sensor itself is broken (event renamed, dummy re-id'd, bus
+ * unwired), which is the repo's fixture-vacuity defect class. Asserting the whole roster makes the
+ * dummy's absence a POSITIVE observation — the actors that DID act have to be named for the
+ * assertion to pass, so a dead sensor reads `[]` and fails.
+ */
+const actorIdsThatTookTurns = (input: CombatEngineInput): string[] => {
     const bus = createEventBus();
-    let count = 0;
+    const ids: string[] = [];
     bus.on('turn-started', (e: Extract<CombatEvent, { type: 'turn-started' }>) => {
-        if (e.actorId === 'enemy') count += 1;
+        ids.push(e.actorId);
     });
     runCombat({ ...input, bus });
-    return count;
+    return ids;
 };
 
 describe('dummy enemy turn gate', () => {
@@ -167,38 +176,45 @@ describe('dummy enemy turn gate', () => {
         // order to tick its containers. That was the LAST shape in which the dummy acted.
         //
         // The gate is gone: `turnOrderActors` now drops the dummy unconditionally. This case and
-        // its enemy-side twin below are therefore a MATCHED PAIR reading the same 0 through the
-        // two branches of the retired gate — which is exactly what makes them a tripwire against
-        // the gate being reintroduced. Keep BOTH: a single case could be satisfied by a
+        // its enemy-side twin below are therefore a MATCHED PAIR reading the dummy's absence
+        // through the two branches of the retired gate. That makes them a tripwire against the
+        // gate being reintroduced — but only because each asserts the WHOLE `turn-started` roster
+        // rather than a count of one id: the dummy's absence is witnessed alongside the presence
+        // of the actors that DID act, so a sensor that stopped observing anything fails here
+        // instead of reading a green 0. Keep BOTH: a single case could be satisfied by a
         // reintroduced gate that happened to pick the branch it exercises.
-        const count = enemyTurnStartedCount(
-            BASE({
-                healTargetId: 'attacker',
-                mode: 'healing',
-                position: 'M4',
-                target: allySideTarget(),
-                pattern: basePattern(),
-                enemyAttackers: [basicEnemyAt('enemy-front', 'M4')],
-            })
-        );
-        expect(count).toBe(0);
+        expect(
+            actorIdsThatTookTurns(
+                BASE({
+                    healTargetId: 'attacker',
+                    mode: 'healing',
+                    position: 'M4',
+                    target: allySideTarget(),
+                    pattern: basePattern(),
+                    enemyAttackers: [basicEnemyAt('enemy-front', 'M4')],
+                })
+            )
+        ).toEqual(['attacker', 'enemy-front']);
     });
 
     it('positional team-vs-team: the dummy enemy is excluded from the turn order', () => {
         idc = 0;
         // The CONTROL for the case above: identical fixture, `side: 'enemy'` instead of `'ally'`.
-        // Both conjuncts hold → positional-complete → the dummy is vestigial and dropped.
-        const count = enemyTurnStartedCount(
-            BASE({
-                healTargetId: 'attacker',
-                mode: 'healing',
-                position: 'M4',
-                target: parsedTarget('front'),
-                pattern: basePattern(),
-                enemyAttackers: [basicEnemyAt('enemy-front', 'M4')],
-            })
-        );
-        expect(count).toBe(0);
+        // Both conjuncts hold → positional-complete → the dummy is vestigial and dropped. Same
+        // whole-roster assertion, and the same roster: flipping the target's side moves who each
+        // actor SHOOTS, never who TAKES A TURN.
+        expect(
+            actorIdsThatTookTurns(
+                BASE({
+                    healTargetId: 'attacker',
+                    mode: 'healing',
+                    position: 'M4',
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    enemyAttackers: [basicEnemyAt('enemy-front', 'M4')],
+                })
+            )
+        ).toEqual(['attacker', 'enemy-front']);
     });
 
     // TRIPWIRE, and ONLY a tripwire — the coverage it replaces is restored above, not conceded.
