@@ -38,6 +38,7 @@ import type { CombatEvent } from '../events';
 import { createEventBus } from '../events';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { normalizeCombatRoster, MIN_TARGETABLE_MAX_HP } from '../normalizeRoster';
+import { isPositional, resolvesPositionalVictim } from '../positionalBinding';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -740,45 +741,102 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
     // SP-4b-1 §4B split one overloaded predicate into three and moved SEVEN cast/selection gates
     // from `isPositional` to `resolvesPositionalVictim`. Two sites deliberately did NOT move,
     // because they route the actor's OWN state and the opposing roster is only a MODE signal:
-    // `applyPositionedTimedBurst` (engine.ts ~:6530) and THIS tick (engine.ts ~:8300). Narrowing
-    // the burst site was caught by `barrier.test.ts › blocks a bomb detonation`; narrowing this one
-    // was caught by NOTHING — it survived as a mutant. This test closes that hole.
+    // `applyPositionedTimedBurst` (engine.ts:7061) and THIS tick (engine.ts:8937). Narrowing the
+    // burst site was caught by `barrier.test.ts › blocks a bomb detonation`; narrowing this one was
+    // caught by NOTHING — it survived as a mutant. This test closes that hole.
     //
     // The two predicates diverge on exactly one input class: the opposing roster is PLACED but has
-    // no member with `stats.hp > 0` (a roster of 0-max-HP pressure sources — the shape 54 fixture
-    // files and the pre-SP-3b healing calculator pass). So the enemies here are placed with max HP
-    // 0. `isPositional` is TRUE (they carry positions), `resolvesPositionalVictim` is FALSE (none is
-    // hittable) — and the ally's own corrosion MUST still tick against its own HP, because whether
-    // the ally can find a VICTIM has nothing to do with whether its own DoT containers burn it.
-    // Narrowing the gate strands the containers unticked: the same "state routed to nowhere" defect
-    // §4B fixed, one layer down.
-    // RULING (SP-4c-2a, already decided — see task brief). This test used to pin "an ally ticks
-    // its OWN corrosion even when NO opposing actor is hittable": the divergence zone it needed
-    // was an enemy roster that is POSITIONED (`isPositional` true, via `enemyAt(..., 0)`'s
-    // explicit board slot) but NOT a valid victim (`resolvesPositionalVictim` false, via `hp: 0`).
+    // no member with `stats.hp > 0`. `isPositional` is TRUE (they carry positions),
+    // `resolvesPositionalVictim` is FALSE (none is hittable) — and the ticking actor's own corrosion
+    // MUST still tick against its own HP, because whether it can find a VICTIM has nothing to do
+    // with whether its own DoT containers burn it. Narrowing the gate strands the containers
+    // unticked: the same "state routed to nowhere" defect §4B fixed, one layer down.
     //
-    // The targetable-HP floor (normalizeRoster.ts, MIN_TARGETABLE_MAX_HP) closes that shape
-    // CATEGORICALLY for the enemy side: `withTargetableHp` floors every enemy attacker's `stats.hp`
-    // unconditionally, with no escape hatch, so `resolvesPositionalVictim` is now TRUE for every
-    // positioned enemy — there is no longer any way to construct an enemy that is positioned but
-    // unhittable. This is NOT restorable by killing the enemy mid-combat either:
-    // `isTargetableRosterMember` keys on STATIC `stats.hp` (max HP), not live `currentHp`, so a
-    // corpse still reads as targetable, and SP-4c-1 ends the match outright once the only enemy
-    // dies anyway. Adding an opt-out flag to the floor is a standing owner ruling this epic already
-    // closed: "no opt-out flag for legacy fixtures — an escape hatch preserves the exact fork 4c
-    // needs gone."
+    // SP-4c-2a MIRRORED THIS CASE ONTO THE OTHER SIDE, and that is the whole change. The original
+    // put the divergence zone on the ENEMY roster (an ally ticking while every enemy was a 0-max-HP
+    // pressure source). `withTargetableHp` (normalizeRoster.ts) floors every ENEMY attacker's max
+    // HP unconditionally, so that half of the zone is gone: no input can produce a positioned
+    // enemy that is not a valid victim. But the DoT-tick gate is ONE shared, team-symmetric
+    // expression — `const opposing = sideIsPlayer ? enemyAttackerActors : allPlayerActors`
+    // (engine.ts:8932) — and the floor is deliberately ENEMY-SIDE ONLY (see `withTargetableHp`'s
+    // "ENEMY SIDE ONLY" note: the focus's `hp` must stay untouched or a never-alive focus reads as
+    // a corpse). So for an ENEMY ticker, whose `opposing` is `allPlayerActors`, the divergence zone
+    // is fully intact — and this case moves there. Same property, same gate, same arithmetic,
+    // opposite side; team symmetry is a LOCKED project rule for engine work, so the mirror is a
+    // preservation of the property rather than a workaround.
+    it('GATE RETENTION (player-side mirror): an ENEMY ticks its OWN corrosion even when NO opposing actor is hittable (0-max-HP PLAYER roster)', () => {
+        idc = 0;
+        // The divergence zone, on the PLAYER roster: the focus (`hp: 0`) and one team ally
+        // (`teamAlly(..., 0)`) are both auto-placed by the boundary but neither has max HP > 0.
+        //
+        // The TICKER is `enemy-back` at M2, deliberately OUTSIDE the focus/ally Line-Range-1
+        // footprint (M4 + M3), so its `perTargetDamage` row is the PURE tick with no firing-hit
+        // confound — the same isolation trick case C.1 uses.
+        //
+        // The APPLIER is `team-ally`, not the focus. `tickDoTs` skips any entry whose applier has
+        // no turn ctx yet (`if (!ctx) continue`, engine.ts:1030), and a `hp: 0` focus that is also
+        // the heal target is skipped by the dead-target guard and never records one — measured: it
+        // emits no `turn-started`, while the ally does. The ally's ctx is neutral (selfDotModifier 0,
+        // affinityDamageModifier 0 → dotMult 1, affinityMult 1), so it changes no factor below.
+        let premise: { isPositional: boolean; resolvesVictim: boolean } | undefined;
+        const { events, result } = collect(
+            POSITIONAL_BASE({
+                hp: 0,
+                teamActors: [teamAlly('team-ally', 'M2', 0)],
+                enemyAttackers: [
+                    enemyAt('enemy-front', 'M4', 1_000_000_000),
+                    enemyAt('enemy-back', 'M2', 10000), // outside footprint — the ticker
+                ],
+                __testTapActors: (actors: CombatActor[]) => {
+                    const back = actors.find((a) => a.id === 'enemy-back');
+                    back?.corrosionEntries.push(corrosion(5, 1, 5, 'team-ally'));
+                    // ANTI-VACUITY, load-bearing: evaluate the two predicates on the SAME inputs
+                    // the engine's gate sees — the ticker's position against the live PLAYER
+                    // roster — so the divergence is asserted rather than assumed. If a future
+                    // change gave the players max HP (or extended the floor to the player side),
+                    // `resolvesVictim` flips true, this case stops testing the retention, and the
+                    // assertion below fails instead of going quietly vacuous.
+                    const players = actors.filter((a) => a.side === 'player');
+                    premise = {
+                        isPositional: isPositional(back!.position, players),
+                        resolvesVictim: resolvesPositionalVictim(back!.position, players),
+                    };
+                },
+            })
+        );
+        expect(premise).toEqual({ isPositional: true, resolvesVictim: false });
+
+        // The tick fired, at the header's corrosion arithmetic:
+        //   tick = stacks × (tier/100) × min(victimOwnMaxHp, 500_000) × dotMult × affinityMult
+        //        = 1 × (5/100) × min(10_000, 500_000) × 1 × 1
+        //        = 0.05 × 10_000 = 500
+        // — drained from enemy-back's OWN HP through the per-victim enemySink at its turn-start.
+        expect(result.rounds[0].perTargetDamage?.['enemy-back']).toBe(500);
+        const ticks = events.filter(
+            (e) =>
+                e.type === 'dot-ticked' &&
+                (e as CombatEvent & { targetId: string }).targetId === 'enemy-back'
+        );
+        expect(ticks.length).toBeGreaterThanOrEqual(1);
+
+        // And the unhittable PLAYER roster absorbed nothing — no player is a victim row at all.
+        expect(result.rounds[0].perTargetDamage?.['attacker']).toBeUndefined();
+        expect(result.rounds[0].perTargetDamage?.['team-ally']).toBeUndefined();
+    });
+
+    // TRIPWIRE for the half of the divergence zone the floor DID close: the ENEMY-side shape the
+    // case above used to be written against (a positioned enemy with max HP 0). The property itself
+    // is not conceded — it is covered by the player-side mirror above.
     //
-    // So: the premise is structurally unconstructible, not numerically stale, and the retention
-    // GATE this test covered (the `isPositional`-not-`resolvesPositionalVictim` divergence inside
-    // the DoT-tick site) is deleted outright in rung 4c-2d along with the dummy — so the coverage
-    // loss is EXPECTED, the same closure `dummyEnemyTurnGate.test.ts`'s tripwire documents for the
-    // sibling turn-order gate.
-    //
-    // TRIPWIRE: assert the premise is unconstructible — the roster this fixture asks for (two
-    // positioned, 0-max-HP enemies) arrives at the engine already floored and hittable. If the
-    // premise ever becomes constructible again (the floor removed, or gains an escape hatch), this
-    // fails and flags that the GATE RETENTION claim needs re-deriving before it can be trusted.
-    it('TRIPWIRE: the GATE RETENTION premise (positioned-but-unhittable enemy) is gone — every positioned enemy arrives already hittable', () => {
+    // It fails, and so flags that the enemy-side shape is constructible again, if EITHER:
+    //   • the floor is removed or gains an escape hatch (`withTargetableHp` in normalizeRoster.ts,
+    //     which today floors unconditionally — and a per-fixture opt-out is a standing owner ruling
+    //     this epic already closed: "no opt-out flag for legacy fixtures — an escape hatch
+    //     preserves the exact fork 4c needs gone"); or
+    //   • `isTargetableRosterMember` is re-keyed from STATIC `stats.hp` to live `currentHp`
+    //     (positionalBinding.ts:35-37) — a corpse would then read as untargetable and reopen the
+    //     shape from the other end, which the max-HP assertion here would not otherwise notice.
+    it('TRIPWIRE: the ENEMY-side divergence shape (positioned-but-unhittable enemy) is gone — every positioned enemy arrives already hittable', () => {
         const input = POSITIONAL_BASE({
             teamActors: [teamAlly('team-ally', 'M2', 10000)],
             enemyAttackers: [enemyAt('enemy-front', 'M4', 0), enemyAt('enemy-mid', 'M3', 0)],

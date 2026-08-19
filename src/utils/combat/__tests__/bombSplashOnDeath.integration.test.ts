@@ -266,6 +266,10 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
     // or gains an escape hatch, this fails and flags that the old "position undefined blocks the
     // splash gate" claim needs re-deriving (and re-testing against the real gate) before rung
     // 4c-2d can delete it safely.
+    // The OTHER way the premise could return, which this HP assertion would NOT notice:
+    // `isTargetableRosterMember` being re-keyed from STATIC `stats.hp` to live `currentHp`
+    // (positionalBinding.ts:35-37). A corpse would then read as untargetable, `resolvesPositionalVictim`
+    // would go false mid-run, and the cast would fall back to the position-less dummy sink again.
     it('TRIPWIRE: the "position-undefined splash victim" premise is gone — the floor arrives already targetable', () => {
         const input: CombatEngineInput = {
             enemyAttackers: bareEnemy({ stats: { hp: 0 } }),

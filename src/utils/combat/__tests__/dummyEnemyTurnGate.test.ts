@@ -10,19 +10,29 @@
  * battle is NOT fully positional. In a positional-complete battle it is excluded from the turn
  * order entirely.
  *
- * PRECISION on "positional-complete", because the distinction is what this file's fixtures turn on:
- * `dummyEnemyIsVestigial`'s first conjunct is `enemyAttackerActors.some(isTargetableRosterMember)`
- * — TARGETABLE (max hp > 0), not merely POSITIONED. Since SP-4b-1 the boundary positions every
- * enemy and since SP-4b-2b the roster is never empty, so "positioned" no longer discriminates
- * anything; a placed-but-unhittable 0-max-HP roster is what still reads as not-fully-positional.
- * The second conjunct is unchanged: every player actor positioned with an ENEMY-side parsed target.
+ * PRECISION on "positional-complete", because the distinction is what this file's fixtures turn on.
+ * `dummyEnemyIsVestigial` (engine.ts:2680-2686) is an AND of TWO conjuncts:
+ *   1. `enemyAttackerActors.some(isTargetableRosterMember)` — TARGETABLE (positioned AND max
+ *      hp > 0), not merely POSITIONED;
+ *   2. `allPlayerActors.every(a => a.position != null && t?.side === 'enemy')` — every player actor
+ *      positioned AND aiming its parsed ACTIVE target at the ENEMY side.
+ *
+ * Conjunct 1 is now a TAUTOLOGY and no longer discriminates anything: SP-4b-1 positions every
+ * enemy, SP-4b-2b refuses an empty roster, and SP-4c-2a's `MIN_TARGETABLE_MAX_HP` floor
+ * (`normalizeRoster.ts`) raises every enemy attacker's max HP above 0 — so the placed-but-unhittable
+ * 0-max-HP roster that USED to be this file's route into the not-fully-positional branch cannot be
+ * constructed any more (see the TRIPWIRE case below).
+ *
+ * Conjunct 2 is still FALSIFIABLE, and it is the live route the cases below use: a player actor
+ * whose parsed ACTIVE target is ALLY-side (a healer or support ship) fails `t?.side === 'enemy'`,
+ * so the whole AND is false even with a real, hittable, positioned enemy on the board — and the
+ * dummy stays in the turn order. That shape survives the normalization boundary by design:
+ * `withTargeting` FILLS an absent target but never SUBSTITUTES an ally-side one ("FILL, never
+ * SUBSTITUTE", `normalizeRoster.ts:79-81`).
  *
  * ⭐ SP-4c HAND-OFF. This whole file's SUBJECT — the dummy's turn-order gate — is deleted by SP-4c
- * along with the dummy itself, so these cases go with it rather than being migrated. It is also a
- * PRESSURE-SOURCE fixture: the not-fully-positional arms below only reach the dummy's turn via a
- * placed-but-unhittable 0-max-HP roster (the same `isTargetableRosterMember` trick
- * `dummyReachability.test.ts` uses for its liveness proof), so when the dummy goes there is no
- * remaining actor for the gate to exclude and no assertion here survives the deletion.
+ * along with the dummy itself, so these cases go with it rather than being migrated: once there is
+ * no dummy there is no actor for the gate to include or exclude.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -47,6 +57,18 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
     raw: selection,
     side: 'enemy',
     selection,
+});
+/**
+ * An ALLY-side active target — a healer/support ship's binding.
+ *
+ * This is the live falsifier of `dummyEnemyIsVestigial`'s SECOND conjunct (`t?.side === 'enemy'`),
+ * and the only one left now the floor has made the first conjunct a tautology. It reaches the engine
+ * unrewritten: `normalizeCombatRoster`'s `withTargeting` fills an ABSENT target only.
+ */
+const allySideTarget = (): ParsedTarget => ({
+    raw: 'ally-team',
+    side: 'ally',
+    selection: 'team',
 });
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 const basicAttack = (): ShipSkills['slots'][number] => ({
@@ -75,14 +97,12 @@ const basicEnemyAt = (id: string, position: Position): EnemyAttacker =>
     }) as EnemyAttacker;
 
 const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: an EMPTY roster is refused at the normalization boundary, but this file's whole
-    // subject is the NOT-fully-positional branch of the turn-order gate, so it needs a roster that
-    // is real yet still leaves the dummy as the offense sink. That shape is the documented 0-MAX-HP
-    // "pressure source": `dummyEnemyIsVestigial`'s first conjunct is
-    // `enemyAttackerActors.some(isTargetableRosterMember)` — max hp > 0, the same member predicate
-    // `resolvesPositionalVictim` is built from, NOT `isPositional`. A placed-but-unhittable roster
-    // therefore reads as "pressure, not targets", the dummy stays in the turn order, and the gate's
-    // negative branch is observable exactly as it was pre-branch.
+    // A 0-max-HP roster: what USED to be the "pressure source" idiom (placed but unhittable, so
+    // `dummyEnemyIsVestigial`'s first conjunct read false and the dummy stayed in the turn order).
+    // SP-4c-2a's floor retired the idiom — this member now arrives at the engine at
+    // MIN_TARGETABLE_MAX_HP, and the TRIPWIRE case below is the only thing that still cares. The
+    // cases that need the dummy in the turn order falsify the SECOND conjunct instead
+    // (`allySideTarget`), and override this roster with a genuinely hittable enemy.
     enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
     attack: 10000,
     crit: 0,
@@ -119,34 +139,41 @@ const enemyTurnStartedCount = (input: CombatEngineInput): number => {
 };
 
 describe('dummy enemy turn gate', () => {
-    // RULING (SP-4c-2a, already decided — see task brief): this test used to pin "DPS mode (no
-    // TARGETABLE enemies): the dummy enemy takes its tick turn" — the ONE way to reach that claim
-    // was BASE's 0-max-HP "pressure source" roster, which `dummyEnemyIsVestigial`'s first conjunct
-    // (`enemyAttackerActors.some(isTargetableRosterMember)`, i.e. max hp > 0) read as
-    // not-fully-positional, keeping the dummy in the turn order.
+    // The two cases below are a MATCHED PAIR over the ONE conjunct the floor left falsifiable, so
+    // the file distinguishes the gate's two branches instead of only observing one. They differ in
+    // a single field — the focus's parsed active target's `side` — and the roster is a real,
+    // positioned, hittable enemy in BOTH, so the first conjunct is true in both and cannot be what
+    // moves the reading.
     //
-    // The targetable-HP floor (normalizeRoster.ts, MIN_TARGETABLE_MAX_HP) closes that constructive
-    // path CATEGORICALLY: every enemy attacker arrives at the engine already hittable, so
-    // `enemyAttackerActors.some(isTargetableRosterMember)` is now a tautology and there is no
-    // longer any input that makes the dummy's turn-order gate take its NOT-fully-positional
-    // branch. This is the same class of closure as `perVictimDotTick.integration.test.ts`'s GATE
-    // RETENTION case (SP-4c-2a Task 4's B6 ruling) — structurally unconstructible, not numerically
-    // stale — and this file's own pre-existing "SP-4c HAND-OFF" comment above already named the
-    // reason the coverage loss is EXPECTED rather than accidental: the dummy's turn-order gate
-    // (`dummyEnemyIsVestigial`) is deleted outright, along with the dummy itself, in rung 4c-2d.
-    //
-    // TRIPWIRE: assert the premise is unconstructible — the roster this fixture asks for (0 max
-    // HP) arrives at the engine already floored and hittable. If the floor is ever removed or
-    // gains an escape hatch, this fails and flags that the old claim (and the gate it pinned) may
-    // need to be re-examined before deletion.
-    it('TRIPWIRE: DPS mode\'s "no TARGETABLE enemies" premise is gone — the floor arrives already hittable', () => {
-        const floored = normalizeCombatRoster(BASE());
-        expect(floored.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
+    // The claim this pair restores is the one this file was written for and which SP-4c-2a's first
+    // pass wrongly conceded as unconstructible: the dummy still takes its tick turn while a player
+    // actor could still fall back to it.
+    it('a player actor with an ALLY-side target: the dummy enemy still takes its tick turn', () => {
+        idc = 0;
+        // The focus is a support ship: positioned at M4, active target ALLY-side. Conjunct 2 of
+        // `dummyEnemyIsVestigial` (`t?.side === 'enemy'`) is therefore false → the AND is false →
+        // the dummy is NOT dropped from the turn order and emits `turn-started` on its own turn.
+        // (Derivation of the bound: every actor in the turn order takes one turn per round, so with
+        // BASE's `numRounds: 1` this is a single dummy turn. The original assertion this restores
+        // was `> 0`, which is kept: extra-action grants could legitimately add turns, and the
+        // load-bearing claim is "the dummy is in the turn order at all".)
+        const count = enemyTurnStartedCount(
+            BASE({
+                healTargetId: 'attacker',
+                mode: 'healing',
+                position: 'M4',
+                target: allySideTarget(),
+                pattern: basePattern(),
+                enemyAttackers: [basicEnemyAt('enemy-front', 'M4')],
+            })
+        );
+        expect(count).toBeGreaterThan(0);
     });
 
     it('positional team-vs-team: the dummy enemy is excluded from the turn order', () => {
         idc = 0;
-        // Focus at M4 targeting a positioned enemy → positional-complete → dummy is vestigial.
+        // The CONTROL for the case above: identical fixture, `side: 'enemy'` instead of `'ally'`.
+        // Both conjuncts hold → positional-complete → the dummy is vestigial and dropped.
         const count = enemyTurnStartedCount(
             BASE({
                 healTargetId: 'attacker',
@@ -158,5 +185,25 @@ describe('dummy enemy turn gate', () => {
             })
         );
         expect(count).toBe(0);
+    });
+
+    // TRIPWIRE, and ONLY a tripwire — the coverage it replaces is restored above, not conceded.
+    //
+    // What IS gone is the ROUTE this file's old first case took into the not-fully-positional
+    // branch: BASE's 0-max-HP "pressure source" roster, which `dummyEnemyIsVestigial`'s FIRST
+    // conjunct (`enemyAttackerActors.some(isTargetableRosterMember)`, i.e. max hp > 0) read as
+    // not-fully-positional. SP-4c-2a's floor makes that FIRST CONJUNCT — not the whole gate — a
+    // tautology, so the roster can no longer be built.
+    //
+    // This case asserts that premise directly. It fails, and so flags that the retired route is
+    // constructible again, if EITHER:
+    //   • the floor is removed or gains an escape hatch (`withTargetableHp` in normalizeRoster.ts,
+    //     which today floors unconditionally); or
+    //   • `isTargetableRosterMember` is re-keyed from STATIC `stats.hp` to live `currentHp`
+    //     (positionalBinding.ts:35-37) — a corpse would then read as untargetable and reopen the
+    //     shape from the other end, which the HP assertion here would not otherwise notice.
+    it('TRIPWIRE: the 0-max-HP route into the not-fully-positional branch is gone — the floor arrives already hittable', () => {
+        const floored = normalizeCombatRoster(BASE());
+        expect(floored.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
     });
 });
