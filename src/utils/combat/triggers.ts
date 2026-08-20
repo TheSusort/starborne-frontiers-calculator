@@ -1964,8 +1964,10 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     }
     // SP-M M1 Task 7 + spec §4 (M10): an enemy-oriented `hp-threshold` gate is re-evaluated PER
     // RESOLVED TARGET by the branch below, so it must not also gate globally — the single global
-    // `enemyHpPct` describes the vestigial dummy positionally and would either block everything or
-    // false-pass a whole AoE.
+    // `enemyHpPct` is a fight-wide SCALAR (`100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`, both of
+    // them legacy scalar inputs that described the dummy sink SP-4c-2d deleted and now describe no
+    // actor on the board at all), so gating an AoE on it would either block everything or false-pass
+    // the whole footprint.
     // Only an ENEMY/target-oriented hp-threshold is dropped: a SELF one keeps gating normally
     // (buildShipAbilities.ts's re-target never attaches target:'all-enemies' for a self-only
     // hp-threshold — see that file's matching narrowing).
@@ -1984,8 +1986,9 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     // of this function's promise: NO PER-TARGET RE-CHECK SITE EXISTS IN THOSE BRANCHES YET. Adding
     // them here without one would not fix a dead gate, it would make that gate ALWAYS-ON — strictly
     // worse than today, where a non-self `hp-threshold` on a `counter` / `dot` / `convert-dot` is
-    // still evaluated against the vestigial positional `enemyHpPct` and is therefore
-    // dead-but-FAILS-CLOSED: unfixed, never over-firing.
+    // still evaluated against that fight-wide scalar `enemyHpPct` — which on a positional run stays
+    // at 100% because positional credit books per-victim and never feeds `cumulativeDamage` — and is
+    // therefore dead-but-FAILS-CLOSED: unfixed, never over-firing.
     // SO: ADDING A SHAPE TO THE `dt === …` TEST BELOW IS ONLY SAFE ONCE THAT SHAPE'S BRANCH CALLS
     // `perVictimOk` (or a named dedicated re-check) on the target it actually resolves. Do not
     // "tidy" `dot`, `convert-dot` or `counter` into the list because they look enemy-facing —
@@ -2745,11 +2748,25 @@ function buildPerVictimConditionCtx(
     victim: CombatActor
 ): ReturnType<typeof buildDrainContext> {
     const base = buildDrainContext(ctx, ownerId);
-    // Per-victim HP% from the victim's own live currentHp/maxHp — but ONLY when the engine tracks
-    // a real max HP for this victim (positional real enemies, registered in baseHpById). The DPS
-    // dummy is NOT registered there (recipientMaxHp → 0); for it, `base.enemyHpPct` is already the
-    // correct HP% (buildDrainContext derives it from ctx.cumulativeDamage/ctx.enemyHp), so fall
-    // back to it rather than dividing by 0 (which would read a spurious 0% and always fire).
+    // Per-victim HP% from the victim's own live currentHp/maxHp — but ONLY when the engine tracks a
+    // real max HP for this victim (`recipientMaxHp`: the actor's last-turn effectiveMaxHp, else its
+    // registered base HP). Otherwise fall back to the fight-wide `base.enemyHpPct` rather than
+    // dividing by 0, which would read a spurious 0% and always fire.
+    //
+    // WHAT REACHES THAT FALLBACK, honestly: it used to be documented as the DPS dummy's arm (not
+    // registered in baseHpById → recipientMaxHp 0, and `base.enemyHpPct` genuinely WAS its HP%).
+    // SP-4c-2d deleted that actor, and the arm is now CORPUS-INERT — no shape the suite can build
+    // reaches it. Measured, not assumed: a two-armed console probe on this exact branch over the
+    // whole suite logged 626 hits on the `maxHp > 0` arm and 0 on this one. The two ways in are (a)
+    // an `IntentExecContext` with no `recipientMaxHpFor` resolver — the engine always supplies one
+    // (engine.ts's drain ctx), so this needs a hand-built ctx; and (b) a resolved victim whose
+    // tracked max HP is 0, which SP-4c-2a's `MIN_TARGETABLE_MAX_HP` floor rules out for an ENEMY
+    // victim but NOT for a player one (the focus `hp` input and a walked team ship's `walk.stats.hp`
+    // are unfloored, and DPS-mode callers default `hp` to 0) — that needs an enemy-owned
+    // `all-enemies` damage proc carrying a per-victim enemy condition, which no shipped enemy kit in
+    // the corpus pairs with a 0-max-HP player victim today. Note that if it were ever reached, the
+    // value it falls back to describes NO actor: `base.enemyHpPct` is the legacy scalar
+    // `100 * (1 - cumulativeDamage / enemyHp)`. It is a divide-by-zero backstop, not a reading.
     const maxHp = ctx.recipientMaxHpFor?.(victim.id) ?? 0;
     const enemyHpPct =
         maxHp > 0 ? Math.max(0, Math.min(100, (100 * victim.currentHp) / maxHp)) : base.enemyHpPct;
@@ -4163,7 +4180,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // `livingOpposingActorIds` can still hand back [] — it filters out actors carrying a
             // `destroyedRound`. That used to fall through to the dummy sink, "its intended role";
             // SP-4c-2d Task 1 retired the role and the empty list is now a NO-OP. "Pure DPS-calc
-            // mode" was the shorthand when this was written and never named that case: since SP-1
+            // mode" was the shorthand when this was written and no longer names that case: since SP-1
             // the DPS page supplies a real, positioned enemy and since SP-4b-1 the normalization
             // boundary places it. Neither do the two shapes this note used to name next — both are
             // impossible below the boundary: SP-4b-2b REFUSES an absent/empty roster, and SP-4c-2a's

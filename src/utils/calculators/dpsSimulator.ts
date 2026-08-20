@@ -446,8 +446,10 @@ function synthesizedDpsEnemy(args: {
             attack: 0,
             crit: 0,
             critDamage: 0,
-            // The engine's own dummy default (`enemySpeed ?? 50`, engine.ts:1903) — the enemy acts
-            // last at default speeds, and turn order must not shift for a caller that set nothing.
+            // 50 was the engine's own dummy-actor default (`enemySpeed ?? 50`) before SP-4c-2d
+            // deleted that actor and every read of the field — this line is now the only place the
+            // default lives. Kept at 50 so the enemy still acts last at default speeds: turn order
+            // must not shift for a caller that set nothing.
             speed: args.enemySpeed ?? 50,
             defence: args.enemyDefense,
             hp: args.enemyHp,
@@ -613,7 +615,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         defence,
         hp,
         // Base hacking/security (A2 Task 2) — the OLD landing-formula defaults (200 / 100) applied at
-        // this boundary, threaded onto the attacker/dummy actor bases. No production reader yet (A2 Task 4).
+        // this boundary. `hacking` is threaded onto the focus attacker's base. `enemySecurity` has no
+        // reader left in the engine (it fed the deleted dummy actor's stat block); the resolved value
+        // above still reaches the fight through `synthesizedDpsEnemy`'s `security`, and the field is
+        // passed on for rung 4d to remove. No production reader yet (A2 Task 4).
         hacking,
         enemySecurity,
         allyChargePerRound,

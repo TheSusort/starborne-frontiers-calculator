@@ -1,9 +1,16 @@
 /**
  * SP-M M1: reactive-damage procs REDUCE the resolved victim's real HP in a positioned two-team
  * battle (simulateBattle → mode: 'battle'), surface on the victim's damageTaken, and
- * are attributed to the owner via damageDealt (perTargetDealt). DPS/healing credit-only behaviour
- * is unchanged (guards: enemyChargedCast / reactiveDamageMitigation, whose fixtures supply no
- * positioned enemy roster — no `position:` on any enemy actor — so `hasPositionedEnemyRoster` stays false).
+ * are attributed to the owner via damageDealt (perTargetDealt).
+ *
+ * This was originally the POSITIONAL half of a two-destination split. The other half — credit-only
+ * booking against the dummy sink — was taken by the guard fixtures next door (enemyChargedCast /
+ * reactiveDamageMitigation), which supplied no `position:` on any enemy actor and so read the
+ * then-live `hasPositionedEnemyRoster` as false. Neither the arm nor the gate exists any more:
+ * SP-4b-1's normalization boundary places every actor, so those fixtures take the per-victim branch
+ * too (reactiveDamageMitigation now pairs each magnitude with a "the legacy scalar channel stays 0"
+ * assertion), and SP-4c-2d deleted the gate along with the dummy. What this file still covers on its
+ * own is the battle-mode SURFACING: the victim's damageTaken and the owner's damageDealt.
  */
 import { describe, it, expect } from 'vitest';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
@@ -116,8 +123,9 @@ describe('SP-M M1: FrontLine reactive damage reduces the charging enemy HP (posi
 /**
  * SP-M Task 3: the hpBasisPct reactive-damage path (Vindicator on-resist, Paracelsus
  * on-destroyed) shares the SAME applyReactiveDamage executor tail Task 2 gated on the
- * then-named `positionalTeamBattle` input field — since replaced by the derived
- * `hasPositionedEnemyRoster` check (per the SP-1 follow-up) — no production change is expected here. These fixtures verify
+ * then-named `positionalTeamBattle` input field — later replaced by the derived
+ * `hasPositionedEnemyRoster` check (per the SP-1 follow-up), and both of those are now deleted
+ * (SP-4c-2d: the tail is unconditional) — no production change is expected here. These fixtures verify
  * that shared branch actually covers the hpBasisPct callers (real HP drop + damageDealt credit),
  * not just the flat-multiplier callers (FrontLine, above).
  */
@@ -944,7 +952,7 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
  * `simulateBattle`.
  * The three reactive resolvers (`enemyWithMostBuffs`, `enemyWithHighestSpeed`,
  * `livingOpposingActorIds`) previously gated on that flag instead of the then-named
- * `positionalTeamBattle` input field, since replaced by the derived `hasPositionedEnemyRoster`
+ * `positionalTeamBattle` input field, later replaced by the derived `hasPositionedEnemyRoster`
  * check (per the SP-1 follow-up), so a healer on the roster silently misrouted Judge/Incinerator/Chakara/Rhodium's reactive damage
  * onto the vestigial dummy `enemy` instead of the real enemy roster — defeating M1 for the (very
  * common) healer-inclusive team composition. These fixtures add a plain ally-targeting healer
@@ -952,8 +960,9 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
  * file's `frontline` fixture already uses) alongside a reactive-damage ship and assert the real
  * enemy(ies) still lose HP. Pre-fix (`dummyEnemyIsVestigial`-gated): RED — the healer flips the
  * gate false, the resolver falls back to the dummy, and the matching enemy(ies) take 0 real HP.
- * Post-fix (then `positionalTeamBattle`-gated, now `hasPositionedEnemyRoster`-gated): GREEN
- * — real enemy HP drops exactly as it does without the healer.
+ * Post-fix (then `positionalTeamBattle`-gated, later `hasPositionedEnemyRoster`-gated, and since
+ * SP-4c-2d ungated — every resolver reads the real roster unconditionally): GREEN — real enemy HP
+ * drops exactly as it does without the healer.
  */
 
 // Plain ally-targeting healer — this WAS the only thing needed to flip the retired

@@ -1202,13 +1202,23 @@ export interface CombatEngineInput {
     shieldPenetration?: number;
     chargeCount: number;
     shipSkills: ShipSkills;
-    /** Optional (F7) — omitted only by `battleSimulator.ts`'s positional call, where the
-     *  dummy `enemy` actor these feed is vestigial (never read as a victim's stats there).
-     *  `dpsSimulator.ts` (DPS mode) and `healingEngineAdapter.ts` still pass real values —
-     *  the latter's healer can cast a `damage` ability at `target:'enemy'`, landing on this
-     *  dummy and feeding `basis:'damage-dealt'` heal/shield riders, so its defence/HP are
-     *  load-bearing there (see docs/superpowers/notes/2026-07-13-f7-dummy-audit.md follow-up).
-     *  Absent → defaults to a huge-HP/zero-defence sink internally. */
+    /** Legacy fight-wide enemy scalars: both were the stat block of the dummy `enemy` actor that
+     *  SP-4c-2d deleted, so they no longer describe any victim.
+     *  - `enemyDefense` has ZERO readers left in this file (it is not even destructured in
+     *    `runCombat`; every other `enemyDefense` occurrence here is a comment, the unrelated
+     *    per-victim `enemyDefenseModifier`, or the victim-derived `enemyDefense` key on a turn ctx).
+     *  - `enemyHp` keeps exactly two, both enemy-HP% DENOMINATORS — the synthesized focus-skip row's
+     *    `enemyHpPct` and the drain ctx's — see the destructure comment in `runCombat`.
+     *  A victim's real defence/HP come from the positioned `enemyAttackers` roster instead. That
+     *  includes the healing mode's healer casting a `damage` ability at `target:'enemy'`: it lands on
+     *  a real positioned enemy and feeds `basis:'damage-dealt'` heal/shield riders off THAT victim's
+     *  stats, so these scalars are no longer load-bearing there either.
+     *  Callers still pass them (deleting the fields is rung 4d's churn story): `dpsSimulator.ts`
+     *  forwards its own calculator fields — and, when the caller supplied no `enemyAttackers`, also
+     *  builds the synthesized enemy OUT of them, which is the one path by which they still influence
+     *  a fight; `healingEngineAdapter.ts` passes LEGACY_SINK_* constants; `battleSimulator.ts`'s
+     *  positional call omits them. Absent → `enemyHp` falls back to 1e9 (the old sink's HP, kept so
+     *  the two percentages above do not move). */
     enemyDefense?: number;
     enemyHp?: number;
     numRounds: number;
@@ -1239,15 +1249,24 @@ export interface CombatEngineInput {
      *  Guard) reaches both the per-turn stats-snapshot and the live debuff-landing recompute
      *  when the focus is the target of an enemy debuff, instead of silently defaulting. */
     security?: number;
-    /** DPS dummy enemy's base security (A2 Task 2). Optional — base for effectiveStatsOf.security on the
-     *  dummy enemy actor. The adapter passes `input.enemySecurity ?? 100` (the OLD landing-formula default);
-     *  no production reader until dynamic landing lands (A2 Task 4). */
+    /** Legacy fight-wide enemy base security (A2 Task 2). ZERO readers in this file since SP-4c-2d:
+     *  its only consumer was `effectiveStatsOf.security` on the deleted dummy enemy actor. A real
+     *  enemy's security is read from its own `enemyAttackers[i].stats.security`. `dpsSimulator.ts`
+     *  still resolves `input.enemySecurity ?? 100` (the OLD landing-formula default) and passes it
+     *  here, and feeds the SAME resolved value into the synthesized enemy it builds when the caller
+     *  supplied no roster — that synthesized actor is now the only route by which this number
+     *  reaches a landing computation. Field removal is rung 4d's job. */
     enemySecurity?: number;
     allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
     /** Attacker turn-order speed. Default 100. */
     speed?: number;
-    /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
+    /** Legacy fight-wide enemy turn-order speed. ZERO readers in this file since SP-4c-2d — it was
+     *  the deleted dummy actor's `speed`, and no actor is built from it here any more; turn order
+     *  comes from each real actor's own speed. It still matters INDIRECTLY on the DPS path:
+     *  `dpsSimulator.ts`'s `synthesizedDpsEnemy` reads `enemySpeed ?? 50` as the synthesized enemy's
+     *  speed when the caller supplied no roster, which is why 50 (sorting last against a default-100
+     *  attacker, as the dummy did) is still the effective default there. Field removal is rung 4d. */
     enemySpeed?: number;
     /** Caster heal-modifier stat (healing calc). Default 0. */
     healModifier?: number;
@@ -1790,14 +1809,15 @@ export function __resetNoVictimPlayerTurnCount(): void {
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
  * CURRENT effective speed (selectNextBySpeed) until the pool drains — every actor takes one
- * turn (plus any extra-action grants): the attacker (default
- * speed 100) runs the full damage/buff/DoT-application pipeline; the enemy (default
- * speed 50) ticks the DoT containers it carries (DoTs tick at the start of the
- * afflicted ship's turn). When enemySpeed > speed the order inverts — the enemy acts
- * before the attacker, deferring round-1 DoT ticks to round 2. The round's RoundData
- * row is assembled after all turns. At default speeds the attacker always precedes the
- * enemy, making this a byte-identical relocation of the old single-block round —
- * events are write-only taps that never read or change a sim value.
+ * turn (plus any extra-action grants): the focus attacker (default speed 100) runs the full
+ * damage/buff/DoT-application pipeline, and each real actor — team ships and the positioned
+ * `enemyAttackers` alike — takes its own turn, ticking on it the DoT containers it carries (DoTs
+ * tick at the start of the afflicted ship's turn). An enemy faster than the focus attacker
+ * therefore acts first and, carrying no DoTs yet in round 1, defers its first tick to round 2.
+ * There is no longer a dummy `enemy` actor in the order at all: SP-4c-2c dropped its turn and
+ * SP-4c-2d deleted the actor, so every turn in the pool belongs to a ship on the board. The
+ * round's RoundData row is assembled after all turns; events are write-only taps that never read
+ * or change a sim value.
  */
 export function runCombat(rawInput: CombatEngineInput): {
     rounds: RoundData[];
@@ -1849,9 +1869,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         // SP-4c-2d: `enemyDefense` / `enemySecurity` / `enemySpeed` are no longer destructured —
         // their only consumer was the deleted dummy actor's stat block. They remain on
         // `CombatEngineInput` (removing them is rung 4d's ~200-file churn story, and `enemyHp` is a
-        // REQUIRED field). `enemyHp` still has one reader: the synthesized focus-skip turn's
-        // `enemyHpPct` denominator. Its 1e9 default is the old sink's HP, kept so that number does
-        // not move.
+        // REQUIRED field). `enemyHp` still has TWO readers, both of them enemy-HP% denominators:
+        //   1. the synthesized focus-skip turn's row `enemyHpPct` (pushSynthesizedFocusSkipTurn); and
+        //   2. the drain context — it is passed as `enemyHp` into every drainQueue ctx, where
+        //      triggers.ts's `buildDrainContext` derives
+        //      `enemyHpPct = 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`, the denominator of
+        //      EVERY drain-time enemy-HP% condition gate.
+        // Its 1e9 default is the old sink's HP, kept so that number does not move.
         enemyHp = 1_000_000_000,
         numRounds,
         selfBuffs,
@@ -1904,12 +1928,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         input.shipSkills
     );
 
-    // Actors. The attacker (default speed 100) takes the first turn each round; the enemy
-    // (default speed 50) takes the second turn and holds the DoT containers (previously
-    // loop-locals) it ticks on its turn. Speeds are configurable via the speed/enemySpeed
-    // inputs — a faster enemy (enemySpeed > attacker speed) inverts the turn order, which
-    // delays the first DoT tick to round 2 (the enemy acts before the attacker's first
-    // DoT application, so lastAttackerCtx is undefined on the enemy's round-1 turn).
+    // Actors. The focus attacker (default speed 100) takes the first turn each round unless a real
+    // actor outspeeds it. Every actor carries its OWN DoT containers and ticks them at the start of
+    // its own turn; no actor holds a fight-wide container on another's behalf any more (SP-4c-2c
+    // retired the dummy's turn and SP-4c-2d deleted the actor, and `dotCarrierActors` — what the
+    // round row REPORTS — is exactly the positioned enemy attackers). Speeds are configurable per
+    // actor, so an enemy faster than the focus attacker acts before that attacker's first DoT
+    // application and has nothing to tick in round 1 (lastAttackerCtx is undefined on its round-1
+    // turn), delaying the first tick to round 2.
     const attacker = createActor({
         id: 'attacker',
         side: 'player',
@@ -3256,29 +3282,40 @@ export function runCombat(rawInput: CombatEngineInput): {
     //    while the selection loop is still walking → the grant CAN bump the granter's pending
     //    count via processExtraActionGrants(granter, …), and the selection loop then re-picks the
     //    granter at its live speed-rank among the remaining actors (a same-round extra turn).
-    //    `inTurnLoop` is true only while the loop body walks; the pre-loop / post-round drains
-    //    see it false → Path B.
+    //    `inTurnLoop` is true only while the loop body walks; the two drains OUTSIDE the loop
+    //    (pre-loop and round-tail, named under Path B) see it false → Path B.
     //
-    //  PATH B — post-round enemy death (cross-round buffered grant). Fires when an enemy death is
-    //    reconciled AFTER the turn loop closed and after the round's last per-turn
-    //    drainIntentsFor(side), with NO live queue. The post-round drain block then:
-    //      1. runs drainIntentsFor('player')/drainIntentsFor('enemy') right after the
-    //         ship-destroyed emit — on-enemy-destroyed CHARGE reactives (Liberator's "all allies
-    //         add 1 charge") apply immediately; charges carry into the next round → correct.
-    //      2. buffers extra-action grants (inTurnLoop false → grantExtraAction pushes onto
-    //         `pendingExtraActions`); at the START of the NEXT round's pool construction each
-    //         buffered granter's pending count is bumped one extra (respecting once-per-round via
-    //         the SAME round extraActionFired set) → the on-kill extra action lands the round AFTER
-    //         the kill is registered.
-    //    ⚠️ PATH B HAS NO PRODUCTION TRIGGER TODAY, and the history is why. Its one caller was the
-    //    round-tail block that landed the DPS run's aggregate damage on the dummy `enemy` actor:
-    //    that HP lands post-round, so a kill there emitted ship-destroyed with `inTurnLoop` false.
-    //    SP-4b-2b made that block unreachable (roster emptiness became impossible) and SP-4c-2d
-    //    deleted it along with the actor. Real positioned enemy attackers die DURING a turn
-    //    (positional applyOutgoingToEnemy → recordDestroyed inside the live queue) → Path A. Path B
-    //    is kept because the buffering mechanism is generic: any future post-turn-loop death
-    //    (a round-tail DoT, a summoned actor) lands here. Enemy-incoming-accounting nuances around
-    //    this tail are deferred to SP-F/F7.
+    //  PATH B — out-of-turn-loop death (cross-round buffered grant). Fires when a death is
+    //    reconciled while NO turn queue is live, which today means from either of the two drains
+    //    that sit outside the selection loop:
+    //      • drain point (a), the `round-started` drain, which runs BEFORE `inTurnLoop = true`; and
+    //      • the `round-ended` drain at the round TAIL, which runs after the turn loop's `finally`
+    //        has reset the flag — see that `finally`'s own comment.
+    //    An extra-action grant arriving from either is buffered (inTurnLoop false →
+    //    grantExtraAction pushes onto `pendingExtraActions`) and flushed at the top of the NEXT
+    //    round, before that round's pre-loop drain and turn loop: the buffered granter's pending
+    //    count is bumped one extra (respecting once-per-round via THAT round's extraActionFired
+    //    set) → the on-kill extra action lands the round AFTER the kill is registered. Sibling
+    //    NON-extra-action reactives on the same death are not buffered at all — they execute in the
+    //    next generation of the same drain pass, so an on-enemy-destroyed CHARGE reactive
+    //    (Liberator's "all allies add 1 charge") applies immediately and the charges carry into the
+    //    next round → correct.
+    //    ⚠️ PATH B IS REACHABLE — but no longer through the caller it was written for, and the
+    //    history is why the two are easy to confuse. That original caller was the round-tail block
+    //    that landed the DPS run's aggregate damage on the dummy `enemy` actor: that HP landed
+    //    post-round, so a kill there emitted ship-destroyed with `inTurnLoop` false. SP-4b-2b made
+    //    the block unreachable (roster emptiness became impossible) and SP-4c-2d deleted it, the
+    //    actor, and the dedicated post-round death drain it fed. What remains are the two drains
+    //    named above, and shipped kits reach them: an end-of-round reactive `damage` proc
+    //    (Incinerator's "at the end of the round, this unit deals 100% damage to all enemies with
+    //    Inferno" — or Judge's "at the start of the round … to all enemies with less than 50% HP"
+    //    on the other drain) that lands a kill emits ship-destroyed → the `on-enemy-destroyed`
+    //    listener enqueues → drainQueue executes that intent in the SAME pass's next generation →
+    //    a Sokol/Liberator `extra-action` grant reaches grantExtraAction with inTurnLoop false →
+    //    Path B. Live on a multi-enemy board (the fight has to continue into the next round for the
+    //    flush to land). Deaths DURING a turn still take Path A (positional applyOutgoingToEnemy →
+    //    recordDestroyed inside the live queue). Enemy-incoming-accounting nuances around the round
+    //    tail are deferred to SP-F/F7.
     //
     // pendingExtraActions is COMBAT-lifetime (outside the round loop) so a kill reconciled at the
     // end of round R survives into round R+1's pool build. Each entry is flushed (and removed)
@@ -5886,15 +5923,21 @@ export function runCombat(rawInput: CombatEngineInput): {
         // approximations: no outgoing-damage buff, no per-victim incoming-damage modifier,
         // base-only defense penetration, no shield penetration). PR4b changed only the NUMBER's
         // formula (now mitigated + crit-eligible instead of a flat effectiveAttack × multiplier fold
-        // with no defense and no crit); SP-M M1 then split WHERE it lands, and the two destinations
-        // are mutually exclusive per proc (see the gate in the body): with a real positioned victim
-        // it reduces that victim's HP via applyVictimDamage and books per-victim (creditDealt),
-        // otherwise it stays credit-only against the owner's round damage-dealt bucket
-        // (creditDamage), which is the pre-SP-M contract.
+        // with no defense and no crit); SP-M M1 then split WHERE it lands. There is now exactly ONE
+        // destination: the proc reduces the resolved victim's HP via applyVictimDamage and books
+        // per-victim (creditDealt). SP-4c-2d deleted the second one — the credit-only arm that
+        // booked into the owner's round damage-dealt scalar bucket (creditDamage, the pre-SP-M
+        // contract) when there was "no real victim to reduce" — together with the gate that chose
+        // between them; see the SP-4c-2d note on the apply below for why both conjuncts of that gate
+        // are gone. So there is no gate in the body any more, and no destination to be mutually
+        // exclusive with.
         //
-        // Victim resolution is the caller's job (triggers.ts resolves `counterTargetId ?? ctx.
-        // enemy.id`, the SAME idiom every sibling target:'enemy' reactive branch already uses) —
-        // this closure only needs a concrete victim id to mitigate against.
+        // Victim resolution is the caller's job — this closure only needs a concrete victim id to
+        // mitigate against. triggers.ts resolves it from the event (critVictimIds / counterTargetId
+        // / debuffVictimId), and otherwise from `livingOpposingActorIds`. No arm falls back to a sink
+        // id any more: the arm that used to (`counterTargetId ?? ctx.enemy.id`) returns early on an
+        // empty living roster since SP-4c-2d Task 1, so this closure is reached only with a resolved
+        // victim id.
         const applyReactiveDamage = (
             ownerId: string,
             victimId: string,
@@ -6056,50 +6099,51 @@ export function runCombat(rawInput: CombatEngineInput): {
             // the apply is unconditional, and the credit-only arm went with the conjuncts rather
             // than becoming unreachable code. Any future caller that genuinely has no victim must
             // not arrive here at all: `applyReactiveDamage` requires a concrete `victimId`, and
-            // SP-4c-2d Task 1 made a victimless reactive infliction a no-op in the executor.
-            {
-                // Buffer this application's log-only consequence twins (Lifeline shield grant,
-                // shield destroyed, cheat death) so they print UNDER this proc's own attack row —
-                // which triggers.ts emits only after this call returns. Restored in a `finally`
-                // so a throw can never leave the flag stuck on for later applications.
-                const wasDeferring = deferConsequenceLogs;
-                deferConsequenceLogs = true;
-                // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
-                let procOutcome: AppliedVictimDamage | undefined;
-                try {
-                    procOutcome = applyVictimDamage(raw, victim, sink, {
-                        killerId: ownerId,
-                        byDirectDamage: true,
-                        isCounter: true,
-                        shieldPenetrationPct: 0,
-                        bombPortion: 0,
-                    });
-                } finally {
-                    deferConsequenceLogs = wasDeferring;
-                }
-                // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
-                // documented as its exact mirror, so booking `raw` here would re-create the
-                // double-count for the eight reactive-damage ships). No fixture reaches the case
-                // where the two DIVERGE — that needs a reactive `damage` proc onto a block-holding
-                // victim — so it is kept correct by construction with its sibling rather than
-                // pinned. (The branch itself is well covered; only the raw≠booked split is not.)
-                const procBooked = procOutcome?.incomingBooked ?? 0;
-                if (procBooked > 1e-9) {
-                    roundPerTargetDamage.set(
-                        victim.id,
-                        (roundPerTargetDamage.get(victim.id) ?? 0) + procBooked
-                    );
-                    creditDealt(ownerId, victim.id, procBooked);
-                    // SP-4b-2 D1: the twin of this function's own `creditDamage(ownerId,
-                    // 'direct', raw)` below — the third and last suppressed direct write. Same
-                    // if/else, so a proc lands in exactly one channel. A reactive hit IS direct
-                    // damage its owner dealt, and it counted toward the Echoing Burst gather
-                    // before the corpus turned positional; without this it would silently stop.
-                    creditPositionalDirect(ownerId, procBooked);
-                }
-                // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
-                return { dealt: raw, didCrit };
+            // SP-4c-2d Task 1 made a victimless reactive infliction a no-op in the executor. The
+            // `{ … }` block that survived the gate's deletion is dedented away with it — it was a
+            // phantom nesting level with no scope left to own.
+            //
+            // Buffer this application's log-only consequence twins (Lifeline shield grant,
+            // shield destroyed, cheat death) so they print UNDER this proc's own attack row —
+            // which triggers.ts emits only after this call returns. Restored in a `finally`
+            // so a throw can never leave the flag stuck on for later applications.
+            const wasDeferring = deferConsequenceLogs;
+            deferConsequenceLogs = true;
+            // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
+            let procOutcome: AppliedVictimDamage | undefined;
+            try {
+                procOutcome = applyVictimDamage(raw, victim, sink, {
+                    killerId: ownerId,
+                    byDirectDamage: true,
+                    isCounter: true,
+                    shieldPenetrationPct: 0,
+                    bombPortion: 0,
+                });
+            } finally {
+                deferConsequenceLogs = wasDeferring;
             }
+            // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
+            // documented as its exact mirror, so booking `raw` here would re-create the
+            // double-count for the eight reactive-damage ships). No fixture reaches the case
+            // where the two DIVERGE — that needs a reactive `damage` proc onto a block-holding
+            // victim — so it is kept correct by construction with its sibling rather than
+            // pinned. (The branch itself is well covered; only the raw≠booked split is not.)
+            const procBooked = procOutcome?.incomingBooked ?? 0;
+            if (procBooked > 1e-9) {
+                roundPerTargetDamage.set(
+                    victim.id,
+                    (roundPerTargetDamage.get(victim.id) ?? 0) + procBooked
+                );
+                creditDealt(ownerId, victim.id, procBooked);
+                // SP-4b-2 D1: the twin of this function's own `creditDamage(ownerId,
+                // 'direct', raw)` below — the third and last suppressed direct write. Same
+                // if/else, so a proc lands in exactly one channel. A reactive hit IS direct
+                // damage its owner dealt, and it counted toward the Echoing Burst gather
+                // before the corpus turned positional; without this it would silently stop.
+                creditPositionalDirect(ownerId, procBooked);
+            }
+            // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
+            return { dealt: raw, didCrit };
         };
 
         // §4.5 STASIS direct-damage break (B3 Task 2). Fires via the `onHitBreakStasis` hook
@@ -8147,14 +8191,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         };
 
-        // `inTurnLoop` is true only while the selection loop body walks. The pre-loop and
-        // post-round drains see inTurnLoop=false → Path B (buffer).
+        // `inTurnLoop` is true only while the selection loop body walks. The two drains outside the
+        // loop — the pre-loop `round-started` drain and the round-tail `round-ended` drain — see
+        // inTurnLoop=false → Path B (buffer).
         let inTurnLoop = false;
 
         // Reactive extra-action bridge (Task 10). PATH A (inTurnLoop): bump the granter's pending
         // count so the selection loop re-picks it at its live speed-rank among the remaining
         // actors (same machinery the attacker/team turn branches use), so a during-turn death
-        // grants a SAME-round extra turn. PATH B (no live loop — post-round enemy death): buffer
+        // grants a SAME-round extra turn. PATH B (no live loop — a death reconciled in one of the
+        // drains outside the turn loop, i.e. the `round-started` or `round-ended` drain): buffer
         // onto pendingExtraActions; the next round's pool build flushes it. Since bySide PR2 the
         // granter may be a PLAYER or ENEMY actor (the ship whose death-passive fired), resolved
         // from the combined allActorsById roster; a missing id is impossible (every reactive owner
@@ -9588,10 +9634,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // Positional target selection (Task C2, GATED). Mirrors the focus-turn
                             // branch (C1) but keyed to THIS team actor's own board position
                             // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
-                            // focus attacker's. When `selectedTeamEnemy` is null — not positional, no
-                            // parsed target, or no living positioned enemy — we diverge NOTHING from the
-                            // legacy dummy `enemy` binding. No existing test threads a team target →
-                            // this branch never fires for them (goldens byte-identical).
+                            // focus attacker's. When positional selection resolves nobody — not
+                            // positional, no parsed target, or no living positioned enemy — a team
+                            // actor is PLAYER-side, so `selectTurnTarget` now answers "no victim"
+                            // (`tb.legacyVictim` is `undefined` on that side since SP-4c-2b, and
+                            // SP-4c-2d deleted the dummy it used to hold). It does not fall back to
+                            // any stand-in victim.
                             // SP-F F5: charge-aware (mirrors the focus site) — resolve BOTH the
                             // target and the footprint pattern from the CHARGED axes on a
                             // charge-firing turn (each falls back to the active axis when unset).
@@ -9599,12 +9647,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             const teamTarget = teamWillFireCharged
                                 ? parsedChargedTargetFor(actor)
                                 : parsedTargetFor(actor);
-                            // Same `tgt` consolidation as the focus turn: both branches are full
-                            // CombatActors, so every per-target binding derives from `tgt` uniformly.
-                            // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
-                            // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
-                            // SP-4c-2b AMENDS that "both branches are full CombatActors" claim, exactly
-                            // as at the focus site: a third case has no victim at all.
+                            // Same `tgt` consolidation as the focus turn: every per-target binding
+                            // derives from `tgt` uniformly. This used to say the fallback path bound
+                            // `tgt === enemy`, "whose stats/containers ARE the legacy module vars
+                            // (enemyDefense/enemyHp/…)" — that path is gone twice over: SP-4c-2b made
+                            // player-side selection return no victim, SP-4c-2d deleted the actor, and
+                            // `enemyDefense` is no longer even a binding in this file. So `tgt` is
+                            // EITHER a real positioned CombatActor OR undefined — never a stand-in.
                             const { tgt } = selectTurnTarget(actor);
                             // SP-4c-2b: `tgt` is undefined when this cast targets an ALLY — there is
                             // no opposing victim to resolve. The turn still RUNS (a repair/buff must
@@ -10814,8 +10863,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The turn loop is closed: no live queue remains. The reset lives in `finally` so it
             // is structurally guaranteed on ANY loop exit (normal, break, return, throw) — a future
             // early exit added to the round loop can no longer leave `inTurnLoop` stuck true and
-            // mis-dispatch the post-round drain as Path A. Any extra-action grant from here on (the
-            // post-round enemy-death drain below) sees inTurnLoop=false → Path B (buffered for next round).
+            // mis-dispatch a round-tail drain as Path A. Any extra-action grant from here on — the
+            // only drain left below is the `round-ended` one at the round tail, the dedicated
+            // post-round enemy-death drain having gone with the dummy in SP-4c-2d — sees
+            // inTurnLoop=false → Path B (buffered for next round).
             inTurnLoop = false;
             // Same rationale for combat-log attribution: the post-round death-drain and round-ended
             // reactives that follow are turn-less, so clear actingActorId here. Otherwise their
@@ -10976,8 +11027,16 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // Deliberately uses focus.corrosion/focus.inferno/focus.generic ONLY (not the
         // perActorDot-folded corrosionDamage/infernoDamage/genericDamage locals) — per-victim DoT
-        // ticks land via applyVictimDamage, so folding perActorDot here would double-drain the
-        // dummy HP overwrite (same guard as the focusPositionalDetonation/detonation comment below).
+        // ticks land via applyVictimDamage. SP-4c-2d: the old justification was the round-tail dummy
+        // HP overwrite (`enemy.currentHp = enemyHp - cumulative…`), which this fold would have
+        // drained a second time for a tick that had already reduced a real victim. That overwrite is
+        // gone; what remains is the TWO-CHANNEL accounting rule it was a symptom of. A per-victim
+        // amount books on the per-victim maps (roundPerTargetDamage / perTargetDealt — what
+        // dpsSimulator reads), and `cumulativeDamage` is the separate FOCUS-only scalar aggregate;
+        // each amount belongs to exactly ONE of the two. Folding per-victim ticks in here would
+        // inflate `rawTotals.cumulative` and depress every drain-time `enemyHpPct` gate (whose
+        // denominator is this same cumulative) for damage that is already counted elsewhere. Same
+        // guard as the focusPositionalDetonation/detonation comment below.
         const totalRoundDamage =
             focus.direct + focus.corrosion + focus.inferno + focus.detonation + focus.generic;
         cumulativeDamage += totalRoundDamage;
@@ -10991,13 +11050,20 @@ export function runCombat(rawInput: CombatEngineInput): {
         totalGenericRaw += genericDamage;
         // Summary detonation reflects per-victim positional detonation too (focusPositionalDetonation
         // is 0 non-positionally → byte-identical). NOTE: cumulativeDamage/totalRoundDamage above
-        // deliberately use focus.detonation ONLY — per-victim detonation lands via applyVictimDamage,
-        // so folding it into cumulativeDamage would double-count the enemy-HP decline.
+        // deliberately use focus.detonation ONLY — per-victim detonation lands via applyVictimDamage
+        // and is therefore already booked on the per-victim maps, so folding it into cumulativeDamage
+        // would count the same damage on both channels (see the two-channel note above).
         totalDetonationRaw += detonationDamage;
 
         // Team damage = Σ over all NON-focus actor entries of every channel (direct already
         // includes its secondary/conditional sub-buckets, so they are NOT added separately).
-        // By construction totalRoundDamage + teamRoundDamage = the round's enemy-HP delta.
+        // `totalRoundDamage + teamRoundDamage` is the round's SCALAR-channel total — exactly what
+        // `cumulativeDamage + cumulativeTeamDamage` accumulates and what the drain-time /
+        // focus-skip enemy-HP% denominators consume. It is NOT the real roster's HP delta: every
+        // per-victim amount (positional casts, reactive procs, per-victim DoT and detonation ticks)
+        // books on the per-victim maps instead, per the two-channel rule above. The identity used to
+        // hold literally because the round tail overwrote the dummy sink's HP with precisely this
+        // sum; SP-4c-2d deleted that write along with the actor.
         let teamRoundDamage = 0;
         for (const [id, d] of roundDamage) {
             if (id === focusActorId) continue;
@@ -11097,19 +11163,23 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
 
         // round-ended (C2b-2): end-of-round reactive purge (Rhodium). Emitted at the round TAIL,
-        // after the post-round death drain so the purge sees post-death state, before roundData
-        // assembly. Drain BOTH queues (player + enemy), mirroring the round-started emit+drain.
+        // after every turn and its per-turn drain — so the purge sees post-death state — and before
+        // roundData assembly. (It used to be described as sitting after "the post-round death
+        // drain"; that dedicated drain served the dummy's post-round HP write and went with the
+        // actor in SP-4c-2d. This is now the LAST drain of the round, and the only one after the
+        // turn loop.) Drain BOTH queues (player + enemy), mirroring the round-started emit+drain.
         // Drains the single-target reactive executor (most-buffs) — single-target by design, out of E3 scope.
         bus.emit({ type: 'round-ended', round: r });
         drainIntentsFor('player');
         drainIntentsFor('enemy');
 
         // LOG-ONLY per-actor status snapshot (see the events.ts doc). Emitted at the round TAIL —
-        // after the post-round death drain, round-ended reactives AND their drains — so it reports
-        // the statuses that genuinely survive into the next round. Team-symmetric: one emit per
-        // actor in `allActors`, both sides. The DPS dummy keys its debuffs under the sentinel store
-        // rather than its actor id, so its lists come back empty; harmless, since it is not on the
-        // board and the assembler only reads roster ids.
+        // after every turn, the round-ended reactives AND their drains — so it reports the statuses
+        // that genuinely survive into the next round. Team-symmetric: one emit per actor in
+        // `allActors`, both sides. Note that the side-wide SCHEDULED enemy-debuff bucket is keyed
+        // under the sentinel store (`DEFAULT_ENEMY_TARGET`), not under any actor id, so it never
+        // shows up in these per-actor lists — this loop reports only per-actor stores, and since
+        // SP-4c-2d there is no dummy actor for the bucket to be attributed to either.
         for (const a of allActors) {
             // Reuses the engine's established three-source name reads (scheduled snapshot +
             // payload-carrying timed + aura/accum ability statuses) rather than a bespoke store
