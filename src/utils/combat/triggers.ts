@@ -4212,7 +4212,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         // M10 (spec §4): the all-enemies path already filtered per victim via
         // `resolveAoEReactiveDamageVictims`; the single-target paths (debuffVictimId / first living
-        // opposing actor / sink) did not, so filter them here. Filtering the already-filtered
+        // opposing actor) did not, so filter them here. A third arm, the dummy sink, was listed here
+        // until SP-4c-2d deleted it — an empty living roster now no-ops above instead. Filtering the already-filtered
         // all-enemies list again would be harmless but redundant — skip it so the two paths stay
         // one-to-one with their resolution sites.
         if (intent.ability.target !== 'all-enemies') {

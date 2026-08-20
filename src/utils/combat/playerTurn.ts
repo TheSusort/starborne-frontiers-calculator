@@ -1576,7 +1576,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //     aimed its own skill at.
     //  2. It is no longer unconditional — see the `hasVictim` guard on the line below.
     //
-    // FIX 2 (review wave 1) — THE GUARD, and why it is load-bearing rather than tidy. With no victim
+    // THE GUARD, and why it is load-bearing rather than tidy. ATTRIBUTION, so nobody reads this block
+    // as the rung that added the conjunct: the `hasVictim` conjunct on the write below arrived with
+    // SP-4c-2b (`f1bce838`), whose own review wave 1 labelled it "FIX 2". SP-4c-2d added only the
+    // corrected commentary here and the `dynamicLanding.test.ts` fence named at the end of it. With no victim
     // `liveLandingChance` is correctly 0 ("there is no enemy whose security to beat"), but publishing
     // that 0 poisons every later reader of the field. That is precisely how the Flamel defect
     // happened — a real, previously-SHIPPED defect, not a hypothetical: an ally-targeted supporter

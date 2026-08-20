@@ -2578,10 +2578,25 @@ export function runCombat(rawInput: CombatEngineInput): {
     // heal recipient, ctx) and corrupt the simulation.
     //
     // The sentinel stays reserved even though no actor carries it any more — see
-    // `SENTINEL_ENEMY_ACTOR_ID`: freeing the string would let a caller name a real enemy attacker
-    // `'enemy'` and interleave its events with the side-wide bucket's under one id. Both directions
-    // are fenced by `sentinelActorIdReservation.test.ts`.
+    // `SENTINEL_ENEMY_ACTOR_ID`: freeing the string would let a caller name a real actor `'enemy'`
+    // and interleave its events with the side-wide bucket's under one id. Both directions are
+    // fenced by `sentinelActorIdReservation.test.ts`.
     const reservedActorIds = new Set<string>([SENTINEL_ENEMY_ACTOR_ID, ...playerIds]);
+    // The sentinel reservation is SIDE-SYMMETRIC. A TEAM actor carrying the string interleaves its
+    // events with the bucket's exactly as an enemy attacker would, so it is rejected the same way.
+    // Before this check the reservation only guarded the enemy loop below, and a `teamActors` entry
+    // named `'enemy'` was accepted (as it also was before the dummy was deleted — it then silently
+    // clobbered the dummy's `allActorsById` entry with no validation either). Not reachable from
+    // production: every `teamActors` id is minted from a user ship id (`battleSimulator`'s
+    // `p:<shipId>:<i>`, the DPS page's ship ids), so this fences the DIRECT-caller surface.
+    // `focusActorId` is the literal `'attacker'`, so it cannot collide.
+    for (const t of teamActors) {
+        if (t.id === SENTINEL_ENEMY_ACTOR_ID) {
+            throw new Error(
+                `runCombat: teamActors[].id '${t.id}' collides with a reserved actor id`
+            );
+        }
+    }
     const seenEnemyAttackerIds = new Set<string>();
     for (const e of enemyAttackerInputs) {
         if (reservedActorIds.has(e.id)) {
@@ -9653,10 +9668,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
                             // focus attacker's. When positional selection resolves nobody — not
                             // positional, no parsed target, or no living positioned enemy — a team
-                            // actor is PLAYER-side, so `selectTurnTarget` now answers "no victim"
-                            // (`tb.legacyVictim` is `undefined` on that side since SP-4c-2b, and
-                            // SP-4c-2d deleted the dummy it used to hold). It does not fall back to
-                            // any stand-in victim.
+                            // actor is PLAYER-side, so `selectTurnTarget` now answers "no victim":
+                            // since SP-4c-2b it hands out nothing on that side. The binding it would
+                            // have handed out, `playerTurnBindings.legacyVictim`, still held the
+                            // dummy ghost until SP-4c-2d deleted the actor; it is `undefined` now.
+                            // Either way this path does not fall back to any stand-in victim.
                             // SP-F F5: charge-aware (mirrors the focus site) — resolve BOTH the
                             // target and the footprint pattern from the CHARGED axes on a
                             // charge-firing turn (each falls back to the active axis when unset).
