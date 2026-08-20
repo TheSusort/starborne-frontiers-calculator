@@ -2676,9 +2676,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // THIS ctx, distinct from Berserker's Marauder Rage which drains via the on-deal-damage
         // reactive path instead). aoeVictimIds is the actor's own splash-pattern footprint
         // (already computed pre-turn by buildTurnArgs for the AoE-purge fan-out, E3) — undefined
-        // in DPS/non-positional mode → default 1 (single-target DPS, the faithful "Tygr doesn't
-        // add charge against one target" behaviour).
-        enemiesHitThisCast: aoeVictimIds?.length,
+        // in DPS/non-positional mode, which is exactly the single-target-cast and no-victim-cast
+        // cases alike. SP-4d Task 8: those two are NOT the same measurement — a single-target
+        // cast hit its one target (1), a no-victim cast hit nobody (0) — so the fallback is keyed
+        // on `hasVictim` (the same discriminator every other victim-derived field in this ctx
+        // uses), not a bare `?? 1`. A prior rung dropped that `?? 1` default outright, which made
+        // the single-target case read absent instead of 1 (Tygr's own `eq 1`-shaped gate would
+        // silently never fire); this restores the correct-for-single-target value while also
+        // fixing the no-victim value from absent to the honest 0.
+        enemiesHitThisCast: aoeVictimIds?.length ?? (hasVictim ? 1 : 0),
         // Ship-kit Wave 4, Task 3 (review follow-up): SAME field/derivation as preDebuffGateCtx
         // (:1444) and modifierCtx (:1724) above — REQUIRED here because THIS ctx is what
         // gateFiringAbilities consumes just below (:1956) to gate `type:'control'` payload

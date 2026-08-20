@@ -9535,20 +9535,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
                             lastTurnCtxByActor.set(actor.id, turn.turnCtx);
                             // SP-D: record this cast's footprint size (aoeVictimIds — undefined in
-                            // DPS/non-positional mode → default 1) for the enemies-hit-this-cast
-                            // drain-time gate.
-                            // SP-4c-2b NAMED RESIDUAL, measured inert TWICE OVER: on a no-victim turn
-                            // `aoeVictimIds` is undefined (§A.4 — the ghost never had a position, so
-                            // it already was), so this books **1** for a cast that hit NOBODY. Left
-                            // alone deliberately. (1) Only two corpus ships gate on
-                            // `enemies-hit-this-cast` — Berserker (passive) and Tygr (active) — and
-                            // NEITHER is one of the 24 ally-target ships, so no shipped ship can both
-                            // take a no-victim turn and read this. (2) Both gates are `gte 2`/`gte 3`,
-                            // which a phantom 1 does not satisfy even if one could. Pinned by
-                            // `noVictimResidualTripwires.test.ts`; the honest value would be 0.
+                            // DPS/non-positional mode) for the enemies-hit-this-cast drain-time gate.
+                            // SP-4d Task 8: `tgt` (not `aoeVictimIds`) is the "did a victim resolve"
+                            // discriminator — mirrors playerTurn.ts's `hasVictim` (`enemy !==
+                            // undefined`, and `enemy` here IS `tgt`, see buildTurnArgs's conditional
+                            // spread). Was `?? 1`, which fabricated a footprint of 1 for a no-victim
+                            // turn (an ally-targeted cast that hit NOBODY) — the residual
+                            // `noVictimResidualTripwires.test.ts` used to tripwire because no corpus
+                            // ship could observe it (neither `enemies-hit-this-cast` reader,
+                            // Berserker/Tygr, is one of the 24 ally-target ships). Now books the
+                            // honest 0 for that case and still books 1 for a real single-target hit.
                             enemiesHitThisCastByActor.set(
                                 actor.id,
-                                focusTurnArgs.aoeVictimIds?.length ?? 1
+                                focusTurnArgs.aoeVictimIds?.length ?? (tgt !== undefined ? 1 : 0)
                             );
 
                             // Extra-action grants from this turn bump the attacker's pending-action
@@ -9858,10 +9857,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
                             // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
                             lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
-                            // SP-D: record this cast's footprint size (mirrors the focus site).
+                            // SP-D: record this cast's footprint size (mirrors the focus site,
+                            // including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback — see its note).
                             enemiesHitThisCastByActor.set(
                                 actor.id,
-                                teamTurnArgs.aoeVictimIds?.length ?? 1
+                                teamTurnArgs.aoeVictimIds?.length ?? (tgt !== undefined ? 1 : 0)
                             );
 
                             // Heal-target buffs: a walked team actor that IS the heal target surfaces its
@@ -10292,10 +10292,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                                 // its own future DoT entries would tick with this ctx).
                                 lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
-                                // SP-D: record this cast's footprint size (mirrors the focus/team sites).
+                                // SP-D: record this cast's footprint size (mirrors the focus/team
+                                // sites, including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback).
+                                // `tgt` is guaranteed defined in this branch (the enclosing
+                                // `if (skipDeadTargetTurn || tgt === undefined)` already bailed
+                                // otherwise — an enemy attacker always resolves a real victim, the
+                                // no-victim concept is player-ally-cast-only), so this is a no-op
+                                // for the enemy side; kept identical to the other two sites so all
+                                // three read the same expression rather than two agreeing by
+                                // construction and one by accident.
                                 enemiesHitThisCastByActor.set(
                                     actor.id,
-                                    enemyTurnArgs.aoeVictimIds?.length ?? 1
+                                    enemyTurnArgs.aoeVictimIds?.length ??
+                                        (tgt !== undefined ? 1 : 0)
                                 );
                                 // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
                                 // its own active self-buffs and the debuffs it landed on the heal target,
