@@ -128,6 +128,8 @@ export const GearPieceDisplay = memo(
             // piece is calibrated from its simulated level-16 main stat, not the
             // raw stored one.
             if (assumedCalibration) {
+                // Cast: useGearUpgrades types mainStat loosely as {name: string; value:
+                // number; type: string}, not the Stat union.
                 return assumedCalibrationDisplayStat(gear, upgrade?.mainStat as Stat | undefined);
             }
             if ((isCalibrationActive || showCalibratedPreview) && isCalibrationEligible(gear)) {

@@ -75,6 +75,20 @@ export function withAssumedCalibration(gear: GearPiece, allowSimulatedLevel: boo
  * the bonus applies to the simulated level-16 main stat rather than the level-0
  * one.
  */
+export function makeAssumedCalibrationGetter(
+    getGearPiece: (id: string) => GearPiece | undefined,
+    allowSimulatedLevel: boolean
+): (id: string) => GearPiece | undefined {
+    const cache = new Map<string, GearPiece | undefined>();
+    return (id: string) => {
+        if (cache.has(id)) return cache.get(id);
+        const piece = getGearPiece(id);
+        const transformed = piece ? withAssumedCalibration(piece, allowSimulatedLevel) : undefined;
+        cache.set(id, transformed);
+        return transformed;
+    };
+}
+
 /**
  * The stat an assumed-calibration PREVIEW must be built from, so the results card
  * shows exactly what the optimizer scored.
@@ -95,18 +109,4 @@ export function assumedCalibrationDisplayStat(
     const base = gear.level < 16 && upgradedMainStat ? upgradedMainStat : gear.mainStat;
     if (!base) return null;
     return { ...base, value: applyCalibrationToStat(base, gear.stars) };
-}
-
-export function makeAssumedCalibrationGetter(
-    getGearPiece: (id: string) => GearPiece | undefined,
-    allowSimulatedLevel: boolean
-): (id: string) => GearPiece | undefined {
-    const cache = new Map<string, GearPiece | undefined>();
-    return (id: string) => {
-        if (cache.has(id)) return cache.get(id);
-        const piece = getGearPiece(id);
-        const transformed = piece ? withAssumedCalibration(piece, allowSimulatedLevel) : undefined;
-        cache.set(id, transformed);
-        return transformed;
-    };
 }
