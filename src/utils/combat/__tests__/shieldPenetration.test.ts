@@ -195,18 +195,9 @@ describe('H1 Task 2 — shieldPenetration on every actor', () => {
         expect(runtime.actor.stats.shieldPenetration).toBe(0);
     });
 
-    // (f) DPS dummy enemy always has shieldPenetration = 0 (it has no shield pen — indestructible punching bag).
-    it('DPS dummy enemy always has shieldPenetration 0', () => {
-        let captured: CombatActor[] = [];
-        runCombat(
-            baseEngineInput({
-                shieldPenetration: 50, // focus pen must not bleed onto dummy enemy
-                __testTapActors: (actors) => {
-                    captured = actors;
-                },
-            })
-        );
-        const dummy = captured.find((a) => a.id === 'enemy');
-        expect(dummy?.stats.shieldPenetration).toBe(0);
-    });
+    // (f) SP-4c-2d DELETED a case here: 'DPS dummy enemy always has shieldPenetration 0', which
+    // pinned that the focus's `shieldPenetration` did not bleed onto the dummy `enemy` actor's
+    // stat block. That actor is gone, so there is nothing for it to bleed onto. The no-bleed claim
+    // that still matters — the focus's pen must not appear on an ENEMY ATTACKER — is covered by
+    // the 'enemy actor defaults shieldPenetration to 0 when omitted' case above.
 });

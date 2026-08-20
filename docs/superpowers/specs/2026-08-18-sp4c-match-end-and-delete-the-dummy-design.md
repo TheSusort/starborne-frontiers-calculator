@@ -674,3 +674,323 @@ kit that reaches it**, so it must be recorded as a ruling rather than absorbed s
 deletion. This is closely related to **open issue #334** (a victimless reactive arm aiming at the
 sentinel), which §8's hand-off already nominated 4c-2d to force a decision on — same seam, same rung;
 decide them together.
+
+---
+
+## 10. AMENDMENT (2026-08-20) — 4c-2d's design, and §9.8's claim measured too narrow
+
+4c-2d is **one PR, three commits** (owner ruling). The ordering is forced: the deletion removes
+`ctx.enemy` / `ctx.enemyId`, so the routing ruling must land first or with it.
+
+### 10.1 §9.8 found ONE fallback site. There are FOUR, and one of them is LIVE
+
+§9.8 inventoried the reactive **dot** branch's `ctx.enemy.id` fallback and generalised from it that
+the class is corpus-inert. Walking `DrainContext`'s `enemy` / `enemyId` fields by type rather than by
+grep found **four** sites, and the enumeration below was run against real `Ship` objects at all three
+refit tiers (0/2/4) through `buildShipAbilities` — not by parsing each skill text as an active slot,
+which is the mistake that made a first attempt miss Ruiner's Bomb entirely.
+
+| Site | Branch | Fallback today | Shipped consumer? |
+| --- | --- | --- | --- |
+| `triggers.ts:3234` | debuff | `applicationTargetId ?? ctx.enemy.id` | **No** — all 16 reactive debuff shapes resolve |
+| `triggers.ts:3474` | dot | `victim?.id ?? ctx.enemy.id` | **No** — all 7 DoT-family shapes stamp a victim |
+| `triggers.ts:4157` | damage | `opposing[0] : ctx.enemy.id` | **No** — selectors `return` per `:4079` |
+| `triggers.ts:4261` | purge | `?? ctx.enemyId` | **YES — measured 73 hits** |
+
+The corpus enumeration: 147 ships x 3 refit tiers, **40 distinct `(ship, type, trigger, target)`
+shapes** of a fallback-carrying type on a live reactive trigger — 16 `debuff`, 11 `damage`, 6 `dot`,
+6 `purge`, 1 `convert-dot`. Filtering to *victimless trigger AND no self-resolving target* — the shape
+that reaches a fallback — yields **zero**. The DoT-family population (6 `dot` + 1 `convert-dot`)
+reproduces §9.8's list exactly (Crocus, Pestilence, Ruiner, Shepherd, Warden, Wisteria, plus
+Belladonna's `convert-dot`), which cross-validates two independently-derived counts.
+
+⚠️ **A first attempt at this enumeration was wrong, and the way it was wrong is worth recording.**
+Parsing each skill text *as an active slot* (the shortcut `scripts/auditSkills.ts` uses, which is
+correct for its own purpose) silently **misses passive-slot DoTs**: `buildShipAbilities` derives DoTs
+at the ship level for active/charged only (`:3096`, `buildDoTAutoFill`). That basis reported 36 rows
+and **omitted Ruiner's Bomb entirely** — a shipped reactive DoT. It was caught only by checking a named
+ship against its CSV text rather than trusting the total. **An enumeration offered as a reachability
+proof must be built through the production route, and spot-checked against a ship known to belong in
+it.** Agreement with §9.8's independently-derived list is what promoted the second attempt from
+plausible to load-bearing.
+
+**But the purge branch breaks the pattern, and §9.8 never looked at it.** `enemy-most-buffs` resolves
+through `mostBuffsAmong`, which returns `undefined` when **no enemy carries any buff at all**
+(`engine.ts:8511`, `return bestCount > 0 ? best : undefined`). Every sibling selector `return`s on
+that; the purge branch alone falls through to `ctx.enemyId`. So **Rhodium's end-of-round purge targets
+the dummy in every round where no enemy is buffed** — a shipped ship, in an ordinary situation.
+
+Measured with a `console.error` at the site over the whole suite: **73 hits**, of which 64 from
+`owner=attacker`, 2 from the enemy side (`owner=e:r:0` — so it is not player-only), and 3 from
+Sefuba's `on-enemy-purged` route. By file: **60 in `realKitFingerprints.test.ts`** (a golden suite),
+8 in `reactiveDamagePositionalHp`, 3 in `purgeReactive`, 2 in `purgeConditionalSources`.
+
+**Rhodium's own kit is internally inconsistent today.** Its `damage` half and its `purge` half share
+the same trigger (`end-of-round`) and the same target (`enemy-most-buffs`). The damage half `return`s
+when the selector resolves nothing (`triggers.ts:4085-4087`); the purge half aims at the dummy. One
+ability, two answers.
+
+### 10.2 The ruling: a victimless infliction is a NO-OP (owner, 2026-08-20)
+
+The engine already states this rule in the branch that documents it best, `triggers.ts:4079`:
+
+> *"A selector that resolves nothing is a NO-OP — it never falls back to the dummy."*
+
+All four sites adopt it, each at its own natural exit: `:3234` `continue`s (skipping that entry in the
+`applicationTargetIds` loop), `:3474` `return`s before `landDotOn` (**no container push and no
+`dot-applied`**), `:4157` `return`s when `opposing` is empty, `:4261` `return`s.
+
+**`ctx.enemy` and `ctx.enemyId` are DELETED from `DrainContext`, not merely left unread.** That makes
+`tsc` the gate instead of a grep, so no fifth site can hide — which is the specific failure this
+amendment is correcting. §9.8 found one of four by reading code.
+
+### 10.3 The measured cost of the ruling — it is NOT corpus-inert, but it IS zero-movement
+
+The candidate fix applied on a scratch basis (`targetId === ctx.enemyId` -> `return`), full suite:
+
+- **4 failing tests in 2 files** — `purgeReactive.test.ts` (a, c) and `purgeConditionalSources.test.ts`
+  (two cases). **All four pin the deleted behaviour in their own names** ("falls back to `ctx.enemyId`
+  when counterTargetId is absent", "... when delegate returns undefined"). They migrate or die with
+  the ruling, the same way §9.5's stranded-DoT test dies with the actor. None is a regression.
+- **ZERO golden movement.** `realKitFingerprints.test.ts` passes untouched *despite carrying 60 of the
+  73 hits.*
+- **Oracle at the exact baseline: `147 / 146 / 2`** (`--seeds 15`).
+
+⭐ **The lesson, and it is the inverse of §9.6's:** 60 live hits inside a golden suite moved that suite
+by nothing. The fingerprint is a token SET, and Rhodium already emits its `purge` token from the rounds
+where an enemy *is* buffed — so deleting the rounds where it purged an empty ghost removes no token.
+§9.1 warned that a churn estimate ages; this warns the other way round: **hit-count at a site is not a
+predictor of observable movement, in either direction. Measure the fix, never the fallback frequency.**
+
+### 10.4 Commit 2: the deletion
+
+Clusters **A / B / D / E / F / G** per §4, plus §9.4's grep-invisible additions.
+
+⚠️ **§9.4's line numbers for those additions have ALREADY ROTTED — re-resolved here by symbol.**
+§9.4 warned they would rot "if anything lands above them"; they rotted anyway, because they were taken
+at `767775cd`, *before* 4c-2c's own review commits (`66a2dedb`, `adae5655`). Verified against
+`e8cdafdd`:
+
+| Item | §9.4 said | Actually at (`e8cdafdd`) | Anchor to grep for |
+| --- | --- | --- | --- |
+| the dead turn body | `:9955`-`:10035` | **`:9970`-`:10057`** | `} else if (actor.kind === 'enemy' && actor.id === enemy.id) {` |
+| its ⛔ opening banner | — | **`:9972`** | `⛔ DEAD BRANCH SINCE SP-4c-2c` |
+| `isDummyEnemy` binding | `:8861` | **`:8876`** | `const isDummyEnemy =` |
+| dead-actor-skip exemption | `:8838`-`:8862` | **banner at `:8846`** | `⛔ THE \`enemy\` DUMMY — DEAD SITE` |
+| `dotCarrierActors` membership | `:2623` | **`:2623` (correct)** | `const dotCarrierActors: CombatActor[] = [enemy,` |
+
+**Worse, the engine's own internal cross-references are stale too:** the comments at `:10024`,
+`:10043` and `:10057` each say *"see the banner at `:9957`"* — that banner is at `:9972`. Those three
+were written by 4c-2c to guide this rung and are wrong by 15 lines. So the deletion must **grep the
+⛔ banners and the inline condition, never navigate by any recorded number** — including the numbers
+in this table, which are correct at `e8cdafdd` and will rot the same way.
+
+`SENTINEL_ENEMY_ACTOR_ID = 'enemy'` per §4.3, and **the string stays reserved** in `reservedActorIds`.
+
+**A tension between §4.3 and §9.5, resolved: §4.3 wins.** §9.5 said the migrating scheduled-decrement
+test "re-keys the reported `actorId`", which reads as contradicting §4.3's byte-identical `'enemy'`.
+The string does **not** change; what re-keys is the test's *rationale* — the id now denotes a bucket,
+not an actor. Preserving the literal is what keeps the event stream byte-identical across the deletion.
+
+Tests: `retiredDummyTurn.test.ts` test 1 dies, test 2 **migrates** (§9.5). `indestructibleDeath.test.ts`
+loses its two `dpsEnemyTarget`-only cases, keeps four. `dummyReachability.test.ts`'s six paths each keep
+a **positive half** so a zero from a case that never ran stays impossible — which also closes §9's
+riding cleanups (`:317-321` / `:370-393` positive halves, `:346`/`:352` dead `DUMMY_HP`, `:231`
+bypassing `consultations()`). Plus §4.6's structural pair: no actor carries id `'enemy'` on any run,
+**and** `runCombat` still rejects an enemy attacker named `'enemy'` — fencing the reservation in both
+directions.
+
+### 10.5 Commit 3: the editor rejects what the engine now drops (owner ruling)
+
+The engine dropping a victimless infliction is correct but silent, so the **authoring surface** must
+refuse the shape. `SkillEditorModal` offers `start-of-round` (a member of `LIVE_TRIGGERS`,
+`types/abilities.ts:271`), so a user can author *"At the start of the round, inflict Corrosion II on an
+enemy"* — trigger `start-of-round`, type `dot`, target `enemy` — today. Pre-4c-2c it ticked against a
+ghost; since 4c-2c it applies, logs, reports stacks via `dotCarrierActors`, and deals **zero**.
+
+**There is no save gate to hook** — the modal is live-edit (`onChange` per keystroke, `:139`). So the
+ruling lands as two edits in `AbilityCard.tsx` plus a predicate in `simCoverage.ts` (already the home
+for this class — `PASSIVE_NOOP_TYPES` does the trigger-aware version at `AbilityCard.tsx:932`):
+
+1. **Constrain** — for `dot`/`debuff` on a victimless trigger, `TARGET_OPTIONS` drops plain `enemy`,
+   leaving only targets that resolve (`enemy-highest-attack`, `adjacent-enemies`, `all-enemies`).
+2. **Flag** — an inline error when an ability *already saved* with that combination is reopened. This
+   is the only half that reaches stored abilities; a dropdown change cannot.
+
+This is the **only** commit with an `UNRELEASED_CHANGES` entry, and per §9.7's trap the wording stays
+about the editor, not the engine: *"The skill editor now flags a passive that inflicts a DoT or debuff
+without naming a target — previously it saved silently and did nothing in the combat sim."* Writing
+"reactive DoTs now work" would credit this rung with a fix it did not make.
+
+### 10.6 Verification and the comment sweep
+
+- **Re-measure; never quote a churn table.** §7.4's 4c-2c cell was wrong by two orders of magnitude
+  because it was taken three rungs upstream (§9.1). The numbers in §10.3 were measured at `e8cdafdd`
+  and must be re-measured if anything lands before this rung starts.
+- Expectation: **zero golden movement, oracle `147 / 146 / 2`**. Per §4.5, movement means an earlier
+  rung missed a path — investigate, do not re-pin.
+- Gates: `npm test` (533 files / 5894 tests at `e8cdafdd`), `npx tsc --noEmit`, `npm run lint`,
+  `npm run audit:placement-symmetry -- --seeds 15`. Husky pre-commit is the only gate — there is no CI
+  test workflow. **Never `vitest -u`.**
+- **Sweep scope (owner ruling): deleted symbols + touched files.** Two passes, two methods.
+  *Mechanical:* every mention of a deleted identifier — `dummyEnemyIsVestigial` (26 lines / 18 files,
+  already stale since 4c-2c deleted the binding), `isDummyEnemy`, `dpsEnemyTarget`, `enemyOutcome` — a
+  closed set, verified by a final grep to zero. *Judgment:* a comment audit on **every file the diff
+  touches**, because comment-adjacent-to-changed-code is where all four of 4c-2c's false-comment rounds
+  landed. The remaining historical narrative in untouched files stays (779 "dummy" lines across 146
+  files; re-tensing all of it would bury the deletion and destroy context).
+- Re-resolve the ~14 `engine.ts` line cross-references **by symbol, not number** (§9.4). This is no
+  longer a precaution: §10.4 found **4 of the 5 inventory citations and 3 of the engine's own internal
+  cross-refs already stale** at `e8cdafdd`, with no intervening commits. Treat every recorded line
+  number in §4, §9 and §10 as advisory and every symbol as authoritative.
+- Both tripwires for commit 1 need a **synthetic parser-legal ability** for the dot/debuff halves (no
+  shipped kit can build the shape) plus a negative half (same ability with `enemy-highest-attack` still
+  lands), and per 4c-2c's lesson each must be **shown to fail against restored pre-rung semantics** —
+  that rung shipped a tripwire which passed byte-identical against the old world.
+
+### 10.7 Scope boundaries
+
+Unchanged from §4.2 and §7.4: the four scalar inputs go to **4d** (`enemyHp` is a required
+`CombatEngineInput` field, ~200-file churn), which also absorbs **#333**. The enemy-side
+`legacyVictim: healTarget` and **#335** go to **4e**. `enemyType` stays. Indestructible NPCs stay out
+(§5). **#334 closes with commit 1.** **#331** is unassigned.
+
+**Filed by this amendment:** Rhodium's damage/purge selector asymmetry (§10.1) is *fixed* by commit 1
+rather than deferred — both halves end up on the `:4079` convention.
+
+## 11. AMENDMENT (2026-08-20) — what 4c-2d actually cost, and the five things §10 got wrong
+
+**Measurement point: `c87098ff`** (the Task-4 comment sweep, on top of `9d627b4c`). Per §9.1 a churn figure ages exactly
+the way a reachability claim does, so this amendment states its own measurement point and every
+number below was taken there, not carried forward from §10.3.
+
+### 11.1 The measured outcome
+
+| | |
+|---|---|
+| Suite | **535 files / 5917 tests, all passing** (`npx vitest run`) — `e8cdafdd` was 533/5894 |
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | clean |
+| Oracle (`--seeds 15`) | **`147 / 146 / 2`** — exactly the §10.6 expectation |
+| Golden movement | **ZERO across all five commits.** `git diff --name-only main...HEAD` contains no `.snap` file at all, and the working tree never produced one. `vitest -u` was never run |
+| Branch churn | 46 files, +2203 / −1599 across the three feature commits and their two review commits; the sweep commit is comment-only |
+
+The prediction that mattered held: **the deletion is zero-movement.** §4.5's rule ("movement means an
+earlier rung missed a path — investigate, do not re-pin") was never invoked because there was nothing
+to investigate.
+
+### 11.2 §10.5's `SELF_RESOLVING_ENEMY_TARGETS` list was WRONG — and the error is a class
+
+§10.5 asserted that constraining the Target dropdown to *"targets that resolve
+(`enemy-highest-attack`, `adjacent-enemies`, `all-enemies`)"* would steer the user to a working
+shape. That list is **correct for the `damage` and `purge` branches and wrong for `dot`/`debuff`** — a
+per-branch fact generalised across branches. Verified against `triggers.ts`:
+
+- the **`dot`** branch consults `ability.target` in exactly one place: an `all-enemies` fan-out gated
+  on `eventCtx.cleansedEnemyIds`, which only the `on-enemy-cleansed` listener stamps. Everything else
+  goes through `routedVictimId = eventCtx.victimId ?? eventCtx.counterTargetId`, and SP-4c-2d Task 1
+  returns on `undefined`. So on a victimless trigger **every** target drops, `all-enemies` included.
+- the **`debuff`** branch resolves exactly one ability-target for itself, `enemy-highest-attack`
+  (`ctx.enemyWithHighestAttack`). `adjacent-enemies` anchors on `eventCtx.victimId`; `critVictimIds`,
+  `repairedEnemyIds`, `counterTargetId` and `debuffVictimId` are all event stamps. A victimless
+  trigger supplies none of them.
+
+**The generalisable lesson: in this engine, "does target T resolve?" is a question about the EXECUTOR
+BRANCH, not about T.** This is the same shape as the fact §10.1 already records — `on-deal-damage`
+stamps a victim but the damage branch never reads it. Two branches sharing a target enum do not share
+a target resolution.
+
+### 11.3 That error made the planned lever the WRONG lever — hence warn-only (owner ruling)
+
+Because §11.2 holds, `TARGET_OPTIONS` in `AbilityCard.tsx` **does not even offer**
+`enemy-highest-attack` (its eight entries are self / ally / all-allies / adjacent-allies / enemy /
+all-enemies / adjacent-enemies / target-and-adjacent-enemies). So for a `dot`/`debuff` on a victimless
+trigger, **every offerable target drops** and a dropdown constraint has nothing to steer the user
+*toward* — it would remove options and leave them nowhere to go.
+
+**Owner ruling: the guard WARNS, it does not block or reject.** §10.5's heading ("the editor rejects
+what the engine now drops") and its step 1 ("`TARGET_OPTIONS` drops plain `enemy`") are both
+superseded. The planned warning text — *"pick All enemies or Adjacent enemies"* — was **false advice**
+and was never shipped; the shipped `VICTIMLESS_INFLICTION_WARNING` points at the trigger instead
+("pick a trigger that names an enemy … or move this effect to the skill the ship casts").
+
+Note the alignment this produces: "warn, don't block" is the rule `PASSIVE_NOOP_TYPES` in
+`simCoverage.ts` already followed for the same class of silent no-op. The plan invented a stricter
+mechanism than the file it was landing in already had.
+
+### 11.4 The load-bearing carve-out: Selenite
+
+**Selenite's R2/R4 refit passive is `debuff` + `start-of-round` + `enemy-highest-attack`** — *"At the
+start of the round, the highest attack enemy is applied with Concentrate Fire for 1 turn"*
+(`docs/ship-skills.csv`). It **genuinely resolves**, through the debuff branch's own highest-attack
+selector, and it is the one shipped ship the guard must NOT flag. `isSelfResolvingSelector` is
+`debuff`-only on purpose: the `dot` executor has no equivalent selector, so the same target does not
+rescue a dot. Confirmed by measurement, not by symmetry — the tempting symmetric version of that
+predicate would have been wrong.
+
+### 11.5 THREE assertions the plan wrote were vacuous or uncompilable — and an implementer caught each
+
+A plan's sample assertions are **untested code and must be treated as such.** All three were found by
+the implementer executing the task, not by review of the plan:
+
+1. **The purge negative passed identically before and after the fix.** Purging a buff-less target
+   removes 0 buffs, so no `purge-performed` event fired either way — the assertion observed the
+   *consequence* of the call rather than the call. The fix is to observe the CALL (that the executor
+   returned before resolving a target at all), not its downstream event.
+2. **The editor-card tests used `querySelectorAll('option')`, which returns `[]`.** This project's
+   `Select` is a custom `Button` plus a portalled `role="listbox"`, not a native `<select>`. A test
+   asserting "the dropdown no longer offers X" by counting `<option>` nodes is vacuously green against
+   any implementation.
+3. **A `target: 'enemy-highest-attack'` dot fixture would have stayed victimless** — see §11.2: that
+   target rescues a debuff, never a dot. The intended negative half would have gone red for the right
+   reason by accident, or green for the wrong one.
+
+### 11.6 A mutation I specified could not fence the property it was meant to fence
+
+The plan named a mutation ("drop the victimless-trigger conjunct") as the tripwire for
+`isVictimlessInfliction`. It does not work: with the conjunct dropped, the carve-out's early-out
+short-circuits regardless, so the mutant stays green. **Lesson: specify the PROPERTY to fence, not the
+MUTATION to run.** A mutation is a proposed proof; only the property is the requirement, and a proof
+that fails leaves the requirement standing.
+
+### 11.7 The deletion task's "behaviour-free" checkpoint was wrong
+
+The Task-2 brief called dropping the dummy from `dotCarrierActors` a behaviour-free step, on the
+grounds that a prior rung had proved the dummy never *ticks*. It is not behaviour-free: the dummy
+never ticked but it kept **reporting** — a DoT pushed into its containers was summed into every
+round's `activeCorrosionStacks` / `activeInfernoStacks` while dealing nothing (§9.8's strand).
+**"Never ticks" does not imply "never reports."** Two different questions about the same container.
+
+### 11.8 `"PATH B HAS NO PRODUCTION TRIGGER TODAY"` was FALSE, and it had propagated
+
+That assertion sat in `engine.ts`'s extra-action documentation and had already been carried into a
+later hand-off. Path B of the extra-action machinery — a `grantExtraAction` reached with
+`inTurnLoop === false` — **is reachable via the out-of-turn-loop drains**: an Incinerator or Judge AoE
+that lands a kill during the `round-started` / `round-ended` drain emits `ship-destroyed` →
+`on-enemy-destroyed` → a Liberator/Sokol `extra-action` grant reaches `grantExtraAction` with
+`inTurnLoop` false. It is live on a multi-enemy board. The comment now reads "⚠️ PATH B IS
+REACHABLE"; what SP-4c-2d actually removed was the *original* caller (the round-tail dummy HP block),
+which is exactly why the two were easy to confuse.
+
+### 11.9 §9.4's line numbers had rotted BEFORE this rung started — reaffirmed
+
+§10.4 already found 4 of 5 inventory citations and 3 of the engine's own internal cross-refs stale at
+`e8cdafdd` with no intervening commits. The Task-4 sweep found more of the same (`~1297`, `:4794`,
+`:5432`, `~6452`, `~10568`, `~929`), and where such a reference sat inside text being rewritten it was
+replaced with the SYMBOL rather than a fresh number. **Navigate by symbol. Treat every recorded line
+number in §4, §9, §10 and §11 as advisory and every symbol as authoritative.** Do not "repair" line
+numbers as a sweep task — that is churn with a half-life measured in commits.
+
+### 11.10 The sweep, and the one place §10.6 contradicted itself
+
+§10.6 asked for the deleted-symbol grep to return **zero** while also ruling that accurate past-tense
+history stays. Those conflict for every deleted symbol named inside a correct historical note.
+**Owner ruling: history governs.** So the sweep corrected every present-tense-FALSE mention and left
+accurate history alone even where it names a deleted symbol — `dpsEnemyTarget` *was* deleted in
+SP-4c-2d, that sentence is true, and it is worth keeping searchable. The deleted-symbol grep therefore
+does NOT return zero, **by design**; a future rung must not treat a non-zero count as unfinished work.
+
+Two files outside the "touched files" rule were swept anyway, because no commit on this branch touched
+them and they therefore carried unamended present-tense dummy claims:
+`healingEngineAdapter.ts` (comments only — the `LEGACY_SINK_*` scalars it still passes are 4d's code
+to remove) and `battleSimulator.ts`. `dpsEnemyPlacement.ts` was swept for the same reason.

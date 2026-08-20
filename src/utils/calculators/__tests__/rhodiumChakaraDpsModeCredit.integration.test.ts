@@ -9,11 +9,12 @@
  * `creditDamage` is never called at all — a regression vs pre-SP-M behavior (these procs used to
  * target the DPS dummy `enemy` via the plain `target:'enemy'` fallback and always credited).
  *
- * Fix (engine.ts playerDrainCtx): `enemyWithMostBuffs`/`enemyWithHighestSpeed` fall back to the live
- * dummy `enemy.id` when there is no positioned enemy roster — mirroring Task 7's `livingOpposingActorIds`
- * dummy-aware binding for Judge/Incinerator's all-enemies proc. (The fix originally keyed on
- * `dummyEnemyIsVestigial`; Task 9b re-keyed it to `hasPositionedEnemyRoster`, and SP-4c-2c deleted
- * the old gate entirely.)
+ * The fix at the time (engine.ts playerDrainCtx): `enemyWithMostBuffs`/`enemyWithHighestSpeed` fell
+ * back to the live dummy `enemy.id` when there was no positioned enemy roster — mirroring Task 7's
+ * `livingOpposingActorIds` dummy-aware binding for Judge/Incinerator's all-enemies proc. It
+ * originally keyed on `dummyEnemyIsVestigial`; Task 9b re-keyed it to `hasPositionedEnemyRoster`,
+ * SP-4c-2c deleted the old gate, and SP-4c-2d deleted the fallback arm together with the dummy —
+ * all three resolvers now read the real positioned roster unconditionally.
  *
  * Both ships use their real corpus passive text (docs/ship-skills.csv), matching the positional
  * fixtures in reactiveDamagePositionalHp.test.ts verbatim.
@@ -42,8 +43,9 @@
  * `simulateDPS` now ALWAYS builds a real, positioned enemy (`enemy-1`), so the four `simulateDPS`
  * tests below no longer take the dummy-fallback branch this file was written against — they take
  * the POSITIONAL branch, where `enemyWithMostBuffs` is `onceByOwner(() => mostBuffsAmong(
- * enemyAttackerActors))` (engine.ts:8348, `? onceByOwner(() => mostBuffsAmong(enemyAttackerActors))`,
- * gated on `hasPositionedEnemyRoster`, now true).
+ * enemyAttackerActors))`. That branch was the `hasPositionedEnemyRoster === true` arm of a ternary
+ * at the time; SP-4c-2d deleted the gate and the dummy-fallback arm, so it is now the only binding
+ * (see `playerDrainCtx` in engine.ts).
  * Against a single UNBUFFED enemy `mostBuffsAmong` returns `undefined` (engine.ts:8250,
  * `return bestCount > 0 ? best : undefined;`, the deliberate "no buffs anywhere → no most-buffs
  * target" rule), so Rhodium's proc found no target and dropped entirely: `directDamage` read 0.

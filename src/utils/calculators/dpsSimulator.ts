@@ -118,9 +118,9 @@ export interface DPSSimulationInput {
      *
      *  OPTIONAL, but no longer the switch between two run shapes: since SP-4b-2a a caller that
      *  supplies none gets one SYNTHESIZED from the scalar fields (`synthesizedDpsEnemy`), so
-     *  `simulateDPS` always hands `runCombat` a non-empty roster and the engine's
-     *  `dpsEnemyTarget` is ALWAYS false on a DPS-calculator run — the focus's damage always
-     *  lands per-victim on real actors, never on the vestigial dummy. Supply this to CHOOSE the
+     *  `simulateDPS` always hands `runCombat` a non-empty roster — the focus's damage always
+     *  lands per-victim on real actors. (The engine's roster-emptiness discriminator and the
+     *  vestigial dummy it selected were deleted in SP-4c-2d.) Supply this to CHOOSE the
      *  enemy (a real ship with skills, several enemies, an explicit slot); omit it to accept the
      *  0-attack stream-inert stand-in built from `enemyHp`/`enemyDefense`/`enemySpeed`/
      *  `enemySecurity`/`enemyAffinity`. Past `effectiveEnemyAttackers` the two are
@@ -133,11 +133,13 @@ export interface DPSSimulationInput {
     position?: Position;
     /** Pre-parsed targeting preference for the focus attacker. Also optional since SP-4b-1 — the
      *  boundary fills an absent one with `DEFAULT_FRONT_ENEMY_TARGET`. Without that fill,
-     *  `selectTurnTarget` (which requires `resolvesPositionalVictim(...) && target`) would
-     *  short-circuit to `legacyVictim` (the dummy) however well-positioned the roster is — which is
-     *  precisely why the boundary fills it. (It would ALSO have kept the dummy in the turn order via
-     *  the `dummyEnemyIsVestigial` gate's `t?.side === 'enemy'` conjunct; that gate was deleted in
-     *  SP-4c-2c and the dummy now takes no turn on any run, so that half no longer applies.) */
+     *  `selectTurnTarget` (which requires `resolvesPositionalVictim(...) && target`) would resolve
+     *  NO victim however well-positioned the roster is — the focus would run a no-victim turn and
+     *  its offensive clause would deliver nothing — which is precisely why the boundary fills it.
+     *  History: before SP-4c-2b the same miss short-circuited to `legacyVictim` (the dummy), and
+     *  before SP-4c-2c it ALSO kept the dummy in the turn order via the `dummyEnemyIsVestigial`
+     *  gate's `t?.side === 'enemy'` conjunct. Both the gate and the actor are gone (SP-4c-2c /
+     *  SP-4c-2d). */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
      *  positional apply site. A single-target 1v1 wants shape 'base', which is exactly what the
@@ -166,8 +168,9 @@ export interface RoundData {
     /** Enemy HP% ENTERING this round (100 → 0) — the value hp-threshold conditions are gated
      *  against. Read off the STRUCK VICTIM's live HP at the focus's last turn of the round
      *  (`playerTurn`'s `enemyHpDecline`), which on a positional run — since SP-4b-2a, every DPS
-     *  run — is the real enemy's own HP curve, not a cumulative-damage scalar. The two coincide
-     *  only on the roster-less dummy, whose HP lands post-round. */
+     *  run — is the real enemy's own HP curve, not a cumulative-damage scalar. The two used to
+     *  coincide on the roster-less dummy run, whose HP landed post-round; the boundary stopped
+     *  accepting an empty roster (SP-4b-2b) and SP-4c-2d deleted the actor, so that shape is gone. */
     enemyHpPct: number;
     /** Direct (non-DoT, non-detonation) damage the focus dealt this round.
      *
@@ -231,11 +234,11 @@ export interface RoundData {
      *  contributions land in the TICK round (the ticking victim's own turn-start), not the cast
      *  round — same pre-existing timing `perTargetDamage` already has for DoT ticks.
      *
-     *  REACTIVE DAMAGE **IS** INCLUDED on the positional path, and this comment used to say the
-     *  opposite. `applyReactiveDamage` writes here via `creditDealt` when `hasPositionedEnemyRoster`
-     *  and the victim is a real positioned actor (`engine.ts` ~5784, shipped in #318);
-     *  `applyCounterAttack` (~5554) and reflect (~5243) write it unconditionally. Only a run with
-     *  NO positioned enemy roster falls back to credit-only `creditDamage`. Verified empirically
+     *  REACTIVE DAMAGE **IS** INCLUDED, and this comment used to say the opposite.
+     *  `applyReactiveDamage` writes here via `creditDealt` (shipped in #318); `applyCounterAttack`
+     *  and reflect write it unconditionally too. It used to fall back to credit-only
+     *  `creditDamage` on a run with no positioned enemy roster, but SP-4c-2d deleted that arm —
+     *  the roster is always positioned below the normalization boundary. Verified empirically
      *  across four reactive shapes — start-of-round proc, adjacent-ally retaliation, reflect, and a
      *  true on-attacked counter — each crediting this channel keyed by the reacting actor.
      *
@@ -294,14 +297,18 @@ export interface RoundData {
      *  the round tail shows only in the turn-time list. Populated only under
      *  `collectStatusTimeline`, and only when at least one name is present. */
     focusStatuses?: RoundActorStatuses;
-    /** SP-2: round-tail status names per REAL enemy actor id (the vestigial dummy is filtered out —
-     *  it keys its debuffs under the `__enemy__` sentinel and always reports empty). Keyed by id
+    /** SP-2: round-tail status names per REAL enemy actor id — only ids in
+     *  `effectiveEnemyAttackers` are kept, so the focus's and the team's own snapshots stay out.
+     *  (The vestigial dummy this filter also used to exclude was deleted in SP-4c-2d.) The side-wide
+     *  SCHEDULED enemy-debuff bucket keys under the `__enemy__` sentinel store rather than any actor
+     *  id, so it never appears in these per-actor lists either. Keyed by id
      *  rather than collapsed to one entry: a roster is not its first member (the defect #318 fixed
      *  in `finalHpPct`). Populated only under `collectStatusTimeline`, and only for actors carrying
      *  at least one name. */
     enemyStatuses?: Record<string, RoundActorStatuses>;
     /** SP-4b-2 D3: BOARD-WIDE totals — the SUM across every enemy-side DoT carrier at round tail
-     *  (the vestigial dummy sink plus every positioned enemy) that still REPORTS. Stacks and bomb
+     *  (every positioned enemy; the vestigial dummy sink was a carrier too until SP-4c-2d deleted
+     *  it) that still REPORTS. Stacks and bomb
      *  entries are extensive quantities, so they add; this is deliberately not `finalHpPct`'s
      *  HP-weighted treatment, which exists because HP% is an intensive per-actor ratio. On the
      *  usual 1-enemy board these are that enemy's own totals. `activeBombCount` counts bomb
@@ -309,8 +316,9 @@ export interface RoundData {
      *
      *  CORPSES ARE EXCLUDED (`dotCarrierReports`, engine.ts): a destroyed POSITIONED enemy is
      *  skipped before its DoT-tick prologue and nothing clears its containers, so its stacks are
-     *  frozen leftovers that deal nothing and never expire. The dummy sink is exempt from that
-     *  skip, so its entries stay live state and keep reporting even after it dies. */
+     *  frozen leftovers that deal nothing and never expire. The dummy sink used to be EXEMPT from
+     *  that exclusion and kept reporting after it died; `dotCarrierReports` lost the exemption along
+     *  with the actor in SP-4c-2d, so the corpse exclusion is now unconditional. */
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
@@ -331,8 +339,8 @@ export interface DPSSimulationSummary {
     totalDamage: number;
     avgDamagePerRound: number;
     /** Round the LAST real enemy fell; undefined while any of them survived the window.
-     *  Re-derived from `ship-destroyed`, never from the engine's `enemyOutcome` (which reads the
-     *  never-dying dummy). */
+     *  Re-derived from `ship-destroyed`. The engine used to expose an `enemyOutcome` block, but it
+     *  read the never-dying dummy and was deleted with it in SP-4c-2d. */
     roundsToKill?: number;
     /** True while ANY real enemy is still standing at the end of the window. */
     survived: boolean;
@@ -446,8 +454,10 @@ function synthesizedDpsEnemy(args: {
             attack: 0,
             crit: 0,
             critDamage: 0,
-            // The engine's own dummy default (`enemySpeed ?? 50`, engine.ts:1903) — the enemy acts
-            // last at default speeds, and turn order must not shift for a caller that set nothing.
+            // 50 was the engine's own dummy-actor default (`enemySpeed ?? 50`) before SP-4c-2d
+            // deleted that actor and every read of the field — this line is now the only place the
+            // default lives. Kept at 50 so the enemy still acts last at default speeds: turn order
+            // must not shift for a caller that set nothing.
             speed: args.enemySpeed ?? 50,
             defence: args.enemyDefense,
             hp: args.enemyHp,
@@ -529,11 +539,12 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     const engineTeamActors = deriveTeamEngineActors(teamActors, input.enemyAffinity);
     const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
 
-    // The engine's own `enemyOutcome` is derived from the vestigial DUMMY (`enemy.destroyedRound`,
-    // engine.ts:11060), which has billions of HP and never dies — so it always reports
-    // `survived: true` / `roundsToKill: undefined` and is unusable here (SP-4b-2a: every DPS run now
-    // faces a real enemy, so this is the only outcome). Capture the REAL enemies' deaths off an
-    // emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same remedy.
+    // The engine used to return an `enemyOutcome` block derived from the vestigial DUMMY, which had
+    // billions of HP and never died — so it always reported `survived: true` /
+    // `roundsToKill: undefined` and was unusable here. SP-4c-2d deleted the field for exactly that
+    // reason; there is no engine-side outcome to prefer any more. Capture the REAL enemies' deaths
+    // off an emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same
+    // remedy.
     const realEnemyIds = new Set(effectiveEnemyAttackers.map((e) => e.id));
     const realEnemyDeathRound = new Map<string, number>();
     /** Last `hp-changed` percentage seen per real enemy. Integer-granular and only emitted on
@@ -612,7 +623,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         defence,
         hp,
         // Base hacking/security (A2 Task 2) — the OLD landing-formula defaults (200 / 100) applied at
-        // this boundary, threaded onto the attacker/dummy actor bases. No production reader yet (A2 Task 4).
+        // this boundary. `hacking` is threaded onto the focus attacker's base. `enemySecurity` has no
+        // reader left in the engine (it fed the deleted dummy actor's stat block); the resolved value
+        // above still reaches the fight through `synthesizedDpsEnemy`'s `security`, and the field is
+        // passed on for rung 4d to remove. No production reader yet (A2 Task 4).
         hacking,
         enemySecurity,
         allyChargePerRound,
@@ -667,12 +681,13 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         return (remaining / totalMaxHp) * 100;
     };
 
-    // End the reported run AT the kill, dropping the zero-damage rounds the engine still simulated
-    // afterwards. The engine's own early exit (engine.ts:11008) is gated on `dpsEnemyTarget`, which
-    // is now false on EVERY DPS run (a real enemy is always present), and `battleSimulator` derives its outcome post-hoc
-    // rather than breaking the loop — so the trim belongs here. Matches the documented
-    // `dpsEnemyTarget` semantics ("roundData ends AT the kill, no zero-damage rounds past it") and
-    // keeps `avgDamagePerRound` dividing by the rounds that actually happened.
+    // End the reported run AT the kill, dropping any zero-damage rounds the engine still simulated
+    // afterwards. The engine used to carry its own early exit for this, gated on roster emptiness —
+    // false on every DPS run, and deleted in SP-4c-2d — while `battleSimulator` derives its outcome
+    // post-hoc rather than breaking the loop, so the trim belongs here. (SP-4c-1's side-wipe rule
+    // now ends the run on the turn that kills the last enemy, so this trim is usually a no-op; it
+    // still covers a run that reports rounds past a kill for any other reason.) Keeps
+    // `avgDamagePerRound` dividing by the rounds that actually happened.
     const reportedRounds =
         realRoundsToKill !== undefined ? rounds.filter((r) => r.round <= realRoundsToKill) : rounds;
 
@@ -742,9 +757,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // would fold the ENEMY's output into the player's team aggregate.
     //
     // Replacement (not addition), mirroring the focus: the two channels are mutually exclusive per
-    // cast — the `!teamPositional` gate above, `applyReactiveDamage`'s
-    // `hasPositionedEnemyRoster ? creditDealt : creditDamage` split (engine.ts:5894/5938), and the
-    // positional DoT/detonation sites which call `creditDealt` only. A run with no walked team
+    // cast — the `!teamPositional` gate above, `applyReactiveDamage` (which since SP-4c-2d calls
+    // `creditDealt` unconditionally, its credit-only arm having been roster-emptiness-gated), and
+    // the positional DoT/detonation sites which call `creditDealt` only. A run with no walked team
     // actors at all (`walkedTeamIds.length === 0`) has nothing to re-derive here.
     const walkedTeamIds = engineTeamActors?.filter((t) => t.walk).map((t) => t.id) ?? [];
     const perRoundTeamDamage =
@@ -794,7 +809,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             // numRounds there).
             avgDamagePerRound: Math.round(totalDamage / reportedRounds.length),
             // SP-U U5: rounds-to-kill adapter, re-derived from the `ship-destroyed` tap (see above —
-            // the engine's own outcome fields read the DUMMY and are unusable). Wiped → roundsToKill
+            // the engine's own outcome fields read the DUMMY and were deleted with it in SP-4c-2d,
+            // so there is nothing engine-side left to prefer). Wiped → roundsToKill
             // = death round, survived false, finalHpPct 0; else survived true, roundsToKill
             // undefined, finalHpPct = end-of-window enemy HP%.
             survived: !allRealEnemiesDead,

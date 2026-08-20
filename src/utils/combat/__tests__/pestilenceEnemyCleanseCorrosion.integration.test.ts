@@ -199,10 +199,9 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
         ...over,
     });
 
-    it('fans Corrosion onto BOTH cleansed enemies (one cleanse event, two recipients) and leaves the dummy empty', () => {
+    it('fans Corrosion onto BOTH cleansed enemies (one cleanse event, two recipients)', () => {
         let foe1: CombatActor | undefined;
         let foe2: CombatActor | undefined;
-        let dummy: CombatActor | undefined;
         const bus = createEventBus();
         const dotsApplied: DotApplied[] = [];
         bus.on('dot-applied', (e) => dotsApplied.push(e));
@@ -212,7 +211,6 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
                 __testTapActors: (actors) => {
                     foe1 = actors.find((a) => a.id === 'foe1');
                     foe2 = actors.find((a) => a.id === 'foe2');
-                    dummy = actors.find((a) => a.id === 'enemy');
                 },
             })
         );
@@ -226,9 +224,16 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
         const hitIds = new Set(corrosion.map((e) => e.targetId));
         expect(hitIds.has('foe1')).toBe(true);
         expect(hitIds.has('foe2')).toBe(true);
-        // Dummy-sink guard: the Corrosion never routed to the vestigial DPS dummy 'enemy'.
+        // Dummy-sink guard: the Corrosion never routed to the string 'enemy'. The companion
+        // assertion that read that ACTOR's own containers went with the actor in SP-4c-2d (it would
+        // now pass vacuously — there is no such actor to look up), which is also why this case's
+        // title no longer claims to check "the dummy is empty".
+        // BE HONEST ABOUT WHAT IS LEFT: this line is a WEAK pin. No actor can carry the id (the
+        // reservation fence in `sentinelActorIdReservation.test.ts` rejects a caller that tries) and
+        // the routing above resolves real roster members, so it can only fail if a future change
+        // re-introduces a hardcoded 'enemy' target for a reactive DoT. Kept at that value —
+        // cheap, and it is the one place a `dot-applied` stream would show such a regression.
         expect(corrosion.some((e) => e.targetId === 'enemy')).toBe(false);
-        expect(dummy?.corrosionEntries ?? []).toHaveLength(0);
         // Both real enemies actually carry a Corrosion stack from the focus.
         expect(foe1.corrosionEntries.some((e) => e.sourceId === 'attacker')).toBe(true);
         expect(foe2.corrosionEntries.some((e) => e.sourceId === 'attacker')).toBe(true);

@@ -26,7 +26,6 @@ import { createEventBus, CombatEvent } from '../events';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
 import { createStatusEngine } from '../statusEngine';
 import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
-import type { CombatActor } from '../state';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -595,8 +594,6 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
         };
         const ctx: IntentExecContext = {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],

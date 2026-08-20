@@ -274,7 +274,7 @@ export const PRACTICE_TARGET_ID = 'practice-target';
  *
  * It is killable, exactly as a real default card is. A healer whose cast carries a damage clause
  * can destroy it and spend the rest of the window with no targetable opponent — the same shape as
- * killing your only real enemy today, and SP-4c removes the sink underneath both.
+ * killing your only real enemy today, and SP-4c has since removed the sink underneath both.
  *
  * HP stays at the card default rather than being inflated to make it immortal, because an HP-scaled
  * damage channel is exactly what a huge number would distort: corrosion is `min(enemyHp, 500_000)`
@@ -285,9 +285,9 @@ export const PRACTICE_TARGET_ID = 'practice-target';
  * engine.ts:8921) — and that is the branch the practice target actually runs, since it sits in
  * `baseHpById` via `enemyAttackerActors` (engine.ts:2809, `const baseHpById = new Map<string,
  * number>([`, whose entries include `...enemyAttackerActors.map((a) => [a.id, a.stats.hp])`). The
- * bare fight-wide `enemyHp` scalar only reaches `tickDoTs` through the vestigial dummy branch
- * (engine.ts:9554, `} else if (actor.kind === 'enemy' && actor.id === enemy.id) {`), which the
- * practice target never takes. So inflating this HP to make the target
+ * bare fight-wide `enemyHp` scalar reaches `tickDoTs` on NO path any more: both of its call sites
+ * pass a `recipientMaxHp(...)`, and the vestigial dummy branch that passed the bare scalar went
+ * with the actor in SP-4c-2d. So inflating this HP to make the target
  * immortal would immediately multiply every corrosion tick against it by the same ratio — e.g. 40,000
  * → 500,000 is 12.5×. Inferno is unaffected either way: measured at 5,000 against a 1,000,000-HP
  * victim and a 40,000-HP one alike, because it scales off the APPLIER's attack (engine.ts:1066,
@@ -317,8 +317,8 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * mode. Mirrors `simulateDPS`: it derives the engine's input from the public healing input —
  * the heal-target id mapping, the debuff landing chance (the healer's hacking vs the VICTIM's
  * security — per-enemy since SP-3, defaulted to `LEGACY_SINK_SECURITY` when the card leaves it
- * unspecified, which is every card the UI produces; the fight-wide `enemySecurity` scalar only
- * still gates a whiffed cast against the vestigial dummy),
+ * unspecified, which is every card the UI produces; the fight-wide `enemySecurity` scalar has no
+ * engine reader left since SP-4c-2d deleted the dummy actor it described),
  * the static defPen/dot self-buff fold, the charged-skill widening, and the per-team-actor
  * walk (shared `deriveTeamEngineActors`) — then calls `runCombat` and assembles the public
  * result from the additive `healing` block.
@@ -349,9 +349,11 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * ENGINE's, not this adapter's: `normalizeCombatRoster` fills both axes on `runCombat`'s first line
  * and the duplicate derivation here was retired. It is load-bearing, not tidiness: a team actor's
  * axes are sourced exclusively from `teamTargetById`/`teamPatternById`, so an actor missing them
- * would have `selectTurnTarget` short-circuit to `legacyVictim` — the dummy — and its
- * `basis:'damage-dealt'` riders would then scale off the sink's 10,000 defence instead of the real
- * enemy's. What this adapter still owns is the ally-side SUBSTITUTION (`offensiveTarget`), which is
+ * would resolve NO opposing victim at all — `selectTurnTarget` returns `tgt: undefined` on the
+ * player side since SP-4c-2b — and its offensive clause would deliver nothing. Before SP-4c-2d that
+ * same miss short-circuited to `legacyVictim` — the dummy — and the actor's `basis:'damage-dealt'`
+ * riders then scaled off the sink's 10,000 defence instead of the real enemy's.
+ * What this adapter still owns is the ally-side SUBSTITUTION (`offensiveTarget`), which is
  * a matchup policy rather than a fill — the boundary only fills what is ABSENT.
  *
  * Consequences the pre-SP-3 dummy run did not have: every player cast lands per-victim on a real
@@ -361,12 +363,14 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * game-faithful and deliberately not softened — correct default placement (`healingPlacement.ts`,
  * via `defaultHealTargetSlot`) is the only mitigation.
  *
- * The vestigial dummy is the opponent only where positional resolution yields nothing: when the
- * roster holds no targetable member (every enemy at max hp 0), or when a placed actor's target
- * resolves to no living victim — the mid-run whiff window — since `selectTurnTarget` ends in
- * `selected ?? legacyVictim`. Two entries have dropped off that list: "target/pattern missing"
- * (the boundary fills both, so an actor with no axes is no longer a way in) and an EMPTY roster
- * (see the next paragraph). See the LEGACY_SINK_* comment below.
+ * There is no fallback opponent on the PLAYER side any more. Every case that used to route a player
+ * cast to the vestigial dummy — a roster with no targetable member (every enemy at max hp 0), a
+ * placed actor whose target resolves to no living victim (the mid-run whiff window), missing
+ * target/pattern axes, and an EMPTY roster — now yields "no victim": SP-4c-2b made
+ * `selectTurnTarget` return `tgt: undefined` for a player actor that resolves nobody, and SP-4c-2d
+ * deleted the actor itself. The ENEMY side still ends in `selected ?? legacyVictim`, but its
+ * `legacyVictim` is the HEAL TARGET — a real, positioned player actor — not the dummy; re-homing
+ * that anchor is rung 4e's job. See the LEGACY_SINK_* comment below.
  *
  * `enemies: []` is a SUPPORTED shape and reaches this function from production: it means "nothing
  * shoots back", and `effectiveEnemies` turns it into ONE inert PRACTICE TARGET (`practiceTarget`
@@ -416,7 +420,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         healTargetAffinity,
     } = input;
 
-    // An empty roster means "nothing shoots back", not "hand the run to the dummy". Every reader
+    // An empty roster means "nothing shoots back", not "hand the run to the dummy" (which is what
+    // it used to mean, before the practice target and before SP-4c-2d). Every reader
     // below MUST use this, not `enemies` — there are four (the three slot-resolution arguments
     // and the map).
     const effectiveEnemies = enemies.length ? enemies : [practiceTarget()];
@@ -428,13 +433,13 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // the dummy and the sink's defence is no longer the basis for anything. The ally-side target
     // substitution further down is the other half of the same claim.
     //
-    // These scalars are the LEGACY SINK, and they now do DOUBLE duty:
+    // These scalars are the LEGACY SINK. They used to do DOUBLE duty; only the second job is left:
     //
-    //  1. they still describe the dummy, which is reachable only through the residual whiff window
-    //     (`selectTurnTarget`'s `selected ?? legacyVictim`) — no longer through an empty roster. Do
-    //     NOT "tidy" them to 0/huge while that window exists: the sink's defence is still the basis
-    //     for a `damage-dealt` rider on a whiffed cast, its security still gates the healer's
-    //     outbound debuffs, and `enemySpeed 0` still pins it last in the turn order;
+    //  1. GONE. They described the dummy actor, which SP-4c-2d deleted. The fight-wide
+    //     `enemyDefense` / `enemySecurity` / `enemySpeed` arguments of the `runCombat` call below are
+    //     no longer destructured by the engine at all, and `enemyHp` keeps only its enemy-HP%
+    //     denominator readers. The arguments are still passed — dropping them (and the fields) is
+    //     rung 4d's job, so leave the constants and their call sites exactly as they are;
     //  2. they are the per-enemy DEFAULTS for a real enemy that leaves `defence`/`hp`/`security`
     //     unspecified — which is every caller the UI produces today, since the enemy panel only
     //     collects attack/crit/critDamage/speed/hacking. Defaulting matters, and NOT to the
@@ -448,7 +453,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     //     behaving exactly like the pre-SP-3 punching bag — just positioned, and killable the
     //     moment a caller gives it real numbers.
     //
-    // SP-4 retires the dummy outright; until then these keep their pre-SP-3 values.
+    // SP-4c-2d retired the dummy outright; these keep their pre-SP-3 values because job 2 above
+    // still needs them.
     const LEGACY_SINK_DEFENCE = 10000;
     const LEGACY_SINK_HP = 1_000_000;
     const LEGACY_SINK_SECURITY = 100;
@@ -473,14 +479,26 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
      *
      * ⚠️ NOT a normalisation nicety, and NOT something the engine's boundary covers — it fills an
      * ABSENT axis, it never rewrites a supplied one. `resolvePositionalTarget` returns `null` for
-     * `target.side === 'ally'`, so `selectTurnTarget` falls back to `tb.legacyVictim` — the
-     * vestigial DUMMY. Worse, `willApplyPositionally` (the focus cast site in engine.ts) tests only
-     * `resolvesPositionalVictim && target != null && pattern != null` and never the target's SIDE,
-     * so it stays TRUE while the bound victim is the position-less dummy: the positional apply then resolves
-     * footprint victims from `tgt.position === undefined`, finds none, and delivers ZERO. Measured on
-     * a Volk-shaped `allies` target with `Pattern-Cone-Support-Range-1` over a `damage` + 50%
-     * `damage-dealt` rider kit: `perTargetDealt` undefined and the rider heal 0 at enemy defence 1,000
-     * AND at 9,000 — no sensitivity at all — where the same kit with `front` targeting pays 3,876.
+     * `target.side === 'ally'`, and the consequence is side-dependent:
+     *   - PLAYER side (the healer and its team actors): `selectTurnTarget` answers `tgt: undefined`
+     *     (SP-4c-2b). The engine's `positional` gate is fenced on `tgt !== undefined`, and
+     *     `runPlayerTurn` fences its own damage assembly on `hasVictim`, so an offensive clause in
+     *     the cast delivers exactly ZERO and `perTargetDealt` stays empty.
+     *   - ENEMY side (a support ship the user picked as an opponent): `selectTurnTarget` still ends
+     *     in `selected ?? tb.legacyVictim`, and the enemy side's `legacyVictim` is the HEAL TARGET —
+     *     so the cast anchors on that one player actor instead of the cell its own pattern was
+     *     meant to walk.
+     * Either way the supplied ally-side axis cannot do the offensive job, which is why it is
+     * substituted here rather than forwarded.
+     *
+     * History (measured before SP-4c-2b, when the player side ALSO fell back): the bound victim was
+     * the position-less dummy, `willApplyPositionally` never tested the target's SIDE so it stayed
+     * TRUE, and the positional apply resolved footprint victims from `tgt.position === undefined`,
+     * found none, and delivered ZERO. Measured on a Volk-shaped `allies` target with
+     * `Pattern-Cone-Support-Range-1` over a `damage` + 50% `damage-dealt` rider kit: `perTargetDealt`
+     * undefined and the rider heal 0 at enemy defence 1,000 AND at 9,000 — no sensitivity at all —
+     * where the same kit with `front` targeting pays 3,876. The zero survived the dummy's deletion;
+     * only the route to it changed.
      *
      * This is the MAJORITY production config, not an edge case: `docs/ship-targeting.csv` lists 20
      * ships with an ally-side `active_target` (AEGIS, Chimei, Cultivator, Flamel, Graphite, Grif,
@@ -530,12 +548,13 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // whichever actor IS the heal target; an actor's own `affinity` always wins.
     // The parsed axes mirror the enemy branch below EXACTLY, and for the same reason: a team
     // actor's target/pattern are sourced ONLY from `teamTargetById`/`teamPatternById`, which are
-    // populated only from `t.target`/`t.pattern`. With neither, `selectTurnTarget` WOULD
-    // short-circuit to `legacyVictim` — the dummy — however well-positioned the roster is, and
-    // the actor's `basis:'damage-dealt'` riders would
-    // compute against the sink's 10,000 defence instead of the real enemy's (measured 2579 vs 7753
-    // on a walked ally with attack 10,000 vs an enemy at defence 1,000 — a ~3× error that surfaces
-    // as `teamHealing`). It bit the DEFAULT production config, whose heal target walks
+    // populated only from `t.target`/`t.pattern`. With neither, `selectTurnTarget` WOULD resolve NO
+    // victim at all (`tgt: undefined` on the player side since SP-4c-2b) however well-positioned the
+    // roster is, and the actor's offensive clause would deliver nothing. Before SP-4c-2d the same
+    // miss short-circuited to `legacyVictim` — the dummy — and the actor's `basis:'damage-dealt'`
+    // riders then computed against the sink's 10,000 defence instead of the real enemy's (measured
+    // 2579 vs 7753 on a walked ally with attack 10,000 vs an enemy at defence 1,000 — a ~3× error
+    // that surfaced as `teamHealing`). It bit the DEFAULT production config, whose heal target walks
     // `buildDefaultShipSkills()` — a kit that carries a damage ability. SP-4b-1 moved that
     // guarantee INTO the engine (`normalizeCombatRoster` fills both axes for every team actor), so
     // what remains here is only the ally-side substitution, which the boundary must not do.
@@ -544,8 +563,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         position: playerAllySlots[i],
         affinity: t.affinity ?? (t.id === healTargetId ? healTargetAffinity : undefined),
         // Ally-side axes are substituted, not forwarded — see `offensiveTarget`. A team actor with an
-        // ally-side active target would otherwise bind the dummy and deliver zero, exactly as the
-        // focus did.
+        // ally-side active target would otherwise resolve no victim and deliver zero, exactly as the
+        // focus would.
         target: offensiveTarget(t.target),
         // `pattern` is NOT defaulted here: `normalizeCombatRoster` (runCombat's first line) fills an
         // absent pattern with the same DEFAULT_BASE_PATTERN. `target` still is — substituting an
@@ -606,13 +625,15 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             affinityCritPenalty: aff.critPenalty,
             position: enemySlots[i],
             // A kitless/manual enemy has no parsed targeting, so it would have NO ParsedTarget and
-            // fall back to `legacyVictim` — the dummy — leaving SP-4 blocked. That ABSENT case is
-            // now the engine boundary's job (`normalizeCombatRoster` fills the same
+            // fall back to `legacyVictim` — which on the ENEMY side is the HEAL TARGET, not a cell
+            // its own pattern chose. (Before SP-4c-2d the player side had a dummy fallback here too;
+            // that actor is gone.) That ABSENT case is now the engine boundary's job
+            // (`normalizeCombatRoster` fills the same
             // `DEFAULT_FRONT_ENEMY_TARGET`); `offensiveTarget` is kept here for the half it owns —
             // an ALLY-side parsed target is SUBSTITUTED rather than forwarded, which a fill cannot
             // do because the axis is present. That half is live: the page feeds every enemy its
             // REAL parsed targeting, so a support ship picked as an enemy — 20 of them have an
-            // ally-side active target — would otherwise bind the dummy and deliver nothing.
+            // ally-side active target — would otherwise fall through to that heal-target anchor.
             target: offensiveTarget(e.target),
             // Filled by `normalizeCombatRoster`, not here — see the team-actor branch above.
             pattern: e.pattern,
@@ -647,10 +668,13 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         defence: healer.defence,
         hp: healer.hp,
         speed: healer.speed,
-        // Base hacking/security (holistic review #1) — thread onto the focus (healer) actor and
-        // the dummy enemy actor so the engine's live per-turn recompute drives landing uniformly
-        // across all three modes (DPS / battle-sim / healing). Walked team-actor hacking flows via
-        // the walk bundle (deriveTeamEngineActors → engine reads walk.stats.hacking).
+        // Base hacking (holistic review #1) — threaded onto the focus (healer) actor so the engine's
+        // live per-turn recompute drives landing uniformly across all three modes (DPS / battle-sim /
+        // healing). Walked team-actor hacking flows via the walk bundle (deriveTeamEngineActors →
+        // engine reads walk.stats.hacking). `enemySecurity`/`enemySpeed` used to describe the dummy
+        // enemy actor; SP-4c-2d deleted it and the engine no longer destructures either field — each
+        // real enemy's own `stats.security`/`stats.speed` (set above) is what counts. Both arguments
+        // are still passed; removing them is rung 4d's job.
         hacking: healer.hacking,
         enemySecurity: LEGACY_SINK_SECURITY,
         enemySpeed: 0,
@@ -666,7 +690,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // apply, so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
         position: resolvedHealerSlot,
         // A support healer's parsed ACTIVE target is ALLY-side for 20 of the roster's ships, and an
-        // ally-side target binds the DUMMY while still passing the positional-apply gate — so any
+        // ally-side target resolves NO opposing victim (`tgt: undefined` since SP-4c-2b) — so any
         // offensive clause in the cast delivers exactly zero. Substituted here; the support footprint
         // rides `pattern` below and is untouched. See `offensiveTarget` for the measurements.
         target: offensiveTarget(input.healerTargeting?.active?.target),

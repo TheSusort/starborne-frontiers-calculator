@@ -458,8 +458,6 @@ describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scru
         se.beginRound(1);
         return {
             round: 1,
-            enemy: { id: 'enemy' } as CombatActor,
-            enemyId: 'enemy',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],

@@ -99,6 +99,7 @@ import {
     __resetLegacyVictimFallbackCount,
     __getNoVictimPlayerTurnCount,
     __resetNoVictimPlayerTurnCount,
+    SENTINEL_ENEMY_ACTOR_ID,
 } from '../engine';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
 import { normalizeCombatRoster, MIN_TARGETABLE_MAX_HP } from '../normalizeRoster';
@@ -143,9 +144,11 @@ describe('dummy reachability after normalization', () => {
         const { result, actorsThatTookTurns } = collectTurns(bareInput());
 
         // The path ran: the focus took a turn every round and its cast is recorded against the
-        // REAL roster member — not the dummy, which is not even in the turn order any more.
+        // REAL roster member. The sentinel takes no turn because since SP-4c-2d no actor carries
+        // that id at all (fenced structurally in `sentinelActorIdReservation.test.ts`); this line
+        // is kept as a cheap turn-order regression pin, not as the primary fence.
         expect(actorsThatTookTurns(1)).toContain('attacker');
-        expect(actorsThatTookTurns(1)).not.toContain('enemy');
+        expect(actorsThatTookTurns(1)).not.toContain(SENTINEL_ENEMY_ACTOR_ID);
         expect(dealtBy(result, 1, 'attacker')).toEqual({ [BARE_ENEMY_ID]: PER_CAST });
         expect(dealtBy(result, BARE_ROUNDS, 'attacker')).toEqual({ [BARE_ENEMY_ID]: PER_CAST });
 
@@ -228,7 +231,7 @@ describe('dummy reachability after normalization', () => {
         expect(result.rounds).toHaveLength(1);
 
         // The counter does not move: no whiff round means no consultation.
-        expect(__getLegacyVictimFallbackCount()).toBe(0);
+        expect(consultations()).toBe(0);
     });
 
     it('DEATH RETARGETING: the cast moves to the next living member, not to the fallback', () => {
@@ -314,11 +317,12 @@ describe('the shapes that used to reach the dummy sink', () => {
         expect(floored.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
     });
 
-    it('a live roster consults nothing', () => {
-        runCombat(bareInput());
-
-        expect(consultations()).toBe(0);
-    });
+    // SP-4c-2d DELETED a case here, titled 'a live roster consults nothing'. It ran `bareInput()`
+    // and asserted the zero — the FOCUS DAMAGE fixture exactly, with no positive half, so it was a
+    // strictly weaker duplicate: a zero it produced could equally have come from a run that did
+    // nothing. FOCUS DAMAGE makes the same claim with a `turn-started` and a `perTargetDealt` row
+    // behind it. Per this file's own standard (see the header, §1), every surviving case keeps a
+    // positive half.
 
     it('LIVENESS: the no-victim player turn is what keeps this file honest now', () => {
         // THIS FILE'S VACUITY GUARD, re-homed for the third and final time — and the change of
@@ -343,23 +347,25 @@ describe('the shapes that used to reach the dummy sink', () => {
         // target, so `resolvePositionalTarget` returns null every round, `selectTurnTarget` answers
         // `tgt: undefined` on the player side, and the turn RUNS with no victim (it does not skip —
         // that distinction is 4c-2b's whole subject and 24 shipped support ships depend on it).
-        const DUMMY_HP = 10_000;
+        // No `enemyHp` override: it used to be set here (a `DUMMY_HP` const) to size the dummy
+        // sink, and nothing has read it since the corrosion derivation that needed it went. The
+        // fixture's subject is the focus's ALLY-side target, nothing else.
         const { result, actorsThatTookTurns } = collectTurns({
             ...bareInput(),
             position: 'M4',
             target: { raw: 'ally-team', side: 'ally', selection: 'team' },
             pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
-            enemyHp: DUMMY_HP,
         });
 
         // The path RAN: the focus took an ally-targeted turn every round and booked nothing against
         // anybody, which is what a no-victim turn looks like from outside.
         expect(actorsThatTookTurns(1)).toContain('attacker');
         expect(dealtBy(result, 1, 'attacker')).toBeUndefined();
-        // ...and the dummy is not in the order at all — the SP-4c-2c switch, observed here rather
-        // than assumed, on the very shape that used to be the one exception to it.
-        expect(actorsThatTookTurns(1)).not.toContain('enemy');
-        expect(actorsThatTookTurns(BARE_ROUNDS)).not.toContain('enemy');
+        // ...and the sentinel id is not in the order at all — the SP-4c-2c switch observed on the
+        // very shape that used to be its one exception, and since SP-4c-2d also a consequence of
+        // there being no such actor to schedule.
+        expect(actorsThatTookTurns(1)).not.toContain(SENTINEL_ENEMY_ACTOR_ID);
+        expect(actorsThatTookTurns(BARE_ROUNDS)).not.toContain(SENTINEL_ENEMY_ACTOR_ID);
 
         // The non-zero reading, and the whole reason this case exists.
         expect(__getNoVictimPlayerTurnCount()).toBe(BARE_ROUNDS);
@@ -384,11 +390,20 @@ describe('the shapes that used to reach the dummy sink', () => {
         // route into the credit counter — so the counter was deleted instead of becoming 4c-2d's
         // gate, because a zero nothing can falsify is not evidence. The header carries the
         // measurement and the precise form of the claim.
-        runCombat({
+        const { result, destroyed } = collectTurns({
             ...bareInput(),
             numRounds: 3,
             enemyAttackers: bareEnemy({ stats: { hp: 5_000 } }),
         });
+
+        // POSITIVE HALF (SP-4c-2d): this case used to assert the zero alone, which is the vacuity
+        // shape this file's header forbids — a zero from a run that never reached the whiff window
+        // for some unrelated reason would read identically. The window's absence is only meaningful
+        // if the kill that used to OPEN it still happens, so pin that: the member dies to the
+        // round-1 cast, and the run ends there instead of playing rounds 2-3 against the corpse.
+        expect(destroyed()).toEqual([BARE_ENEMY_ID]);
+        expect(dealtBy(result, 1, 'attacker')).toEqual({ [BARE_ENEMY_ID]: PER_CAST });
+        expect(result.rounds).toHaveLength(1);
 
         expect(consultations()).toBe(0);
     });

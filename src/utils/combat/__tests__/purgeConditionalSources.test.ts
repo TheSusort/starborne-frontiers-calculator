@@ -279,9 +279,10 @@ describe('C2b-2 T2: round-ended event fires once per round', () => {
 //
 // Drives a purge intent through executeIntent directly (mirrors the
 // purgeReactive.test.ts executor harness) and asserts target selection:
-//   - target:'enemy-most-buffs' → ctx.enemyWithMostBuffs(ownerId) (NOT counterTargetId/enemyId)
-//   - target:'enemy'            → counterTargetId ?? enemyId (unchanged)
-//   - target:'enemy-most-buffs' with delegate returning undefined → ctx.enemyId fallback
+//   - target:'enemy-most-buffs' → ctx.enemyWithMostBuffs(ownerId) (NOT counterTargetId)
+//   - target:'enemy'            → counterTargetId; NO-OP when absent (SP-4c-2d)
+//   - target:'enemy-most-buffs' with delegate returning undefined → NO-OP (SP-4c-2d; this was
+//     the ctx.enemyId fallback, and Rhodium's shipped shape)
 // ---------------------------------------------------------------------------
 
 /** Minimal purge intent for the executor tests (target configurable). */
@@ -318,8 +319,6 @@ function makeMostBuffsCtx(enemyWithMostBuffs?: (ownerId: string) => string | und
     const bus = createEventBus();
     const ctx: IntentExecContext = {
         round: 3,
-        enemy: { id: 'enemy-default' } as CombatActor,
-        enemyId: 'enemy-default',
         statusEngine: se,
         bus,
         corrosionEntries: [],
@@ -363,7 +362,7 @@ describe('C2b-2 T3: executeIntent — enemy-most-buffs purge target', () => {
         expect(purgedCalls[0]).toEqual(['most-buffed-enemy', 2]);
     });
 
-    it('target:enemy still resolves counterTargetId ?? enemyId (most-buffs delegate unused)', () => {
+    it('target:enemy resolves counterTargetId (most-buffs delegate unused)', () => {
         const spy = vi.fn(() => 'most-buffed-enemy');
         const { ctx, purgedCalls } = makeMostBuffsCtx(spy);
         executeIntent(
@@ -374,16 +373,18 @@ describe('C2b-2 T3: executeIntent — enemy-most-buffs purge target', () => {
         expect(purgedCalls[0]).toEqual(['routed-enemy', 2]);
     });
 
-    it('target:enemy falls back to ctx.enemyId when counterTargetId absent', () => {
+    it('target:enemy NO-OPS when counterTargetId absent (SP-4c-2d: was ctx.enemyId)', () => {
         const { ctx, purgedCalls } = makeMostBuffsCtx(() => 'most-buffed-enemy');
         executeIntent(makeMostBuffsIntent({ target: 'enemy' }), ctx);
-        expect(purgedCalls[0]).toEqual(['enemy-default', 2]);
+        expect(purgedCalls).toHaveLength(0);
     });
 
-    it('target:enemy-most-buffs falls back to ctx.enemyId when delegate returns undefined', () => {
+    it('target:enemy-most-buffs NO-OPS when the delegate returns undefined (SP-4c-2d)', () => {
+        // This is Rhodium's shipped shape: no enemy carries a buff, so mostBuffsAmong returns
+        // undefined. It used to purge the dummy; it now no-ops, matching the damage branch.
         const { ctx, purgedCalls } = makeMostBuffsCtx(() => undefined);
         executeIntent(makeMostBuffsIntent(), ctx);
-        expect(purgedCalls[0]).toEqual(['enemy-default', 2]);
+        expect(purgedCalls).toHaveLength(0);
     });
 });
 

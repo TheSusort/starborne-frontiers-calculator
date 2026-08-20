@@ -20,9 +20,11 @@ import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
 import {
     isAbilityNotSimulated,
+    isVictimlessInfliction,
     PASSIVE_NOOP_TYPES,
     NOT_SIMULATED_NOTE,
     PASSIVE_NOOP_WARNING,
+    VICTIMLESS_INFLICTION_WARNING,
 } from './simCoverage';
 import { ConditionRow } from './ConditionRow';
 
@@ -932,6 +934,18 @@ export const AbilityCard: React.FC<Props> = ({
                 !LIVE_TRIGGERS.has(ability.trigger) && (
                     <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
                 )}
+
+            {/* SP-4c-2d: a DoT or debuff on a trigger that names no enemy is DROPPED by the
+                engine — it used to land on a vestigial hidden actor, so either way the user saw
+                the effect reported in the combat log while it dealt nothing. WARN, DON'T BLOCK:
+                no target the editor can offer would make the shape work (only a debuff on the
+                highest-attack enemy resolves its own target, and that is Selenite's real passive,
+                which the predicate exempts), so there is nowhere to steer the user. This also
+                reaches abilities ALREADY SAVED with the combination — SkillEditorModal is
+                live-edit with no save gate, so nothing else can. */}
+            {isVictimlessInfliction(ability) && (
+                <p className="text-xs text-yellow-400">{VICTIMLESS_INFLICTION_WARNING}</p>
+            )}
 
             {/* Not-simulated note is independent of the field editor so it always
                 shows for flagged types even when a case provides editable fields

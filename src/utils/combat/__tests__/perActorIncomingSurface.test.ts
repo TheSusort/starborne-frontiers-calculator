@@ -150,7 +150,8 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
 // per-actor intake at all. (That measurement was taken against the 0-max-HP "pressure source" shape
 // as well as a normal roster; SP-4c-2a has since retired that shape — `withTargetableHp` in
 // normalizeRoster.ts floors every enemy attacker's max HP — so it is not even constructible now,
-// which only narrows the ways the sink could be reached.) So the U5 property has MOVED to the real
+// which only narrows the ways the sink could be reached.) SP-4c-2d then deleted the sink actor
+// outright, so there is no longer anything to bypass. The U5 property has MOVED to the real
 // opponent rather than vanished, and the bucket key moves with it (M1). The pinned 5000 is
 // unchanged.
 const NON_POSITIONAL: CombatEngineInput = {

@@ -2721,8 +2721,6 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
         };
         const ctx: IntentExecContext = {
             round: 1,
-            enemy: { id: 'enemy' } as CombatActor,
-            enemyId: 'enemy',
             statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
             bus: createEventBus(),
             corrosionEntries: [],
@@ -3125,8 +3123,6 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
         se.beginRound(1);
         return {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],
@@ -3165,20 +3161,18 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
         expect(emitted[0].targetId).toBe('enemy-1');
     });
 
-    it('uses the default store and ctx.enemy.id when no eventCtx is present', () => {
+    it('NO-OPS when no eventCtx is present (SP-4c-2d: was the default store + ctx.enemy.id)', () => {
         const ctx = buildCtx();
         const emitted: Array<{ type: string; targetId?: string }> = [];
         ctx.bus.on('debuff-applied', (e) => emitted.push(e as { type: string; targetId?: string }));
 
         executeIntent(makeDebuffIntent(), ctx);
 
-        // The timed ability status lands on the default enemy store.
+        // Nothing lands: the default (dummy-keyed) enemy store stays empty...
         const timedDefault = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, undefined);
-        expect(timedDefault.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(true);
-
-        // debuff-applied event targets the default enemy (ctx.enemy.id).
-        expect(emitted).toHaveLength(1);
-        expect(emitted[0].targetId).toBe('enemy-default');
+        expect(timedDefault.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(false);
+        // ...and no event is emitted, where it used to name the sentinel 'enemy-default'.
+        expect(emitted).toHaveLength(0);
     });
 });
 
@@ -3245,8 +3239,6 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
         };
         const ctx: IntentExecContext = {
             round: 1,
-            enemy: { id: 'enemy' } as CombatActor,
-            enemyId: 'enemy',
             statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
             bus: createEventBus(),
             corrosionEntries: [],
@@ -3326,8 +3318,6 @@ describe('debuff-resisted reports the resolved counter target (combat-log fideli
         const emitted: Array<{ type: string; targetId?: string }> = [];
         const ctx: IntentExecContext = {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],
@@ -3419,8 +3409,6 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
         se.beginRound(1);
         return {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],
@@ -3567,8 +3555,6 @@ describe('Overload lifecycle Task 3: executeIntent remove-self-buff branch', () 
         se.beginRound(1);
         return {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],
@@ -4479,8 +4465,6 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
         const calls: Call[] = [];
         const ctx = {
             round: 1,
-            enemy: { id: 'dummy' } as CombatActor,
-            enemyId: 'dummy',
             statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
             bus: createEventBus(),
             corrosionEntries: [],
@@ -4569,8 +4553,6 @@ describe('on-debuff-inflicted damage branch (debuffVictimId routing)', () => {
         const calls: Call[] = [];
         const ctx = {
             round: 1,
-            enemy: { id: 'dummy' } as CombatActor,
-            enemyId: 'dummy',
             statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
             bus: createEventBus(),
             corrosionEntries: [],
@@ -4648,8 +4630,6 @@ describe("procScope 'per-attack' verdict cache", () => {
         const calls: string[] = [];
         const ctx = {
             round: 1,
-            enemy: { id: 'dummy' } as CombatActor,
-            enemyId: 'dummy',
             statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
             bus: createEventBus(),
             corrosionEntries: [],

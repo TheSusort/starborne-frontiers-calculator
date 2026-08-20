@@ -98,8 +98,6 @@ function makeShieldCtx(grantShieldToTarget: (raw: number, actor: CombatActor) =>
 
     const ctx = {
         round: 1,
-        enemy: { id: 'enemy', currentHp: 100000 } as CombatActor,
-        enemyId: 'enemy',
         statusEngine: se,
         bus,
         corrosionEntries: [],

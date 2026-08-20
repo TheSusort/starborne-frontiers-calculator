@@ -209,9 +209,10 @@ describe('inline emit damage split across sub-attacks', () => {
 
 type EnemyAttackerInput = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-/** A positioned enemy that never attacks and never dies. Its only job is to make
- *  `dpsEnemyTarget` false (engine.ts:2294, `enemyAttackerInputs.length === 0`) so the focus's
- *  bound target is the VESTIGIAL SINK rather than a real destructible DPS enemy. */
+/** A positioned enemy that never attacks and never dies — a stable punching bag, so the guard
+ *  below observes the emit shape and not a mid-run death. It was originally introduced to satisfy
+ *  the engine's roster-emptiness discriminator so the focus's bound target would be the VESTIGIAL
+ *  SINK; SP-4c-2d deleted both, and the bound target is now this actor. */
 const inertEnemyAt = (id: string, position: Position): EnemyAttackerInput =>
     ({
         id,

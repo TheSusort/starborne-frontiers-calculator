@@ -146,22 +146,29 @@ const supportOnlyRetaliatoryKit = (): ShipSkills => ({
 });
 
 /**
- * A support-only focus whose reactive inflict fires on `start-of-round` and therefore threads NO
- * victim — the Judge/Chakara trigger shape. Used by the victimless-arm case: it is what drives
- * `triggers.ts` into its `?? ctx.enemy.id` fallthrough, where the dummy sentinel would otherwise be
- * priced as a real defender.
+ * A support-only focus carrying ONE reactive inflict, whose TRIGGER is the only knob.
+ *
+ * `start-of-round` threads NO victim — the Judge/Chakara trigger shape, and what used to drive
+ * `triggers.ts` into its `?? ctx.enemy.id` fallthrough where the dummy sentinel got priced as a real
+ * defender. `on-attacked` threads one (`counterTargetId` = whoever shot the focus).
+ *
+ * ONE builder for both arms on purpose (FIX 4, review wave 2): the victimless case below asserts a
+ * pure negative, and a pure negative cannot tell "correctly inflicted nothing" apart from "this
+ * helper stopped building a firing reactive at all". Its positive pairing must therefore differ from
+ * it in EXACTLY the trigger — same ability id, same buffName, same `application: 'inflict'`, same
+ * config — which is only structurally guaranteed if both come from here.
  */
-const victimlessReactiveKit = (): ShipSkills => ({
+const reactiveInflictKit = (trigger: 'start-of-round' | 'on-attacked'): ShipSkills => ({
     slots: [
         ...supportOnlyRetaliatoryKit().slots.filter((s) => s.slot === 'active'),
         {
             slot: 'passive',
             abilities: [
                 {
-                    id: 'victimless-inflict',
+                    id: 'reactive-inflict',
                     type: 'debuff',
                     target: 'enemy',
-                    trigger: 'start-of-round',
+                    trigger,
                     conditions: [],
                     config: {
                         type: 'debuff',
@@ -177,6 +184,12 @@ const victimlessReactiveKit = (): ShipSkills => ({
         },
     ],
 });
+
+/** The victimless arm: no `victimId`, no `counterTargetId` — the reaction names nobody. */
+const victimlessReactiveKit = (): ShipSkills => reactiveInflictKit('start-of-round');
+
+/** The control arm: the SAME ability on a trigger that stamps a real victim. */
+const victimStampingReactiveKit = (): ShipSkills => reactiveInflictKit('on-attacked');
 
 const input = (): CombatEngineInput => ({
     attack: 1_000,
@@ -308,28 +321,31 @@ describe('SP-4c-2b: a reactive infliction rolls against ITS OWN victim', () => {
         expect(byVictim[HARD_ENEMY_ID].resisted).toBeGreaterThan(0);
     });
 
-    it('THE VICTIMLESS REACTIVE ARM: an inflict that resolves nobody is not priced against the ghost', () => {
-        // The arm the previous case cannot reach, and the one the review flagged as unmeasured. A
-        // `start-of-round` reactive threads no victim at all (no `victimId`, no `counterTargetId`), so
-        // `triggers.ts` takes its `applicationTargetId ?? ctx.enemy.id` fallthrough and the inflict is
-        // aimed at the DUMMY SENTINEL. Combined with a support-only focus — whose own cast resolves no
-        // victim either — this is the only shape in which BOTH remaining guards are load-bearing:
+    it('THE VICTIMLESS REACTIVE ARM is now a NO-OP — SP-4c-2d INVERTED THIS CASE', () => {
+        // WHAT THIS CASE USED TO SAY, and why the inversion matters. A `start-of-round` reactive
+        // threads no victim at all (no `victimId`, no `counterTargetId`), so `triggers.ts` took its
+        // `applicationTargetId ?? ctx.enemy.id` fallthrough and the inflict was aimed at the DUMMY
+        // SENTINEL. This case asserted exactly that — `inflicted` equalled `['enemy', 'enemy', …]`,
+        // one per round — on the grounds that landing on the sentinel is "the honest reading of
+        // 'this reaction named nobody'". SP-4c-2d took the opposite view, which is the one the
+        // reactive `damage` branch already documented: a reaction that names nobody is a NO-OP.
         //
-        //   * `reactiveLandingChanceFor` must REFUSE to price the sentinel. The dummy is still a
-        //     member of `allActorsById` (4c-2d deletes it), so without the refusal the lookup succeeds
-        //     and the roll is measured against `stats.security ?? 100` — a phantom defender that, at
-        //     corpus hacking, clamps the chance to 0 and never lands. That is a STRONGER lie than the
-        //     cached value this rung replaced.
-        //   * the publication must be GUARDED on `hasVictim`. With the sentinel refused, the roll
-        //     falls back to `owner.liveDebuffLandingChance ?? 1`; if a no-victim turn were still
-        //     allowed to publish its 0 there, this inflict would read that 0 — the original Flamel
-        //     defect, arriving through the fallback instead of the primary path.
-        //
-        // VERIFIED BY MUTATION, both arms: deleting the sentinel refusal in
-        // `reactiveLandingChanceFor` turns this case red, and deleting the `hasVictim` guard at the
-        // publication site turns it red too. Removing that publication guard is exactly the kind of
-        // thing a future rung could do by accident — 4c-2d deletes the dummy, which changes what
-        // resolves here — and both guards are otherwise "measured inert" with nothing enforcing them.
+        // ⚠️ COVERAGE THIS INVERSION COSTS — recorded rather than quietly dropped, because both
+        // items were fenced BY MUTATION here and by nothing else in the corpus:
+        //   * `reactiveLandingChanceFor`'s refusal to price the dummy sentinel (engine.ts). No arm
+        //     can hand it the sentinel any more — every surviving route resolves a real id — so the
+        //     refusal is now a measured-inert BACKSTOP. Its comment says so.
+        //   * the `hasVictim` guard on the landing-chance PUBLICATION. With the sentinel arm gone,
+        //     nothing in production reads `owner.liveDebuffLandingChance` through the reactive
+        //     fallback tail either (`liveDebuffLandingChanceFor` resolves a real victim and returns
+        //     a number), so that guard is inert on the same footing. RE-FENCED in review wave 2 —
+        //     `dynamicLanding.test.ts`'s 'a no-victim turn does not publish a landing chance' reads
+        //     the runtime field directly across two turns, so the coverage is restored rather than
+        //     merely mourned. Note the two items are NOT the same kind of inert: that guard survives
+        //     the dummy's deletion (its subject is a victimless TURN), the sentinel refusal does not.
+        // The two cases ABOVE still fence the per-victim resolver itself, which is this file's
+        // primary subject; what is gone is the fallback-path fencing, and it is gone because the
+        // fallback path is gone.
         const inflicted: string[] = [];
         const bus = createEventBus();
         bus.on('debuff-applied', (e) => {
@@ -337,14 +353,36 @@ describe('SP-4c-2b: a reactive infliction rolls against ITS OWN victim', () => {
         });
         runCombat({ ...supportInput(), shipSkills: victimlessReactiveKit(), bus });
 
-        // The inflict fires and lands. Its target is the sentinel, which is the honest reading of
-        // "this reaction named nobody" — what matters is that it is not silently resisted forever.
-        // ONE PER ROUND, and the exact count is what makes this case fence the publication guard
-        // rather than merely the sentinel guard. A `> 0` assertion is satisfied by ROUND 1 ALONE,
-        // which fires BEFORE the focus has taken its first turn and therefore before anything could
-        // have been published — so it stays green even with the guard removed (measured). Requiring
-        // every round forces rounds 2..N, which are the ones that read the published value.
-        expect(inflicted).toEqual(Array.from({ length: ROUNDS }, () => 'enemy'));
+        // NOTHING is inflicted — not on the sentinel, not on a real enemy. The `toEqual([])` form
+        // (rather than a length check) is deliberate: if a future change re-routes this arm to some
+        // real enemy instead of no-opping, the failure message names the enemy it picked.
+        expect(inflicted).toEqual([]);
+    });
+
+    it('...and that empty list is a REAL no-op: the same ability on a victim-stamping trigger DOES inflict', () => {
+        // FIX 4 (review wave 2) — the non-vacuity half of the case above. Inverting that case turned
+        // it into a pure negative, and a pure negative passes just as well when the kit builds
+        // nothing, the passive never fires, the board has no enemies, or `debuff-applied` stops
+        // carrying `sourceId: 'attacker'`. Nothing else in this file reads
+        // `reactiveInflictKit`, so nothing else would notice.
+        //
+        // This arm differs from it in EXACTLY ONE FIELD — the trigger — because both come from the
+        // same builder. `on-attacked` stamps `counterTargetId` (the ship that shot the focus), so a
+        // real victim resolves and the identical inflict lands. Green here + empty there = "the
+        // reaction named nobody"; red here = "this fixture stopped observing anything".
+        const inflicted: string[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => {
+            if (e.sourceId === 'attacker') inflicted.push(e.targetId);
+        });
+        runCombat({ ...supportInput(), shipSkills: victimStampingReactiveKit(), bus });
+
+        // Every landing is on the ZERO-security attacker (chance 1); the security-100 one is at
+        // chance 0 and never receives it — the same per-victim split the cases above pin, which is
+        // why this asserts the SET rather than a bare `length > 0`: a bare count would also pass if
+        // the inflict were re-routed to the wrong enemy.
+        expect(inflicted.length).toBeGreaterThan(0);
+        expect([...new Set(inflicted)]).toEqual([SOFT_ENEMY_ID]);
     });
 
     it('THE REGRESSION: one cached chance cannot produce both outcomes', () => {

@@ -61,10 +61,10 @@ describe('DPSCalculatorPage supplies a real positioned enemy', () => {
         expect(spy).toHaveBeenCalled();
         const input = spy.mock.calls.at(-1)?.[0];
 
-        // A real enemy is what flips the engine's `dpsEnemyTarget` false.
+        // A real enemy is required by the engine's normalization boundary (SP-4b-2b).
         expect(input?.enemyAttackers?.length).toBeGreaterThan(0);
         // BOTH positions are required: `isPositional` needs the actor's own slot AND an opposing
-        // one, else selectTurnTarget silently falls back to the vestigial dummy.
+        // one, else selectTurnTarget resolves no victim and the cast lands on nobody.
         expect(input?.position).toBeDefined();
         expect(input?.enemyAttackers?.[0]?.position).toBeDefined();
         // The enemy carries a real HP/defence so it is a genuine damage target, not a sink.

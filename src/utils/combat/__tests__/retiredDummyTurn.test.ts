@@ -1,88 +1,36 @@
 /**
- * SP-4c-2c — the two consequences of retiring the dummy `enemy`'s turn.
+ * SP-4c-2c/2d — the side-wide scheduled-debuff decrement OUTLIVES the actor that used to host it.
  *
- * Neither is a bug, and neither is reachable by any SHIPPED KIT — which is a weaker and more
- * accurate claim than "no production route exists". SP-4c-2b closed only the PLAYER-TURN route into
- * the dummy's containers (the player side gets `tgt: undefined`, and the dummy is not a member of
- * `opposingRoster`, so it can never be resolved as a victim). A REACTIVE route survives: the dummy's
- * containers are handed to `drainQueue` as `ctx.*`, and `triggers.ts`'s `landDotOn` pushes into
- * `(victim?.corrosionEntries ?? ctx.corrosionEntries)` whenever a reactive DoT intent's `eventCtx`
- * stamps neither `victimId` nor `counterTargetId`. That route is inert by CORPUS, enumerated: of the
- * 16 reactive (non-`on-cast`) DoT abilities across 148 ships x 3 refits, on 6 ships (Crocus,
- * Pestilence, Ruiner, Shepherd, Warden, Wisteria), every listener stamps one of those fields. So the
- * tap below is how the shape is reached today — but a future kit could reach it for real, and
- * SP-4c-2d must rule on what happens then (spec §9.8). Both are pinned because SP-4c-2d deletes
- * the actor and must know exactly what it is deleting — an undocumented behaviour discovered during
- * a pure-deletion rung reads as that rung's regression.
+ * ── WHAT HAPPENED TO THIS FILE (read before adding or removing a case) ─────────────────────────
  *
- * This whole file goes with the dummy in SP-4c-2d. It is not migrated: once there is no dummy
- * there are no containers to strand and no Post-Turn the decrement could have hung on.
+ * It was written at SP-4c-2c to pin the TWO consequences of retiring the dummy `enemy`'s turn, and
+ * SP-4c-2d treated them differently — deliberately, per spec §9.5, and it is easy to get backwards:
+ *
+ *  1. **The stranded DoT — DELETED with the actor.** That case pinned a hazard that was specific to
+ *     the dummy: a DoT pushed onto ITS containers never ticked (no turn), never expired, and was
+ *     still summed into every round's report (`dotCarrierActors` included it). SP-4c-2d deleted the
+ *     actor AND dropped it from `dotCarrierActors`, so there is no ghost to strand a DoT on and no
+ *     reporting route that would surface one. The hazard does not exist to pin.
+ *     (`multiEnemyDotStateReporting.integration.test.ts` lost its own dummy-reporting case for the
+ *     same reason, and the same rung.)
+ *  2. **The scheduled decrement — MIGRATED, not deleted.** Its subject was never the dummy: it is
+ *     the round-tail decrement of the side-wide `'__enemy__'` bucket, a store with no carrier at
+ *     all. The bucket outlived its host. What changed is only what the reported `actorId` DENOTES
+ *     — see `SENTINEL_ENEMY_ACTOR_ID`.
+ *
+ * The surviving case's own comment carries the value/order split it pins. Do not delete this file
+ * wholesale on the strength of its name.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { runCombat } from '../engine';
+import { runCombat, SENTINEL_ENEMY_ACTOR_ID } from '../engine';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import { createEventBus } from '../events';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
 import { bareAlly, bareInput } from '../__testutils__/bareRosterFixture';
-import { collectTurns } from '../__testutils__/turnOrderTap';
 
-/** `bareInput().numRounds`. */
-const BARE_ROUNDS = 2;
-
-/** The dummy sentinel's actor id — the id the side-wide `'__enemy__'` bucket reports under. */
-const DUMMY_ID = 'enemy';
-
-describe('the retired dummy turn', () => {
+describe('the side-wide scheduled-debuff decrement, after the dummy turn was retired', () => {
     beforeEach(() => {
         setupKeyedTestRng(12345);
-    });
-
-    it('STRANDS a DoT pushed onto the dummy: it never ticks, never expires, and is still reported', () => {
-        // The fixture is SP-4c-2b's LIVENESS shape verbatim — an ally-side active target, which was
-        // the last thing that kept the dummy in the turn order — plus a test tap that pushes one
-        // corrosion entry straight onto the dummy's container.
-        //
-        // Before SP-4c-2c the dummy took its turn and this entry ticked for 500 a round
-        // (1 stack x tier 5/100 x min(enemyHp, 500_000) = 0.05 x 10_000) while `remainingRounds`
-        // counted down. Now there is no turn to tick it in, so it is frozen: 0 damage forever, and
-        // because `dotCarrierActors` (engine.ts) still includes the dummy for REPORTING, the stack
-        // is still counted into every round's row. Measured, not predicted.
-        const DUMMY_HP = 10_000;
-        const { result, actorsThatTookTurns } = collectTurns({
-            ...bareInput(),
-            position: 'M4',
-            target: { raw: 'ally-team', side: 'ally', selection: 'team' },
-            pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
-            enemyHp: DUMMY_HP,
-            __testTapActors: (actors) => {
-                actors
-                    .find((a) => a.id === DUMMY_ID)
-                    ?.corrosionEntries.push({
-                        tier: 5,
-                        stacks: 1,
-                        // 2, not 5. Both outlive the run POST-rung — with no dummy turn nothing
-                        // calls `expireStacks`, so expiry is never the reason the ticking stops —
-                        // but the value has to make the PRE-rung arm differ, and only a countdown
-                        // the dummy's turns can actually exhaust does that. Measured across the
-                        // mutation (`turnOrderActors = allActors`): at 5 the pre-rung stacks read
-                        // [1, 1], identical to post-rung, so the stacks line below never bit; at 2
-                        // they read [1, 0]. 1 would also move the stacks but would weaken the
-                        // damage line — pre-rung [500, 0] instead of [500, 500].
-                        remainingRounds: 2,
-                        sourceId: 'attacker',
-                    });
-            },
-        });
-
-        // The dummy really is absent from the order — without this the two zeros below could be
-        // explained by the entry never having been pushed.
-        expect(actorsThatTookTurns(1)).not.toContain(DUMMY_ID);
-        expect(actorsThatTookTurns(BARE_ROUNDS)).not.toContain(DUMMY_ID);
-
-        // It never ticks: 500/round became 0/round.
-        expect(result.rounds.map((r) => r.corrosionDamage)).toEqual([0, 0]);
-        // ...but it IS still reported, every round, at full stack count. This is the strand.
-        expect(result.rounds.map((r) => r.activeCorrosionStacks)).toEqual([1, 1]);
     });
 
     it('MOVES the side-wide scheduled enemy-debuff decrement to the round tail, still exactly once per round', () => {
@@ -105,8 +53,9 @@ describe('the retired dummy turn', () => {
         // both a double-decrement and a dropped decrement. The ORDER assertion — the expiry lands
         // after every `turn-started` of its round — is the only half that witnesses THIS rung.
         //
-        // WHY THIS SHAPE. The rung is differential only where the dummy USED to keep its turn, i.e.
-        // where `dummyEnemyIsVestigial` was false, and the bucket has to actually populate:
+        // WHY THIS SHAPE. The rung this case was written for (SP-4c-2c) was differential only where
+        // the dummy USED to keep its turn, i.e. where the retired `dummyEnemyIsVestigial` gate read
+        // false, and the bucket has to actually populate:
         //  • the FOCUS carries an ENEMY-side target and a position, so its cast resolves a victim
         //    and its scheduled debuff lands. (Since SP-4c-2b a no-victim turn rejects every timed
         //    enemy application without drawing the gate — `landsTimedEnemyApplicationLive`,
@@ -116,18 +65,27 @@ describe('the retired dummy turn', () => {
         //    the turn order pre-rung.
         // A bare, unpositioned shape does NOT work for this: `withTargeting` (normalizeRoster.ts)
         // fills `target: actor.target ?? DEFAULT_FRONT_ENEMY_TARGET`, so a bare focus gets an
-        // enemy-side target anyway, and auto-placement plus `MIN_TARGETABLE_MAX_HP` make
-        // `hasPositionedEnemyRoster` constant `true` below the boundary. Both conjuncts hold there,
-        // the dummy was ALREADY dropped pre-rung, and the test would witness nothing.
+        // enemy-side target anyway, and auto-placement plus `MIN_TARGETABLE_MAX_HP` made the
+        // retired gate's roster conjunct constant `true` below the boundary. Both conjuncts held
+        // there, the dummy was ALREADY dropped pre-rung, and the test would witness nothing.
         //
         // The debuff is CHARGE-sourced and the charge is spent in round 1 and never recharges
         // (`chargeCount: 99`), so it is applied exactly once. An ACTIVE-sourced debuff is re-upserted
         // on every focus turn, which refreshes `turnsRemaining` back to its full duration each round
         // and hides the decrement entirely.
         //
-        // `buff-expired` is the sharper witness — it pins exactly-once AND the `actorId`, and it
-        // carries the sentinel's id (`enemy.id`) by design, because the bucket has no single carrier.
-        // But it is log-only, so the row schedule is asserted alongside it: `RoundData
+        // `buff-expired` is the sharper witness — it pins exactly-once AND the `actorId`, which is
+        // `SENTINEL_ENEMY_ACTOR_ID` by design, because the bucket has no single carrier.
+        //
+        // ⚠️ WHAT SP-4c-2d MIGRATED HERE, precisely, because §9.5 and §4.3 read as if they disagree:
+        // the STRING did not change. It was `enemy.id` and is now `SENTINEL_ENEMY_ACTOR_ID`, whose
+        // value is the same literal `'enemy'` — so the event stream is byte-identical across the
+        // actor's deletion. What re-keyed is what the id DENOTES: it used to be the dummy actor that
+        // hosted the decrement, and it is now an id for the BUCKET itself. This case therefore
+        // MIGRATES rather than dying with the actor — its subject (a side-wide store decremented
+        // exactly once a round) was never dummy-specific.
+        //
+        // `buff-expired` is log-only, so the row schedule is asserted alongside it: `RoundData
         // .activeEnemyDebuffs` DOES observe this bucket. `playerTurn.ts` filters it out of
         // `statusEngine.snapshot(actor.id)`, whose `enemyTargetId` defaults to `DEFAULT_ENEMY_TARGET`
         // and returns the '__enemy__' map, and the timed arm is not victim-fenced — so the row is a
@@ -191,7 +149,9 @@ describe('the retired dummy turn', () => {
         // of round 1 (2 -> 1) and once at the tail of round 2 (1 -> 0), so it expires in round 2 —
         // ONCE, attributed to the sentinel. Two decrements a round would burn it in round 1; none
         // at all would leave this array empty across all four rounds.
-        expect(expiries).toEqual([{ round: 2, actorId: DUMMY_ID, buffName: DEBUFF_NAME }]);
+        expect(expiries).toEqual([
+            { round: 2, actorId: SENTINEL_ENEMY_ACTOR_ID, buffName: DEBUFF_NAME },
+        ]);
 
         // ...and the same schedule as a consumer reads it off the row.
         expect(rounds.map((r) => r.activeEnemyDebuffs)).toEqual([
@@ -201,13 +161,12 @@ describe('the retired dummy turn', () => {
             [],
         ]);
 
-        // ORDER — the half that witnesses this rung. The decrement now runs at the ROUND TAIL, so
-        // its expiry is emitted after every turn of that round. Pre-rung it was the dummy's own
-        // Post-Turn, which sat mid-walk (after `attacker`, before `e1` and `ally`).
-        // The three turns are the focus, the roster member and the ally; the dummy is not among
-        // them, so its retired Post-Turn cannot be where the expiry comes from. Pre-rung this reads
-        // `turn, turn, expired, turn, turn` — FOUR turns, with the expiry third, immediately after
-        // the dummy's own.
+        // ORDER — the half that witnesses SP-4c-2c. The decrement runs at the ROUND TAIL, so its
+        // expiry is emitted after every turn of that round. Pre-4c-2c it was the dummy's own
+        // Post-Turn, which sat mid-walk (after `attacker`, before `e1` and `ally`), and that stream
+        // read `turn, turn, expired, turn, turn` — FOUR turns, with the expiry third, immediately
+        // after the dummy's own. The three turns below are the focus, the roster member and the
+        // ally; there is no fourth actor for a Post-Turn to hang on any more.
         const expiryRound = expiries[0].round;
         expect(stream.filter((s) => s.round === expiryRound).map((s) => s.kind)).toEqual([
             'turn',

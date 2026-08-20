@@ -184,20 +184,12 @@ describe('A2 Task 2 — base hacking/security on every actor', () => {
         expect(runtime.actor.stats.security).toBe(133);
     });
 
-    // (c) DPS dummy enemy carries stats.security = configured enemy security.
-    it('DPS dummy enemy carries security = configured enemySecurity', () => {
-        let captured: CombatActor[] = [];
-        runCombat(
-            baseEngineInput({
-                enemySecurity: 140,
-                __testTapActors: (actors) => {
-                    captured = actors;
-                },
-            })
-        );
-        const dummy = captured.find((a) => a.id === 'enemy');
-        expect(dummy?.stats.security).toBe(140);
-    });
+    // (c) SP-4c-2d DELETED a case here: 'DPS dummy enemy carries security = configured
+    // enemySecurity'. It asserted that `input.enemySecurity` reached the dummy `enemy` actor's
+    // `stats.security`. That actor is gone, and it was the ONLY consumer of `enemySecurity` — the
+    // field survives on `CombatEngineInput` (removing it is rung 4d's churn story) but nothing
+    // reads it, so there is no plumbing left to pin. Same for `enemySpeed`/`enemyDefense`. The
+    // real per-actor security plumbing is covered by (a)/(b) above (focus + enemy attacker).
 
     // (d) Player attacker actor carries stats.hacking = configured hacking.
     it('player attacker actor carries hacking = configured hacking', () => {

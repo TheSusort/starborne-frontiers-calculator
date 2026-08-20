@@ -191,6 +191,19 @@ function makeArgs(
     };
 }
 
+/** The SP-4c-2b no-victim turn: `enemy` ABSENT, and with it every enemy-derived arg. Not "a neutral
+ *  enemy" — absent means the turn faces nobody, which is what an ally-targeted cast resolves.
+ *  Deliberately built by OMISSION rather than by passing a stand-in actor: this shape must stay
+ *  buildable after the vestigial dummy actor is deleted, so it may not reference one. */
+function makeNoVictimArgs(
+    runtime: PlayerActorRuntime,
+    statusEngine: StatusEngine,
+    bus: ReturnType<typeof createEventBus>,
+    round: number
+): PlayerTurnArgs {
+    return { runtime, statusEngine, bus, round };
+}
+
 /** Run `numRounds` turns of one inflict-debuff caster and count the debuff-applied
  *  events (one per landed round). seedSelf/seedEnemy let a test pre-apply a live
  *  hacking/security status active from round 1. */
@@ -318,5 +331,73 @@ describe('A2 Task 4 — dynamic per-target debuff landing/resist', () => {
             affinityDamageModifier: 25, // effHacking 250 vs 230 → chance 0.2 → lands once over 6
         });
         expect(advantaged).toBeGreaterThan(neutral2);
+    });
+});
+
+/**
+ * SP-4c-2d (review wave 2, FIX 2) — THE PUBLICATION GUARD, fenced.
+ *
+ * `runPlayerTurn` ends its landing-chance derivation with `if (hasVictim)
+ * runtime.liveDebuffLandingChance = liveLandingChance` (playerTurn.ts). The conjunct is the whole
+ * subject here: on a no-victim turn `liveLandingChance` is correctly 0 ("there is no enemy whose
+ * security to beat"), and PUBLISHING that 0 is how the original Flamel defect worked — an
+ * ally-targeted supporter published 0 and every later reader of the field auto-resisted forever
+ * (measured on Flamel at the time: 138 landings → 0).
+ *
+ * WHY IT NEEDS A FENCE AT ALL. The guard is CORPUS-INERT: SP-4c-2b gave the reactive path its own
+ * per-victim resolver and SP-4c-2d deleted the victimless fallbacks in triggers.ts, so no shape the
+ * suite can build now reads a poisoned publication. Measured by mutation: with the `hasVictim`
+ * conjunct removed, all 7 pre-existing test files that name `liveDebuffLandingChance` stay green
+ * (96 tests). That is precisely the state in which a future "simplification" deletes the conjunct
+ * and nothing objects — the defect class this repo has shipped twice. So the guard gets a case whose
+ * only subject is the guard.
+ *
+ * NOT "structurally unreachable": the field still has readers (the `?? owner.liveDebuffLandingChance`
+ * tails in triggers.ts), and 24 of 148 shipped ships have an ally-side active target, so the arming
+ * shape exists on the board — it is one refactor from being wired to a reader again.
+ *
+ * THIS GUARD SURVIVES THE EPIC, unlike its sibling. `reactiveLandingChanceFor`'s dummy-sentinel
+ * refusal (engine.ts) is dead once the dummy actor is deleted, because refusing that actor's id is
+ * all it does. This one never mentions the dummy: its subject is a turn with NO victim, a shape
+ * SP-4c-2b created and which outlives the dummy entirely. Hence the fixture builds its no-victim
+ * turn by OMITTING `enemy` (see `makeNoVictimArgs`) rather than by handing over a stand-in, so this
+ * file keeps compiling and keeps meaning the same thing after the deletion.
+ *
+ * DRIVEN THROUGH `runPlayerTurn`, and reading the runtime FIELD rather than an event, because the
+ * write is the behaviour: there is no observable emission downstream of it (that is exactly what
+ * "inert" means). Two turns on ONE runtime is the minimum shape that can tell "kept the real value"
+ * apart from "never had one".
+ */
+describe('SP-4c-2d: a no-victim turn does not publish a landing chance', () => {
+    /** hacking 200 vs security 150 → clamp(200 − 150, 0, 100)/100. Exact in binary, so `toBe`. */
+    const REAL_CHANCE = 0.5;
+
+    /** One runtime, `turns` sequential turns: turn 1 faces a real victim, every later turn faces
+     *  NOBODY. Returns the runtime so the caller can read the published field directly. */
+    const runTurns = (turns: number): PlayerActorRuntime => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const bus = createEventBus();
+        const runtime = makeRuntime({ hacking: 200 });
+        const enemy = makeEnemy(150);
+        for (let r = 1; r <= turns; r++) {
+            eng.beginRound(r);
+            runPlayerTurn(
+                r === 1
+                    ? makeArgs(runtime, eng, enemy, bus, r)
+                    : makeNoVictimArgs(runtime, eng, bus, r)
+            );
+        }
+        return runtime;
+    };
+
+    it('NON-VACUOUS BASELINE: a turn WITH a victim publishes that victim-derived chance', () => {
+        // Without this half, the case below passes when the field is never written at all — the
+        // "correctly kept 0.5" / "never had 0.5 to keep" confusion.
+        expect(runTurns(1).liveDebuffLandingChance).toBe(REAL_CHANCE);
+    });
+
+    it('THE GUARD: a following NO-VICTIM turn leaves it at the real chance, not 0', () => {
+        // Remove the `hasVictim` conjunct at playerTurn.ts's publication site and this reads 0.
+        expect(runTurns(2).liveDebuffLandingChance).toBe(REAL_CHANCE);
     });
 });

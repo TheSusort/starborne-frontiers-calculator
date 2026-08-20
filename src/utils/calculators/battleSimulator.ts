@@ -22,10 +22,11 @@
  * The per-round event LOG is a CHRONOLOGICAL (emission-order) play-by-play, team-labeled
  * at render time. It walks the round's events in bus-emission order and emits one line per
  * relevant event: turn delimiters (`turn-started`), ATTACKER-centric damage (from
- * `ability-performed` — actorId=attacker, targetId, amount; dummy-'enemy' target lines are
- * kept), heals, buffs, debuffs, dots, deaths. (The dummy-'enemy' targetId on ally/self-
- * targeting ships means some damage lines read as "X → enemy"; that's accepted — the
- * per-victim unification is a deferred follow-up.)
+ * `ability-performed` — actorId=attacker, targetId, amount), heals, buffs, debuffs, dots,
+ * deaths. (The dummy-'enemy' targetId used to appear on ally/self-targeting ships' damage
+ * lines, so some read as "X → enemy". Those lines are gone: SP-4c-2b made an ally-targeted
+ * player cast resolve no victim and SP-4c-2d deleted the actor, and `runPlayerTurn` emits no
+ * `ability-performed` at all for a turn with no victim.)
  *
  * HP% is derived as maxHp minus cumulative actual HP loss (from perRoundPerIncoming when
  * present — post-shield/barrier HP damage — plus healing received), falling back to raw
@@ -160,8 +161,10 @@ export interface BattleRound {
     ships: ShipRoundState[];
     /**
      * Distinct acting `actorId`s for this round in true speed order (emission order of
-     * `turn-started`). Only roster actorIds — the dummy player-offense `'enemy'` id is
-     * filtered out since it's not on the board.
+     * `turn-started`). Only roster actorIds: a `turn-started` for an id that is not on the
+     * board is dropped. The dummy player-offense `'enemy'` id this used to exclude was
+     * deleted in SP-4c-2d; the filter stays because this assembler is a pure function over
+     * any event stream, including hand-authored ones.
      */
     turnOrder: string[];
 }
@@ -352,8 +355,11 @@ export function assembleBattleResult(args: {
     // Cumulative healing received per actor (SP-F F2: per-recipient, from heal-performed.perTarget).
     const cumulativeHealed = new Map<string, number>();
 
-    // Roster id set: turn-started for a non-roster id (the dummy player-offense 'enemy')
-    // is filtered out of turnOrder since it's not on the board.
+    // Roster id set: a turn-started for a non-roster id is filtered out of turnOrder since it's
+    // not on the board. It used to catch the dummy player-offense 'enemy' id, which SP-4c-2d
+    // deleted. Note that `SENTINEL_ENEMY_ACTOR_ID` ('enemy') still names the side-wide scheduled
+    // enemy-debuff BUCKET on `buff-expired`, so a non-roster id can still reach the buff/debuff
+    // accumulation above — it just never reaches a rendered roster row.
     const rosterIds = new Set(roster.map((r) => r.actorId));
 
     const rounds: BattleRound[] = [];
@@ -489,7 +495,7 @@ export function assembleBattleResult(args: {
         });
 
         // Per-round turn order: distinct acting roster actorIds in `turn-started` emission
-        // order (true speed order). Dummy/non-roster ids are dropped.
+        // order (true speed order). Non-roster ids are dropped.
         const turnOrder: string[] = [];
         const seenActors = new Set<string>();
         for (const e of roundEvents) {
@@ -891,7 +897,9 @@ export function simulateBattle(
     const enemyRepAffinity = enemyPlans[0]?.affinity;
     const playerRepAffinity = playerPlans[0]?.affinity;
 
-    // Representative enemy security (threaded onto the dummy target for live landing recompute).
+    // Representative enemy security (first opponent). It used to be threaded onto the dummy target
+    // for the live landing recompute; SP-4c-2d deleted that actor and the engine no longer reads the
+    // fight-wide `enemySecurity` at all. Still passed below — removing it is rung 4d's job.
     const enemyRepSecurity = input.enemyTeam[0]?.ship.baseStats.security ?? 100;
 
     const hasCharged = (plan: PlacementPlan): boolean =>
@@ -1035,12 +1043,12 @@ export function simulateBattle(
         // SP-F F4: fold the focus actor's heal-modifier on its heal casts (read as
         // `input.healModifier`). Team symmetry with the walk/enemy paths.
         healModifier: focus.stats.healModifier,
-        // Base hacking/security so the engine's live landing recompute has real inputs for
-        // the focus actor and the vestigial dummy enemy. The dummy carries the representative
-        // enemy security (first opponent). When the focus targets a POSITIONED enemy with
-        // differing security, the live recompute resolves against that actual target's security
-        // and therefore differs from the representative-security basis — the intended per-target
-        // behaviour covered by the heterogeneous-security team-vs-team test in twoTeamBattle.test.ts.
+        // Base hacking/security so the engine's live landing recompute has real inputs for the
+        // focus actor. The fight-wide `enemySecurity` below used to feed the vestigial dummy enemy;
+        // that actor was deleted in SP-4c-2d and the field has no engine reader left. Landing
+        // against an enemy resolves against that actual target's own security — the intended
+        // per-target behaviour covered by the heterogeneous-security team-vs-team test in
+        // twoTeamBattle.test.ts.
         hacking: focus.stats.hacking,
         security: focus.stats.security,
         enemySecurity: enemyRepSecurity,
