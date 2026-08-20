@@ -28,7 +28,8 @@ export function dotFamilyCounts(
  * `enemyDebuffCount` uses ENTRY-ARRAY LENGTHS (active DoT entries / pending bombs),
  * NOT total stacks — matching the inline conditional/charge logic it replaces.
  * The remaining fields are DPS-assumption defaults: self HP is fixed at 100 (the sim
- * never takes damage); enemy HP is caller-derived (`enemyHpPct`, default 100);
+ * never takes damage); enemy HP is caller-derived (`enemyHpPct`, passed through as-is with
+ * no default — SP-4d: absent means no enemy/victim reading exists this round);
  * no self-debuffs / enemy-buffs / adjacency.
  */
 export function buildRoundContext(state: {
@@ -40,7 +41,8 @@ export function buildRoundContext(state: {
     effectiveCritRate: number; // 0..100
     enemyType?: EnemyBaseClass;
     roundCrit?: boolean;
-    /** Derived enemy HP% (0..100): 100 × max(0, 1 − cumulativeDamage/enemyHp). Default 100. */
+    /** Derived enemy HP% (0..100): 100 × max(0, 1 − cumulativeDamage/enemyHp). Passed through
+     *  as-is; absent means no enemy/victim reading exists this round (no phantom is invented). */
     enemyHpPct?: number;
     /** Self HP% (0..100). Default 100 (DPS-assumption: self never takes damage). */
     selfHpPct?: number;
@@ -93,20 +95,23 @@ export function buildRoundContext(state: {
      *  power known to this caller — DPS-safe / inert for every ship besides Wildfire). Only
      *  runPlayerTurn's modifierCtx passes a real value. See ConditionContext.selfCritPower. */
     selfCritPower?: number;
-    /** SP-C — target's crit power. Default 0 (no enemy crit-power config). */
+    /** SP-C — target's crit power. Passed through as-is; absent means no target reading exists
+     *  this round (no phantom is invented). */
     targetCritPower?: number;
     /** SP-C — owner Speed. Default 0. */
     selfSpeed?: number;
-    /** SP-C — comparison target Speed (DPS: enemySpeed; engine: min damaged-enemy speed). Default 0. */
+    /** SP-C — comparison target Speed (DPS: enemySpeed; engine: min damaged-enemy speed). Passed
+     *  through as-is; absent means no target reading exists this round (no phantom is invented). */
     targetSpeed?: number;
     /** SP-C — owner absolute current HP. Default 0 (DPS callers pass ship max HP). */
     selfCurrentHp?: number;
-    /** SP-C — target absolute current HP (DPS: enemyHp). Default 0. */
+    /** SP-C — target absolute current HP (DPS: enemyHp). Passed through as-is; absent means no
+     *  target reading exists this round (no phantom is invented). */
     targetCurrentHp?: number;
-    /** SP-D — number of enemies damaged by this cast. Default 1 (DPS single-target mode).
-     *  Positional callers pass the real per-cast footprint size (0 is a real value — an
-     *  empty/whiffed footprint — and is NOT re-defaulted here). See
-     *  ConditionContext.enemiesHitThisCast. */
+    /** SP-D — number of enemies damaged by this cast. Passed through as-is; absent means no
+     *  cast/victim reading exists this round (no phantom is invented). Positional callers pass
+     *  the real per-cast footprint size (0 is a real value — an empty/whiffed footprint — and is
+     *  NOT re-defaulted here). See ConditionContext.enemiesHitThisCast. */
     enemiesHitThisCast?: number;
     /** SP-D — optional per-family DoT entry count lookup (Belladonna's named "3+ Acidic Decay"
      *  gate). Default undefined (no family tracking today — every family reads 0 via
@@ -143,7 +148,6 @@ export function buildRoundContext(state: {
         enemyDestroyedCount: 0,
         selfHpPct: state.selfHpPct ?? 100,
         targetHpPct: state.targetHpPct ?? 100,
-        enemyHpPct: state.enemyHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
         targetRepairedThisRound: state.targetRepairedThisRound ?? false,
         selfShielded: state.selfShielded ?? false,
@@ -155,12 +159,8 @@ export function buildRoundContext(state: {
         turnsTaken: state.turnsTaken ?? 0,
         stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
         selfCritPower: state.selfCritPower ?? 0,
-        targetCritPower: state.targetCritPower ?? 0,
         selfSpeed: state.selfSpeed ?? 0,
-        targetSpeed: state.targetSpeed ?? 0,
         selfCurrentHp: state.selfCurrentHp ?? 0,
-        targetCurrentHp: state.targetCurrentHp ?? 0,
-        enemiesHitThisCast: state.enemiesHitThisCast ?? 1,
         // SP-D — DoT-ONLY subtotal, derived from the SAME entry counts already folded into
         // enemyDebuffCount above. Deliberately excludes landedEnemyDebuffCount (control/marker
         // debuffs) — that is the whole DoT-ONLY point of this subject vs `enemy-debuff`.
@@ -169,6 +169,20 @@ export function buildRoundContext(state: {
             state.infernoEntryCount +
             state.bombCount +
             (state.genericCount ?? 0),
+        // SP-4d: these five are NOT defaulted. An absent reading means the subject does not exist
+        // (no victim resolved this turn), and evaluateConditions answers that honestly; inventing
+        // `100` / `0` / `1` here is exactly the phantom the rung deletes, and it hid itself by
+        // sitting one layer ABOVE the `??` in evaluateConditions. The conditional-spread idiom is
+        // load-bearing: writing the key with an `undefined` value would also work at runtime, but
+        // it makes `'enemyHpPct' in ctx` lie, which the sentinel-vs-legacy `enemyDebuffNames`
+        // distinction in this same context type depends on.
+        ...(state.enemyHpPct !== undefined ? { enemyHpPct: state.enemyHpPct } : {}),
+        ...(state.targetCritPower !== undefined ? { targetCritPower: state.targetCritPower } : {}),
+        ...(state.targetSpeed !== undefined ? { targetSpeed: state.targetSpeed } : {}),
+        ...(state.targetCurrentHp !== undefined ? { targetCurrentHp: state.targetCurrentHp } : {}),
+        ...(state.enemiesHitThisCast !== undefined
+            ? { enemiesHitThisCast: state.enemiesHitThisCast }
+            : {}),
         ...(state.enemyDotFamilyCounts !== undefined
             ? { enemyDotFamilyCounts: state.enemyDotFamilyCounts }
             : {}),

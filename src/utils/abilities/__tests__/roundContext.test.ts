@@ -45,7 +45,9 @@ describe('buildRoundContext', () => {
         expect(ctx.enemyAdjacentCount).toBe(0);
         expect(ctx.enemyDestroyedCount).toBe(0);
         expect(ctx.selfHpPct).toBe(100);
-        expect(ctx.enemyHpPct).toBe(100);
+        // SP-4d: enemyHpPct is no longer a DPS-assumption default — see the dedicated
+        // "absent enemy/target readings stay absent" test below.
+        expect(ctx.enemyHpPct).toBeUndefined();
         expect(ctx.selfCritPower).toBe(0);
     });
 
@@ -74,7 +76,7 @@ describe('buildRoundContext', () => {
         expect(ctx.enemyType).toBeUndefined();
     });
 
-    it('threads roundCrit and enemyHpPct through, defaulting enemyHpPct to 100', () => {
+    it('threads roundCrit through, leaving it undefined when omitted', () => {
         const base = {
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
@@ -83,11 +85,54 @@ describe('buildRoundContext', () => {
             bombCount: 0,
             effectiveCritRate: 50,
         };
-        expect(buildRoundContext(base).enemyHpPct).toBe(100);
         expect(buildRoundContext(base).roundCrit).toBeUndefined();
         const ctx = buildRoundContext({ ...base, roundCrit: true, enemyHpPct: 40 });
         expect(ctx.roundCrit).toBe(true);
         expect(ctx.enemyHpPct).toBe(40);
+    });
+
+    it('SP-4d: absent enemy/target readings stay absent — no phantom is materialised here', () => {
+        // This file is the SECOND fabrication layer (spec §3.2). While it filled these in eagerly,
+        // evaluateConditions never saw an absent value through the real funnel, so a fix applied
+        // only there would have passed its own unit tests and changed nothing in a fight.
+        const base = {
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 50,
+        };
+        const ctx = buildRoundContext(base);
+        expect(ctx.enemyHpPct).toBeUndefined();
+        expect(ctx.targetCritPower).toBeUndefined();
+        expect(ctx.targetSpeed).toBeUndefined();
+        expect(ctx.targetCurrentHp).toBeUndefined();
+        expect(ctx.enemiesHitThisCast).toBeUndefined();
+    });
+
+    it('SP-4d: a supplied reading still passes through untouched', () => {
+        const base = {
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 50,
+        };
+        const ctx = buildRoundContext({
+            ...base,
+            enemyHpPct: 40,
+            targetCritPower: 150,
+            targetSpeed: 90,
+            targetCurrentHp: 5000,
+            enemiesHitThisCast: 3,
+        });
+        expect(ctx.enemyHpPct).toBe(40);
+        expect(ctx.targetCritPower).toBe(150);
+        expect(ctx.targetSpeed).toBe(90);
+        expect(ctx.targetCurrentHp).toBe(5000);
+        expect(ctx.enemiesHitThisCast).toBe(3);
     });
 
     it('accepts explicit selfHpPct, enemyBuffNames, selfDebuffNames', () => {

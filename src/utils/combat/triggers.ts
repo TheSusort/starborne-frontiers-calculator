@@ -2143,12 +2143,12 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
 // payload-carriers) — names only, never re-applying the payload effect.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Neutral resolver for the names-only aura/accum reads: a status's own conditions
-// are evaluated against a default (full-HP, no-debuff) round context. This is a
-// deliberate names-existence approximation — an "enemy has a buff" / "self has a
-// debuff" gate only needs to know the status is present, not re-derive its full
-// live gate. No fixture exercises a conditional enemy aura/accum, so this is inert
-// for current goldens (YAGNI: the gated full-kit enemy lands in a later task).
+// Neutral resolver for the names-only aura/accum reads: a status's own conditions are evaluated
+// against a NAMES-ONLY round context. SP-4d: it deliberately supplies no enemy-HP or target-stat
+// reading, so any such gate here is UNRESOLVABLE rather than silently satisfied by a full-HP
+// phantom — this ctx has no victim and never did. It remains a names-existence approximation: an
+// "enemy has a buff" / "self has a debuff" gate only needs to know the status is present. No
+// fixture exercises a conditional enemy aura/accum, so this is inert for current goldens.
 const NEUTRAL_NAMES_CTX = buildRoundContext({
     selfBuffNames: [],
     landedEnemyDebuffCount: 0,
