@@ -21,6 +21,7 @@
  */
 
 import { GearPiece } from '../../types/gear';
+import { Stat } from '../../types/stats';
 import { applyCalibrationToStat } from './calibrationUtils';
 
 /**
@@ -74,6 +75,28 @@ export function withAssumedCalibration(gear: GearPiece, allowSimulatedLevel: boo
  * the bonus applies to the simulated level-16 main stat rather than the level-0
  * one.
  */
+/**
+ * The stat an assumed-calibration PREVIEW must be built from, so the results card
+ * shows exactly what the optimizer scored.
+ *
+ * The optimizer composes its getter as assumed(upgraded(get)): when "Use upgraded
+ * stats" is on, the calibration bonus lands on the SIMULATED level-16 main stat.
+ * This mirrors that choice for display.
+ *
+ * No eligibility check — the caller decides (see GearSuggestions). The level test
+ * is safe without knowing the useUpgradedStats flag: with that setting off, a
+ * sub-16 piece is never assumed-calibration-eligible in the first place, so the
+ * upgraded branch cannot be reached for one.
+ */
+export function assumedCalibrationDisplayStat(
+    gear: GearPiece,
+    upgradedMainStat: Stat | null | undefined
+): Stat | null {
+    const base = gear.level < 16 && upgradedMainStat ? upgradedMainStat : gear.mainStat;
+    if (!base) return null;
+    return { ...base, value: applyCalibrationToStat(base, gear.stars) };
+}
+
 export function makeAssumedCalibrationGetter(
     getGearPiece: (id: string) => GearPiece | undefined,
     allowSimulatedLevel: boolean

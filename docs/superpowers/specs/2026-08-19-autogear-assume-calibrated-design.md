@@ -108,7 +108,7 @@ Therefore the entire feature is a **transform at the page boundary**. No strateg
 New module `src/utils/gear/assumedCalibration.ts`:
 
 ```ts
-assumedCalibrationEligible(gear, { allowSimulatedLevel }): boolean
+assumedCalibrationEligible(gear: GearPiece, allowSimulatedLevel: boolean): boolean
     !gear.slot.includes('implant')
     && (gear.stars === 5 || gear.stars === 6)
     && (gear.level === 16 || allowSimulatedLevel)
@@ -187,17 +187,20 @@ Two neighbouring caches were checked and are **not** hazards:
 ### Results display
 
 The results view keeps passing the **real** `getGearPiece`, so gear cards show true inventory data.
-The hypothetical is surfaced through the existing `GearPieceDisplay` affordance:
+The hypothetical is surfaced through a new dedicated `assumedCalibration` prop on `GearPieceDisplay`,
+not the existing `showCalibratedPreview`: `showCalibratedPreview` is entangled with the
+`isCalibrationActive && !showCalibratedPreview` render branches that govern how genuinely-calibrated
+gear displays, and it is shared with `CalibrationModal`. Piggybacking the assumed-calibration case
+onto it risked changing that unrelated real-calibration rendering. The new prop:
 
-- `showCalibratedPreview` (already present, used by `CalibrationModal.tsx:182`) makes the card render
-  the calibrated main stat, matching the number the optimizer scored.
-- Pieces relying on an assumed calibration get a visible marker.
+- `assumedCalibration` makes the card render the calibrated main stat, matching the number the
+  optimizer scored, and shows a visible marker that calibration is required.
 
-Two edits inside `GearPieceDisplay`:
+One edit inside `GearPieceDisplay`:
 
-1. The `displayMainStat` memo (line ~113) gates on the strict `isCalibrationEligible`; it needs the
-   relaxed predicate so simulated-level pieces preview correctly.
-2. The marker itself, following the existing calibration-indicator styling at lines 317–328.
+1. The `displayMainStat` memo (line ~113) gains an `assumedCalibration` branch that builds the
+   preview from the same base stat the optimizer's `assumed(upgraded(get))` composition scores —
+   the simulated level-16 main stat when "Use upgraded stats" is on, otherwise the raw stored one.
 
 Per project convention the marker is plain text plus a colour class — **no emoji**.
 

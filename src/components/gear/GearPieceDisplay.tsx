@@ -14,7 +14,7 @@ import {
     getCalibratedMainStat,
 } from '../../utils/gear/calibrationCalculator';
 import { calculateUpgradeCost } from '../../utils/gear/potentialCalculator';
-import { applyCalibrationToStat } from '../../utils/gear/calibrationUtils';
+import { assumedCalibrationDisplayStat } from '../../utils/gear/assumedCalibration';
 
 interface Props {
     gear: GearPiece;
@@ -123,17 +123,18 @@ export const GearPieceDisplay = memo(
             // scored. Eligibility is the caller's responsibility — GearSuggestions
             // already gates with assumedCalibrationEligible(gear, useUpgradedStats)
             // before ever setting assumedCalibration={true}, so we trust the prop here.
+            // The preview follows the optimizer's own upgraded-stats composition
+            // (assumed(upgraded(get))): with "Use upgraded stats" on, a sub-16
+            // piece is calibrated from its simulated level-16 main stat, not the
+            // raw stored one.
             if (assumedCalibration) {
-                return {
-                    ...gear.mainStat,
-                    value: applyCalibrationToStat(gear.mainStat, gear.stars),
-                };
+                return assumedCalibrationDisplayStat(gear, upgrade?.mainStat as Stat | undefined);
             }
             if ((isCalibrationActive || showCalibratedPreview) && isCalibrationEligible(gear)) {
                 return getCalibratedMainStat(gear);
             }
             return gear.mainStat;
-        }, [gear, isCalibrationActive, showCalibratedPreview, assumedCalibration]);
+        }, [gear, isCalibrationActive, showCalibratedPreview, assumedCalibration, upgrade]);
 
         const handleRemove = useCallback(() => {
             onRemove?.(gear.id);

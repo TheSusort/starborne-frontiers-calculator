@@ -3,6 +3,7 @@ import {
     assumedCalibrationEligible,
     withAssumedCalibration,
     makeAssumedCalibrationGetter,
+    assumedCalibrationDisplayStat,
 } from '../assumedCalibration';
 import { GearPiece } from '../../../types/gear';
 
@@ -137,6 +138,51 @@ describe('withAssumedCalibration', () => {
             false
         );
         expect(hp6.mainStat).toEqual({ name: 'hp', value: 6000, type: 'flat' });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// assumedCalibrationDisplayStat
+// ---------------------------------------------------------------------------
+describe('assumedCalibrationDisplayStat', () => {
+    it('calibrates the SIMULATED upgraded value, not the raw one, when an upgrade exists', () => {
+        // attack/flat calibration bonus is x2 for both 5-star and 6-star (see
+        // CALIBRATION_BONUSES). Raw value 300 would calibrate to 600 — the
+        // simulated level-16 value of 1200 must calibrate to 2400 instead.
+        const gear = makeGear({
+            level: 0,
+            stars: 5,
+            mainStat: { name: 'attack', value: 300, type: 'flat' },
+        });
+        const upgradedMainStat = { name: 'attack' as const, value: 1200, type: 'flat' as const };
+        const result = assumedCalibrationDisplayStat(gear, upgradedMainStat);
+        expect(result).toEqual({ name: 'attack', value: 2400, type: 'flat' });
+    });
+
+    it('falls back to the raw main stat when there is no simulated upgrade', () => {
+        const gear = makeGear({
+            level: 0,
+            stars: 5,
+            mainStat: { name: 'attack', value: 300, type: 'flat' },
+        });
+        const result = assumedCalibrationDisplayStat(gear, undefined);
+        expect(result).toEqual({ name: 'attack', value: 600, type: 'flat' });
+    });
+
+    it('ignores an upgrade record on a level-16 piece and uses the raw stored main stat', () => {
+        const gear = makeGear({
+            level: 16,
+            stars: 6,
+            mainStat: { name: 'attack', value: 1000, type: 'flat' },
+        });
+        const upgradedMainStat = { name: 'attack' as const, value: 9999, type: 'flat' as const };
+        const result = assumedCalibrationDisplayStat(gear, upgradedMainStat);
+        expect(result).toEqual({ name: 'attack', value: 2000, type: 'flat' });
+    });
+
+    it('returns null for a piece with no main stat', () => {
+        const gear = makeGear({ mainStat: null });
+        expect(assumedCalibrationDisplayStat(gear, undefined)).toBeNull();
     });
 });
 
