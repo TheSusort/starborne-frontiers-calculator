@@ -98,8 +98,6 @@ const BASE = (
     chargeCount: 0,
     affinity: focusAffinity,
     shipSkills: { slots: [{ slot: 'active', abilities: [focusHit] }] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

@@ -129,8 +129,6 @@ const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
     critDamage: 0,
     defensePenetration: 0,
     chargeCount: 0,
-    enemyDefense: 0,
-    enemyHp: HUGE_HP,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -145,7 +143,6 @@ const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
     hp: HUGE_HP,
     speed: 100,
     hacking: 200,
-    enemySecurity: 0,
 };
 
 /** Run one round against a positioned roster, seeding each named actor's containers at

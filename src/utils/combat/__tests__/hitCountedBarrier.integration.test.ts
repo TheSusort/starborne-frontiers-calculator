@@ -213,8 +213,6 @@ describe('hit-counted Barrier — reactive path (triggers.ts executeIntent, cfg.
             grantExtraAction: () => {},
             playerIds: ['holder'],
             lastTurnCtxByActor: new Map(),
-            enemyHp: 100000,
-            cumulativeDamage: 0,
             recordResisted: () => {},
         };
     };
@@ -437,8 +435,6 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [{ slot: 'active', abilities: [noopDamage()] }] },
-    enemyDefense: 0,
-    enemyHp: HP,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],

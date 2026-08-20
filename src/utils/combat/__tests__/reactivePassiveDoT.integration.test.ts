@@ -120,8 +120,6 @@ function ruinerVsRepairingEnemy(numRounds: number, ruinerSpeed = 500) {
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: ruinerSkills,
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds,
         selfBuffs: [],
         enemyDebuffs: [],

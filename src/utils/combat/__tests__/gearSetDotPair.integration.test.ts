@@ -95,8 +95,9 @@ const activeInferno: Ability = {
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     // SP-4b-2b: a real opponent. DAMAGE fixture (5000 attack over 5 rounds plus DoT ticks) so it
     // takes the 10M-HP form — "enemy never dies" is load-bearing here, since a mid-sim death would
-    // silently drop tick rounds out of every total this file sums. `enemyDefense: 0` is carried onto
-    // the roster entry's own stats.defence; the fight-wide scalar is inert positionally (M6).
+    // silently drop tick rounds out of every total this file sums. 0 lives on the roster entry's
+    // own stats.defence (the fight-wide `enemyDefense` scalar it used to be kept in step with,
+    // always inert positionally M6, was deleted in SP-4d).
     enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 0 } }),
     attack: 5000,
     crit: 0,
@@ -104,8 +105,6 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 5,
     selfBuffs: [],
     enemyDebuffs: [],

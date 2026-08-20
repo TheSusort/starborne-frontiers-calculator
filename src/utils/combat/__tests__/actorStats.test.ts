@@ -81,10 +81,11 @@ const TEAM_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: every run needs a real opponent. `enemyDefense: 5000` is carried onto the roster
-    // entry's own `stats.defence` (the fight-wide scalar is inert positionally, M6/#11) and the HP
-    // is raised to 10M so a damaging team ship cannot kill it mid-sim. Nothing in this file asserts
-    // a damage magnitude — these tests read stat plumbing off the actors via `__testTapActors`.
+    // SP-4b-2b: every run needs a real opponent. 5000 lives on the roster entry's own
+    // `stats.defence` (the fight-wide `enemyDefense` scalar it used to be kept in step with,
+    // always inert positionally M6/#11, was deleted in SP-4d) and the HP is raised to 10M so a
+    // damaging team ship cannot kill it mid-sim. Nothing in this file asserts a damage magnitude —
+    // these tests read stat plumbing off the actors via `__testTapActors`.
     enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 5000 } }),
     attack: 10000,
     crit: 50,
@@ -92,8 +93,6 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     defensePenetration: 10,
     chargeCount: 0,
     shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    enemyDefense: 5000,
-    enemyHp: 300000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -186,10 +185,10 @@ describe('A2 Task 2 — base hacking/security on every actor', () => {
 
     // (c) SP-4c-2d DELETED a case here: 'DPS dummy enemy carries security = configured
     // enemySecurity'. It asserted that `input.enemySecurity` reached the dummy `enemy` actor's
-    // `stats.security`. That actor is gone, and it was the ONLY consumer of `enemySecurity` — the
-    // field survives on `CombatEngineInput` (removing it is rung 4d's churn story) but nothing
-    // reads it, so there is no plumbing left to pin. Same for `enemySpeed`/`enemyDefense`. The
-    // real per-actor security plumbing is covered by (a)/(b) above (focus + enemy attacker).
+    // `stats.security`. That actor is gone, and it was the ONLY consumer of `enemySecurity` —
+    // SP-4d deleted the field (and `enemySpeed`/`enemyDefense`/`enemyHp`) from `CombatEngineInput`
+    // entirely, so there is no plumbing left to pin. The real per-actor security plumbing is
+    // covered by (a)/(b) above (focus + enemy attacker).
 
     // (d) Player attacker actor carries stats.hacking = configured hacking.
     it('player attacker actor carries hacking = configured hacking', () => {

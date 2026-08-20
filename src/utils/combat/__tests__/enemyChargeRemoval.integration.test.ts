@@ -127,8 +127,6 @@ const buildInput = (chargeAbilityUnderTest: Ability, enemy: EnemyAttacker): Comb
             { slot: 'passive', abilities: [chargeAbilityUnderTest] },
         ],
     },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 6,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -481,8 +479,6 @@ describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges dr
             shipSkills: {
                 slots: [{ slot: 'active', abilities: [enemyDamage(1, 'p-a')] }],
             },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -535,8 +531,6 @@ describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges dr
             shipSkills: {
                 slots: [{ slot: 'active', abilities: [enemyDamage(1, 'p-a')] }],
             },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],

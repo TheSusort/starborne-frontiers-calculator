@@ -161,8 +161,6 @@ describe('B2 Task 2 — isStasised: engine-local per-actor Stasis reader (tap on
             defensePenetration: 0,
             chargeCount: 0,
             shipSkills: { slots: [stasisInflictAttack(2)] },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 2,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -216,8 +214,6 @@ describe('B2 Task 2 — isStasised: engine-local per-actor Stasis reader (tap on
             chargeCount: 0,
             // Focus has no offense (we only care about the enemy applying Stasis to it).
             shipSkills: { slots: [basicAttack()] },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 2,
             selfBuffs: [],
             enemyDebuffs: [],

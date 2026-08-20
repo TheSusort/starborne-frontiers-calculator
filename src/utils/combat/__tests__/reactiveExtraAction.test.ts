@@ -74,10 +74,8 @@ const positionalKillBase = (
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills,
-    enemyDefense: 0,
     // Dummy sink HP huge so the dummy is never even close to a (now impossible) death — the only
     // death in these runs is the positioned enemy attacker the focus kills.
-    enemyHp: 1_000_000_000,
     numRounds: 4,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -403,8 +401,6 @@ describe('reactive death-triggered bridge', () => {
             defensePenetration: 0,
             chargeCount: 0,
             shipSkills: harvesterSkills,
-            enemyDefense: 0,
-            enemyHp: 10_000_000, // dummy enemy never dies → no Path-B noise
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],

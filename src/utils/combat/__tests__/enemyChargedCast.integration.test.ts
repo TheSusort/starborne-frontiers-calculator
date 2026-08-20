@@ -229,8 +229,6 @@ const buildFocusInput = (opts: {
             { slot: 'passive', abilities: opts.reactionAbilities },
         ],
     },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: opts.numRounds,
     selfBuffs: [],
     enemyDebuffs: [],

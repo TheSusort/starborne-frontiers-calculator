@@ -158,8 +158,6 @@ const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: focusSkills(),
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -174,7 +172,6 @@ const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     hp: 1_000_000_000,
     speed: 100,
     hacking: 100, // focus reactive DoT lands (vs enemy security 0)
-    enemySecurity: 0,
     // Healing mode unlocks the positioned enemy roster (the sim's team-vs-team path).
     healTargetId: 'attacker',
     mode: 'healing',

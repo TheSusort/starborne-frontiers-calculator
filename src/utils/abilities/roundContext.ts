@@ -28,7 +28,8 @@ export function dotFamilyCounts(
  * `enemyDebuffCount` uses ENTRY-ARRAY LENGTHS (active DoT entries / pending bombs),
  * NOT total stacks — matching the inline conditional/charge logic it replaces.
  * The remaining fields are DPS-assumption defaults: self HP is fixed at 100 (the sim
- * never takes damage); enemy HP is caller-derived (`enemyHpPct`, default 100);
+ * never takes damage); enemy HP is caller-derived (`enemyHpPct`, passed through as-is with
+ * no default — SP-4d: absent means no enemy/victim reading exists this round);
  * no self-debuffs / enemy-buffs / adjacency.
  */
 export function buildRoundContext(state: {
@@ -40,7 +41,8 @@ export function buildRoundContext(state: {
     effectiveCritRate: number; // 0..100
     enemyType?: EnemyBaseClass;
     roundCrit?: boolean;
-    /** Derived enemy HP% (0..100): 100 × max(0, 1 − cumulativeDamage/enemyHp). Default 100. */
+    /** Derived enemy HP% (0..100): 100 × max(0, 1 − cumulativeDamage/enemyHp). Passed through
+     *  as-is; absent means no enemy/victim reading exists this round (no phantom is invented). */
     enemyHpPct?: number;
     /** Self HP% (0..100). Default 100 (DPS-assumption: self never takes damage). */
     selfHpPct?: number;
@@ -93,20 +95,23 @@ export function buildRoundContext(state: {
      *  power known to this caller — DPS-safe / inert for every ship besides Wildfire). Only
      *  runPlayerTurn's modifierCtx passes a real value. See ConditionContext.selfCritPower. */
     selfCritPower?: number;
-    /** SP-C — target's crit power. Default 0 (no enemy crit-power config). */
+    /** SP-C — target's crit power. Passed through as-is; absent means no target reading exists
+     *  this round (no phantom is invented). */
     targetCritPower?: number;
     /** SP-C — owner Speed. Default 0. */
     selfSpeed?: number;
-    /** SP-C — comparison target Speed (DPS: enemySpeed; engine: min damaged-enemy speed). Default 0. */
+    /** SP-C — comparison target Speed (DPS: enemySpeed; engine: min damaged-enemy speed). Passed
+     *  through as-is; absent means no target reading exists this round (no phantom is invented). */
     targetSpeed?: number;
     /** SP-C — owner absolute current HP. Default 0 (DPS callers pass ship max HP). */
     selfCurrentHp?: number;
-    /** SP-C — target absolute current HP (DPS: enemyHp). Default 0. */
+    /** SP-C — target absolute current HP (DPS: enemyHp). Passed through as-is; absent means no
+     *  target reading exists this round (no phantom is invented). */
     targetCurrentHp?: number;
-    /** SP-D — number of enemies damaged by this cast. Default 1 (DPS single-target mode).
-     *  Positional callers pass the real per-cast footprint size (0 is a real value — an
-     *  empty/whiffed footprint — and is NOT re-defaulted here). See
-     *  ConditionContext.enemiesHitThisCast. */
+    /** SP-D — number of enemies damaged by this cast. Passed through as-is; absent means no
+     *  cast/victim reading exists this round (no phantom is invented). Positional callers pass
+     *  the real per-cast footprint size (0 is a real value — an empty/whiffed footprint — and is
+     *  NOT re-defaulted here). See ConditionContext.enemiesHitThisCast. */
     enemiesHitThisCast?: number;
     /** SP-D — optional per-family DoT entry count lookup (Belladonna's named "3+ Acidic Decay"
      *  gate). Default undefined (no family tracking today — every family reads 0 via
@@ -120,19 +125,44 @@ export function buildRoundContext(state: {
      *  leave undefined (do NOT pass []) to keep the manual assume-met fallback (single-ship DPS).
      *  Only the live combat engine's drain context supplies a real array. */
     allyTeamNames?: string[];
+    /** SP-4d — true when this round/reaction has NO opposing victim to ask a per-victim question
+     *  about (e.g. an ally-targeted cast that resolves nobody). Default `false`/omitted preserves
+     *  every existing caller's behaviour unchanged (a real victim, or the DPS-assumption default).
+     *
+     *  WHY THIS EXISTS: `enemyDebuffCount` and `enemyDotCount` below are SUMS of entry-array
+     *  lengths (`landedEnemyDebuffCount`, `corrosionEntryCount`, `infernoEntryCount`, `bombCount`,
+     *  `genericCount`) that this function's callers compute unconditionally and that are
+     *  themselves required numbers — they read exactly `0` both when there is no opposing victim
+     *  AND when there is a real victim carrying no debuffs/DoTs. Those two situations must answer
+     *  differently (unresolvable vs. a real `0`), and no arithmetic on the counts alone can tell
+     *  them apart — only the caller, which alone knows whether it resolved a victim this round,
+     *  can say so. This flag is that explicit signal.
+     *
+     *  EFFECT: when `true`, `enemyDebuffCount`, `enemyDotCount`, and `enemyShielded` are all left
+     *  absent on the returned context regardless of what the constituent counts/`state.enemyShielded`
+     *  say — see each field's own assignment below. Every OTHER field on this context is
+     *  unaffected; side-wide subjects (`enemy-buff`, `enemy-destroyed`, `enemy-adjacent`,
+     *  `enemy-stealth-count`, `enemy-type`) do not read through this flag at all and keep
+     *  answering, because a real opposing roster is always guaranteed to exist even on a turn
+     *  that resolves no single victim. */
+    noOpposingVictim?: boolean;
 }): ConditionContext {
+    const hasVictim = !state.noOpposingVictim;
     return {
         selfBuffNames: state.selfBuffNames,
-        enemyDebuffCount:
-            state.landedEnemyDebuffCount +
-            state.corrosionEntryCount +
-            state.infernoEntryCount +
-            state.bombCount +
-            // SP-E (Task E3 forward-note): now that generic DoTs become live (Voron/Orel
-            // transform), fold genericCount in here too — closes the DoT-vs-debuff asymmetry
-            // vs enemyDotCount below, which already includes it (E2). Inert (0) for every
-            // existing ship without a live generic DoT.
-            (state.genericCount ?? 0),
+        // SP-4d: absent (not a fabricated 0) when this round has no opposing victim — see
+        // `noOpposingVictim`'s doc above for why the sum alone can't distinguish the two.
+        enemyDebuffCount: hasVictim
+            ? state.landedEnemyDebuffCount +
+              state.corrosionEntryCount +
+              state.infernoEntryCount +
+              state.bombCount +
+              // SP-E (Task E3 forward-note): now that generic DoTs become live (Voron/Orel
+              // transform), fold genericCount in here too — closes the DoT-vs-debuff asymmetry
+              // vs enemyDotCount below, which already includes it (E2). Inert (0) for every
+              // existing ship without a live generic DoT.
+              (state.genericCount ?? 0)
+            : undefined,
         effectiveCritRate: state.effectiveCritRate,
         enemyType: state.enemyType,
         // DPS-assumption defaults (overridable for live-engine population)
@@ -143,32 +173,48 @@ export function buildRoundContext(state: {
         enemyDestroyedCount: 0,
         selfHpPct: state.selfHpPct ?? 100,
         targetHpPct: state.targetHpPct ?? 100,
-        enemyHpPct: state.enemyHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
         targetRepairedThisRound: state.targetRepairedThisRound ?? false,
         selfShielded: state.selfShielded ?? false,
         selfShieldFull: state.selfShieldFull ?? false,
-        enemyShielded: state.enemyShielded ?? false,
+        // SP-4d: absent when there is no opposing victim (see `noOpposingVictim`'s doc) — a
+        // no-victim turn must not read as "the enemy has no shield" (a real, satisfiable `false`),
+        // it must read as "there is no enemy to ask about" (unresolvable). With a victim, keeps
+        // the pre-existing default-false behaviour untouched.
+        enemyShielded: hasVictim ? (state.enemyShielded ?? false) : undefined,
         wasHitThisRound: state.wasHitThisRound ?? false,
         firstActivator: state.firstActivator ?? false,
         isLastStanding: state.lastStanding ?? false,
         turnsTaken: state.turnsTaken ?? 0,
         stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
         selfCritPower: state.selfCritPower ?? 0,
-        targetCritPower: state.targetCritPower ?? 0,
         selfSpeed: state.selfSpeed ?? 0,
-        targetSpeed: state.targetSpeed ?? 0,
         selfCurrentHp: state.selfCurrentHp ?? 0,
-        targetCurrentHp: state.targetCurrentHp ?? 0,
-        enemiesHitThisCast: state.enemiesHitThisCast ?? 1,
         // SP-D — DoT-ONLY subtotal, derived from the SAME entry counts already folded into
         // enemyDebuffCount above. Deliberately excludes landedEnemyDebuffCount (control/marker
         // debuffs) — that is the whole DoT-ONLY point of this subject vs `enemy-debuff`.
-        enemyDotCount:
-            state.corrosionEntryCount +
-            state.infernoEntryCount +
-            state.bombCount +
-            (state.genericCount ?? 0),
+        // SP-4d: absent (not a fabricated 0) when there is no opposing victim — same reasoning as
+        // enemyDebuffCount above; see `noOpposingVictim`'s doc.
+        enemyDotCount: hasVictim
+            ? state.corrosionEntryCount +
+              state.infernoEntryCount +
+              state.bombCount +
+              (state.genericCount ?? 0)
+            : undefined,
+        // SP-4d: these five are NOT defaulted. An absent reading means the subject does not exist
+        // (no victim resolved this turn), and evaluateConditions answers that honestly; inventing
+        // `100` / `0` / `1` here is exactly the phantom the rung deletes, and it hid itself by
+        // sitting one layer ABOVE the `??` in evaluateConditions. The conditional-spread idiom is
+        // load-bearing: writing the key with an `undefined` value would also work at runtime, but
+        // it makes `'enemyHpPct' in ctx` lie, which the sentinel-vs-legacy `enemyDebuffNames`
+        // distinction in this same context type depends on.
+        ...(state.enemyHpPct !== undefined ? { enemyHpPct: state.enemyHpPct } : {}),
+        ...(state.targetCritPower !== undefined ? { targetCritPower: state.targetCritPower } : {}),
+        ...(state.targetSpeed !== undefined ? { targetSpeed: state.targetSpeed } : {}),
+        ...(state.targetCurrentHp !== undefined ? { targetCurrentHp: state.targetCurrentHp } : {}),
+        ...(state.enemiesHitThisCast !== undefined
+            ? { enemiesHitThisCast: state.enemiesHitThisCast }
+            : {}),
         ...(state.enemyDotFamilyCounts !== undefined
             ? { enemyDotFamilyCounts: state.enemyDotFamilyCounts }
             : {}),

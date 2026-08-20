@@ -157,7 +157,6 @@ const observe = (over: Partial<CombatEngineInput> = {}): Observed => {
         // The focus's own reactive applications must LAND, so the DoT branch's landing draw is not
         // what a negative case is really measuring.
         hacking: 200,
-        enemySecurity: 0,
         ...over,
         bus,
         // Called immediately after `createStatusEngine`, BEFORE the fight loop — so a spy installed

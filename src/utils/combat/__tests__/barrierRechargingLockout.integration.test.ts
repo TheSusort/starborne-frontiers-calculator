@@ -112,7 +112,6 @@ describe('Barrier Recharging: real 3-turn cooldown (re-arm gate)', () => {
             playerIds,
             lastTurnCtxByActor: new Map(),
             enemyHp: 100000,
-            cumulativeDamage: 0,
             recordResisted: () => {},
         } as IntentExecContext;
     };
@@ -324,8 +323,6 @@ describe('Barrier Recharging: the CAST-path gate (a charge-slot Barrier grant vs
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [{ slot: 'active', abilities: [noopDamage('focus-noop')] }] },
-        enemyDefense: 0,
-        enemyHp: HP,
         numRounds: 2,
         selfBuffs: [],
         enemyDebuffs: [],

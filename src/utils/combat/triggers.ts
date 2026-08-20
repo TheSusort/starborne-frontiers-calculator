@@ -1483,9 +1483,6 @@ export interface IntentExecContext {
      *  charged-cast stamps only counterTargetId) falls back to this owner-keyed amount. */
     reactiveDealtByOwner?: Map<string, number>;
     enemyType?: EnemyBaseClass;
-    enemyHp: number;
-    /** Damage dealt to the enemy so far (drives the drain-time enemyHpPct). */
-    cumulativeDamage: number;
     /** Record a resisted enemy application onto the round's resisted list (the engine
      *  routes it to pendingResisted or the last attacker turn, per Task-2 staging). */
     recordResisted: (resisted: ActiveBuff) => void;
@@ -1550,10 +1547,14 @@ export interface IntentExecContext {
     turnsTakenFor?: (ownerId: string) => number;
     /** SP-D: number of enemies damaged by `ownerId`'s most recent cast this round, feeding the
      *  `enemies-hit-this-cast` gate at drain time (Berserker's Marauder Rage, drained via the
-     *  on-deal-damage reactive trigger). Engine-populated from the per-turn footprint size;
-     *  absent → buildDrainContext defaults to 1 (no cast yet / DPS mode — a >=2/>=3 gate is
-     *  inert, byte-identical). */
-    enemiesHitThisCastFor?: (ownerId: string) => number;
+     *  on-deal-damage reactive trigger). Engine-populated from the per-turn footprint size.
+     *  SP-4d Fix wave 1: the delegate itself may return `undefined` for an owner with no
+     *  recorded footprint (no cast yet this combat) — that footprint is UNKNOWN, not "hit
+     *  exactly one enemy", so `number | undefined` here lets buildDrainContext's absent-subject
+     *  guard leave the gate unresolved instead of defaulting to a fabricated 1. Absent
+     *  DELEGATE (no function at all — DPS mode / fixtures) is unaffected: the optional-chain
+     *  call below already answers `undefined` in that case, byte-identical. */
+    enemiesHitThisCastFor?: (ownerId: string) => number | undefined;
     /** PR4b: apply a full mitigated/crit-eligible reactive damage hit from `ownerId` against
      *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
      *  on-enemy-cleansed, FrontLine's on-enemy-charged-cast). `abilityId` keys the dedicated
@@ -1784,7 +1785,11 @@ export function buildActorConditionContext(
         infernoEntryCount: number;
         bombCount: number;
         enemyType?: EnemyBaseClass;
-        enemyHpPct: number;
+        /** SP-4d: passed through as-is to `buildRoundContext` below — absent means no enemy/victim
+         *  reading exists this round (no phantom is invented). Every existing caller still supplies
+         *  a real number; only `playerTurn.ts`'s foreign-caster aura ctx forwards the turn-local
+         *  absent value. */
+        enemyHpPct?: number;
         effectiveCritRate?: number;
         includeAbilitySelfNames?: boolean;
         /** Self HP% (0..100). Default 100 (DPS-assumption). Populated by live engine in Task 3+. */
@@ -1806,6 +1811,32 @@ export function buildActorConditionContext(
          *  field is threaded here so a future reactive consumer only needs an IntentExecContext
          *  delegate, not another hand-enumerated layer. */
         enemyShielded?: boolean;
+        /** SP-4d — forwarded verbatim to `buildRoundContext`'s `noOpposingVictim` (see that
+         *  function's doc for the full rationale). Default false/omitted preserves every
+         *  existing caller's behaviour (`enemyDebuffCount`/`enemyDotCount`/`enemyShielded` stay
+         *  resolvable). This wrapper serves THREE structurally different call sites, which is why
+         *  the flag lives on `shared` rather than being hard-coded here — each caller alone knows
+         *  whether IT has an opposing victim this evaluation:
+         *   - `playerTurn.ts`'s `foreignCasterCtx` (a foreign ally's aura/accum gate, evaluated
+         *     against the ACTING actor's current turn) sets this to the acting actor's own
+         *     `!hasVictim` — the aura is being asked to apply against THIS turn's target.
+         *   - `engine.ts`'s `seedPassiveTimedStatuses` (combat-start passive seeding) leaves this
+         *     unset/false — at combat start there is always a real opposing roster (SP-4b-2a/b
+         *     make a roster-less run structurally impossible), just with zero debuffs/DoTs/shield
+         *     on it yet, which are real `0`/`false` answers, not an absent subject.
+         *   - `buildDrainContext` (reactive drain-time) leaves this unset/false DELIBERATELY: at
+         *     drain time `enemy-debuff`/`enemy-dot-count`/`enemy-shield` read a persistent
+         *     per-owner store (`snapshot(ownerId)`, `corrosionEntries`/etc.) that answers about the
+         *     opposing SIDE this owner has been engaging, not a single per-cast resolved victim —
+         *     there is no "this reactive event's victim" concept threaded into `IntentExecContext`
+         *     the way `enemy` is threaded through a cast-time turn, and manufacturing one here
+         *     would either be a guess or require new plumbing outside this task's scope. Forcing
+         *     it `true` unconditionally would also risk silently breaking a real `gte`-gated
+         *     reactive ability that legitimately reads a nonzero count today — an unmeasured
+         *     regression, not a fix. See `enemyShielded`'s own doc above: buildDrainContext never
+         *     populates it anyway, so this path already answers a real (if usually-empty) `false`
+         *     for `enemy-shield` today and continues to. */
+        noOpposingVictim?: boolean;
         /** Owner was hit by a direct attack this round. Default false. Populated by
          *  buildDrainContext (D-PR8). */
         wasHitThisRound?: boolean;
@@ -1818,8 +1849,10 @@ export function buildActorConditionContext(
         /** Owner's own-turn counter (CombatActor.turnsTaken). Default 0 (DPS-assumption).
          *  Populated by buildDrainContext (Phase 0 Task 4). */
         turnsTaken?: number;
-        /** SP-D: number of enemies damaged by the owner's most recent cast this round. Default 1
-         *  (no cast yet / DPS mode). Populated by buildDrainContext from the engine's per-actor
+        /** SP-D: number of enemies damaged by the owner's most recent cast this round. SP-4d Fix
+         *  wave 1: absent (no cast yet / DPS mode / no delegate) rather than a fabricated 1 — see
+         *  `enemiesHitThisCastFor`'s own comment at its engine.ts declaration for what is and
+         *  is not fixed. Populated by buildDrainContext from the engine's per-actor
          *  enemiesHitThisCastFor delegate — REQUIRED for a passive-sourced timed self-buff gated
          *  on this subject (Berserker's Marauder Rage) to actually re-evaluate on-cast instead of
          *  only at the one-time combat-start seed (see seedPassiveTimedStatuses). */
@@ -1871,6 +1904,7 @@ export function buildActorConditionContext(
         turnsTaken: shared.turnsTaken,
         enemiesHitThisCast: shared.enemiesHitThisCast,
         allyTeamNames: shared.allyTeamNames,
+        noOpposingVictim: shared.noOpposingVictim,
     });
 }
 
@@ -1974,10 +2008,11 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     }
     // SP-M M1 Task 7 + spec §4 (M10): an enemy-oriented `hp-threshold` gate is re-evaluated PER
     // RESOLVED TARGET by the branch below, so it must not also gate globally — the single global
-    // `enemyHpPct` is a fight-wide SCALAR (`100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`, both of
-    // them legacy scalar inputs that described the dummy sink SP-4c-2d deleted and now describe no
-    // actor on the board at all), so gating an AoE on it would either block everything or false-pass
-    // the whole footprint.
+    // `enemyHpPct` used to be a fight-wide SCALAR (`100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`,
+    // both of them legacy scalar inputs that described the dummy sink SP-4c-2d deleted). SP-4d
+    // deleted `cumulativeDamage`/`enemyHp` from `IntentExecContext` outright, so drain-time
+    // `enemyHpPct` is now ABSENT rather than a stale constant — so gating an AoE on it would either
+    // block everything or false-pass the whole footprint.
     // Only an ENEMY/target-oriented hp-threshold is dropped: a SELF one keeps gating normally
     // (buildShipAbilities.ts's re-target never attaches target:'all-enemies' for a self-only
     // hp-threshold — see that file's matching narrowing).
@@ -1995,10 +2030,11 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     // `landDotOn`. All three are enemy-facing. The real reason they are left out is the OTHER half
     // of this function's promise: NO PER-TARGET RE-CHECK SITE EXISTS IN THOSE BRANCHES YET. Adding
     // them here without one would not fix a dead gate, it would make that gate ALWAYS-ON — strictly
-    // worse than today, where a non-self `hp-threshold` on a `counter` / `dot` / `convert-dot` is
-    // still evaluated against that fight-wide scalar `enemyHpPct` — which on a positional run stays
-    // at 100% because positional credit books per-victim and never feeds `cumulativeDamage` — and is
-    // therefore dead-but-FAILS-CLOSED: unfixed, never over-firing.
+    // worse than today, where a non-self `hp-threshold` on a `counter` / `dot` / `convert-dot` reads
+    // an ABSENT `enemyHpPct` (SP-4d deleted the `cumulativeDamage`/`enemyHp` fields it used to be
+    // derived from) and `conditionMet` refuses that reading before the comparator switch — so the
+    // gate is unresolvable rather than evaluated against a stale constant, and is therefore
+    // dead-but-FAILS-CLOSED, now more robustly than before: unfixed, never over-firing.
     // SO: ADDING A SHAPE TO THE `dt === …` TEST BELOW IS ONLY SAFE ONCE THAT SHAPE'S BRANCH CALLS
     // `perVictimOk` (or a named dedicated re-check) on the target it actually resolves. Do not
     // "tidy" `dot`, `convert-dot` or `counter` into the list because they look enemy-facing —
@@ -2048,8 +2084,6 @@ function perVictimEnemyConditions(intent: Intent): Ability['conditions'] {
 }
 
 function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
-    const enemyHpPct =
-        ctx.enemyHp > 0 ? Math.max(0, 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)) : 100;
     // Owner-aware drain gate (Task 6): self-buff names come from the OWNER's snapshot so each
     // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
     // `includeAbilitySelfNames` is now TRUE at drain time so the gate ALSO sees ability-sourced
@@ -2076,7 +2110,13 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
             ctx.genericDoTEntries ?? []
         ),
         enemyType: ctx.enemyType,
-        enemyHpPct,
+        // SP-4d: NO fight-wide enemy-HP reading. It used to be
+        // `100 * (1 - cumulativeDamage / enemyHp)`, both terms legacy scalars describing the dummy
+        // sink SP-4c-2d deleted; on a positional run (every run) it sat at a constant 100. A
+        // `below` gate read false off it and an `above` gate read TRUE against nobody. Enemy-HP
+        // gates that CAN be re-checked per resolved target already are (`perVictimOk`, see
+        // splitDrainGateConditions); the rest are now honestly unresolvable instead of
+        // dead-but-fail-closed. Do not reintroduce a scalar here.
         // Task 6 (Phase 4c PR 1): live self-HP% for drain-time hp-threshold gates. The engine
         // closes over the heal target's current/max HP; every non-tank id and DPS mode report 100
         // (the pre-4c default) → all existing drain gating stays byte-identical.
@@ -2113,10 +2153,18 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // paths read 0 and stay byte-identical (the evaluator's t<=0 guard blocks ALL
         // periods at turn 0, so every-n-turns is never met).
         turnsTaken: ctx.turnsTakenFor?.(ownerId) ?? 0,
-        // SP-D: live enemies-hit-this-cast gate (Berserker's Marauder Rage). Default 1 → DPS /
-        // no-delegate paths keep the single-target assumption (a >=2/>=3 gate stays inert) and
-        // stay byte-identical.
-        enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId) ?? 1,
+        // SP-D: live enemies-hit-this-cast gate (Berserker's Marauder Rage). SP-4d Fix wave 1: no
+        // `?? 1` default anywhere on this path — the delegate itself (engine.ts) now returns
+        // `undefined` when `enemiesHitThisCastByActor` has no entry for `ownerId`. That happens
+        // for two genuinely different reasons, both meaning the footprint is UNKNOWN rather than
+        // "hit exactly one enemy": (1) no delegate was supplied at all (DPS mode / a test fixture
+        // that omits engine wiring), and (2) a delegate IS wired but this owner has not yet had a
+        // turn (focus/team/enemy) recorded this combat — e.g. a round-1 start-of-round drain
+        // firing before turn 1 resolves, or a reactive draining for this owner off another
+        // actor's earlier action before this owner has taken its own first turn. Either way the
+        // gate is unresolvable rather than answered by a number describing no cast. Tygr's
+        // `gte 2` and Berserker's `gte 3` are unaffected — a fabricated 1 already failed both.
+        enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId),
         // SP-F F4: live same-team ally ship names (Isha/Nayra reciprocal Override gate). Only when
         // the engine supplied a name map (team-sim). `playerIds` is the drain owner's OWN side; we
         // exclude the owner itself (ALLY names, self-excluded — mirrors `isSameSideAlly`), keep only
@@ -2143,12 +2191,20 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
 // payload-carriers) — names only, never re-applying the payload effect.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Neutral resolver for the names-only aura/accum reads: a status's own conditions
-// are evaluated against a default (full-HP, no-debuff) round context. This is a
-// deliberate names-existence approximation — an "enemy has a buff" / "self has a
-// debuff" gate only needs to know the status is present, not re-derive its full
-// live gate. No fixture exercises a conditional enemy aura/accum, so this is inert
-// for current goldens (YAGNI: the gated full-kit enemy lands in a later task).
+// Neutral resolver for the names-only aura/accum reads: a status's own conditions are evaluated
+// against a NAMES-ONLY round context. SP-4d: it deliberately supplies no enemy-HP or target-stat
+// reading, so any such gate here is UNRESOLVABLE rather than silently satisfied by a full-HP
+// phantom — this ctx has no victim and never did. It remains a names-existence approximation: an
+// "enemy has a buff" / "self has a debuff" gate only needs to know the status is present. No
+// fixture exercises a conditional enemy aura/accum, so this is inert for current goldens.
+//
+// SP-4d: `noOpposingVictim: true` is EXPLICIT, not incidental — this constant already passes
+// literal `0`s for every entry count, which `buildRoundContext` would otherwise sum into a real
+// (satisfiable-by-`eq 0`) `enemyDebuffCount`/`enemyDotCount` of exactly 0, and default
+// `enemyShielded` to a real `false`. `tsc` cannot flag a missing optional field, and a call site
+// that "looks obviously zero, obviously fine" is exactly the shape that has already bitten this
+// rung once elsewhere. This ctx has no victim and never did, so it must say so explicitly rather
+// than relying on its zeroed inputs to happen to produce the same answer.
 const NEUTRAL_NAMES_CTX = buildRoundContext({
     selfBuffNames: [],
     landedEnemyDebuffCount: 0,
@@ -2156,6 +2212,7 @@ const NEUTRAL_NAMES_CTX = buildRoundContext({
     infernoEntryCount: 0,
     bombCount: 0,
     effectiveCritRate: 0,
+    noOpposingVictim: true,
 });
 
 /** Union of self-buff NAMES held by the given owners (e.g. all enemy attackers).
@@ -2761,8 +2818,8 @@ function buildPerVictimConditionCtx(
     const base = buildDrainContext(ctx, ownerId);
     // Per-victim HP% from the victim's own live currentHp/maxHp — but ONLY when the engine tracks a
     // real max HP for this victim (`recipientMaxHp`: the actor's last-turn effectiveMaxHp, else its
-    // registered base HP). Otherwise fall back to the fight-wide `base.enemyHpPct` rather than
-    // dividing by 0, which would read a spurious 0% and always fire.
+    // registered base HP). Otherwise fall back to `base.enemyHpPct` rather than dividing by 0, which
+    // would read a spurious 0% and always fire.
     //
     // WHAT REACHES THAT FALLBACK, honestly: it used to be documented as the DPS dummy's arm (not
     // registered in baseHpById → recipientMaxHp 0, and `base.enemyHpPct` genuinely WAS its HP%).
@@ -2775,9 +2832,12 @@ function buildPerVictimConditionCtx(
     // victim but NOT for a player one (the focus `hp` input and a walked team ship's `walk.stats.hp`
     // are unfloored, and DPS-mode callers default `hp` to 0) — that needs an enemy-owned
     // `all-enemies` damage proc carrying a per-victim enemy condition, which no shipped enemy kit in
-    // the corpus pairs with a 0-max-HP player victim today. Note that if it were ever reached, the
-    // value it falls back to describes NO actor: `base.enemyHpPct` is the legacy scalar
-    // `100 * (1 - cumulativeDamage / enemyHp)`. It is a divide-by-zero backstop, not a reading.
+    // the corpus pairs with a 0-max-HP player victim today.
+    //
+    // A victim with a known max HP reports ITS OWN live HP%. Otherwise there is no reading: SP-4d
+    // made `base.enemyHpPct` absent (it was the legacy fight-wide scalar this comment already
+    // described as belonging to no actor), so the gate is unresolvable rather than answered by a
+    // number about nobody.
     const maxHp = ctx.recipientMaxHpFor?.(victim.id) ?? 0;
     const enemyHpPct =
         maxHp > 0 ? Math.max(0, Math.min(100, (100 * victim.currentHp) / maxHp)) : base.enemyHpPct;

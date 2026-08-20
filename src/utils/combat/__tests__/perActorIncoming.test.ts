@@ -72,8 +72,6 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [] },
-    enemyDefense: 0,
-    enemyHp: 10_000_000,
     numRounds: 3,
     selfBuffs: [],
     enemyDebuffs: [],

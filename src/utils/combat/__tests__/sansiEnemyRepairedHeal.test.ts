@@ -129,8 +129,6 @@ const playerSansiBase = (enemyAttackers: EnemyAttacker[]): CombatEngineInput => 
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: sansiFocusSkills(),
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -286,8 +284,6 @@ describe('Sansi (enemy-side) — team symmetry: an enemy Sansi reacts to a PLAYE
             chargeCount: 0,
             // Player focus casts an all-allies repair (repairs attacker + ally-2 → 2 players).
             shipSkills: { slots: [{ slot: 'active', abilities: [healAllAllies('player-aoe')] }] },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],

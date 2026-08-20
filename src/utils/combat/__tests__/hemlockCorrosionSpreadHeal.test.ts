@@ -159,8 +159,6 @@ const playerHemlock = (
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: hemlockFocusSkills(),
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     // ONE round: Hemlock lands Toxic Overflow on her turn, then the end-of-round mechanic spreads +
     // heals ONCE. (A second round would re-apply Toxic Overflow → a second spread — not what these
     // single-fire assertions test.)
@@ -431,8 +429,6 @@ describe('Team symmetry — an ENEMY-side Hemlock reacts to a PLAYER-side spread
             // Player focus does nothing meaningful; it is the frontmost target the enemy Hemlock
             // hits (a 0-mult attack keeps its turn valid).
             shipSkills: { slots: [{ slot: 'active', abilities: [noopAttack()] }] },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],

@@ -235,9 +235,10 @@ describe('self-debuff gate in runPlayerTurn (Task 7)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a real, TARGETABLE opponent (non-zero max HP). `enemyDefense: 0` is carried onto
-    // its own stats.defence so the 10000/20000 figures below are unchanged. Every test that needs a
-    // Provoke/Taunt-carrying enemy overrides this with its own.
+    // SP-4b-2b: a real, TARGETABLE opponent (non-zero max HP). 0 lives on its own stats.defence
+    // (the fight-wide `enemyDefense` scalar it used to be kept in step with was deleted in SP-4d)
+    // so the 10000/20000 figures below are unchanged. Every test that needs a Provoke/Taunt-
+    // carrying enemy overrides this with its own.
     enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000, defence: 0 } }),
     attack: 10000,
     crit: 0,
@@ -245,8 +246,6 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -427,7 +426,6 @@ describe('status-grant gate path — LIVE self-debuff/Provoke positive (Task 6)'
         const result = runCombat(
             GRANT_BASE({
                 shipSkills: grantGatedSelfBuffSkill(cond),
-                enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
                 mode: 'healing',
                 enemyAttackers: [provokeEnemy()],
@@ -511,7 +509,6 @@ describe('status-grant gate path — LIVE enemy-buff/Taunt positive (item 11)', 
         const result = runCombat(
             GRANT_BASE({
                 shipSkills: grantGatedSelfBuffSkill(cond),
-                enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
                 mode: 'healing',
                 enemyAttackers: [tauntEnemy()],
@@ -608,7 +605,6 @@ describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Ta
         runCombat(
             GRANT_BASE({
                 shipSkills: grantGatedSelfBuffSkill(cond),
-                enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
                 mode: 'healing',
                 enemyAttackers: [enemy],

@@ -156,10 +156,10 @@ const BASE = (
 ): CombatEngineInput => {
     const { chargedMultiplier = 100, activeMultiplier = 100, ...rest } = overrides;
     return {
-        // SP-4b-2b: a real, positioned opponent. ENEMY_DEFENSE is carried onto its OWN
-        // `stats.defence` — that is what keeps the pinned damage numbers identical, since the
-        // fight-wide `enemyDefense` scalar is inert on a positional run (M6/#11). HP is the
-        // fixture's own 10M so nothing ever dies.
+        // SP-4b-2b: a real, positioned opponent. ENEMY_DEFENSE lives on its OWN `stats.defence` —
+        // that is what keeps the pinned damage numbers identical (the fight-wide `enemyDefense`
+        // scalar it used to be kept in step with, always inert on a positional run M6/#11, was
+        // deleted in SP-4d). HP is the fixture's own 10M so nothing ever dies.
         enemyAttackers: bareEnemy({ stats: { hp: HP, defence: ENEMY_DEFENSE } }),
         attack: ATTACK,
         crit: 0,
@@ -172,8 +172,6 @@ const BASE = (
                 { slot: 'charged', abilities: [dmg(chargedMultiplier)] },
             ],
         },
-        enemyDefense: ENEMY_DEFENSE,
-        enemyHp: HP,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],

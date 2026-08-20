@@ -139,8 +139,6 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [] }, // DPS-mode focus is an inert bystander here.
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -292,8 +290,6 @@ const ENEMY_SIDE_BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInp
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: basicAttack,
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

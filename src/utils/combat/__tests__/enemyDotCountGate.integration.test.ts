@@ -88,8 +88,6 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (player si
             defensePenetration: 0,
             chargeCount: 1, // cap: round 1's baseline +1 cadence reaches it → round 2 casts charged
             shipSkills: anemoneShipSkills(seedDots),
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 2,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -237,8 +235,6 @@ describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runti
             defensePenetration: 0,
             chargeCount: 1,
             shipSkills: belladonnaShipSkills(['corrosion', 'inferno', 'bomb']),
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 2,
             selfBuffs: [],
             enemyDebuffs: [],

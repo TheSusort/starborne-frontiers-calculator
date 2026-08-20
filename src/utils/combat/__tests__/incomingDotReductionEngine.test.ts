@@ -179,8 +179,6 @@ function collectDotTicks(withVortexVeil: boolean, dotType: 'inferno' | 'corrosio
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills,
-        enemyDefense: 0,
-        enemyHp: 10_000_000,
         numRounds: 2,
         selfBuffs: [],
         enemyDebuffs: [],

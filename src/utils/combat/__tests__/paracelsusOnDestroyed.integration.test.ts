@@ -173,8 +173,6 @@ const playerScenarioInput = (paracelsusSlots: ShipSkills['slots']): CombatEngine
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [basicAttackSlot()] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -304,8 +302,6 @@ const enemyScenarioInput = (paracelsusSlots: ShipSkills['slots']): CombatEngineI
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [basicAttackSlot()] }, // placeholder; replaced below with a REAL attack
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

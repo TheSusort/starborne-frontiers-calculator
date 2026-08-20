@@ -140,8 +140,6 @@ describe('C2b-3 Task 3: Nayra purge gated on target-repaired-this-round', () => 
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: focusSkills(heal),
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],

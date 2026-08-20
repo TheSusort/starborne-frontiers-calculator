@@ -103,8 +103,6 @@ const buildPlayerOwnerInput = (opts: {
     shipSkills: {
         slots: [{ slot: 'active', abilities: [] }, ...opts.reactionAbilities.slots],
     },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -277,8 +275,6 @@ describe('PR4b: reactive damage executor — team-symmetric mitigation (enemy-ow
                 { slot: 'charged', abilities: [] },
             ],
         },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],

@@ -114,8 +114,6 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
             defensePenetration: 0,
             chargeCount: 0,
             shipSkills: { slots: [damageWithDefenseDownSlot()] },
-            enemyDefense: 0,
-            enemyHp: 10_000_000,
             numRounds: 1,
             selfBuffs: [],
             // No scheduled debuffs — ability-sourced only.

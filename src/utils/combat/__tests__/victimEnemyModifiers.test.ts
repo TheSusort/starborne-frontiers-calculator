@@ -103,8 +103,6 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [damageSlot()] },
-    enemyDefense: 0,
-    enemyHp: 10_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [defenseDown],
@@ -198,8 +196,6 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
             chargeCount: 0,
             // Active slot fires damage + ability Defense Down on the enemy.
             shipSkills: { slots: [damageWithDebuffSlot()] },
-            enemyDefense: 0,
-            enemyHp: 10_000_000,
             numRounds: 1,
             selfBuffs: [],
             // No scheduled debuffs — ability-only.

@@ -252,8 +252,6 @@ const nonPositionalFocus = (hits: number, numRounds: number): CombatEngineInput 
             },
         ],
     },
-    enemyDefense: 0,
-    enemyHp: 1_000_000,
     numRounds,
     selfBuffs: [],
     enemyDebuffs: [],

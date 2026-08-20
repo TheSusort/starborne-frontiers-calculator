@@ -7,10 +7,10 @@
  * production parser output, not a hand-written stand-in.
  *
  * Team-symmetry: the SAME gate must fire whether Cobalt is the focus PLAYER attacker (its
- * `stat-vs-target` condition gates via `runPlayerTurn`'s per-cast `ctx`, fed by the DPS-mode
- * `hp`/`enemyHp` top-level inputs) or an ENEMY attacker (the same condition gates via the
- * SAME code path, fed by `buildTurnArgs`'s live `actor`/`enemy` CombatActor pairing — no
- * player/enemy branch in the implementation).
+ * `stat-vs-target` condition gates via `runPlayerTurn`'s per-cast `ctx`, fed by the top-level
+ * `hp` input and the ACTUAL victim's roster-entry HP) or an ENEMY attacker (the same condition
+ * gates via the SAME code path, fed by `buildTurnArgs`'s live `actor`/`enemy` CombatActor
+ * pairing — no player/enemy branch in the implementation).
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
@@ -46,10 +46,10 @@ const cobaltShipSkills = (): ShipSkills =>
 describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () => {
     it('player-side Cobalt: the 25%-max-HP bonus lands when its own maxHp exceeds the opponent maxHp', () => {
         const makeInput = (hp: number, enemyHp: number): CombatEngineInput => ({
-            // SP-4b-2b: the gate compares Cobalt's max HP against ITS ACTUAL VICTIM's max HP.
-            // On a positional run that victim is the roster entry, not the `enemyHp` scalar
-            // (M6 — the scalar is inert), so the pool moves onto the roster entry's own
-            // `stats.hp` and `enemyHp` is kept in step purely so the two never disagree.
+            // SP-4b-2b: the gate compares Cobalt's max HP against ITS ACTUAL VICTIM's max HP,
+            // which on a positional run is the roster entry, not a fight-wide scalar (M6). SP-4d
+            // deleted that scalar from `CombatEngineInput` entirely; the pool lives only on the
+            // roster entry's own `stats.hp` now.
             enemyAttackers: bareEnemy({ stats: { hp: enemyHp } }),
             attack: 1000,
             crit: 0,
@@ -57,8 +57,6 @@ describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () =
             defensePenetration: 0,
             chargeCount: 0,
             shipSkills: cobaltShipSkills(),
-            enemyDefense: 0,
-            enemyHp,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -116,8 +114,6 @@ describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () =
             defensePenetration: 0,
             chargeCount: 0,
             shipSkills: basicAttack,
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000, // the DPS-dummy the player's own basic attack pokes; irrelevant
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -218,8 +214,6 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
             defensePenetration: 0,
             chargeCount: 2,
             shipSkills: bayahShipSkills(),
-            enemyDefense: 0,
-            enemyHp: 1_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -282,9 +276,9 @@ describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', (
         // 'active' every round) — isolating the charge-count delta as the only observable signal.
         const makeInput = (speed: number, enemySpeed: number): CombatEngineInput => ({
             // SP-4b-2b: "all damaged enemies have more Speed than this Unit" is evaluated against
-            // the ACTUAL damaged enemies, so the comparison speed moves onto the roster entry's
-            // own `stats.speed`. The `enemySpeed` scalar below is the vestigial fight-wide one
-            // (M6, inert positionally) and is kept in step only so the two never disagree.
+            // the ACTUAL damaged enemies, so the comparison speed lives on the roster entry's own
+            // `stats.speed` (M6). SP-4d deleted the fight-wide `enemySpeed` scalar that used to be
+            // kept in step with it here.
             enemyAttackers: bareEnemy({ stats: { speed: enemySpeed, hp: 1_000_000 } }),
             attack: 1000,
             crit: 0,
@@ -292,8 +286,6 @@ describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', (
             defensePenetration: 0,
             chargeCount: 5,
             shipSkills: chakaraShipSkills(),
-            enemyDefense: 0,
-            enemyHp: 1_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -307,7 +299,6 @@ describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', (
             defence: 0,
             hp: 10_000,
             speed,
-            enemySpeed,
         });
 
         // Both runs bank the engine's unconditional per-turn charge (advanceChargeCadence) —

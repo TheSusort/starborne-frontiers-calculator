@@ -308,9 +308,10 @@ export function buildTurnQueue(actors: CombatActor[]): CombatActor[] {
  * position, so this fully decides every intra-team tie; a cross-team tie (both sides hold the
  * mirrored cell) falls through to the side rank below.
  *
- * A position-less actor (the DPS dummy sink, a bare enemy attacker in DPS/healing mode) ranks
- * LAST, so it never displaces a positioned actor. When NO actor in a tie group has a position the
- * ranks are all equal and ordering falls through to side + input order exactly as before.
+ * A position-less actor (a bare enemy attacker in DPS/healing mode; historically the DPS dummy
+ * sink, deleted in SP-4c-2d) ranks LAST, so it never displaces a positioned actor. When NO actor
+ * in a tie group has a position the ranks are all equal and ordering falls through to side +
+ * input order exactly as before.
  */
 export function positionTurnRank(position?: Position): number {
     if (!position) return Number.POSITIVE_INFINITY;

@@ -81,8 +81,8 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
 
 const BASE = (): CombatEngineInput => ({
     // SP-4b-2b: every run needs a real opponent. `attack: 0` + heal-only kit means the inert
-    // 500k-HP default survives the whole sim. `enemyDefense`/`enemyHp` are INERT positionally
-    // (M6) and are kept only because no assertion derives a number from them.
+    // 500k-HP default survives the whole sim. The fight-wide `enemyDefense`/`enemyHp` scalars
+    // this used to keep in step (M6, always inert positionally) were deleted in SP-4d.
     enemyAttackers: bareEnemy(),
     attack: 0,
     crit: 0,
@@ -90,8 +90,6 @@ const BASE = (): CombatEngineInput => ({
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: healerSkills(),
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -240,16 +238,15 @@ describe('SP-3b Task 7 (review fix): flag-off fence covers HoT + leech + reactiv
     const HOT_LEECH_REACTIVE_BASE = (): CombatEngineInput => ({
         // SP-4b-2b: this focus DOES deal damage (5000 attack, `damageAb` every round), so it gets
         // the 10M-HP form — the 500k default is not a survival guarantee and a mid-sim death
-        // reshapes the run. `enemyDefense: 0` is carried onto the roster entry's own
-        // `stats.defence` so damage magnitudes stay what they were; the fight-wide scalar is inert.
+        // reshapes the run. 0 lives on the roster entry's own `stats.defence` so damage
+        // magnitudes stay what they were (the fight-wide `enemyDefense` scalar it used to be kept
+        // in step with was deleted in SP-4d).
         enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 0 } }),
         attack: 5000,
         crit: 0,
         critDamage: 0,
         defensePenetration: 0,
         chargeCount: 0,
-        enemyDefense: 0,
-        enemyHp: 10_000_000,
         numRounds: 1,
         // A scheduled (no-caster) HoT on the focus/heal target — ticks every turn via
         // playerTurn.ts's `tickHot`, holder === target branch (the gate under review).

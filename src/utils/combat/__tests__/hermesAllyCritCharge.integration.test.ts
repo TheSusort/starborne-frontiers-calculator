@@ -172,8 +172,6 @@ function runHermes(opts: { hits: number; pattern: ParsedPattern; enemies: EnemyA
                 },
             ],
         },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],

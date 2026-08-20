@@ -241,6 +241,12 @@ export interface PassiveSlotHit {
     target: Ability['target'];
 }
 
+/** DISPLAY ONLY. The round chart needs a number for a turn that struck nobody; this is NOT a
+ *  reading of any enemy's HP, and the gate-facing `enemyHpPct` on the same turn is ABSENT.
+ *  Kept at 100 so the chart and every golden stay byte-identical across SP-4d. The honest display
+ *  value for a multi-enemy roster is a separate question — filed with #331. */
+export const DISPLAY_ENEMY_HP_PCT_NO_VICTIM = 100;
+
 /** Everything one player actor's turn contributes to the round's RoundData row. */
 export interface PlayerTurnResult {
     action: 'active' | 'charged';
@@ -512,9 +518,9 @@ export interface PlayerTurnArgs {
     pendingAccumulators?: PendingAccumulator[];
     /** SP-4c-2b: absent on a no-victim turn (no victim ⇒ no defence to pierce). */
     enemyDefense?: number;
-    /** SP-4c-2b: absent on a no-victim turn. NOTE the residual at the `enemyHpPct` derivation
-     *  below — it still answers 100 when this is 0, which is byte-identical to the ghost's reading
-     *  but is not yet honest. See the plan's §B residual note. */
+    /** SP-4c-2b: absent on a no-victim turn. SP-4d: the `enemyHpPct` derivation below now answers
+     *  `undefined` rather than 100 when this is absent — the honest "no reading" answer, not the
+     *  ghost's fabricated one. */
     enemyHp?: number;
     enemyType?: EnemyBaseClass;
     // Required (Phase 3): the engine always passes its internal bus (wrapping the optional
@@ -934,7 +940,9 @@ function chargeGainFromSkill(args: {
         const scale =
             !primary || primary.countComparator != null
                 ? 1
-                : evaluateCondition(primary, args.ctxFor.get(ability.id) ?? args.fallbackCtx);
+                : // SP-4d: an unresolvable scaling source contributes no charge.
+                  (evaluateCondition(primary, args.ctxFor.get(ability.id) ?? args.fallbackCtx) ??
+                  0);
         gain += scale * ability.config.amount;
     }
     return gain;
@@ -1245,29 +1253,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  `ctx`) — adding them to postDebuffGateCtx or modifierCtx would change which gates those
      *  contexts can resolve.
      *
-     *  ⚠️ NAMED RESIDUAL — omission does NOT answer "there is no target". An earlier version of this
-     *  doc claimed it did ("rather than inventing one with zeroed stats"); that was wrong, and it was
-     *  the only one of this rung's three phantoms that a comment actively denied. All three fields are
-     *  optional with a `?? 0` default (`evaluateConditions.ts`'s `stat-vs-target` arm,
-     *  roundContext.ts:158-162), and `stat-vs-target` resolves
-     *  `statComparator === 'lt' ? self < target : self > target`. So with the slice empty the target
-     *  reads **0**, and a **`gt`** comparator is TRUE against nobody — the same shape as the
-     *  `enemyHpPct: 100` residual, an invented weakling rather than an absent enemy.
+     *  DISCHARGED (was a NAMED RESIDUAL through SP-4d task 2) — omission now correctly answers "there
+     *  is no target". `ConditionContext.targetSpeed`/`targetCurrentHp`/`targetCritPower` are no
+     *  longer defaulted with `?? 0`: `buildRoundContext` (roundContext.ts) conditionally spreads each
+     *  one, withholding the KEY entirely when this slice is empty, and `evaluateConditions.ts`'s
+     *  `stat-vs-target` arm returns `undefined` rather than comparing against a fabricated 0.
+     *  `conditionMet` rejects that `undefined` above the comparator switch, so with the slice empty a
+     *  **`gt`** comparator now reads FALSE against nobody, not TRUE — the same fix shape as the
+     *  `enemyHpPct` derivation this task closes.
      *
-     *  REACHABLE, unlike the other two: this slice is spread into `ctx` (further down), which
-     *  `gateFiringAbilities` uses to gate heal/shield/buff/charge payloads. That consumer is
-     *  deliberately NOT victim-fenced — the repair must land on a no-victim turn — so the gate really
-     *  does evaluate. Nothing suppresses it.
+     *  REACHABLE: this slice is spread into `ctx` (further down), which `gateFiringAbilities` uses to
+     *  gate heal/shield/buff/charge payloads. That consumer is deliberately NOT victim-fenced — the
+     *  repair must land on a no-victim turn — so the gate really does evaluate, and now evaluates
+     *  honestly rather than against an invented target.
      *
-     *  CORPUS-INERT ON ONE LEG ONLY, which is weaker than residuals (b)/(c) and worth stating plainly.
      *  Exactly three corpus ships carry `stat-vs-target`, measured over parsed abilities:
-     *    • Bayah   (charged control + debuff, crit-power, `gt`) — phantom-satisfiable
-     *    • Cobalt  (active additional-damage, hp, `gt`)         — phantom-satisfiable
-     *    • Chakara (active charge, speed, `lt`)                 — SAFE: `self < 0` is never true
-     *  The single leg holding it inert is that none of the three is an ally-target ship (§A.2), so
-     *  none can take a no-victim turn. `noVictimResidualTripwires.test.ts` case (c) fails the day one
-     *  does. The fix when that happens: make `ConditionContext.targetSpeed`/`targetCurrentHp`/
-     *  `targetCritPower` carry an explicit absent-target answer instead of `?? 0`. */
+     *    • Bayah   (charged control + debuff, crit-power, `gt`)
+     *    • Cobalt  (active additional-damage, hp, `gt`)
+     *    • Chakara (active charge, speed, `lt`) — was always SAFE regardless of this fix: `self < 0`
+     *      is never true by arithmetic alone.
+     *  None of the three is an ally-target ship (§A.2), so none can take a no-victim turn in the
+     *  shipped corpus today — `noVictimAbsentSubject.integration.test.ts` (SP-4d task 3) pins the
+     *  synthetic shape directly, since no shipped kit can build it. */
     const victimStatGateCtx = (v: CombatActor | undefined) =>
         v !== undefined
             ? {
@@ -1365,20 +1372,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // during the turn walk — so on a positional run (since SP-4b-2a, every DPS-calculator run)
     // this reads the victim's HP as it stood when THIS actor's turn began, which is the intended
     // "entering this turn" semantics for the hp-threshold gates, not a per-round scalar.
-    // SP-4c-2b: with no victim there is no HP to have declined, so the decline is 0. NAMED RESIDUAL
-    // (plan §B): `enemyHpPct` below then still answers 100 — "a healthy enemy" — because
-    // `PlayerRoundCtx.enemyHpPct` is required. Byte-identical to the ghost's reading (§A.4: the
-    // decline is always 0 on these turns), but not yet honest; a separate rung widens it.
-    // MEASURED CORPUS-INERT, so nobody can observe the phantom 100 today. The gate that would read
-    // it is `hp-threshold` with `hpComparator: 'above'` and `hpSubject` 'enemy'/default, and a scan
-    // of all 147 corpus ships' parsed abilities (165 hp-threshold conditions) found ZERO of them:
-    // the only enemy-subject HP gates in the corpus are `below`, and a `below` gate against 100
-    // reads FALSE — which is the correct "there is no enemy" answer anyway. Pinned by
-    // `noVictimResidualTripwires.test.ts`, which fails loudly the day a kit adds such a gate. The
-    // fix sites when that happens are `PlayerRoundCtx.enemyHpPct` (this file, ~248, make it
-    // optional) and this derivation.
-    const enemyHpDecline = hasVictim ? Math.max(0, enemyHp - enemy.currentHp) : 0;
-    const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+    // SP-4d: with no victim there is no HP to have declined and no denominator to divide by, so
+    // there is NO READING — the gate-facing value is absent, and every enemy-HP gate on this turn
+    // is unresolvable rather than satisfied by a fabricated 100 ("a healthy enemy"). The
+    // 4c-2b-era residual note that stood here is discharged; do not restore a `: 100` fallback.
+    // The `: 0` arm is REACHABLE — do not collapse this ternary. A victim with max HP 0 is a real
+    // victim with no HP, i.e. 0%, which is a different answer from `undefined` ("no victim") and
+    // from 100 ("a healthy enemy"). It is NOT reached the obvious way: `normalizeRoster` floors an
+    // ENEMY's max HP to 1,000,000, so `bareEnemy({ stats: { hp: 0 } })` never gets here. It is
+    // reached on an ENEMY's own turn against a PLAYER-side actor whose `stats.hp` is omitted or
+    // zero — the player side carries no such floor. Measured by instrumenting this branch over the
+    // combat suite: 4 hits, every one with victim id `'attacker'`.
+    const enemyHpPct = hasVictim
+        ? enemyHp > 0
+            ? Math.max(0, 100 * (1 - Math.max(0, enemyHp - enemy.currentHp) / enemyHp))
+            : 0
+        : undefined;
 
     const firingSkill = selectFiringSkill(shipSkills, action);
     // noCrit is read from the UNGATED skill: the flag is a property of the attack
@@ -1815,6 +1824,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
+        // SP-4d: the entry counts above are all 0 on a no-victim turn (see the `corrosionEntries
+        // = []` default note at this function's destructure), which is ALSO what a real victim
+        // with no debuffs/DoTs looks like — the sum alone cannot tell the two apart. `hasVictim`
+        // is the same discriminator every other victim-derived field in this ctx already uses
+        // (victimStatGateCtx/victimShieldGateCtx below).
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
@@ -2179,6 +2194,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // Include the foreign caster's ability-sourced self statuses (e.g. its self-granted
                 // gate buffs) so its own aura's gate sees them — matches the local priorAbilitySelfNames.
                 includeAbilitySelfNames: true,
+                // SP-4d: this ctx gates the FOREIGN caster's OWN enemy-side aura/accum ability
+                // against whether IT currently applies to THIS actor's resolved victim this turn
+                // (it feeds `activeAbilityStatuses('enemy', resolveCtx(...), actor.id, targetId)`
+                // below) — so the relevant "opposing victim" is the ACTING actor's own `hasVictim`,
+                // the same discriminator the local (non-foreign) contexts in this function use.
+                noOpposingVictim: !hasVictim,
             });
             foreignCtxMemo.set(casterId, c);
         }
@@ -2261,6 +2282,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
+        // SP-4d: see preDebuffGateCtx's matching note above — same `hasVictim` discriminator.
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
@@ -2370,6 +2393,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
+        // SP-4d: see preDebuffGateCtx's matching note above — same `hasVictim` discriminator.
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
@@ -2634,6 +2659,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         roundCrit,
         enemyHpPct,
+        // SP-4d: see preDebuffGateCtx's matching note above — same `hasVictim` discriminator.
+        // This is the ctx `gateFiringAbilities` gates against just below, i.e. the one that
+        // actually reaches the Hermes-shaped repro (a self-shield gated on `enemy-debuff eq 0`).
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
@@ -2667,9 +2696,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // THIS ctx, distinct from Berserker's Marauder Rage which drains via the on-deal-damage
         // reactive path instead). aoeVictimIds is the actor's own splash-pattern footprint
         // (already computed pre-turn by buildTurnArgs for the AoE-purge fan-out, E3) — undefined
-        // in DPS/non-positional mode → default 1 (single-target DPS, the faithful "Tygr doesn't
-        // add charge against one target" behaviour).
-        enemiesHitThisCast: aoeVictimIds?.length,
+        // in DPS/non-positional mode, which is exactly the single-target-cast and no-victim-cast
+        // cases alike. SP-4d Task 8: those two are NOT the same measurement — a single-target
+        // cast hit its one target (1), a no-victim cast hit nobody (0) — so the fallback is keyed
+        // on `hasVictim` (the same discriminator every other victim-derived field in this ctx
+        // uses), not a bare `?? 1`. A prior rung dropped that `?? 1` default outright, which made
+        // the single-target case read absent instead of 1 (Tygr's own `eq 1`-shaped gate would
+        // silently never fire); this restores the correct-for-single-target value while also
+        // fixing the no-victim value from absent to the honest 0.
+        enemiesHitThisCast: aoeVictimIds?.length ?? (hasVictim ? 1 : 0),
         // Ship-kit Wave 4, Task 3 (review follow-up): SAME field/derivation as preDebuffGateCtx
         // (:1444) and modifierCtx (:1724) above — REQUIRED here because THIS ctx is what
         // gateFiringAbilities consumes just below (:1956) to gate `type:'control'` payload
@@ -4463,7 +4498,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         action,
         roundCrit,
         hitCrits,
-        enemyHpPct,
+        enemyHpPct: enemyHpPct ?? DISPLAY_ENEMY_HP_PCT_NO_VICTIM,
         // SP-4c-2b: a no-victim cast inflicted no DoT on anybody, so the round row reports NONE —
         // neither landed nor resisted. Both engine derivations read this pair, and each is wrong if
         // only `dotsLanded` is touched: `appliedDoTs: dotsConfig` (engine.ts:11240) would display

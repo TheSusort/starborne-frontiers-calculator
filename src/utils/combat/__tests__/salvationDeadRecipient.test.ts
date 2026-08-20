@@ -86,8 +86,6 @@ const buildCtx = (
         grantExtraAction: () => {},
         playerIds,
         lastTurnCtxByActor: new Map(),
-        enemyHp: 100000,
-        cumulativeDamage: 0,
         recordResisted: () => {},
         oncePerCombatFired: new Set<string>(),
         healing,

@@ -118,8 +118,6 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [basicAttack()] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 6, // enough rounds for the proc gate to fire repeatedly
     selfBuffs: [],
     enemyDebuffs: [],

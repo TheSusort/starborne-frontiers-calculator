@@ -5,7 +5,26 @@ export interface ConditionContext {
     selfBuffNames: string[];
     selfDebuffNames: string[];
     enemyBuffNames: string[];
-    enemyDebuffCount: number;
+    /** SP-4d: OPTIONAL, and absent means "there is no opposing victim to count debuffs on" — not
+     *  "the victim has zero debuffs". Per-victim, like `enemyHpPct`/`enemyDotCount`/`enemyShielded`:
+     *  a no-victim turn (an ally-targeted cast that resolves nobody) must not be indistinguishable
+     *  from a real victim with no debuffs, because an `eq 0` gate is satisfiable by the former and
+     *  must not be by the latter (see `evaluateCondition`'s `enemy-debuff` arm). `buildRoundContext`
+     *  derives this from entry-array lengths that are themselves 0 on both a no-victim turn AND a
+     *  debuff-free victim — see its `noOpposingVictim` flag for how the two are told apart.
+     *
+     *  COMPOSITION WITH `enemyDebuffNames` (the OTHER optional sentinel on this field pair, which
+     *  means something completely different): `enemyDebuffNames` absent means "the caller has not
+     *  opted into name matching" and falls back to reading THIS field; `enemyDebuffNames` present
+     *  (even as `[]`) means "a real name-matched answer, read it directly, `enemyDebuffCount` is
+     *  irrelevant". The two absences do not collide because callers only ever populate
+     *  `enemyDebuffNames` when they have a real resolved victim to read names off of (see
+     *  `roundContext.ts` / `engine.ts`'s `tgt ? {enemyDebuffNames: ...} : {}` gating) — so on a
+     *  no-victim turn `enemyDebuffNames` is ALSO absent, the name-gated branch never engages, and
+     *  a name-gated `enemy-debuff` condition falls through to this field, which is itself absent.
+     *  A name-gated gate with no victim is therefore unresolvable via the SAME path as the bare
+     *  gate, not a separately-guarded one. */
+    enemyDebuffCount?: number;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for `enemy-debuff`
      *  conditions that carry a `buffName` (e.g. Tygr's "to enemies with Stasis or Disable",
      *  Incinerator's "to enemies afflicted with Inferno"). OPTIONAL SENTINEL: `undefined` means
@@ -16,7 +35,8 @@ export interface ConditionContext {
      *  requirement) never populates this; only the live combat engine (real/positional target)
      *  opts in. Control/marker debuff names come from `ownerDebuffNamesFor`; DoT names (Inferno/
      *  Corrosion/Bomb) are synthesized base-type names since DoTs are tracked as counted entry
-     *  arrays with no names of their own (see roundContext.ts). */
+     *  arrays with no names of their own (see roundContext.ts). See `enemyDebuffCount`'s own doc
+     *  for how this sentinel composes with SP-4d's no-opposing-victim sentinel. */
     enemyDebuffNames?: string[];
     enemyType?: EnemyBaseClass;
     effectiveCritRate: number; // 0..100
@@ -28,7 +48,13 @@ export interface ConditionContext {
     enemyAdjacentCount: number;
     enemyDestroyedCount: number;
     selfHpPct: number; // 0..100
-    enemyHpPct: number; // 0..100
+    /** SP-4d: OPTIONAL, and absent means "there is no enemy to ask about" — not "an enemy at full
+     *  health". Absent on a no-victim turn (an ally-targeted cast resolves nobody) and at drain
+     *  time (the fight-wide reading it used to carry described no actor on the board). Every arm
+     *  that reads it returns `undefined` when it is absent; `conditionMet` rejects that before the
+     *  comparator switch. Do NOT reintroduce a `?? 100` here or at any builder — that default is
+     *  the phantom this rung deletes (spec §3.2: it was materialised in TWO layers). */
+    enemyHpPct?: number; // 0..100
     targetHpPct?: number; // 0..100 — heal target's live HP%, threaded in healing mode only
     /** True when the condition owner has the lowest Speed among its (player) team
      *  (ties → all tied qualify). Optional; defaults to true via buildRoundContext (a lone
@@ -45,9 +71,13 @@ export interface ConditionContext {
      *  the engine; defaults false (DPS mode / no shield). Narrower than `selfShielded`. */
     selfShieldFull?: boolean;
     /** True when the condition owner's TARGET currently has a shield (the resolved victim's
-     *  shieldPool > 0) — the target-side mirror of `selfShielded`. Live-derived by the engine;
-     *  defaults false (DPS mode's dummy victim carries no shield pool). Used by Malvex's charged
-     *  "If the target has a Shield, it gains Barrier for 1 hit". */
+     *  shieldPool > 0) — the target-side mirror of `selfShielded`. Live-derived by the engine.
+     *  SP-4d: THREE distinct states now — `true`/`false` are real per-victim readings (DPS mode's
+     *  configured stand-in reads `false`, a real shield-carrying victim reads `true`); `undefined`
+     *  means there is no opposing victim to ask about at all (a no-victim turn), which
+     *  `evaluateCondition`'s `enemy-shield` arm keeps distinct from `false` — collapsing it to
+     *  `false` (as `?? false`/`? 1 : 0` did before this rung) let an `eq 0`/`lte` gate fire against
+     *  nobody. Used by Malvex's charged "If the target has a Shield, it gains Barrier for 1 hit". */
     enemyShielded?: boolean;
     /** True when the condition owner was hit by a direct attack this round (damage landed
      *  on shield or HP). Live-derived by the engine; defaults false (DPS / not-yet-hit). */
@@ -82,29 +112,45 @@ export interface ConditionContext {
      *  critDamage itself). Defaults to 0 everywhere else (DPS-safe: no other ConditionContext
      *  builder populates it, so it's inert for every ship besides Wildfire). */
     selfCritPower?: number;
-    /** SP-C — the acting unit's target's effective crit power. Default 0 (no enemy crit-power
-     *  config in DPS → an owner with any crit power out-competes it). Live-derived in the engine. */
+    /** SP-C — the acting unit's target's effective crit power. SP-4d: OPTIONAL, and absent means
+     *  no target to compare against — a `stat-vs-target` gate is then unresolvable rather than
+     *  satisfied by a fabricated 0 (Bayah/Cobalt's `gt` clauses no longer fire against nobody).
+     *  DPS mode still supplies a real configured value. Live-derived in the engine. */
     targetCritPower?: number;
     /** SP-C — the acting unit's own Speed. Default 0. Live-derived (ship stat / real actor). */
     selfSpeed?: number;
     /** SP-C — comparison target Speed. DPS: configured enemySpeed. Positional: MIN Speed among
-     *  damaged enemies (Chakara "all damaged enemies have more Speed"). Default 0. */
+     *  damaged enemies (Chakara "all damaged enemies have more Speed"). SP-4d: OPTIONAL, and
+     *  absent means no target — unresolvable, not a fabricated 0. */
     targetSpeed?: number;
     /** SP-C — the acting unit's ABSOLUTE current HP (not %). Default 0. DPS: ship max HP
      *  (full-HP assumption). Live-derived in the engine. */
     selfCurrentHp?: number;
-    /** SP-C — target's ABSOLUTE current HP (not %). Default 0. DPS: configured enemyHp. */
+    /** SP-C — target's ABSOLUTE current HP (not %). DPS: configured enemyHp. SP-4d: OPTIONAL,
+     *  and absent means no target — unresolvable, not a fabricated 0. */
     targetCurrentHp?: number;
     /** SP-D — the number of enemies DAMAGED by THIS cast (Berserker/Tygr's "hitting N or more
-     *  enemies" gates). Default 1 (DPS single-target mode — a ≥2/≥3 gate is inert, the faithful
-     *  behaviour). Live-derived by the positional engine from the firing actor's footprint. */
+     *  enemies" gates). SP-4d Fix wave 1: OPTIONAL, and absent means no footprint has been
+     *  recorded for this owner yet this combat — unresolvable, not a fabricated 1. SP-4d Task 8
+     *  closed the sibling residual: an AoE cast reads N, a genuine single-target cast reads 1, and
+     *  a cast that resolves NO victim (an ally-targeted cast that hit nobody) now reads a real
+     *  measurement, 0 — it hit zero enemies — not a fabricated 1 (`noVictimResidualTripwires.test.ts`
+     *  case (b), retired). Only "no cast recorded at all for this owner" stays absent/unknown.
+     *  Live-derived by the positional engine from the firing actor's footprint. */
     enemiesHitThisCast?: number;
     /** SP-D — per-target DoT-ONLY entry subtotal (corrosion + inferno + bomb entry-array
      *  lengths, +acidicDecay once SP-E adds it). Distinct from `enemyDebuffCount`, which also
      *  folds in landed CONTROL/marker debuffs — `enemy-dot-count` must never be satisfied by a
-     *  non-DoT debuff (e.g. Stasis). Default 0 (DPS-safe / no DoTs). Derived by buildRoundContext
-     *  from the SAME corrosionEntryCount/infernoEntryCount/bombCount already threaded through the
-     *  funnel for `enemyDebuffCount` — no new engine seam required. */
+     *  non-DoT debuff (e.g. Stasis). Derived by buildRoundContext from the SAME
+     *  corrosionEntryCount/infernoEntryCount/bombCount already threaded through the funnel for
+     *  `enemyDebuffCount` — no new engine seam required. SP-4d: OPTIONAL, and absent means "there
+     *  is no opposing victim to count DoTs on" — not "the victim carries zero DoTs". Same
+     *  per-victim distinction as `enemyDebuffCount`/`enemyHpPct`/`enemyShielded`: the entry-array
+     *  lengths this is summed from are themselves 0 on both a no-victim turn AND a DoT-free real
+     *  victim, so `buildRoundContext` needs its own `noOpposingVictim` signal (not the counts) to
+     *  tell the two apart. `evaluateCondition`'s bare `enemy-dot-count` arm reads this field
+     *  as-is — no `?? 0` — so the absence propagates instead of being fabricated back into a
+     *  satisfiable 0. */
     enemyDotCount?: number;
     /** SP-D — optional per-family DoT entry count lookup, for `enemy-dot-count` conditions that
      *  carry a `buffName` (Belladonna's "3+ Acidic Decay"). Absent/missing family → 0 (the
@@ -125,8 +171,10 @@ export interface ConditionContext {
     killedEnemyHadDebuff?: boolean;
 }
 
-/** Resolve one condition to a count (>= 0). 0 means "not met". */
-export function evaluateCondition(cond: Condition, ctx: ConditionContext): number {
+/** Resolve one condition to a count (>= 0), or `undefined` when the condition's SUBJECT DOES NOT
+ *  EXIST (SP-4d). `undefined` is not "zero" and not "unknown": it means the question cannot be
+ *  asked, so `conditionMet` refuses it regardless of comparator and `scaledBonus` pays nothing. */
+export function evaluateCondition(cond: Condition, ctx: ConditionContext): number | undefined {
     // SP-F F4: `ally-on-team` (Isha/Nayra's reciprocal Override gate) is a LIVE roster check when
     // the team-sim provides ally ship names; otherwise it falls back to the manual assume-met path
     // (single-ship DPS has no roster → a "if X is on the same team" gate is treated as met). Handled
@@ -154,7 +202,10 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             // (no buffName, OR the caller left enemyDebuffNames undefined — the DPS-parity
             // sentinel) falls back to the legacy name-agnostic count of ALL landed enemy
             // debuffs + DoTs. See the ConditionContext.enemyDebuffNames doc for the sentinel
-            // rationale.
+            // rationale. SP-4d: `enemyDebuffCount` is itself optional now — this line already
+            // returns it as-is (no `?? 0`), so an absent reading (no opposing victim) propagates
+            // as `undefined` rather than being fabricated into a satisfiable 0. See
+            // ConditionContext.enemyDebuffCount's own doc for how the two sentinels compose.
             if (cond.buffName && ctx.enemyDebuffNames)
                 return countNames(ctx.enemyDebuffNames, cond.buffName);
             return ctx.enemyDebuffCount;
@@ -178,14 +229,25 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.stealthedEnemyCount ?? 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
+        // SP-4d: was `?? 1` — a cast that resolved no victim booked a footprint of ONE. Absent now
+        // means no footprint was recorded, which does not resolve. Tygr's `gte 2` and Berserker's
+        // `gte 3` are unaffected either way; an `lte`/`eq 0` reader is the case this closes.
         case 'enemies-hit-this-cast':
-            return ctx.enemiesHitThisCast ?? 1;
+            return ctx.enemiesHitThisCast;
         case 'enemy-dot-count':
+            // Named-family branch (Belladonna's "3+ Acidic Decay") is untouched by SP-4d: it is
+            // runtime-inert today (no DoT family exists in the game yet — `enemyDotFamilyCounts`
+            // reads every family as 0 regardless of victim), so there is no live no-victim
+            // fabrication to close here. The bare branch below is: `?? 0` would re-fabricate the
+            // exact absence `enemyDotCount`'s own doc says must propagate.
             if (cond.buffName) return ctx.enemyDotFamilyCounts?.[cond.buffName] ?? 0;
-            return ctx.enemyDotCount ?? 0;
+            return ctx.enemyDotCount;
         case 'killed-enemy-had-debuff':
             return ctx.killedEnemyHadDebuff ? 1 : 0;
         case 'stat-vs-target': {
+            // The OWNER always exists, so an absent self reading is a caller omission (0), not a
+            // missing subject. The TARGET is the subject: absent means nobody to compare against,
+            // and a `gt` comparator against a fabricated 0 was TRUE against nobody (spec §2).
             const self =
                 cond.compareStat === 'crit-power'
                     ? (ctx.selfCritPower ?? 0)
@@ -194,21 +256,25 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
                       : (ctx.selfCurrentHp ?? 0);
             const target =
                 cond.compareStat === 'crit-power'
-                    ? (ctx.targetCritPower ?? 0)
+                    ? ctx.targetCritPower
                     : cond.compareStat === 'speed'
-                      ? (ctx.targetSpeed ?? 0)
-                      : (ctx.targetCurrentHp ?? 0);
+                      ? ctx.targetSpeed
+                      : ctx.targetCurrentHp;
+            if (target === undefined) return undefined;
             return (cond.statComparator === 'lt' ? self < target : self > target) ? 1 : 0;
         }
-        case 'hp-threshold':
-            return evalHpThreshold(cond, ctx) ? 1 : 0;
-        // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as
-        // SCALING sources for HP-proportional modifiers (Akula/Tithonus) — perUnit
-        // is "per HP point". As a bare gate they pass while the enemy lives.
+        case 'hp-threshold': {
+            const met = evalHpThreshold(cond, ctx);
+            return met === undefined ? undefined : met ? 1 : 0;
+        }
+        // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as SCALING sources
+        // for HP-proportional modifiers (Akula/Tithonus) — perUnit is "per HP point". As a bare
+        // gate they pass while the enemy lives. SP-4d: with no enemy neither question resolves —
+        // and note the missing-HP arm must NOT compute `100 - 0`, which would pay the FULL bonus.
         case 'enemy-hp-pct':
             return ctx.enemyHpPct;
         case 'enemy-hp-missing-pct':
-            return 100 - ctx.enemyHpPct;
+            return ctx.enemyHpPct === undefined ? undefined : 100 - ctx.enemyHpPct;
         case 'self-hp-missing-pct':
             return 100 - ctx.selfHpPct;
         case 'lowest-speed-ally':
@@ -219,8 +285,12 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.selfShielded ? 1 : 0;
         case 'self-shield-full':
             return ctx.selfShieldFull ? 1 : 0;
+        // SP-4d: `undefined` (no opposing victim) must stay `undefined`, not collapse to `0` — a
+        // ternary (`ctx.enemyShielded ? 1 : 0`) would treat "no victim" and "victim, no shield"
+        // identically, which is exactly the fabrication an `eq 0`/`lte` gate can exploit against
+        // nobody. Real `true`/`false` still resolve to 1/0 as before.
         case 'enemy-shield':
-            return ctx.enemyShielded ? 1 : 0;
+            return ctx.enemyShielded === undefined ? undefined : ctx.enemyShielded ? 1 : 0;
         case 'not-hit-this-round':
             return ctx.wasHitThisRound ? 0 : 1;
         case 'first-activator':
@@ -251,13 +321,21 @@ function countNames(names: string[], filter?: string): number {
 // 'self' (e.g. "if at full HP"), or the heal target's live HP when hpSubject is 'target'
 // (reactive crossing gates — healing mode only; absent targetHpPct defaults to 100 so the
 // condition is inert under DPS assumptions). Under DPS assumptions all three are 100.
-function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean {
+function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean | undefined {
     const hp =
         cond.hpSubject === 'self'
             ? ctx.selfHpPct
             : cond.hpSubject === 'target'
               ? (ctx.targetHpPct ?? 100)
               : ctx.enemyHpPct;
+    // SP-4d: only the enemy/default subject can be absent — `selfHpPct` is required and the heal
+    // target's reading keeps its documented 100 default (healing-mode inertness, not a phantom).
+    // The guard matters because without it `hp > t` / `hp < t` against `undefined` is just
+    // `false`, so this arm would answer `0` for "there is no enemy" — indistinguishable from "the
+    // enemy is at 0%", and satisfiable by an `eq 0` or `lte N` gate that should fire against
+    // nobody. Pinned by absentSubject.test.ts's "negation idiom (eq 0) is not satisfied by an
+    // absent enemy either" and its hp-threshold comparator-proof (lte) case.
+    if (hp === undefined) return undefined;
     const t = cond.hpPercent ?? 0;
     return cond.hpComparator === 'above' ? hp > t : hp < t;
 }
@@ -269,6 +347,20 @@ function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean {
  */
 export function conditionMet(cond: Condition, ctx: ConditionContext): boolean {
     const count = evaluateCondition(cond, ctx);
+    // SP-4d: an absent subject must be represented as `undefined`, never `0` — THAT
+    // representation, not this guard's position, is what closes the phantom. A `0` would satisfy
+    // an `eq 0` or `lte N` gate that `undefined` never does, so what must be pinned is each arm
+    // (`hp-threshold`, `stat-vs-target`, `enemies-hit-this-cast`) returning `undefined` rather
+    // than `0`. See absentSubject.test.ts's comparator-proof cases, which mutation-verify exactly
+    // that: removing an arm's absent-subject guard turns them red.
+    //
+    // A behavioural test therefore CANNOT pin this line's position, and none should claim to:
+    // moving it below the switch is byte-identical, because every comparator is already false
+    // against a real `undefined` (`undefined >= 2`, `undefined <= 1`, `undefined === 0`). It sits
+    // here anyway so the switch never receives an absent count — that keeps the comparator arms
+    // free of non-null assertions and stops their correctness depending on JS's coercion rules,
+    // which a later refactor to `(count ?? 0) >= threshold` would silently break.
+    if (count === undefined) return false;
     if (cond.countComparator != null && cond.countThreshold != null) {
         switch (cond.countComparator) {
             case 'gte':
@@ -338,7 +430,10 @@ export function scaledBonus(ability: Ability, ctx: ConditionContext): number {
     // Sum across the scaling source's anyOf OR-group so a binary "X or Y" bonus (Rikra's
     // Taunted/Provoked) fires on either; a lone condition is a singleton group → unchanged.
     const count = anyOfGroupIndices(ability.conditions, idx).reduce(
-        (sum, i) => sum + evaluateCondition(ability.conditions[i], ctx),
+        // SP-4d: an absent subject contributes 0 rather than its fabricated reading. Measured
+        // inert on the shipped corpus (spec §6: Akula and Tithonus are the only readers, both are
+        // attackers, and every evaluation in the suite carries a live per-victim value).
+        (sum, i) => sum + (evaluateCondition(ability.conditions[i], ctx) ?? 0),
         0
     );
     const bonus = count * ability.scaling.perUnit;

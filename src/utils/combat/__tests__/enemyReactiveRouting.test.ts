@@ -312,8 +312,6 @@ const liberatorBattle = (withPassive: boolean): CombatEngineInput => {
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [e2eBasicAttack()] },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 4,
         selfBuffs: [],
         enemyDebuffs: [],

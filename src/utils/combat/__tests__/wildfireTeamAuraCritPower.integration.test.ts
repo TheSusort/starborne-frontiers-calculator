@@ -189,8 +189,6 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],

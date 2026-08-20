@@ -89,6 +89,7 @@ import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
+    DISPLAY_ENEMY_HP_PCT_NO_VICTIM,
     HealingRuntimeCtx,
     PlayerActorRuntime,
     PlayerRoundCtx,
@@ -1202,25 +1203,6 @@ export interface CombatEngineInput {
     shieldPenetration?: number;
     chargeCount: number;
     shipSkills: ShipSkills;
-    /** Legacy fight-wide enemy scalars: both were the stat block of the dummy `enemy` actor that
-     *  SP-4c-2d deleted, so they no longer describe any victim.
-     *  - `enemyDefense` has ZERO readers left in this file (it is not even destructured in
-     *    `runCombat`; every other `enemyDefense` occurrence here is a comment, the unrelated
-     *    per-victim `enemyDefenseModifier`, or the victim-derived `enemyDefense` key on a turn ctx).
-     *  - `enemyHp` keeps exactly two, both enemy-HP% DENOMINATORS — the synthesized focus-skip row's
-     *    `enemyHpPct` and the drain ctx's — see the destructure comment in `runCombat`.
-     *  A victim's real defence/HP come from the positioned `enemyAttackers` roster instead. That
-     *  includes the healing mode's healer casting a `damage` ability at `target:'enemy'`: it lands on
-     *  a real positioned enemy and feeds `basis:'damage-dealt'` heal/shield riders off THAT victim's
-     *  stats, so these scalars are no longer load-bearing there either.
-     *  Callers still pass them (deleting the fields is rung 4d's churn story): `dpsSimulator.ts`
-     *  forwards its own calculator fields — and, when the caller supplied no `enemyAttackers`, also
-     *  builds the synthesized enemy OUT of them, which is the one path by which they still influence
-     *  a fight; `healingEngineAdapter.ts` passes LEGACY_SINK_* constants; `battleSimulator.ts`'s
-     *  positional call omits them. Absent → `enemyHp` falls back to 1e9 (the old sink's HP, kept so
-     *  the two percentages above do not move). */
-    enemyDefense?: number;
-    enemyHp?: number;
     numRounds: number;
     /** Scheduled (manual + team) buffs — statusEngine input. */
     selfBuffs: SelectedGameBuff[];
@@ -1249,25 +1231,10 @@ export interface CombatEngineInput {
      *  Guard) reaches both the per-turn stats-snapshot and the live debuff-landing recompute
      *  when the focus is the target of an enemy debuff, instead of silently defaulting. */
     security?: number;
-    /** Legacy fight-wide enemy base security (A2 Task 2). ZERO readers in this file since SP-4c-2d:
-     *  its only consumer was `effectiveStatsOf.security` on the deleted dummy enemy actor. A real
-     *  enemy's security is read from its own `enemyAttackers[i].stats.security`. `dpsSimulator.ts`
-     *  still resolves `input.enemySecurity ?? 100` (the OLD landing-formula default) and passes it
-     *  here, and feeds the SAME resolved value into the synthesized enemy it builds when the caller
-     *  supplied no roster — that synthesized actor is now the only route by which this number
-     *  reaches a landing computation. Field removal is rung 4d's job. */
-    enemySecurity?: number;
     allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
     /** Attacker turn-order speed. Default 100. */
     speed?: number;
-    /** Legacy fight-wide enemy turn-order speed. ZERO readers in this file since SP-4c-2d — it was
-     *  the deleted dummy actor's `speed`, and no actor is built from it here any more; turn order
-     *  comes from each real actor's own speed. It still matters INDIRECTLY on the DPS path:
-     *  `dpsSimulator.ts`'s `synthesizedDpsEnemy` reads `enemySpeed ?? 50` as the synthesized enemy's
-     *  speed when the caller supplied no roster, which is why 50 (sorting last against a default-100
-     *  attacker, as the dummy did) is still the effective default there. Field removal is rung 4d. */
-    enemySpeed?: number;
     /** Caster heal-modifier stat (healing calc). Default 0. */
     healModifier?: number;
     /** FOCUS actor's ship role (Ship.type) for role-filtered ally-damage reactions
@@ -1867,17 +1834,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         chargeCount,
         // shipSkills is intentionally NOT destructured here — the cast/reactive split below
         // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
-        // SP-4c-2d: `enemyDefense` / `enemySecurity` / `enemySpeed` are no longer destructured —
-        // their only consumer was the deleted dummy actor's stat block. They remain on
-        // `CombatEngineInput` (removing them is rung 4d's ~200-file churn story, and `enemyHp` is a
-        // REQUIRED field). `enemyHp` still has TWO readers, both of them enemy-HP% denominators:
-        //   1. the synthesized focus-skip turn's row `enemyHpPct` (pushSynthesizedFocusSkipTurn); and
-        //   2. the drain context — it is passed as `enemyHp` into every drainQueue ctx, where
-        //      triggers.ts's `buildDrainContext` derives
-        //      `enemyHpPct = 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`, the denominator of
-        //      EVERY drain-time enemy-HP% condition gate.
-        // Its 1e9 default is the old sink's HP, kept so that number does not move.
-        enemyHp = 1_000_000_000,
+        // SP-4d: `enemyDefense` / `enemyHp` / `enemySecurity` / `enemySpeed` are no longer
+        // destructured here — they were the deleted dummy actor's stat block, and their last
+        // readers were enemy-HP% phantoms this rung retired (the drain ctx's derivation, then the
+        // skip row's). Task 6 deleted the fields from `CombatEngineInput` entirely. A victim's
+        // real HP/defence come from the positioned `enemyAttackers` roster.
         numRounds,
         selfBuffs,
         enemyDebuffs,
@@ -1975,9 +1936,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Nothing was left but the object. The literal `'enemy'` survives as `SENTINEL_ENEMY_ACTOR_ID`
     // (see its doc) — an id for the side-wide scheduled-debuff BUCKET, not an actor.
     //
-    // The four scalars still arrive on `CombatEngineInput` and are now nearly unread (`enemyHp`
-    // remains a REQUIRED field, so removing them is a ~200-file mechanical churn story: rung 4d).
-    // Do not reintroduce a stand-in actor to give them a home.
+    // The four scalars are GONE from `CombatEngineInput` — SP-4d deleted the fields once its
+    // earlier rungs had retired their last readers (the drain ctx's derivation, then the skip
+    // row's), and `tsc` enumerated the ~1,100 call-site lines that had been passing them. A
+    // victim's real HP/defence/security/speed come from its own `enemyAttackers` roster entry.
+    // Do not reintroduce a stand-in actor, or a scalar, to describe "the enemy" fight-wide.
 
     // The reported actor. Internal for now — the DPS adapter's attacker. The engine core
     // keys on this, never on the literal 'attacker' (end-state rule, spec). A later phase
@@ -2430,9 +2393,6 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // All mutable state declared fresh on every call
     let cumulativeDamage = 0;
-    // Non-focus (team) cumulative damage. Enemy HP decline everywhere uses
-    // cumulativeDamage + cumulativeTeamDamage; the row/summary cumulativeDamage stays focus-only.
-    let cumulativeTeamDamage = 0;
     let totalTeamRaw = 0;
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
@@ -2496,8 +2456,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     // the actor's own splash pattern from its resolved anchor position against the LIVE
     // opposing roster, known BEFORE runPlayerTurn returns (unlike the actual HP application,
     // which drivePositionalApply performs AFTER). Set at each of the three turn-firing call
-    // sites (focus/team/enemy), mirroring lastTurnCtxByActor's per-turn update. Absent id (no
-    // cast yet) → the enemiesHitThisCastFor delegate below defaults to 1.
+    // sites (focus/team/enemy), mirroring lastTurnCtxByActor's per-turn update. SP-4d Fix wave
+    // 1: absent id (no cast yet) → the enemiesHitThisCastFor delegate below now returns
+    // `undefined` (footprint UNKNOWN), not a fabricated 1 — see that delegate's own comment.
     const enemiesHitThisCastByActor = new Map<string, number>();
 
     // --- Heal target resolution (data, not a mode switch) ---
@@ -8129,21 +8090,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         // turn (dead heal-target OR stasised). Extracted from the two byte-identical sites
         // (handleDeadTargetSkip + the stasis gate) so the shape cannot drift.
         const pushSynthesizedFocusSkipTurn = (): void => {
-            // The row's `enemyHpPct` for a turn that struck nobody. SP-4c-2d: this used to read
-            // `Math.max(0, enemyHp - enemy.currentHp)` off the dummy sink, whose `currentHp` the
-            // round tail kept at `Math.max(0, enemyHp - (cumulativeDamage + cumulativeTeamDamage))`.
-            // Deleting the actor restores the SCALAR form the actor-read replaced, and the two are
-            // algebraically identical: substituting the tail's assignment collapses the expression
-            // to `min(cumulative, max(0, enemyHp))`. Every call site is inside the turn loop, i.e.
-            // BEFORE this round's `cumulativeDamage +=` fold, so the cumulative read here is the
-            // same end-of-previous-round value the actor carried. Measured across the change over
-            // the whole suite: 152 calls, old and new expression both 0 on every one.
-            const enemyHpDecline = Math.min(
-                cumulativeDamage + cumulativeTeamDamage,
-                Math.max(0, enemyHp)
-            );
-            const enemyHpPct =
-                enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+            // The row's `enemyHpPct` for a turn that never happened. SP-4d: this was the LAST
+            // reader of the `enemyHp` input — a scalar restored by 4c-2d when the dummy actor it
+            // described was deleted, dividing a cumulative-damage numerator (which positional
+            // credit never feeds) by a 1e9 denominator, so it reported 100 on all 152 measured
+            // calls. It is a DISPLAY value for a turn with no victim, so it now says so by name.
+            // Filed separately (with #331): on a round where the focus died, the chart therefore
+            // reports "Enemy HP: 100%" while the real enemy may be at 12% — that is the display
+            // layer's own question, and naming this constant is what makes it findable.
+            const enemyHpPct = DISPLAY_ENEMY_HP_PCT_NO_VICTIM;
             const lastKnownCtx = lastTurnCtxByActor.get(focusActorId);
             focusTurns.push({
                 action: 'active',
@@ -8313,24 +8268,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                         lastTurnCtxByActor,
                         reactiveDealtByOwner,
                         enemyType,
-                        enemyHp,
-                        // Drain-time HP% includes this round's damage SO FAR (the round
-                        // accumulators below are folded into cumulativeDamage only at
-                        // post-round assembly): a follow-up reacts to the state its trigger
-                        // created — e.g. an on-crit follow-up gated on enemy HP% sees the
-                        // enemy's HP AFTER the attacker's hit that just crit. This differs
-                        // from the attacker turn's own gates, which deliberately use the
-                        // entering-round HP (pre-existing convention, unchanged).
-                        // Map-sum: enemy-HP decline is focus + team cumulative + this round's
-                        // map totals across ALL actors (the drain reacts to the enemy's true
-                        // remaining HP, not just the focus actor's contribution).
-                        cumulativeDamage:
-                            cumulativeDamage +
-                            cumulativeTeamDamage +
-                            [...roundDamage.values()].reduce(
-                                (s, d) => s + d.direct + d.corrosion + d.inferno + d.detonation,
-                                0
-                            ),
+                        // SP-4d: `enemyHp` (IntentExecContext) deleted — it fed only the
+                        // buildDrainContext fight-wide `enemyHpPct` derivation this rung removed.
+                        // Fix wave 1: `cumulativeDamage` (IntentExecContext) is deleted too — it
+                        // had zero readers left anywhere in src/ once that derivation was gone
+                        // (verified by grep for `ctx.cumulativeDamage` / `.cumulativeDamage` across
+                        // src/, distinct from the engine's own local `cumulativeDamage` variable
+                        // and the live `RoundData.cumulativeDamage` display field, which are
+                        // unrelated). Do not reintroduce it as a "future consumer might want it"
+                        // field — that rationale is exactly what this rung exists to remove.
                         // Bomb damagePerStack/affinity now resolve per OWNER inside the executor
                         // (lastTurnCtxByActor.get(intent.ownerId)) — no global effectiveAttack/
                         // affinityMult here. The focus actor's entry resolves identically to the
@@ -8468,10 +8414,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // SP-D: live per-actor count of enemies damaged by that actor's most
                         // recent cast this round (Berserker's Marauder Rage, drained via
                         // on-deal-damage). Combat-wide map — no per-side sideCtx field needed
-                        // (mirrors turnsTakenFor/wasHitThisRoundFor). Absent id → default 1
-                        // (buildDrainContext).
-                        enemiesHitThisCastFor: (ownerId) =>
-                            enemiesHitThisCastByActor.get(ownerId) ?? 1,
+                        // (mirrors turnsTakenFor/wasHitThisRoundFor). SP-4d Fix wave 1: no `?? 1`
+                        // default — an owner with no recorded footprint (no delegate call has ever
+                        // set one for it, e.g. before its first turn this combat) has an UNKNOWN
+                        // footprint, not "hit exactly one enemy". Returning `undefined` lets
+                        // buildDrainContext's absent-subject guard leave the gate unresolved
+                        // instead of answering a fabricated 1. Tygr's `gte 2` and Berserker's
+                        // `gte 3` are unaffected — a fabricated 1 already failed both comparators.
+                        enemiesHitThisCastFor: (ownerId) => enemiesHitThisCastByActor.get(ownerId),
                         // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
@@ -9585,20 +9535,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
                             lastTurnCtxByActor.set(actor.id, turn.turnCtx);
                             // SP-D: record this cast's footprint size (aoeVictimIds — undefined in
-                            // DPS/non-positional mode → default 1) for the enemies-hit-this-cast
-                            // drain-time gate.
-                            // SP-4c-2b NAMED RESIDUAL, measured inert TWICE OVER: on a no-victim turn
-                            // `aoeVictimIds` is undefined (§A.4 — the ghost never had a position, so
-                            // it already was), so this books **1** for a cast that hit NOBODY. Left
-                            // alone deliberately. (1) Only two corpus ships gate on
-                            // `enemies-hit-this-cast` — Berserker (passive) and Tygr (active) — and
-                            // NEITHER is one of the 24 ally-target ships, so no shipped ship can both
-                            // take a no-victim turn and read this. (2) Both gates are `gte 2`/`gte 3`,
-                            // which a phantom 1 does not satisfy even if one could. Pinned by
-                            // `noVictimResidualTripwires.test.ts`; the honest value would be 0.
+                            // DPS/non-positional mode) for the enemies-hit-this-cast drain-time gate.
+                            // SP-4d Task 8: `tgt` (not `aoeVictimIds`) is the "did a victim resolve"
+                            // discriminator — mirrors playerTurn.ts's `hasVictim` (`enemy !==
+                            // undefined`, and `enemy` here IS `tgt`, see buildTurnArgs's conditional
+                            // spread). Was `?? 1`, which fabricated a footprint of 1 for a no-victim
+                            // turn (an ally-targeted cast that hit NOBODY) — the residual
+                            // `noVictimResidualTripwires.test.ts` used to tripwire because no corpus
+                            // ship could observe it (neither `enemies-hit-this-cast` reader,
+                            // Berserker/Tygr, is one of the 24 ally-target ships). Now books the
+                            // honest 0 for that case and still books 1 for a real single-target hit.
                             enemiesHitThisCastByActor.set(
                                 actor.id,
-                                focusTurnArgs.aoeVictimIds?.length ?? 1
+                                focusTurnArgs.aoeVictimIds?.length ?? (tgt !== undefined ? 1 : 0)
                             );
 
                             // Extra-action grants from this turn bump the attacker's pending-action
@@ -9908,10 +9857,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
                             // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
                             lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
-                            // SP-D: record this cast's footprint size (mirrors the focus site).
+                            // SP-D: record this cast's footprint size (mirrors the focus site,
+                            // including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback — see its note).
                             enemiesHitThisCastByActor.set(
                                 actor.id,
-                                teamTurnArgs.aoeVictimIds?.length ?? 1
+                                teamTurnArgs.aoeVictimIds?.length ?? (tgt !== undefined ? 1 : 0)
                             );
 
                             // Heal-target buffs: a walked team actor that IS the heal target surfaces its
@@ -10342,10 +10292,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                                 // its own future DoT entries would tick with this ctx).
                                 lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
-                                // SP-D: record this cast's footprint size (mirrors the focus/team sites).
+                                // SP-D: record this cast's footprint size (mirrors the focus/team
+                                // sites, including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback).
+                                // `tgt` is guaranteed defined in this branch (the enclosing
+                                // `if (skipDeadTargetTurn || tgt === undefined)` already bailed
+                                // otherwise — an enemy attacker always resolves a real victim, the
+                                // no-victim concept is player-ally-cast-only), so this is a no-op
+                                // for the enemy side; kept identical to the other two sites so all
+                                // three read the same expression rather than two agreeing by
+                                // construction and one by accident.
                                 enemiesHitThisCastByActor.set(
                                     actor.id,
-                                    enemyTurnArgs.aoeVictimIds?.length ?? 1
+                                    enemyTurnArgs.aoeVictimIds?.length ??
+                                        (tgt !== undefined ? 1 : 0)
                                 );
                                 // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
                                 // its own active self-buffs and the debuffs it landed on the heal target,
@@ -11092,20 +11051,19 @@ export function runCombat(rawInput: CombatEngineInput): {
         totalDetonationRaw += detonationDamage;
 
         // Team damage = Σ over all NON-focus actor entries of every channel (direct already
-        // includes its secondary/conditional sub-buckets, so they are NOT added separately).
-        // `totalRoundDamage + teamRoundDamage` is the round's SCALAR-channel total — exactly what
-        // `cumulativeDamage + cumulativeTeamDamage` accumulates and what the drain-time /
-        // focus-skip enemy-HP% denominators consume. It is NOT the real roster's HP delta: every
-        // per-victim amount (positional casts, reactive procs, per-victim DoT and detonation ticks)
-        // books on the per-victim maps instead, per the two-channel rule above. The identity used to
-        // hold literally because the round tail overwrote the dummy sink's HP with precisely this
-        // sum; SP-4c-2d deleted that write along with the actor.
+        // includes its secondary/conditional sub-buckets, so they are NOT added separately). It is
+        // NOT the real roster's HP delta: every per-victim amount (positional casts, reactive
+        // procs, per-victim DoT and detonation ticks) books on the per-victim maps instead, per the
+        // two-channel rule above. SP-4d deleted the `cumulativeTeamDamage` scalar that used to
+        // accumulate this alongside `cumulativeDamage` for the focus-skip enemy-HP% denominator
+        // (pushSynthesizedFocusSkipTurn) — that was its only reader, and the row now uses
+        // `DISPLAY_ENEMY_HP_PCT_NO_VICTIM` instead. `totalTeamRaw` below is the real (and only
+        // remaining) team-damage accumulator, surfaced on the result as `teamTotal`.
         let teamRoundDamage = 0;
         for (const [id, d] of roundDamage) {
             if (id === focusActorId) continue;
             teamRoundDamage += d.direct + d.corrosion + d.inferno + d.detonation + d.generic;
         }
-        cumulativeTeamDamage += teamRoundDamage;
         totalTeamRaw += teamRoundDamage;
 
         // SP-4c-2d DELETED THE ROUND-TAIL ENEMY-HP BLOCK. It had two arms and both went:
@@ -11128,8 +11086,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         // A test-only credit counter used to sit in the `else` arm, counting rounds in which damage
         // was BOOKED against the sink; SP-4c-2c deleted it after measuring 0 hits across the suite
         // (a zero nothing can falsify is not evidence). Its identifier is deliberately not repeated
-        // anywhere in this file. `cumulativeDamage` / `cumulativeTeamDamage` themselves survive —
-        // they are the report's scalar damage totals, not the dummy's HP ledger.
+        // anywhere in this file. `cumulativeDamage` survives — it is the report's scalar damage
+        // total, not the dummy's HP ledger. `cumulativeTeamDamage` did not: SP-4d deleted it once
+        // its only reader (this block's old enemy-HP% denominator) was gone.
 
         // Toxic Overflow end-of-round Corrosion spread (ship-kit W3, Task 9, ledger #49). Game rule
         // (constants/buffs.ts): "At the end of the round if a unit has Toxic Overflow and at least 1

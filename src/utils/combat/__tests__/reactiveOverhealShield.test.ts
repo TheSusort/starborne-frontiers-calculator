@@ -163,7 +163,6 @@ function makeShieldCtx(grantShieldToTarget: (raw: number, actor: CombatActor) =>
             ],
         ]),
         enemyHp: 100000,
-        cumulativeDamage: 0,
         recordResisted: () => {},
         healing,
     } as IntentExecContext;

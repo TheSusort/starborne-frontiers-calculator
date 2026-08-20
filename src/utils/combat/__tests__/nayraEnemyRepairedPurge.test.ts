@@ -140,8 +140,6 @@ describe('E5 Task 2: player-Nayra purge gated on target-repaired-this-round vs a
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: nayraFocusSkills(),
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],

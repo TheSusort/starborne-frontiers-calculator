@@ -44,11 +44,11 @@ const TEAM_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent. `enemyDefense: 5000` below is the vestigial fight-wide
-    // scalar (M6, inert on a positional run), so the same 5000 is carried onto the roster entry's
-    // own `stats.defence` where it is actually live. Nothing here measures damage — this file taps
-    // actor construction — but keeping the two in step means a later damage assertion added to
-    // this fixture is not silently facing a 0-defence enemy.
+    // SP-4b-2b: a run needs an opponent. 5000 lives on the roster entry's own `stats.defence`
+    // (the fight-wide `enemyDefense` scalar it used to be kept in step with was deleted in
+    // SP-4d). Nothing here measures damage — this file taps actor construction — but a
+    // non-zero defence means a later damage assertion added to this fixture is not silently
+    // facing a 0-defence enemy.
     enemyAttackers: bareEnemy({ stats: { defence: 5000, hp: 10_000_000 } }),
     attack: 10000,
     crit: 50,
@@ -56,8 +56,6 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     defensePenetration: 10,
     chargeCount: 0,
     shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    enemyDefense: 5000,
-    enemyHp: 300000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],

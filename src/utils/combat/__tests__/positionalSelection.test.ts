@@ -71,8 +71,6 @@ const BASE = (selection: ParsedTarget['selection']): CombatEngineInput => ({
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [basicAttack()] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

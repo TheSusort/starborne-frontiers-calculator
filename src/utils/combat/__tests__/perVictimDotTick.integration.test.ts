@@ -116,8 +116,6 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [basicSlot()] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -156,8 +154,6 @@ const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineIn
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [basicSlot()] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -595,7 +591,6 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         // (confirmed by standalone repro against the real engine).
         const { result } = collect(
             NONPOS_BASE({
-                enemyHp: 10000,
                 __testTapActors: (actors: CombatActor[]) => {
                     actors
                         .find((a) => a.id === 'pressure-source')
