@@ -1823,8 +1823,10 @@ export function buildActorConditionContext(
         /** Owner's own-turn counter (CombatActor.turnsTaken). Default 0 (DPS-assumption).
          *  Populated by buildDrainContext (Phase 0 Task 4). */
         turnsTaken?: number;
-        /** SP-D: number of enemies damaged by the owner's most recent cast this round. Default 1
-         *  (no cast yet / DPS mode). Populated by buildDrainContext from the engine's per-actor
+        /** SP-D: number of enemies damaged by the owner's most recent cast this round. SP-4d Fix
+         *  wave 1: absent (no cast yet / DPS mode / no delegate) rather than a fabricated 1 — see
+         *  `enemiesHitThisCastFor`'s own comment at its engine.ts declaration for what is and
+         *  is not fixed. Populated by buildDrainContext from the engine's per-actor
          *  enemiesHitThisCastFor delegate — REQUIRED for a passive-sourced timed self-buff gated
          *  on this subject (Berserker's Marauder Rage) to actually re-evaluate on-cast instead of
          *  only at the one-time combat-start seed (see seedPassiveTimedStatuses). */

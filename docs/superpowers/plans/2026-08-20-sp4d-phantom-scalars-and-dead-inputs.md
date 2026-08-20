@@ -1015,11 +1015,20 @@ git commit -m "refactor(engine)!: delete the four fight-wide enemy scalars (SP-4
 
 The file's three cases exist because the phantoms could not be asserted directly — each scans the corpus to prove no shipped kit can observe the phantom. Tasks 1–4 make the phantoms directly assertable, so the cases become redundant with `absentSubject.test.ts` and `noVictimAbsentSubject.integration.test.ts`.
 
+> **CORRECTION (Task 7 execution).** This premise is only 2/3 true, and it is worth recording why
+> rather than silently fixing the plan: Task 4 fixed the `enemies-hit-this-cast` phantom at the
+> `enemiesHitThisCastFor` **resolver** (an owner with no recorded turn reads `undefined` instead of
+> a fabricated 1 — SP-4d Fix wave 1), but the three `.set()` **booking sites** in engine.ts still
+> book `aoeVictimIds?.length ?? 1` for a REAL cast that resolves no victim. That is precisely case
+> (b)'s original shape, unchanged. Only cases (a) and (c) were actually made directly assertable;
+> (b) is not superseded and was NOT deleted from the migrated file — see the spec's §9 amendment
+> and the migrated file's own header for the full account.
+
 **Migrate, do not delete.** SP-4c §9.5 ruled migrate-don't-delete for exactly this situation and CodeRabbit enforced it once already on that rung. Specifically:
 
-- Delete cases (a), (b) and (c) — each replaced by a named case in the two new files. In each deletion, note in the new file's header which tripwire it discharges.
+- Delete cases (a) and (c) — each replaced by a named case in the two new files. In each deletion, note in the new file's header which tripwire it discharges. **Case (b) is kept, not deleted** (see the correction above) — it is still the only tripwire for a genuinely live residual.
 - **Keep** the `is non-vacuous: the corpus scan really produces conditions` case and the `ALLY_TARGET_SHIPS is not stale` pin, moving them to whichever file still scans the corpus. If neither new file scans the corpus, keep this file with those two cases and a rewritten header explaining that it now guards the corpus census the spec's §6 inertness claims rest on.
-- Rewrite the file header: the residuals are fixed, and the header must not keep describing them in the present tense. A HISTORY banner must be scoped to exactly what it disclaims — 4c-2c shipped one that covered a single claim while four present-tense falsehoods survived beneath it.
+- Rewrite the file header: two of the three residuals are fixed; the header must not keep describing THOSE in the present tense, but the still-open one must stay present tense, accurately. A HISTORY banner must be scoped to exactly what it disclaims — 4c-2c shipped one that covered a single claim while four present-tense falsehoods survived beneath it.
 
 - [ ] **Step 2: Run the migrated file**
 

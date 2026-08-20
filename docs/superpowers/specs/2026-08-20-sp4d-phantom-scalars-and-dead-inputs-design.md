@@ -314,3 +314,101 @@ nothing. Restoring the production switches and re-running is the method that cat
 **Housekeeping:** #334 (a victimless reactive infliction aiming at the sentinel) reads as closed by
 4c-2d's commit 1 — *"warn when an authored infliction names no enemy"*. Verify against `dc7f2056` and
 close the issue rather than carrying it into 4d.
+
+---
+
+## 9. Amendment (Task 7) — what the rung actually cost
+
+**Measurement point: `63637d09`** (Tasks 1–6, HEAD when Task 7 began). Task 7's own commit changes
+comments and tests only — it moves no production code path — so every number below also holds at
+the commit that carries this section. Per §1.1's own rule, a churn figure ages exactly like a
+reachability claim: re-measure at the NEXT rung's start rather than quoting this table.
+
+### 9.1 Suite counts
+
+- **This branch (`63637d09`, and unchanged through Task 7): 540 files / 5979 tests, all green.**
+  (Task 7's tripwire migration removed 2 tests — the two retired corpus-scan cases (a) and (c) —
+  from a 540/5981 count at Task 6's own commit, `3c821f50`.)
+- **Baseline, `main` at the branch point: 537 files / 5958 tests.**
+- `npx tsc --noEmit`: clean. `npm run lint`: clean.
+- **Zero golden movement**: `git diff --name-only main...HEAD | grep '\.snap'` returns nothing,
+  across all seven tasks.
+- **Oracle, `--seeds 15`: 147 / 146 / 2** — the two findings are both Enforcer `debuff-resisted`
+  (fires as `enemy`, never as `focus`/`team`), the same pre-existing, likely-RNG pair this rung
+  inherited and did not touch.
+
+### 9.2 Re-measured churn (§1.1)
+
+§1.1's own table (268 files / 1,109 occurrences: `enemyHp` 524, `enemyDefense` 496, `enemySecurity`
+73, `enemySpeed` 16) was itself already stale by the time Task 6 ran: Task 6's own re-measurement
+(Step 1's script, run fresh rather than trusting §1.1) read **266 files / 1,094 occurrences** —
+15 fewer occurrences and 2 fewer files than the spec recorded, from ordinary drift across Tasks
+1–5's own comment and fixture edits between `dc7f2056` and Task 6's commit. Task 6 proceeded on the
+re-measured number, per its own Step 1 instruction never to use the plan's table.
+
+Re-running the identical script at Task 7's own measurement point (post-deletion) finds
+**83 files / 348 occurrences** of `enemy(Hp|Defense|Speed|Security):` still in `src/`:
+`enemyDefense` 136, `enemyHp` 138, `enemySecurity` 60, `enemySpeed` 14. This is not residue Task 6
+missed — it is exactly §5.1's "what stays": `DPSSimulationInput`'s own four fields (and the
+synthesized-enemy call sites that consume them), `healingEngineAdapter.ts`'s `LEGACY_SINK_*`
+per-enemy roster defaults, and `playerTurn.ts`'s own per-turn `enemyDefense`/`enemyHp` parameters
+(a per-victim concept unrelated to the deleted `CombatEngineInput` scalars, sharing only a name). A
+spot-check of the non-adapter survivors (`grep -v "DPSSimulationInput\|dpsSimulator\|LEGACY_SINK\|enemyDefenseModifier"`,
+225 lines) confirms every one is one of these two categories, never a `CombatEngineInput` literal —
+consistent with Task 6's own tsc-clean claim.
+
+### 9.3 §6.1's three owed measurements, answered
+
+1. **Re-take the churn count at the branch point.** Done above (§9.2): 266 files / 1,094
+   occurrences at Task 6's start, not §1.1's 268 / 1,109.
+2. **Does a real single-target cast register a footprint, or does it rely on the `?? 1`
+   fallback?** Answered by Task 4's own commit measurement (`f6ceb53e`): of 12,735
+   `enemiesHitThisCastFor` resolver calls, **94.9% found a real booked value** — mostly a genuine
+   `1` from an actual single-target cast, so the booking site itself was never the problem. The
+   remaining 5.1% (**651 calls**, `12735 × 0.051 ≈ 650`) found no map entry at all — an owner that
+   had not yet completed a turn this drain cycle — which is where the phantom `1` was being
+   manufactured, and which SP-4d Fix wave 1 fixed at the resolver (`enemiesHitThisCastFor`), not
+   the booking site. **The three `.set()` booking sites in engine.ts still fabricate 1 for a REAL
+   cast that resolves no victim** — a narrower, genuinely still-open case, deliberately left alone
+   (both existing corpus readers, Tygr `gte 2` and Berserker `gte 3`, already fail against a
+   fabricated 1, so 1-vs-absent is byte-identical for them) and re-tripwired by the migrated
+   `noVictimResidualTripwires.test.ts` rather than fixed.
+3. **Is the drain-time `enemyHpPct` genuinely a constant 100 on every positional run?** Yes,
+   measured directly rather than argued: Task 4's own before-commit instrumentation over the whole
+   suite recorded **12,886 drain-time evaluations, every single one exactly 100** — positional
+   credit books per-victim and never feeds `cumulativeDamage`, so an `above` hp-threshold gate at
+   drain time would have read TRUE against no actor on the board on every run there is, had one
+   existed in the corpus (§6's comparator census: none does — every enemy-subject `hp-threshold`
+   gate in the shipped corpus is `below`).
+
+### 9.4 Task 4's footprint fix reached further than the spec's own example
+
+§2's game example (Hermes repairs an ally, no victim resolved) is what motivated the fix, but the
+9.3.2 measurement shows the actual FIX SITE — the `enemiesHitThisCastFor` resolver returning
+`undefined` for "no entry yet" — answers "unknown" for **651 of 12,735 calls**, and those calls are
+not only no-victim ally casts: the dominant case is a **round-1 start-of-round drain**, firing for
+ANY owner (support or attacker alike) before its own first turn has resolved this combat, which had
+nothing to do with an ally-targeted cast at all. Checked against observability the same way §6
+checks everything else: both of the corpus's two readers (Tygr `gte 2`, Berserker `gte 3`) already
+failed against the old fabricated `1`, and continue to fail against the new `undefined` — so the
+broadened footprint changes zero shipped numbers. This is recorded here because "the fix's footprint
+matches the spec's motivating example" would otherwise be assumed rather than checked, and in this
+rung it is false: the fix is broader than its own example, and only stays inert because of the
+corpus's comparator shapes, not because of the shape of the fix.
+
+### 9.5 What the spec got wrong
+
+- **§1.1's churn table aged before the rung that was supposed to consume it ran** (see §9.2) — the
+  exact failure mode §1.1 itself warns about ("a churn figure ages exactly the way a reachability
+  claim does"), materializing one task later than the spec anticipated.
+- **§5's site inventory attributes `buildActorConditionContext`'s `enemyHpPct` widening to Task 4.**
+  It was not: `tsc --noEmit` forced that signature to accept `enemyHpPct?: number` (rather than a
+  required field) during **Task 3** (`be1b7029`, "a no-victim turn has no enemy-HP reading"), which
+  is where `PlayerRoundCtx.enemyHpPct` first became optional and the drain-context signature had to
+  follow it to keep compiling. Task 4 only stopped `buildDrainContext` from deriving a VALUE for
+  that already-optional field from `cumulativeDamage / enemyHp`; the widening itself predates it by
+  one task.
+- **The brief for this task assumed Tasks 1–4 discharged all three of `noVictimResidualTripwires.test.ts`'s
+  named residuals.** Two were (see this file's Task 7 header for cases (a)/(c)); the third,
+  `enemies-hit-this-cast`'s phantom booking of 1 for a cast that hits nobody, was not — see §9.3.2.
+  The migrated test file keeps that case rather than retiring it.

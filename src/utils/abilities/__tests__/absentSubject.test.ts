@@ -11,6 +11,12 @@
  * instead of a phantom fixes the `gt` clause and leaves the parser's own negation idiom
  * (`countComparator: 'eq', countThreshold: 0`, buildShipAbilities.ts:266) firing against nobody.
  * Rejecting an absent subject BEFORE the comparator switch is what closes both.
+ *
+ * DISCHARGES, Task 7: two of `noVictimResidualTripwires.test.ts`'s three SP-4c-2b corpus-scan
+ * cases are retired here as direct assertions — case (a) (enemy hp-threshold ABOVE) by "an enemy
+ * hp-threshold ABOVE gate does not fire with no enemy" below, and case (c) (stat-vs-target GT) by
+ * "Cobalt's clause shape does not fire against nobody" below. Case (b) (enemies-hit-this-cast) is
+ * NOT discharged by this file — it remains a live, unfixed residual; see that file's header.
  */
 import { describe, it, expect } from 'vitest';
 import { conditionMet, conditionsMet, evaluateCondition, scaledBonus } from '../evaluateConditions';

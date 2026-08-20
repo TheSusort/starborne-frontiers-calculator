@@ -12,6 +12,13 @@
  * Synthetic on purpose: no shipped kit can build this shape (none of the 24 ally-target ships
  * carries a phantom-satisfiable gate — spec §6), which is why the residual was tripwired rather
  * than red. Each case has a NEGATIVE half so it cannot pass by blocking everything.
+ *
+ * DISCHARGES, Task 7: two of `noVictimResidualTripwires.test.ts`'s three SP-4c-2b corpus-scan
+ * cases are retired here as direct engine-level assertions — case (a) (enemy hp-threshold ABOVE)
+ * by "an enemy hp-threshold ABOVE gate does not grant the shield against nobody" and its
+ * drain-time sibling below, and case (c) (stat-vs-target GT) by "Cobalt's HP-vs-target clause does
+ * not grant the shield against nobody" below. Case (b) (enemies-hit-this-cast) is NOT discharged
+ * by this file — it remains a live, unfixed residual; see that file's header.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
