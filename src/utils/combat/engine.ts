@@ -1208,10 +1208,11 @@ export interface CombatEngineInput {
      *  - `enemyDefense` has ZERO readers left in this file (it is not even destructured in
      *    `runCombat`; every other `enemyDefense` occurrence here is a comment, the unrelated
      *    per-victim `enemyDefenseModifier`, or the victim-derived `enemyDefense` key on a turn ctx).
-     *  - `enemyHp` keeps exactly ONE reader — the synthesized focus-skip row's `enemyHpPct`, a
-     *    display value. SP-4d deleted its second reader (the drain ctx's `IntentExecContext.enemyHp`,
-     *    which fed a fight-wide `enemyHpPct` derivation pinned at a constant 100 on every positional
-     *    run) — see the destructure comment in `runCombat`.
+     *  - `enemyHp` now has ZERO readers too. SP-4d deleted both: the drain ctx's
+     *    `IntentExecContext.enemyHp`, which fed a fight-wide `enemyHpPct` derivation measured at a
+     *    constant 100 across all 12,886 evaluations in the suite; and the synthesized focus-skip
+     *    row's `enemyHpPct`, now a named display constant. The field survives only until its own
+     *    deletion rung.
      *  A victim's real defence/HP come from the positioned `enemyAttackers` roster instead. That
      *  includes the healing mode's healer casting a `damage` ability at `target:'enemy'`: it lands on
      *  a real positioned enemy and feeds `basis:'damage-dealt'` heal/shield riders off THAT victim's
@@ -1870,10 +1871,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         chargeCount,
         // shipSkills is intentionally NOT destructured here — the cast/reactive split below
         // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
-        // SP-4d: `enemyDefense` / `enemyHp` / `enemySecurity` / `enemySpeed` are gone from
-        // `CombatEngineInput` entirely — they were the deleted dummy actor's stat block, and their
-        // last two readers were enemy-HP% phantoms. A victim's real HP/defence come from the
-        // positioned `enemyAttackers` roster.
+        // SP-4d: `enemyDefense` / `enemyHp` / `enemySecurity` / `enemySpeed` are no longer
+        // destructured here — they were the deleted dummy actor's stat block, and their last
+        // readers were enemy-HP% phantoms this rung retired (the drain ctx's derivation, then the
+        // skip row's). They still ARRIVE on `CombatEngineInput`; deleting the fields is the next
+        // rung's churn. A victim's real HP/defence come from the positioned `enemyAttackers`
+        // roster.
         numRounds,
         selfBuffs,
         enemyDebuffs,
@@ -1971,9 +1974,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Nothing was left but the object. The literal `'enemy'` survives as `SENTINEL_ENEMY_ACTOR_ID`
     // (see its doc) — an id for the side-wide scheduled-debuff BUCKET, not an actor.
     //
-    // The four scalars still arrive on `CombatEngineInput` and are now nearly unread (`enemyHp`
-    // remains a REQUIRED field, so removing them is a ~200-file mechanical churn story: rung 4d).
-    // Do not reintroduce a stand-in actor to give them a home.
+    // The four scalars still arrive on `CombatEngineInput` and are now entirely unread — every
+    // field is OPTIONAL (the "REQUIRED field" claim that stood here was false from the moment
+    // SP-4c-2d widened `enemyHp`), so deleting them is mechanical call-site churn that `tsc`
+    // enumerates. Do not reintroduce a stand-in actor to give them a home.
 
     // The reported actor. Internal for now — the DPS adapter's attacker. The engine core
     // keys on this, never on the literal 'attacker' (end-state rule, spec). A later phase
