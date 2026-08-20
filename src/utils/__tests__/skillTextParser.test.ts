@@ -2823,12 +2823,17 @@ describe('parseHealAbilities', () => {
             { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
         ]);
     });
-    it('most-missing-health routes as ally', () => {
+    // SP-4e Task 3: "most missing health" NAMES its recipient by live HP, so it carries the
+    // 'lowest-hp-ally' selector rather than the generic 'ally' the engine used to resolve off the
+    // teamBattle run-mode flag. Loose phrasing for lowest HP PERCENTAGE, not an absolute basis.
+    it('most-missing-health routes as lowest-hp-ally', () => {
         expect(
             parseHealAbilities(
                 'This unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.'
             )
-        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'ally', explicitTarget: true }]);
+        ).toEqual([
+            { kind: 'heal', pct: 30, basis: 'hp', target: 'lowest-hp-ally', explicitTarget: true },
+        ]);
     });
     it('attack-based repair (bare → self, explicitTarget false)', () => {
         expect(parseHealAbilities('repairs <unit-damage>90%</unit-damage> of its Attack.')).toEqual(
@@ -2924,7 +2929,8 @@ describe('parseHealAbilities', () => {
                 kind: 'heal',
                 pct: 5,
                 basis: 'damage-dealt',
-                target: 'ally',
+                // SP-4e Task 3: the named half of the dual recipient carries the selector.
+                target: 'lowest-hp-ally',
                 explicitTarget: true,
             },
             {
@@ -3021,7 +3027,7 @@ describe('damage-leech parsing', () => {
         });
     });
 
-    it('Pallas: "heals for 20% of the damage dealt" leech verb → ally', () => {
+    it('Pallas: "heals for 20% of the damage dealt" leech verb → lowest-hp-ally', () => {
         const r = parseHealAbilities(
             'This Unit deals 200% damage. The other ally with the lowest current health percentage heals for 20% of the damage dealt and this repair cannot critically hit.'
         );
@@ -3030,7 +3036,9 @@ describe('damage-leech parsing', () => {
             kind: 'heal',
             pct: 20,
             basis: 'damage-dealt',
-            target: 'ally',
+            // SP-4e Task 3: "the OTHER ally with the lowest current health percentage" — a named
+            // selector, so it is also never narrowed by Pallas's support footprint.
+            target: 'lowest-hp-ally',
         });
     });
 
@@ -3047,7 +3055,8 @@ describe('damage-leech parsing', () => {
             kind: 'heal',
             pct: 5,
             basis: 'damage-dealt',
-            target: 'ally',
+            // SP-4e Task 3: the ally half is the named worst-HP selector; the self half mirrors it.
+            target: 'lowest-hp-ally',
             leechScope: 'detonation',
         });
         expect(r[1]).toMatchObject({ target: 'self', leechScope: 'detonation' });

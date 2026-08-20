@@ -564,9 +564,17 @@ Run: `npm test`
 Expected movement, and nothing else — each move traceable to one named ship:
 - **Pallas** — her active heal reaches the worst-HP ally even when off-footprint (previously
   intersected away), and no longer self-heals when she is the only living ally.
-- **Volk** — no change expected: his passive was already unscoped and already routed lowest-HP.
-  A Volk move means the selector's ranking diverges from `lowestHpAllyId`'s — investigate, do not
-  re-pin.
+- **Volk** — **moves in `mode: 'healing'`, not in `mode: 'battle'`.** ⚠️ Corrected 2026-08-20: an
+  earlier draft of this step said "no change expected", which is true only for battle mode.
+  `engine.ts:3402` sets `teamBattle: runMode === 'battle'`, so a healing-calculator run has
+  `teamBattle === false` and Volk's passive currently falls to `else base = [healing.targetId]` —
+  the user's chosen focus ship. The flip routes it to the worst-HP ally in **both** modes, which
+  means **Task 3, not Task 4, is what closes defect D3** (spec §1). In battle mode he was already
+  unscoped and already lowest-HP, so no movement there; a *battle-mode* Volk move would mean the
+  selector's ranking diverges from `lowestHpAllyId`'s — investigate that, do not re-pin.
+- **Pallas** — same two-mode split, plus the footprint change: in healing mode she moves off
+  `healing.targetId`; in battle mode she moves because her ACTIVE-slot heal is no longer
+  intersected with the support footprint.
 - **Valkyrie** — her detonation repair moves off the heal anchor onto the worst-HP ally, and now
   actually restores that ally's HP (Task 2 Step 8).
 

@@ -1059,7 +1059,8 @@ function flipBareSupportTarget(
     // "just like buffs"; the engine intersects all-allies with the support pattern). Cleanses
     // (and the default) keep 'ally' — single-recipient, unchanged. An EXPLICIT recipient
     // ("the ally with the most missing health" → Volk) sets explicitTarget and never reaches
-    // this branch, so it stays a single 'ally'.
+    // this branch; since SP-4e Task 3 that recipient is also parsed as 'lowest-hp-ally' rather
+    // than 'ally', so it stays a single named selector either way.
     bareActiveScope: 'ally' | 'all-allies' = 'ally'
 ): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
@@ -1096,9 +1097,10 @@ function flipBareSupportTarget(
 
     // SP-4e: every flip branch above additionally requires `target === 'self'` — 'lowest-hp-ally'
     // never satisfies that, so it always falls through every branch and passes through unchanged,
-    // regardless of `explicitTarget`. (No parser emits this variant yet; when one does, it is
-    // expected to arrive with explicitTarget=true, but that is not what this function's structure
-    // guarantees.) Do not add a flip arm for it — a named selector is never a "bare" support target.
+    // regardless of `explicitTarget`. (Since Task 3 the parser DOES emit it — Pallas, Volk and
+    // Valkyrie — always with explicitTarget=true, though that is not what this function's
+    // structure guarantees.) Do not add a flip arm for it — a named selector is never a "bare"
+    // support target.
     return target;
 }
 

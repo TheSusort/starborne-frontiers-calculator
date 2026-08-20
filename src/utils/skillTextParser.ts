@@ -4080,8 +4080,10 @@ function resolveHealBasis(after: string): ParsedHealAbility['basis'] {
 
 /**
  * Resolves heal/shield target from the scoped sentence. "itself"/"its" with no other
- * recipient → self; explicit plural phrases ("all allies", "allies") → all-allies; a
- * singular ally recipient ("the ally", "that ally", "them", "most missing health") → ally.
+ * recipient → self; explicit plural phrases ("all allies", "allies") → all-allies; a recipient
+ * NAMED by live HP ("most missing health", "lowest current health percentage", "the other
+ * ally") → lowest-hp-ally; any other singular ally recipient ("the ally", "that ally",
+ * "them") → ally.
  * Note: "their" alone is NOT treated as all-allies — it may refer to a single named
  * ally's stat (e.g. "the ally … of their Max HP"). Only explicit plural noun phrases
  * trigger all-allies so that singular-ally phrasings aren't misrouted.
@@ -4102,13 +4104,24 @@ function resolveHealTarget(sentence: string): {
     // kill count), not a heal recipient. Strip that antecedent before testing the generic
     // \bthem\b ally signal below so it isn't misread as an ally recipient (Finding B2).
     const sWithoutKillAntecedent = s.replace(/\b(?:killing|destroying)\s+them\b/g, '');
-    // Singular ally detection takes priority over the bare "their" heuristic so that
-    // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
+    // SP-4e: the text NAMES its recipient by live HP — Pallas ("the other ally with the lowest
+    // current health percentage"), Volk ("the ally with the most missing health"), Valkyrie ("the
+    // ally with the lowest current health percentage"). One selector covers all three: "most
+    // missing health" is loose phrasing for lowest HP PERCENTAGE, not absolute missing HP
+    // (user-confirmed 2026-08-20) — do NOT model an absolute basis.
+    // Tested BEFORE the generic singular arm below, because Pallas's sentence matches both.
+    // Sentence-scoped by the caller, which is the only thing keeping Chimei's over-repair
+    // sentence ("the ally with the lowest current health percentage repairs an amount equivalent
+    // to the over-repair" — a different, unimplemented mechanic) out of this arm.
     if (
-        /\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b|most\s+missing\s+health|\bthe\s+other\s+ally\b/.test(
+        /most\s+missing\s+health|lowest\s+current\s+health(?:\s+percentage)?|\bthe\s+other\s+ally\b/.test(
             sWithoutKillAntecedent
         )
     )
+        return { target: 'lowest-hp-ally', explicit: true };
+    // Singular ally detection takes priority over the bare "their" heuristic so that
+    // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
+    if (/\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b/.test(sWithoutKillAntecedent))
         return { target: 'ally', explicit: true };
     if (/\ball\s+allies\b|\ballies\b/.test(s)) return { target: 'all-allies', explicit: true };
     // "itself" (or "to/from this unit") is an explicit self RECIPIENT. A bare leading subject
