@@ -2499,8 +2499,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     // the actor's own splash pattern from its resolved anchor position against the LIVE
     // opposing roster, known BEFORE runPlayerTurn returns (unlike the actual HP application,
     // which drivePositionalApply performs AFTER). Set at each of the three turn-firing call
-    // sites (focus/team/enemy), mirroring lastTurnCtxByActor's per-turn update. Absent id (no
-    // cast yet) → the enemiesHitThisCastFor delegate below defaults to 1.
+    // sites (focus/team/enemy), mirroring lastTurnCtxByActor's per-turn update. SP-4d Fix wave
+    // 1: absent id (no cast yet) → the enemiesHitThisCastFor delegate below now returns
+    // `undefined` (footprint UNKNOWN), not a fabricated 1 — see that delegate's own comment.
     const enemiesHitThisCastByActor = new Map<string, number>();
 
     // --- Heal target resolution (data, not a mode switch) ---
@@ -8318,18 +8319,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         enemyType,
                         // SP-4d: `enemyHp` (IntentExecContext) deleted — it fed only the
                         // buildDrainContext fight-wide `enemyHpPct` derivation this rung removed.
-                        // `cumulativeDamage` below stays: it is a real running total other callers
-                        // may still consume, it just no longer drives a drain-time enemy-HP%
-                        // scalar. Map-sum: enemy-HP decline is focus + team cumulative + this
-                        // round's map totals across ALL actors (the drain reacts to the enemy's
-                        // true remaining HP, not just the focus actor's contribution).
-                        cumulativeDamage:
-                            cumulativeDamage +
-                            cumulativeTeamDamage +
-                            [...roundDamage.values()].reduce(
-                                (s, d) => s + d.direct + d.corrosion + d.inferno + d.detonation,
-                                0
-                            ),
+                        // Fix wave 1: `cumulativeDamage` (IntentExecContext) is deleted too — it
+                        // had zero readers left anywhere in src/ once that derivation was gone
+                        // (verified by grep for `ctx.cumulativeDamage` / `.cumulativeDamage` across
+                        // src/, distinct from the engine's own local `cumulativeDamage` variable
+                        // and the live `RoundData.cumulativeDamage` display field, which are
+                        // unrelated). Do not reintroduce it as a "future consumer might want it"
+                        // field — that rationale is exactly what this rung exists to remove.
                         // Bomb damagePerStack/affinity now resolve per OWNER inside the executor
                         // (lastTurnCtxByActor.get(intent.ownerId)) — no global effectiveAttack/
                         // affinityMult here. The focus actor's entry resolves identically to the
@@ -8467,10 +8463,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // SP-D: live per-actor count of enemies damaged by that actor's most
                         // recent cast this round (Berserker's Marauder Rage, drained via
                         // on-deal-damage). Combat-wide map — no per-side sideCtx field needed
-                        // (mirrors turnsTakenFor/wasHitThisRoundFor). Absent id → default 1
-                        // (buildDrainContext).
-                        enemiesHitThisCastFor: (ownerId) =>
-                            enemiesHitThisCastByActor.get(ownerId) ?? 1,
+                        // (mirrors turnsTakenFor/wasHitThisRoundFor). SP-4d Fix wave 1: no `?? 1`
+                        // default — an owner with no recorded footprint (no delegate call has ever
+                        // set one for it, e.g. before its first turn this combat) has an UNKNOWN
+                        // footprint, not "hit exactly one enemy". Returning `undefined` lets
+                        // buildDrainContext's absent-subject guard leave the gate unresolved
+                        // instead of answering a fabricated 1. Tygr's `gte 2` and Berserker's
+                        // `gte 3` are unaffected — a fabricated 1 already failed both comparators.
+                        enemiesHitThisCastFor: (ownerId) => enemiesHitThisCastByActor.get(ownerId),
                         // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,

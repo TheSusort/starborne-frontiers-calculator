@@ -104,7 +104,6 @@ function makeCtx(opts?: {
             [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1, effectiveMaxHp: 10000 } as never],
         ]),
         enemyHp: 100000,
-        cumulativeDamage: 0,
         recordResisted: () => {},
         applyReactiveDamage: opts?.applyReactiveDamage,
         oncePerRoundConsumed: opts?.oncePerRoundConsumed,

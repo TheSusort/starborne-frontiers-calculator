@@ -134,7 +134,6 @@ function makeBuffCtx(): IntentExecContext & { appliedActorIds: string[] } {
             [GRANTER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
         ]),
         enemyHp: 100000,
-        cumulativeDamage: 0,
         recordResisted: () => {},
     } as unknown as IntentExecContext & { appliedActorIds: string[] };
 

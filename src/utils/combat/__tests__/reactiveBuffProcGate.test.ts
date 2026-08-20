@@ -144,7 +144,6 @@ function makeCtx(opts?: {
             ],
         ]),
         enemyHp: 100000,
-        cumulativeDamage: 0,
         recordResisted: () => {},
         procChanceGates: opts?.procChanceGates,
     } as unknown as IntentExecContext & { buffAppliedEvents: string[] };
@@ -209,7 +208,6 @@ function makeAdjacentCtx(opts?: {
             [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
         ]),
         enemyHp: 100000,
-        cumulativeDamage: 0,
         recordResisted: () => {},
         ...(opts?.includeAdjacentDelegate
             ? {

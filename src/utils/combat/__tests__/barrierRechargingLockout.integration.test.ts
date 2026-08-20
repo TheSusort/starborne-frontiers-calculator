@@ -112,7 +112,6 @@ describe('Barrier Recharging: real 3-turn cooldown (re-arm gate)', () => {
             playerIds,
             lastTurnCtxByActor: new Map(),
             enemyHp: 100000,
-            cumulativeDamage: 0,
             recordResisted: () => {},
         } as IntentExecContext;
     };

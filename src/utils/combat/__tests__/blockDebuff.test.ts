@@ -505,7 +505,6 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             enemyHp: 100000,
-            cumulativeDamage: 0,
             recordResisted: (r: ActiveBuff) => resisted.push(r),
         } as unknown as IntentExecContext;
         return { ctx, resisted };
@@ -561,7 +560,6 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             enemyHp: 100000,
-            cumulativeDamage: 0,
             recordResisted: () => {},
         } as unknown as IntentExecContext;
 
@@ -676,7 +674,6 @@ describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             enemyHp: 100000,
-            cumulativeDamage: 0,
             recordResisted: () => {},
         } as unknown as IntentExecContext;
     };
@@ -870,7 +867,6 @@ describe('Block Debuff — integration (engine)', () => {
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             enemyHp: 100000,
-            cumulativeDamage: 0,
             recordResisted: (r: ActiveBuff) => resisted.push(r),
         } as unknown as IntentExecContext;
 

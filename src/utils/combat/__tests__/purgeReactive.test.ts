@@ -173,7 +173,6 @@ function makePurgeCtx(removedCount: number): {
         grantExtraAction: () => {},
         playerIds: ['caster1'],
         lastTurnCtxByActor: new Map(),
-        cumulativeDamage: 0,
         recordResisted: () => {},
     };
 

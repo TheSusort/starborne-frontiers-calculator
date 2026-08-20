@@ -172,7 +172,6 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
             grantExtraAction: () => {},
             playerIds: ['grif'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
             ...overrides,
         };

@@ -82,7 +82,6 @@ const buildCtx = (destroyedRound?: number): IntentExecContext => {
         playerIds: ['owner'],
         lastTurnCtxByActor: new Map(),
         enemyHp: 100000,
-        cumulativeDamage: 0,
         recordResisted: () => {},
         oncePerCombatFired: new Set<string>(),
     } as unknown as IntentExecContext;

@@ -342,7 +342,6 @@ function makeMostBuffsCtx(enemyWithMostBuffs?: (ownerId: string) => string | und
         grantExtraAction: () => {},
         playerIds: ['caster1'],
         lastTurnCtxByActor: new Map(),
-        cumulativeDamage: 0,
         recordResisted: () => {},
         enemyWithMostBuffs,
     };

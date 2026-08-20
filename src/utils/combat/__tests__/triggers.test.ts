@@ -2733,7 +2733,6 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             grantExtraAction: () => {},
             playerIds: ['A'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
             healing,
             oncePerCombatFired,
@@ -3134,7 +3133,6 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
             grantExtraAction: () => {},
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
         };
     };
@@ -3249,7 +3247,6 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             grantExtraAction: () => {},
             playerIds: ['A'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
             healing,
             ...(selfHpPctFor !== undefined ? { selfHpPctFor } : {}),
@@ -3337,7 +3334,6 @@ describe('debuff-resisted reports the resolved counter target (combat-log fideli
             grantExtraAction: () => {},
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
         };
         ctx.bus.on('debuff-resisted', (e) =>
@@ -3417,7 +3413,6 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             grantExtraAction: () => {},
             playerIds: PLAYER_IDS,
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
         };
     };
@@ -3562,7 +3557,6 @@ describe('Overload lifecycle Task 3: executeIntent remove-self-buff branch', () 
             grantExtraAction: () => {},
             playerIds: [ownerId],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
         };
     };
@@ -4471,7 +4465,6 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
             grantExtraAction: () => {},
             playerIds: ['vindi'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
             oncePerRoundConsumed: new Set<string>(),
             applyReactiveDamage: (
@@ -4558,7 +4551,6 @@ describe('on-debuff-inflicted damage branch (debuffVictimId routing)', () => {
             grantExtraAction: () => {},
             playerIds: ['owner'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
             oncePerRoundConsumed: new Set<string>(),
             livingOpposingActorIds: () => ['enemy1', 'enemy2'],
@@ -4634,7 +4626,6 @@ describe("procScope 'per-attack' verdict cache", () => {
             grantExtraAction: () => {},
             playerIds: ['owner'],
             lastTurnCtxByActor: new Map(),
-            cumulativeDamage: 0,
             recordResisted: () => {},
             oncePerRoundConsumed: new Set<string>(),
             procChanceGates: new Map(),

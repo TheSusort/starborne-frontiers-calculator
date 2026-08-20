@@ -1483,10 +1483,6 @@ export interface IntentExecContext {
      *  charged-cast stamps only counterTargetId) falls back to this owner-keyed amount. */
     reactiveDealtByOwner?: Map<string, number>;
     enemyType?: EnemyBaseClass;
-    /** Damage dealt to the enemy so far. SP-4d: no longer feeds a drain-time enemyHpPct
-     *  derivation (that fight-wide scalar is deleted — see buildDrainContext) but callers still
-     *  supply it, and per-victim/other future consumers may still want a live damage-dealt read. */
-    cumulativeDamage: number;
     /** Record a resisted enemy application onto the round's resisted list (the engine
      *  routes it to pendingResisted or the last attacker turn, per Task-2 staging). */
     recordResisted: (resisted: ActiveBuff) => void;
@@ -1551,10 +1547,14 @@ export interface IntentExecContext {
     turnsTakenFor?: (ownerId: string) => number;
     /** SP-D: number of enemies damaged by `ownerId`'s most recent cast this round, feeding the
      *  `enemies-hit-this-cast` gate at drain time (Berserker's Marauder Rage, drained via the
-     *  on-deal-damage reactive trigger). Engine-populated from the per-turn footprint size;
-     *  absent → buildDrainContext defaults to 1 (no cast yet / DPS mode — a >=2/>=3 gate is
-     *  inert, byte-identical). */
-    enemiesHitThisCastFor?: (ownerId: string) => number;
+     *  on-deal-damage reactive trigger). Engine-populated from the per-turn footprint size.
+     *  SP-4d Fix wave 1: the delegate itself may return `undefined` for an owner with no
+     *  recorded footprint (no cast yet this combat) — that footprint is UNKNOWN, not "hit
+     *  exactly one enemy", so `number | undefined` here lets buildDrainContext's absent-subject
+     *  guard leave the gate unresolved instead of defaulting to a fabricated 1. Absent
+     *  DELEGATE (no function at all — DPS mode / fixtures) is unaffected: the optional-chain
+     *  call below already answers `undefined` in that case, byte-identical. */
+    enemiesHitThisCastFor?: (ownerId: string) => number | undefined;
     /** PR4b: apply a full mitigated/crit-eligible reactive damage hit from `ownerId` against
      *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
      *  on-enemy-cleansed, FrontLine's on-enemy-charged-cast). `abilityId` keys the dedicated
@@ -2122,11 +2122,17 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // paths read 0 and stay byte-identical (the evaluator's t<=0 guard blocks ALL
         // periods at turn 0, so every-n-turns is never met).
         turnsTaken: ctx.turnsTakenFor?.(ownerId) ?? 0,
-        // SP-D: live enemies-hit-this-cast gate (Berserker's Marauder Rage). SP-4d: no `?? 1`
-        // default — an absent id (no delegate / no recorded footprint yet, e.g. before this
-        // owner's first cast) means the footprint is UNKNOWN, not "hit exactly one enemy", so the
-        // gate is unresolvable rather than answered by a number describing no cast. Tygr's `gte 2`
-        // and Berserker's `gte 3` are unaffected — a fabricated 1 failed them too.
+        // SP-D: live enemies-hit-this-cast gate (Berserker's Marauder Rage). SP-4d Fix wave 1: no
+        // `?? 1` default anywhere on this path — the delegate itself (engine.ts) now returns
+        // `undefined` when `enemiesHitThisCastByActor` has no entry for `ownerId`. That happens
+        // for two genuinely different reasons, both meaning the footprint is UNKNOWN rather than
+        // "hit exactly one enemy": (1) no delegate was supplied at all (DPS mode / a test fixture
+        // that omits engine wiring), and (2) a delegate IS wired but this owner has not yet had a
+        // turn (focus/team/enemy) recorded this combat — e.g. a round-1 start-of-round drain
+        // firing before turn 1 resolves, or a reactive draining for this owner off another
+        // actor's earlier action before this owner has taken its own first turn. Either way the
+        // gate is unresolvable rather than answered by a number describing no cast. Tygr's
+        // `gte 2` and Berserker's `gte 3` are unaffected — a fabricated 1 already failed both.
         enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId),
         // SP-F F4: live same-team ally ship names (Isha/Nayra reciprocal Override gate). Only when
         // the engine supplied a name map (team-sim). `playerIds` is the drain owner's OWN side; we
