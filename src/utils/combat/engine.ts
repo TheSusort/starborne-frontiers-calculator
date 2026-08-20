@@ -6726,8 +6726,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 case 'self':
                 case 'ally':
                 case 'all-allies':
+                case 'lowest-hp-ally':
                 case 'adjacent-allies':
                     return DEFAULT_BASE_PATTERN;
+                default: {
+                    // Exhaustiveness guard: a new AbilityTarget variant must be classified here
+                    // explicitly rather than silently inheriting a footprint.
+                    const _exhaustive: never = abilityTarget;
+                    return _exhaustive;
+                }
             }
         };
         /**

@@ -3885,7 +3885,7 @@ export interface ParsedHealAbility {
     kind: 'heal' | 'shield';
     pct: number;
     basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken';
-    target: 'self' | 'ally' | 'all-allies';
+    target: 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally';
     // True when a target phrase was actually matched ("itself", "the ally", "all allies");
     // false when target defaulted to 'self' because the text named no recipient. The
     // slot/damage-aware bare-repair→ally FLIP in buildShipAbilities keys off this flag.

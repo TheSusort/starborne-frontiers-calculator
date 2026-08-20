@@ -1048,7 +1048,7 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * `role` is threaded from the ship (`ship.type`, the ship-class field) so rule B can read the class.
  */
 function flipBareSupportTarget(
-    target: 'self' | 'ally' | 'all-allies',
+    target: 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally',
     explicitTarget: boolean,
     slot: SkillSlot,
     hasDamage: boolean,
@@ -1061,7 +1061,7 @@ function flipBareSupportTarget(
     // ("the ally with the most missing health" → Volk) sets explicitTarget and never reaches
     // this branch, so it stays a single 'ally'.
     bareActiveScope: 'ally' | 'all-allies' = 'ally'
-): 'self' | 'ally' | 'all-allies' {
+): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
         !explicitTarget &&
         target === 'self' &&
@@ -1094,6 +1094,9 @@ function flipBareSupportTarget(
         }
     }
 
+    // SP-4e: 'lowest-hp-ally' always arrives with explicitTarget=true (the text NAMED a
+    // recipient), so every branch above is skipped and it passes through unchanged. Do not add a
+    // flip arm for it — a named selector is never a "bare" support target.
     return target;
 }
 
@@ -1101,12 +1104,12 @@ function flipBareSupportTarget(
  *  to all allies (Graphite: Overclock + shield). Standalone self shields ("gains a shield…")
  *  stay self. Explicit recipients and damage-rider skills are unchanged. */
 function flipBareSupportShieldTarget(
-    target: 'self' | 'ally' | 'all-allies',
+    target: 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally',
     explicitTarget: boolean,
     slot: SkillSlot,
     hasDamage: boolean,
     hasCoCastAllAlliesGrant: boolean
-): 'self' | 'ally' | 'all-allies' {
+): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
         hasCoCastAllAlliesGrant &&
         !explicitTarget &&

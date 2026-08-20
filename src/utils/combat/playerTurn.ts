@@ -54,7 +54,7 @@ import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
-import { resolveSupportRecipients } from './supportRecipients';
+import { lowestHpAllyRecipients, resolveSupportRecipients } from './supportRecipients';
 import { resolveDebuffRecipientIds } from './debuffRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
@@ -1358,6 +1358,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     ? footprintAllyIds
                     : undefined,
         });
+
+    // SP-4e: live HP fraction of a same-side actor, or undefined when the id is unknown here or
+    // the actor is not living. Reads the healing-mode accessors when present (authoritative max
+    // HP, buff-aware) and the live same-side roster otherwise. Feeds the 'lowest-hp-ally'
+    // selector, which needs live HP that `resolveSupportRecipients` cannot see.
+    const allyHpFraction = (id: string): number | undefined => {
+        const a = args.healing
+            ? args.healing.recipientActor(id)
+            : sameSideLiving?.find((candidate) => candidate.id === id);
+        if (!a || a.currentHp <= 0) return undefined;
+        const maxHp = args.healing ? args.healing.recipientMaxHp(id) : a.stats.hp;
+        return maxHp > 0 ? a.currentHp / maxHp : 0;
+    };
 
     // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
     // the engine no longer passes a precomputed scalar — `enemy` is the tgt actor, `enemyHp`
@@ -3761,10 +3774,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     ? args.healing.enemyIds
                     : args.healing.playerIds
                 : (sameSideLiving ?? []).map((a) => a.id);
-            for (const rid of supportRecipients(ab.target, allyRoster, {
-                ability: ab,
-                fromPassive,
-            })) {
+            // SP-4e: 'lowest-hp-ally' is a NAMED single-recipient selector, so it is resolved
+            // HERE from live HP rather than handed to supportRecipients — that helper only
+            // FILTERS its base, so passing it the whole allyRoster would fan a single-recipient
+            // target out to every ally. Not footprint-scoped: the selector reaches its ally
+            // wherever they stand. Resolves to nobody when the caster is the only living ally.
+            const recipients =
+                ab.target === 'lowest-hp-ally'
+                    ? lowestHpAllyRecipients({
+                          casterId: actor.id,
+                          candidateIds: allyRoster,
+                          hpFractionOf: allyHpFraction,
+                      })
+                    : supportRecipients(ab.target, allyRoster, {
+                          ability: ab,
+                          fromPassive,
+                      });
+            for (const rid of recipients) {
                 statusEngine.extendAllBuffsDuration(rid, turns);
             }
         }

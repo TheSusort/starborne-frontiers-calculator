@@ -89,6 +89,14 @@ export type AbilityTarget =
     | 'self'
     | 'ally'
     | 'all-allies'
+    | 'lowest-hp-ally' // SP-4e: the living same-side ally with the lowest currentHp/maxHp, caster
+    // EXCLUDED, ties broken by source order. Named by the ability's own text
+    // (Pallas "the other ally with the lowest current health percentage", Volk
+    // "the ally with the most missing health", Valkyrie "the ally with the lowest
+    // current health percentage"). NEVER narrowed by the caster's support
+    // footprint — it reaches its ally wherever they stand, on either slot
+    // (user-confirmed 2026-08-20). Resolves to NO recipient when the caster is the
+    // only living ally: "the OTHER ally" means nobody, not a self-heal.
     | 'adjacent-allies' // Fortifying Shroud: living same-side allies on neighbouring board
     // cells (non-positional → all same-side allies). Resolved via
     // IntentExecContext.adjacentAllyIdsFor.
