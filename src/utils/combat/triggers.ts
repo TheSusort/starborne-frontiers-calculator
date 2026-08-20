@@ -1784,7 +1784,11 @@ export function buildActorConditionContext(
         infernoEntryCount: number;
         bombCount: number;
         enemyType?: EnemyBaseClass;
-        enemyHpPct: number;
+        /** SP-4d: passed through as-is to `buildRoundContext` below — absent means no enemy/victim
+         *  reading exists this round (no phantom is invented). Every existing caller still supplies
+         *  a real number; only `playerTurn.ts`'s foreign-caster aura ctx forwards the turn-local
+         *  absent value. */
+        enemyHpPct?: number;
         effectiveCritRate?: number;
         includeAbilitySelfNames?: boolean;
         /** Self HP% (0..100). Default 100 (DPS-assumption). Populated by live engine in Task 3+. */

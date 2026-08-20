@@ -241,6 +241,12 @@ export interface PassiveSlotHit {
     target: Ability['target'];
 }
 
+/** DISPLAY ONLY. The round chart needs a number for a turn that struck nobody; this is NOT a
+ *  reading of any enemy's HP, and the gate-facing `enemyHpPct` on the same turn is ABSENT.
+ *  Kept at 100 so the chart and every golden stay byte-identical across SP-4d. The honest display
+ *  value for a multi-enemy roster is a separate question — filed with #331. */
+export const DISPLAY_ENEMY_HP_PCT_NO_VICTIM = 100;
+
 /** Everything one player actor's turn contributes to the round's RoundData row. */
 export interface PlayerTurnResult {
     action: 'active' | 'charged';
@@ -512,9 +518,9 @@ export interface PlayerTurnArgs {
     pendingAccumulators?: PendingAccumulator[];
     /** SP-4c-2b: absent on a no-victim turn (no victim ⇒ no defence to pierce). */
     enemyDefense?: number;
-    /** SP-4c-2b: absent on a no-victim turn. NOTE the residual at the `enemyHpPct` derivation
-     *  below — it still answers 100 when this is 0, which is byte-identical to the ghost's reading
-     *  but is not yet honest. See the plan's §B residual note. */
+    /** SP-4c-2b: absent on a no-victim turn. SP-4d: the `enemyHpPct` derivation below now answers
+     *  `undefined` rather than 100 when this is absent — the honest "no reading" answer, not the
+     *  ghost's fabricated one. */
     enemyHp?: number;
     enemyType?: EnemyBaseClass;
     // Required (Phase 3): the engine always passes its internal bus (wrapping the optional
@@ -1247,29 +1253,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  `ctx`) — adding them to postDebuffGateCtx or modifierCtx would change which gates those
      *  contexts can resolve.
      *
-     *  ⚠️ NAMED RESIDUAL — omission does NOT answer "there is no target". An earlier version of this
-     *  doc claimed it did ("rather than inventing one with zeroed stats"); that was wrong, and it was
-     *  the only one of this rung's three phantoms that a comment actively denied. All three fields are
-     *  optional with a `?? 0` default (`evaluateConditions.ts`'s `stat-vs-target` arm,
-     *  roundContext.ts:158-162), and `stat-vs-target` resolves
-     *  `statComparator === 'lt' ? self < target : self > target`. So with the slice empty the target
-     *  reads **0**, and a **`gt`** comparator is TRUE against nobody — the same shape as the
-     *  `enemyHpPct: 100` residual, an invented weakling rather than an absent enemy.
+     *  DISCHARGED (was a NAMED RESIDUAL through SP-4d task 2) — omission now correctly answers "there
+     *  is no target". `ConditionContext.targetSpeed`/`targetCurrentHp`/`targetCritPower` are no
+     *  longer defaulted with `?? 0`: `buildRoundContext` (roundContext.ts) conditionally spreads each
+     *  one, withholding the KEY entirely when this slice is empty, and `evaluateConditions.ts`'s
+     *  `stat-vs-target` arm returns `undefined` rather than comparing against a fabricated 0.
+     *  `conditionMet` rejects that `undefined` above the comparator switch, so with the slice empty a
+     *  **`gt`** comparator now reads FALSE against nobody, not TRUE — the same fix shape as the
+     *  `enemyHpPct` derivation this task closes.
      *
-     *  REACHABLE, unlike the other two: this slice is spread into `ctx` (further down), which
-     *  `gateFiringAbilities` uses to gate heal/shield/buff/charge payloads. That consumer is
-     *  deliberately NOT victim-fenced — the repair must land on a no-victim turn — so the gate really
-     *  does evaluate. Nothing suppresses it.
+     *  REACHABLE: this slice is spread into `ctx` (further down), which `gateFiringAbilities` uses to
+     *  gate heal/shield/buff/charge payloads. That consumer is deliberately NOT victim-fenced — the
+     *  repair must land on a no-victim turn — so the gate really does evaluate, and now evaluates
+     *  honestly rather than against an invented target.
      *
-     *  CORPUS-INERT ON ONE LEG ONLY, which is weaker than residuals (b)/(c) and worth stating plainly.
      *  Exactly three corpus ships carry `stat-vs-target`, measured over parsed abilities:
-     *    • Bayah   (charged control + debuff, crit-power, `gt`) — phantom-satisfiable
-     *    • Cobalt  (active additional-damage, hp, `gt`)         — phantom-satisfiable
-     *    • Chakara (active charge, speed, `lt`)                 — SAFE: `self < 0` is never true
-     *  The single leg holding it inert is that none of the three is an ally-target ship (§A.2), so
-     *  none can take a no-victim turn. `noVictimResidualTripwires.test.ts` case (c) fails the day one
-     *  does. The fix when that happens: make `ConditionContext.targetSpeed`/`targetCurrentHp`/
-     *  `targetCritPower` carry an explicit absent-target answer instead of `?? 0`. */
+     *    • Bayah   (charged control + debuff, crit-power, `gt`)
+     *    • Cobalt  (active additional-damage, hp, `gt`)
+     *    • Chakara (active charge, speed, `lt`) — was always SAFE regardless of this fix: `self < 0`
+     *      is never true by arithmetic alone.
+     *  None of the three is an ally-target ship (§A.2), so none can take a no-victim turn in the
+     *  shipped corpus today — `noVictimAbsentSubject.integration.test.ts` (SP-4d task 3) pins the
+     *  synthetic shape directly, since no shipped kit can build it. */
     const victimStatGateCtx = (v: CombatActor | undefined) =>
         v !== undefined
             ? {
@@ -1367,20 +1372,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // during the turn walk — so on a positional run (since SP-4b-2a, every DPS-calculator run)
     // this reads the victim's HP as it stood when THIS actor's turn began, which is the intended
     // "entering this turn" semantics for the hp-threshold gates, not a per-round scalar.
-    // SP-4c-2b: with no victim there is no HP to have declined, so the decline is 0. NAMED RESIDUAL
-    // (plan §B): `enemyHpPct` below then still answers 100 — "a healthy enemy" — because
-    // `PlayerRoundCtx.enemyHpPct` is required. Byte-identical to the ghost's reading (§A.4: the
-    // decline is always 0 on these turns), but not yet honest; a separate rung widens it.
-    // MEASURED CORPUS-INERT, so nobody can observe the phantom 100 today. The gate that would read
-    // it is `hp-threshold` with `hpComparator: 'above'` and `hpSubject` 'enemy'/default, and a scan
-    // of all 147 corpus ships' parsed abilities (165 hp-threshold conditions) found ZERO of them:
-    // the only enemy-subject HP gates in the corpus are `below`, and a `below` gate against 100
-    // reads FALSE — which is the correct "there is no enemy" answer anyway. Pinned by
-    // `noVictimResidualTripwires.test.ts`, which fails loudly the day a kit adds such a gate. The
-    // fix sites when that happens are `PlayerRoundCtx.enemyHpPct` (this file, ~248, make it
-    // optional) and this derivation.
-    const enemyHpDecline = hasVictim ? Math.max(0, enemyHp - enemy.currentHp) : 0;
-    const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+    // SP-4d: with no victim there is no HP to have declined and no denominator to divide by, so
+    // there is NO READING — the gate-facing value is absent, and every enemy-HP gate on this turn
+    // is unresolvable rather than satisfied by a fabricated 100 ("a healthy enemy"). The
+    // 4c-2b-era residual note that stood here is discharged; do not restore a `: 100` fallback.
+    const enemyHpPct = hasVictim
+        ? enemyHp > 0
+            ? Math.max(0, 100 * (1 - Math.max(0, enemyHp - enemy.currentHp) / enemyHp))
+            : 0
+        : undefined;
 
     const firingSkill = selectFiringSkill(shipSkills, action);
     // noCrit is read from the UNGATED skill: the flag is a property of the attack
@@ -4465,7 +4465,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         action,
         roundCrit,
         hitCrits,
-        enemyHpPct,
+        enemyHpPct: enemyHpPct ?? DISPLAY_ENEMY_HP_PCT_NO_VICTIM,
         // SP-4c-2b: a no-victim cast inflicted no DoT on anybody, so the round row reports NONE —
         // neither landed nor resisted. Both engine derivations read this pair, and each is wrong if
         // only `dotsLanded` is touched: `appliedDoTs: dotsConfig` (engine.ts:11240) would display
