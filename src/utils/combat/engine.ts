@@ -2725,11 +2725,13 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  unresolvable id", which was wrong about exactly the id that matters. */
     const reactiveLandingChanceFor = (ownerId: string, victimId: string): number | undefined => {
         const owner = allActorsById.get(ownerId);
-        // FIX 1 (review wave 1): REFUSE to price the dummy sentinel. Two reactive arms fall through
-        // to `ctx.enemy.id` when no real victim was threaded (`applicationTargetId ?? ctx.enemy.id`
-        // and `victim?.id ?? ctx.enemy.id` in triggers.ts — e.g. Burner's on-deal-damage, which
-        // carries no victimId), and the dummy is deliberately still a member of `allActorsById`
-        // (4c-2d deletes it). So without this guard the lookup SUCCEEDS and the roll gets priced
+        // FIX 1 (review wave 1): REFUSE to price the dummy sentinel. Two reactive arms USED TO fall
+        // through to `ctx.enemy.id` when no real victim was threaded (`applicationTargetId ??
+        // ctx.enemy.id` and `victim?.id ?? ctx.enemy.id` in triggers.ts — e.g. Burner's
+        // on-deal-damage, which carries no victimId); SP-4c-2d made both a NO-OP, so no arm routes
+        // here any more and this guard is a pure backstop. The dummy is deliberately still a member
+        // of `allActorsById` (Task 2 of 4c-2d deletes the actor). Without this guard a call that DID
+        // name the sentinel would have the lookup SUCCEED and the roll get priced
         // against a phantom: `liveDebuffLandingChance` reads `defender.stats.security ?? 100`, and
         // the dummy's security is whatever `enemySecurity` was — `undefined` for most callers, i.e.
         // **100**, which for corpus hacking clamps the chance to 0 and never lands. That is a
@@ -5993,10 +5995,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A missing/already-destroyed victim has no defense to mitigate against — skip
             // rather than crediting an un-mitigated number. BEHAVIOR CHANGE vs the pre-#211
             // formula (which never referenced a victim and credited unconditionally): for the
-            // ctx.enemy fallback this is inert (the DPS/sim `enemy` is a real destructible actor
-            // since SP-U U5, but its HP/`recordDestroyed` only land in the post-round accounting
-            // step — never during this in-turn drain — so `victim.destroyedRound` is never set
-            // yet here), but a counterTargetId-routed victim (FrontLine's charging
+            // now-retired ctx.enemy fallback it was inert (the DPS/sim `enemy` is a real destructible
+            // actor since SP-U U5, but its HP/`recordDestroyed` only land in the post-round
+            // accounting step — never during this in-turn drain — so `victim.destroyedRound` was
+            // never set yet here), but a counterTargetId-routed victim (FrontLine's charging
             // enemy) CAN die to an earlier reactive in the same drain batch — the proc then
             // credits nothing, which is the correct reading (you can't hit a corpse).
             if (!victim || victim.destroyedRound !== undefined) return;
@@ -6115,7 +6117,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             //
             // victim.id !== enemy.id: defensive backstop keeping the HP path off the vestigial dummy
             // (a proc whose target resolved to ctx.enemy — e.g. an AoE with an empty living roster —
-            // stays credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim.
+            // stayed credit-only). After Tasks 4-7 all eight ships resolve a real positioned victim,
+            // and since SP-4c-2d that empty-roster shape no-ops in the executor instead of arriving
+            // here at all, so this is a backstop over a route nothing takes.
             //
             // SP-1 follow-up: gated on `hasPositionedEnemyRoster`, NOT the then-named
             // `positionalTeamBattle` input field, now expressed as `mode: 'battle'` — the same
@@ -8278,8 +8282,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (isTurnBlocked(intent.ownerId)) continue;
                     executeIntent(intent, {
                         round: r,
-                        enemy,
-                        enemyId: enemy.id,
                         statusEngine,
                         bus,
                         // Combat-log attribution: the actor whose turn is active when this
@@ -8492,9 +8494,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // C2b-2: opposing actor with the most buffs (Rhodium's enemy-most-buffs purge). Buff
         // count via selfBuffNamesForOwners (incl. unremovable — fine for SELECTION; removal still
         // respects the unremovable set). Ties → first by roster order (deterministic for goldens).
-        // Returns undefined for an empty roster → executor falls back to ctx.enemyId. Historically
-        // that fallback was how the DPS dummy got picked. No live call site can hand it an empty
-        // roster any more: both arguments (`enemyAttackerActors` / `allPlayerActors`) are fixed
+        // Returns undefined for an empty roster — and, the case that actually fires, when no
+        // opposing actor carries ANY buff. SP-4c-2d: the executor NO-OPS on undefined. It used to
+        // fall back to ctx.enemyId, which is how the DPS dummy got picked (Rhodium's end-of-round
+        // purge did this in every buff-less round — 73 measured hits suite-wide). No live call site
+        // can hand it an empty roster any more: both arguments
+        // (`enemyAttackerActors` / `allPlayerActors`) are fixed
         // arrays built from the input rosters and never filtered by death, and since SP-4b-2b the
         // boundary refuses an absent/empty `enemyAttackers`. The guard stays as a total-function
         // contract, not as a live branch.

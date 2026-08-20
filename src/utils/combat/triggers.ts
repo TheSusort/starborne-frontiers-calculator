@@ -1136,7 +1136,7 @@ export function registerReactiveListeners(args: {
                     // enemy. Harmless for Zosimos's self-gain intent (it ignores repairerId).
                     // Phase 3 PR-F: ALSO stamp counterTargetId = the repairer (Ruiner's Bomb
                     // routes here like every other "on that enemy" counter-infliction — the
-                    // debuff branch's existing `counterTargetId ?? ctx.enemy.id` fallback picks
+                    // debuff branch's existing `counterTargetId` route picks
                     // this up for free) and repairedEnemyIds = the healed set (Amartya's "that
                     // defender" Defense Shred fans out to every healed enemy instead).
                     const onEnemyRepair = (casterId: string, targets: string[]) => {
@@ -1240,8 +1240,9 @@ export function registerReactiveListeners(args: {
                         // eventCtx.victimId (that field is consumed only by the dot/convert-dot
                         // branches). counterTargetId is exactly the field on-enemy-repaired/
                         // on-enemy-cleansed/on-enemy-charged-cast already use for this same
-                        // single-recipient routing shape — without it, the debuff executor falls
-                        // back to ctx.enemy.id (the DPS dummy sink) in positional/team battle.
+                        // single-recipient routing shape — without it the debuff executor has no
+                        // target at all and (since SP-4c-2d) NO-OPS; before that rung it fell back
+                        // to ctx.enemy.id, the DPS dummy sink, in positional/team battle.
                         if (isOpposing(e.actorId) && e.buffName === 'Taunt')
                             enqueue({
                                 ...intent,
@@ -1305,7 +1306,8 @@ export function registerReactiveListeners(args: {
                     bus.on('purge-performed', (e) => {
                         // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
                         // Route counterTargetId = e.targetId so Sefuba's chain "purge 1 more"
-                        // re-purges the SAME victim (not ctx.enemyId — victim-routing).
+                        // re-purges the SAME victim (victim-routing; before SP-4c-2d an
+                        // unstamped chain purge hit ctx.enemyId, the dummy, instead).
                         // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
                         if (e.casterId === ownerId)
                             enqueue({
@@ -1376,8 +1378,6 @@ export function registerReactiveListeners(args: {
  *  `lastTurnCtxByActor.get(intent.ownerId)` — NOT from a single attacker. */
 export interface IntentExecContext {
     round: number;
-    enemy: CombatActor;
-    enemyId: string;
     statusEngine: StatusEngine;
     bus: CombatEventBus;
     /** Combat-log attribution (reactive stamping): the actorId whose turn was active when
@@ -1631,8 +1631,9 @@ export interface IntentExecContext {
     procDecisionThisSubAttack?: Map<string, boolean>;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
-     *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
-     *  ctx.enemyId. Optional — absent in unit-test ctxs that don't drive most-buffs purges. */
+     *  Returns undefined when no opposing actor carries a buff at all (and for an empty roster)
+     *  → SP-4c-2d: the executor NO-OPS. It used to fall back to ctx.enemyId, the dummy. Optional —
+     *  absent in unit-test ctxs that don't drive most-buffs purges. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
     /** Task A: resolve any actor's RAW affinity by id (from the combat-wide allActorsById map).
      *  Used by the reactive `apply`-debuff branch to re-resolve landing vs the ACTUAL target's
@@ -2825,12 +2826,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // The re-check `scrubDrainGateConditions` promised: evaluate the scrubbed enemy-oriented
     // conditions against ONE resolved target's own live state.
     //
-    // A target with no resolvable actor — the vestigial dummy sink (`ctx.enemyId`, still the tail
-    // of the `debuff` and `purge` target chains until SP-4c deletes it), or a unit-test ctx with no
-    // `actorById` — falls back to `baseDrainCtx`, the EXACT context the global gate used before this
-    // change. That makes every sink-resolved case byte-identical to pre-fix behaviour rather than a
-    // new reading, and `buildPerVictimConditionCtx` already makes the same fallback internally when
-    // `recipientMaxHpFor` returns 0.
+    // A target with no resolvable actor — a unit-test ctx with no `actorById`, or an id naming
+    // nobody — falls back to `baseDrainCtx`, the EXACT context the global gate used before this
+    // change. That makes every such case byte-identical to pre-fix behaviour rather than a new
+    // reading, and `buildPerVictimConditionCtx` already makes the same fallback internally when
+    // `recipientMaxHpFor` returns 0. The `undefined` arm is now unreachable from the `debuff` and
+    // `purge` branches: SP-4c-2d made an unresolved target a NO-OP before this gate is consulted,
+    // so the vestigial dummy sink is no longer the tail of either target chain.
     const perVictimGate = perVictimEnemyConditions(intent);
     const perVictimOk = (targetId: string | undefined): boolean => {
         if (perVictimGate.length === 0) return true;
@@ -3213,6 +3215,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ? intent.eventCtx.critVictimIds
                     : [counterTargetId];
         for (const applicationTargetId of applicationTargetIds) {
+            // SP-4c-2d: a victimless infliction is a NO-OP — the rule the reactive damage
+            // branch already states above its selector arms. Before this rung an unresolved
+            // target fell through to `ctx.enemy.id`, the vestigial dummy sink.
+            if (applicationTargetId === undefined) continue;
             // M10 (spec §4): the enemy-oriented gate scrubbed from the global check is re-evaluated
             // against the target THIS application actually lands on — PER fanned-out target, so a
             // route that resolves several enemies (critVictimIds / adjacent-enemies /
@@ -3231,7 +3237,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // EXISTING resist `else` handles it (no duplicated resist code). `&&`
             // short-circuits when not immune → byte-identical to the original
             // `landsTimedEnemyApplication`-only condition.
-            const debuffTargetId = applicationTargetId ?? ctx.enemy.id;
+            const debuffTargetId = applicationTargetId;
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
             // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
             // NOT a global one — a team ship's debuff lands at ITS landing chance. One draw PER
@@ -3293,9 +3299,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     // can route retaliation back at it.
                     sourceId: intent.ownerId,
                     // The RESOLVED target the debuff was aimed at (enemy-highest-attack /
-                    // counter-infliction route), falling back to the default enemy only when no
-                    // specific victim resolved — so the combat log names the ship that resisted
-                    // ("src → <that ship>: X resisted") instead of the dummy sink id.
+                    // counter-infliction route) — so the combat log names the ship that resisted
+                    // ("src → <that ship>: X resisted"). SP-4c-2d: it can no longer be the dummy
+                    // sink id, because an unresolved target never reaches this loop body at all.
                     targetId: debuffTargetId,
                     round: ctx.round,
                     buffName: cfg.buffName,
@@ -3458,11 +3464,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
         // Resolve the REAL victim (same seam the convert-dot branch uses): a reactive DoT must
         // land on the enemy the triggering event carries (e.g. on-ally-crit-dot → "on that
-        // enemy", the ally's actual victim), NOT the fixed DPS dummy `enemy` sink. When no victim
-        // is threaded — DPS mode (victimId resolves to the dummy anyway), an owner's own-target
-        // reactive (Burner on-deal-damage: no victimId → the dummy IS the owner's target), or a
-        // unit-test ctx without `actorById` — fall through to the ctx-level containers / ctx.enemy.id
-        // exactly as before (byte-identical). Only a resolved victim swaps to its OWN containers.
+        // enemy", the ally's actual victim), NOT the fixed DPS dummy `enemy` sink. SP-4c-2d: when
+        // no victim is threaded at all the whole application is a NO-OP (the guard below) — this
+        // used to fall through to the ctx-level containers and `ctx.enemy.id`, i.e. to the dummy.
+        // A victim id that resolves to no ACTOR still lands, on the ctx-level containers keyed by
+        // that id: a unit-test ctx has no `actorById` delegate to resolve the object with.
         //
         // `counterTargetId` is the second half of that seam: the COUNTER-INFLICTION route ("on
         // that enemy" / "on its attacker" / "on any enemy performing a repair") that on-attacked
@@ -3470,8 +3476,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // branch already falls back to. Without it Warden/Shepherd's Corrosion and Ruiner's Bomb
         // land in the vestigial dummy's containers and never tick or burst on the real enemy.
         const routedVictimId = intent.eventCtx?.victimId ?? intent.eventCtx?.counterTargetId;
-        const victim = routedVictimId ? ctx.actorById?.(routedVictimId) : undefined;
-        const victimId = victim?.id ?? ctx.enemy.id;
+        // SP-4c-2d: victimless → NO-OP, so no container push and NO `dot-applied`. Before this
+        // rung the stack landed in the dummy's containers, where since 4c-2c it never ticked and
+        // never expired while `dotCarrierActors` kept REPORTING it (spec §9.8).
+        if (routedVictimId === undefined) return;
+        const victim = ctx.actorById?.(routedVictimId);
+        // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
+        // knows the id — keep using it rather than inventing a target.
+        const victimId = victim?.id ?? routedVictimId;
         // Block Debuff (D-PR15 Task 7): an immune target auto-resists this reactive DoT — block
         // it AND emit a resist event (block path ONLY; a normal landing failure below stays
         // silent → byte-identical when not immune). Placed AFTER the inert-DoT guard above so a
@@ -4074,10 +4086,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // (enemy-most-buffs, Rhodium) resolve one living opposing actor via the ctx resolvers —
         // mirrors the debuff branch's enemy-highest-attack resolution (triggers.ts ~2207).
         // Everything else keeps the pre-existing eventCtx-routed counterparty (FrontLine's
-        // charging enemy, Grif's cleansing enemy) else the ctx.enemy fallback (Judge/Chakara/
-        // Incinerator's start-of-round/end-of-round triggers, which have no specific triggering
-        // counterparty, and the DPS dummy). A selector that resolves nothing is a NO-OP — it
-        // never falls back to the dummy. `multiplier` is a raw percentage like the cast path
+        // charging enemy, Grif's cleansing enemy) else the first living opposing actor
+        // (Judge/Chakara/Incinerator's start-of-round/end-of-round triggers, which have no specific
+        // triggering counterparty). A selector that resolves nothing is a NO-OP — it never falls
+        // back to the dummy, and since SP-4c-2d neither does the living-roster arm below when the
+        // roster is empty: all four reactive branches now agree on that rule.
+        // `multiplier` is a raw percentage like the cast path
         // (e.g. 75 for "75% damage"); `hits` folds into the mitigation call the same way
         // applyCounterAttack folds a counter's hit count. Emits NO event → no chain.
         const tgt = intent.ability.target;
@@ -4141,20 +4155,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // stays alive whenever the team fields an ally-targeting ship (healer) and would
             // otherwise leak a phantom "→ enemy" line into the log (repeated once per fire).
             // `livingOpposingActorIds` can still hand back [] — it is gated on
-            // hasPositionedEnemyRoster AND filters out actors carrying a `destroyedRound` — so a run
-            // can still fall through to the dummy sink, its intended role. "Pure DPS-calc mode" was
-            // the shorthand when this was written and no longer names that case: since SP-1 the DPS
-            // page supplies a real, positioned enemy and since SP-4b-1 the normalization boundary
-            // places it. Neither do the two shapes this note used to name next — both are now
-            // impossible below the boundary: SP-4b-2b REFUSES an absent/empty roster, and SP-4c-2a's
+            // hasPositionedEnemyRoster AND filters out actors carrying a `destroyedRound`. That used
+            // to fall through to the dummy sink, "its intended role"; SP-4c-2d retired the role and
+            // the empty list is now a NO-OP. "Pure DPS-calc mode" was the shorthand when this was
+            // written and no longer names that case: since SP-1 the DPS page supplies a real,
+            // positioned enemy and since SP-4b-1 the normalization boundary places it. Neither do
+            // the two shapes this note used to name next — both are now impossible below the
+            // boundary: SP-4b-2b REFUSES an absent/empty roster, and SP-4c-2a's
             // `MIN_TARGETABLE_MAX_HP` floor (`withTargetableHp` in normalizeRoster.ts) makes
             // hasPositionedEnemyRoster constant true, so a roster made only of 0-max-HP pressure
             // sources cannot be constructed either. What is LEFT is the DESTROYED-roster case: every
             // opposing actor already carries a `destroyedRound`, so the filter empties the list. No
-            // claim is made here about whether a shipped run reaches it; the arm goes with the dummy
-            // in SP-4c-2d regardless.
+            // claim is made here about whether a shipped run reaches it — it no-ops either way.
             const opposing = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
-            victimIds = [opposing.length > 0 ? opposing[0] : ctx.enemy.id];
+            // SP-4c-2d: an empty living roster is a NO-OP, matching the two selector arms above
+            // — this arm is the last one that still fell back to the dummy.
+            if (opposing.length === 0) return;
+            victimIds = [opposing[0]];
         }
         // M10 (spec §4): the all-enemies path already filtered per victim via
         // `resolveAoEReactiveDamageVictims`; the single-target paths (debuffVictimId / first living
@@ -4247,19 +4264,24 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // footprint (pattern + opposing roster) is not reachable at drain time.
         // Reactive purge (C2b): remove buffs from the victim. Target = the routed
         // attacker/killer (counterTargetId — set by on-attacked/on-destroyed in C2b-2,
-        // and by on-enemy-purged for Sefuba's chain victim-routing) else the turn's
-        // enemy. statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
+        // and by on-enemy-purged for Sefuba's chain victim-routing).
+        // statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
         // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
         // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
         // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the REAL
         // victim this event carries (eventCtx.victimId — Task 12's on-deal-damage purge,
         // Zeolite: "purges 1 buff from the enemy when dealing damage to a Defender" — the
-        // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam)
-        // else the turn's enemy.
+        // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam).
+        // SP-4c-2d: nothing resolved → NO-OP. It used to be "else the turn's enemy", the dummy.
         const targetId =
             intent.ability.target === 'enemy-most-buffs'
-                ? (ctx.enemyWithMostBuffs?.(intent.ownerId) ?? ctx.enemyId)
-                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId ?? ctx.enemyId);
+                ? ctx.enemyWithMostBuffs?.(intent.ownerId)
+                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId);
+        // SP-4c-2d: this was the ONLY fallback with a SHIPPED consumer — Rhodium's end-of-round
+        // purge, in every round where no enemy carried a buff (`mostBuffsAmong` returns undefined
+        // there, `engine.ts`). Measured 73 hits suite-wide. Rhodium's own `damage` half on the
+        // same trigger and same target already returned on undefined; now both halves agree.
+        if (targetId === undefined) return;
         // M10 (spec §4): as in the debuff branch — re-check against the real routed target.
         if (!perVictimOk(targetId)) return;
         // Task 12 (Zeolite): the `enemy-type` gate was scrubbed from the generic drain-time

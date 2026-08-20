@@ -95,11 +95,16 @@ describe('allyCritDot – Task 1: viaCrit on dot-applied', () => {
     });
 
     // ── Test 3: executor-applied dot never carries viaCrit ───────────────────
-    // A reactive dot (trigger: 'start-of-round') fires through the executor.
-    // Its dot-applied events should NEVER carry viaCrit, even at crit=100.
-    // The executor emission at triggers.ts ~485-492 deliberately omits viaCrit
+    // A reactive dot fires through the executor. Its dot-applied events should NEVER
+    // carry viaCrit, even at crit=100 — the executor emission deliberately omits it
     // (drain-time has no crit outcome).
-    it('executor-applied dot (start-of-round reactive) never carries viaCrit at crit=100', () => {
+    //
+    // SP-4c-2d: the trigger is `on-deal-damage`, not `start-of-round`. A start-of-round
+    // reactive threads NO victim, and a victimless reactive infliction is now a no-op —
+    // so it emits nothing at all and this case would have gone vacuous (its `> 0` guard
+    // is what catches that). `on-deal-damage` stamps `eventCtx.victimId` (the enemy the
+    // focus just hit), so the executor still fires and still has a payload to inspect.
+    it('executor-applied dot (on-deal-damage reactive) never carries viaCrit at crit=100', () => {
         const bus = createEventBus();
         const executorDotEvents: Extract<CombatEvent, { type: 'dot-applied' }>[] = [];
         bus.on('dot-applied', (e) => executorDotEvents.push(e));
@@ -119,7 +124,7 @@ describe('allyCritDot – Task 1: viaCrit on dot-applied', () => {
                         ab({
                             type: 'dot',
                             target: 'enemy',
-                            trigger: 'start-of-round',
+                            trigger: 'on-deal-damage',
                             config: {
                                 type: 'dot',
                                 dotType: 'corrosion',

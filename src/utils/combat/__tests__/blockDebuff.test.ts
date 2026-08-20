@@ -494,8 +494,6 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
         const resisted: ActiveBuff[] = [];
         const ctx: IntentExecContext = {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],
@@ -542,8 +540,6 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
         bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
         const ctx: IntentExecContext = {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus,
             corrosionEntries: [],
@@ -596,13 +592,18 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
 // Task 7: Block Debuff — reactive DoT block + resist event (executeIntent).
 //
 // The REACTIVE DoT executor (triggers.ts `cfg.type === 'dot'`) appends a DoT to
-// the reactive target (`ctx.enemy.id`) on a triggered event, gated by a landing
-// roll that is SILENT on failure. When that target carries `Block Debuff`, the
-// immunity check must BLOCK the DoT (no entry appended → no `dot-applied`) AND
-// emit a `debuff-resisted` event labelled with the blocked DoT (`Inferno III`) —
+// the routed reactive victim on a triggered event, gated by a landing roll that is
+// SILENT on failure. When that victim carries `Block Debuff`, the immunity check
+// must BLOCK the DoT (no entry appended → no `dot-applied`) AND emit a
+// `debuff-resisted` event labelled with the blocked DoT (`Inferno III`) —
 // block-path ONLY. Normal landing failures stay silent (byte-identical). We drive
-// the executor directly, reusing the Task 5 harness, with the reactive DoT firing
-// at `ctx.enemy.id` (`enemy-default`).
+// the executor directly, reusing the Task 5 harness.
+//
+// SP-4c-2d: the intent now STAMPS its victim (`eventCtx.counterTargetId`), which is
+// what an on-attacked reactive does in production anyway. Before that rung these two
+// cases relied on the branch falling back to `ctx.enemy.id`; that fallback is now a
+// no-op, so without the stamp both cases would pass VACUOUSLY (nothing lands, so
+// nothing is blocked either).
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
@@ -615,10 +616,14 @@ describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
             liveDebuffLandingChance: 1,
         }) as unknown as PlayerActorRuntime;
 
-    // A reactive (on-attacked) Inferno III DoT inflicted at the reactive target (ctx.enemy.id).
+    /** The routed victim every case here inflicts on — the id the Block Debuff is seeded against. */
+    const VICTIM_ID = 'enemy-default';
+
+    // A reactive (on-attacked) Inferno III DoT inflicted at the routed attacker.
     const makeReactiveDotIntent = (): Intent => ({
         ownerId: 'attacker',
         sourceSlot: 'passive',
+        eventCtx: { counterTargetId: VICTIM_ID },
         ability: {
             id: 'reactive-dot',
             type: 'dot',
@@ -660,8 +665,6 @@ describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
         if (immuneTargetId) seedBlockDebuff(se, 1, immuneTargetId);
         return {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],
@@ -679,7 +682,7 @@ describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
     };
 
     it('immune target BLOCKS a reactive DoT: no dot-applied, resisted Inferno III event, no entry', () => {
-        const ctx = buildCtx('enemy-default');
+        const ctx = buildCtx(VICTIM_ID);
         const events: CombatEvent[] = [];
         ctx.bus.on('dot-applied', (e) => events.push(e as CombatEvent));
         ctx.bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
@@ -847,8 +850,6 @@ describe('Block Debuff — integration (engine)', () => {
         const resisted: ActiveBuff[] = [];
         const ctx: IntentExecContext = {
             round: 1,
-            enemy: { id: 'enemy-1' } as CombatActor,
-            enemyId: 'enemy-1',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],

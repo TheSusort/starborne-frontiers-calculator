@@ -106,8 +106,6 @@ function makeCtx(opts?: {
 
     const ctx = {
         round: 1,
-        enemy: { id: 'enemy1', currentHp: 100000 } as CombatActor,
-        enemyId: 'enemy1',
         statusEngine: se,
         bus,
         corrosionEntries: [],
@@ -179,8 +177,6 @@ function makeAdjacentCtx(opts?: {
 
     const ctx = {
         round: 1,
-        enemy: { id: 'enemy1', currentHp: 100000 } as CombatActor,
-        enemyId: 'enemy1',
         statusEngine: se,
         bus,
         corrosionEntries: [],

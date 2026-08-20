@@ -160,8 +160,6 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
         se.beginRound(1);
         return {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],
@@ -199,7 +197,10 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
         eventCtx,
     });
 
-    it('routes to ctx.enemy.id when no eventCtx counterTargetId is present (Judge/Chakara/Incinerator/Rhodium shape)', () => {
+    it('NO-OPS when neither an eventCtx target nor a living opposing roster resolves (SP-4c-2d: was ctx.enemy.id)', () => {
+        // This ctx supplies no `livingOpposingActorIds` delegate, so the arm's roster is empty.
+        // It used to fall through to the vestigial dummy (`victimId: 'enemy-default'`); the empty
+        // roster is now a NO-OP, matching the two selector arms above it in the executor.
         const calls: Call[] = [];
         const ctx = makeExecCtx({
             applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) => {
@@ -209,10 +210,26 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
 
         executeIntent(makeDamageIntent('grif', { multiplier: 75, noCrit: true }), ctx);
 
+        expect(calls).toEqual([]);
+    });
+
+    it('routes to the FIRST living opposing actor when the roster resolves one', () => {
+        // The positive half of the case above, and the arm's real production route (Judge / Chakara
+        // / Incinerator / Rhodium's start-of-round / end-of-round triggers, which stamp no victim).
+        const calls: Call[] = [];
+        const ctx = makeExecCtx({
+            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) => {
+                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit });
+            },
+            livingOpposingActorIds: () => ['front-enemy', 'back-enemy'],
+        });
+
+        executeIntent(makeDamageIntent('grif', { multiplier: 75, noCrit: true }), ctx);
+
         expect(calls).toEqual([
             {
                 ownerId: 'grif',
-                victimId: 'enemy-default',
+                victimId: 'front-enemy',
                 abilityId: 'grif-dmg',
                 multiplier: 75,
                 hits: 1,
@@ -254,7 +271,12 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
             },
         });
 
-        executeIntent(makeDamageIntent('grif', { multiplier: 60 }), ctx);
+        // SP-4c-2d: a routed victim is now REQUIRED to reach the wiring this case is about —
+        // without one the executor no-ops and `calls[0]` would be undefined.
+        executeIntent(
+            makeDamageIntent('grif', { multiplier: 60 }, { counterTargetId: 'caster-x' }),
+            ctx
+        );
 
         expect(calls[0]).toMatchObject({ multiplier: 60, hits: 1, noCrit: false });
     });

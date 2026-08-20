@@ -201,8 +201,6 @@ describe('hit-counted Barrier — reactive path (triggers.ts executeIntent, cfg.
         se.beginRound(1);
         return {
             round: 1,
-            enemy: { id: 'enemy-default' } as CombatActor,
-            enemyId: 'enemy-default',
             statusEngine: se,
             bus: createEventBus(),
             corrosionEntries: [],

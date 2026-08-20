@@ -85,7 +85,8 @@ describe('C2b-1 T2: reactiveRecipients helper', () => {
 // C2b-1 Task 3: executeIntent — purge branch
 //
 // Verifies the new `cfg.type === 'purge'` executor branch:
-//   (a) target routing: counterTargetId when set, else ctx.enemyId
+//   (a) target routing: counterTargetId when set; NO-OP when it is absent (SP-4c-2d — this
+//       used to fall back to ctx.enemyId, the vestigial dummy)
 //   (b) emits purge-performed when removed > 0 and !eventCtx.fromPurgeEvent
 //   (c) does NOT emit when fromPurgeEvent is true (removal still happens)
 //   (d) does NOT emit when removed === 0
@@ -149,8 +150,6 @@ function makePurgeCtx(removedCount: number): {
 
     const ctx: IntentExecContext = {
         round: 3,
-        enemy: { id: 'enemy-default' } as CombatActor,
-        enemyId: 'enemy-default',
         statusEngine: se,
         bus,
         corrosionEntries: [],
@@ -193,11 +192,10 @@ describe('C2b-1 T3: executeIntent — purge branch', () => {
         expect(purgedCalls[0]).toEqual(['routed-enemy', 1]);
     });
 
-    it('(a) falls back to ctx.enemyId when counterTargetId is absent', () => {
+    it('(a) NO-OPS when counterTargetId is absent (SP-4c-2d: was a fallback to ctx.enemyId)', () => {
         const { ctx, purgedCalls } = makePurgeCtx(1);
         executeIntent(makePurgeIntent(), ctx);
-        expect(purgedCalls).toHaveLength(1);
-        expect(purgedCalls[0]).toEqual(['enemy-default', 1]);
+        expect(purgedCalls).toHaveLength(0);
     });
 
     it('(b) emits purge-performed when removed > 0 and fromPurgeEvent unset', () => {
@@ -215,7 +213,12 @@ describe('C2b-1 T3: executeIntent — purge branch', () => {
 
     it('(c) does NOT emit when fromPurgeEvent is true, but removal still happens', () => {
         const { ctx, purgedCalls, emitted } = makePurgeCtx(1);
-        executeIntent(makePurgeIntent({ fromPurgeEvent: true }), ctx);
+        // SP-4c-2d: counterTargetId is now REQUIRED for this case to reach the emission gate at
+        // all — without it the executor no-ops and this test would pass vacuously.
+        executeIntent(
+            makePurgeIntent({ fromPurgeEvent: true, counterTargetId: 'routed-enemy' }),
+            ctx
+        );
         // removal still happens
         expect(purgedCalls).toHaveLength(1);
         // no re-emission
@@ -224,7 +227,8 @@ describe('C2b-1 T3: executeIntent — purge branch', () => {
 
     it('(d) does NOT emit when removed === 0', () => {
         const { ctx, emitted } = makePurgeCtx(0);
-        executeIntent(makePurgeIntent(), ctx);
+        // SP-4c-2d: same — a routed target is required or the no-op satisfies this vacuously.
+        executeIntent(makePurgeIntent({ counterTargetId: 'routed-enemy' }), ctx);
         expect(emitted).toHaveLength(0);
     });
 });

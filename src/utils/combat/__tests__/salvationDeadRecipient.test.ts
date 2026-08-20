@@ -74,8 +74,6 @@ const buildCtx = (
     se.beginRound(1);
     return {
         round: 1,
-        enemy: { id: 'enemy' } as CombatActor,
-        enemyId: 'enemy',
         statusEngine: se,
         bus: createEventBus(),
         corrosionEntries: [],

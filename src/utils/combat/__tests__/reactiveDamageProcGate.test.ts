@@ -62,8 +62,6 @@ function makeCtx(opts?: {
 
     return {
         round: 1,
-        enemy: { id: 'enemy1', currentHp: 100000 } as CombatActor,
-        enemyId: 'enemy1',
         statusEngine: se,
         bus,
         corrosionEntries: [],
@@ -108,6 +106,11 @@ function makeCtx(opts?: {
         recordResisted: () => {},
         procChanceGates: opts?.procChanceGates,
         applyReactiveDamage: opts?.applyReactiveDamage,
+        // SP-4c-2d: the damage branch's no-eventCtx arm routes to the first LIVING opposing actor
+        // and, since that rung, NO-OPS on an empty roster instead of falling back to the vestigial
+        // `enemy` dummy. Without this delegate every case here would no-op before reaching the
+        // proc gate it is about — green, and completely vacuous.
+        livingOpposingActorIds: () => ['victim1'],
     } as IntentExecContext;
 }
 

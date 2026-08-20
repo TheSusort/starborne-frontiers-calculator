@@ -65,8 +65,6 @@ function makeCtx(opts?: {
 
     return {
         round: opts?.round ?? 1,
-        enemy: { id: 'enemy1', currentHp: 100000 } as CombatActor,
-        enemyId: 'enemy1',
         statusEngine: se,
         bus,
         corrosionEntries: [],
@@ -111,6 +109,11 @@ function makeCtx(opts?: {
         applyReactiveDamage: opts?.applyReactiveDamage,
         oncePerRoundConsumed: opts?.oncePerRoundConsumed,
         healing: opts?.healing,
+        // SP-4c-2d: the damage branch's no-eventCtx arm routes to the first LIVING opposing actor
+        // and, since that rung, NO-OPS on an empty roster instead of falling back to the vestigial
+        // `enemy` dummy. Without this delegate the damage cases here would no-op before reaching
+        // the once-per-round gate they are about — green, and completely vacuous.
+        livingOpposingActorIds: () => ['victim1'],
     } as IntentExecContext;
 }
 
