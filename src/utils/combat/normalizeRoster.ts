@@ -106,11 +106,13 @@ export const MIN_TARGETABLE_MAX_HP = 1_000_000;
 /**
  * Responsibility (c): every enemy attacker is a HITTABLE ship.
  *
- * `isTargetableRosterMember` (positional + max hp > 0) is what `hasPositionedEnemyRoster` is built
- * from, and a roster holding no targetable member is the ONE shape that still reached the vestigial
- * dummy's scalar sink — measured at 412 credits across 26 files on `main` @ `8d2c2a61`, every one of
- * them this shape. Flooring here makes `hasPositionedEnemyRoster` constant `true` below the
- * boundary, so the positional path is taken on every run and player damage books per-victim.
+ * `isTargetableRosterMember` (positional + max hp > 0) was what the engine's now-deleted
+ * `hasPositionedEnemyRoster` was built from, and a roster holding no targetable member was the ONE
+ * shape that still reached the vestigial dummy's scalar sink — measured at 412 credits across 26
+ * files on `main` @ `8d2c2a61`, every one of them this shape. Flooring here made that predicate
+ * constant `true` below the boundary, which is what let SP-4c-2d delete it (and the dummy) outright:
+ * the positional path is taken on every run and player damage books per-victim. The predicate itself
+ * is still live for the PLAYER side — see `resolvesPositionalVictim` and reason 2 below.
  *
  * UNIFORM, not conditional on the side being untargetable. The census found 3,004 runCombat
  * invocations and ZERO mixed rosters (a 0-max-HP member alongside a targetable one), so the two

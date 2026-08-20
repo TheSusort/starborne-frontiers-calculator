@@ -3092,11 +3092,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // The guard's first version read `enemy.currentHp <= 0` and was WRONG — reachable, in
         // healing/sim mode, where it silently killed the focus's entire event stream from the
         // moment cumulative damage crossed `enemyHp` (round 6 of 10 in the reproduction; see
-        // `multiHitInlineEmitGuards.test.ts`'s runCombat-level block). The sink NEVER DIES, but its
-        // `currentHp` is CLAMPED: engine.ts (~10568) sets it to `Math.max(0, enemyHp -
-        // cumulativeDamage - cumulativeTeamDamage)` at every round tail, so it reaches 0 and stays
-        // there forever, and nothing terminates the run (the `dpsEnemyTarget &&
-        // enemy.destroyedRound !== undefined` break at ~11008 is gated OFF for this mode).
+        // `multiHitInlineEmitGuards.test.ts`'s runCombat-level block). HISTORY, and it is what makes
+        // the signal choice permanent rather than incidental: the sink NEVER DIED, but its
+        // `currentHp` was CLAMPED — engine.ts set it to `Math.max(0, enemyHp - cumulativeDamage -
+        // cumulativeTeamDamage)` at every round tail, so it reached 0 and stayed there forever
+        // while nothing terminated the run. SP-4c-2d deleted the sink, that clamp and the
+        // roster-emptiness break together, so the specific reproduction is gone — but the LESSON
+        // (`currentHp <= 0` is not an aliveness signal) is not about the dummy at all: a
+        // never-alive actor reads the same way, which is the class that failed 346 tests during
+        // SP-4c-1.
         // THE READING ERROR WORTH NOT REPEATING: the derivation below reasons exclusively about
         // MID-CAST HP application — "can anything decline this target's HP while the loop runs" —
         // and every bullet in it is still true. It simply never asked the OTHER question, "can the
@@ -3120,27 +3124,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //   Everything below is CORROBORATION: it shows no OTHER actor's mid-round work can
         //   decline the bound target's HP either, so the target is alive at every cast this loop
         //   can reach and not merely un-killable by this loop.
-        //   • A ROSTER-LESS run (`dpsEnemyTarget`, engine.ts — since SP-4b-2a a direct-`runCombat`
-        //     shape only, no longer the DPS calculator) drives a REAL destructible `enemy`, but its
-        //     HP lands POST-round in a single applyVictimDamage call after every turn of the round
-        //     has run (engine.ts ~10546, and the round-tail reactive re-fold ~10711-10747), and
-        //     the run breaks the moment `destroyedRound` is set (engine.ts ~11008). Nothing
-        //     declines its HP mid-round.
-        //   • Every OTHER non-positional mode (sim/healing) binds the VESTIGIAL sink (engine.ts's
-        //     `enemy` has no `position`, so `isPositional(enemy.position, …)` is always false),
-        //     whose HP is in the billions and which by construction never DIES — `recordDestroyed`
-        //     is never called on it, so `destroyedRound` stays undefined for the whole run.
-        //     NOT the same as "its currentHp stays positive": the round-tail clamp drives that
-        //     field to 0 and pins it there (see WHICH SIGNAL above). Never-dies is the property
-        //     this guard relies on; never-at-zero-HP is false and must not be substituted for it.
-        //   • The general reactive-proc funnel (engine.ts:5894, `applyVictimDamage` for a proc
-        //     victim) is explicitly gated `hasPositionedEnemyRoster && victim.id !== enemy.id`.
-        //     SCOPE NOTE (SP-4b-2a): that gate keeps the funnel off a NON-positional bound target
-        //     — which is what this corroboration is about — but it OPENS on a positional run, and
-        //     since SP-4b-2a that includes every DPS-calculator run. Where the bound target is a
-        //     real positioned actor the derivation rests on the PRIMARY argument above (this loop
-        //     emits only, and its listeners are enqueue-only), which is self-sufficient and says
-        //     so; the corroboration bullets below enumerate the NON-positional shapes only.
+        //   • ⚠️ TWO BULLETS HERE DESCRIBED THE DUMMY SINK AND WENT WITH IT (SP-4c-2d). They said
+        //     that a ROSTER-LESS run drove a real destructible `enemy` whose HP landed POST-round
+        //     (so nothing declined it mid-round), and that every OTHER non-positional mode bound the
+        //     vestigial billion-HP sink, which never DIED even though the round-tail clamp pinned
+        //     its `currentHp` at 0. Both shapes are gone: the roster-less run has been impossible
+        //     since SP-4b-2b, and the sink itself is deleted. Every bound target is now a real
+        //     actor, so this corroboration reduces to the PRIMARY argument above.
+        //   • The general reactive-proc funnel (`applyVictimDamage` for a proc victim) used to be
+        //     gated `hasPositionedEnemyRoster && victim.id !== enemy.id`, which kept it off a
+        //     non-positional bound target. SP-4c-2d deleted both conjuncts (the first was constant
+        //     true below the normalization boundary, the second named the deleted dummy), so the
+        //     funnel is unconditional — which is why the derivation rests on the PRIMARY argument
+        //     (this loop emits only, and its listeners are enqueue-only) rather than on any gate.
         //   • The remaining mid-round `applyVictimDamage` sites do NOT share one gate. An earlier
         //     draft of this comment claimed they were all "gated on `victim.position !== undefined`
         //     or on the victim carrying an ability/kit"; that is WRONG for two of them. The real

@@ -215,44 +215,18 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
         ]);
     });
 
-    it('BEHAVIOUR CHANGE (SP-4c-2a): the dummy sink still REPORTS its containers, but no longer TICKS them (dropped from the turn order)', () => {
-        // The dummy `enemy` actor object still exists and still carries the seeded containers —
-        // the D3 reporting fields (activeCorrosionStacks/activeDoTStates/...) walk every
-        // enemy-side actor's containers regardless of turn participation, so the dummy is still
-        // COUNTED here.
-        //
-        // SP-4b-2b: this used to get there by passing NO roster. A roster is now required, and
-        // omitting `target`/`pattern` does NOT keep a run non-positional (`normalizeCombatRoster`
-        // fills both). The remaining non-positional shape was BASE's 0-MAX-HP "pressure source":
-        // `resolvesPositionalVictim` found nobody targetable (positionalBinding.ts:69-79).
-        //
-        // SP-4c-2a's targetable-HP floor closes THAT shape too — the same 0-max-HP enemy is now
-        // raised to MIN_TARGETABLE_MAX_HP and `hasPositionedEnemyRoster` is constant true, which
-        // flipped the then-live `dummyEnemyIsVestigial` gate true and dropped the dummy from the
-        // TURN ORDER. SP-4c-2c has since deleted that gate and dropped the dummy UNCONDITIONALLY,
-        // so the reading below no longer depends on the roster's HP at all: the dummy's own
-        // per-victim DoT tick (which used to run during its turn, decrementing `ticksRemaining`)
-        // never fires on any run. That was a REAL BEHAVIOUR CHANGE at 4c-2a, not test drift:
-        // `ticksRemaining` is ONE MORE than before the floor (5 vs 4, 9 vs 8) because the one tick
-        // that used to happen this round didn't. The counts/stacks themselves are unaffected — only
-        // the decrement timing moved, and 4c-2c did not move it again.
-        const row = runCombat({
-            ...BASE,
-            shipSkills: { slots: [] },
-            __testTapActors: (actors) => {
-                const dummy = actors.find((a) => a.id === 'enemy')!;
-                dummy.corrosionEntries.push(dot(9, 6, 5));
-                dummy.pendingBombs.push(bomb(1));
-            },
-        }).rounds[0];
-
-        expect(row.activeCorrosionStacks).toBe(6);
-        expect(row.activeBombCount).toBe(1);
-        expect(row.activeDoTStates).toEqual([
-            { type: 'corrosion', tier: 9, stacks: 6, ticksRemaining: 5 },
-            { type: 'bomb', tier: 100, stacks: 1, ticksRemaining: 9 },
-        ]);
-    });
+    // SP-4c-2d DELETED A CASE HERE, and the deletion is the record of what it removed. It was
+    // titled "the dummy sink still REPORTS its containers, but no longer TICKS them" and it seeded
+    // the dummy `enemy` actor's own containers through `__testTapActors`, then asserted the D3
+    // reporting fields still counted them. That was the STRAND: SP-4c-2c had retired the dummy's
+    // turn, so its entries never ticked and never expired, while `dotCarrierActors` kept including
+    // it for REPORTING — a phantom exactly like the corpse case below, and the one shape of it that
+    // was not filtered out. SP-4c-2d deleted the actor and dropped it from `dotCarrierActors`, so
+    // there is no ghost to seed and no reporting route that would surface one. The sibling pin in
+    // `retiredDummyTurn.test.ts` went the same way and for the same reason (spec §9.5).
+    //
+    // Nothing about the REAL carriers changed: every case above and below reads a positioned enemy
+    // attacker's own containers, which is what the D3 fields have described since 4b-2.
 
     /**
      * Task-14 finding 3 — A CORPSE IS NOT STANDING STATE.

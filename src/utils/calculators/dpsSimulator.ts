@@ -118,9 +118,9 @@ export interface DPSSimulationInput {
      *
      *  OPTIONAL, but no longer the switch between two run shapes: since SP-4b-2a a caller that
      *  supplies none gets one SYNTHESIZED from the scalar fields (`synthesizedDpsEnemy`), so
-     *  `simulateDPS` always hands `runCombat` a non-empty roster and the engine's
-     *  `dpsEnemyTarget` is ALWAYS false on a DPS-calculator run — the focus's damage always
-     *  lands per-victim on real actors, never on the vestigial dummy. Supply this to CHOOSE the
+     *  `simulateDPS` always hands `runCombat` a non-empty roster — the focus's damage always
+     *  lands per-victim on real actors. (The engine's roster-emptiness discriminator and the
+     *  vestigial dummy it selected were deleted in SP-4c-2d.) Supply this to CHOOSE the
      *  enemy (a real ship with skills, several enemies, an explicit slot); omit it to accept the
      *  0-attack stream-inert stand-in built from `enemyHp`/`enemyDefense`/`enemySpeed`/
      *  `enemySecurity`/`enemyAffinity`. Past `effectiveEnemyAttackers` the two are
@@ -231,11 +231,11 @@ export interface RoundData {
      *  contributions land in the TICK round (the ticking victim's own turn-start), not the cast
      *  round — same pre-existing timing `perTargetDamage` already has for DoT ticks.
      *
-     *  REACTIVE DAMAGE **IS** INCLUDED on the positional path, and this comment used to say the
-     *  opposite. `applyReactiveDamage` writes here via `creditDealt` when `hasPositionedEnemyRoster`
-     *  and the victim is a real positioned actor (`engine.ts` ~5784, shipped in #318);
-     *  `applyCounterAttack` (~5554) and reflect (~5243) write it unconditionally. Only a run with
-     *  NO positioned enemy roster falls back to credit-only `creditDamage`. Verified empirically
+     *  REACTIVE DAMAGE **IS** INCLUDED, and this comment used to say the opposite.
+     *  `applyReactiveDamage` writes here via `creditDealt` (shipped in #318); `applyCounterAttack`
+     *  and reflect write it unconditionally too. It used to fall back to credit-only
+     *  `creditDamage` on a run with no positioned enemy roster, but SP-4c-2d deleted that arm —
+     *  the roster is always positioned below the normalization boundary. Verified empirically
      *  across four reactive shapes — start-of-round proc, adjacent-ally retaliation, reflect, and a
      *  true on-attacked counter — each crediting this channel keyed by the reacting actor.
      *
@@ -331,8 +331,8 @@ export interface DPSSimulationSummary {
     totalDamage: number;
     avgDamagePerRound: number;
     /** Round the LAST real enemy fell; undefined while any of them survived the window.
-     *  Re-derived from `ship-destroyed`, never from the engine's `enemyOutcome` (which reads the
-     *  never-dying dummy). */
+     *  Re-derived from `ship-destroyed`. The engine used to expose an `enemyOutcome` block, but it
+     *  read the never-dying dummy and was deleted with it in SP-4c-2d. */
     roundsToKill?: number;
     /** True while ANY real enemy is still standing at the end of the window. */
     survived: boolean;
@@ -529,11 +529,12 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     const engineTeamActors = deriveTeamEngineActors(teamActors, input.enemyAffinity);
     const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
 
-    // The engine's own `enemyOutcome` is derived from the vestigial DUMMY (`enemy.destroyedRound`,
-    // engine.ts:11060), which has billions of HP and never dies — so it always reports
-    // `survived: true` / `roundsToKill: undefined` and is unusable here (SP-4b-2a: every DPS run now
-    // faces a real enemy, so this is the only outcome). Capture the REAL enemies' deaths off an
-    // emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same remedy.
+    // The engine used to return an `enemyOutcome` block derived from the vestigial DUMMY, which had
+    // billions of HP and never died — so it always reported `survived: true` /
+    // `roundsToKill: undefined` and was unusable here. SP-4c-2d deleted the field for exactly that
+    // reason; there is no engine-side outcome to prefer any more. Capture the REAL enemies' deaths
+    // off an emit-only bus tap and re-derive below — same defect class as `cumulativeDamage`, same
+    // remedy.
     const realEnemyIds = new Set(effectiveEnemyAttackers.map((e) => e.id));
     const realEnemyDeathRound = new Map<string, number>();
     /** Last `hp-changed` percentage seen per real enemy. Integer-granular and only emitted on
@@ -667,12 +668,13 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         return (remaining / totalMaxHp) * 100;
     };
 
-    // End the reported run AT the kill, dropping the zero-damage rounds the engine still simulated
-    // afterwards. The engine's own early exit (engine.ts:11008) is gated on `dpsEnemyTarget`, which
-    // is now false on EVERY DPS run (a real enemy is always present), and `battleSimulator` derives its outcome post-hoc
-    // rather than breaking the loop — so the trim belongs here. Matches the documented
-    // `dpsEnemyTarget` semantics ("roundData ends AT the kill, no zero-damage rounds past it") and
-    // keeps `avgDamagePerRound` dividing by the rounds that actually happened.
+    // End the reported run AT the kill, dropping any zero-damage rounds the engine still simulated
+    // afterwards. The engine used to carry its own early exit for this, gated on roster emptiness —
+    // false on every DPS run, and deleted in SP-4c-2d — while `battleSimulator` derives its outcome
+    // post-hoc rather than breaking the loop, so the trim belongs here. (SP-4c-1's side-wipe rule
+    // now ends the run on the turn that kills the last enemy, so this trim is usually a no-op; it
+    // still covers a run that reports rounds past a kill for any other reason.) Keeps
+    // `avgDamagePerRound` dividing by the rounds that actually happened.
     const reportedRounds =
         realRoundsToKill !== undefined ? rounds.filter((r) => r.round <= realRoundsToKill) : rounds;
 
@@ -742,9 +744,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // would fold the ENEMY's output into the player's team aggregate.
     //
     // Replacement (not addition), mirroring the focus: the two channels are mutually exclusive per
-    // cast — the `!teamPositional` gate above, `applyReactiveDamage`'s
-    // `hasPositionedEnemyRoster ? creditDealt : creditDamage` split (engine.ts:5894/5938), and the
-    // positional DoT/detonation sites which call `creditDealt` only. A run with no walked team
+    // cast — the `!teamPositional` gate above, `applyReactiveDamage` (which since SP-4c-2d calls
+    // `creditDealt` unconditionally, its credit-only arm having been roster-emptiness-gated), and
+    // the positional DoT/detonation sites which call `creditDealt` only. A run with no walked team
     // actors at all (`walkedTeamIds.length === 0`) has nothing to re-derive here.
     const walkedTeamIds = engineTeamActors?.filter((t) => t.walk).map((t) => t.id) ?? [];
     const perRoundTeamDamage =

@@ -1791,8 +1791,8 @@ export function buildActorConditionContext(
          *  no shield). Populated by buildDrainContext from the engine's selfShieldFullFor delegate. */
         selfShieldFull?: boolean;
         /** Malvex charged Barrier: the owner's TARGET has a shield. Default false. NOT populated
-         *  by buildDrainContext — a reaction has no "the cast's primary target" (ctx.enemy is the
-         *  legacy/dummy victim sink on the player side), and the only corpus consumer of
+         *  by buildDrainContext — a reaction has no "the cast's primary target" at all, and the
+         *  only corpus consumer of
          *  `enemy-shield` is an on-cast charged-slot grant that never reaches executeIntent. The
          *  field is threaded here so a future reactive consumer only needs an IntentExecContext
          *  delegate, not another hand-enumerated layer. */
@@ -3523,11 +3523,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // SP-E, Task E4 (Belladonna): "When an ally inflicts Corrosion, chance (1%/10 Hacking) to
     // convert it into <buffName> of the same level; upon converting, extend the new entry N
     // turns at crit-power chance." Team-symmetric: `owner` is Belladonna (either side); the
-    // victim is resolved via eventCtx.victimId (the ally's ACTUAL target), never the fixed
-    // ctx.enemy — the same seam the `dot` branch above now uses so a reactive DoT lands on the
-    // real positional victim (a Belladonna reacting on the OPPOSING side to her OWN ally's cast
-    // must land on that ally's real victim, which can be a real player actor in the enemy-owner
-    // case) — never the DPS/team `enemy` dummy.
+    // victim is resolved via eventCtx.victimId (the ally's ACTUAL target) — the same seam the
+    // `dot` branch above uses, so a reactive DoT lands on the real positional victim (a Belladonna
+    // reacting on the OPPOSING side to her OWN ally's cast must land on that ally's real victim,
+    // which can be a real player actor in the enemy-owner case). It used to be able to fall back to
+    // a fixed `ctx.enemy` — the DPS/team dummy — which SP-4c-2d deleted.
     if (cfg.type === 'convert-dot') {
         // Gate 0: only the fromDotType this event carries (Corrosion) converts.
         if (intent.eventCtx?.dotType !== cfg.fromDotType) return;
@@ -4019,8 +4019,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
         // HP/Shield-basis reactive (Vindicator on-resist HP / Xcellence on-resist Shield,
-        // Ship-kit W8): REQUIRES a routed inflictor (counterTargetId) — no fallback to
-        // ctx.enemy (you cannot retaliate against no-one). Frequency: one proc per
+        // Ship-kit W8): REQUIRES a routed inflictor (counterTargetId) and has no fallback — you
+        // cannot retaliate against no-one. (There was never one here; the sibling arms that DID
+        // fall back to the dummy sink were no-oped in SP-4c-2d.) Frequency: one proc per
         // triggering enemy action, keyed (owner, ability, round, source) so multiple debuffs
         // resisted from ONE cast collapse to a single proc while two DIFFERENT enemies each proc.
         // (oncePerRoundConsumed is the per-round set; a 3-part key never collides with the 2-part
@@ -4118,7 +4119,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         } else if (tgt === 'adjacent-enemies') {
             // Ship-kit W5 Task C3 (Demolisher bomb-splash): anchor on the BOMB VICTIM
             // (eventCtx.victimId, stamped by the on-bomb-detonated listener above) rather than
-            // ctx.enemy/counterTargetId — the splash must land on the bombed enemy's own
+            // `counterTargetId` — the splash must land on the bombed enemy's own
             // adjacent enemies, not "an enemy of the owner". `ctx.adjacentOpposingIdsFor` (NOT
             // `adjacentAllyIdsFor`, which is bound to the OWNER's own drain side — wrong
             // direction here: the anchor is on the side OPPOSITE the owner) resolves the
@@ -4154,24 +4155,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // always hit opposing[0], so an AoE debuffer dumped every proc onto enemy slot 1.
             victimIds = [intent.eventCtx.debuffVictimId];
         } else {
-            // No specific triggering enemy (start/end-of-round, on-deal-damage). In a
-            // POSITIONAL battle route to a real
-            // living opposing actor — NEVER the vestigial DPS-dummy sink (ctx.enemy.id), which
-            // stays alive whenever the team fields an ally-targeting ship (healer) and would
-            // otherwise leak a phantom "→ enemy" line into the log (repeated once per fire).
-            // `livingOpposingActorIds` can still hand back [] — it is gated on
-            // hasPositionedEnemyRoster AND filters out actors carrying a `destroyedRound`. That used
-            // to fall through to the dummy sink, "its intended role"; SP-4c-2d retired the role and
-            // the empty list is now a NO-OP. "Pure DPS-calc mode" was the shorthand when this was
-            // written and no longer names that case: since SP-1 the DPS page supplies a real,
-            // positioned enemy and since SP-4b-1 the normalization boundary places it. Neither do
-            // the two shapes this note used to name next — both are now impossible below the
-            // boundary: SP-4b-2b REFUSES an absent/empty roster, and SP-4c-2a's
-            // `MIN_TARGETABLE_MAX_HP` floor (`withTargetableHp` in normalizeRoster.ts) makes
-            // hasPositionedEnemyRoster constant true, so a roster made only of 0-max-HP pressure
-            // sources cannot be constructed either. What is LEFT is the DESTROYED-roster case: every
-            // opposing actor already carries a `destroyedRound`, so the filter empties the list. No
-            // claim is made here about whether a shipped run reaches it — it no-ops either way.
+            // No specific triggering enemy (start/end-of-round, on-deal-damage). Route to a real
+            // living opposing actor. This used to say "NEVER the vestigial DPS-dummy sink
+            // (ctx.enemy.id)", which stayed alive whenever the team fielded an ally-targeting ship
+            // (a healer) and leaked a phantom "→ enemy" line into the log once per fire; SP-4c-2d
+            // deleted that actor, so there is nothing left to route away from.
+            // `livingOpposingActorIds` can still hand back [] — it filters out actors carrying a
+            // `destroyedRound`. That used to fall through to the dummy sink, "its intended role";
+            // SP-4c-2d Task 1 retired the role and the empty list is now a NO-OP. "Pure DPS-calc
+            // mode" was the shorthand when this was written and never named that case: since SP-1
+            // the DPS page supplies a real, positioned enemy and since SP-4b-1 the normalization
+            // boundary places it. Neither do the two shapes this note used to name next — both are
+            // impossible below the boundary: SP-4b-2b REFUSES an absent/empty roster, and SP-4c-2a's
+            // `MIN_TARGETABLE_MAX_HP` floor (`withTargetableHp` in normalizeRoster.ts) makes every
+            // supplied member hittable, so a roster made only of 0-max-HP pressure sources cannot
+            // be constructed either. What is LEFT is the DESTROYED-roster case: every opposing actor
+            // already carries a `destroyedRound`, so the filter empties the list. No claim is made
+            // here about whether a shipped run reaches it — it no-ops either way.
             const opposing = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
             // SP-4c-2d: an empty living roster is a NO-OP, matching the two selector arms above
             // — this arm is the last one that still fell back to the dummy.

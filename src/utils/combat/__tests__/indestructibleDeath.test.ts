@@ -10,13 +10,13 @@
  * ────────────────────────────────────────────────────────────────────────────────────────────
  * SP-4b-2b — THIS FILE'S ORIGINAL SUBJECT WAS THE EMPTY-ROSTER SHAPE, WHICH IS NOW ILLEGAL.
  *
- * U5's destructible target was the singular `enemy` entity, and the engine gates that entirely on
- * `dpsEnemyTarget = enemyAttackerInputs.length === 0` (engine.ts:2527, `const dpsEnemyTarget =`).
- * An empty roster is now a
- * validation error at the normalization boundary, so NOTHING can reach that branch any more:
- *   • with any roster at all the singular `enemy` is a vestigial immortal sink — it never emits
- *     ship-destroyed, never terminates the run, and `enemyOutcome` describes IT, so it reads
- *     `survived: true / roundsToKill: undefined` no matter what dies;
+ * U5's destructible target was the singular `enemy` entity, and the engine gated that entirely on a
+ * `dpsEnemyTarget = enemyAttackerInputs.length === 0` discriminator. An empty roster became a
+ * validation error at the normalization boundary, so nothing could reach that branch any more, and
+ * SP-4c-2d has since deleted both the discriminator and the actor:
+ *   • with any roster at all the singular `enemy` was a vestigial immortal sink — it never emitted
+ *     ship-destroyed, never terminated the run, and `enemyOutcome` described IT, so it read
+ *     `survived: true / roundsToKill: undefined` no matter what died;
  *   • the "pressure source" (0-MAX-hp roster) trick that USED to keep other fixtures non-positional
  *     would not have helped here anyway — it kept the cast on the sink, but the sink is still
  *     immortal. SP-4c-2a has since retired the trick outright (`withTargetableHp` in
@@ -28,23 +28,24 @@
  * ship-destroyed on the kill round, and no credit booked past the kill — with the pinned integers
  * unchanged (30000 credited over 3 rounds, 10000 intake per round, kill in round 3).
  *
- * TWO properties are `dpsEnemyTarget`-only and do NOT transfer. They are pinned as such below
- * rather than silently dropped:
- *   • the early `break` that TERMINATED the run on the kill (engine.ts:11212,
- *     `if (dpsEnemyTarget && enemy.destroyedRound !== undefined) break;`) is gated on
- *     `dpsEnemyTarget`, so the run now plays out its full `numRounds`. Past the kill the focus
- *     falls back onto the legacy dummy victim and books NO credit (engine.ts:9218, the direct-cast
- *     `if (!positional) {` guard around `creditDamage(...)`, which skips the credit call whenever
- *     the cast resolves positionally — which it does here, since `resolvesPositionalVictim` is
- *     keyed on MAX hp and stays true even after the kill — and NOT engine.ts:5969's
- *     `if (hasPositionedEnemyRoster && victim.id !== enemy.id) {`, which is the reactive-proc
- *     credit skip inside `applyReactiveDamage`, a different path from the direct-cast credit this
- *     sentence is about), which is what the credit-window case asserts.
- *   • `result.enemyOutcome` reads the singular `enemy`, i.e. the immortal sink. Its production
- *     successor is `simulateDPS`'s own `ship-destroyed` re-derivation (dpsSimulator.ts:796),
- *     covered by `dpsSynthesizedEnemy` / `dpsMultiEnemyFinalHp` / `dpsRealEnemyReactions`. The
- *     last case here pins that the ONLY input which made `enemyOutcome` meaningful now throws.
- * (SP-4c deletes the dummy; both bullets go with it.)
+ * TWO properties were `dpsEnemyTarget`-only and did NOT transfer. **SP-4c-2d deleted both**, along
+ * with everything in this file that pinned them — recorded here so a reader does not go looking:
+ *   • the early `break` that TERMINATED the run on the kill was gated on `dpsEnemyTarget`, so the
+ *     run played out its full `numRounds` once a roster existed. A real positioned enemy's death
+ *     now ends the run through SP-4c-1's side-wipe rule instead, which is why the first case below
+ *     reads `toHaveLength(3)` again.
+ *   • `result.enemyOutcome` read the singular `enemy`, i.e. the immortal sink, and is GONE from
+ *     `runCombat`'s return shape. Its production successor is `simulateDPS`'s own `ship-destroyed`
+ *     re-derivation, covered by `dpsSynthesizedEnemy` / `dpsMultiEnemyFinalHp` /
+ *     `dpsRealEnemyReactions`. The `enemyOutcome` assertion that used to sit in the second case
+ *     went with the field; the case's three real claims (ship-destroyed, kill round, intake) stay.
+ *     The case that pinned "the ONLY input which made `enemyOutcome` meaningful now throws" went
+ *     too — with the field deleted it had no subject, and `dummyReachability.test.ts`'s
+ *     `REFUSES an empty roster outright` still pins the boundary contract itself.
+ *
+ * Also gone from this file: two assertions that the dummy id `'enemy'` never appears among
+ * `ship-destroyed` actors. No actor carries that id at all now, so they could only pass vacuously;
+ * `sentinelActorIdReservation.test.ts` fences the id structurally instead, in both directions.
  * ────────────────────────────────────────────────────────────────────────────────────────────
  */
 import { describe, it, expect } from 'vitest';
@@ -162,16 +163,17 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         expect(creditedRounds.map((rd) => rd.round)).toEqual([1, 2, 3]);
         expect(result.rounds).toHaveLength(3);
 
-        // The scalar totals are dead the moment a roster exists — the DIRECT-CAST credit skip at
-        // engine.ts:9218 (`if (!positional) {` around `creditDamage(...)`), which is the site the
-        // header names; NOT the reactive-proc skip at :5969, whatever an earlier draft of this
-        // comment said — so they are 0 across the board — pinned so a future regression that
-        // starts double-booking through BOTH channels is caught here.
+        // The scalar totals are dead the moment a roster exists — the DIRECT-CAST credit skip
+        // (`if (!positional) {` around `creditDamage(...)`) suppresses them on a positional cast —
+        // so they are 0 across the board, pinned so a future regression that starts double-booking
+        // through BOTH channels is caught here.
         //
-        // ⭐ SP-4c HAND-OFF: this all-zero block asserts the ABSENCE of a channel SP-4c deletes, so
-        // when `rawTotals` goes with the dummy this assertion must be DELETED, not migrated. It is
-        // not a pin on intended values — a reader who mistakes it for one will try to keep the
-        // scalar block alive to satisfy it. The live claim (per-victim booking) is the
+        // ⚠️ CORRECTION (SP-4c-2d): an earlier note here predicted `rawTotals` would "go with the
+        // dummy" and told a future rung to DELETE this assertion. That prediction was wrong.
+        // `rawTotals` is the report's scalar damage summary and it survives the dummy's deletion
+        // intact; what went is the dummy's own HP ledger and `enemyOutcome`. So this block stays —
+        // but read it for what it is: an assertion that the scalar channel books NOTHING on a
+        // positional run, not a pin on intended values. The live claim (per-victim booking) is the
         // `creditedRounds` assertion above it.
         expect(result.rawTotals).toEqual({
             direct: 0,
@@ -187,9 +189,10 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
     });
 
     it('reports the real enemy outcome (rounds-to-kill / not survived / 0% HP)', () => {
-        // The same three claims the old `result.enemyOutcome` assertion made, read off the real
+        // The same three claims the deleted `result.enemyOutcome` field made, read off the real
         // enemy instead of the immortal sink: it DID die (not survived), in round 3
-        // (rounds-to-kill), and its intake covered its whole pool (0% HP left).
+        // (rounds-to-kill), and its intake covered its whole pool (0% HP left). These ARE the
+        // property now — there is no scalar block left to compare them against (SP-4c-2d).
         idCounter = 0;
         const bus = createEventBus();
         const destroyed: { actorId: string; round: number }[] = [];
@@ -207,16 +210,6 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
             0
         );
         expect(intake).toBeGreaterThanOrEqual(25_000); // pool exhausted → 0% HP
-
-        // The scalar block now describes the vestigial sink, not this kill (see the header).
-        // ⭐ SP-4c HAND-OFF: like the `rawTotals` block above, this pins what the SINK reads, on a
-        // field SP-4c deletes. DELETE it with the dummy; do not read it as asserted intent about a
-        // real enemy. The three real claims are the `ship-destroyed` / round / intake asserts above.
-        expect(result.enemyOutcome).toEqual({
-            survived: true,
-            roundsToKill: undefined,
-            finalHpPct: 100,
-        });
     });
 
     it('surfaces the enemy per-round intake in perActorIncoming (per-victim basis)', () => {
@@ -243,8 +236,6 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         const enemyDeaths = shipDestroyed.filter((e) => e.actorId === BARE_ENEMY_ID);
         expect(enemyDeaths).toHaveLength(1);
         expect(enemyDeaths[0].round).toBe(3);
-        // And the sink itself is never destroyed, whatever happens to the real roster.
-        expect(shipDestroyed.filter((e) => e.actorId === 'enemy')).toHaveLength(0);
     });
 
     it('DoT damage also drives the kill; DoT ticks are counted up to the kill round', () => {
@@ -283,17 +274,8 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         });
         expect(result.rounds).toHaveLength(6);
         expect(shipDestroyed).not.toContain(BARE_ENEMY_ID);
-        expect(shipDestroyed).not.toContain('enemy');
         // Positive control for the two negatives above: the run really did damage this enemy for
         // all 6 rounds, so "never destroyed" is a fact about survival and not about inertness.
         expect(dealtBy(result.rounds, 'attacker')).toBe(60000);
-    });
-
-    // The shape U5 characterized — no roster at all, so the singular `enemy` IS the destructible
-    // target — is a validation error since SP-4b-2b. Pinned here so the two properties that did
-    // NOT transfer (the terminating break, and a meaningful `enemyOutcome`) are on record as
-    // unreachable-by-contract rather than quietly untested.
-    it('the empty-roster shape that made the singular `enemy` destructible now throws', () => {
-        expect(() => run(dpsBase({ enemyAttackers: [] }))).toThrow(/enemyAttackers is empty/);
     });
 });

@@ -202,7 +202,6 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
     it('fans Corrosion onto BOTH cleansed enemies (one cleanse event, two recipients) and leaves the dummy empty', () => {
         let foe1: CombatActor | undefined;
         let foe2: CombatActor | undefined;
-        let dummy: CombatActor | undefined;
         const bus = createEventBus();
         const dotsApplied: DotApplied[] = [];
         bus.on('dot-applied', (e) => dotsApplied.push(e));
@@ -212,7 +211,6 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
                 __testTapActors: (actors) => {
                     foe1 = actors.find((a) => a.id === 'foe1');
                     foe2 = actors.find((a) => a.id === 'foe2');
-                    dummy = actors.find((a) => a.id === 'enemy');
                 },
             })
         );
@@ -226,9 +224,11 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
         const hitIds = new Set(corrosion.map((e) => e.targetId));
         expect(hitIds.has('foe1')).toBe(true);
         expect(hitIds.has('foe2')).toBe(true);
-        // Dummy-sink guard: the Corrosion never routed to the vestigial DPS dummy 'enemy'.
+        // Dummy-sink guard: the Corrosion never routed to the vestigial DPS dummy 'enemy'. Kept as
+        // an event-stream pin; the companion assertion that read that ACTOR's own containers went
+        // with the actor in SP-4c-2d (it would now pass vacuously — there is no such actor to look
+        // up). `sentinelActorIdReservation.test.ts` fences the id structurally instead.
         expect(corrosion.some((e) => e.targetId === 'enemy')).toBe(false);
-        expect(dummy?.corrosionEntries ?? []).toHaveLength(0);
         // Both real enemies actually carry a Corrosion stack from the focus.
         expect(foe1.corrosionEntries.some((e) => e.sourceId === 'attacker')).toBe(true);
         expect(foe2.corrosionEntries.some((e) => e.sourceId === 'attacker')).toBe(true);
