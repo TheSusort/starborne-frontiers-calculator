@@ -617,7 +617,6 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             grantExtraAction: () => {},
             playerIds: PLAYER_IDS,
             lastTurnCtxByActor: new Map(),
-            enemyHp: 100000,
             cumulativeDamage: 0,
             recordResisted: () => {},
             healing,

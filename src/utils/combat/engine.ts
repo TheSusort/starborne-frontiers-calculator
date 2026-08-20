@@ -1207,8 +1207,10 @@ export interface CombatEngineInput {
      *  - `enemyDefense` has ZERO readers left in this file (it is not even destructured in
      *    `runCombat`; every other `enemyDefense` occurrence here is a comment, the unrelated
      *    per-victim `enemyDefenseModifier`, or the victim-derived `enemyDefense` key on a turn ctx).
-     *  - `enemyHp` keeps exactly two, both enemy-HP% DENOMINATORS — the synthesized focus-skip row's
-     *    `enemyHpPct` and the drain ctx's — see the destructure comment in `runCombat`.
+     *  - `enemyHp` keeps exactly ONE reader — the synthesized focus-skip row's `enemyHpPct`, a
+     *    display value. SP-4d deleted its second reader (the drain ctx's `IntentExecContext.enemyHp`,
+     *    which fed a fight-wide `enemyHpPct` derivation pinned at a constant 100 on every positional
+     *    run) — see the destructure comment in `runCombat`.
      *  A victim's real defence/HP come from the positioned `enemyAttackers` roster instead. That
      *  includes the healing mode's healer casting a `damage` ability at `target:'enemy'`: it lands on
      *  a real positioned enemy and feeds `basis:'damage-dealt'` heal/shield riders off THAT victim's
@@ -1870,12 +1872,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         // SP-4c-2d: `enemyDefense` / `enemySecurity` / `enemySpeed` are no longer destructured —
         // their only consumer was the deleted dummy actor's stat block. They remain on
         // `CombatEngineInput` (removing them is rung 4d's ~200-file churn story, and `enemyHp` is a
-        // REQUIRED field). `enemyHp` still has TWO readers, both of them enemy-HP% denominators:
-        //   1. the synthesized focus-skip turn's row `enemyHpPct` (pushSynthesizedFocusSkipTurn); and
-        //   2. the drain context — it is passed as `enemyHp` into every drainQueue ctx, where
-        //      triggers.ts's `buildDrainContext` derives
-        //      `enemyHpPct = 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`, the denominator of
-        //      EVERY drain-time enemy-HP% condition gate.
+        // REQUIRED field). SP-4d deleted `enemyHp`'s second reader — it used to be passed into
+        // every drainQueue ctx as `IntentExecContext.enemyHp`, where triggers.ts's
+        // `buildDrainContext` derived a fight-wide `enemyHpPct = 100 * (1 - ctx.cumulativeDamage /
+        // ctx.enemyHp)`; that scalar sat at a constant 100 on every positional run (positional
+        // credit books per-victim and never fed `cumulativeDamage`) and is gone. `enemyHp` now has
+        // exactly ONE reader: the synthesized focus-skip turn's row `enemyHpPct`
+        // (pushSynthesizedFocusSkipTurn) — a display value, not a gate reading.
         // Its 1e9 default is the old sink's HP, kept so that number does not move.
         enemyHp = 1_000_000_000,
         numRounds,
@@ -8313,17 +8316,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         lastTurnCtxByActor,
                         reactiveDealtByOwner,
                         enemyType,
-                        enemyHp,
-                        // Drain-time HP% includes this round's damage SO FAR (the round
-                        // accumulators below are folded into cumulativeDamage only at
-                        // post-round assembly): a follow-up reacts to the state its trigger
-                        // created — e.g. an on-crit follow-up gated on enemy HP% sees the
-                        // enemy's HP AFTER the attacker's hit that just crit. This differs
-                        // from the attacker turn's own gates, which deliberately use the
-                        // entering-round HP (pre-existing convention, unchanged).
-                        // Map-sum: enemy-HP decline is focus + team cumulative + this round's
-                        // map totals across ALL actors (the drain reacts to the enemy's true
-                        // remaining HP, not just the focus actor's contribution).
+                        // SP-4d: `enemyHp` (IntentExecContext) deleted — it fed only the
+                        // buildDrainContext fight-wide `enemyHpPct` derivation this rung removed.
+                        // `cumulativeDamage` below stays: it is a real running total other callers
+                        // may still consume, it just no longer drives a drain-time enemy-HP%
+                        // scalar. Map-sum: enemy-HP decline is focus + team cumulative + this
+                        // round's map totals across ALL actors (the drain reacts to the enemy's
+                        // true remaining HP, not just the focus actor's contribution).
                         cumulativeDamage:
                             cumulativeDamage +
                             cumulativeTeamDamage +

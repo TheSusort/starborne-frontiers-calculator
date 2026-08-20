@@ -213,7 +213,6 @@ describe('hit-counted Barrier — reactive path (triggers.ts executeIntent, cfg.
             grantExtraAction: () => {},
             playerIds: ['holder'],
             lastTurnCtxByActor: new Map(),
-            enemyHp: 100000,
             cumulativeDamage: 0,
             recordResisted: () => {},
         };

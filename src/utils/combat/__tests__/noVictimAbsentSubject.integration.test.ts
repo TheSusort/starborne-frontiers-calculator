@@ -112,4 +112,79 @@ describe('SP-4d: a no-victim turn resolves no enemy-derived gate', () => {
         const { shieldsOnFocus } = supportRun({ subject: 'always', derivable: true } as Condition);
         expect(shieldsOnFocus.length).toBeGreaterThan(0);
     });
+
+    it('a REACTIVE payload gated on an enemy hp-threshold ABOVE does not fire at drain time', () => {
+        // The drain context's enemy-HP reading was a fight-wide scalar
+        // (`100 * (1 - cumulativeDamage / enemyHp)`) which — because positional credit books
+        // per-victim and never feeds `cumulativeDamage` — sat at exactly 100 on every positional
+        // run, i.e. on every run there is. A `below` gate read false there (dead but fail-closed);
+        // an `above` gate read TRUE against a number describing no actor on the board.
+        //
+        // Trigger note: the brief's original 'on-repair' is not a modelled AbilityTrigger (see
+        // src/types/abilities.ts's AbilityTrigger union). Uses 'end-of-turn' instead — it fires at
+        // the OWNER's own turn-end (rides `turn-ended`, self-scoped on actorId === ownerId) and is
+        // drained through the SAME reactive queue/executeIntent/buildDrainContext path as every
+        // other reactive trigger, which is what this case needs to exercise. Reachability was
+        // verified directly: with this same shape but `conditions: []` (ungated), the shield lands
+        // (shieldsOnFocus non-empty) — proving the trigger fires and reaches the drain gate at all,
+        // not just that the gated version happens to produce an empty array.
+        const bus = createEventBus();
+        const shieldsOnFocus: number[] = [];
+        bus.on('shield-applied', (e: Extract<CombatEvent, { type: 'shield-applied' }>) => {
+            const forFocus = e.perTarget?.find((t) => t.targetId === 'attacker');
+            if (forFocus && forFocus.amount > 0) shieldsOnFocus.push(forFocus.amount);
+        });
+        runCombat({
+            ...bareInput(),
+            mode: 'battle',
+            position: 'M4',
+            target: { raw: 'ally-team', side: 'ally', selection: 'team' },
+            pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'repair1',
+                                type: 'heal',
+                                target: 'all-allies',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'heal', pct: 27, basis: 'hp' },
+                            },
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            {
+                                id: 'reactiveShield',
+                                type: 'shield',
+                                target: 'self',
+                                trigger: 'end-of-turn',
+                                conditions: [
+                                    {
+                                        subject: 'hp-threshold',
+                                        hpComparator: 'above',
+                                        hpPercent: 50,
+                                        derivable: true,
+                                    },
+                                ],
+                                config: { type: 'shield', pct: 50, basis: 'hp' },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+            teamActors: [bareAlly()],
+            enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
+            bus,
+            __testTapActors: (actors) => {
+                const ally = actors.find((a) => a.id === BARE_ALLY_ID);
+                if (ally) ally.currentHp = ally.stats.hp * HURT_PCT;
+            },
+        });
+        expect(shieldsOnFocus).toEqual([]);
+    });
 });

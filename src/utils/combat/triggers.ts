@@ -1483,8 +1483,9 @@ export interface IntentExecContext {
      *  charged-cast stamps only counterTargetId) falls back to this owner-keyed amount. */
     reactiveDealtByOwner?: Map<string, number>;
     enemyType?: EnemyBaseClass;
-    enemyHp: number;
-    /** Damage dealt to the enemy so far (drives the drain-time enemyHpPct). */
+    /** Damage dealt to the enemy so far. SP-4d: no longer feeds a drain-time enemyHpPct
+     *  derivation (that fight-wide scalar is deleted — see buildDrainContext) but callers still
+     *  supply it, and per-victim/other future consumers may still want a live damage-dealt read. */
     cumulativeDamage: number;
     /** Record a resisted enemy application onto the round's resisted list (the engine
      *  routes it to pendingResisted or the last attacker turn, per Task-2 staging). */
@@ -2052,8 +2053,6 @@ function perVictimEnemyConditions(intent: Intent): Ability['conditions'] {
 }
 
 function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
-    const enemyHpPct =
-        ctx.enemyHp > 0 ? Math.max(0, 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)) : 100;
     // Owner-aware drain gate (Task 6): self-buff names come from the OWNER's snapshot so each
     // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
     // `includeAbilitySelfNames` is now TRUE at drain time so the gate ALSO sees ability-sourced
@@ -2080,7 +2079,13 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
             ctx.genericDoTEntries ?? []
         ),
         enemyType: ctx.enemyType,
-        enemyHpPct,
+        // SP-4d: NO fight-wide enemy-HP reading. It used to be
+        // `100 * (1 - cumulativeDamage / enemyHp)`, both terms legacy scalars describing the dummy
+        // sink SP-4c-2d deleted; on a positional run (every run) it sat at a constant 100. A
+        // `below` gate read false off it and an `above` gate read TRUE against nobody. Enemy-HP
+        // gates that CAN be re-checked per resolved target already are (`perVictimOk`, see
+        // splitDrainGateConditions); the rest are now honestly unresolvable instead of
+        // dead-but-fail-closed. Do not reintroduce a scalar here.
         // Task 6 (Phase 4c PR 1): live self-HP% for drain-time hp-threshold gates. The engine
         // closes over the heal target's current/max HP; every non-tank id and DPS mode report 100
         // (the pre-4c default) → all existing drain gating stays byte-identical.
@@ -2117,10 +2122,12 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // paths read 0 and stay byte-identical (the evaluator's t<=0 guard blocks ALL
         // periods at turn 0, so every-n-turns is never met).
         turnsTaken: ctx.turnsTakenFor?.(ownerId) ?? 0,
-        // SP-D: live enemies-hit-this-cast gate (Berserker's Marauder Rage). Default 1 → DPS /
-        // no-delegate paths keep the single-target assumption (a >=2/>=3 gate stays inert) and
-        // stay byte-identical.
-        enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId) ?? 1,
+        // SP-D: live enemies-hit-this-cast gate (Berserker's Marauder Rage). SP-4d: no `?? 1`
+        // default — an absent id (no delegate / no recorded footprint yet, e.g. before this
+        // owner's first cast) means the footprint is UNKNOWN, not "hit exactly one enemy", so the
+        // gate is unresolvable rather than answered by a number describing no cast. Tygr's `gte 2`
+        // and Berserker's `gte 3` are unaffected — a fabricated 1 failed them too.
+        enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId),
         // SP-F F4: live same-team ally ship names (Isha/Nayra reciprocal Override gate). Only when
         // the engine supplied a name map (team-sim). `playerIds` is the drain owner's OWN side; we
         // exclude the owner itself (ALLY names, self-excluded — mirrors `isSameSideAlly`), keep only
@@ -2765,8 +2772,8 @@ function buildPerVictimConditionCtx(
     const base = buildDrainContext(ctx, ownerId);
     // Per-victim HP% from the victim's own live currentHp/maxHp — but ONLY when the engine tracks a
     // real max HP for this victim (`recipientMaxHp`: the actor's last-turn effectiveMaxHp, else its
-    // registered base HP). Otherwise fall back to the fight-wide `base.enemyHpPct` rather than
-    // dividing by 0, which would read a spurious 0% and always fire.
+    // registered base HP). Otherwise fall back to `base.enemyHpPct` rather than dividing by 0, which
+    // would read a spurious 0% and always fire.
     //
     // WHAT REACHES THAT FALLBACK, honestly: it used to be documented as the DPS dummy's arm (not
     // registered in baseHpById → recipientMaxHp 0, and `base.enemyHpPct` genuinely WAS its HP%).
@@ -2779,9 +2786,12 @@ function buildPerVictimConditionCtx(
     // victim but NOT for a player one (the focus `hp` input and a walked team ship's `walk.stats.hp`
     // are unfloored, and DPS-mode callers default `hp` to 0) — that needs an enemy-owned
     // `all-enemies` damage proc carrying a per-victim enemy condition, which no shipped enemy kit in
-    // the corpus pairs with a 0-max-HP player victim today. Note that if it were ever reached, the
-    // value it falls back to describes NO actor: `base.enemyHpPct` is the legacy scalar
-    // `100 * (1 - cumulativeDamage / enemyHp)`. It is a divide-by-zero backstop, not a reading.
+    // the corpus pairs with a 0-max-HP player victim today.
+    //
+    // A victim with a known max HP reports ITS OWN live HP%. Otherwise there is no reading: SP-4d
+    // made `base.enemyHpPct` absent (it was the legacy fight-wide scalar this comment already
+    // described as belonging to no actor), so the gate is unresolvable rather than answered by a
+    // number about nobody.
     const maxHp = ctx.recipientMaxHpFor?.(victim.id) ?? 0;
     const enemyHpPct =
         maxHp > 0 ? Math.max(0, Math.min(100, (100 * victim.currentHp) / maxHp)) : base.enemyHpPct;

@@ -470,7 +470,6 @@ describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scru
             grantExtraAction: () => {},
             playerIds: ['tank'],
             lastTurnCtxByActor: new Map(),
-            enemyHp: 100000,
             cumulativeDamage: 0,
             recordResisted: () => {},
             oncePerCombatFired: new Set<string>(),
