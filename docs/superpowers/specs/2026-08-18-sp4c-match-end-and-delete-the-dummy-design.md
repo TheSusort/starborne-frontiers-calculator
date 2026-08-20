@@ -537,7 +537,7 @@ Moving the side-wide scheduled-enemy-debuff decrement off the dummy's Post-Turn 
 tail produces **the same round, the same `actorId`, the same count and the same row values**. It is
 observable ONLY as the `buff-expired` emission's **position in the ordered event stream**:
 
-```
+```text
 pre-rung : turn r2 attacker → turn r2 enemy → expired r2 by enemy → turn r2 e1 → turn r2 ally
 post-rung: turn r2 attacker → turn r2 e1 → turn r2 ally → expired r2 by enemy
 ```

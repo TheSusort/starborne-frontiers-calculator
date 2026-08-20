@@ -50,7 +50,7 @@ contract since 4b-2b throws on an empty roster, and route 2 (the dummy's own DoT
 Measured, not reasoned — a `console.error` at the increment site (`engine.ts:11245`) with both
 switches applied, over the whole suite:
 
-```
+```console
 $ npx vitest run --reporter=basic 2>&1 | grep -c "DUMMY_CREDIT_SITE_REACHED"
 0
 ```
@@ -80,7 +80,7 @@ That reading is enemy-side (the heal-target binding) and is **rung 4e's** busine
 **(a) A DoT landed on the dummy's containers is now STRANDED, and still reported.** Probed with the
 `LIVENESS` fixture (a test tap pushes one corrosion entry onto the dummy) with the switches applied:
 
-```
+```text
 TURNS_R1 ["attacker","e1"]      <- no "enemy": the dummy takes no turn
 TURNS_R2 ["attacker","e1"]
 CORROSION_DMG   [0,0]           <- never ticks
@@ -88,10 +88,18 @@ ACTIVE_STACKS   [1,1]           <- but IS still reported, every round, forever
 ```
 
 The stacks never tick, never expire, and `dotCarrierActors` (`engine.ts:2671`) still includes the
-dummy, so `activeCorrosionStacks` reports them for the rest of the run. No **production** route
-writes there (4c-2b closed the player side; the dummy is not a member of `opposingRoster`), so this is
-constructible only through `__testTapActors` — but it must be pinned, because 4c-2d deletes the actor
-and needs to know what it is deleting.
+dummy, so `activeCorrosionStacks` reports them for the rest of the run. It must be pinned, because
+4c-2d deletes the actor and needs to know what it is deleting.
+
+⚠️ **This paragraph originally continued "No production route writes there … so this is constructible
+only through `__testTapActors`". The final whole-branch review MEASURED that wrong** — see spec §9.8.
+The player-turn route is indeed closed (4c-2b; the dummy is not in `opposingRoster`), but a live
+REACTIVE route survives: the dummy's containers are aliased into `drainQueue` as `ctx.*`, and
+`triggers.ts` pushes to `(victim?.corrosionEntries ?? ctx.corrosionEntries)` whenever an intent's
+`eventCtx` stamps neither `victimId` nor `counterTargetId`. The honest claim is **"no SHIPPED KIT
+reaches it"** — all 16 reactive non-`on-cast` DoT abilities in the corpus stamp a victim, which is why
+nothing moved. Same overstatement class §0.2 warns about for the credit counter, and I made it anyway:
+**when you narrow a claim, sweep every document that carries it.**
 
 **(b) The scheduled-enemy-debuff decrement MOVES within the round.** Previously, on a
 non-vestigial run, the side-wide `__enemy__` bucket was decremented at the dummy's own Post-Turn,
@@ -130,7 +138,7 @@ resurrecting the exact regression the D5 block was written to fix.
 | `src/utils/combat/engine.ts` | Modify | The two switches; delete `dummyEnemyIsVestigial`; delete `dummySinkCreditCount` + its two exports + its doc block; repair the comment stretches the switches falsify |
 | `src/utils/combat/__tests__/dummyEnemyTurnGate.test.ts` | Modify | Becomes a permanent tripwire: the dummy is in NO turn order, on either branch of the retired gate |
 | `src/utils/combat/__tests__/dummyReachability.test.ts` | Modify | Keeps its six `consulted: 0` path cases (enemy-side reading, 4e's business); drops every credit-counter reading; its vacuity guard moves to `__getNoVictimPlayerTurnCount` |
-| `src/utils/combat/__tests__/retiredDummyTurn.test.ts` | **Create** | The two §0.4 hazard tripwires. A single new file so 4c-2d can delete it wholesale with the actor |
+| `src/utils/combat/__tests__/retiredDummyTurn.test.ts` | **Create** | The two §0.4 hazard tripwires. A single new file so 4c-2d can dispose of both at once — but see the ⚠️ below: 4c-2d must DELETE the first test and MIGRATE the second |
 | `docs/superpowers/specs/2026-08-18-sp4c-match-end-and-delete-the-dummy-design.md` | Modify | §9 amendment: the churn correction and the counter-deletion decision |
 
 ---
@@ -251,8 +259,8 @@ steps are its resolution.
 In `src/utils/combat/engine.ts`:
 
 1. Delete the whole `dummySinkCreditCount` doc block and its three declarations (lines ~1774–1826):
-   the `/** TEST-ONLY instrumentation, and the COMPANION to `legacyVictimFallbackCount` … */`
-   comment, `let dummySinkCreditCount = 0;`, `export function __getDummySinkCreditCount()`, and
+   the doc comment opening "TEST-ONLY instrumentation, and the COMPANION to
+   `legacyVictimFallbackCount`", `let dummySinkCreditCount = 0;`, `export function __getDummySinkCreditCount()`, and
    `export function __resetDummySinkCreditCount()`.
 2. At line 11245, replace:
 
@@ -400,7 +408,7 @@ both are constructible in a test, and 4c-2d needs to know they exist before it d
 
 **Interfaces:**
 - Consumes: `runCombat` from `../engine`; `collectTurns` from `../__testutils__/turnOrderTap`; `bareInput` from `../__testutils__/bareRosterFixture`; `setupKeyedTestRng` from `../../calculators/rateAccumulator`.
-- Produces: nothing imported elsewhere. A standalone file so 4c-2d deletes it wholesale with the actor.
+- Produces: nothing imported elsewhere. A standalone file so 4c-2d can dispose of both tests at once. ⚠️ SUPERSEDED DURING EXECUTION — spec §9.5 is the authority: 4c-2d deletes the stranded-DoT test and MIGRATES the scheduled-decrement one (re-keying the reported `actorId`), because that one pins a round-tail decrement of a side-wide bucket which outlives the actor. Deleting the file wholesale would drop the only coverage of it.
 
 - [ ] **Step 1: Write the file with both tripwires**
 
@@ -408,14 +416,23 @@ both are constructible in a test, and 4c-2d needs to know they exist before it d
 /**
  * SP-4c-2c — the two consequences of retiring the dummy `enemy`'s turn.
  *
- * Neither is a bug and neither is reachable from any production input: nothing routes into the
- * dummy's containers since SP-4c-2b (the player side gets `tgt: undefined`, and the dummy is not a
- * member of `opposingRoster`, so it can never be a victim). Both are pinned because SP-4c-2d deletes
- * the actor and must know exactly what it is deleting — an undocumented behaviour discovered during
- * a pure-deletion rung reads as that rung's regression.
+ * ⚠️ TWO CLAIMS IN THIS SAMPLE WERE FALSIFIED DURING EXECUTION. The shipped file says the correct
+ * thing; this block is kept as the plan's record. Read spec §9.5 and §9.8 for the authority.
  *
- * ⭐ This whole file goes with the dummy in SP-4c-2d. It is not migrated: once there is no dummy
- * there are no containers to strand and no Post-Turn the decrement could have hung on.
+ * (1) "Neither is reachable from any production input" — WRONG, and the final whole-branch review
+ * measured it. That covers only the PLAYER-TURN route (`tgt: undefined` since SP-4c-2b, and the dummy
+ * is not in `opposingRoster`). A live REACTIVE route survives: the dummy's containers are aliased into
+ * `drainQueue` as `ctx.*`, and `triggers.ts` pushes to `(victim?.corrosionEntries ?? ctx.corrosionEntries)`
+ * whenever an intent's `eventCtx` stamps neither `victimId` nor `counterTargetId`. The honest claim is
+ * "no SHIPPED KIT reaches it" — all 16 reactive non-`on-cast` DoT abilities in the corpus stamp a victim.
+ *
+ * (2) "This whole file goes with the dummy; it is not migrated" — WRONG for the second test. The
+ * stranded-DoT test does die with the actor. The scheduled-decrement test pins a round-tail decrement
+ * of a side-wide bucket that OUTLIVES the actor; only the reported `actorId` dies with the dummy, so
+ * 4c-2d must MIGRATE it.
+ *
+ * Both are pinned because SP-4c-2d deletes the actor and must know exactly what it is deleting — an
+ * undocumented behaviour discovered during a pure-deletion rung reads as that rung's regression.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
@@ -585,7 +602,8 @@ Each of these now states something untrue. Fix the statement; do not merely add 
    Its entries are live state and are reported exactly as before." **All three clauses are now
    false** — this is the strand Task 2 pins. Rewrite the bullet to say: the dummy takes no turn at
    all since 4c-2c, so anything in its containers is frozen; nothing writes there through any
-   production route, so the containers are empty in practice; the `|| a.id === enemy.id` disjunct is
+   SHIPPED kit (a live reactive route exists — see spec §9.8), so the containers are empty in
+   practice; the `|| a.id === enemy.id` disjunct is
    now redundant (the dummy is never destroyed, so the first disjunct already admits it) and is kept
    only until 4c-2d removes the carrier. Cite `retiredDummyTurn.test.ts`.
 2. **The turn-order construction note (~2775–2864).** With the gate deleted, the entire HISTORICAL
