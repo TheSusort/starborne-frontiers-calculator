@@ -610,6 +610,36 @@ EOF
 
 ## Task 3: The editor guard (commit 3)
 
+> ## ⛔ SUPERSEDED — READ THIS BEFORE FOLLOWING ANY STEP BELOW
+>
+> **Task 3 shipped as WARN-ONLY. Every instruction below that filters `TARGET_OPTIONS`, removes the
+> `enemy` option, or recommends a replacement target is SUPERSEDED and must not be followed.**
+> See spec §11.2–§11.3 for the measurement and the owner ruling.
+>
+> Why: this task's design rested on a list of "self-resolving" enemy targets that was **wrong for the
+> `dot`/`debuff` branches**. In this engine, *"does target T resolve?"* is a question about the
+> **executor branch**, not about T. Measured:
+> - the **dot** branch consults `ability.target` only for an `all-enemies` fan-out gated on
+>   `eventCtx.cleansedEnemyIds`, which a victimless trigger never stamps → on such a trigger **every**
+>   target drops, `all-enemies` included;
+> - the **debuff** branch resolves only `enemy-highest-attack`;
+> - `TARGET_OPTIONS` does not even **offer** `enemy-highest-attack`.
+>
+> So there is no valid replacement target to steer a user toward: constraining the dropdown steers
+> them nowhere, and the warning text drafted below ("for example 'All enemies' or 'Adjacent enemies'")
+> is **false advice** — neither resolves on a victimless trigger. Blocking was therefore dropped in
+> favour of warning, which is also `simCoverage.ts`'s own stated precedent ("warn, don't block, so real
+> ship passives can still be documented ahead of sim support").
+>
+> **What actually shipped** (commit `9d627b4c`): `isVictimlessInfliction` in
+> `src/components/skills/simCoverage.ts` + an inline warning in `AbilityCard.tsx`. **No dropdown is
+> constrained** — a test pins that every Target option stays selectable. The predicate carries one
+> load-bearing carve-out: **Selenite**'s passive is `debuff` + `start-of-round` +
+> `enemy-highest-attack`, which genuinely resolves, so it must not be flagged.
+>
+> The steps below are kept for the record of what was planned, not as instructions.
+
+
 **Files:**
 - Modify: `src/components/skills/simCoverage.ts`
 - Modify: `src/components/skills/AbilityCard.tsx`
