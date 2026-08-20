@@ -51,7 +51,11 @@ const fillerBase = (id: string, name: string, type: Ship['type'], stats: Partial
 });
 
 // Filler ally with an on-attacked counter (a real reactive to co-exist alongside the reviewed
-// ship). Enemy-targeted damage active only — NEVER an ally-heal (dummyEnemyIsVestigial gotcha).
+// ship). Enemy-targeted damage active only. (The old "NEVER an ally-heal" rule was the
+// `dummyEnemyIsVestigial` gotcha — an ally-side active kept the dummy in the turn order and
+// misrouted reactive resolvers. Both halves are gone: SP-M M1 Task 9b re-gated the resolvers on
+// `hasPositionedEnemyRoster`, and SP-4c-2c deleted the gate and the dummy's turn. Kept as-is
+// because a damage active is the simplest thing that co-exists with the reviewed ship.)
 const counterAlly = (): Ship => ({
     ...fillerBase('trace-ally-counter', 'CounterAlly', 'DEFENDER', { attack: 1200, defence: 500, speed: 95 }),
     firstPassiveSkillText:

@@ -393,10 +393,10 @@ floor fixes it at the engine, and that is the WHOLE fix: the input gets `min="1"
 
 | Rung | Story | Churn |
 | --- | --- | --- |
-| **4c-2a** | The targetable-roster contract: floor 0-max-HP enemy attackers at the boundary | The 54 all-zero-roster files; drives the credit gate to 0. Fixes §7.3 |
+| **4c-2a** ✅ SHIPPED | The targetable-roster contract: floor 0-max-HP enemy attackers at the boundary | The 54 all-zero-roster files; drives the credit gate to 0. Fixes §7.3 |
 | **4c-2b** ✅ SHIPPED | The no-victim player turn: `selectTurnTarget` returns `tgt: undefined` on the player side, and the two player call sites **RUN the turn anyway** — the enemy side's cadence-only skip is NOT the template (a skip silences all 24 shipped ally-target support ships). Both §2.3 guards drop for free: the ghost's id was always `'enemy'`, so they already omitted `targetId`/`enemyDebuffNames` on these turns | **3,206** player consultations, all ally-side (2,311 `allies` / 622 `other-allies` / 195 `all-allies` / 78 `self`; 14 of the 2,311 are §A.7's mixed/no-skill cases) — NOT 4,188, which predates 4c-2a and lumped both sides together. Golden movement: **3 fingerprints** (AEGIS/Hermes/Mender), one mechanism |
-| **4c-2c** | Drop the dummy from the turn order unconditionally; the D5 scheduled decrement becomes unconditional | The 3,883 no-op turn events across 73 files, 3 of them golden suites |
-| **4c-2d** | Pure deletion: the actor + clusters A/B/D/E/F/G, `SENTINEL_ENEMY_ACTOR_ID` per §4.3 | **Zero movement** — now genuinely, because a–c moved everything |
+| **4c-2c** ✅ SHIPPED | Drop the dummy from the turn order unconditionally; the D5 scheduled decrement becomes unconditional | ~~The 3,883 no-op turn events across 73 files, 3 of them golden suites~~ — **this cell was wrong by two orders of magnitude.** Measured on `f1bce838` with both switches applied: **2 failing tests in 2 files** (`dummyEnemyTurnGate`, `dummyReachability`), 5,890/5,892 still passing, **ZERO golden movement**, oracle at the exact baseline `147 / 146 / 2`. The estimate was taken at `8d2c2a61`, before 4c-2a and 4c-2b between them did the work. See §9.1 |
+| **4c-2d** | Pure deletion: the actor + clusters A/B/D/E/F/G, `SENTINEL_ENEMY_ACTOR_ID` per §4.3. **Inventory corrected by §9.4:** it LOSES `dummySinkCreditCount` (deleted in 4c-2c) and GAINS the whole dummy turn body at `engine.ts:9955`–`:10035`, the dead `isDummyEnemy` Post-Turn arm, the dead-actor-skip exemption, the dummy's membership in `dotCarrierActors`, and the new `retiredDummyTurn.test.ts` | **Zero movement** — expectation unchanged, and better founded than when written, because a–c moved everything and the residue is now inventoried rather than estimated |
 
 §4's cluster table stays correct as the *inventory* for 4c-2d. What it got wrong was the entry
 condition and the churn expectation, both of which a–c now establish.
@@ -463,3 +463,214 @@ ally-targeted supporter with no heal anchor is silenced — precisely the outcom
 = 0 (so a `stat-vs-target` **`gt`** gate reads TRUE against nobody — Bayah and Cobalt are the only
 `gt` readers, neither ally-target). All three want ONE rung that widens the condition context to give
 an honest absent-subject answer. Zero enemy-HP-**above** gates exist in the 147-ship corpus.
+
+---
+
+## 9. AMENDMENT (2026-08-19) — what 4c-2c actually cost, and what it hands to 4c-2d
+
+Plan: `docs/superpowers/plans/2026-08-19-sp4c2c-retire-the-dummy-turn.md` (its §0 carries the measured
+facts verbatim). Ledger: `.superpowers/sdd/progress.md`. Branch: `sp4c-2c/retire-dummy-turn`, off
+`main` @ `f1bce838`.
+
+**§7.4's churn cell for this rung was wrong by two orders of magnitude, and §8.4's hand-off was right
+about *what* the remaining work was and wrong about *what doing it would mean*.** Both are corrected
+below; §7.4's cells are corrected in place as well, the way §8 corrected §4's.
+
+### 9.1 The churn estimate was stale — and a churn estimate ages exactly the way a reachability claim does
+
+Measured before the rung, on `main` @ `f1bce838`, by applying both switches on a scratch basis and
+running the full suite plus the oracle:
+
+| §7.4 said | MEASURED on `f1bce838` |
+| --- | --- |
+| "3,883 no-op turn events across 73 files, 3 of them golden suites" | **2 failing tests in 2 files** — `dummyEnemyTurnGate.test.ts` and `dummyReachability.test.ts`. **5,890 / 5,892 still pass** |
+| 3 golden suites move | **ZERO golden movement.** `fingerprint`, `kitFingerprintScenarios`, `placementSymmetry` and `ablation` all green, untouched |
+| (not stated) | Oracle at the **exact baseline**: `shipsSwept: 147 / symmetricShips: 146 / findings: 2` |
+
+The estimate was taken at `8d2c2a61` — *before* 4c-2a floored the 0-max-HP pressure source and
+*before* 4c-2b stopped the player side consulting the ghost. Between them those two rungs did the
+work the turn-order deletion was expected to do; by the time 4c-2c ran, the 3,883 no-op turn events
+it was supposed to delete had already stopped being emitted.
+
+**The lesson is §7.5's, one rung on.** §7.5 established that *a claim about whether a path is
+reachable is a measurement, not a reading*. This rung establishes the temporal half of the same rule:
+**a churn estimate ages exactly the way a reachability claim does.** A number that was correctly
+measured at rung *n* is not evidence at rung *n+2* — every intervening rung is a potential
+invalidator, and the ladder was *designed* so that earlier rungs would absorb later rungs' churn. So:
+**re-measure immediately before the rung; never quote the table.** The measurement is cheap (one
+scratch application of the switches, one full-suite run, ~25 seconds) and it is the only thing that
+distinguishes "this rung is a no-op because its work was already done" from "this rung is a no-op
+because its switch did not take".
+
+### 9.2 The credit counter: §8.4 named the right work, and the wrong shape of it
+
+§8.4 nominated `dummySinkCreditCount` as 4c-2d's deletion gate and recorded that its `LIVENESS`
+credit — routed through the **dummy's own DoT-tick turn** — was "4c-2c's remaining work". That was
+correct. What it framed wrongly was the job: it read as *drive `credited` to 0 and then gate on the
+zero*. Retiring the turn does not drive the counter to 0 in any evidential sense — **it removes the
+counter's last liveness route, which makes its zero unfalsifiable.**
+
+Measured, not reasoned: a `console.error` at the increment site over the whole suite hit **0 times
+across 532 files** with the switches applied, where the pre-switch tree hit it **twice**. A counter
+whose zero cannot be made to move is not a gate; it is the fixture-vacuity defect class this epic has
+already been bitten by (`project_real_kit_golden_fingerprints`: green, deterministic, observing
+nothing). **So `dummySinkCreditCount` and its two exports (`__getDummySinkCreditCount`,
+`__resetDummySinkCreditCount`) were DELETED in this rung** rather than handed to 4c-2d as a vacuous
+gate. `dummyReachability.test.ts`'s vacuity guard was re-homed onto `__getNoVictimPlayerTurnCount`,
+which 4c-2b introduced and which still moves.
+
+**State the claim with the precision the counter's own doc used.** The correct claim is
+**"corpus-dead — no shape the suite can build reaches the site"**, NOT "structurally unreachable".
+The increment lived in the round-tail vestigial-sink `else` branch keyed on
+`totalRoundDamage + teamRoundDamage > 0` — *not* inside the dummy's turn body. Any future change that
+routes scalar damage there lights the site up again. This is the same line the counter's doc already
+drew ("no SHIPPED caller reaches the sink", not "the sink is unreachable"), and it must not be
+overstated in a comment, a commit message or the changelog.
+
+`legacyVictimFallbackCount` is untouched and still has a live non-zero home
+(`damageChannelAccounting.integration.test.ts`, a never-targetable *player* roster). That reading is
+enemy-side and is **4e's** business.
+
+### 9.3 A finding that did not exist before this rung: the D5 decrement change is a VALUE-LEVEL NO-OP
+
+Moving the side-wide scheduled-enemy-debuff decrement off the dummy's Post-Turn and onto the round
+tail produces **the same round, the same `actorId`, the same count and the same row values**. It is
+observable ONLY as the `buff-expired` emission's **position in the ordered event stream**:
+
+```text
+pre-rung : turn r2 attacker → turn r2 enemy → expired r2 by enemy → turn r2 e1 → turn r2 ally
+post-rung: turn r2 attacker → turn r2 e1 → turn r2 ally → expired r2 by enemy
+```
+
+That is the whole of the rung's semantic shift, and it is why §9.7 concludes there is no changelog
+entry to write.
+
+**Record the near-miss, not just the conclusion.** The first version of the tripwire meant to pin
+this **PASSED byte-identical against pre-rung semantics** — its fixture was a shape where the dummy
+had *already* been dropped before the rung, so the test could not distinguish the two orderings and
+would have shipped green while observing nothing. It was rewritten onto a **mixed** fixture (a
+focus ship with an enemy-side target, plus a team ally with an explicit ally-side target) and now
+asserts the **ordered** event stream rather than the values. A tripwire that cannot fail is this
+epic's signature defect and one nearly shipped here: **every tripwire must be shown to fail against
+the semantics it claims to have changed, before it is believed.**
+
+### 9.4 What 4c-2d must know: the inventory is BIGGER than §7.4's row implied, and its largest item is grep-invisible
+
+The whole `} else if (actor.kind === 'enemy' && actor.id === enemy.id) {` turn body —
+`engine.ts:9955` through the `⛔ END OF THE DEAD BRANCH` banner at `:10035`, 81 lines carrying
+`tickDoTs`, `processBombs` and `processAccumulators` — is now unreachable on every run, because the
+dummy is in no turn order. **A grep for `isDummyEnemy` MISSES it:** the condition is spelled inline
+rather than through the named binding, so the symbol that a deleting rung would naturally sweep for
+does not appear there at all. It was marked in place with four `⛔ DEAD BRANCH` banners rather than
+deleted, precisely because 4c-2d's zero-movement claim depends on 4c-2d knowing its own inventory.
+
+§7.4's 4c-2d row is corrected in place. The inventory:
+
+- **LOSES** `dummySinkCreditCount` and its two exports — deleted in this rung (§9.2).
+- **GAINS** the dead turn body above (`:9955`–`:10035`).
+- **GAINS** the dead `isDummyEnemy` Post-Turn arm (`isDummyEnemy` at `engine.ts:8861` is provably
+  always `false`, so the ternary that reads it is unreachable).
+- **GAINS** the dead-actor-skip exemption (the `!isDummyEnemy` conjunct, whose comment block is now
+  bannered with everything it used to claim and no longer does).
+- **GAINS** the dummy's membership in `dotCarrierActors` (`engine.ts:2623`, first member) — the
+  reporting route that makes §0.4(a)'s stranded DoT visible.
+- **GAINS** the new test file `src/utils/combat/__tests__/retiredDummyTurn.test.ts` (see §9.5 — one
+  of its two tests migrates rather than dies).
+
+Its **zero-movement** expectation is unchanged, and is now better founded than when it was written:
+what remains is an inventory, not an estimate.
+
+⚠️ Nine line-number references in `engine.ts` comments are load-bearing as of `767775cd` and will rot
+if anything lands above them before 4c-2d. Each is paired with the symbol it points at (§6's rule), so
+a stale number self-corrects, but 4c-2d should re-resolve them by symbol rather than by number.
+
+### 9.5 Hand-off on `retiredDummyTurn.test.ts`: one test dies with the actor, one MIGRATES
+
+The file carries the two §0.4 hazard tripwires, and 4c-2d must treat them differently:
+
+1. **The stranded-DoT test** pins a dummy-specific hazard (a DoT pushed onto the dummy's containers
+   never ticks, never expires, and is still reported by `dotCarrierActors`). It **dies with the
+   actor** — delete it alongside.
+2. **The scheduled-decrement test** pins a behaviour that is **not dummy-specific**: the round-tail
+   decrement of a side-wide bucket that *outlives the actor that used to host it*. 4c-2d should
+   **MIGRATE** it — re-keying the reported `actorId`, since the bucket will still need some identity
+   to report under — rather than delete the file wholesale.
+
+### 9.6 Method notes earned here
+
+Both are cheap, and both nearly produced a false green.
+
+- **An invalid `TargetSelection` string ran GREEN under vitest** and was caught only by
+  `npx tsc --noEmit`. Same class as this repo's known "`tsc` catches what vitest can't" trap: a test
+  fixture whose *type* is wrong is not a test failure, it is a test that silently exercises a
+  different path (or none).
+- **Verifying "this commit is comment-only" by piping both revisions through esbuild passed
+  VACUOUSLY on the first attempt, for two different people.** esbuild rejected the arguments and wrote
+  **0 bytes for both sides**, so `diff` reported "identical" while proving nothing. Both caught it the
+  same way: by adding a **negative control** — flip one character of real code and confirm the
+  comparison flags it. The generalisation, and it belongs next to §6's "before believing *X differs
+  from Y*, run X-vs-X": **a comparison that reports "no difference" must first be shown capable of
+  reporting a difference.** The two rules are the two halves of the same discipline — a positive
+  control for a claimed difference, a negative control for a claimed identity.
+
+### 9.7 The changelog decision: NO entry, deliberately
+
+`CLAUDE.md` requires a plain-English `UNRELEASED_CHANGES` entry in `src/constants/changelog.ts` for
+`feat:`/`fix:` work users would notice, and explicitly skips refactors and test-only changes.
+**This rung gets no entry, and the absence is a decision rather than an oversight.** It moved zero
+user-observable behaviour: no golden fingerprint moved, no oracle finding moved (`147 / 146 / 2`
+exactly), and the one semantic shift is §9.3's value-level no-op — same round, same actor, same
+count, same values, differing only in the ordinal position of a `buff-expired` emission inside the
+round.
+
+Note the trap that bit the previous rung's changelog: **a user-facing claim written from the headline
+behaviour will overstate it.** "The phantom enemy line no longer appears in the combat log" would be
+exactly such an overstatement here — that `turn-started`/`turn-ended` pair was already suppressed on
+every positional run *before* this rung, by 4c-2a and 4c-2b. Writing it would credit this rung with a
+fix the ladder had already shipped, which is the same error §9.1's stale churn cell made in the other
+direction.
+
+### 9.8 A LIVE write route into the dummy's containers survives — 4c-2d must rule on it
+
+Three comments on this branch claimed nothing in production can write into the dummy's DoT/bomb
+containers. **That claim was an overstatement of exactly the class §0.2 of this rung's plan warns
+against**, and the whole-branch review measured it false. The stated reason (`tgt: undefined` on the
+player side since 4c-2b, plus the dummy not being a member of `opposingRoster`) closes only the
+PLAYER-TURN route. A second route is live:
+
+- `engine.ts` aliases `enemy.corrosionEntries` / `enemy.pendingBombs` and passes those aliases into
+  `drainQueue` as `ctx.corrosionEntries` / `ctx.pendingBombs`;
+- `triggers.ts`'s `landDotOn` pushes into `(victim?.corrosionEntries ?? ctx.corrosionEntries)`
+  whenever the reactive intent's `eventCtx` stamps neither `victimId` nor `counterTargetId` (the
+  `routedVictimId` resolution).
+
+Measured with a parser-legal `type:'dot'` / `trigger:'start-of-round'` / `target:'enemy'` ability on a
+positional run whose team includes an ally-targeting ally — the shape whose liveness the retired gate
+used to depend on:
+
+| | `dot-applied` | ticks | `corrosionDamage` | stacks |
+| --- | --- | --- | --- | --- |
+| pre-branch `f1bce838` | `targetId='enemy'` | 25000 x3 | `[25000,25000,25000,0]` | `[1,1,0,0]` |
+| post-branch | `targetId='enemy'` | none | `[0,0,0,0]` | `[1,1,1,1]` |
+
+So retiring the turn **silently deletes real damage for that shape** — it is not a no-op in general,
+only in the corpus.
+
+**Why it is not a blocking bug, by enumeration rather than argument.** Across all 148 ships x 3 refit
+levels there are **16 reactive (non-`on-cast`) DoT abilities on 6 ships** — Crocus
+(`on-ally-crit-dot`), Pestilence (`on-enemy-cleansed`), Ruiner (`on-enemy-repaired`), Shepherd and
+Warden (`on-attacked`), Wisteria (`on-self-crit-dot`). **Every one of those listeners stamps
+`victimId` or `counterTargetId`**, so no shipped kit reaches the fallback. That is why no golden and
+no oracle finding moved. The three comments have been corrected in place to say **"no SHIPPED kit
+reaches it", not "no production route exists"** — the same line §0.2 drew for the deleted credit
+counter ("corpus-dead", not "structurally unreachable").
+
+**The hand-off: 4c-2d must DECIDE.** With the turn retired, that fallback now writes into a ghost
+that never ticks and never expires while still being reported — so 4c-2d has to choose whether the
+victimless reactive arm **resolves a real victim** (e.g. the sentinel-free positional roster) or
+**drops the application outright**. Either is defensible; leaving it to fall into a deleted actor's
+containers is not. The decision is **corpus-inert today but a real behaviour change for any future
+kit that reaches it**, so it must be recorded as a ruling rather than absorbed silently into the
+deletion. This is closely related to **open issue #334** (a victimless reactive arm aiming at the
+sentinel), which §8's hand-off already nominated 4c-2d to force a decision on — same seam, same rung;
+decide them together.

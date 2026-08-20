@@ -84,8 +84,11 @@ const nukeActor = (id: string): TeamActor =>
         },
     }) as TeamActorEngineInput;
 
-/** An ally-targeting healer keeps the DPS dummy alive (dummyEnemyIsVestigial=false) — the exact
- *  condition under which the phantom "enemy" leaked in the user's battle. */
+/** An ally-targeting healer — the exact condition under which the phantom "enemy" leaked in the
+ *  user's battle. It USED to keep the dummy in the turn order by falsifying the second conjunct of
+ *  the `dummyEnemyIsVestigial` gate; that gate was deleted in SP-4c-2c and the dummy now takes no
+ *  turn on any run, so the healer is retained here purely as the fixture shape that reproduced the
+ *  original bug, not as a live condition. */
 const healerActor = (id: string): TeamActor =>
     ({
         id,

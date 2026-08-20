@@ -132,8 +132,9 @@ const baseInput = (overrides: Partial<DPSSimulationInput> = {}): DPSSimulationIn
  * Per-round PLAYER turn order from turn-started events (drops the opposing actor).
  *
  * SP-4b-2a: a scalar-only `simulateDPS` run now fights a REAL, positioned enemy
- * (`SYNTHESIZED_DPS_ENEMY_ID`); the vestigial dummy `enemy` no longer takes a turn
- * (`dummyEnemyIsVestigial`, engine.ts). The id to drop moved from `'enemy'` to `'enemy-1'`. The
+ * (`SYNTHESIZED_DPS_ENEMY_ID`); the vestigial dummy `enemy` no longer takes a turn — and since
+ * SP-4c-2c not on any run at all (`turnOrderActors` drops it unconditionally; the
+ * `dummyEnemyIsVestigial` gate is deleted). The id to drop moved from `'enemy'` to `'enemy-1'`. The
  * player orders asserted below are unchanged: the synthesized enemy keeps the dummy's default
  * speed (50), below both F (100/150) and G (120), and carries `attack: 0` with no `shipSkills`.
  */

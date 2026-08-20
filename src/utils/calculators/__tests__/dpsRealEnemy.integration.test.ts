@@ -98,8 +98,11 @@ describe('DPS calculator with a real positioned enemy', () => {
             },
         });
 
-        // `dummyEnemyIsVestigial` requires every player actor to have a position AND an
-        // enemy-side parsed target; satisfied, the dummy 'enemy' leaves the turn order.
+        // The dummy 'enemy' is not in the turn order. Since SP-4c-2c that holds UNCONDITIONALLY
+        // (`turnOrderActors` drops it on every run); before that it held here because the retired
+        // `dummyEnemyIsVestigial` gate required every player actor to have a position AND an
+        // enemy-side parsed target, which this fixture satisfies. The assertion is unchanged — only
+        // the reason it passes is.
         expect(new Set(actors)).toEqual(new Set(['attacker', 'enemy-1']));
         expect(actors).not.toContain('enemy');
     });

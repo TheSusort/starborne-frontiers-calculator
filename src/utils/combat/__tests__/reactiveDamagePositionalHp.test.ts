@@ -938,9 +938,10 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
 });
 
 /**
- * SP-M M1 Task 9b: correctness-bug regression. `dummyEnemyIsVestigial` (engine.ts ~2135) requires
- * EVERY player actor's parsed target to be enemy-side — false the instant the player team
- * includes an ally-targeting ship (e.g. a healer), even in a fully positional `simulateBattle`.
+ * SP-M M1 Task 9b: correctness-bug regression. The then-live `dummyEnemyIsVestigial` gate (deleted
+ * in SP-4c-2c) required EVERY player actor's parsed target to be enemy-side — false the instant the
+ * player team included an ally-targeting ship (e.g. a healer), even in a fully positional
+ * `simulateBattle`.
  * The three reactive resolvers (`enemyWithMostBuffs`, `enemyWithHighestSpeed`,
  * `livingOpposingActorIds`) previously gated on that flag instead of the then-named
  * `positionalTeamBattle` input field, since replaced by the derived `hasPositionedEnemyRoster`
@@ -955,9 +956,10 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
  * — real enemy HP drops exactly as it does without the healer.
  */
 
-// Plain ally-targeting healer — the ONLY thing needed to flip dummyEnemyIsVestigial's second
-// conjunct false (a player actor whose parsed target is NOT enemy-side), while remaining otherwise
-// inert (no shield/passive text) so it does not itself perturb any enemy's HP.
+// Plain ally-targeting healer — this WAS the only thing needed to flip the retired
+// `dummyEnemyIsVestigial`'s second conjunct false (a player actor whose parsed target is NOT
+// enemy-side), which is what made it the minimal reproducer for the Task 9b bug. It remains
+// otherwise inert (no shield/passive text) so it does not itself perturb any enemy's HP.
 const healer = (id: string): Ship =>
     ship(id, {
         type: 'Defender',
