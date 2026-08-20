@@ -3477,10 +3477,15 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
 
     const buildHealCtx = (): {
         ctx: IntentExecContext;
-        applied: number[];
+        applied: Array<{ raw: number; id: string | undefined }>;
         credits: Array<{ bucket: string; amount: number }>;
     } => {
-        const applied: number[] = [];
+        // SP-4e fix wave 1: `applied` records the RECIPIENT, not just the amount. As a bare
+        // `number[]` it counted APPLICATIONS, so a production mis-route that repaired the anchor
+        // instead of the resolved recipient left every assertion below green — the reviewer proved
+        // it by rewriting the executor's `recipientActor(rid)` to `recipientActor(targetId)` and
+        // watching all four recipient-routing tests still pass. The id is the discriminator.
+        const applied: Array<{ raw: number; id: string | undefined }> = [];
         const credits: Array<{ bucket: string; amount: number }> = [];
         const healing: HealingRuntimeCtx = {
             targetId: 'tank',
@@ -3488,8 +3493,8 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => 1000,
-            applyHealToTarget: (raw) => {
-                applied.push(raw);
+            applyHealToTarget: (raw, victim) => {
+                applied.push({ raw, id: victim?.id });
                 return { consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
@@ -3511,8 +3516,9 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
 
         executeIntent(makeHealIntent('tank'), ctx);
 
-        // 10% of owner hp (1000) = 100, consumed by the heal target.
-        expect(applied).toEqual([100]);
+        // 10% of owner hp (1000) = 100, consumed by the heal target — and it is the ANCHOR's
+        // pool that is drained, because here the damaged ally IS the anchor.
+        expect(applied).toEqual([{ raw: 100, id: 'tank' }]);
         expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
         expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });
@@ -3531,7 +3537,9 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
         // consumption split for the 4d multi-target future"); 4e IS that future, and the rule is
         // that a reactive repair lands on the recipient it resolved. Graphite's "grants the ally
         // Repair Over Time" and Cultivator's "that ally" now actually repair that ally.
-        expect(applied).toEqual([100]);
+        // The recipient id is the load-bearing half: `[{ raw: 100 }]` alone would also be
+        // produced by a regression that repaired the ANCHOR ('tank') instead of 'team1'.
+        expect(applied).toEqual([{ raw: 100, id: 'team1' }]);
         expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
         expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });

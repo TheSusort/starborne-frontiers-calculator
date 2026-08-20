@@ -311,12 +311,26 @@ function registerActorAbilityStatuses(
             // target; `all-allies` (Hayyan) keeps every player. The global ally → all-players rule
             // for every OTHER cast-path buff is UNCHANGED.
             //
-            // SP-4e: `'lowest-hp-ally'` joins BOTH ally arms, and the carve-out match is the more
-            // important of the two. Hermes's clause is literally "grants Cheat Death to the
-            // lowest-HP ally", so once the parser emits the variant for that wording (Task 3) a
-            // carve-out keyed on `'ally'` alone would stop matching and Hermes's grant would
-            // silently widen from the anchor to the WHOLE TEAM. Matching both keeps that routing
-            // put across the flip.
+            // SP-4e: `'lowest-hp-ally'` joins BOTH ally arms. On the CARVE-OUT arm the match is
+            // purely DEFENSIVE and is expected to stay dead — do not read it as a Hermes fix.
+            // Measured against the corpus (`docs/ship-skills.csv`, 2026-08-20): the only
+            // firing-slot Cheat Death grants are Hermes (charged, `'ally'`) and Hayyan (charged,
+            // `'all-allies'`); Tycho's and Yazid's are passive-slot, which `castPathCheatDeath`
+            // already excludes. Hermes's charged text is "This Unit repairs 37% of its Max HP and
+            // adds 1 charge to the Charged Skill. / If the target has less than 40% HP, it grants
+            // Cheat Death." — it names NO ally selector (no "most missing health" / "lowest
+            // current health" / "the other ally" in any of its five rows), so Task 3's parser flip
+            // cannot turn it into `'lowest-hp-ally'`. `castPathCheatDeath` is keyed on the BUFF
+            // NAME, so nothing else can reach this arm with the variant either. The match exists
+            // so the two single-ally flavours cannot diverge if a future kit does land here.
+            //
+            // NO OWNER FALLBACK FOR THE SELECTOR. The `'ally'` flavour names the heal ANCHOR, and
+            // `[ownerId]` is a sane stand-in for it when there is no anchor (DPS mode —
+            // `healTargetId` is optional). The selector flavour names "the OTHER ally", so the
+            // owner is the one answer it forbids: with no anchor to narrow to it resolves to
+            // NOBODY, matching every other SP-4e site (`undefined` → empty recipient list). An
+            // un-fenced `healTargetId ?? ownerId` here would have been exactly the self-grant this
+            // rung exists to prevent.
             //
             // KNOWN APPROXIMATION on the non-carve-out arm: this function runs at actor
             // CONSTRUCTION, before any HP has moved and before `healingCtx` exists, so there is no
@@ -332,7 +346,11 @@ function registerActorAbilityStatuses(
                     ? [] // enemy-side statuses have no player recipients; the timed-enemy application path never reads recipients
                     : castPathCheatDeath &&
                         (ability.target === 'ally' || ability.target === 'lowest-hp-ally')
-                      ? [healTargetId ?? ownerId]
+                      ? healTargetId !== undefined
+                          ? [healTargetId]
+                          : ability.target === 'lowest-hp-ally'
+                            ? [] // selector + no anchor → nobody; NEVER the owner (see above)
+                            : [ownerId]
                       : ability.target === 'ally' ||
                           ability.target === 'all-allies' ||
                           ability.target === 'lowest-hp-ally'
@@ -1793,6 +1811,28 @@ export function __getNoVictimPlayerTurnCount(): number {
 }
 export function __resetNoVictimPlayerTurnCount(): void {
     noVictimPlayerTurnCount = 0;
+}
+/**
+ * TEST-ONLY EXECUTABLE TRIPWIRE (SP-4e). Counts iterations of the AGGREGATE `procStandingLeeches`
+ * entry loop — the `!positional` half of the standing-leech fork, whose live twin is
+ * `procStandingLeechesPerVictim`. The aggregate half is UNREACHABLE (see the block on the proc
+ * itself for the measurement), and this counter is how that claim stays true: `leech.test.ts` —
+ * the file that owns standing-leech coverage on every target flavour — asserts it is still 0 after
+ * its whole suite has run. A comment cannot fail; this can.
+ *
+ * Deliberately NOT a `throw`: the arm is dead, but a throw at the loop head would turn a future
+ * reachability change into a crash in a user's browser rather than a red test. Deliberately not
+ * gated on an env flag either — an unreachable `++` costs nothing in production.
+ *
+ * Module-level and NOT reset per run: `__resetAggregateStandingLeechApplications` is the test's job.
+ * Vitest isolates modules per test FILE, so each file reads only its own runs.
+ */
+let aggregateStandingLeechApplications = 0;
+export function __getAggregateStandingLeechApplications(): number {
+    return aggregateStandingLeechApplications;
+}
+export function __resetAggregateStandingLeechApplications(): void {
+    aggregateStandingLeechApplications = 0;
 }
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
@@ -3941,17 +3981,38 @@ export function runCombat(rawInput: CombatEngineInput): {
     // exists mid-turn). NO heal-performed emission (chain guard: leech procs never feed
     // on-ally-critically-repaired). Healing mode only; inert when no leeches registered.
     //
-    // ⚠️ UNREACHABLE as of SP-4e (measured, 2026-08-20). A `console.error` probe on the leech loop
-    // below recorded ZERO hits across the whole suite (6,006 tests): the function is entered 12,194
-    // times, and every call is filtered out by `amount <= 0` / `!entries` before the loop. The cause
-    // is structural, not fixture luck — `normalizeCombatRoster` assigns every actor a position, so
-    // `positional` is true whenever there is a victim to damage, and this proc's ONLY feed
-    // (`creditDamage`) is called from exactly two sites, both inside `if (!positional)`. Its live
-    // twin is `procStandingLeechesPerVictim` below. Kept, not deleted: it is the non-positional
-    // branch's half of a deliberate pair, and deleting one half of a `!positional`/`positional`
-    // fork is how the two drift (that drift is literally the leech-channel defect class closed in
-    // #328). Any behaviour added here must be added there too, and only the per-victim copy can be
-    // covered by a test — do not write a fixture claiming to cover this one.
+    // ⚠️ UNREACHABLE as of SP-4e (measured, 2026-08-20), and TRIPWIRED — see below.
+    //
+    // THE EVIDENCE IS THE MEASUREMENT, not a structural argument. A `console.error` probe on the
+    // leech loop below recorded ZERO hits across the whole suite (6,006 tests) while a probe at the
+    // function entry recorded 12,194 calls: every one is filtered out by `amount <= 0` / `!entries`
+    // before the loop. The reachability chain is that this proc's ONLY feed (`creditDamage`) is
+    // called from exactly two sites, both inside `if (!positional)`, and no fixture in the corpus
+    // reaches either with a registered leech entry. Do NOT restate that as "positional is always
+    // true": `positional` (see the gate in the turn loop) is also false when there is no target,
+    // no pattern, or no `positionalScalars` — none of which is about having a victim. The zero is
+    // an empirical fact about the corpus, not a theorem.
+    //
+    // TRIPWIRE (executable, not a comment): the loop head bumps
+    // `aggregateStandingLeechApplications`, and `leech.test.ts` — the file that owns standing-leech
+    // coverage on self / ally / all-allies / detonation scope — asserts it is still 0 once its
+    // whole suite has run. A change that makes this arm reachable turns that file RED instead of
+    // silently activating untested code.
+    //
+    // KEPT, NOT DELETED: it is the non-positional half of a deliberate `!positional`/`positional`
+    // fork (its live twin is `procStandingLeechesPerVictim` below), and deleting one half of such a
+    // fork is how the two drift — the leech-channel defect class closed in #328.
+    //
+    // ⚠️ BUT DO NOT CITE THAT FORK AS "TWO COPIES KEPT IN SYNC": they have ALREADY drifted, and
+    // this half is the weaker one. (1) Its `'ally'` arm has no `ownerIsEnemy` guard, while the
+    // per-victim twin's does. (2) It resolves its owner from `runtimesById`, which is PLAYER-side
+    // only — so for an enemy owner this proc returns before the loop, and its `'lowest-hp-ally'`
+    // arm is structurally dead on the enemy side. This half is therefore NOT team-symmetric, and
+    // the locked symmetry rule is satisfied only by the per-victim twin. Anything added here still
+    // has to be added there (that is the anti-drift rule), but the reverse does not hold, and only
+    // the per-victim copy can be covered by a test — do not write a fixture claiming to cover this
+    // one. Making this half symmetric is a real fix, not this rung's scope; the tripwire is what
+    // guarantees the question comes back before the code goes live.
     const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: number): void => {
         if (!healingCtx || amount <= 0) return;
         const entries = standingLeeches.get(sourceId);
@@ -3959,6 +4020,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         const owner = runtimesById.get(sourceId);
         if (!owner) return;
         for (const e of entries) {
+            // The tripwire (see the ⚠️ block above). Bumped BEFORE the scope filter so it counts
+            // every entry this dead arm actually walks, not only the ones that pay out.
+            aggregateStandingLeechApplications++;
             if (e.scope === 'detonation' && channel !== 'detonation') continue;
             let raw = amount * (e.pct / 100);
             if (e.kind === 'heal') {
@@ -4032,9 +4096,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // It REUSES procStandingLeeches's fold math (pct → raw, healModifier, heal-crit draw) but does
     // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor) /
     // grantShieldToTarget(raw, actor)), resolving each recipient's actor — so a covered enemy's
-    // leech can repair the right ally, not just the heal target. procStandingLeeches is left
-    // UNTOUCHED (its `rid === healTarget.id` pool-gating is load-bearing for the non-positional
-    // all-allies case, leech.test.ts:355-404).
+    // leech can repair the right ally, not just the heal target.
+    //
+    // WHAT THE AGGREGATE `procStandingLeeches` NOW DOES (rewritten SP-4e fix wave 1 — the previous
+    // wording said it was left "UNTOUCHED", which stopped being true the moment SP-4e armed its
+    // selector arm, and cited a line range that had drifted twice over). It was touched: it gained
+    // a `'lowest-hp-ally'` arm that applies to the SELECTED recipient's own pool. Every other
+    // target flavour there keeps its long-standing anchor-only application — `'ally'` →
+    // `[healTarget.id]`, `'all-allies'` → the whole roster credited but only the anchor's pool
+    // touched — and widening those is Task 4's scope, not this rung's. The tests that pin the
+    // anchor-only behaviour are named, not line-numbered, in `leech.test.ts`: Test 3
+    // "detonation scope: no leech on direct rounds; leech = burst × pct on the burst round" and
+    // Test 8 "all-allies: directHeal credited once per recipient (playerIds order)". Note that the
+    // aggregate proc is itself UNREACHABLE and tripwired (see its own ⚠️ block) — those two tests
+    // exercise THIS per-victim proc.
     //
     // RECIPIENT RESOLUTION: via `allRuntimesById` (NOT allActorsById) — the focus attacker is
     // keyed 'attacker', not its real id. `self` → the acting owner; `ally` → the heal target;

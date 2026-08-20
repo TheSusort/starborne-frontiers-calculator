@@ -1,5 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
+import {
+    runCombat,
+    CombatEngineInput,
+    TeamActorEngineInput,
+    __getAggregateStandingLeechApplications,
+    __resetAggregateStandingLeechApplications,
+} from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { createEventBus, CombatEvent } from '../events';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
@@ -95,6 +101,28 @@ const leechHeal = (
         target,
         config: { type: 'heal', pct, basis: 'damage-dealt', leechScope: 'all', ...extra },
     });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXECUTABLE TRIPWIRE (SP-4e fix wave 1) for the AGGREGATE `procStandingLeeches`.
+//
+// engine.ts carries a measured claim that the aggregate (`!positional`) half of the standing-leech
+// fork is UNREACHABLE — every proc is filtered by `amount <= 0` / `!entries` before its entry loop,
+// and the live work happens in `procStandingLeechesPerVictim`. That claim used to live only in a
+// comment, and a comment cannot fail. This file is the right place to make it fail: it is the one
+// that owns standing-leech coverage on every target flavour (self, ally, all-allies, detonation
+// scope) and on both the direct and DoT-tick channels.
+//
+// If a future change routes any of these fixtures through the aggregate arm, this goes RED — which
+// matters because that arm is NOT team-symmetric (it resolves its owner from the player-only
+// `runtimesById` and its `'ally'` arm has no `ownerIsEnemy` guard), so silently activating it would
+// ship an asymmetric heal route. See the ⚠️ block on the proc for the full statement.
+//
+// Vitest isolates modules per test FILE, so the counter reads only this file's runs.
+// ─────────────────────────────────────────────────────────────────────────────
+beforeAll(() => __resetAggregateStandingLeechApplications());
+afterAll(() => {
+    expect(__getAggregateStandingLeechApplications()).toBe(0);
+});
 
 describe('standing-leech hook — damage-dealt passive', () => {
     // ── Test 1: scope 'all' standing heal procs on direct damage ─────────────
