@@ -58,9 +58,13 @@ const makeHealing = (
         },
         grantShieldToTarget: () => 0,
         playerIds,
-        // E5 fields (unused on this player-path double — present for type-correctness).
         enemyIds: [],
-        recipientActor: () => undefined,
+        // SP-4e Task 2: no longer an "unused E5 field present for type-correctness" — the reactive
+        // heal branch reads it to decide whose pool to repair (it used to repair only `targetId`).
+        // Production resolves every roster id via `allActorsById.get`; a blanket `() => undefined`
+        // would repair nobody and make this suite's effectiveHeal assertions vacuous.
+        recipientActor: (id) =>
+            playerIds.includes(id) ? ({ id } as unknown as CombatActor) : undefined,
     };
     return { healing, credits };
 };
@@ -130,7 +134,7 @@ describe('Phase 4 PR 2 Task 3 — Salvation dead-recipient gross-heal filtering'
         expect(credits.get('caster')?.directHeal).not.toBe(3 * RAW);
     });
 
-    it('leaves the live heal target path (effectiveHeal/overheal) unchanged', () => {
+    it('repairs EVERY living recipient (SP-4e), not just the live heal target', () => {
         const playerIds = ['caster', 'ally1', 'ally2'];
         const runtimes = new Map<string, PlayerActorRuntime>([
             ['caster', runtime('caster', 0)],
@@ -142,8 +146,14 @@ describe('Phase 4 PR 2 Task 3 — Salvation dead-recipient gross-heal filtering'
 
         executeIntent(salvationHeal('caster'), ctx);
 
-        // Live target ally1: applyHealToTarget split of RAW (50): 50 consumed, 0 overheal.
-        expect(credits.get('caster')?.effectiveHeal).toBe(50);
+        // SP-4e Task 2: the two LIVING recipients (ally1, ally2) each consume their own pool, so
+        // effectiveHeal is 2 × the per-recipient split. Before this rung only the anchor (ally1)
+        // was applied and this read 50 — an `all-allies` reactive heal credited gross for every
+        // ally but restored HP to one. The dead caster is still excluded (that is THIS file's
+        // subject, and the first test above pins it): 2 recipients, not 3.
+        // This double's `applyHealToTarget` ignores its `victim` argument and always splits
+        // 50 consumed / 0 overheal, so the numbers below count APPLICATIONS, not HP.
+        expect(credits.get('caster')?.effectiveHeal).toBe(2 * 50);
         expect(credits.get('caster')?.overheal).toBe(0);
     });
 

@@ -115,6 +115,7 @@ import {
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
+import { allyHpFraction, lowestHpAllyRecipients } from './supportRecipients';
 import { consumeExposed, exposedIncomingPct } from './exposedStatus';
 import {
     HIT_MITIGATION_DOT_ROUNDS,
@@ -309,12 +310,32 @@ function registerActorAbilityStatuses(
             // (Hermes "grants Cheat Death to the lowest-HP ally"), fallback [ownerId] when no heal
             // target; `all-allies` (Hayyan) keeps every player. The global ally → all-players rule
             // for every OTHER cast-path buff is UNCHANGED.
+            //
+            // SP-4e: `'lowest-hp-ally'` joins BOTH ally arms, and the carve-out match is the more
+            // important of the two. Hermes's clause is literally "grants Cheat Death to the
+            // lowest-HP ally", so once the parser emits the variant for that wording (Task 3) a
+            // carve-out keyed on `'ally'` alone would stop matching and Hermes's grant would
+            // silently widen from the anchor to the WHOLE TEAM. Matching both keeps that routing
+            // put across the flip.
+            //
+            // KNOWN APPROXIMATION on the non-carve-out arm: this function runs at actor
+            // CONSTRUCTION, before any HP has moved and before `healingCtx` exists, so there is no
+            // live-HP view here to resolve the selector against — and the statuses it registers
+            // (auras / accumulating / timed-recipient lists) outlive any single instant anyway, so
+            // a setup-time snapshot would be a wrong answer dressed as a precise one. The variant
+            // therefore inherits plain `'ally'`'s roster-wide fan-out, which over-applies exactly
+            // as plain `'ally'` already does. What matters is that it must NOT fall through to the
+            // trailing `[ownerId]`: a self-only grant is the one answer "the OTHER ally" forbids,
+            // and that is what an un-armed variant would have got here.
             const recipients: string[] =
                 side === 'enemy'
                     ? [] // enemy-side statuses have no player recipients; the timed-enemy application path never reads recipients
-                    : castPathCheatDeath && ability.target === 'ally'
+                    : castPathCheatDeath &&
+                        (ability.target === 'ally' || ability.target === 'lowest-hp-ally')
                       ? [healTargetId ?? ownerId]
-                      : ability.target === 'ally' || ability.target === 'all-allies'
+                      : ability.target === 'ally' ||
+                          ability.target === 'all-allies' ||
+                          ability.target === 'lowest-hp-ally'
                         ? playerIds
                         : [ownerId];
             // A hit-counted grant is never an aura: an aura is re-evaluated per round against
@@ -3399,6 +3420,34 @@ export function runCombat(rawInput: CombatEngineInput): {
         : undefined;
 
     /**
+     * SP-4e: the `'lowest-hp-ally'` selector, resolved SIDE-RELATIVE to `ownerId` — over the
+     * owner's OWN roster on either side (locked team symmetry). Lowest currentHp/maxHp, owner
+     * EXCLUDED, ties broken by source order; `undefined` when the owner is the only living
+     * candidate ("the OTHER ally" is nobody, never a self-target).
+     *
+     * ONE ranking for the whole engine: this delegates to `lowestHpAllyRecipients`, the same
+     * helper the cast path (`recipientsFor` in playerTurn) binds — a second hand-copied ranking is
+     * the shape that produced the one-directional defects in #306. `allyHpFraction` over the
+     * healing ctx supplies the buff-aware max HP the helper's doc requires, and both `playerIds`
+     * and `enemyIds` are fixed source-order arrays, which is what makes the tie-break the
+     * documented one.
+     *
+     * Feeds `IntentExecContext.lowestHpAllyIdFor` (reactives) and the standing-leech procs.
+     * `undefined` without a healing ctx (DPS mode): there is no live HP view to rank over, and the
+     * consumers answer "no recipient" rather than falling back to the owner.
+     */
+    const lowestHpAllyIdForOwner = (ownerId: string): string | undefined => {
+        if (!healingCtx) return undefined;
+        const ownerActor = allActorsById.get(ownerId);
+        if (!ownerActor) return undefined;
+        return lowestHpAllyRecipients({
+            casterId: ownerId,
+            candidateIds: ownerActor.side === 'enemy' ? healingCtx.enemyIds : healingCtx.playerIds,
+            hpFractionOf: (id) => allyHpFraction({ id, healing: healingCtx }),
+        })[0];
+    };
+
+    /**
      * SP-3b Task 7: mirror ONE LANDED repair onto the RECIPIENT axis (`perRecipient`).
      *
      * The axis is defined as "keyed by the actor the repair LANDED ON", but until this change only
@@ -3891,6 +3940,18 @@ export function runCombat(rawInput: CombatEngineInput): {
     // standing crit/critDamage (base+gear stats — the per-turn folded effectiveCrit only
     // exists mid-turn). NO heal-performed emission (chain guard: leech procs never feed
     // on-ally-critically-repaired). Healing mode only; inert when no leeches registered.
+    //
+    // ⚠️ UNREACHABLE as of SP-4e (measured, 2026-08-20). A `console.error` probe on the leech loop
+    // below recorded ZERO hits across the whole suite (6,006 tests): the function is entered 12,194
+    // times, and every call is filtered out by `amount <= 0` / `!entries` before the loop. The cause
+    // is structural, not fixture luck — `normalizeCombatRoster` assigns every actor a position, so
+    // `positional` is true whenever there is a victim to damage, and this proc's ONLY feed
+    // (`creditDamage`) is called from exactly two sites, both inside `if (!positional)`. Its live
+    // twin is `procStandingLeechesPerVictim` below. Kept, not deleted: it is the non-positional
+    // branch's half of a deliberate pair, and deleting one half of a `!positional`/`positional`
+    // fork is how the two drift (that drift is literally the leech-channel defect class closed in
+    // #328). Any behaviour added here must be added there too, and only the per-victim copy can be
+    // covered by a test — do not write a fixture claiming to cover this one.
     const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: number): void => {
         if (!healingCtx || amount <= 0) return;
         const entries = standingLeeches.get(sourceId);
@@ -3906,16 +3967,40 @@ export function runCombat(rawInput: CombatEngineInput): {
                     raw *= 1 + owner.critDamage / 100;
                 }
             }
+            // SP-4e: the named selector resolves SIDE-RELATIVE to the leech's owner
+            // (lowestHpAllyIdForOwner), owner excluded; `undefined` → NO recipient, never the
+            // owner. Distinct from the `ally` arm below, which names the player heal ANCHOR.
+            const selectorRecipientId =
+                e.target === 'lowest-hp-ally' ? lowestHpAllyIdForOwner(sourceId) : undefined;
             const recipients =
-                e.target === 'ally'
-                    ? [healTarget!.id]
-                    : e.target === 'all-allies'
-                      ? healingCtx.playerIds
-                      : [sourceId];
+                e.target === 'lowest-hp-ally'
+                    ? selectorRecipientId === undefined
+                        ? []
+                        : [selectorRecipientId]
+                    : e.target === 'ally'
+                      ? [healTarget!.id]
+                      : e.target === 'all-allies'
+                        ? healingCtx.playerIds
+                        : [sourceId];
             for (const rid of recipients) {
+                // SP-4e: a SELECTOR-resolved recipient applies to its OWN pool — the shape
+                // `procStandingLeechesPerVictim` already uses. Every other target keeps this
+                // aggregate path's long-standing anchor-only application (widening those is
+                // Task 4's scope, not this rung's), which is why arming the selector here is
+                // zero-churn: no existing entry takes this branch.
+                const selectorActor =
+                    selectorRecipientId !== undefined ? healingCtx.recipientActor(rid) : undefined;
                 if (e.kind === 'heal') {
                     healingCtx.credit(sourceId, 'directHeal', raw);
-                    if (rid === healTarget!.id) {
+                    if (selectorActor) {
+                        const { consumed, overheal } = healingCtx.applyHealToTarget(
+                            raw,
+                            selectorActor
+                        );
+                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
+                        healingCtx.credit(sourceId, 'overheal', overheal);
+                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
+                    } else if (rid === healTarget!.id) {
                         const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
                         healingCtx.credit(sourceId, 'effectiveHeal', consumed);
                         healingCtx.credit(sourceId, 'overheal', overheal);
@@ -3926,7 +4011,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
-                    if (rid === healTarget!.id) healingCtx.grantShieldToTarget(raw);
+                    if (selectorActor) healingCtx.grantShieldToTarget(raw, selectorActor);
+                    else if (rid === healTarget!.id) healingCtx.grantShieldToTarget(raw);
                 }
             }
         }
@@ -4022,24 +4108,40 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             }
             // Recipient routing is SIDE-RELATIVE: "allies" means the owner's own side.
-            // `ally` (the single designated recipient) has no enemy-side equivalent — the player
-            // heal target is a player-only concept — and no corpus ship reaches it here: every
-            // passive leech that survives the reactive partition into `standingLeeches` targets
-            // `self` (Magnolia, Malvex, Quixilver, Valerian; Valkyrie's `ally` one is
-            // `on-bomb-detonated`, so it is reactive and never enters this map). An enemy owner
-            // therefore resolves to NO recipient rather than silently repairing a PLAYER — the
-            // same nothing it got before enemy owners were registered at all. Wire a real rule
-            // here if a future enemy kit needs one.
+            //
+            // `ally` (the single designated recipient) is the one arm with no enemy-side
+            // equivalent, because it names the PLAYER HEAL ANCHOR — a player-only concept, not
+            // "an ally" in any general sense. An enemy owner therefore resolves to NO recipient
+            // rather than silently repairing a PLAYER: the same nothing it got before enemy
+            // owners were registered at all.
+            //
+            // SP-4e correction: "no enemy-side equivalent" is no longer a statement about
+            // single-recipient ally targeting in general. `lowest-hp-ally` — the selector the
+            // ability's own TEXT names (Pallas, Volk, Valkyrie) — IS a single ally target with a
+            // symmetric enemy-side answer, because it resolves over the OWNER's own roster on
+            // either side. It gets its arm below; only the anchor-flavoured `ally` stays
+            // player-only, and Task 4 retires that arm once the parser stops emitting it.
+            //
+            // Corpus reach is unchanged: every passive leech that survives the reactive partition
+            // into `standingLeeches` targets `self` (Magnolia, Malvex, Quixilver, Valerian;
+            // Valkyrie's ally-facing one is `on-bomb-detonated`, so it is reactive and never
+            // enters this map). Neither ally-facing arm has a live entry today.
+            const selectorRecipientId =
+                e.target === 'lowest-hp-ally' ? lowestHpAllyIdForOwner(sourceId) : undefined;
             const recipients =
-                e.target === 'ally'
-                    ? ownerIsEnemy
+                e.target === 'lowest-hp-ally'
+                    ? selectorRecipientId === undefined
                         ? []
-                        : [healTarget!.id]
-                    : e.target === 'all-allies'
+                        : [selectorRecipientId]
+                    : e.target === 'ally'
                       ? ownerIsEnemy
-                          ? healingCtx.enemyIds
-                          : healingCtx.playerIds
-                      : [sourceId];
+                          ? []
+                          : [healTarget!.id]
+                      : e.target === 'all-allies'
+                        ? ownerIsEnemy
+                            ? healingCtx.enemyIds
+                            : healingCtx.playerIds
+                        : [sourceId];
             for (const rid of recipients) {
                 // Resolve the recipient's live actor for the pool application (Task-1 closures
                 // take an explicit victim). Runtime maps, not allActorsById: the focus is 'attacker'.
@@ -8444,6 +8546,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // 'adjacent-enemies' anchor resolution). See IntentExecContext.
                         adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
                         footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
+                        // SP-4e: the 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
+                        // closure is already side-relative to the OWNER it is asked about, which is
+                        // the correct scoping for a drain whose intents can carry either side's
+                        // owner id, and it shares the cast path's single ranking.
+                        lowestHpAllyIdFor: lowestHpAllyIdForOwner,
                     });
                 }
             }

@@ -2721,7 +2721,11 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e: the reactive heal branch now applies to the RESOLVED recipient's own pool
+            // (previously only to `targetId`), so this double must model production, where
+            // `recipientActor` resolves every roster id. A blanket `() => undefined` here would
+            // make the repair land nowhere and this suite would stop observing consumption at all.
+            recipientActor: (id) => (id === 'A' ? ({ id: 'A' } as CombatActor) : undefined),
         };
         const ctx: IntentExecContext = {
             round: 1,
@@ -3235,7 +3239,10 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e: see the identical note on the once-per-combat double above — the reactive
+            // heal branch resolves `recipientActor` now, so an always-undefined stub would make
+            // this suite's `applied` array permanently empty and its gate assertions vacuous.
+            recipientActor: (id) => (id === 'A' ? ({ id: 'A' } as CombatActor) : undefined),
         };
         const ctx: IntentExecContext = {
             round: 1,
@@ -3488,7 +3495,9 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             grantShieldToTarget: () => 0,
             playerIds: PLAYER_IDS,
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e: production resolves every roster id here (`allActorsById.get`), and the
+            // reactive heal branch now reads it to pick whose pool to repair. Model that.
+            recipientActor: (id) => (PLAYER_IDS.includes(id) ? ({ id } as CombatActor) : undefined),
         };
         const ctx: IntentExecContext = {
             ...buildBuffCtx(),
@@ -3508,16 +3517,23 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
         expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });
 
-    it('heal intent with damagedAllyId ≠ healing.targetId credits directHeal but does NOT touch the target pool', () => {
+    it('heal intent with damagedAllyId ≠ healing.targetId repairs THAT ally, not the target', () => {
         const { ctx, applied, credits } = buildHealCtx();
 
-        // The damaged ally is 'team1', NOT the heal target 'tank' — locks the
-        // recipient-vs-target consumption split for the 4d multi-target future.
+        // The damaged ally is 'team1', NOT the heal target 'tank' — this pins the ROUTING half,
+        // which is unchanged: the repair goes to 'team1'.
         executeIntent(makeHealIntent('team1'), ctx);
 
-        expect(applied).toHaveLength(0);
+        // SP-4e Task 2 (the pool gate): before this change the executor credited gross directHeal
+        // for 'team1' and then restored HP only to the ANCHOR ('tank'), so a non-anchor recipient
+        // was healed NOTHING — `applied` was empty and no effectiveHeal was credited. The old
+        // assertion pinned that no-op as if it were the rule ("locks the recipient-vs-target
+        // consumption split for the 4d multi-target future"); 4e IS that future, and the rule is
+        // that a reactive repair lands on the recipient it resolved. Graphite's "grants the ally
+        // Repair Over Time" and Cultivator's "that ally" now actually repair that ally.
+        expect(applied).toEqual([100]);
         expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
-        expect(credits.some((c) => c.bucket === 'effectiveHeal')).toBe(false);
+        expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });
 });
 
