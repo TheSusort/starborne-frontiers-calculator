@@ -1936,10 +1936,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Nothing was left but the object. The literal `'enemy'` survives as `SENTINEL_ENEMY_ACTOR_ID`
     // (see its doc) — an id for the side-wide scheduled-debuff BUCKET, not an actor.
     //
-    // The four scalars still arrive on `CombatEngineInput` and are now entirely unread — every
-    // field is OPTIONAL (the "REQUIRED field" claim that stood here was false from the moment
-    // SP-4c-2d widened `enemyHp`), so deleting them is mechanical call-site churn that `tsc`
-    // enumerates. Do not reintroduce a stand-in actor to give them a home.
+    // The four scalars are GONE from `CombatEngineInput` — SP-4d deleted the fields once its
+    // earlier rungs had retired their last readers (the drain ctx's derivation, then the skip
+    // row's), and `tsc` enumerated the ~1,100 call-site lines that had been passing them. A
+    // victim's real HP/defence/security/speed come from its own `enemyAttackers` roster entry.
+    // Do not reintroduce a stand-in actor, or a scalar, to describe "the enemy" fight-wide.
 
     // The reported actor. Internal for now — the DPS adapter's attacker. The engine core
     // keys on this, never on the literal 'attacker' (end-state rule, spec). A later phase
