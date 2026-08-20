@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { AbilityCard } from '../AbilityCard';
+import { VICTIMLESS_INFLICTION_WARNING } from '../simCoverage';
 import { Ability } from '../../../types/abilities';
 
 const damageAbility: Ability = {
@@ -155,6 +156,96 @@ describe('AbilityCard', () => {
                 <AbilityCard ability={dot} slot="passive" onChange={() => {}} onRemove={() => {}} />
             );
             expect(screen.getByText(/not simulated on the passive slot/i)).toBeInTheDocument();
+        });
+    });
+
+    /**
+     * SP-4c-2d. `SkillEditorModal` is live-edit — every keystroke calls onChange and there is no
+     * save button — so an ability the engine drops can already be sitting in storage. This warning
+     * is the only surface that reaches those, and it is WARN-ONLY by ruling: no offerable target
+     * makes a victimless dot/debuff work, so removing options would leave the user nowhere to go.
+     */
+    describe('victimless-infliction warning', () => {
+        const at = (over: Partial<Ability>): Ability =>
+            ({
+                id: 'v1',
+                type: 'dot',
+                target: 'enemy',
+                trigger: 'start-of-round',
+                conditions: [],
+                config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
+                ...over,
+            }) as Ability;
+
+        it('flags an ALREADY-SAVED dot that the engine drops', () => {
+            // "At the start of the round, inflict Corrosion on an enemy" — authorable today,
+            // and it reports stacks in the combat log while dealing nothing.
+            render(<AbilityCard ability={at({})} onChange={() => {}} onRemove={() => {}} />);
+            expect(screen.getByText(VICTIMLESS_INFLICTION_WARNING)).toBeInTheDocument();
+        });
+
+        it("does NOT flag Selenite's real passive (debuff on the highest-attack enemy)", () => {
+            // The carve-out, on a SHIPPED ship: `debuff` + `start-of-round` +
+            // `enemy-highest-attack` resolves its own target and lands. A warning here would be a
+            // false alarm on a real kit — this case is the fence against the predicate being
+            // "simplified" back into flagging it.
+            render(
+                <AbilityCard
+                    ability={at({
+                        type: 'debuff',
+                        target: 'enemy-highest-attack',
+                        config: {
+                            type: 'debuff',
+                            buffName: 'Concentrate Fire',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'apply',
+                            duration: 2,
+                        },
+                    })}
+                    onChange={() => {}}
+                    onRemove={() => {}}
+                />
+            );
+            expect(screen.queryByText(VICTIMLESS_INFLICTION_WARNING)).not.toBeInTheDocument();
+        });
+
+        it('does NOT flag a damage ability on the same trigger', () => {
+            render(
+                <AbilityCard
+                    ability={{ ...damageAbility, trigger: 'start-of-round' }}
+                    onChange={() => {}}
+                    onRemove={() => {}}
+                />
+            );
+            expect(screen.queryByText(VICTIMLESS_INFLICTION_WARNING)).not.toBeInTheDocument();
+        });
+
+        it('does NOT flag a dot on on-deal-damage, which names the enemy that was hit', () => {
+            render(
+                <AbilityCard
+                    ability={at({ trigger: 'on-deal-damage' })}
+                    onChange={() => {}}
+                    onRemove={() => {}}
+                />
+            );
+            expect(screen.queryByText(VICTIMLESS_INFLICTION_WARNING)).not.toBeInTheDocument();
+        });
+
+        it('WARNS WITHOUT BLOCKING — every Target option stays selectable', () => {
+            // Pins the ruling: the flagged ability still offers the full target list, including the
+            // bare Enemy it is flagged for. A future change that started removing options would
+            // break this rather than pass quietly. (`Select` is the project's custom control, not a
+            // native <select> — the options only exist once the dropdown is opened, in a portal.)
+            render(<AbilityCard ability={at({})} onChange={() => {}} onRemove={() => {}} />);
+            fireEvent.click(screen.getByLabelText('Target'));
+            const labels = within(screen.getByRole('listbox'))
+                .getAllByRole('option')
+                .map((o) => o.textContent);
+            expect(labels).toContain('Enemy');
+            expect(labels).toContain('All enemies');
+            expect(labels).toContain('Adjacent enemies');
         });
     });
 
