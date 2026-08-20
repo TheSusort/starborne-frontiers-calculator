@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { parseHealAbilities } from '../../skillTextParser';
 import { buildShipAbilities } from '../buildShipAbilities';
@@ -23,8 +23,22 @@ import type { AbilityTarget } from '../../../types/abilities';
  * Both blocks read `docs/ship-skills.csv` — the parser's source of truth (CLAUDE.md), NOT any
  * ships constant — via `scripts/lib/shipSkillCsv`, whose `loadShipSkillRecords` is built on the
  * same `readCsvRecords`/`parseCsvLine` pair `scripts/auditSkills.ts` uses (so multi-line quoted
- * passives survive). The CSV is gitignored dev reference data, so these skip on a clean checkout.
+ * passives survive).
+ *
+ * The CSV is gitignored dev reference data. Both blocks THROW when it is absent rather than
+ * skipping (`realKitFingerprints.test.ts`'s convention): a fresh worktree of this repo routinely
+ * lacks it and there is no CI test workflow, so a skip would make the inventory gate — whose entire
+ * purpose is to stop a future parser change quietly widening the selector — vanish in silence.
  */
+
+function requireCsv(): void {
+    if (!csvAvailable()) {
+        throw new Error(
+            'docs/ship-skills.csv is missing from this worktree (gitignored reference data) — it is ' +
+                "the parser's source of truth and these tests cannot run without it."
+        );
+    }
+}
 
 type CsvSlot = 'active' | 'charged' | 'passive1' | 'passive2' | 'passive3';
 
@@ -77,93 +91,81 @@ const builtHealTargets = (slot: CsvSlot, text: string): AbilityTarget[] =>
         .map((a) => a.target);
 
 describe('SP-4e: a text-named worst-HP ally recipient parses as lowest-hp-ally', () => {
-    it.skipIf(!csvAvailable())(
-        'Pallas active — "The other ally with the lowest current health percentage"',
-        () => {
-            const text = csvText('Pallas', 'active');
-            expect(parseHealAbilities(text)).toEqual([
-                {
-                    kind: 'heal',
-                    pct: 20,
-                    basis: 'damage-dealt',
-                    target: 'lowest-hp-ally',
-                    explicitTarget: true,
-                },
-            ]);
-            expect(builtHealTargets('active', text)).toEqual(['lowest-hp-ally']);
-        }
-    );
+    beforeAll(requireCsv);
 
-    it.skipIf(!csvAvailable())(
-        'Volk passive — "repairs 30% of its Max HP to the ally with the most missing health"',
-        () => {
-            const p1 = csvText('Volk', 'passive1');
-            expect(parseHealAbilities(p1)).toEqual([
-                {
-                    kind: 'heal',
-                    pct: 30,
-                    basis: 'hp',
-                    target: 'lowest-hp-ally',
-                    explicitTarget: true,
-                },
-            ]);
-            expect(builtHealTargets('passive1', p1)).toEqual(['lowest-hp-ally']);
+    it('Pallas active — "The other ally with the lowest current health percentage"', () => {
+        const text = csvText('Pallas', 'active');
+        expect(parseHealAbilities(text)).toEqual([
+            {
+                kind: 'heal',
+                pct: 20,
+                basis: 'damage-dealt',
+                target: 'lowest-hp-ally',
+                explicitTarget: true,
+            },
+        ]);
+        expect(builtHealTargets('active', text)).toEqual(['lowest-hp-ally']);
+    });
 
-            // The R2 passive repeats the ally repair and adds an end-of-turn SELF repair — the
-            // selector must claim only the first, leaving the bare self-repair alone.
-            const p2 = csvText('Volk', 'passive2');
-            expect(parseHealAbilities(p2).map((h) => h.target)).toEqual(['lowest-hp-ally', 'self']);
-            expect(builtHealTargets('passive2', p2)).toEqual(['lowest-hp-ally', 'self']);
-        }
-    );
+    it('Volk passive — "repairs 30% of its Max HP to the ally with the most missing health"', () => {
+        const p1 = csvText('Volk', 'passive1');
+        expect(parseHealAbilities(p1)).toEqual([
+            {
+                kind: 'heal',
+                pct: 30,
+                basis: 'hp',
+                target: 'lowest-hp-ally',
+                explicitTarget: true,
+            },
+        ]);
+        expect(builtHealTargets('passive1', p1)).toEqual(['lowest-hp-ally']);
 
-    it.skipIf(!csvAvailable())(
-        'Valkyrie passive — "this Unit and the ally with the lowest current health percentage"',
-        () => {
-            const p1 = csvText('Valkyrie', 'passive1');
-            // "this Unit AND the ally …" → two entries: the selected ally plus a mirrored self.
-            expect(parseHealAbilities(p1)).toEqual([
-                {
-                    kind: 'heal',
-                    pct: 5,
-                    basis: 'damage-dealt',
-                    target: 'lowest-hp-ally',
-                    explicitTarget: true,
-                    leechScope: 'detonation',
-                },
-                {
-                    kind: 'heal',
-                    pct: 5,
-                    basis: 'damage-dealt',
-                    target: 'self',
-                    explicitTarget: true,
-                    leechScope: 'detonation',
-                },
-            ]);
-            expect(builtHealTargets('passive1', p1)).toEqual(['lowest-hp-ally', 'self']);
-        }
-    );
+        // The R2 passive repeats the ally repair and adds an end-of-turn SELF repair — the
+        // selector must claim only the first, leaving the bare self-repair alone.
+        const p2 = csvText('Volk', 'passive2');
+        expect(parseHealAbilities(p2).map((h) => h.target)).toEqual(['lowest-hp-ally', 'self']);
+        expect(builtHealTargets('passive2', p2)).toEqual(['lowest-hp-ally', 'self']);
+    });
 
-    it.skipIf(!csvAvailable())(
-        'Chimei is NOT captured — the selector phrase sits in her unimplemented over-repair sentence',
-        () => {
-            // Chimei's passive contains a FULL match for the selector regex ("the ally with the
-            // lowest current health percentage") — but in a third sentence describing over-repair
-            // overflow, a mechanic the parser does not model (no percentage-of-stat heal, so it
-            // emits nothing). The parser's per-match sentence scoping is the only thing stopping
-            // that phrase from leaking onto the SECOND sentence's real all-allies Stealth repair.
-            const rec = loadShipSkillRecords().find((r) => r.name.toLowerCase() === 'chimei')!;
-            expect(rec.passives[0]).toContain('lowest current health percentage');
-            for (const [slot, text] of csvSlots(rec)) {
-                expect(parseHealAbilities(text).map((h) => h.target)).not.toContain(
-                    'lowest-hp-ally'
-                );
-                expect(builtHealTargets(slot, text)).not.toContain('lowest-hp-ally');
-            }
-            // Positive control: her real heals still route to all allies.
-            expect(builtHealTargets('passive1', rec.passives[0])).toEqual(['all-allies']);
+    it('Valkyrie passive — "this Unit and the ally with the lowest current health percentage"', () => {
+        const p1 = csvText('Valkyrie', 'passive1');
+        // "this Unit AND the ally …" → two entries: the selected ally plus a mirrored self.
+        expect(parseHealAbilities(p1)).toEqual([
+            {
+                kind: 'heal',
+                pct: 5,
+                basis: 'damage-dealt',
+                target: 'lowest-hp-ally',
+                explicitTarget: true,
+                leechScope: 'detonation',
+            },
+            {
+                kind: 'heal',
+                pct: 5,
+                basis: 'damage-dealt',
+                target: 'self',
+                explicitTarget: true,
+                leechScope: 'detonation',
+            },
+        ]);
+        expect(builtHealTargets('passive1', p1)).toEqual(['lowest-hp-ally', 'self']);
+    });
+
+    it('Chimei is NOT captured — the selector phrase sits in her unimplemented over-repair sentence', () => {
+        // Chimei's passive contains a FULL match for the selector regex ("the ally with the
+        // lowest current health percentage") — but in a third sentence describing over-repair
+        // overflow, a mechanic the parser does not model (no percentage-of-stat heal, so it
+        // emits nothing). The parser's per-match sentence scoping is the only thing stopping
+        // that phrase from leaking onto the SECOND sentence's real all-allies Stealth repair.
+        const rec = loadShipSkillRecords().find((r) => r.name.toLowerCase() === 'chimei')!;
+        expect(rec.passives[0]).toContain('lowest current health percentage');
+        for (const [slot, text] of csvSlots(rec)) {
+            expect(parseHealAbilities(text).map((h) => h.target)).not.toContain('lowest-hp-ally');
+            expect(builtHealTargets(slot, text)).not.toContain('lowest-hp-ally');
         }
-    );
+        // Positive control: her real heals still route to all allies.
+        expect(builtHealTargets('passive1', rec.passives[0])).toEqual(['all-allies']);
+    });
 });
 
 /**
@@ -173,6 +175,8 @@ describe('SP-4e: a text-named worst-HP ally recipient parses as lowest-hp-ally',
  * that keeps Chimei's over-repair sentence out — fails here instead of silently re-routing heals.
  */
 describe('SP-4e: lowest-hp-ally roster inventory gate', () => {
+    beforeAll(requireCsv);
+
     interface InventoryRow {
         ship: string;
         slot: CsvSlot;
@@ -194,10 +198,13 @@ describe('SP-4e: lowest-hp-ally roster inventory gate', () => {
         return rows;
     };
 
-    it.skipIf(!csvAvailable())('carries the selector on exactly Pallas, Volk and Valkyrie', () => {
+    it('carries the selector on exactly Pallas, Volk and Valkyrie', () => {
         const all = sweep();
-        // Guard the sweep itself: a silently-empty roster read would make every assertion vacuous.
-        expect(all.length).toBeGreaterThan(500);
+        // Guard the sweep itself: a silently-empty — or merely SHRUNKEN — roster read would make
+        // every assertion below vacuous. The floor sits just under the real row count (1124 at the
+        // time of writing) rather than at a token value, so losing even a modest slice of the
+        // roster trips it instead of passing with half the corpus unread.
+        expect(all.length).toBeGreaterThan(1000);
 
         const selected = all.filter((r) => r.target === 'lowest-hp-ally');
         expect(selected.map((r) => `${r.ship}/${r.slot}/${r.type}`).sort()).toEqual([
@@ -214,7 +221,7 @@ describe('SP-4e: lowest-hp-ally roster inventory gate', () => {
         ]);
     });
 
-    it.skipIf(!csvAvailable())('carries none on Chimei', () => {
+    it('carries none on Chimei', () => {
         const chimei = sweep().filter((r) => r.ship.toLowerCase() === 'chimei');
         // Chimei is swept at all (not a dropped multi-line CSV record), and carries none.
         expect(chimei.length).toBeGreaterThan(0);

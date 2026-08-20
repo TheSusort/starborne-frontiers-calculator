@@ -82,12 +82,7 @@ const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [
     { value: 'self', label: 'Self' },
     { value: 'ally', label: 'Ally' },
     { value: 'all-allies', label: 'All allies' },
-    // SP-4e: 'lowest-hp-ally' is deliberately NOT offered here yet. The variant exists in the
-    // model and in `resolveSupportRecipients`, but `recipientsFor` (playerTurn.ts) and
-    // `reactiveRecipients` (triggers.ts) do not route it yet — one throws and the other
-    // silently resolves to the caster, the single answer the selector forbids. Offering it
-    // before those land makes a user-authorable crash. Add the option in the task that ships
-    // the in-app docs, once all three routing sites are live.
+    { value: 'lowest-hp-ally', label: 'Lowest HP ally' },
     { value: 'adjacent-allies', label: 'Adjacent allies' },
     { value: 'enemy', label: 'Enemy' },
     { value: 'all-enemies', label: 'All enemies' },

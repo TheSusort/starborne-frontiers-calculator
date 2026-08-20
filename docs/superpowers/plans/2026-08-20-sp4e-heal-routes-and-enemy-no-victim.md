@@ -209,6 +209,12 @@ Expected: PASS.
 
 - [ ] **Step 10: Do NOT add the editor surface yet — it moves to Task 6**
 
+✅ **Superseded (2026-08-21).** The deferral held only until the routing sites landed, which they
+did in Task 2. The option `{ value: 'lowest-hp-ally', label: 'Lowest HP ally' }` was added to
+`AbilityCard.tsx`'s `TARGET_OPTIONS` (and the placeholder comment deleted) in **Task 3's fix wave**,
+because Task 3 ships the three parsed ships and the editor was rendering their Target field as the
+bare `defaultOption` "Select". **Task 6 Step 3 is therefore already done — do not add it twice.**
+
 ⚠️ **Corrected after review (2026-08-20).** Adding `'lowest-hp-ally'` to `AbilityCard.tsx`'s
 `TARGET_OPTIONS` in this task makes a **user-authorable crash**: `recipientsFor`
 (`playerTurn.ts`) does not route the variant until Task 2, so it reaches
@@ -873,18 +879,19 @@ emoji:
     'Combat sim: enemy support ships that cast on their own allies no longer register your focus ship as a target on that turn.',
 ```
 
-- [ ] **Step 3: Add the editor surface (moved here from Task 1)**
+- [x] ~~**Step 3: Add the editor surface (moved here from Task 1)**~~ — **DONE in Task 3's fix
+wave (2026-08-21). Do not repeat it.**
 
-Now that all three routing sites are live, add to `src/components/skills/AbilityCard.tsx`'s
-`TARGET_OPTIONS`, in ally-side order after `'all-allies'`:
+`{ value: 'lowest-hp-ally', label: 'Lowest HP ally' }` is already in
+`src/components/skills/AbilityCard.tsx`'s `TARGET_OPTIONS`, in ally-side order after `'all-allies'`,
+and Task 1's placeholder comment is gone. It moved forward because Task 3 shipped Pallas, Volk and
+Valkyrie carrying the target: with the option missing, the editor's Target field fell back to
+`Select`'s `defaultOption` — the literal word "Select" — for all three, as though unset, and
+touching the dropdown overwrote the parsed selector with no way to restore it.
 
-```ts
-    { value: 'lowest-hp-ally', label: 'Lowest HP ally' },
-```
-
-and delete the placeholder comment Task 1 left at that spot explaining why it was absent. Verify by
-authoring one in the running app (`npm start`, port 3000) that a heal with this target resolves to
-the worst-HP ally and does not throw — the crash this deferral exists to prevent.
+Still worth doing here if not already done: verify in the running app (`npm start`, port 3000) that
+a hand-authored heal with this target resolves to the worst-HP ally and does not throw — the crash
+the original deferral existed to prevent.
 
 `abilityDefaults.ts` needs no change: its only `AbilityTarget` surface is `DEFAULT_TARGETS:
 Record<AbilityType, AbilityTarget>`, a per-ability-type default with no ally-target list.

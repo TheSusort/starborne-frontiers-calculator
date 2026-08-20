@@ -4113,6 +4113,12 @@ function resolveHealTarget(sentence: string): {
     // Sentence-scoped by the caller, which is the only thing keeping Chimei's over-repair
     // sentence ("the ally with the lowest current health percentage repairs an amount equivalent
     // to the over-repair" — a different, unimplemented mechanic) out of this arm.
+    // NOT load-bearing on today's corpus: the third alternative (`the other ally`) is redundant,
+    // because Pallas — the only ship whose text says it — also carries "lowest current health",
+    // which the second alternative already matches. It stays as the brief prescribed it, but a
+    // future "the other ally" with NO HP phrase would route here rather than to an arbitrary ally,
+    // which is a widening to weigh at that point (the inventory gate in
+    // `abilities/__tests__/lowestHpAllySelector.test.ts` is what surfaces it).
     if (
         /most\s+missing\s+health|lowest\s+current\s+health(?:\s+percentage)?|\bthe\s+other\s+ally\b/.test(
             sWithoutKillAntecedent
