@@ -44,8 +44,8 @@ const SimulatorPage: React.FC = () => {
     const [playerSquadLeader, setPlayerSquadLeader] = useState<SquadLeaderSelection | undefined>(
         () => readStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS.player)
     );
-    const [enemySquadLeader, setEnemySquadLeader] = useState<SquadLeaderSelection | undefined>(
-        () => readStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS.enemy)
+    const [enemySquadLeader, setEnemySquadLeader] = useState<SquadLeaderSelection | undefined>(() =>
+        readStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS.enemy)
     );
 
     const handleSquadLeaderChange = (side: Side, selection: SquadLeaderSelection | undefined) => {

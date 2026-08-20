@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { isAbilityNotSimulated, SIMULATED_CONTROL_EFFECTS, NOT_SIMULATED_TYPES } from '../simCoverage';
+import {
+    isAbilityNotSimulated,
+    SIMULATED_CONTROL_EFFECTS,
+    NOT_SIMULATED_TYPES,
+} from '../simCoverage';
 import { Ability, ControlEffect } from '../../../types/abilities';
 
 const ALL_CONTROL_EFFECTS: readonly ControlEffect[] = [

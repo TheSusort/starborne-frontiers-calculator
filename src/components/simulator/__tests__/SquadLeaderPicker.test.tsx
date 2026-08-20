@@ -86,7 +86,11 @@ describe('SquadLeaderPicker selects', () => {
         renderPicker({ selection: brandisherStage3, onChange });
         fireEvent.click(screen.getByRole('button', { name: /Stage/i }));
         fireEvent.click(screen.getByRole('option', { name: 'I' }));
-        expect(onChange).toHaveBeenCalledWith({ faction: 'MARAUDERS', name: 'Brandisher', stage: 1 });
+        expect(onChange).toHaveBeenCalledWith({
+            faction: 'MARAUDERS',
+            name: 'Brandisher',
+            stage: 1,
+        });
     });
 });
 
@@ -109,9 +113,7 @@ describe('SquadLeaderPicker applied-effects preview', () => {
         renderPicker({ selection: brandisherStage3, board: marauderBoard });
         // Stage II "+25% direct damage to secondary targets" is conditional → unsimulated;
         // the four stat effects (I ally buffs + III enemy debuffs) are simulated.
-        expect(
-            screen.getByText('+25% direct damage to secondary targets')
-        ).toBeInTheDocument();
+        expect(screen.getByText('+25% direct damage to secondary targets')).toBeInTheDocument();
         expect(screen.getAllByText('Not simulated')).toHaveLength(1);
     });
 

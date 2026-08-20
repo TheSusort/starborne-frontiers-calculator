@@ -177,9 +177,7 @@ describe('simulateBattle pre-fight modifiers — incomingCritDamage (Optimizer I
             playerSquadLeader: { faction: 'TERRAN_COMBINE', name: 'Optimizer', stage: 3 },
         });
         expect(round1(stage2, 'attacker').damageTaken).toBeGreaterThan(0);
-        expect(round1(stage3, 'attacker').damageTaken).toBe(
-            round1(stage2, 'attacker').damageTaken
-        );
+        expect(round1(stage3, 'attacker').damageTaken).toBe(round1(stage2, 'attacker').damageTaken);
     });
 });
 
@@ -224,9 +222,7 @@ describe('simulateBattle pre-fight modifiers — outgoingCritDamage (Negotiator 
             rounds: 2,
             playerSquadLeader: { faction: 'ATLAS_SYNDICATE', name: 'Negotiator', stage: 3 },
         });
-        expect(round1(stage3, 'attacker').damageTaken).toBe(
-            round1(stage2, 'attacker').damageTaken
-        );
+        expect(round1(stage3, 'attacker').damageTaken).toBe(round1(stage2, 'attacker').damageTaken);
     });
 });
 
