@@ -14,9 +14,10 @@ Three legacies survive on the heal path, all of them from the era when a run had
 
 1. an **unconditional lowest-HP ally route** for a single-`ally` heal, gated on a *mode flag*
    (`teamBattle` / `isEnemyCaster`) rather than on what the ability's text says;
-2. `procStandingLeeches` routing an `'ally'`-targeted leech to **the heal anchor**
-   (`[healTarget!.id]`), deliberately left alone by SP-3 as "load-bearing for the non-positional
-   all-allies case";
+2. an **anchor-only heal route and pool gate on the reactive path** (`reactiveRecipients` falling
+   through to the heal anchor, plus a `rid === ctx.healing.targetId` gate that silently drops any
+   other recipient's HP restore) — and the same anchor route on the corpus-dead standing-leech
+   path SP-3 left alone as "load-bearing for the non-positional all-allies case". See §3.2;
 3. the enemy side's `TurnBindings.legacyVictim: healTarget` — the last fallback victim in the
    engine, and the reason the enemy side still answers a no-victim turn differently from the
    player side (#335).
@@ -55,9 +56,10 @@ defects are narrower and different from §6's:
 
 - **D1 — Pallas's "other" is unenforced.** `lowestHpAllyId` returns `best ?? actor.id`, so with no
   other living ally the heal becomes a **self-heal**, which Pallas's text forbids.
-- **D2 — Valkyrie's leech routes to the anchor.** `engine.ts:3908-3931`: `e.target === 'ally'` →
-  `[healTarget!.id]`, and the pool only lands when `rid === healTarget.id`. Valkyrie's text names
-  the lowest-HP ally, not the focus.
+- **D2 — Valkyrie's leech routes to the anchor.** Via `triggers.ts:2486` `reactiveRecipients`,
+  which falls through to `fallbackTargetId`; and `triggers.ts:3849`'s pool gate then restores HP
+  only to the anchor. Valkyrie's text names the lowest-HP ally, not the focus. **Not**
+  `procStandingLeeches` — see §3.2 for why.
 - **D3 — the healing calculator routes Pallas/Volk to the focus.** Without `teamBattle`, the
   `else base = [healing.targetId]` arm sends both ships' heals to the user's chosen focus ship
   rather than to the worst-HP ally.
@@ -168,36 +170,53 @@ to the caster.** Living same-side allies, caster excluded, ranked by `currentHp 
 broken by source order; **empty when there is no other living ally** (D1). Its `best ?? actor.id`
 tail goes.
 
-### 3.2 `procStandingLeeches` — `engine.ts:3908-3931`
+### 3.2 Valkyrie's real fix site is `triggers.ts`, NOT `procStandingLeeches`
+
+**Correction found while planning (2026-08-20).** §0/D2 named `procStandingLeeches` as Valkyrie's
+site. Verified: it is not. `standingLeeches` is scanned from `rt.castSkills.slots`, i.e. AFTER
+`partitionReactiveAbilities` — and `on-bomb-detonated` is in `LIVE_TRIGGERS`
+(`src/types/abilities.ts:288`), so Valkyrie's leech is partitioned into `reactiveAbilities` and
+**never enters that map.** `engine.ts:4024-4032` already says so in a comment; the epic spec did
+not.
+
+`'ally'` recipient resolution therefore lives at **three** sites, and only two are live:
+
+| Site | Code | `'ally'` resolves to | Live ships |
+| --- | --- | --- | --- |
+| **A — cast** | `playerTurn.ts:3850` `recipientsFor` | mode-flag lowest-HP, else `healing.targetId` | **Pallas, Volk** |
+| **B — reactive** | `triggers.ts:2486` `reactiveRecipients` | `cleansedAllyIds` → `damagedAllyId` → `fallbackTargetId` (the anchor) | **Valkyrie** (falls through to the anchor); Cultivator/Hayyan resolve correctly via `cleansedAllyIds` |
+| **C — standing leech** | `engine.ts:3908` `procStandingLeeches` + `:4033` `procStandingLeechesPerVictim` | `[healTarget!.id]` / `[]` for an enemy owner | **none — corpus-dead.** Every leech surviving the partition targets `self` (Magnolia, Malvex, Quixilver, Valerian) |
+
+**Site B carries a second defect: an anchor-only pool gate.** `triggers.ts:3849`:
 
 ```ts
-const recipients =
-    e.target === 'ally' ? [healTarget!.id]
-    : e.target === 'all-allies' ? healingCtx.playerIds
-    : [sourceId];
+if (rid === ctx.healing.targetId) {
+    const { consumed, overheal } = ctx.healing.applyHealToTarget(raw);
 ```
 
-The `'ally'` arm becomes `'lowest-hp-ally'` and resolves the selector against the **owner's own
-side**, then applies to **that actor's** pool via the parametrized closures
-`applyHealToTarget(raw, actor)` / `grantShieldToTarget(raw, actor)` — the same mechanism the
-per-victim positional leech already uses (`engine.ts:~3935+`). This retires the
-`rid === healTarget.id` pool gate SP-3 deferred (D2).
+A reactive heal to any non-anchor recipient is credited gross and **restores no HP**. Once
+Valkyrie routes to a worst-HP ally that is not the focus, its repair would silently do nothing.
+The fix has a template **directly beside it** — the reactive *shield* branch (`:3864-3874`) already
+resolves `ctx.healing.recipientActor(rid)` and calls `grantShieldToTarget(raw, recipientActor)`.
+Mirror that shape using `applyHealToTarget(raw, recipientActor)` (the closure already takes an
+optional victim, `engine.ts:3357`).
 
-**The epic spec's `leech.test.ts:355-404` citation has drifted** — that range now spans Test 6
-(`healModifier`) and Test 7 (DPS-mode inertness), neither of which pins the pool gate. The two
-tests that actually matter, cited by NAME because line numbers here have already gone stale once:
+**Site C still gets the new arm**, for consistency and so a future enemy kit cannot land on a
+`[healTarget!.id]` route — but its churn expectation is **zero**, and per §5.1 rule 3 a
+predicted-zero that returns zero must be followed by finding the test that should have moved.
 
-- **Test 3, "detonation-scope leech (Valkyrie shape)"** (`:181`) — the direct pin for D2. Read it
-  first.
-- **Test 8, "all-allies recipient routing"** (`:399`) — the real pin for the `rid ===
-  healTarget.id` pool gate, i.e. for the "load-bearing for the non-positional all-allies case"
-  claim SP-3 used to defer it.
+`leech.test.ts` is therefore NOT the pin for Valkyrie. **The epic spec's `leech.test.ts:355-404`
+citation has drifted twice over** — that range now spans Test 6 (`healModifier`) and Test 7
+(DPS-mode inertness), and the file covers site C, which Valkyrie never reaches. Cite by name:
 
-Most fixtures in that file use `healTargetId: 'attacker'`, so the anchor IS the caster and they are
-indifferent to the change. The ones that are not must be re-derived, not re-pinned.
+- **Test 8, "all-allies recipient routing"** (`:399`) — the real pin for site C's
+  `rid === healTarget.id` pool gate, i.e. for the "load-bearing for the non-positional all-allies
+  case" claim SP-3 used to defer it.
+- **Test 3, "detonation-scope leech (Valkyrie shape)"** (`:181`) — named for Valkyrie but built on
+  a synthetic `leechHeal` fixture on the *cast* slot, so it exercises site C, not Valkyrie's
+  actual route. Treat it as a site-C test that happens to be named after her.
 
-A leftover generic `'ally'` on a standing leech (nothing in the roster produces one) routes over
-the footprint like §3.1, for consistency.
+Valkyrie's actual behaviour needs a **new** test through the reactive path (§6 item 4).
 
 ### 3.3 Collapse the two-axis split — `playerTurn.ts:176-182`
 
