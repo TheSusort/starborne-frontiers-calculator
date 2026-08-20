@@ -16,7 +16,8 @@
  * cases are retired here as direct assertions — case (a) (enemy hp-threshold ABOVE) by "an enemy
  * hp-threshold ABOVE gate does not fire with no enemy" below, and case (c) (stat-vs-target GT) by
  * "Cobalt's clause shape does not fire against nobody" below. Case (b) (enemies-hit-this-cast) is
- * NOT discharged by this file — it remains a live, unfixed residual; see that file's header.
+ * NOT discharged by this file — it was closed later, by SP-4d Task 8's honest 0-vs-1 footprint fix;
+ * see `noVictimResidualTripwires.test.ts`'s header for where it is discharged.
  */
 import { describe, it, expect } from 'vitest';
 import { conditionMet, conditionsMet, evaluateCondition, scaledBonus } from '../evaluateConditions';
@@ -86,8 +87,9 @@ describe('SP-4d: an absent subject does not resolve', () => {
     });
 
     it('THE COMPARATOR-PROOF CASE: an lte gate is not satisfied by an absent footprint either', () => {
-        // Today `enemies-hit-this-cast` answers 1 with no footprint, so `lte 1` fires against nobody.
-        // Answering 0 instead would ALSO fire it. Only rejecting before the comparator closes this.
+        // Before this rung, `enemies-hit-this-cast` answered a fabricated 1 for an owner with no
+        // recorded footprint, so `lte 1` fired against nobody. Answering 0 instead would ALSO have
+        // fired it. Only rejecting before the comparator closes both — which is what this asserts.
         const ctx = makeConditionContext({ enemiesHitThisCast: undefined });
         expect(
             conditionMet(

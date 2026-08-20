@@ -18,7 +18,8 @@
  * by "an enemy hp-threshold ABOVE gate does not grant the shield against nobody" and its
  * drain-time sibling below, and case (c) (stat-vs-target GT) by "Cobalt's HP-vs-target clause does
  * not grant the shield against nobody" below. Case (b) (enemies-hit-this-cast) is NOT discharged
- * by this file — it remains a live, unfixed residual; see that file's header.
+ * by this file — it was closed later, by SP-4d Task 8's honest 0-vs-1 footprint fix; see
+ * `noVictimResidualTripwires.test.ts`'s header for where it is discharged.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat } from '../engine';

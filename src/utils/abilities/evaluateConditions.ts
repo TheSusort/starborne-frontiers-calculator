@@ -131,11 +131,12 @@ export interface ConditionContext {
     targetCurrentHp?: number;
     /** SP-D — the number of enemies DAMAGED by THIS cast (Berserker/Tygr's "hitting N or more
      *  enemies" gates). SP-4d Fix wave 1: OPTIONAL, and absent means no footprint has been
-     *  recorded for this owner yet this combat — unresolvable, not a fabricated 1. A real cast
-     *  that resolves no victim still books a footprint of 1 at the engine's booking sites today
-     *  (deliberately left; see `noVictimResidualTripwires.test.ts`), so this field can still read
-     *  1 on a no-victim turn — only the "no cast yet" case changed. Live-derived by the
-     *  positional engine from the firing actor's footprint. */
+     *  recorded for this owner yet this combat — unresolvable, not a fabricated 1. SP-4d Task 8
+     *  closed the sibling residual: an AoE cast reads N, a genuine single-target cast reads 1, and
+     *  a cast that resolves NO victim (an ally-targeted cast that hit nobody) now reads a real
+     *  measurement, 0 — it hit zero enemies — not a fabricated 1 (`noVictimResidualTripwires.test.ts`
+     *  case (b), retired). Only "no cast recorded at all for this owner" stays absent/unknown.
+     *  Live-derived by the positional engine from the firing actor's footprint. */
     enemiesHitThisCast?: number;
     /** SP-D — per-target DoT-ONLY entry subtotal (corrosion + inferno + bomb entry-array
      *  lengths, +acidicDecay once SP-E adds it). Distinct from `enemyDebuffCount`, which also

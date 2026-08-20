@@ -17,7 +17,7 @@
  * the real production delegate: a `start-of-round` reactive drain, which fires (`round-started`)
  * BEFORE any turn resolves this combat (engine.ts's "Drain point (a)"). At that instant
  * `enemiesHitThisCastByActor` has no entry for the focus actor at all — not "hit nobody" (which
- * still books a 1, a different, deliberately-untouched residual — see
+ * SP-4d Task 8 later made book an honest 0, closing that separate residual — see
  * `noVictimResidualTripwires.test.ts`), but never-set.
  *
  * The gate uses `lte 1`: a phantom 1 SATISFIES it (1 <= 1 → met), but an honest absent answer

@@ -120,6 +120,13 @@ answering. Side-wide, unchanged: `enemy-buff` (a deduped union across enemies), 
 `enemy-type` already implements exactly this rule by hand — `if (!ctx.enemyType) return 0; // unknown
 type → cannot confirm either way`. This rung generalises that instinct and makes it comparator-proof.
 
+**Caveat: "side-wide is always resolvable" is not a claim that every side-wide subject answers
+something real.** `enemy-adjacent` is hardcoded `0` at every builder (`roundContext.ts`'s
+`enemyAdjacentCount: 0`), with no live derivation anywhere in `src/` — the parser marks it
+`derivable: false`, so it never even reaches this rule's machinery. It is a pre-existing dead
+subject, unrelated to and out of scope for this rung; this note exists only so the rule above is not
+misread as vouching for it.
+
 ### 3.2 The fabrication happens in TWO layers — fixing one is silently defeated by the other
 
 `buildRoundContext` (`src/utils/abilities/roundContext.ts`) eagerly materialises every optional field,
@@ -146,7 +153,15 @@ that same file (`roundCrit`, `enemyDotFamilyCounts`) is the pattern to copy.
 | --- | --- | --- | --- |
 | `enemyHpPct` — `hp-threshold` (enemy/default), `enemy-hp-pct`, `enemy-hp-missing-pct` | `100` | absent on a no-victim turn and at drain time | `below` gates unchanged (false either way); `above` gates stop firing against nobody; scaling contributes 0 |
 | `targetSpeed` / `targetCurrentHp` / `targetCritPower` — `stat-vs-target` | `0` | absent → unresolvable | a `gt` comparison stops firing against nobody; `lt` was already safe by arithmetic |
-| `enemiesHitThisCast` | `1` | absent when no footprint was recorded | Tygr `gte 2` and Berserker `gte 3` unchanged; a `gte 1` or `lte` reader could no longer be satisfied by a phantom |
+| `enemiesHitThisCast` | `1` | `0` for a cast that resolves NO victim (a real measurement — it hit zero enemies, not "no footprint"); absent ONLY when this owner has no recorded cast at all this combat | Tygr `gte 2` and Berserker `gte 3` unchanged; a `gte 1` reader correctly stops firing against a no-victim cast's `0`; but an `eq 0` or `lte 1` reader DOES fire against that same `0`, because 0 genuinely satisfies them |
+
+**On that third row's `eq`/`lte` behaviour (shipped in SP-4d Task 8, `61d45dec`):** this is the one
+row in this table that ends deliberately FAIL-OPEN under `eq`/`lte`, not fail-closed like the other
+two. That is intentional, not an oversight: a cast that hit nobody really did hit zero enemies, so
+`0` is a true measurement of the cast, not a phantom standing in for a missing subject — the
+`enemyHpPct` / `stat-vs-target` rows are absent because there is no HP or stat to read AT ALL, but
+"how many enemies did this cast hit" has an honest zero answer even with no victim. Record this
+plainly because it was never recorded at the time the row was written.
 
 ---
 
@@ -173,6 +188,17 @@ Two reasons to keep the number rather than widen the row:
 its turn, `pushSynthesizedFocusSkipTurn` reports `Enemy HP: 100%` in the round chart while the enemy
 your attackers nearly killed sits at 12%. Naming the constant is what makes that issue findable
 instead of buried in a division.
+
+**One qualifier on "byte-for-byte" above: the shipped `enemyHpPct` derivation has a genuine `: 0`
+value change, not just a display-constant swap.** `playerTurn.ts`'s ternary is `hasVictim ?
+(enemyHp > 0 ? <decline formula> : 0) : undefined` — the `: 0` arm answers a real victim whose max
+HP is 0, which is a different, honest answer from both `undefined` ("no victim") and the old
+fabricated `100` ("a healthy enemy"). It is both gate-facing and display-facing, so it is a genuine
+behaviour change, not covered by §4's display-constant argument above. Measured by instrumenting the
+branch over the whole combat suite: **4 hits, all with victim id `'attacker'`**, every one reached
+on an ENEMY's turn against a PLAYER-side actor with omitted or zero `stats.hp` — the player side
+carries no HP floor (unlike the enemy side, which `normalizeRoster` floors to 1,000,000). Golden
+files did not move. Recorded here rather than left as an overclaim under "byte-for-byte."
 
 ---
 
@@ -301,12 +327,43 @@ nothing. Restoring the production switches and re-running is the method that cat
 
 - **The display honesty issue** (§4): a skip row reporting `Enemy HP: 100%` while the real enemy sits
   at 12%. New issue, filed with #331 — both are `RoundData` still describing a one-enemy world.
-- **The fail-closed per-victim subjects** — `enemyDebuffCount`, `enemyDotCount`, `enemyShielded`. Their
-  fabricated values (`0` / `false`) only ever block a gate **except** under `eq`/`lte`, which no parser
-  path emits for an enemy subject and which the corpus does not contain (§6). Reachable only by
-  hand-authoring in the ability editor — the same reachability class as the parked OR-run hazard from
-  #328. §3.1's rule is written down and tripwired; the residue is a follow-up issue, not a widening of
-  this rung.
+- **The fail-closed per-victim subjects — CLOSED inside this rung, not parked.** This bullet
+  originally argued that `enemyDebuffCount`, `enemyDotCount`, `enemyShielded` could be left
+  fabricating `0`/`false` because the fabrication "only ever block[s] a gate **except** under
+  `eq`/`lte`, which no parser path emits for an enemy subject and which the corpus does not contain
+  (§6)... [r]eachable only by hand-authoring in the ability editor." **That argument was false, and
+  was never checked against the parser before being written down.** Measured (SP-4d Task 9): both
+  halves reproduce from real skill-text phrasings —
+
+      detectGrantConditions(
+        '…If the enemy has no debuffs, this Unit gains <unit-skill>Shield</unit-skill> for 2 turns.',
+        'Shield'
+      ) → [{ subject: 'enemy-debuff', derivable: true, countComparator: 'eq', countThreshold: 0 }]
+
+      '…If the enemy has 2 or fewer debuffs…' → { countComparator: 'lte', countThreshold: 2 }
+
+  (emitted by `countGateCondition`, `src/utils/skillTextParser.ts` ~908-966) — and attaching either
+  shape to a Hermes-shaped self-shield granted the shield TWICE on a no-victim turn (measured
+  `[500000, 500000]` instead of one grant). The residue was one ship-text phrasing away from
+  shipping, not editor-only. The owner elected to close it inside this rung rather than file the
+  follow-up, and SP-4d Task 9 did: all three subjects now propagate `undefined` (unresolvable) on
+  the CAST path when no opposing victim resolves — see `evaluateConditions.ts`'s `enemy-debuff` /
+  `enemy-dot-count` / `enemy-shield` arms and `roundContext.ts`'s `noOpposingVictim` signal.
+- **The drain-time reading of the SAME three subjects — deliberately NOT the same defect, and left
+  answering real values.** §3.1's own rule is "a per-victim subject with no victim is unresolvable;
+  a side-wide subject is always resolvable." At REACTIVE DRAIN TIME, `enemy-debuff` /
+  `enemy-dot-count` / `enemy-shield` do not read a per-cast resolved victim at all — they read a
+  persistent per-owner store (`snapshot(ownerId)`, `corrosionEntries`/`infernoEntries`/`bombCount`)
+  describing the opposing SIDE this owner has been engaging over the fight. A real enemy roster is
+  guaranteed since 4b-2b (the normalization boundary throws on an empty one), so a drain-time `0`
+  there means "the enemy side currently carries no debuffs" — a TRUE, side-wide measurement, not a
+  phantom standing in for a missing subject the way the cast-path `0` was. `buildDrainContext`
+  therefore leaves `noOpposingVictim` unset/false on purpose (see its own doc in `triggers.ts`) and
+  keeps answering real `0`/`false` there, unchanged by Task 9. Corroborating argument, not just an
+  appeal to the rule: if the drain-time count were a constant 0 rather than a real reading, all
+  **12** shipped `gte` enemy-debuff gates in the corpus (measured against `docs/ship-skills.csv`:
+  APEX, Asphyxiator ×2, Bayah ×3, Bizon, Crocus ×2, Tygr) would be permanently dead, and the
+  fingerprint suites would have caught it.
 - **#331** (`RoundData.teamDamage` omits walked-team damage) and **#335 / 4e** (the enemy-side
   ally-targeted supporter is still silenced; the non-positional heal routes).
 - **Indestructible NPCs** (SP-4c §5).
@@ -317,14 +374,18 @@ close the issue rather than carrying it into 4d.
 
 ---
 
-## 9. Amendment (Task 7) — what the rung actually cost
+## 9. Amendment (Task 7, re-measured through Task 9 / HEAD) — what the rung actually cost
 
-**Measurement point: `63637d09`** (Tasks 1–6, HEAD when Task 7 began). Task 7's own commit changes
-comments and tests only — it moves no production code path — so every number below also holds at
-the commit that carries this section. Per §1.1's own rule, a churn figure ages exactly like a
-reachability claim: re-measure at the NEXT rung's start rather than quoting this table.
+**Original measurement point: `63637d09`** (Tasks 1–6, HEAD when Task 7 began). Task 7's own commit
+changed comments and tests only — it moved no production code path — so every number in §9.1–§9.4
+below is left exactly as Task 7 recorded it, AS HISTORY: it is what was true and knowable at that
+commit. Per §1.1's own rule, a churn figure ages exactly like a reachability claim, and this section
+aged too — Task 8 and Task 9 each closed something §9.3/§9.5 recorded as still-open. Task 10 corrects
+those two specific claims in place below (they would otherwise be a present-tense falsehood, not
+accurate history) and adds §9.6 with the re-measurement at current HEAD plus the lessons the original
+amendment omitted. Do not quote §9.1–§9.4's table as the current state; §9.6 is.
 
-### 9.1 Suite counts
+### 9.1 Suite counts (AS OF `63637d09` — superseded by §9.6 for current numbers)
 
 - **This branch (`63637d09`, and unchanged through Task 7): 540 files / 5979 tests, all green.**
   (Task 7's tripwire migration removed 2 tests — the two retired corpus-scan cases (a) and (c) —
@@ -368,11 +429,14 @@ consistent with Task 6's own tsc-clean claim.
    remaining 5.1% (**651 calls**, `12735 × 0.051 ≈ 650`) found no map entry at all — an owner that
    had not yet completed a turn this drain cycle — which is where the phantom `1` was being
    manufactured, and which SP-4d Fix wave 1 fixed at the resolver (`enemiesHitThisCastFor`), not
-   the booking site. **The three `.set()` booking sites in engine.ts still fabricate 1 for a REAL
-   cast that resolves no victim** — a narrower, genuinely still-open case, deliberately left alone
-   (both existing corpus readers, Tygr `gte 2` and Berserker `gte 3`, already fail against a
-   fabricated 1, so 1-vs-absent is byte-identical for them) and re-tripwired by the migrated
-   `noVictimResidualTripwires.test.ts` rather than fixed.
+   the booking site. **At Task 7's measurement point, the three `.set()` booking sites in
+   engine.ts still fabricated 1 for a REAL cast that resolves no victim** — a narrower, genuinely
+   still-open case, deliberately left alone at the time (both existing corpus readers, Tygr
+   `gte 2` and Berserker `gte 3`, already failed against a fabricated 1, so 1-vs-absent was
+   byte-identical for them) and re-tripwired by the migrated `noVictimResidualTripwires.test.ts`
+   rather than fixed. **This did not stay open**: SP-4d Task 8 (`61d45dec`) closed it, changing
+   all three booking sites to `aoeVictimIds?.length ?? (<a victim resolved> ? 1 : 0)` — see §9.6.1
+   for why the measurement above pointed at the wrong half of the problem.
 3. **Is the drain-time `enemyHpPct` genuinely a constant 100 on every positional run?** Yes,
    measured directly rather than argued: Task 4's own before-commit instrumentation over the whole
    suite recorded **12,886 drain-time evaluations, every single one exactly 100** — positional
@@ -410,5 +474,46 @@ corpus's comparator shapes, not because of the shape of the fix.
   one task.
 - **The brief for this task assumed Tasks 1–4 discharged all three of `noVictimResidualTripwires.test.ts`'s
   named residuals.** Two were (see this file's Task 7 header for cases (a)/(c)); the third,
-  `enemies-hit-this-cast`'s phantom booking of 1 for a cast that hits nobody, was not — see §9.3.2.
-  The migrated test file keeps that case rather than retiring it.
+  `enemies-hit-this-cast`'s phantom booking of 1 for a cast that hits nobody, was NOT discharged as
+  of Task 7 — see §9.3.2 — and the migrated test file kept that case rather than retiring it at the
+  time. **Superseded**: SP-4d Task 8 (`61d45dec`) closed case (b) too, and
+  `noVictimResidualTripwires.test.ts`'s header (re-read at HEAD) now records all three cases as
+  RETIRED. See §9.6 for what Task 8/9 actually cost and the lessons Task 7's own amendment missed.
+
+### 9.6 Re-measured at HEAD (`7781ada8`, Task 10) — what Tasks 8/9 cost, and what this amendment omitted
+
+**Suite counts, current HEAD: 543 files / 5996 tests, all green.** `npx tsc --noEmit`: clean.
+`npm run lint`: clean. **Zero golden movement**: `git diff --name-only` shows no `.snap` file across
+the whole 19-commit branch from `dc7f2056`. **Oracle, `--seeds 15`: 147 / 146 / 2** — unchanged, the
+same pre-existing Enforcer `debuff-resisted` pair.
+
+#### 9.6.1 Task 4 fixed the wrong half, because its own measurement answered the wrong question
+
+§9.3.2 measured **map-entry presence**: 94.9% of `enemiesHitThisCastFor` resolver calls found *some*
+entry, so Task 4 fixed the resolver's `?? 1` fallback for the 5.1% with no entry at all. That was
+sound as far as it went — but "was a value recorded?" is not "is the recorded value honest?": the
+entry a no-victim cast books IS present (the map has a real key for that owner), and the value
+booked there was `1`, not a measurement of what the cast actually hit. Task 4's presence-rate
+measurement could not see this, because it only asked whether `.get(ownerId)` returned something,
+never what the booking sites had `.set()` in the no-victim case. So issue #333's third row survived
+Task 4 intact: the *resolver* stopped inventing 1 for an owner with no entry, while the three
+*booking sites* in engine.ts went on inventing 1 for a cast that resolved nobody — the same phantom,
+one layer over, invisible to a measurement of the wrong layer. It cost an unplanned task (Task 8,
+`61d45dec`) to close. The generalisable lesson, worth carrying into any future "is this field
+honest" audit: **a presence check and a correctness check are different questions, and a metric
+answering the first will look like progress while leaving the second's bug fully intact.**
+
+#### 9.6.2 `as unknown as` test fixtures sit outside `tsc`'s missed-site guarantee
+
+§7's exit criteria lean on `tsc --noEmit` to enumerate every site a field deletion misses — true for
+real `CombatEngineInput`/`IntentExecContext` literals, because a required-field or excess-property
+error fires. It is NOT true for a fixture that casts through `as unknown as IntentExecContext` (or
+any `as unknown as X`): the cast tells the compiler to stop checking the object's shape entirely, so
+a dead property inside one is invisible to any compiler-driven sweep, however thorough. Measured
+directly: **8 test files still hold 12 dead `enemyHp` properties** behind exactly this cast pattern
+(`reactiveDamageTakenShield.test.ts`, `onShieldAppliedReaction.test.ts`, `blockDebuff.test.ts` ×4,
+`reactiveOncePerRoundGate.test.ts`, `deadOwnerReactiveGate.test.ts`, `cleanseReactivePath.test.ts`,
+`reactiveOverhealShield.test.ts`, `reactiveBuffProcGate.test.ts` ×2) — none of them a compile error,
+all of them dead weight `tsc` will never flag. See `.superpowers/sdd/progress.md`'s follow-up (i)
+for the sweep this leaves open, including that the same fixtures already lost their sibling
+`cumulativeDamage: 0` property, making this a half-finished sweep rather than an untouched one.

@@ -2008,10 +2008,11 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     }
     // SP-M M1 Task 7 + spec §4 (M10): an enemy-oriented `hp-threshold` gate is re-evaluated PER
     // RESOLVED TARGET by the branch below, so it must not also gate globally — the single global
-    // `enemyHpPct` is a fight-wide SCALAR (`100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`, both of
-    // them legacy scalar inputs that described the dummy sink SP-4c-2d deleted and now describe no
-    // actor on the board at all), so gating an AoE on it would either block everything or false-pass
-    // the whole footprint.
+    // `enemyHpPct` used to be a fight-wide SCALAR (`100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)`,
+    // both of them legacy scalar inputs that described the dummy sink SP-4c-2d deleted). SP-4d
+    // deleted `cumulativeDamage`/`enemyHp` from `IntentExecContext` outright, so drain-time
+    // `enemyHpPct` is now ABSENT rather than a stale constant — so gating an AoE on it would either
+    // block everything or false-pass the whole footprint.
     // Only an ENEMY/target-oriented hp-threshold is dropped: a SELF one keeps gating normally
     // (buildShipAbilities.ts's re-target never attaches target:'all-enemies' for a self-only
     // hp-threshold — see that file's matching narrowing).
@@ -2029,10 +2030,11 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     // `landDotOn`. All three are enemy-facing. The real reason they are left out is the OTHER half
     // of this function's promise: NO PER-TARGET RE-CHECK SITE EXISTS IN THOSE BRANCHES YET. Adding
     // them here without one would not fix a dead gate, it would make that gate ALWAYS-ON — strictly
-    // worse than today, where a non-self `hp-threshold` on a `counter` / `dot` / `convert-dot` is
-    // still evaluated against that fight-wide scalar `enemyHpPct` — which on a positional run stays
-    // at 100% because positional credit books per-victim and never feeds `cumulativeDamage` — and is
-    // therefore dead-but-FAILS-CLOSED: unfixed, never over-firing.
+    // worse than today, where a non-self `hp-threshold` on a `counter` / `dot` / `convert-dot` reads
+    // an ABSENT `enemyHpPct` (SP-4d deleted the `cumulativeDamage`/`enemyHp` fields it used to be
+    // derived from) and `conditionMet` refuses that reading before the comparator switch — so the
+    // gate is unresolvable rather than evaluated against a stale constant, and is therefore
+    // dead-but-FAILS-CLOSED, now more robustly than before: unfixed, never over-firing.
     // SO: ADDING A SHAPE TO THE `dt === …` TEST BELOW IS ONLY SAFE ONCE THAT SHAPE'S BRANCH CALLS
     // `perVictimOk` (or a named dedicated re-check) on the target it actually resolves. Do not
     // "tidy" `dot`, `convert-dot` or `counter` into the list because they look enemy-facing —

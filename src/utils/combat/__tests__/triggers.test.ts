@@ -32,13 +32,16 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // A real, positioned opponent. The top-level `enemyHp` / `enemyDefense` scalars below describe
-    // the VESTIGIAL DUMMY and are inert on a positional run, so the roster entry carries the same
-    // two values the file has always declared: `defence: 8000` keeps every damage magnitude equal
-    // to the pre-positional numbers (and leaves defence-shred effects something to bite on), and
-    // `hp: 10_000_000` replaces the dummy's 400k because bareEnemy()'s default 500k is killable by
-    // this file's ~18.5k/round focus — once the opposing roster is wiped the run changes shape.
-    // Fixtures that WANT a squishy enemy override the roster entry's own hp (see fix C).
+    // A real, positioned opponent. SP-4d deleted the fight-wide `enemyHp` / `enemyDefense` /
+    // `enemySpeed` / `enemySecurity` scalars from `CombatEngineInput` outright — there is no
+    // top-level enemy-HP field left to configure here at all. The roster entry below carries the
+    // same two values the file has always declared: `defence: 8000` keeps every damage magnitude
+    // equal to the pre-positional numbers (and leaves defence-shred effects something to bite on),
+    // and `hp: 10_000_000` replaces the old dummy's 400k because bareEnemy()'s default 500k is
+    // killable by this file's ~18.5k/round focus — once the opposing roster is wiped the run
+    // changes shape. Fixtures that WANT a squishy enemy override the roster entry's own hp (see
+    // fix C). (`defence: 6000, hp: 30000` two lines below are the FOCUS actor's own stats, unrelated
+    // to the deleted enemy scalars.)
     enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 8000 } }),
     attack: 15000,
     crit: 50,
@@ -1380,11 +1383,14 @@ describe('Phase 3 reactive triggers', () => {
     // This test used to express the same rule with a SINGLE-TARGET on-crit `debuff` gated on
     // `hpSubject:'enemy'`, and read the resulting `Below50 Shred` out of `activeEnemyDebuffs`.
     // That shape is DEAD on a positional run and cannot be revived from the fixture side: the
-    // global drain gate (`triggers.ts` `buildDrainContext`, l.1847-1849) computes its
-    // `enemyHpPct` as `100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)` — BOTH vestigial-dummy
-    // scalars. Positional credit books into `perTargetDealt` and never feeds
-    // `cumulativeDamage` (measured at the drain: `cum=0` on every drain of this fixture), so
-    // that gate reads 100% forever.
+    // global drain gate (`triggers.ts` `buildDrainContext`) used to compute its `enemyHpPct` as
+    // `100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)` — BOTH vestigial-dummy scalars. Positional
+    // credit books into `perTargetDealt` and never fed `cumulativeDamage` (measured at the drain:
+    // `cum=0` on every drain of this fixture), so that gate read 100% forever — dead-but-
+    // fail-closed. SP-4d later deleted `cumulativeDamage`/`enemyHp` from `IntentExecContext`
+    // outright, so today the same gate reads an ABSENT `enemyHpPct` and is rejected before the
+    // comparator switch — unresolvable rather than evaluated against a stale constant, but the
+    // shape is exactly as dead as it always was.
     //
     // The dead predicate is `hpSubject !== 'self'` (`triggers.ts:2581`, `triggers.ts:2652`) —
     // which INCLUDES an UNDEFINED `hpSubject`, not just `'enemy'`: `evaluateConditions.ts`'s
@@ -1457,10 +1463,11 @@ describe('Phase 3 reactive triggers', () => {
             ],
         });
 
-        // The gate reads the real VICTIM's HP, so the 30 000 lives on the ROSTER ENTRY: the
-        // top-level `enemyHp` scalar configures the vestigial dummy and is inert on a positional
-        // run (M6). `defence: 8000` is baseInput's own value, kept so the crit hit stays ~18.5k
-        // ≈ 62% of 30 000 — one hit crosses the threshold, exactly as the trace above computes.
+        // The gate reads the real VICTIM's HP, so the 30 000 lives on the ROSTER ENTRY —
+        // there is no top-level `enemyHp` scalar left to set instead; SP-4d deleted it from
+        // `CombatEngineInput` outright. `defence: 8000` is baseInput's own value, kept so the crit
+        // hit stays ~18.5k ≈ 62% of 30 000 — one hit crosses the threshold, exactly as the trace
+        // above computes.
         const run = (hp: number) =>
             collectEvents(
                 baseInput({
