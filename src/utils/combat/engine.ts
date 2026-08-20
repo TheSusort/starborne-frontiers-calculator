@@ -89,6 +89,7 @@ import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
+    DISPLAY_ENEMY_HP_PCT_NO_VICTIM,
     HealingRuntimeCtx,
     PlayerActorRuntime,
     PlayerRoundCtx,
@@ -1869,18 +1870,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         chargeCount,
         // shipSkills is intentionally NOT destructured here — the cast/reactive split below
         // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
-        // SP-4c-2d: `enemyDefense` / `enemySecurity` / `enemySpeed` are no longer destructured —
-        // their only consumer was the deleted dummy actor's stat block. They remain on
-        // `CombatEngineInput` (removing them is rung 4d's ~200-file churn story, and `enemyHp` is a
-        // REQUIRED field). SP-4d deleted `enemyHp`'s second reader — it used to be passed into
-        // every drainQueue ctx as `IntentExecContext.enemyHp`, where triggers.ts's
-        // `buildDrainContext` derived a fight-wide `enemyHpPct = 100 * (1 - ctx.cumulativeDamage /
-        // ctx.enemyHp)`; that scalar sat at a constant 100 on every positional run (positional
-        // credit books per-victim and never fed `cumulativeDamage`) and is gone. `enemyHp` now has
-        // exactly ONE reader: the synthesized focus-skip turn's row `enemyHpPct`
-        // (pushSynthesizedFocusSkipTurn) — a display value, not a gate reading.
-        // Its 1e9 default is the old sink's HP, kept so that number does not move.
-        enemyHp = 1_000_000_000,
+        // SP-4d: `enemyDefense` / `enemyHp` / `enemySecurity` / `enemySpeed` are gone from
+        // `CombatEngineInput` entirely — they were the deleted dummy actor's stat block, and their
+        // last two readers were enemy-HP% phantoms. A victim's real HP/defence come from the
+        // positioned `enemyAttackers` roster.
         numRounds,
         selfBuffs,
         enemyDebuffs,
@@ -2433,9 +2426,6 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // All mutable state declared fresh on every call
     let cumulativeDamage = 0;
-    // Non-focus (team) cumulative damage. Enemy HP decline everywhere uses
-    // cumulativeDamage + cumulativeTeamDamage; the row/summary cumulativeDamage stays focus-only.
-    let cumulativeTeamDamage = 0;
     let totalTeamRaw = 0;
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
@@ -8133,21 +8123,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         // turn (dead heal-target OR stasised). Extracted from the two byte-identical sites
         // (handleDeadTargetSkip + the stasis gate) so the shape cannot drift.
         const pushSynthesizedFocusSkipTurn = (): void => {
-            // The row's `enemyHpPct` for a turn that struck nobody. SP-4c-2d: this used to read
-            // `Math.max(0, enemyHp - enemy.currentHp)` off the dummy sink, whose `currentHp` the
-            // round tail kept at `Math.max(0, enemyHp - (cumulativeDamage + cumulativeTeamDamage))`.
-            // Deleting the actor restores the SCALAR form the actor-read replaced, and the two are
-            // algebraically identical: substituting the tail's assignment collapses the expression
-            // to `min(cumulative, max(0, enemyHp))`. Every call site is inside the turn loop, i.e.
-            // BEFORE this round's `cumulativeDamage +=` fold, so the cumulative read here is the
-            // same end-of-previous-round value the actor carried. Measured across the change over
-            // the whole suite: 152 calls, old and new expression both 0 on every one.
-            const enemyHpDecline = Math.min(
-                cumulativeDamage + cumulativeTeamDamage,
-                Math.max(0, enemyHp)
-            );
-            const enemyHpPct =
-                enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+            // The row's `enemyHpPct` for a turn that never happened. SP-4d: this was the LAST
+            // reader of the `enemyHp` input — a scalar restored by 4c-2d when the dummy actor it
+            // described was deleted, dividing a cumulative-damage numerator (which positional
+            // credit never feeds) by a 1e9 denominator, so it reported 100 on all 152 measured
+            // calls. It is a DISPLAY value for a turn with no victim, so it now says so by name.
+            // Filed separately (with #331): on a round where the focus died, the chart therefore
+            // reports "Enemy HP: 100%" while the real enemy may be at 12% — that is the display
+            // layer's own question, and naming this constant is what makes it findable.
+            const enemyHpPct = DISPLAY_ENEMY_HP_PCT_NO_VICTIM;
             const lastKnownCtx = lastTurnCtxByActor.get(focusActorId);
             focusTurns.push({
                 action: 'active',
@@ -11091,20 +11075,19 @@ export function runCombat(rawInput: CombatEngineInput): {
         totalDetonationRaw += detonationDamage;
 
         // Team damage = Σ over all NON-focus actor entries of every channel (direct already
-        // includes its secondary/conditional sub-buckets, so they are NOT added separately).
-        // `totalRoundDamage + teamRoundDamage` is the round's SCALAR-channel total — exactly what
-        // `cumulativeDamage + cumulativeTeamDamage` accumulates and what the drain-time /
-        // focus-skip enemy-HP% denominators consume. It is NOT the real roster's HP delta: every
-        // per-victim amount (positional casts, reactive procs, per-victim DoT and detonation ticks)
-        // books on the per-victim maps instead, per the two-channel rule above. The identity used to
-        // hold literally because the round tail overwrote the dummy sink's HP with precisely this
-        // sum; SP-4c-2d deleted that write along with the actor.
+        // includes its secondary/conditional sub-buckets, so they are NOT added separately). It is
+        // NOT the real roster's HP delta: every per-victim amount (positional casts, reactive
+        // procs, per-victim DoT and detonation ticks) books on the per-victim maps instead, per the
+        // two-channel rule above. SP-4d deleted the `cumulativeTeamDamage` scalar that used to
+        // accumulate this alongside `cumulativeDamage` for the focus-skip enemy-HP% denominator
+        // (pushSynthesizedFocusSkipTurn) — that was its only reader, and the row now uses
+        // `DISPLAY_ENEMY_HP_PCT_NO_VICTIM` instead. `totalTeamRaw` below is the real (and only
+        // remaining) team-damage accumulator, surfaced on the result as `teamTotal`.
         let teamRoundDamage = 0;
         for (const [id, d] of roundDamage) {
             if (id === focusActorId) continue;
             teamRoundDamage += d.direct + d.corrosion + d.inferno + d.detonation + d.generic;
         }
-        cumulativeTeamDamage += teamRoundDamage;
         totalTeamRaw += teamRoundDamage;
 
         // SP-4c-2d DELETED THE ROUND-TAIL ENEMY-HP BLOCK. It had two arms and both went:
@@ -11127,8 +11110,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         // A test-only credit counter used to sit in the `else` arm, counting rounds in which damage
         // was BOOKED against the sink; SP-4c-2c deleted it after measuring 0 hits across the suite
         // (a zero nothing can falsify is not evidence). Its identifier is deliberately not repeated
-        // anywhere in this file. `cumulativeDamage` / `cumulativeTeamDamage` themselves survive —
-        // they are the report's scalar damage totals, not the dummy's HP ledger.
+        // anywhere in this file. `cumulativeDamage` survives — it is the report's scalar damage
+        // total, not the dummy's HP ledger. `cumulativeTeamDamage` did not: SP-4d deleted it once
+        // its only reader (this block's old enemy-HP% denominator) was gone.
 
         // Toxic Overflow end-of-round Corrosion spread (ship-kit W3, Task 9, ledger #49). Game rule
         // (constants/buffs.ts): "At the end of the round if a unit has Toxic Overflow and at least 1
