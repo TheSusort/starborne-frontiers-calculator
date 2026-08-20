@@ -17,7 +17,7 @@ import { resolveSupportRecipients } from '../supportRecipients';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
 import { createActor, CombatActor } from '../state';
 import { createStatusEngine, StatusEngine, RegisteredAbilityStatus } from '../statusEngine';
-import { createEventBus } from '../events';
+import { createEventBus, CombatEvent } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { AffinityName } from '../../../types/ship';
@@ -25,7 +25,7 @@ import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { parsePattern } from '../../targetingParser';
 import type { ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
-import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { bareEnemy, bareInput, attackingEnemy } from '../__testutils__/bareRosterFixture';
 
 describe("SP-4e 'lowest-hp-ally' containment", () => {
     // resolveSupportRecipients only FILTERS its baseRecipients — it has no live HP, so it cannot
@@ -650,5 +650,80 @@ describe('SP-4e site C: the standing-leech arms (engine)', () => {
         expect(high!.currentHp).toBe(40_000);
         // The owner is EXCLUDED: it is at full HP and gains nothing (no self-leech).
         expect(healer!.currentHp).toBe(50_000);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// SP-4e review fix (FIX 1) — the `castPathCheatDeath` carve-out FENCE in engine.ts.
+//
+// A single-`ally` Cheat-Death-family grant with NO heal anchor (`healTargetId` undefined —
+// DPS/battle mode, no heal target configured) falls back to `[ownerId]`: a sane stand-in for
+// "the heal anchor" when there is none. `'lowest-hp-ally'` names "the OTHER ally" instead, and
+// the owner is the one answer that selector forbids — so with no anchor to narrow to, the fence
+// resolves it to `[]` (nobody), NOT `[ownerId]`. This is a real behaviour fork with zero prior
+// coverage: reverting the fence to the un-armed `[healTargetId ?? ownerId]` would silently let a
+// `'lowest-hp-ally'` grant self-target again.
+//
+// Harness: `mode: 'battle'`, no `healTargetId`, a single actor (the owner IS the only living
+// player-side actor, so there is no "other ally" to route to regardless). The owner's ACTIVE slot
+// carries an unconditional Cheat-Death grant; a faster owner casts it before a lethal enemy hit
+// lands. `cheat-death-activated` firing (and the owner surviving) proves the grant self-targeted;
+// its absence (and the owner being destroyed) proves the fence held.
+// ---------------------------------------------------------------------------
+describe("SP-4e review fix — the Cheat-Death carve-out fence ('lowest-hp-ally' vs 'ally', no anchor)", () => {
+    const cheatDeathGrant = (target: 'ally' | 'lowest-hp-ally'): Ability => ({
+        id: `cd-fence-${target}`,
+        type: 'buff',
+        target,
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Cheat Death',
+            stacks: 1,
+            parsedEffects: {},
+            isStackable: false,
+            duration: 'recurring',
+        },
+    });
+
+    const grantSkills = (target: 'ally' | 'lowest-hp-ally'): ShipSkills => ({
+        slots: [{ slot: 'active', abilities: [cheatDeathGrant(target)] }],
+    });
+
+    /** Owner casts an active-slot Cheat-Death grant, no `healTargetId`, `mode: 'battle'`. The
+     *  owner is faster than the lethal enemy, so the grant lands (or doesn't) BEFORE the hit. */
+    const runFenceCase = (target: 'ally' | 'lowest-hp-ally') => {
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        const destroyedIds: string[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        bus.on('ship-destroyed', (e) => destroyedIds.push(e.actorId));
+        runCombat({
+            ...bareInput(),
+            attack: 0, // the owner does no damage of its own — only grants the buff
+            shipSkills: grantSkills(target),
+            mode: 'battle',
+            // NO healTargetId — the exact no-anchor shape the fence is scoped to.
+            hp: 5_000,
+            speed: 300, // owner acts before the enemy (speed 100)
+            numRounds: 1,
+            enemyAttackers: attackingEnemy({ stats: { speed: 100 } }), // 10,000 dmg → lethal vs 5,000 hp
+            bus,
+        });
+        return { cheated, destroyedIds };
+    };
+
+    it("target 'lowest-hp-ally', no anchor: fence holds — no self-grant, owner destroyed", () => {
+        const { cheated, destroyedIds } = runFenceCase('lowest-hp-ally');
+        expect(cheated).toHaveLength(0);
+        expect(destroyedIds).toContain('attacker');
+    });
+
+    it("target 'ally', no anchor: UNCHANGED fallback — owner self-grants and survives", () => {
+        const { cheated, destroyedIds } = runFenceCase('ally');
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker' });
+        expect(destroyedIds).not.toContain('attacker');
     });
 });

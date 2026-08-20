@@ -214,9 +214,12 @@ function registerActorAbilityStatuses(
     // actors, enemy attacker ids for enemy actors. Named `playerIds` historically; for enemy
     // actors the engine passes the enemy team's ids so cross-enemy buffs land on the enemy side.
     playerIds: string[],
-    // Heal target id (healing mode) — the recipient a single-`ally` Cheat-Death-family
-    // firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal target) →
-    // the carve-out falls back to [ownerId]. Irrelevant for every non-carve-out status.
+    // Heal target id (healing mode) — the recipient a single-`ally`/`lowest-hp-ally`
+    // Cheat-Death-family firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal
+    // target): the `'ally'` carve-out falls back to [ownerId], but the `'lowest-hp-ally'`
+    // carve-out falls back to [] — the owner is the one answer that selector forbids (see the
+    // fence's own comment at the recipients computation below). Irrelevant for every
+    // non-carve-out status.
     healTargetId?: string
 ): {
     timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];

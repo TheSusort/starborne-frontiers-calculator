@@ -2647,7 +2647,7 @@ describe('healingGoldenParity', () => {
     // `all-allies` heal (pct 8, basis 'hp'). Two walked team actors: 'vanguard' (hp 50000,
     // speed 90, front-most at M4 so the enemy's 'front enemy' selection lands on IT) and 'tank'
     // (hp 100000, speed 80, M1) which is the heal ANCHOR (`healTargetId`). A bare-kit enemy
-    // (attack 2000, multiplier 100, one hit, speed 10 → acts last) deals 2000/round to the
+    // (attack 2000, multiplier 100, one hit, speed 50 → acts last) deals 2000/round to the
     // vanguard; defence 0, crit 0, neutral affinity.
     //
     // One `attacked` event per round → the unfiltered reaction fires ONCE, fanning `all-allies`
@@ -2793,9 +2793,9 @@ describe('healingGoldenParity', () => {
     // heal (pct 10, basis 'hp') → raw 5000/turn. 'tank' (hp 100000, speed 80, M1) is the anchor.
     // The focus healer (speed 200) has an EMPTY kit — it only anchors the run, so every number
     // below is the bystander's own doing (`teamHealing`, not `rounds[].directHeal`). A bare-kit
-    // enemy (attack 2000, multiplier 100, speed 10) deals 2000/round to the bystander.
+    // enemy (attack 2000, multiplier 100, speed 50) deals 2000/round to the bystander.
     //
-    // Cadence: speed 90 vs the enemy's 10 → the bystander's start-of-turn repair fires BEFORE the
+    // Cadence: speed 90 vs the enemy's 50 → the bystander's start-of-turn repair fires BEFORE the
     // round's hit. R1 it is at full HP → 5000 all overheal. From R2 its deficit at repair time is
     // exactly the previous round's unhealed 2000 → 2000 effective, 3000 overheal, and the repair
     // returns it to full each time, so the deficit never accumulates.
