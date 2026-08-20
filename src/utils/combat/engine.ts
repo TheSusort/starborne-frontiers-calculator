@@ -6731,9 +6731,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                     return DEFAULT_BASE_PATTERN;
                 default: {
                     // Exhaustiveness guard: a new AbilityTarget variant must be classified here
-                    // explicitly rather than silently inheriting a footprint.
-                    const _exhaustive: never = abilityTarget;
-                    return _exhaustive;
+                    // explicitly rather than silently inheriting a footprint. Ability configs are
+                    // user-persisted and unvalidated on read, so a stale/imported config can carry
+                    // a target string outside the union at runtime, defeating the compile-time
+                    // `never` check — `return _exhaustive` would then hand back that raw string
+                    // mistyped as `ParsedPattern`, and a downstream `resolveCells` reading
+                    // `.shape`/`.cells` off a string silently yields an empty footprint. Throw
+                    // instead: same compile-time exhaustiveness strength, loud instead of silent.
+                    const exhaustive: never = abilityTarget;
+                    throw new Error(
+                        `passiveSlotPattern: unhandled AbilityTarget ${String(exhaustive)}`
+                    );
                 }
             }
         };

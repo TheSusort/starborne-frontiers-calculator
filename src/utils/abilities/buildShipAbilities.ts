@@ -1094,9 +1094,11 @@ function flipBareSupportTarget(
         }
     }
 
-    // SP-4e: 'lowest-hp-ally' always arrives with explicitTarget=true (the text NAMED a
-    // recipient), so every branch above is skipped and it passes through unchanged. Do not add a
-    // flip arm for it — a named selector is never a "bare" support target.
+    // SP-4e: every flip branch above additionally requires `target === 'self'` — 'lowest-hp-ally'
+    // never satisfies that, so it always falls through every branch and passes through unchanged,
+    // regardless of `explicitTarget`. (No parser emits this variant yet; when one does, it is
+    // expected to arrive with explicitTarget=true, but that is not what this function's structure
+    // guarantees.) Do not add a flip arm for it — a named selector is never a "bare" support target.
     return target;
 }
 

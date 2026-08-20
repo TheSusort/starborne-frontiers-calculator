@@ -23,31 +23,39 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import { AffinityName } from '../../../types/ship';
 
 describe("SP-4e 'lowest-hp-ally' containment", () => {
-    // The variant is a SINGLE-recipient selector. resolveSupportRecipients only FILTERS its
-    // baseRecipients, so any caller that passes the whole ally roster as `base` fans a
-    // single-recipient target out to everyone. This test pins the invariant at the shared helper
-    // so every caller inherits it.
-    it('never widens a single-recipient selector to the whole roster', () => {
-        const out = resolveSupportRecipients({
-            target: 'lowest-hp-ally',
-            casterId: 'p1',
-            baseRecipients: ['p2', 'p3'],
-            footprintAllyIds: ['p1', 'p2', 'p3'],
-        });
-        expect(out).toEqual(['p2']);
+    // resolveSupportRecipients only FILTERS its baseRecipients — it has no live HP, so it cannot
+    // resolve this selector itself. The routing rule is that each caller resolves it via
+    // `lowestHpAllyRecipients` and uses that result DIRECTLY, never routing it back through
+    // resolveSupportRecipients. Reaching this branch at all is therefore a caller bug, and a
+    // multi-id base is the shape that used to silently fan a single-recipient target out to
+    // everyone (`slice(0, 1)` used to "protect" against this by picking the first id) — pin that
+    // it now throws instead. Deleting the guard would make this multi-id call fall through to the
+    // generic footprint filter and silently return `['p2', 'p3']` (both ids are in the footprint),
+    // so this test fails loudly (no throw) if the guard is removed.
+    it('throws rather than silently clamping a multi-id unresolved base', () => {
+        expect(() =>
+            resolveSupportRecipients({
+                target: 'lowest-hp-ally',
+                casterId: 'p1',
+                baseRecipients: ['p2', 'p3'],
+                footprintAllyIds: ['p1', 'p2', 'p3'],
+            })
+        ).toThrow(/lowest-hp-ally/);
     });
 
-    // The variant is NEVER narrowed by the caster's support footprint — it reaches its ally
-    // wherever they stand. An already-resolved one-id base must survive a footprint that
-    // excludes it (today the footprint filter drops it and returns []).
-    it('passes an already-resolved recipient through a footprint that excludes it', () => {
-        const out = resolveSupportRecipients({
-            target: 'lowest-hp-ally',
-            casterId: 'p1',
-            baseRecipients: ['p3'],
-            footprintAllyIds: ['p1', 'p2'],
-        });
-        expect(out).toEqual(['p3']);
+    // A length-1 base is NOT a safe passthrough case either: an unresolved lone-caster roster is
+    // also length 1 (`[casterId]`), so a clamp/passthrough keyed on length alone would silently
+    // reproduce the self-target bug the reviewer demonstrated (caller routing reverted, lone
+    // caster, `slice(0, 1)` selects the caster's own id). This must throw too.
+    it('throws on a single-id base — length alone cannot prove it was pre-resolved', () => {
+        expect(() =>
+            resolveSupportRecipients({
+                target: 'lowest-hp-ally',
+                casterId: 'p1',
+                baseRecipients: ['p1'],
+                footprintAllyIds: ['p1', 'p2'],
+            })
+        ).toThrow(/lowest-hp-ally/);
     });
 });
 

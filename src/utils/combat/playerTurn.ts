@@ -54,7 +54,11 @@ import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
-import { lowestHpAllyRecipients, resolveSupportRecipients } from './supportRecipients';
+import {
+    allyHpFraction,
+    lowestHpAllyRecipients,
+    resolveSupportRecipients,
+} from './supportRecipients';
 import { resolveDebuffRecipientIds } from './debuffRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
@@ -1359,18 +1363,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     : undefined,
         });
 
-    // SP-4e: live HP fraction of a same-side actor, or undefined when the id is unknown here or
-    // the actor is not living. Reads the healing-mode accessors when present (authoritative max
-    // HP, buff-aware) and the live same-side roster otherwise. Feeds the 'lowest-hp-ally'
-    // selector, which needs live HP that `resolveSupportRecipients` cannot see.
-    const allyHpFraction = (id: string): number | undefined => {
-        const a = args.healing
-            ? args.healing.recipientActor(id)
-            : sameSideLiving?.find((candidate) => candidate.id === id);
-        if (!a || a.currentHp <= 0) return undefined;
-        const maxHp = args.healing ? args.healing.recipientMaxHp(id) : a.stats.hp;
-        return maxHp > 0 ? a.currentHp / maxHp : 0;
-    };
+    // SP-4e: live HP fraction of a same-side actor, bound to this turn's healing ctx / live
+    // roster. Reads the healing-mode accessors when present (authoritative max HP, buff-aware)
+    // and the live same-side roster otherwise. Feeds the 'lowest-hp-ally' selector, which needs
+    // live HP that `resolveSupportRecipients` cannot see. `allyHpFraction` itself is lifted to
+    // `supportRecipients.ts` (shared across callers); this is just the per-turn binding of it.
+    const allyHpFractionOf = (id: string): number | undefined =>
+        allyHpFraction({ id, healing: args.healing, sameSideLiving });
 
     // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
     // the engine no longer passes a precomputed scalar — `enemy` is the tgt actor, `enemyHp`
@@ -3784,7 +3783,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     ? lowestHpAllyRecipients({
                           casterId: actor.id,
                           candidateIds: allyRoster,
-                          hpFractionOf: allyHpFraction,
+                          hpFractionOf: allyHpFractionOf,
                       })
                     : supportRecipients(ab.target, allyRoster, {
                           ability: ab,
