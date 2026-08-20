@@ -4,7 +4,7 @@
  * `runCombat` calls this on its first line, so everything below it sees a fully positional world:
  * every actor carries a board slot, and every actor carries offensive targeting. Nothing else in
  * the engine may accommodate an under-specified input — that is the whole point of having a
- * boundary, and it is what lets SP-4c delete the dummy and its seven clusters of fallbacks.
+ * boundary, and it is what let SP-4c-2d delete the dummy and its seven clusters of fallbacks.
  *
  * Four responsibilities, and deliberately no fifth:
  *   (a) auto-placement       — a deterministic slot for any actor with `position == null`
@@ -66,7 +66,9 @@ function placeSide(
  * Fill the ACTIVE targeting axes when the caller supplied none.
  *
  * Both are load-bearing and independently required: `selectTurnTarget` needs
- * `resolvesPositionalVictim(...) && target` (no target → falls back to the dummy), and the
+ * `resolvesPositionalVictim(...) && target` (no target → the selection short-circuits; before
+ * SP-4c-2d that fell back to the dummy, and since 4c-2b/4c-2d a player actor gets NO victim while
+ * an enemy actor gets `legacyVictim: healTarget`), and the
  * positional APPLY gate additionally needs `pattern != null`. With a target but no pattern the cast
  * resolves onto the real enemy and still credits `cumulativeDamage` through the legacy single-apply
  * (the credit is suppressed only when the POSITIONAL branch is taken), but never runs the

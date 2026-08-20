@@ -443,9 +443,12 @@ export interface PlayerActorRuntime {
      *  (`runPlayerTurn` replaces the status engine's landing hook every turn with its own live
      *  closure, which computes from `enemy` directly). The live readers are the reactive fallbacks,
      *  reached when `liveDebuffLandingChanceFor` declines to price a victim: an id absent from
-     *  `allActorsById`, or the DUMMY SENTINEL, which the resolver refuses on purpose (pricing an
+     *  `allActorsById`. Until SP-4c-2d there was a SECOND such case, and it was the load-bearing
+     *  one: an explicit refusal to price the DUMMY SENTINEL, which WAS in the map (pricing an
      *  inflict aimed at nobody against a ghost's default security of 100 would never land — a
-     *  stronger lie than this field ever told). Measured: 3 such rows in the suite, 0 on shipped kits.
+     *  stronger lie than this field ever told). The actor is deleted, so the sentinel is not in the
+     *  map at all and the absent-id arm covers it; the RULE it encoded stands.
+     *  Measured before that deletion: 3 such rows in the suite, 0 on shipped kits.
      *
      *  ONLY EVER WRITTEN FROM A TURN THAT HAD A VICTIM (see the guard at the write site). A no-victim
      *  turn deliberately publishes nothing, so this field can never hold the 0 that caused the
@@ -1227,10 +1230,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     /** SP-4c-2b: no victim this turn — an ally-targeted cast resolved nobody on the opposing side.
      *  Every victim-derived read below must answer "there is no enemy", NEVER "an enemy with neutral
-     *  stats": the latter is exactly the dummy ghost this rung deletes (see plan §A.4-A.5 — the
-     *  ghost's `shieldPool` was arming `enemyShielded` gates in 22 support-ship fingerprints).
-     *  Today the engine still always passes a victim, so this is always true; Task 5 throws the
-     *  switch. Read it as the ONE discriminator: every branch keyed off it keeps the with-victim
+     *  stats": the latter was exactly the dummy ghost, which SP-4c-2b stopped handing out and
+     *  SP-4c-2d deleted (see plan §A.4-A.5 — the ghost's `shieldPool` was arming `enemyShielded`
+     *  gates in 22 support-ship fingerprints).
+     *  Read it as the ONE discriminator: every branch keyed off it keeps the with-victim
      *  path byte-identical by construction. Test it (never `enemy !== undefined`) at every site,
      *  including those that then dereference `enemy` — TS's aliased-condition narrowing carries the
      *  `const` through, closures included. */
@@ -1351,12 +1354,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
     // the engine no longer passes a precomputed scalar — `enemy` is the tgt actor, `enemyHp`
-    // its max, so decline = how much HP the victim has lost). For the DPS dummy sink this equals
-    // the old cumulativeDamage+cumulativeTeamDamage (the sink's currentHp tracks it post-round);
-    // for a real positional victim it now reflects that victim's actual HP.
-    // LOAD-BEARING TIMING: on a roster-less run the dummy's currentHp updates POST-round
-    // (engine.ts ~10568), not per-hit, so this derived value equals the entering-round scalar the
-    // old param carried. That timing does NOT hold for a real positioned victim — its HP falls
+    // its max, so decline = how much HP the victim has lost). For the DPS dummy sink it equalled
+    // the old cumulativeDamage+cumulativeTeamDamage (the sink's currentHp tracked it post-round);
+    // for a real positional victim — which since SP-4c-2d is the only kind — it reflects that
+    // victim's actual HP.
+    // LOAD-BEARING TIMING: on a roster-less run the dummy's currentHp updated POST-round (the
+    // round-tail HP block, deleted in SP-4c-2d), not per-hit, so the derived value equalled the
+    // entering-round scalar the old param carried. That timing does NOT hold for a real positioned
+    // victim — its HP falls
     // during the turn walk — so on a positional run (since SP-4b-2a, every DPS-calculator run)
     // this reads the victim's HP as it stood when THIS actor's turn began, which is the intended
     // "entering this turn" semantics for the hp-threshold gates, not a per-round scalar.
@@ -1430,7 +1435,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //      holds the advantage, so the attacker is disadvantaged): −25 dmg, crit cap 75, +25 crit
     //      penalty, 'apply' debuffs resist.
     //  PRECEDENCE: an outgoing-advantage force wins over a victim's defensive force (rare collision).
-    //  DEFAULT (no override, incl. single-ship DPS where the dummy enemy carries no buffs): the
+    //  DEFAULT (no override, incl. single-ship DPS against a synthesized enemy that carries no
+    //  skills and so grants itself no buffs — before SP-4c-2d, the dummy enemy): the
     //  effective values equal the destructured runtime scalars / real matchup — byte-identical.
     //  SCOPE: the anchor (primary/bound target) path is fully covered. Per-covered-victim AoE
     //  offensive/defensive forcing is a documented limitation (no corpus override ship is AoE).
@@ -1591,11 +1597,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Because an inert guard is exactly what a future simplification deletes unopposed, the line is
     // now fenced by `dynamicLanding.test.ts`'s 'a no-victim turn does not publish a landing chance'.
     //
-    // ⚠️ THIS GUARD SURVIVES THE EPIC — do NOT sweep it alongside its sibling. The dummy-sentinel
-    // refusal in engine.ts's `reactiveLandingChanceFor` becomes DEAD when the next rung deletes the
-    // dummy actor, because refusing that one actor's id is all it does. This guard never mentions the
-    // dummy: its subject is a turn with NO victim, a shape SP-4c-2b created and which outlives the
-    // dummy entirely. The two are inert for different reasons and only one of them expires.
+    // ⚠️ THIS GUARD SURVIVED THE EPIC — do NOT sweep it alongside its (now removed) sibling. The
+    // dummy-sentinel refusal in engine.ts's `reactiveLandingChanceFor` went DEAD the moment SP-4c-2d
+    // deleted the dummy actor, because refusing that one actor's id was all it did, and 4c-2d deleted
+    // it: an id naming no actor now takes the generic `!victim` return. This guard never mentioned the
+    // dummy — its subject is a turn with NO victim, a shape SP-4c-2b created and which outlived the
+    // dummy entirely. The two were inert for different reasons and only one of them expired.
     //
     // GUARD rather than DROP the write: the field still has readers (the reactive fallbacks), and
     // dropping it would push those rows from a real cast-derived chance to a flat `?? 1` — new
@@ -3163,19 +3170,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     WAS-COUPLED-TO (PR5's WARNING, NARROWED — not discharged — by PR6; kept because a
         //     reader tracing why the guard below exists needs to know what it replaced): path (b)
         //     missed the vestigial `enemy` only as an INCIDENTAL SIDE-EFFECT of unrelated plumbing.
-        //     `reduceEnemyBombs` bails at this file's line ~929 (`if (args.targetId === undefined)
-        //     return;`), and engine.ts ~6452 deliberately leaves `targetId` unset whenever the
-        //     player-side target resolved to the dummy sink — a BUFF-ROUTING parity choice whose
-        //     own comment flags the unset field as a gap that may later be "fixed". That was never
+        //     `reduceEnemyBombs` bails on `args.targetId === undefined`, and engine.ts's
+        //     `buildTurnArgs` deliberately left `targetId` unset whenever the player-side target
+        //     resolved to the dummy sink — a BUFF-ROUTING parity choice whose own comment flagged the
+        //     unset field as a gap that may later be "fixed". (SP-4c-2d dropped that dummy-sink
+        //     conjunct; `targetId` is now unset only on a genuine NO-VICTIM turn.) That was never
         //     an intentional guard on this rule, so PR5 required a maintainer closing that gap to
         //     revisit this derivation: path (b) would then land real mid-cast HP damage on a
         //     non-positional bound target.
         //     WHAT THE OBLIGATION NOW COVERS. PR5's WARNING was about DAMAGE, and the guard below
-        //     is an EVENT guard — it stops the loop emitting, not the caller applying. Closing
-        //     engine.ts's ~6452 gap would still let path (b) land real mid-cast HP damage on a
-        //     non-positional bound target, and the aggregate `directDamage` this function returns
-        //     would still be applied on top of it by the caller. So the maintainer who closes that
-        //     gap still owes this derivation a re-walk. What PR6 removes from the obligation is
+        //     is an EVENT guard — it stops the loop emitting, not the caller applying. Closing that
+        //     `buildTurnArgs` gap would have let path (b) land real mid-cast HP damage on a
+        //     non-positional bound target, with the aggregate `directDamage` this function returns
+        //     applied on top of it by the caller. SP-4c-2d closed the gap the other way: the
+        //     dummy-sink conjunct is gone, `targetId` is unset only on a genuine NO-VICTIM turn, and
+        //     every bound target is a real positioned actor — so the shape the obligation was about
+        //     no longer exists. It is recorded because the DERIVATION still rests on the PRIMARY
+        //     argument, not on any of this. What PR6 removes from the obligation is
         //     only its LOG/EVENT half: however the bound target dies mid-cast, the remaining
         //     sub-attacks emit nothing, so no phantom sub-attack row or rider firing can result.
         //     The damage half stands.
@@ -3187,15 +3198,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // (state.ts:151, written once by `recordDestroyed`): once set, the remaining
             // sub-attacks land on a corpse and, per R5, deal nothing — so they emit nothing either.
             // Deliberately NOT `currentHp <= 0`, which is an HP FLOOR and not a death: the
-            // vestigial sim/healing sink sits clamped at 0 forever without ever dying, and gating
-            // on it silences the focus's whole event stream (see WHICH SIGNAL in the derivation
-            // above — that was this guard's first cut, and it was a live regression).
+            // vestigial sim/healing sink sat clamped at 0 forever without ever dying, and gating
+            // on it silenced the focus's whole event stream (see WHICH SIGNAL in the derivation
+            // above — that was this guard's first cut, and it was a live regression). SP-4c-2d
+            // deleted that sink; the DISTINCTION is not about it (a never-alive actor reads the
+            // same way), which is why the signal choice stands.
             // EVENTS only: the cast's `directDamage` is already totalled and is returned to the
             // caller regardless of where this break lands, so the damage half of R5 is not enforced
             // here. Unreachable through any production cast (the derivation above), and
-            // INTENTIONALLY built anyway: before PR6 the same outcome depended on engine.ts ~6452
-            // leaving `targetId` unset for the dummy sink, a choice that site's own comment flags
-            // as a gap a maintainer may later close.
+            // INTENTIONALLY built anyway: before PR6 the same outcome depended on engine.ts's
+            // `buildTurnArgs` leaving `targetId` unset for the dummy sink, a choice that site's own
+            // comment flagged as a gap a maintainer might later close (SP-4c-2d removed both the
+            // conjunct and the sink).
             // SP-4c-2b: `enemy` is narrowed non-optional here — the enclosing block is fenced on the
             // victim, so a no-victim turn emits nothing at all rather than reaching this break.
             if (enemy.destroyedRound !== undefined) break;
@@ -3302,8 +3316,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             for (const e of v.infernoEntries) detonatable.add(e);
             for (const b of v.pendingBombs) detonatable.add(b);
         };
-        // The anchor's containers arrive as loose params (they may be the dummy sink's), so collect
-        // them directly; the footprint/splash victims come from the opposing roster map.
+        // The anchor's containers arrive as loose params (until SP-4c-2d they could be the dummy
+        // sink's), so collect them directly; the footprint/splash victims come from the opposing
+        // roster map.
         collectDetonatable({ corrosionEntries, infernoEntries, pendingBombs });
         for (const victim of opposingVictimById?.values() ?? []) collectDetonatable(victim);
         positionalDetonation = {
@@ -3457,8 +3472,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // above (review fix, B2) — each neighbour rolls its OWN landing via `landsDebuffOnVictim`
     // (Block-Debuff + hacking-vs-security, mirrors PR #185 for non-DoT debuffs), so a neighbour
     // can be hit even when the primary resists (immune or failed its own roll), and vice versa.
-    // Positional-only: adjacentEnemyIdsFor returns [] / is undefined for the DPS dummy sink
-    // (targetId undefined there), so DPS is byte-identical. affinityMult reused as the caster's
+    // Positional-only: adjacentEnemyIdsFor returns [] / is undefined for a target with no board
+    // slot — which, until SP-4c-2d, meant the DPS dummy sink (targetId was unset there), so DPS was
+    // byte-identical. affinityMult reused as the caster's
     // own value (correct for the corpus: Asphyxiator's splash is Inferno, which doesn't consume
     // affinityMult at apply time; only pendingBombs snapshot it, and no corpus bomb-DoT splashes
     // exist) — true per-victim affinity is deferred.
@@ -3509,10 +3525,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // ally of the caster (Tithonus) — via statusEngine.steal. Keyed off targetId, same
     // side-symmetric pattern as the on-cast purge loop below (works for player AND enemy
     // casters; no healEventOnly gate — a buff transfer, not a heal/shield/cleanse consumption).
-    // A run whose target is the dummy sink (no buffs on its empty self-store) →
-    // statusEngine.steal finds nothing → [] → no-op → byte-identical. That is no longer the DPS
-    // calculator (SP-4b-2a): a DPS cast now anchors on a real positioned enemy and CAN steal from
-    // it — which is correct, and inert only because the synthesized stand-in grants itself none.
+    // A run whose target was the dummy sink (no buffs on its empty self-store) had
+    // statusEngine.steal find nothing → [] → no-op → byte-identical. That stopped being the DPS
+    // calculator at SP-4b-2a — a DPS cast anchors on a real positioned enemy and CAN steal from it,
+    // which is correct, and inert only because the synthesized stand-in grants itself none — and
+    // SP-4c-2d deleted the sink, so no cast anchors on one at all.
     //
     // ORDER (Finding 1): this block runs BEFORE the on-cast purge block below. The sole corpus
     // ship carrying both in one skill (Tithonus) reads "steals 1 buff ... THEN purges 2 buffs",
@@ -3537,8 +3554,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // On-cast purge (C2a/C2b-3): remove buffs from the acting actor's target. Keyed off targetId
     // (the opposing victim) → side-symmetric (works for player AND enemy casters; no
     // healEventOnly gate). gatedSkill holds the fired slot's abilities. A dummy-sink target (no
-    // buffs) → no-op → byte-identical; since SP-4b-2a that is no longer the DPS calculator, whose
-    // cast anchors on a real positioned enemy. NOT inside the args.healing gate.
+    // buffs) was a no-op → byte-identical; since SP-4b-2a that stopped being the DPS calculator,
+    // whose cast anchors on a real positioned enemy, and SP-4c-2d deleted the sink outright. NOT
+    // inside the args.healing gate.
     // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
     // condition) so conditional purges only fire when their precondition holds.
     // E3: 'all-enemies' purge ability fans over the footprint victims (aoeVictimIds) instead of just targetId.
@@ -3664,7 +3682,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
     // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
     // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
-    // and is skipped when there is none (incl. the DPS dummy sink when targetId is unset). The
+    // and is skipped when there is none — a NO-VICTIM turn, and before SP-4c-2d the DPS dummy sink,
+    // both of which leave targetId unset. The
     // BUFF branch (Ripper 'all-allies') needs NO enemy target — it must run regardless of
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,

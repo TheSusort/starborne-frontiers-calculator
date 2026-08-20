@@ -226,7 +226,8 @@ export interface Intent {
          *  cleanse-performed event (cleanse-performed.targets — the recipients whose debuffs were
          *  really removed). The `on-enemy-cleansed` listener stamps this so Pestilence's reactive
          *  `dot` ability (target 'all-enemies') fans Corrosion II out over EXACTLY those enemies
-         *  ("on all cleansed enemies"), instead of the single-victim/dummy-sink fallback. Mirrors
+         *  ("on all cleansed enemies"), instead of the single-victim fallback (which routed to the
+         *  dummy sink until SP-4c-2d and is a NO-OP since). Mirrors
          *  the own-side `cleansedAllyIds` above. Ignored by non-dot cleanse reactors (Grif's damage
          *  proc routes via counterTargetId). */
         cleansedEnemyIds?: string[];
@@ -361,8 +362,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not self)
  *    (any OTHER same-side actor's destruction; mirrors on-ally-crit's ally scoping).
  *  - on-enemy-destroyed → ship-destroyed where isOpposing(actorId)
- *    (any opposing-side actor — for players: dummy wall + walked enemy attackers;
- *    for enemy owners: any player actor).
+ *    (any opposing-side actor — for players: the enemy attackers; for enemy owners: any player
+ *    actor).
  *  - on-enemy-repaired → heal-performed where isOpposing(casterId)
  *    (any opposing-side actor's repair cast). One enqueue per cast. Stamps repairerId (the
  *    caster) AND repairedEnemyIds (e.targets, unfiltered) — Ruiner's Bomb routes to the
@@ -495,14 +496,16 @@ export function registerReactiveListeners(args: {
                                 //
                                 // Stamped ONLY when the event actually carries victims — i.e. from
                                 // the POSITIONAL deferred emit. The sibling's `?? [e.targetId]`
-                                // fallback is deliberately NOT copied: on a NON-positional run
-                                // `e.targetId` is the dummy's own id, and handing it to the debuff
-                                // executor as an explicit application target moves the status from
-                                // the dummy's SENTINEL bucket (where `applicationTargetId ===
-                                // undefined` puts it, and where the round-data reporting reads it)
-                                // into a per-actor bucket keyed on the dummy — landing on the same
-                                // actor but in a store nothing reports. Leaving it unstamped keeps
-                                // every non-positional run byte-identical.
+                                // fallback is deliberately NOT copied. THE REASON AS WRITTEN: on a
+                                // NON-positional run `e.targetId` was the dummy's own id, and handing
+                                // it to the debuff executor as an explicit application target moved
+                                // the status out of the side-wide SENTINEL bucket (where
+                                // `applicationTargetId === undefined` puts it, and where the
+                                // round-data reporting reads it) into a per-actor bucket keyed on the
+                                // dummy — the same actor, but a store nothing reports. SP-4c-2d
+                                // deleted the actor and made a victimless infliction a NO-OP, so that
+                                // specific shape is gone; the stamp stays victims-only because a
+                                // victimless stamp has nothing true to say.
                                 // Deliberately NOT `counterTargetId`: that field is a "retaliate
                                 // against a named counterparty" channel whose consumers (the
                                 // `counter` executor, the hp/shield-basis reactive) BAIL when it is
@@ -578,10 +581,12 @@ export function registerReactiveListeners(args: {
                         if ((e.deliveredDamage ?? e.damage ?? 0) <= 0) return;
                         // Capture the owner's own attack target so a reactive DoT rider (Burner's
                         // on-deal-damage Inferno) lands on the enemy actually hit — the real
-                        // positional victim — instead of falling back to the DPS dummy `enemy`
-                        // sink. On a run with no positioned roster `e.targetId` IS the dummy →
-                        // byte-identical; that is no longer a DPS-calculator shape (SP-4b-2a), so
-                        // a DPS run now genuinely routes the rider to the real victim. Non-DoT riders
+                        // positional victim — instead of the ctx-level fallback, which was the DPS
+                        // dummy `enemy` sink until SP-4c-2d and is a NO-OP since. On a run with no
+                        // positioned roster `e.targetId` WAS the dummy → byte-identical; that shape
+                        // is neither a DPS-calculator one (SP-4b-2a) nor constructible at all
+                        // (SP-4b-2b refuses an absent/empty roster), so a DPS run now genuinely
+                        // routes the rider to the real victim. Non-DoT riders
                         // (Warpstrike duration-reduction) ignore victimId, so this is inert there.
                         enqueue({
                             ...intent,
@@ -688,7 +693,8 @@ export function registerReactiveListeners(args: {
                                     ...intent.eventCtx,
                                     // Capture the ally's ACTUAL victim so the reactive `dot`
                                     // executor lands "on that enemy" (the positional victim the
-                                    // ally hit), not the fixed DPS dummy `enemy` sink.
+                                    // ally hit), not the ctx-level fallback (the fixed DPS dummy
+                                    // `enemy` sink until SP-4c-2d, a NO-OP since).
                                     victimId: e.targetId,
                                     dotType: e.dotType,
                                 },
@@ -708,8 +714,9 @@ export function registerReactiveListeners(args: {
                                 eventCtx: {
                                     ...intent.eventCtx,
                                     // Land the injected DoT on the SAME enemy this cast just hit
-                                    // (the reactive `dot` executor's victimId seam), not the DPS
-                                    // dummy sink.
+                                    // (the reactive `dot` executor's victimId seam), not the
+                                    // ctx-level fallback (the DPS dummy sink until SP-4c-2d, a
+                                    // NO-OP since).
                                     victimId: e.targetId,
                                     dotType: e.dotType,
                                 },
@@ -1114,7 +1121,7 @@ export function registerReactiveListeners(args: {
                 case 'on-enemy-destroyed':
                     bus.on('ship-destroyed', (e) => {
                         // Opposing-scoped: fires when any opposing-side actor is destroyed.
-                        // For the player call: dummy wall + enemy attackers.
+                        // For the player call: the enemy attackers.
                         // For the enemy call: any player actor. One enqueue per destruction event.
                         // Ship-kit W8 Task 13 (Meiying): stamp victimId = the slain actor (mirrors
                         // every other Wave 5/7 reactive seam) so (a) an `adjacent-enemies`-target
@@ -1527,8 +1534,8 @@ export interface IntentExecContext {
      *  owner's OWN side — correct for an 'adjacent-allies' buff, but wrong here: the anchor is
      *  the bombed enemy, on the side OPPOSITE the owner). Engine-populated per drain side as the
      *  OPPOSING side's `adjacentAllyIdsFor` (mirrors `livingOpposingActorIds`'s same-direction
-     *  wiring). Absent / no anchor → the executor treats the fan-out as empty (never falls back
-     *  to the dummy sink). */
+     *  wiring). Absent / no anchor → the executor treats the fan-out as empty (never a stand-in
+     *  victim; the dummy sink it used to name was deleted in SP-4c-2d). */
     adjacentOpposingIdsFor?: (anchorId: string) => string[];
     /** Living ally ids on the owner's ACTIVE support pattern footprint (reactives). Absent when
      *  non-positional or the owner has no support pattern → legacy team-wide routing. */
@@ -1669,9 +1676,10 @@ export interface IntentExecContext {
     effectiveAttackFor?: (actorId: string) => number | undefined;
     /** SP-E, Task E4: resolve ANY actor (either side, from the combat-wide actor map) by id.
      *  Used by the convert-dot executor to locate the ACTUAL victim of an ally's DoT infliction
-     *  (eventCtx.victimId) so it retags the right entries — team-symmetric (works whether the
-     *  victim is the singular DPS/team `enemy` dummy or a real player actor hit by an enemy
-     *  ally). Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
+     *  (eventCtx.victimId) so it retags the right entries — team-symmetric (works for a real enemy
+     *  attacker hit by a player ally and for a real player actor hit by an enemy ally; the singular
+     *  DPS/team `enemy` dummy was the third case until SP-4c-2d deleted it).
+     *  Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
      *  that don't exercise convert-dot. */
     actorById?: (actorId: string) => CombatActor | undefined;
     /** Apply a forced bomb burst against `victim` through the engine's per-victim
@@ -1710,8 +1718,9 @@ export interface IntentExecContext {
     /** SP-M M1 Task 7 Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
      *  DAMAGE proc. The executor enumerates these and re-checks the ability's per-victim enemy
      *  conditions (hp-threshold / enemy-debuff) against EACH victim's own live state. Optional —
-     *  ABSENT in unit-test ctxs, where resolveAoEReactiveDamageVictims returns [] (no-op, never
-     *  the vestigial dummy). Player owner → living enemy attackers; enemy owner → living players. */
+     *  ABSENT in unit-test ctxs, where resolveAoEReactiveDamageVictims returns [] (no-op, never a
+     *  stand-in victim — the vestigial dummy it used to name went in SP-4c-2d).
+     *  Player owner → living enemy attackers; enemy owner → living players. */
     livingOpposingActorIds?: (ownerId: string) => string[];
     /** SP-M M1 Task 7: synthesized enemy debuff/DoT NAMES for a victim (the same
      *  enemyDebuffNamesForTarget synthesis buildTurnArgs uses — control/marker debuff names +
@@ -1947,9 +1956,10 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
         };
     }
     // Ship-kit W8 Task 12 (Zeolite): an on-deal-damage purge's `enemy-type` gate must check the
-    // ACTUAL victim this event carries, not the fight-wide `ctx.enemyType` (which describes only the
-    // DPS-mode dummy's class and is hardcoded undefined for an enemy-owned reaction, so it can never
-    // be team-symmetric). RE-CHECKED by a DEDICATED block in the `purge` branch against
+    // ACTUAL victim this event carries, not the fight-wide `ctx.enemyType` (one scalar for the whole
+    // fight — the deleted DPS dummy's class until SP-4c-2d, and hardcoded undefined for an
+    // enemy-owned reaction, so it can never be team-symmetric). RE-CHECKED by a DEDICATED block in
+    // the `purge` branch against
     // `ctx.roleOf(targetId)` (see `enemyTypeCond` there) — hence `perVictim: NO_CONDITIONS`.
     // Routing `enemy-type` through `perVictimOk` instead would evaluate it with `conditionsMet`
     // against the per-victim ctx, whose `enemyType` is that same undefined fight-wide field
@@ -2008,10 +2018,11 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
         // DELIBERATE — do not "tidy" the two into one set. `buildPerVictimConditionCtx` populates
         // `enemyDebuffNames` unconditionally, which converts the undefined-sentinel →
         // owner-scoped-`enemyDebuffCount` fallback (see evaluateConditions' `enemy-debuff` case)
-        // into a NAME match. For a target that resolves to the dummy sink that is not
-        // behaviour-preserving in the safe direction: such a gate can newly FIRE (the victim carries
-        // the name while the owner-scoped count is 0), not merely newly block. Widening it is its
-        // own change with its own tests, not a free rider on M10.
+        // into a NAME match, which is not behaviour-preserving in the safe direction: such a gate can
+        // newly FIRE (the victim carries the name while the owner-scoped count is 0), not merely
+        // newly block. (The case that made this concrete was a target resolving to the dummy sink,
+        // which SP-4c-2d deleted; the asymmetry it argues for is not about the dummy.) Widening it is
+        // its own change with its own tests, not a free rider on M10.
         const dropEnemyDebuff = dt === 'damage' && intent.ability.target === 'all-enemies';
         const isPerVictim = (c: Ability['conditions'][number]): boolean =>
             (c.subject === 'hp-threshold' && c.hpSubject !== 'self') ||
@@ -3423,8 +3434,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Ship-kit W3 (Pestilence): a reactive DoT whose ability targets 'all-enemies' and whose
         // triggering event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
         // Corrosion II … on all cleansed enemies"), mirroring the all-enemies-over-aoeVictimIds
-        // pattern but keyed off the reactive event's actual cleansed ids — NOT the single-victim /
-        // dummy sink. The per-victim Block-Debuff resist is checked inside the loop.
+        // pattern but keyed off the reactive event's actual cleansed ids — NOT the single-victim
+        // fallback (which routed to the dummy sink until SP-4c-2d and is a NO-OP since). The
+        // per-victim Block-Debuff resist is checked inside the loop.
         // SP-4c-2b MOVED THE LANDING DRAW INSIDE THE LOOP. It used to be ONE draw gating the whole
         // fire, against the owner's cached turn-target chance. Under the per-target ruling there is
         // no single "the enemy" for a fan-out to measure itself against, so each recipient now draws
@@ -3496,7 +3508,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // that enemy" / "on its attacker" / "on any enemy performing a repair") that on-attacked
         // and on-enemy-repaired stamp instead of victimId — the same field the sibling `debuff`
         // branch already falls back to. Without it Warden/Shepherd's Corrosion and Ruiner's Bomb
-        // land in the vestigial dummy's containers and never tick or burst on the real enemy.
+        // never reach the real enemy at all — they landed in the vestigial dummy's containers, where
+        // they never ticked or burst, and since SP-4c-2d they would simply no-op.
         const routedVictimId = intent.eventCtx?.victimId ?? intent.eventCtx?.counterTargetId;
         // SP-4c-2d: victimless → NO-OP, so no container push and NO `dot-applied`. Before this
         // rung the stack landed in the dummy's containers, where since 4c-2c it never ticked and
@@ -3636,7 +3649,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // repaired". The effective % is `scaling.perUnit × count`, where count is the number of
         // enemies repaired by the triggering heal-performed event (eventCtx.repairedEnemyIds —
         // stamped by the on-enemy-repaired listener from the REAL repaired-actor ids, so in a
-        // positional team battle this counts the actual multi-enemy repair, not the DPS dummy).
+        // positional team battle this counts the actual multi-enemy repair — not, as before SP-M M1,
+        // the single DPS dummy that SP-4c-2d has since deleted).
         // Undefined countSource → 1× (byte-identical for every existing reactive heal/shield).
         // ship-kit W3 (Hemlock, Task 9): the sibling count-source — "repairs 5% PER enemy affected".
         // count = the number of adjacent allies the Corrosion spread landed Corrosion I on
@@ -4143,7 +4157,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // anchor's OWN-side neighbours within the OPPOSING roster — team-symmetric (a player
             // owner reads the enemy roster and vice versa) and excludes the anchor itself. No
             // anchor (a damage-type ability reached via some OTHER trigger, or a fixture that
-            // never stamped victimId) → empty, never falls back to the dummy sink.
+            // never stamped victimId) → empty, never a stand-in victim (the dummy sink this
+            // used to name went in SP-4c-2d).
             const anchorId = intent.eventCtx?.victimId;
             victimIds =
                 anchorId !== undefined ? (ctx.adjacentOpposingIdsFor?.(anchorId) ?? []) : [];
@@ -4307,7 +4322,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // M10 (spec §4): as in the debuff branch — re-check against the real routed target.
         if (!perVictimOk(targetId)) return;
         // Task 12 (Zeolite): the `enemy-type` gate was scrubbed from the generic drain-time
-        // condition check above (it only sees the single fight-wide dummy class) — re-check it
+        // condition check above (it only sees the single fight-wide `enemyType` scalar, which was
+        // the deleted dummy's class until SP-4c-2d and describes no actor now) — re-check it
         // HERE against the ACTUAL victim's role via `ctx.roleOf` (side-agnostic —
         // roleByActorId is populated from BOTH TeamActorInput.role and EnemyActorInput.role, the
         // same source Meatshield's defense-substitution and Graphite's roleFilter already use).

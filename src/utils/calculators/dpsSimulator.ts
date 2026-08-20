@@ -133,11 +133,13 @@ export interface DPSSimulationInput {
     position?: Position;
     /** Pre-parsed targeting preference for the focus attacker. Also optional since SP-4b-1 — the
      *  boundary fills an absent one with `DEFAULT_FRONT_ENEMY_TARGET`. Without that fill,
-     *  `selectTurnTarget` (which requires `resolvesPositionalVictim(...) && target`) would
-     *  short-circuit to `legacyVictim` (the dummy) however well-positioned the roster is — which is
-     *  precisely why the boundary fills it. (It would ALSO have kept the dummy in the turn order via
-     *  the `dummyEnemyIsVestigial` gate's `t?.side === 'enemy'` conjunct; that gate was deleted in
-     *  SP-4c-2c and the dummy now takes no turn on any run, so that half no longer applies.) */
+     *  `selectTurnTarget` (which requires `resolvesPositionalVictim(...) && target`) would resolve
+     *  NO victim however well-positioned the roster is — the focus would run a no-victim turn and
+     *  its offensive clause would deliver nothing — which is precisely why the boundary fills it.
+     *  History: before SP-4c-2b the same miss short-circuited to `legacyVictim` (the dummy), and
+     *  before SP-4c-2c it ALSO kept the dummy in the turn order via the `dummyEnemyIsVestigial`
+     *  gate's `t?.side === 'enemy'` conjunct. Both the gate and the actor are gone (SP-4c-2c /
+     *  SP-4c-2d). */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for the focus attacker — drives footprint expansion at the
      *  positional apply site. A single-target 1v1 wants shape 'base', which is exactly what the
@@ -166,8 +168,9 @@ export interface RoundData {
     /** Enemy HP% ENTERING this round (100 → 0) — the value hp-threshold conditions are gated
      *  against. Read off the STRUCK VICTIM's live HP at the focus's last turn of the round
      *  (`playerTurn`'s `enemyHpDecline`), which on a positional run — since SP-4b-2a, every DPS
-     *  run — is the real enemy's own HP curve, not a cumulative-damage scalar. The two coincide
-     *  only on the roster-less dummy, whose HP lands post-round. */
+     *  run — is the real enemy's own HP curve, not a cumulative-damage scalar. The two used to
+     *  coincide on the roster-less dummy run, whose HP landed post-round; the boundary stopped
+     *  accepting an empty roster (SP-4b-2b) and SP-4c-2d deleted the actor, so that shape is gone. */
     enemyHpPct: number;
     /** Direct (non-DoT, non-detonation) damage the focus dealt this round.
      *
@@ -294,14 +297,18 @@ export interface RoundData {
      *  the round tail shows only in the turn-time list. Populated only under
      *  `collectStatusTimeline`, and only when at least one name is present. */
     focusStatuses?: RoundActorStatuses;
-    /** SP-2: round-tail status names per REAL enemy actor id (the vestigial dummy is filtered out —
-     *  it keys its debuffs under the `__enemy__` sentinel and always reports empty). Keyed by id
+    /** SP-2: round-tail status names per REAL enemy actor id — only ids in
+     *  `effectiveEnemyAttackers` are kept, so the focus's and the team's own snapshots stay out.
+     *  (The vestigial dummy this filter also used to exclude was deleted in SP-4c-2d.) The side-wide
+     *  SCHEDULED enemy-debuff bucket keys under the `__enemy__` sentinel store rather than any actor
+     *  id, so it never appears in these per-actor lists either. Keyed by id
      *  rather than collapsed to one entry: a roster is not its first member (the defect #318 fixed
      *  in `finalHpPct`). Populated only under `collectStatusTimeline`, and only for actors carrying
      *  at least one name. */
     enemyStatuses?: Record<string, RoundActorStatuses>;
     /** SP-4b-2 D3: BOARD-WIDE totals — the SUM across every enemy-side DoT carrier at round tail
-     *  (the vestigial dummy sink plus every positioned enemy) that still REPORTS. Stacks and bomb
+     *  (every positioned enemy; the vestigial dummy sink was a carrier too until SP-4c-2d deleted
+     *  it) that still REPORTS. Stacks and bomb
      *  entries are extensive quantities, so they add; this is deliberately not `finalHpPct`'s
      *  HP-weighted treatment, which exists because HP% is an intensive per-actor ratio. On the
      *  usual 1-enemy board these are that enemy's own totals. `activeBombCount` counts bomb
@@ -309,8 +316,9 @@ export interface RoundData {
      *
      *  CORPSES ARE EXCLUDED (`dotCarrierReports`, engine.ts): a destroyed POSITIONED enemy is
      *  skipped before its DoT-tick prologue and nothing clears its containers, so its stacks are
-     *  frozen leftovers that deal nothing and never expire. The dummy sink is exempt from that
-     *  skip, so its entries stay live state and keep reporting even after it dies. */
+     *  frozen leftovers that deal nothing and never expire. The dummy sink used to be EXEMPT from
+     *  that exclusion and kept reporting after it died; `dotCarrierReports` lost the exemption along
+     *  with the actor in SP-4c-2d, so the corpse exclusion is now unconditional. */
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
@@ -801,7 +809,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             // numRounds there).
             avgDamagePerRound: Math.round(totalDamage / reportedRounds.length),
             // SP-U U5: rounds-to-kill adapter, re-derived from the `ship-destroyed` tap (see above —
-            // the engine's own outcome fields read the DUMMY and are unusable). Wiped → roundsToKill
+            // the engine's own outcome fields read the DUMMY and were deleted with it in SP-4c-2d,
+            // so there is nothing engine-side left to prefer). Wiped → roundsToKill
             // = death round, survived false, finalHpPct 0; else survived true, roundsToKill
             // undefined, finalHpPct = end-of-window enemy HP%.
             survived: !allRealEnemiesDead,
