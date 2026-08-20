@@ -1203,28 +1203,6 @@ export interface CombatEngineInput {
     shieldPenetration?: number;
     chargeCount: number;
     shipSkills: ShipSkills;
-    /** Legacy fight-wide enemy scalars: both were the stat block of the dummy `enemy` actor that
-     *  SP-4c-2d deleted, so they no longer describe any victim.
-     *  - `enemyDefense` has ZERO readers left in this file (it is not even destructured in
-     *    `runCombat`; every other `enemyDefense` occurrence here is a comment, the unrelated
-     *    per-victim `enemyDefenseModifier`, or the victim-derived `enemyDefense` key on a turn ctx).
-     *  - `enemyHp` now has ZERO readers too. SP-4d deleted both: the drain ctx's
-     *    `IntentExecContext.enemyHp`, which fed a fight-wide `enemyHpPct` derivation measured at a
-     *    constant 100 across all 12,886 evaluations in the suite; and the synthesized focus-skip
-     *    row's `enemyHpPct`, now a named display constant. The field survives only until its own
-     *    deletion rung.
-     *  A victim's real defence/HP come from the positioned `enemyAttackers` roster instead. That
-     *  includes the healing mode's healer casting a `damage` ability at `target:'enemy'`: it lands on
-     *  a real positioned enemy and feeds `basis:'damage-dealt'` heal/shield riders off THAT victim's
-     *  stats, so these scalars are no longer load-bearing there either.
-     *  Callers still pass them (deleting the fields is rung 4d's churn story): `dpsSimulator.ts`
-     *  forwards its own calculator fields — and, when the caller supplied no `enemyAttackers`, also
-     *  builds the synthesized enemy OUT of them, which is the one path by which they still influence
-     *  a fight; `healingEngineAdapter.ts` passes LEGACY_SINK_* constants; `battleSimulator.ts`'s
-     *  positional call omits them. Absent → `enemyHp` falls back to 1e9 (the old sink's HP, kept so
-     *  the two percentages above do not move). */
-    enemyDefense?: number;
-    enemyHp?: number;
     numRounds: number;
     /** Scheduled (manual + team) buffs — statusEngine input. */
     selfBuffs: SelectedGameBuff[];
@@ -1253,25 +1231,10 @@ export interface CombatEngineInput {
      *  Guard) reaches both the per-turn stats-snapshot and the live debuff-landing recompute
      *  when the focus is the target of an enemy debuff, instead of silently defaulting. */
     security?: number;
-    /** Legacy fight-wide enemy base security (A2 Task 2). ZERO readers in this file since SP-4c-2d:
-     *  its only consumer was `effectiveStatsOf.security` on the deleted dummy enemy actor. A real
-     *  enemy's security is read from its own `enemyAttackers[i].stats.security`. `dpsSimulator.ts`
-     *  still resolves `input.enemySecurity ?? 100` (the OLD landing-formula default) and passes it
-     *  here, and feeds the SAME resolved value into the synthesized enemy it builds when the caller
-     *  supplied no roster — that synthesized actor is now the only route by which this number
-     *  reaches a landing computation. Field removal is rung 4d's job. */
-    enemySecurity?: number;
     allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
     /** Attacker turn-order speed. Default 100. */
     speed?: number;
-    /** Legacy fight-wide enemy turn-order speed. ZERO readers in this file since SP-4c-2d — it was
-     *  the deleted dummy actor's `speed`, and no actor is built from it here any more; turn order
-     *  comes from each real actor's own speed. It still matters INDIRECTLY on the DPS path:
-     *  `dpsSimulator.ts`'s `synthesizedDpsEnemy` reads `enemySpeed ?? 50` as the synthesized enemy's
-     *  speed when the caller supplied no roster, which is why 50 (sorting last against a default-100
-     *  attacker, as the dummy did) is still the effective default there. Field removal is rung 4d. */
-    enemySpeed?: number;
     /** Caster heal-modifier stat (healing calc). Default 0. */
     healModifier?: number;
     /** FOCUS actor's ship role (Ship.type) for role-filtered ally-damage reactions
@@ -1874,9 +1837,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // SP-4d: `enemyDefense` / `enemyHp` / `enemySecurity` / `enemySpeed` are no longer
         // destructured here — they were the deleted dummy actor's stat block, and their last
         // readers were enemy-HP% phantoms this rung retired (the drain ctx's derivation, then the
-        // skip row's). They still ARRIVE on `CombatEngineInput`; deleting the fields is the next
-        // rung's churn. A victim's real HP/defence come from the positioned `enemyAttackers`
-        // roster.
+        // skip row's). Task 6 deleted the fields from `CombatEngineInput` entirely. A victim's
+        // real HP/defence come from the positioned `enemyAttackers` roster.
         numRounds,
         selfBuffs,
         enemyDebuffs,

@@ -277,14 +277,15 @@ export const PRACTICE_TARGET_ID = 'practice-target';
  * killing your only real enemy today, and SP-4c has since removed the sink underneath both.
  *
  * HP stays at the card default rather than being inflated to make it immortal, because an HP-scaled
- * damage channel is exactly what a huge number would distort: corrosion is `min(enemyHp, 500_000)`
- * per 1% per stack (engine.ts:1054) and detonation is `min(victimHp, 500_000)` (detonation.ts:106).
- * Both already read the real VICTIM's own max HP today: corrosion's per-victim positional DoT-tick
- * branch passes `enemyHp: recipientMaxHp(actor.id)` (engine.ts:8836, that exact line) — the only
- * site that credits a DoT tick per-victim (`creditDealt(sourceId, actor.id, dealt)`,
- * engine.ts:8921) — and that is the branch the practice target actually runs, since it sits in
- * `baseHpById` via `enemyAttackerActors` (engine.ts:2809, `const baseHpById = new Map<string,
- * number>([`, whose entries include `...enemyAttackerActors.map((a) => [a.id, a.stats.hp])`). The
+ * damage channel is exactly what a huge number would distort: corrosion is
+ * `const corrosionBaseHp = Math.min(args.enemyHp, 500_000);` (engine.ts) per 1% per stack and
+ * detonation is `min(victimHp, 500_000)` (detonation.ts:14). Both already read the real VICTIM's
+ * own max HP today: corrosion's per-victim positional DoT-tick branch passes
+ * `enemyHp: recipientMaxHp(actor.id)` (engine.ts, that exact line) — the only site that credits a
+ * DoT tick per-victim (`creditDealt(sourceId, actor.id, dealt)`) — and that is the branch the
+ * practice target actually runs, since it sits in `baseHpById` via `enemyAttackerActors`
+ * (`const baseHpById = new Map<string, number>([`, whose entries include
+ * `...enemyAttackerActors.map((a) => [a.id, a.stats.hp])`). The
  * bare fight-wide `enemyHp` scalar reaches `tickDoTs` on NO path any more: both of its call sites
  * pass a `recipientMaxHp(...)`, and the vestigial dummy branch that passed the bare scalar went
  * with the actor in SP-4c-2d. So inflating this HP to make the target
@@ -433,13 +434,11 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // the dummy and the sink's defence is no longer the basis for anything. The ally-side target
     // substitution further down is the other half of the same claim.
     //
-    // These scalars are the LEGACY SINK. They used to do DOUBLE duty; only the second job is left:
+    // These scalars are the LEGACY SINK. They used to do DOUBLE duty; only the one job is left:
     //
-    //  1. GONE. They described the dummy actor, which SP-4c-2d deleted. The fight-wide
-    //     `enemyDefense` / `enemySecurity` / `enemySpeed` arguments of the `runCombat` call below are
-    //     no longer destructured by the engine at all, and `enemyHp` keeps only its enemy-HP%
-    //     denominator readers. The arguments are still passed — dropping them (and the fields) is
-    //     rung 4d's job, so leave the constants and their call sites exactly as they are;
+    //  1. GONE. They described the dummy actor, which SP-4c-2d deleted, and SP-4d rung Task 6
+    //     removed the fight-wide `enemyDefense`/`enemyHp`/`enemySecurity`/`enemySpeed` fields from
+    //     `CombatEngineInput` entirely — the `runCombat` call below no longer passes them;
     //  2. they are the per-enemy DEFAULTS for a real enemy that leaves `defence`/`hp`/`security`
     //     unspecified — which is every caller the UI produces today, since the enemy panel only
     //     collects attack/crit/critDamage/speed/hacking. Defaulting matters, and NOT to the
@@ -650,8 +649,6 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         shieldPenetration: healer.shieldPenetration,
         chargeCount,
         shipSkills,
-        enemyDefense: LEGACY_SINK_DEFENCE,
-        enemyHp: LEGACY_SINK_HP,
         numRounds,
         selfBuffs,
         enemyDebuffs: [],
@@ -671,13 +668,10 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         // Base hacking (holistic review #1) — threaded onto the focus (healer) actor so the engine's
         // live per-turn recompute drives landing uniformly across all three modes (DPS / battle-sim /
         // healing). Walked team-actor hacking flows via the walk bundle (deriveTeamEngineActors →
-        // engine reads walk.stats.hacking). `enemySecurity`/`enemySpeed` used to describe the dummy
-        // enemy actor; SP-4c-2d deleted it and the engine no longer destructures either field — each
-        // real enemy's own `stats.security`/`stats.speed` (set above) is what counts. Both arguments
-        // are still passed; removing them is rung 4d's job.
+        // engine reads walk.stats.hacking). Each real enemy's own `stats.security`/`stats.speed`
+        // (set above) is what counts for a fought enemy; the engine has no fight-wide
+        // `enemySecurity`/`enemySpeed` fields to accept a scalar for either any more (SP-4d).
         hacking: healer.hacking,
-        enemySecurity: LEGACY_SINK_SECURITY,
-        enemySpeed: 0,
         healModifier: healer.healModifier,
         role: input.healerRole,
         healTargetId,

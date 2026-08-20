@@ -57,9 +57,10 @@ const bombSkills = (): ShipSkills => ({
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     // SP-4b-2b: a real opponent is now required. This is a DAMAGE fixture (15000 attack, 120%
     // active + bomb bursts over 4 rounds) so it takes the 10M-HP form — the 500k default is not a
-    // survival guarantee and a mid-sim death would cut the bomb cycle short. `enemyDefense: 8000`
-    // is carried onto the roster entry's own `stats.defence`; the fight-wide scalar is inert (M6).
-    // The opponent has 0 attack, so it draws no RNG and the crit stream is unchanged.
+    // survival guarantee and a mid-sim death would cut the bomb cycle short. 8000 lives on the
+    // roster entry's own `stats.defence` (the fight-wide `enemyDefense` scalar it used to be kept
+    // in step with was deleted in SP-4d). The opponent has 0 attack, so it draws no RNG and the
+    // crit stream is unchanged.
     enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 8000 } }),
     attack: 15000,
     crit: 50,
@@ -67,8 +68,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     defensePenetration: 10,
     chargeCount: 3,
     shipSkills: bombSkills(),
-    enemyDefense: 8000,
-    enemyHp: 400000,
     numRounds: 6,
     selfBuffs: [],
     enemyDebuffs: [],

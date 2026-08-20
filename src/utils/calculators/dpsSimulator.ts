@@ -604,8 +604,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         shieldPenetration: input.shieldPenetration,
         chargeCount,
         shipSkills,
-        enemyDefense,
-        enemyHp,
         mode: 'dps',
         numRounds,
         selfBuffs,
@@ -623,16 +621,14 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         defence,
         hp,
         // Base hacking/security (A2 Task 2) — the OLD landing-formula defaults (200 / 100) applied at
-        // this boundary. `hacking` is threaded onto the focus attacker's base. `enemySecurity` has no
-        // reader left in the engine (it fed the deleted dummy actor's stat block); the resolved value
-        // above still reaches the fight through `synthesizedDpsEnemy`'s `security`, and the field is
-        // passed on for rung 4d to remove. No production reader yet (A2 Task 4).
+        // this boundary. `hacking` is threaded onto the focus attacker's base; `enemySecurity`'s
+        // resolved value reaches the fight through `synthesizedDpsEnemy`'s `security` instead — the
+        // engine no longer has a fight-wide `enemySecurity` field to accept it. No production reader
+        // yet for `hacking` (A2 Task 4).
         hacking,
-        enemySecurity,
         allyChargePerRound,
         enemyType,
         speed,
-        enemySpeed,
         teamActors: engineTeamActors,
         bus: collectingBus,
         // A DPS run ALWAYS faces a real, positioned enemy now (`effectiveEnemyAttackers`, derived

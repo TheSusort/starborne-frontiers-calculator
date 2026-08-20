@@ -53,9 +53,9 @@ const ishaSkills = (): ShipSkills => ({
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     // SP-4b-2b: a real opponent. DAMAGE fixture (15000 attack x 120% over 2 rounds) so it takes
-    // the 10M-HP form; `enemyDefense: 8000` is carried onto the roster entry's own stats.defence
-    // (the fight-wide scalar is inert positionally, M6). Nothing here reads a damage magnitude —
-    // the observable is the `buff-applied` count for the gated grant.
+    // the 10M-HP form; 8000 lives on the roster entry's own stats.defence (the fight-wide
+    // `enemyDefense` scalar it used to be kept in step with was deleted in SP-4d). Nothing here
+    // reads a damage magnitude — the observable is the `buff-applied` count for the gated grant.
     enemyAttackers: bareEnemy({ stats: { hp: 10_000_000, defence: 8000 } }),
     attack: 15000,
     crit: 0,
@@ -64,8 +64,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     chargeCount: 0,
     shipSkills: ishaSkills(),
     name: 'Isha',
-    enemyDefense: 8000,
-    enemyHp: 400000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],

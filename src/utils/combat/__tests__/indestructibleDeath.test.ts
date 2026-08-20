@@ -23,8 +23,9 @@
  *     normalizeRoster.ts floors every enemy attacker's max HP), so it is not even constructible.
  *
  * So U5's surface has MOVED rather than vanished, and this file follows it: every case below now
- * measures the REAL, POSITIONED enemy, whose max HP carries the pool `enemyHp` used to hold. Four
- * of the five properties transfer intact — real per-victim intake, natural HP decline,
+ * measures the REAL, POSITIONED enemy, whose max HP carries the pool the fight-wide `enemyHp`
+ * scalar (since deleted, SP-4d) used to hold. Four of the five properties transfer intact — real
+ * per-victim intake, natural HP decline,
  * ship-destroyed on the kill round, and no credit booked past the kill — with the pinned integers
  * unchanged (30000 credited over 3 rounds, 10000 intake per round, kill in round 3).
  *
@@ -103,9 +104,9 @@ const damagePlusInfernoSkills = (): ShipSkills => {
     };
 };
 
-/** The real opponent carries the pool. `enemyHp` (the dummy scalar) is kept in step with it so
- *  the two never disagree, but it is INERT on a positional run (M6) — the roster entry's own
- *  `stats.hp` is what actually declines. */
+/** The real opponent carries the pool on its own `stats.hp` — that is what actually declines. The
+ *  fight-wide `enemyHp` scalar this used to keep in step with (M6, always inert positionally) was
+ *  deleted in SP-4d. */
 const dpsBase = (
     overrides: Partial<CombatEngineInput> = {},
     enemyPool = 25_000
@@ -117,8 +118,6 @@ const dpsBase = (
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: activeDamageSkills(),
-    enemyDefense: 0,
-    enemyHp: 25_000,
     numRounds: 6,
     selfBuffs: [],
     enemyDebuffs: [],

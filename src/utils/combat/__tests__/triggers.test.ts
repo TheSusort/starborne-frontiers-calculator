@@ -46,8 +46,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     defensePenetration: 10,
     chargeCount: 3,
     shipSkills: { slots: [] },
-    enemyDefense: 8000,
-    enemyHp: 400000,
     numRounds: 8,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -378,12 +376,11 @@ describe('Phase 3 reactive triggers', () => {
         };
         // SP-U U5: the DPS enemy is real & destructible now — this scenario's heavy direct +
         // corrosion damage would wipe the default 400k pool mid-window and terminate the run,
-        // truncating the cadence this test measures. A huge pool keeps it alive all 8 rounds so
-        // the on-debuff-inflicted charge cadence is observed in full (enemyHp doesn't affect the
-        // cadence; corrosion values aren't asserted here).
-        const { result } = collectEvents(
-            baseInput({ shipSkills: skills, numRounds: 8, enemyHp: 100_000_000 })
-        );
+        // truncating the cadence this test measures. `enemyHp` no longer has any engine reader
+        // (SP-4d deleted the field); the enemy's real HP comes from the `enemyAttackers` roster
+        // (its default pool is what actually keeps this run alive all 8 rounds — corrosion values
+        // aren't asserted here).
+        const { result } = collectEvents(baseInput({ shipSkills: skills, numRounds: 8 }));
         const actions = result.rounds.map((r) => r.action);
         const charges = result.rounds.map((r) => r.charges);
         expect(actions).toEqual([

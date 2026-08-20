@@ -897,11 +897,6 @@ export function simulateBattle(
     const enemyRepAffinity = enemyPlans[0]?.affinity;
     const playerRepAffinity = playerPlans[0]?.affinity;
 
-    // Representative enemy security (first opponent). It used to be threaded onto the dummy target
-    // for the live landing recompute; SP-4c-2d deleted that actor and the engine no longer reads the
-    // fight-wide `enemySecurity` at all. Still passed below — removing it is rung 4d's job.
-    const enemyRepSecurity = input.enemyTeam[0]?.ship.baseStats.security ?? 100;
-
     const hasCharged = (plan: PlacementPlan): boolean =>
         hasUsableChargedSkill(plan.shipSkills, plan.chargeCount);
 
@@ -1044,14 +1039,11 @@ export function simulateBattle(
         // `input.healModifier`). Team symmetry with the walk/enemy paths.
         healModifier: focus.stats.healModifier,
         // Base hacking/security so the engine's live landing recompute has real inputs for the
-        // focus actor. The fight-wide `enemySecurity` below used to feed the vestigial dummy enemy;
-        // that actor was deleted in SP-4c-2d and the field has no engine reader left. Landing
-        // against an enemy resolves against that actual target's own security — the intended
-        // per-target behaviour covered by the heterogeneous-security team-vs-team test in
-        // twoTeamBattle.test.ts.
+        // focus actor. Landing against an enemy resolves against that actual target's own
+        // security — the intended per-target behaviour covered by the heterogeneous-security
+        // team-vs-team test in twoTeamBattle.test.ts.
         hacking: focus.stats.hacking,
         security: focus.stats.security,
-        enemySecurity: enemyRepSecurity,
         position: focus.position,
         target: withStealthBypass(focus.targeting?.target, focus.activeIgnoresStealth),
         pattern: focus.targeting?.pattern,
