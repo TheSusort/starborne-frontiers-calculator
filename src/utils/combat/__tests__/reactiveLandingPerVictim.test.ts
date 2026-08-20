@@ -146,22 +146,29 @@ const supportOnlyRetaliatoryKit = (): ShipSkills => ({
 });
 
 /**
- * A support-only focus whose reactive inflict fires on `start-of-round` and therefore threads NO
- * victim — the Judge/Chakara trigger shape. Used by the victimless-arm case: it is what drives
- * `triggers.ts` into its `?? ctx.enemy.id` fallthrough, where the dummy sentinel would otherwise be
- * priced as a real defender.
+ * A support-only focus carrying ONE reactive inflict, whose TRIGGER is the only knob.
+ *
+ * `start-of-round` threads NO victim — the Judge/Chakara trigger shape, and what used to drive
+ * `triggers.ts` into its `?? ctx.enemy.id` fallthrough where the dummy sentinel got priced as a real
+ * defender. `on-attacked` threads one (`counterTargetId` = whoever shot the focus).
+ *
+ * ONE builder for both arms on purpose (FIX 4, review wave 2): the victimless case below asserts a
+ * pure negative, and a pure negative cannot tell "correctly inflicted nothing" apart from "this
+ * helper stopped building a firing reactive at all". Its positive pairing must therefore differ from
+ * it in EXACTLY the trigger — same ability id, same buffName, same `application: 'inflict'`, same
+ * config — which is only structurally guaranteed if both come from here.
  */
-const victimlessReactiveKit = (): ShipSkills => ({
+const reactiveInflictKit = (trigger: 'start-of-round' | 'on-attacked'): ShipSkills => ({
     slots: [
         ...supportOnlyRetaliatoryKit().slots.filter((s) => s.slot === 'active'),
         {
             slot: 'passive',
             abilities: [
                 {
-                    id: 'victimless-inflict',
+                    id: 'reactive-inflict',
                     type: 'debuff',
                     target: 'enemy',
-                    trigger: 'start-of-round',
+                    trigger,
                     conditions: [],
                     config: {
                         type: 'debuff',
@@ -177,6 +184,12 @@ const victimlessReactiveKit = (): ShipSkills => ({
         },
     ],
 });
+
+/** The victimless arm: no `victimId`, no `counterTargetId` — the reaction names nobody. */
+const victimlessReactiveKit = (): ShipSkills => reactiveInflictKit('start-of-round');
+
+/** The control arm: the SAME ability on a trigger that stamps a real victim. */
+const victimStampingReactiveKit = (): ShipSkills => reactiveInflictKit('on-attacked');
 
 const input = (): CombatEngineInput => ({
     attack: 1_000,
@@ -325,7 +338,11 @@ describe('SP-4c-2b: a reactive infliction rolls against ITS OWN victim', () => {
         //   * the `hasVictim` guard on the landing-chance PUBLICATION. With the sentinel arm gone,
         //     nothing in production reads `owner.liveDebuffLandingChance` through the reactive
         //     fallback tail either (`liveDebuffLandingChanceFor` resolves a real victim and returns
-        //     a number), so that guard is inert on the same footing.
+        //     a number), so that guard is inert on the same footing. RE-FENCED in review wave 2 —
+        //     `dynamicLanding.test.ts`'s 'a no-victim turn does not publish a landing chance' reads
+        //     the runtime field directly across two turns, so the coverage is restored rather than
+        //     merely mourned. Note the two items are NOT the same kind of inert: that guard survives
+        //     the dummy's deletion (its subject is a victimless TURN), the sentinel refusal does not.
         // The two cases ABOVE still fence the per-victim resolver itself, which is this file's
         // primary subject; what is gone is the fallback-path fencing, and it is gone because the
         // fallback path is gone.
@@ -340,6 +357,32 @@ describe('SP-4c-2b: a reactive infliction rolls against ITS OWN victim', () => {
         // (rather than a length check) is deliberate: if a future change re-routes this arm to some
         // real enemy instead of no-opping, the failure message names the enemy it picked.
         expect(inflicted).toEqual([]);
+    });
+
+    it('...and that empty list is a REAL no-op: the same ability on a victim-stamping trigger DOES inflict', () => {
+        // FIX 4 (review wave 2) — the non-vacuity half of the case above. Inverting that case turned
+        // it into a pure negative, and a pure negative passes just as well when the kit builds
+        // nothing, the passive never fires, the board has no enemies, or `debuff-applied` stops
+        // carrying `sourceId: 'attacker'`. Nothing else in this file reads
+        // `reactiveInflictKit`, so nothing else would notice.
+        //
+        // This arm differs from it in EXACTLY ONE FIELD — the trigger — because both come from the
+        // same builder. `on-attacked` stamps `counterTargetId` (the ship that shot the focus), so a
+        // real victim resolves and the identical inflict lands. Green here + empty there = "the
+        // reaction named nobody"; red here = "this fixture stopped observing anything".
+        const inflicted: string[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => {
+            if (e.sourceId === 'attacker') inflicted.push(e.targetId);
+        });
+        runCombat({ ...supportInput(), shipSkills: victimStampingReactiveKit(), bus });
+
+        // Every landing is on the ZERO-security attacker (chance 1); the security-100 one is at
+        // chance 0 and never receives it — the same per-victim split the cases above pin, which is
+        // why this asserts the SET rather than a bare `length > 0`: a bare count would also pass if
+        // the inflict were re-routed to the wrong enemy.
+        expect(inflicted.length).toBeGreaterThan(0);
+        expect([...new Set(inflicted)]).toEqual([SOFT_ENEMY_ID]);
     });
 
     it('THE REGRESSION: one cached chance cannot produce both outcomes', () => {

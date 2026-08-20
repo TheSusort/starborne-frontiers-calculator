@@ -239,9 +239,11 @@ export interface Intent {
         /** SP-E, Task E4: the ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
          *  the convert-dot executor to resolve the correct CombatActor (via ctx.actorById) whose
-         *  entries to retag — NOT the fixed ctx.enemy/corrosionEntries, which are side-biased to
+         *  entries to retag — NOT the fixed ctx-level `corrosionEntries`, which is side-biased to
          *  the PLAYER's single opposing focus and would be wrong for an ENEMY owner's ally
-         *  hitting a PLAYER actor. Absent for the debuff-applied branch of the same trigger
+         *  hitting a PLAYER actor. (`ctx.enemy` was the other half of that side-biased pair until
+         *  SP-4c-2d deleted the field; `ctx.corrosionEntries` is still here and still side-biased.)
+         *  Absent for the debuff-applied branch of the same trigger
          *  (Oleander's buff grant doesn't need a victim — it routes via damagedAllyId only). */
         victimId?: string;
         /** The debuffed enemy's actor id (debuff-applied.targetId / dot-applied.targetId),
@@ -1196,9 +1198,12 @@ export function registerReactiveListeners(args: {
                         // call: enemy side. For the enemy call: player side.
                         // One enqueue per cast.
                         // SP-M M1: stamp the cleansing enemy as the reaction victim so Grif's 75%
-                        // damage lands on the REAL cleanser in positional mode. In DPS/healing mode
-                        // the only opposing actor IS the dummy `enemy`, so counterTargetId ===
-                        // ctx.enemy.id and this is byte-identical there.
+                        // damage lands on the REAL cleanser in positional mode. The stamp USED TO be
+                        // byte-identical in DPS/healing mode, where the only opposing actor was the
+                        // dummy `enemy` and `ctx.enemy.id` was therefore the same id the executor
+                        // resolved without it. SP-4c-2d deleted `ctx.enemy` from IntentExecContext,
+                        // so the damage branch now resolves either this stamp or a LIVING opposing
+                        // actor — there is no ghost left to be byte-identical with.
                         // Ship-kit W3 (Pestilence): ALSO stamp cleansedEnemyIds = e.targets (the
                         // enemies whose debuffs were actually removed) so a reactive `dot` ability
                         // (target 'all-enemies') fans Corrosion II out over ALL cleansed enemies —

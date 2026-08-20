@@ -1573,13 +1573,29 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // FIX 2 (review wave 1) — THE GUARD, and why it is load-bearing rather than tidy. With no victim
     // `liveLandingChance` is correctly 0 ("there is no enemy whose security to beat"), but publishing
     // that 0 poisons every later reader of the field. That is precisely how the Flamel defect
-    // happened: an ally-targeted supporter published 0 and its on-damaged retaliation then
-    // auto-resisted forever. Fixing the reactive path removed today's reader, but leaving the write
-    // in place leaves the mine armed for a LATER rung — when 4c-2d deletes the dummy actor and the
-    // resolver's remaining fallbacks change shape, the `?? owner.liveDebuffLandingChance` tail in
-    // triggers.ts goes live again and reads this 0, restoring the defect in a rung whose author has
-    // no reason to look here. So a no-victim turn publishes NOTHING and the field keeps the last
-    // chance this actor computed against a real victim.
+    // happened — a real, previously-SHIPPED defect, not a hypothetical: an ally-targeted supporter
+    // published 0 and its on-damaged retaliation then auto-resisted forever (measured on Flamel at
+    // the time: 138 landings → 0). So a no-victim turn publishes NOTHING and the field keeps the
+    // last chance this actor computed against a real victim.
+    //
+    // CURRENT STATUS (SP-4c-2d review wave 2) — a MEASURED-INERT BACKSTOP. SP-4c-2b gave the
+    // reactive path its own per-victim resolver, and SP-4c-2d then deleted the victimless fallbacks
+    // in triggers.ts, so no victimless reaction can reach the `?? owner.liveDebuffLandingChance`
+    // tails there either. An earlier draft of this comment predicted the opposite — that 4c-2d would
+    // change the resolver's fallbacks and re-arm this mine — and that prediction is FALSE: the rung
+    // removed those fallbacks instead. Verified by mutation rather than argued: with the `hasVictim`
+    // conjunct dropped, all 7 pre-existing test files that name `liveDebuffLandingChance` stay green
+    // (96 tests). The accurate claim is CORPUS-INERT — no shape the suite can build reaches it — and
+    // NOT "structurally unreachable": the field still has readers, and 24 of 148 shipped ships carry
+    // the arming shape (an ally-side active target), so it is one refactor from mattering again.
+    // Because an inert guard is exactly what a future simplification deletes unopposed, the line is
+    // now fenced by `dynamicLanding.test.ts`'s 'a no-victim turn does not publish a landing chance'.
+    //
+    // ⚠️ THIS GUARD SURVIVES THE EPIC — do NOT sweep it alongside its sibling. The dummy-sentinel
+    // refusal in engine.ts's `reactiveLandingChanceFor` becomes DEAD when the next rung deletes the
+    // dummy actor, because refusing that one actor's id is all it does. This guard never mentions the
+    // dummy: its subject is a turn with NO victim, a shape SP-4c-2b created and which outlives the
+    // dummy entirely. The two are inert for different reasons and only one of them expires.
     //
     // GUARD rather than DROP the write: the field still has readers (the reactive fallbacks), and
     // dropping it would push those rows from a real cast-derived chance to a flat `?? 1` — new
