@@ -109,6 +109,70 @@ describe('SP-4d: an absent subject does not resolve', () => {
         ).toBe(false);
     });
 
+    it('an enemy hp-threshold negation idiom (eq 0) is not satisfied by an absent enemy either', () => {
+        const ctx = makeConditionContext({ enemyHpPct: undefined });
+        expect(
+            conditionMet(
+                cond({
+                    subject: 'hp-threshold',
+                    hpComparator: 'above',
+                    hpPercent: 50,
+                    countComparator: 'eq',
+                    countThreshold: 0,
+                }),
+                ctx
+            )
+        ).toBe(false);
+    });
+
+    it('THE COMPARATOR-PROOF CASE for hp-threshold: an lte gate is not satisfied by an absent enemy either', () => {
+        const ctx = makeConditionContext({ enemyHpPct: undefined });
+        expect(
+            conditionMet(
+                cond({
+                    subject: 'hp-threshold',
+                    hpComparator: 'above',
+                    hpPercent: 50,
+                    countComparator: 'lte',
+                    countThreshold: 1,
+                }),
+                ctx
+            )
+        ).toBe(false);
+    });
+
+    it('a stat-vs-target negation idiom (eq 0) is not satisfied by an absent target either', () => {
+        const ctx = makeConditionContext({ selfCurrentHp: 20000, targetCurrentHp: undefined });
+        expect(
+            conditionMet(
+                cond({
+                    subject: 'stat-vs-target',
+                    compareStat: 'hp',
+                    statComparator: 'gt',
+                    countComparator: 'eq',
+                    countThreshold: 0,
+                }),
+                ctx
+            )
+        ).toBe(false);
+    });
+
+    it('THE COMPARATOR-PROOF CASE for stat-vs-target: an lte gate is not satisfied by an absent target either', () => {
+        const ctx = makeConditionContext({ selfCurrentHp: 20000, targetCurrentHp: undefined });
+        expect(
+            conditionMet(
+                cond({
+                    subject: 'stat-vs-target',
+                    compareStat: 'hp',
+                    statComparator: 'gt',
+                    countComparator: 'lte',
+                    countThreshold: 1,
+                }),
+                ctx
+            )
+        ).toBe(false);
+    });
+
     it("Tygr's real gte 2 gate is unchanged — a recorded footprint still resolves", () => {
         const ctx = makeConditionContext({ enemiesHitThisCast: 3 });
         expect(
@@ -182,20 +246,23 @@ describe('SP-4d: an absent subject does not resolve', () => {
         // enemy-hp arm must not poison its resolvable self-hp sibling.
         expect(conditionsMet(conditions, ctx)).toBe(true);
 
-        // Negative half: with BOTH conditions unresolvable, the whole OR-group must fail.
+        // Negative half: with BOTH conditions unresolvable, the whole OR-group must fail. A plain
+        // `count > 0` pairing can't distinguish this from a reverted hp-threshold guard (an absent
+        // subject's fabricated `0` also fails `count > 0`), so this uses the eq-0 negation idiom on
+        // the second member instead — that shape goes true if either member's guard is removed,
+        // making this a real pin rather than a coincidentally-passing case.
         const bothUnresolvable = [
             cond({ subject: 'hp-threshold', hpComparator: 'above', hpPercent: 50, anyOf: true }),
             cond({
-                subject: 'stat-vs-target',
-                compareStat: 'hp',
-                statComparator: 'gt',
+                subject: 'hp-threshold',
+                hpComparator: 'above',
+                hpPercent: 50,
+                countComparator: 'eq',
+                countThreshold: 0,
                 anyOf: true,
             }),
         ];
-        const ctxNoTarget = makeConditionContext({
-            enemyHpPct: undefined,
-            targetCurrentHp: undefined,
-        });
+        const ctxNoTarget = makeConditionContext({ enemyHpPct: undefined });
         expect(conditionsMet(bothUnresolvable, ctxNoTarget)).toBe(false);
     });
 });

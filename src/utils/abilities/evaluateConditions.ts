@@ -278,6 +278,11 @@ function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean | unde
               : ctx.enemyHpPct;
     // SP-4d: only the enemy/default subject can be absent — `selfHpPct` is required and the heal
     // target's reading keeps its documented 100 default (healing-mode inertness, not a phantom).
+    // The guard matters because without it `hp > t` / `hp < t` against `undefined` is just
+    // `false`, so this arm would answer `0` for "there is no enemy" — indistinguishable from "the
+    // enemy is at 0%", and satisfiable by an `eq 0` or `lte N` gate that should fire against
+    // nobody. Pinned by absentSubject.test.ts's "negation idiom (eq 0) is not satisfied by an
+    // absent enemy either" and its hp-threshold comparator-proof (lte) case.
     if (hp === undefined) return undefined;
     const t = cond.hpPercent ?? 0;
     return cond.hpComparator === 'above' ? hp > t : hp < t;
@@ -290,21 +295,31 @@ function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean | unde
  */
 export function conditionMet(cond: Condition, ctx: ConditionContext): boolean {
     const count = evaluateCondition(cond, ctx);
-    // SP-4d, AND THE ORDER IS THE POINT: an absent subject is refused here, upstream of the
-    // comparator. Falling through with a 0 would leave the parser's negation idiom
-    // (`eq`/`countThreshold: 0`) and any `lte` gate satisfiable by a subject that does not exist —
-    // the same phantom in a new direction. See absentSubject.test.ts's two comparator-proof cases.
-    if (count === undefined) return false;
     if (cond.countComparator != null && cond.countThreshold != null) {
+        // `count!`: the guard below has not run yet, so TS sees `number | undefined` here — the
+        // assertion only satisfies the type checker, it does not change the runtime value. That
+        // is deliberate: every relational/equality comparator already returns false against a
+        // real `undefined` (`undefined >= 2`, `undefined <= 1`, `undefined === 0` are all false
+        // in JS), so this switch is correct even when `count` is actually absent.
         switch (cond.countComparator) {
             case 'gte':
-                return count >= cond.countThreshold;
+                return count! >= cond.countThreshold;
             case 'lte':
-                return count <= cond.countThreshold;
+                return count! <= cond.countThreshold;
             case 'eq':
-                return count === cond.countThreshold;
+                return count! === cond.countThreshold;
         }
     }
+    // SP-4d: an absent subject must be represented as `undefined`, never `0` — that
+    // representation, not this guard's position, is what closes the phantom. This line is
+    // explicit-over-implicit (it states the intent at the one place a count becomes a boolean)
+    // but it is NOT load-bearing: deleting it is behaviour-neutral, because `undefined > 0` is
+    // already false and every comparator above is already false against `undefined` too — a
+    // mutation test cannot pin this ordering, and none should claim to. What must be pinned is
+    // each arm (`hp-threshold`, `stat-vs-target`, `enemies-hit-this-cast`) returning `undefined`
+    // rather than `0` for an absent subject: a `0` would satisfy an `eq 0` or `lte N` gate that
+    // `undefined` never does. See absentSubject.test.ts's comparator-proof cases.
+    if (count === undefined) return false;
     return count > 0;
 }
 
