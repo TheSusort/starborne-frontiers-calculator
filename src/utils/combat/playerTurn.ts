@@ -1376,6 +1376,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // there is NO READING — the gate-facing value is absent, and every enemy-HP gate on this turn
     // is unresolvable rather than satisfied by a fabricated 100 ("a healthy enemy"). The
     // 4c-2b-era residual note that stood here is discharged; do not restore a `: 100` fallback.
+    // The `: 0` arm is REACHABLE — do not collapse this ternary. A victim with max HP 0 is a real
+    // victim with no HP, i.e. 0%, which is a different answer from `undefined` ("no victim") and
+    // from 100 ("a healthy enemy"). It is NOT reached the obvious way: `normalizeRoster` floors an
+    // ENEMY's max HP to 1,000,000, so `bareEnemy({ stats: { hp: 0 } })` never gets here. It is
+    // reached on an ENEMY's own turn against a PLAYER-side actor whose `stats.hp` is omitted or
+    // zero — the player side carries no such floor. Measured by instrumenting this branch over the
+    // combat suite: 4 hits, every one with victim id `'attacker'`.
     const enemyHpPct = hasVictim
         ? enemyHp > 0
             ? Math.max(0, 100 * (1 - Math.max(0, enemyHp - enemy.currentHp) / enemyHp))
