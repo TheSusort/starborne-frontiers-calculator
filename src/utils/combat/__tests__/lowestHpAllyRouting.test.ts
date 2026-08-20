@@ -727,3 +727,109 @@ describe("SP-4e review fix — the Cheat-Death carve-out fence ('lowest-hp-ally'
         expect(destroyedIds).not.toContain('attacker');
     });
 });
+
+// ---------------------------------------------------------------------------
+// SP-4e Task 4 — a PLAIN `'ally'` heal routes to the caster's TARGET PATTERN.
+//
+// The pre-4e `recipientsFor` decided a single-`'ally'` recipient from the RUN MODE, not from the
+// ability: an enemy caster (and a `teamBattle` player caster) got `lowestHpAllyId(...) ?? actor.id`,
+// and everyone else got `[healing.targetId]` — the healing calculator's chosen anchor. Task 3 gave
+// the three ships whose TEXT names a worst-HP ally the `'lowest-hp-ally'` selector, so those arms
+// no longer carry any real kit. Task 4 deletes them, and the user-confirmed rule for what is left
+// is: an unspecified single ally means "the ship's target pattern" — the caster's own-side roster
+// narrowed by its support footprint, on BOTH sides.
+//
+// Discriminating shape (both cases): the heal ANCHOR / the worst-HP ally sits OFF the footprint and
+// a healthier ally sits ON it. The deleted arms both route to the OFF-footprint id, which the
+// footprint intersection then drops entirely — so the old rule heals NOBODY here while the new rule
+// heals the on-footprint ally. Non-zero, exactly-predicted movement either way, so neither case can
+// pass vacuously.
+// ---------------------------------------------------------------------------
+const ON_FOOTPRINT_ID = 'ally-on-footprint';
+const OFF_FOOTPRINT_ID = 'ally-off-footprint-is-the-heal-anchor';
+const ENEMY_ON_FOOTPRINT_ID = 'enemy-ally-on-footprint';
+const ENEMY_OFF_FOOTPRINT_ID = 'enemy-ally-off-footprint-and-worst-hp';
+
+/** A plain single-`'ally'` heal: no worst-HP wording in its text, so no selector. */
+const plainAllyHeal = (pct: number): Ability => ({
+    id: 'ab-plain-ally',
+    type: 'heal',
+    config: { type: 'heal', pct, basis: 'hp' },
+    target: 'ally',
+    trigger: 'on-cast',
+    conditions: [],
+});
+
+describe("SP-4e Task 4: a plain 'ally' heal routes over the caster's support footprint", () => {
+    it('player caster: heals the ON-footprint ally, NOT the off-footprint heal anchor', () => {
+        let onFootprint: CombatActor | undefined;
+        let offFootprint: CombatActor | undefined;
+        let caster: CombatActor | undefined;
+        const result = runCombat({
+            ...HEAL_BASE(),
+            // Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
+            position: 'M3',
+            pattern: parsePattern('Pattern-Line-Support-Range-1'),
+            shipSkills: castSlots([plainAllyHeal(10)]),
+            // The heal anchor is the OFF-footprint ally: the deleted `[healing.targetId]` arm
+            // routes here, and the footprint intersection then drops it → nobody healed.
+            healTargetId: OFF_FOOTPRINT_ID,
+            teamActors: [
+                walkedAlly(ON_FOOTPRINT_ID, 'M4', 50_000),
+                walkedAlly(OFF_FOOTPRINT_ID, 'M1', 50_000),
+            ],
+            __testTapActors: (actors) => {
+                for (const a of actors) {
+                    if (a.id === ON_FOOTPRINT_ID || a.id === OFF_FOOTPRINT_ID) a.currentHp = 25_000;
+                    if (a.id === FOCUS_ID) a.currentHp = 25_000;
+                }
+                onFootprint = actors.find((a) => a.id === ON_FOOTPRINT_ID);
+                offFootprint = actors.find((a) => a.id === OFF_FOOTPRINT_ID);
+                caster = actors.find((a) => a.id === FOCUS_ID);
+            },
+        });
+        const round = result.healing!.rounds[0];
+        // 10% of the caster's 50,000 hp basis = 5,000 onto every footprint-covered ally.
+        expect(round.perRecipient.get(ON_FOOTPRINT_ID)?.effectiveHeal ?? 0).toBeGreaterThan(0);
+        expect(onFootprint!.currentHp).toBe(30_000);
+        // The caster stands on its own footprint (M3), so the pattern covers it too.
+        expect(caster!.currentHp).toBe(30_000);
+        // Anti-vacuity: the off-footprint ally is identical except its cell, and IS the configured
+        // anchor — the id the deleted arm would have routed to. It receives nothing.
+        expect(round.perRecipient.get(OFF_FOOTPRINT_ID)?.effectiveHeal ?? 0).toBe(0);
+        expect(offFootprint!.currentHp).toBe(25_000);
+    });
+
+    it('ENEMY caster: the same footprint rule over the ENEMY roster (locked symmetry)', () => {
+        let onFootprint: CombatActor | undefined;
+        let offFootprint: CombatActor | undefined;
+        let healer: CombatActor | undefined;
+        runCombat({
+            ...ENEMY_HEAL_BASE(castSlots([plainAllyHeal(10)])),
+            enemyAttackers: [
+                {
+                    ...enemyShip(ENEMY_HEALER_ID, 'M3', castSlots([plainAllyHeal(10)])),
+                    pattern: parsePattern('Pattern-Line-Support-Range-1'),
+                },
+                enemyShip(ENEMY_ON_FOOTPRINT_ID, 'M4', undefined),
+                enemyShip(ENEMY_OFF_FOOTPRINT_ID, 'M1', undefined),
+            ],
+            __testTapActors: (actors) => {
+                for (const a of actors) {
+                    if (a.id === ENEMY_ON_FOOTPRINT_ID) a.currentHp = 40_000;
+                    // The WORST-HP enemy ally, and OFF the footprint: the id the deleted
+                    // `isEnemyCaster` arm routed to.
+                    if (a.id === ENEMY_OFF_FOOTPRINT_ID) a.currentHp = 15_000;
+                    if (a.id === ENEMY_HEALER_ID) a.currentHp = 25_000;
+                }
+                onFootprint = actors.find((a) => a.id === ENEMY_ON_FOOTPRINT_ID);
+                offFootprint = actors.find((a) => a.id === ENEMY_OFF_FOOTPRINT_ID);
+                healer = actors.find((a) => a.id === ENEMY_HEALER_ID);
+            },
+        });
+        // 10% of the healer's 50,000 hp basis = 5,000 onto every footprint-covered enemy ally.
+        expect(onFootprint!.currentHp).toBe(45_000);
+        expect(healer!.currentHp).toBe(30_000);
+        expect(offFootprint!.currentHp).toBe(15_000);
+    });
+});

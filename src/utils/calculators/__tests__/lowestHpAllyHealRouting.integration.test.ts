@@ -14,12 +14,23 @@
  *
  * So this file is the missing coverage. Every case is TWO-ARMED: the same real kit is run once as
  * parsed (`'lowest-hp-ally'`) and once with the recipient rewound to `'ally'` — the exact and only
- * field Task 3 changed, i.e. the pre-Task-3 production value. A test that only asserted the new
- * arm could go quietly vacuous if the fixture stopped healing at all; asserting BOTH arms means
- * the delta itself is pinned, and the legacy arm doubles as documentation of the defect. (The
- * healing-mode cases below rewind the built `Ability.target`; the battle-mode Valkyrie case at the
- * bottom rewinds her skill TEXT instead, because `simulateBattle` derives the abilities itself —
- * see the comment there, and the assertion that proves the two rewinds are equivalent.)
+ * field Task 3 changed. A test that only asserted the new arm could go quietly vacuous if the
+ * fixture stopped healing at all; asserting BOTH arms means the delta itself is pinned.
+ *
+ * ⚠️ WHAT THE `'legacy'` ARM IS, PRECISELY (corrected by SP-4e Task 4). It rewinds the PARSER, not
+ * the engine. That made it a faithful reproduction of pre-Task-3 production only while the engine
+ * still carried the mode-flag arms Task 3 made dead; Task 4 deleted them, so what a plain `'ally'`
+ * MEANS has itself changed — it is now "the caster's target pattern" (own side, narrowed by the
+ * support footprint) rather than `[healing.targetId]`. So in the healing-mode block below the
+ * legacy arm is no longer a picture of the old defect; it is the CURRENT plain-`'ally'` rule, and
+ * its value as an arm is that it isolates the recipient field as the only cause of the delta.
+ * (`healerTargeting.active.pattern` here is `Pattern-Base` — no `support` segment — so
+ * `supportFootprintAllyIds` returns undefined and the plain-`'ally'` arm narrows to nothing,
+ * reaching the whole own side.) The battle-mode Valkyrie block at the bottom is UNAFFECTED: it
+ * runs the reactive route (`reactiveRecipients`), which Task 4 did not touch, so there the legacy
+ * arm still is the pre-Task-3 behaviour. That block rewinds her skill TEXT instead, because
+ * `simulateBattle` derives the abilities itself — see the comment there, and the assertion that
+ * proves the two rewinds are equivalent.
  *
  * Reference data (docs/ship-data.json, docs/ship-skills.csv) is gitignored dev-only. This file
  * THROWS when it is absent rather than skipping (`realKitFingerprints.test.ts`'s convention): a
@@ -196,11 +207,16 @@ describe('SP-4e: a text-named worst-HP repair reaches the worst-HP ally, not the
     it('Pallas moves off the heal target onto the worst-HP ally', () => {
         const legacy = runHealing('Pallas', 'legacy', fullTeam());
         const selector = runHealing('Pallas', 'selector', fullTeam());
-        // LEGACY: `mode: 'healing'` means teamBattle === false, so a plain-'ally' heal based on
-        // `[healing.targetId]` — the user's chosen focus. This is defect D3.
-        expect(legacy.recipients).toEqual([FOCUS]);
-        expect(legacy.healedIds).toEqual([FOCUS]);
-        // SELECTOR: her own text names the recipient, so the run-mode flag stops deciding it.
+        // PLAIN 'ally' (post-Task-4): the caster's target pattern. `Pattern-Base` carries no
+        // `support` segment, so nothing narrows it and the repair reaches the whole own side —
+        // her included. Pre-Task-4 this arm produced `[FOCUS]` alone (the `[healing.targetId]`
+        // fallback, defect D3); that fallback is deleted, which is why the list is wider now.
+        // The healer is in `recipients` but not `healedIds`: it is at full HP when the repair
+        // lands, so its share is all overheal.
+        expect(legacy.recipients).toEqual(['attacker', FOCUS, WORST]);
+        expect(legacy.healedIds).toEqual([FOCUS, WORST]);
+        // SELECTOR: her own text names ONE recipient, so neither the pattern nor the anchor
+        // decides it — and the anchor/focus is excluded even though it is on the pattern.
         expect(selector.recipients).toEqual([WORST]);
         expect(selector.healedIds).toEqual([WORST]);
     });
@@ -210,8 +226,10 @@ describe('SP-4e: a text-named worst-HP repair reaches the worst-HP ally, not the
     it('Volk moves off the heal target onto the worst-HP ally', () => {
         const legacy = runHealing('Volk', 'legacy', fullTeam());
         const selector = runHealing('Volk', 'selector', fullTeam());
-        expect(legacy.recipients).toContain(FOCUS);
-        expect(legacy.recipients).not.toContain(WORST);
+        // PLAIN 'ally' (post-Task-4): the whole own side, as above — so it reaches WORST too.
+        // The discriminating assertion is now the SELECTOR arm's exclusion of FOCUS: the plain
+        // arm includes the configured focus, the selector arm must not.
+        expect(legacy.recipients).toEqual(['attacker', FOCUS, WORST]);
         expect(selector.recipients).toContain(WORST);
         expect(selector.recipients).not.toContain(FOCUS);
     });
@@ -221,7 +239,11 @@ describe('SP-4e: a text-named worst-HP repair reaches the worst-HP ally, not the
     it('Pallas heals NOBODY when she is the only living ally', () => {
         const legacy = runHealing('Pallas', 'legacy', []);
         const selector = runHealing('Pallas', 'selector', []);
-        // LEGACY: the self-fallback fires — the caster repairs itself.
+        // PLAIN 'ally': the caster repairs itself. Same observation as pre-Task-4 but for a
+        // DIFFERENT reason — it used to be the `?? actor.id`/`[healing.targetId]` self-fallback,
+        // and is now simply that the caster is the only id on its own side, so the target
+        // pattern contains nothing else. (The forbidden self-answer for the SELECTOR is what the
+        // second assertion pins; the plain arm self-targeting is legitimate.)
         expect(legacy.recipients).toEqual(['attacker']);
         // SELECTOR: no recipient at all. Anti-vacuity is the legacy arm above: the fixture
         // demonstrably CAN produce a heal here, so an empty list is a routing answer, not a

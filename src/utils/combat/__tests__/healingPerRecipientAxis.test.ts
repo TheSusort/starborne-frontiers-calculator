@@ -27,15 +27,18 @@ const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => 
 const allyTarget = (): ParsedTarget => ({ raw: 'allies', side: 'ally', selection: 'all' });
 
 // ⚠️ CRITICAL MECHANIC — read before touching these fixtures.
-// `resolveSupportRecipients` (supportRecipients.ts:15-19) FILTERS `baseRecipients` by the
-// footprint; it NEVER expands it. And `recipientsFor` (playerTurn.ts:3347-3362) builds that base as:
-//   'self'                          → [actor.id]
-//   'all-allies'                    → playerIds        ← the only MULTI-element base
-//   single 'ally', teamBattle ON    → [lowestHpAllyId(playerIds)]
-//   single 'ally', teamBattle OFF   → [healing.targetId]
-// So a single-`ally` heal has exactly ONE base recipient and the pattern can only REMOVE it.
-// Multi-ally pattern healing therefore comes only from `all-allies` abilities. Fixture A uses
-// `all-allies` to exercise the application half.
+// `resolveSupportRecipients` (supportRecipients.ts) FILTERS `baseRecipients` by the support
+// footprint; it NEVER expands it. Since SP-4e Task 4, `recipientsFor` (playerTurn.ts) builds that
+// base from the ABILITY'S TARGET alone — no run-mode flag is consulted:
+//   'lowest-hp-ally'  → resolved DIRECTLY from live HP, footprint-exempt, single recipient
+//   'self'            → [actor.id]
+//   'ally' / 'all-allies' → own-side ids               ← footprint-narrowed, MULTI-element
+// The pre-4e single-`'ally'` arms (`teamBattle ON → [lowestHpAllyId(playerIds)]`, `teamBattle OFF
+// → [healing.targetId]`) and the `teamBattle` flag itself are GONE. Nothing in THIS file ever
+// routed through them — every ability below targets `'all-allies'`, `'self'` or `'enemy'`, so the
+// deletion moved no case here; only this note needed correcting. `perRecipientApply` is the one
+// surviving axis and it governs APPLICATION only, which is what this file tests: Fixture A uses
+// `all-allies` to exercise it.
 
 /** `all-allies` repair for 10% of the caster's 50000 hp basis → 5000 raw per recipient. */
 const allAlliesHeal = (): Ability =>

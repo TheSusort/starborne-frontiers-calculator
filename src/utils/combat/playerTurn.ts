@@ -172,17 +172,10 @@ export interface HealingRuntimeCtx {
     enemyIds: string[];
     /** Resolve a recipient id to its CombatActor (E5 enemy-heal apply). undefined if absent. */
     recipientActor: (id: string) => CombatActor | undefined;
-    /** Positional team-vs-team battle (the combat simulator), NOT the healing calculator. This is
-     *  the LOWEST-HP-ROUTING signal only: when true, a PLAYER single-`ally` heal/shield resolves
-     *  the lowest-HP living player ally (mirroring the enemy side's `lowestHpEnemyAllyId`) instead
-     *  of the fixed `targetId` — the latter is a vestigial focus in the battle sim, so routing
-     *  there (then intersecting the caster's support footprint) drops the recipient entirely.
-     *  Absent/false → the healing calculator's fixed-target routing (heals measured onto the
-     *  chosen tank). Per-recipient *application* (below) is a separate axis: `teamBattle` implies
-     *  it, but `perRecipientApply` can be on without switching routing to lowest HP. */
-    teamBattle?: boolean;
-    /** Apply heals to each recipient's own actor without `teamBattle`'s lowest-HP routing.
-     *  `teamBattle` implies this; this flag alone does NOT imply lowest-HP routing. */
+    /** Apply each heal to the recipient's OWN actor (and capture its own overheal) rather than
+     *  accounting the whole heal against `targetId`. This is the APPLICATION axis only — recipient
+     *  CHOICE is decided by the ability's target (see `recipientsFor`), never by the run mode.
+     *  SP-4e retired the sibling `teamBattle` routing flag, which conflated the two. */
     perRecipientApply?: boolean;
 }
 
@@ -3860,8 +3853,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       rollOutgoingProc
                   )
                 : 0;
-        // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
-        // all-allies → every player in fixed source order. Shared by the heal + shield branches.
+        // Recipient routing (user-confirmed): self → caster; `lowest-hp-ally` → the worst-HP living
+        // ally on the caster's own side (caster excluded, nobody if it is alone); `ally` and
+        // `all-allies` → the caster's own side in fixed source order, narrowed by its support
+        // footprint. Shared by the heal + shield branches. SP-4e Task 4 replaced "ally → the
+        // bombarded target" with the footprint route and deleted the run-mode arms that chose
+        // between them.
         const isEnemyCaster = actor.side === 'enemy';
         // SP-4e: resolver for the `'lowest-hp-ally'` TARGET (Pallas, Volk, Valkyrie), which the
         // ability's own TEXT names — no longer a mode-flag route. Lowest HP FRACTION among living
@@ -3885,31 +3882,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             })[0];
         const recipientsFor = (ability: Ability, fromPassive: boolean): string[] => {
             const target = ability.target;
-            // SP-4e: a named selector is NEVER narrowed by the support footprint — it reaches its
-            // ally wherever they stand, on the active slot as much as the passive
-            // (user-confirmed 2026-08-20; the same rule already recorded for passives at :1338).
-            // So this returns DIRECTLY rather than falling through to supportRecipients.
+            const ownSideIds = isEnemyCaster ? healing.enemyIds : healing.playerIds;
+            // SP-4e: a named selector is NEVER footprint-scoped — it reaches its ally wherever
+            // they stand, on either slot (user-confirmed 2026-08-20). Returns directly.
             if (target === 'lowest-hp-ally') {
-                const rid = lowestHpAllyId(isEnemyCaster ? healing.enemyIds : healing.playerIds);
+                const rid = lowestHpAllyId(ownSideIds);
                 return rid === undefined ? [] : [rid];
             }
-            let base: string[];
-            if (target === 'self') base = [actor.id];
-            else if (target === 'all-allies')
-                base = isEnemyCaster ? healing.enemyIds : healing.playerIds;
-            // The `?? actor.id` self-fallback below belongs to the LEGACY plain-'ally' arms only,
-            // and is written out here on purpose rather than living inside the resolver: the
-            // selector arm above must NOT have it (self-targeting is the one answer its text
-            // forbids). Task 4 deletes these two arms once the parser flip has made them dead.
-            else if (isEnemyCaster) base = [lowestHpAllyId(healing.enemyIds) ?? actor.id];
-            // Player single-'ally' in a positional team battle: mirror the enemy side and heal
-            // the lowest-HP living player ally (the fixed `targetId` is a vestigial focus there,
-            // and intersecting it with the caster's support footprint drops it — the bug). This
-            // branch is ROUTING only, gated on `teamBattle` alone — `perRecipientApply` (which
-            // `teamBattle` implies) does not affect it. Absent `teamBattle`: the healing
-            // calculator keeps routing to its chosen heal target.
-            else if (healing.teamBattle) base = [lowestHpAllyId(healing.playerIds) ?? actor.id];
-            else base = [healing.targetId];
+            // Everything else routes over the caster's own side and is narrowed by the support
+            // footprint. `'ally'` included: an unspecified single ally means "the ship's target
+            // pattern" (user-confirmed 2026-08-20). The pre-4e mode-flag arms are GONE —
+            // `isEnemyCaster`/`teamBattle` lowest-HP routing and the `[healing.targetId]`
+            // fallback. Routing now comes from the ability's TEXT, not from the run mode, so the
+            // two sides are symmetric by construction rather than by two mirrored branches.
+            const base = target === 'self' ? [actor.id] : ownSideIds;
             return supportRecipients(target, base, { ability, fromPassive });
         };
         // Basis value for a heal/shield ability against recipient `rid`.
@@ -4194,13 +4180,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // EACH recipient's OWN actor (mirrors the enemy event-only path), so an AoE
                         // heal restores every ally's real HP and each over-repaired ally's overheal
                         // is surfaced per-target (drives Abundant Renewal's per-ally shield).
-                        // Gated on `perRecipientApply`, NOT `teamBattle` — the healing calculator
-                        // needs the application half without teamBattle's lowest-HP single-`ally`
-                        // routing (:3360), which is not the game's rule. Absent `perRecipientApply`,
-                        // the healing calculator keeps single-target accounting on healing.targetId.
-                        // `perRecipientApply` is set by BOTH `mode: 'battle'` and the healing
-                        // calculator's own perRecipientHealApply, so the battle sim's behaviour is
-                        // unchanged.
+                        // This is the APPLICATION axis and nothing else: recipient CHOICE was
+                        // decided upstream by `recipientsFor` from the ability's target, so a heal
+                        // applies per-recipient regardless of how its recipients were picked.
+                        // Absent `perRecipientApply`, the healing calculator keeps single-target
+                        // accounting on healing.targetId. `perRecipientApply` is set by BOTH
+                        // `mode: 'battle'` and the healing calculator's own perRecipientHealApply.
                         const perRecipientActor = healing.perRecipientApply
                             ? healing.recipientActor(rid)
                             : undefined;

@@ -315,8 +315,11 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             },
             grantShieldToTarget: (raw) => shields.push(raw),
             playerIds: ['enemy1', 'tank'],
-            // E5: an enemy single-'ally' heal routes to the lowest-HP living enemy ally; here the
-            // sole enemy ally is the caster itself ('enemy1'), a living stand-in (currentHp > 0).
+            // E5 + SP-4e Task 4: an enemy heal resolves over the ENEMY roster (the caster's own
+            // side) — by the support footprint for a plain `'ally'`, or by live HP for a text-named
+            // worst-HP ally. Here the sole enemy id is the caster itself ('enemy1'), a living
+            // stand-in (currentHp > 0), so either route lands there. (The deleted pre-4e arm picked
+            // the lowest-HP OTHER enemy ally and fell back to the caster; same answer, one roster.)
             enemyIds: ['enemy1'],
             recipientActor: (id) =>
                 id === 'enemy1' ? ({ id, currentHp: 10000 } as CombatActor) : undefined,

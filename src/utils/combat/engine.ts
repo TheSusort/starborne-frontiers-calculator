@@ -1297,11 +1297,13 @@ export interface CombatEngineInput {
      *  without `healTargetId` throws, and `healTargetId` with a mode other than `'healing'` or
      *  `'battle'` throws. */
     mode?: RunMode;
-    /** Apply heals to EACH recipient's own actor (per-recipient application), WITHOUT adopting
-     *  `mode: 'battle'`'s lowest-HP single-`ally` routing. The healing calculator sets this
-     *  once it runs positionally: its heals must follow the caster's support PATTERN, which is the
-     *  game's rule for every ship (Volk's lowest-HP repair is its PASSIVE, not a pattern effect).
-     *  `mode: 'battle'` implies this behaviour too, so the battle sim is unaffected.
+    /** Apply heals to EACH recipient's own actor (per-recipient application). This is the
+     *  APPLICATION axis and nothing more: since SP-4e Task 4 recipient CHOICE comes from the
+     *  ability's own target on every run — a text-named worst-HP ally routes to that ally, and
+     *  everything else routes over the caster's support PATTERN, which is the game's rule for every
+     *  ship. (The retired `teamBattle` flag used to make `mode: 'battle'` pick lowest-HP routing for
+     *  a plain `'ally'`; that conflated the two axes and is gone.) The healing calculator sets this
+     *  once it runs positionally; `mode: 'battle'` implies it too, so the battle sim is unaffected.
      *  Absent/false → heals apply only to `healTargetId` (legacy single-target accounting). */
     perRecipientHealApply?: boolean;
     /** The opposing roster — REQUIRED on every run since SP-4b-2b, and never empty (the boundary
@@ -2550,8 +2552,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // actor there — this is byte-identical to the former vestigial `healTargetId: focus.id`
     // binding `battleSimulator` used purely to keep healingCtx built and unlock the enemy roster.
     // Every downstream focus-carve-out (`healTarget && actor.id === healTarget.id`) and the
-    // healingCtx anchor thus resolve exactly as before. Real-vs-real team heals still route to the
-    // lowest-HP living ally via `lowestHpAllyId` (the `teamBattle` path), NOT this anchor.
+    // healingCtx anchor thus resolve exactly as before. The anchor is an ACCOUNTING anchor, not a
+    // recipient: since SP-4e a single-`ally` heal routes over the caster's support footprint and a
+    // text-named worst-HP ally routes via `lowestHpAllyId`, on either side and in either mode —
+    // neither reads this anchor.
     const runMode: RunMode = input.mode ?? 'dps';
 
     // Explicitness guards. These do NOT infer a mode — they refuse an input whose mode and data
@@ -3394,12 +3398,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Constructed whenever `healTarget` is set — which
     // includes `'battle'` runs (battle mode anchors `healTarget` to the focus actor above), NOT
-    // healing mode only. That is exactly why `teamBattle: runMode === 'battle'` two lines below
-    // exists: this ctx is shared by both modes and needs to tell them apart.
+    // healing mode only. The ctx is therefore shared by both modes, and since SP-4e it no longer
+    // needs to tell them apart for ROUTING: recipient choice comes from the ability's target, not
+    // from the run mode (the `teamBattle: runMode === 'battle'` flag that used to sit here is
+    // gone). `perRecipientApply` below is the one mode-derived axis left, and it is APPLICATION
+    // only — the healing calculator opts in explicitly, and a battle run always wants it.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
         ? {
               targetId: healTarget.id,
-              teamBattle: runMode === 'battle',
               perRecipientApply: (input.perRecipientHealApply ?? false) || runMode === 'battle',
               credit: (actorId, bucket, amount) => {
                   healFor(actorId)[bucket] += amount;
@@ -4198,7 +4204,20 @@ export function runCombat(rawInput: CombatEngineInput): {
             // ability's own TEXT names (Pallas, Volk, Valkyrie) — IS a single ally target with a
             // symmetric enemy-side answer, because it resolves over the OWNER's own roster on
             // either side. It gets its arm below; only the anchor-flavoured `ally` stays
-            // player-only, and Task 4 retires that arm once the parser stops emitting it.
+            // player-only.
+            //
+            // ⚠️ OPEN RESIDUAL, and NOT a Task-4 deliverable (an earlier draft of this comment
+            // promised Task 4 would retire the `ally` arm — it did not, and that promise expired).
+            // Task 4 changed what a plain `'ally'` means in `recipientsFor`: the caster's support
+            // footprint, on both sides. THIS proc's `ally` arm still says "the player heal anchor,
+            // nobody for an enemy owner", so the two now DISAGREE. It was left alone deliberately:
+            // the arm is corpus-dead (every standing leech that survives the reactive partition
+            // targets `self` — Magnolia, Malvex, Quixilver, Valerian; Valkyrie's ally-facing one is
+            // `on-bomb-detonated`, so it is reactive and never enters this map), and aligning it
+            // needs a footprint route this proc has no access to — it holds no `supportRecipients`
+            // binding. Deleting the arm is NOT a drop-in either: control would fall through to the
+            // final `[sourceId]` else-arm, i.e. a self-repair, which is a third answer and the wrong
+            // one. So: no live behaviour rides on it, and closing it is its own task.
             //
             // Corpus reach is unchanged: every passive leech that survives the reactive partition
             // into `standingLeeches` targets `self` (Magnolia, Malvex, Quixilver, Valerian;

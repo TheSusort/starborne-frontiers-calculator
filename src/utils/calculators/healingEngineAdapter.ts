@@ -692,8 +692,10 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         pattern: input.healerTargeting?.active?.pattern,
         chargedTarget: chargedOffensiveTarget(input.healerTargeting?.charged?.target),
         chargedPattern: input.healerTargeting?.charged?.pattern,
-        // Heals apply to each recipient the caster's support pattern covers — WITHOUT
-        // teamBattle's lowest-HP routing, which is not the game's rule (only Volk's passive is).
+        // Heals apply to each recipient the caster's support pattern covers. Recipient CHOICE is
+        // no longer a mode flag: a ship whose text names a worst-HP ally (Pallas, Volk, Valkyrie)
+        // carries the 'lowest-hp-ally' target and routes there on any run; everything else routes
+        // over the pattern. SP-4e retired `teamBattle`, which conflated the two.
         perRecipientHealApply: true,
     });
 

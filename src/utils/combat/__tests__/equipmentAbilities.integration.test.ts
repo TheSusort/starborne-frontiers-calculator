@@ -1112,12 +1112,23 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
     const HEAL_PCT = 10; // repair = HEALER_HP × 10% = 1000 per cast (basis 'hp', no other folds)
     const BASE_PER_CAST = HEALER_HP * (HEAL_PCT / 100); // 1000
 
-    /** The healer's active repair, targeting an ally (routes to the heal target). noCrit so
-     *  the heal crit gate never perturbs raw — the only variable is the amp factor. */
+    /** The healer's active repair, aimed at the ONE other ally — the tank. noCrit so the heal
+     *  crit gate never perturbs raw; the only variable is the amp factor.
+     *
+     *  ⚠️ This was `target: 'ally'` until SP-4e Task 4, which retired the `[healing.targetId]`
+     *  routing arm: a plain `'ally'` now covers the caster's target pattern, and with no support
+     *  pattern on this fixture that is the whole own side — the healer included. Two consequences
+     *  broke every case in this block: the source-axis `sumHeal(..., 'directHeal')` doubled (the
+     *  bucket is credited per recipient, above the application gate), and the amp proc gate rolls
+     *  ONCE PER RECIPIENT, so the RNG stream advanced twice per cast and the Vivacious fire count
+     *  moved with it. `'lowest-hp-ally'` restores a single recipient, and it is the tank in every
+     *  case here (caster excluded; the tank is the only other own-side actor), so the arithmetic
+     *  each case documents is measuring exactly what it did before. This block is about the
+     *  AMPLIFICATION fold, not about recipient routing. */
     const repairAlly: Ability = {
         id: 'repair-ally',
         type: 'heal',
-        target: 'ally',
+        target: 'lowest-hp-ally',
         trigger: 'on-cast',
         conditions: [],
         config: { type: 'heal', pct: HEAL_PCT, basis: 'hp', noCrit: true },
@@ -5239,8 +5250,14 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
     const AR_PCT = 30; // legendary
     const EXPECTED_SHIELD = (AR_PCT / 100) * EXPECTED_OVERHEAL; // 900
 
-    /** The healer's active repair, targeting an ally (routes to the heal target 'tank').
-     *  basis 'hp' + noCrit so raw = healer effectiveMaxHp × pct with no crit/heal-modifier folds. */
+    /** The healer's active repair, targeting an ally. basis 'hp' + noCrit so raw = healer
+     *  effectiveMaxHp × pct with no crit/heal-modifier folds.
+     *
+     *  SP-4e Task 4: this reaches the whole own side (no support pattern narrows it), so the healer
+     *  takes a share of its own alongside 'tank'. The healer's share is NOT applied and produces no
+     *  overheal — `perRecipientHealApply` is off on this run, so `applyHealToTarget` runs only for
+     *  `rid === healing.targetId`. That is why the asserted 3,000 overheal and the tank-only shield
+     *  below are unmoved by the widening. */
     const repairAlly: Ability = {
         id: 'ar-repair-ally',
         type: 'heal',

@@ -214,6 +214,27 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         expect(result.rounds[0].perTargetDealt!.ally['enemy-1']).toBeGreaterThan(0);
     });
 
+    // GROSS repair that landed on ONE recipient, from the RECIPIENT axis. Every actor on these
+    // boards sits at full HP, so the landed share is 100% overheal and `totalEffectiveHealing`
+    // alone reads 0 for everybody — the sum of the two is the observable.
+    //
+    // ⚠️ WHY NOT `summary.totalHealing` (which these cases used before SP-4e Task 4): that field is
+    // the SOURCE axis — the healer's own gross output, summed over however many recipients its cast
+    // reached. Task 4 made a plain `'ally'` heal route over the caster's target pattern instead of
+    // to `[healing.targetId]`, and the healer stands on its OWN support footprint, so every board
+    // below now has (at least) two recipients and the source-axis total doubled. That widening is
+    // the new rule, not a regression; what these cases are actually about is whether the repair
+    // reaches the HEAL TARGET, which is a recipient-axis question.
+    const receivedBy = (
+        summary: {
+            perRecipient?: Record<string, { totalEffectiveHealing: number; totalOverheal: number }>;
+        },
+        id: string
+    ): number => {
+        const row = summary.perRecipient?.[id];
+        return row === undefined ? 0 : row.totalEffectiveHealing + row.totalOverheal;
+    };
+
     // ── The support footprint gates which allies a heal reaches ──────────────────────
     //
     // ⚠️ THE ZERO BELOW IS INTENDED BEHAVIOUR (owner ruling, 2026-08-12). `resolveSupportRecipients`
@@ -284,15 +305,20 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
             );
         };
 
-        // ANTI-VACUITY ANCHOR: on-footprint the heal is real, so the zero below is about coverage
-        // and not about a kit that simply never heals.
-        expect(run('M3').summary.totalHealing).toBeGreaterThan(0);
-        // Off-footprint: nothing lands. INTENDED — see the block comment above.
-        expect(run('M1').summary.totalHealing).toBe(0);
+        // ANTI-VACUITY ANCHOR: on-footprint the heal is real (the full 50,000 x 40%), so the zero
+        // below is about coverage and not about a kit that simply never heals.
+        expect(receivedBy(run('M3').summary, 'tank')).toBe(20_000);
+        // Off-footprint: nothing lands ON THE TANK. INTENDED — see the block comment above.
+        expect(receivedBy(run('M1').summary, 'tank')).toBe(0);
+        // …and a SECOND anti-vacuity guard on that zero: the same run still pays the healer its own
+        // share (it stands on its own footprint), so the cast demonstrably fired and the tank's
+        // zero is the footprint filter's doing, not a dead run.
+        expect(receivedBy(run('M1').summary, FOCUS_ID_IN_ENGINE)).toBe(20_000);
         // The DEFAULT (no explicit position anywhere) must land INSIDE the footprint, or the
-        // out-of-the-box page reports zero healing. This is the regression guard for wiring
-        // `defaultHealTargetSlot` into the adapter's player-slot resolution.
-        expect(run().summary.totalHealing).toBeGreaterThan(0);
+        // out-of-the-box page reports zero healing for the ship the user is measuring. This is the
+        // regression guard for wiring `defaultHealTargetSlot` into the adapter's player-slot
+        // resolution.
+        expect(receivedBy(run().summary, 'tank')).toBe(20_000);
     });
 
     // ── The heal target's covered cell SURVIVES a crowded board ──────────────────────
@@ -371,13 +397,14 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         // Every leg pins the VALUE, not a floor. `toBeGreaterThan(0)` would stay green if a partial
         // regression evicted the heal target onto a DIFFERENT covered cell and the heal landed on
         // some other recipient instead — 20,000 is the caster's hp 50,000 x 40%, i.e. the full cast
-        // landing on the heal target and nobody else.
-        expect(run([tank]).summary.totalHealing).toBe(20_000);
+        // landing ON THE HEAL TARGET. (Since Task 4 the same cast ALSO pays the healer its own
+        // share; that is the plain-`'ally'` pattern rule and is not what these legs measure.)
+        expect(receivedBy(run([tank]).summary, 'tank')).toBe(20_000);
         // Crowded, allies UNPOSITIONED: they compete for the index-derived defaults, and the heal
         // target's coverage-aware default still wins T2.
-        expect(run([filler('a0'), filler('a1'), filler('a2'), tank]).summary.totalHealing).toBe(
-            20_000
-        );
+        expect(
+            receivedBy(run([filler('a0'), filler('a1'), filler('a2'), tank]).summary, 'tank')
+        ).toBe(20_000);
         // ⚠️ THE OTHER DIRECTION, AND IT IS A ZERO — pinned deliberately, and NOT a bug to fix here.
         // Same board, but the allies now carry EXPLICIT cells, one of them (T2) the very cell the
         // heal target's coverage-aware default wants. `contestedByExplicit` therefore drops the heal
@@ -391,10 +418,16 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         // indistinguishable from a deliberate placement and a freshly-configured page reported 0.
         // The page-side guard is in `HealingCalculatorPage.test.tsx` ('a default team ship does not
         // evict the heal target off its covered cell'); this leg is why that guard has to exist.
-        expect(
-            run([filler('a0', 'M1'), filler('a1', 'T2'), filler('a2', 'T3'), tank]).summary
-                .totalHealing
-        ).toBe(0);
+        const explicit = run([
+            filler('a0', 'M1'),
+            filler('a1', 'T2'),
+            filler('a2', 'T3'),
+            tank,
+        ]).summary;
+        expect(receivedBy(explicit, 'tank')).toBe(0);
+        // Anti-vacuity on that zero: `a1` holds the contested T2, which the cone DOES cover, so the
+        // cast fired and paid a full share to the ally that took the heal target's cell.
+        expect(receivedBy(explicit, 'a1')).toBe(20_000);
     });
 
     // ── The measured Volk board: one team ship, unplaced heal target ─────────────────
@@ -461,12 +494,15 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
         };
 
         // The shape the page sends: the team ship is UNPLACED, so the heal target's coverage-aware
-        // default claims M1 and the generic ally is the one that gives way. Full cast lands.
-        expect(run().summary.totalHealing).toBe(20_000);
+        // default claims M1 and the generic ally is the one that gives way. Full share lands on it.
+        expect(receivedBy(run().summary, 'tank')).toBe(20_000);
         // The shape the page used to send for a ship the user had never touched. The explicit M1 wins
-        // (correctly — owner ruling), the heal target is pushed to T1, and the heal reaches nobody.
-        // This measured 0 on a freshly configured page; it must only ever be reachable on purpose.
-        expect(run('M1').summary.totalHealing).toBe(0);
+        // (correctly — owner ruling), the heal target is pushed to T1, and the heal reaches IT not at
+        // all. This measured 0 on a freshly configured page; it must only ever be reachable on
+        // purpose. Anti-vacuity: the explicit ally at M1 is covered and takes a full share.
+        const pushed = run('M1').summary;
+        expect(receivedBy(pushed, 'tank')).toBe(0);
+        expect(receivedBy(pushed, 'a0')).toBe(20_000);
     });
 
     // ── An ALLY-SIDE active target must not bind the dummy ───────────────────────────

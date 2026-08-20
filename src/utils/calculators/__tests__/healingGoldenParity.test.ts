@@ -188,7 +188,14 @@ describe('healingGoldenParity', () => {
 
     // ── Scenario 4: reactive cleanse on crit-repair ──────────────────────────
     // crit 50. The healer heals an ALLY (a walked team actor t1, speed 10 so the healer
-    // acts first), routing the heal to the bombard target. A passive cleanse triggers on
+    // acts first). SP-4e Task 4: a plain `'ally'` heal routes over the caster's target pattern
+    // rather than to `[healing.targetId]`, and this fixture has no support pattern (so nothing
+    // narrows it) — the cast reaches BOTH own-side actors, the healer included. The golden moved
+    // accordingly and the movement is exactly that: a `perRecipient.attacker` row that MIRRORS
+    // `t1`'s row byte-for-byte, plus the source-axis totals (`directHeal`, `totalRoundHealing`,
+    // `cumulativeHealing`) doubling. `t1`'s own rows, the `didCrit` cadence (the crit gate rolls
+    // once per CAST, not per recipient) and the top-level heal-target `overheal` are all
+    // UNCHANGED, so what this scenario exists to pin is intact. A passive cleanse triggers on
     // 'on-ally-critically-repaired' (count 1, target self) — it fires only on the casts that
     // crit. With the back-loaded gate at rate 0.5, crits land on casts 2, 4, 6, 8, 10.
     // C1 T4: the reactive cleanse now performs REAL removal and credits the ACTUAL count
@@ -2355,6 +2362,12 @@ describe('healingGoldenParity', () => {
     //   R1 enter 100%: enemy 7000 → tank HP 3000 (30%). Healer charged turn: gate (tank 30% < 40)
     //       PASSES → Cheat Death GRANTED to the tank (round 1, duration Infinity). Charged heal
     //       6000 (deficit 7000 → effective 6000, overheal 0) → tank HP 3000 + 6000 = 9000 (90%).
+    //       SP-4e Task 4: the charged HEAL's plain `'ally'` target now routes over the caster's
+    //       target pattern (unnarrowed here — no support pattern), so the healer takes a SECOND
+    //       6000 share of its own. It is at full HP (the enemy's `front enemy` selection lands on
+    //       the M4 tank), so that share is 100% overheal: the tank's HP curve, `targetHpPct` and
+    //       the Cheat-Death timeline are all unchanged, and the only movement is the SOURCE-axis
+    //       `directHeal` 6000 → 12000 (plus the matching round-1 overheal).
     //   R2 enter 90%: active slot empty → no heal. enemy 7000 → tank HP 2000 (20%). No recovery.
     //   R3 enter 20%: active slot empty → no heal. enemy 7000 would drop HP 2000 → −5000 (LETHAL)
     //       → the persistent Cheat Death (granted R1, never expired) INTERCEPTS → HP floored at 1
@@ -2448,9 +2461,16 @@ describe('healingGoldenParity', () => {
         scenario27Input
     );
 
-    // Supplementary: the cast-path grant lands on the tank ONLY (narrowed 'ally') on the
-    // gate-passing charged round 1 (duration Infinity), then the persistent grant intercepts the
-    // later lethal hit on round 3 — the run completes with NO destroyedRound.
+    // Supplementary: the cast-path grant lands on the tank ONLY on the gate-passing charged round
+    // 1 (duration Infinity), then the persistent grant intercepts the later lethal hit on round 3
+    // — the run completes with NO destroyedRound.
+    //
+    // ⚠️ "tank ONLY" is about the Cheat-Death GRANT, and it survives SP-4e Task 4 for a reason that
+    // is NOT the `'ally'` target: a Cheat-Death-family cast grant does not go through
+    // `recipientsFor` at all — engine.ts's `castPathCheatDeath` carve-out routes it to
+    // `[healTargetId ?? ownerId]` (and, since Task 2's fence, to `[]` for `'lowest-hp-ally'` with
+    // no anchor). The charged HEAL beside it, which DOES go through `recipientsFor`, widened to the
+    // whole own side — hence `directHeal` below.
     it('scenario 27: Cheat Death granted round 1 (tank only), saves the round-3 lethal hit', () => {
         idCounter = 0;
         const bus = createEventBus();
@@ -2474,8 +2494,11 @@ describe('healingGoldenParity', () => {
         // The run completes all 3 rounds with no death recorded.
         expect(result.summary.destroyedRound).toBeUndefined();
         expect(result.rounds).toHaveLength(3);
-        // One-time charged heal on round 1, then nothing; enemy 7000 every round.
-        expect(result.rounds.map((r) => r.directHeal)).toEqual([6000, 0, 0]);
+        // One-time charged heal on round 1, then nothing; enemy 7000 every round. 12000 = two
+        // 6000 shares (tank + healer) — see the arithmetic block above. The tank's own share is
+        // still 6000, which is what the unchanged `targetHpPct` curve below proves.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([12000, 0, 0]);
+        expect(result.rounds[0].perRecipient?.['tank']?.directHeal).toBe(6000);
         expect(result.rounds.map((r) => r.incomingDamage)).toEqual([7000, 7000, 7000]);
         // Entering HP%: 100 → 90 (after the R1 heal) → 20 (after the R2 unhealed hit).
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 90, 20]);

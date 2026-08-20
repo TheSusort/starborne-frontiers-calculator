@@ -91,14 +91,22 @@ const selfHeal = (id: string): Ability => ({
     config: { type: 'heal', pct: 10, basis: 'target-hp' },
 });
 
-// A heal targeting a SINGLE other same-side actor ('ally' target) — for an enemy caster this
-// resolves to the lowest-HP OTHER living enemy ally (never the caster); for a player caster this
-// resolves to CombatEngineInput.healTargetId. Used to prove Amartya's Defense Shred lands on the
-// RECIPIENT, distinct from the caster.
-const healAlly = (id: string): Ability => ({
+// A heal targeting a SINGLE OTHER same-side actor — the living same-side ally with the lowest HP
+// fraction, CASTER EXCLUDED, on either side. Used to prove Amartya's Defense Shred lands on the
+// RECIPIENT, distinct from the caster, so caster exclusion is the load-bearing property.
+//
+// ⚠️ This was a plain `target: 'ally'` until SP-4e Task 4. A plain `'ally'` used to mean "the
+// lowest-HP OTHER enemy ally" for an enemy caster and "`CombatEngineInput.healTargetId`" for a
+// player one — two mode-flag arms, both now deleted. It now means "the caster's target pattern",
+// which INCLUDES the caster, so it can no longer express "somebody other than me": the healer
+// repaired itself and collected a second Defense Shred, destroying the distinction these cases
+// exist to draw. `'lowest-hp-ally'` is the target that still means it, and it means it identically
+// on both sides — which is also what the fixture comments below already described in words ("its
+// only OTHER living enemy ally").
+const healWorstHpAlly = (id: string): Ability => ({
     id,
     type: 'heal',
-    target: 'ally',
+    target: 'lowest-hp-ally',
     trigger: 'on-cast',
     conditions: [],
     config: { type: 'heal', pct: 10, basis: 'target-hp' },
@@ -108,9 +116,10 @@ const healAlly = (id: string): Ability => ({
 // ONE heal-performed event whose `targets` lists all recipients. Used to exercise the
 // repairedEnemyIds.length > 1 fan-out (one repair event → Defense Shred on each repaired
 // recipient). NOTE: 'all-allies' includes the caster itself (there is no caster-excluding
-// multi-recipient heal target — 'ally' is single, 'adjacent-allies' isn't resolved by the heal
-// path), so the caster is legitimately one of the repaired recipients and receives Defense Shred
-// too. The discriminating assertion is that the OTHER (non-caster) recipients each receive it from
+// MULTI-recipient heal target — since SP-4e Task 4 plain 'ally' is footprint-wide and also
+// includes the caster; the only caster-excluding target is the single-recipient
+// 'lowest-hp-ally'; 'adjacent-allies' isn't resolved by the heal path), so the caster is
+// legitimately one of the repaired recipients and receives Defense Shred too. The discriminating assertion is that the OTHER (non-caster) recipients each receive it from
 // the one event — under a hypothetical repairer-only routing ONLY the caster would.
 const healAllAllies = (id: string): Ability => ({
     id,
@@ -329,10 +338,10 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
             shipSkills: {
                 slots: twice
                     ? [
-                          { slot: 'active', abilities: [healAlly('heal-ally')] },
+                          { slot: 'active', abilities: [healWorstHpAlly('heal-ally')] },
                           { slot: 'passive', abilities: [extraAction('healer-extra')] },
                       ]
-                    : [{ slot: 'active', abilities: [healAlly('heal-ally')] }],
+                    : [{ slot: 'active', abilities: [healWorstHpAlly('heal-ally')] }],
             },
         }) as EnemyAttacker;
 
@@ -484,7 +493,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
             critDamage: 0,
             defensePenetration: 0,
             chargeCount: 0,
-            shipSkills: { slots: [{ slot: 'active', abilities: [healAlly('heal-ally')] }] },
+            shipSkills: { slots: [{ slot: 'active', abilities: [healWorstHpAlly('heal-ally')] }] },
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
