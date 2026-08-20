@@ -329,8 +329,14 @@ export function gateFiringAbilities(
     let overlay = 0;
     const kept: Ability[] = [];
     for (const ability of skill.abilities) {
+        // SP-4d: `enemyDebuffCount` is optional now — an absent reading means no opposing victim
+        // exists this round, and the overlay (this cast's own earlier DoT applications) must not
+        // manufacture a defined count out of that absence. `undefined + overlay` would be `NaN`,
+        // which happens to be comparator-safe too (every comparator is false against it, same as
+        // `undefined`), but staying `undefined` keeps the representation honest and matches every
+        // other absent-subject arm in this rung.
         const ctx =
-            overlay > 0
+            overlay > 0 && baseCtx.enemyDebuffCount !== undefined
                 ? { ...baseCtx, enemyDebuffCount: baseCtx.enemyDebuffCount + overlay }
                 : baseCtx;
         ctxFor.set(ability.id, ctx);

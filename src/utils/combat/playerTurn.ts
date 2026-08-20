@@ -1824,6 +1824,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
+        // SP-4d: the entry counts above are all 0 on a no-victim turn (see the `corrosionEntries
+        // = []` default note at this function's destructure), which is ALSO what a real victim
+        // with no debuffs/DoTs looks like — the sum alone cannot tell the two apart. `hasVictim`
+        // is the same discriminator every other victim-derived field in this ctx already uses
+        // (victimStatGateCtx/victimShieldGateCtx below).
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
@@ -2188,6 +2194,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // Include the foreign caster's ability-sourced self statuses (e.g. its self-granted
                 // gate buffs) so its own aura's gate sees them — matches the local priorAbilitySelfNames.
                 includeAbilitySelfNames: true,
+                // SP-4d: this ctx gates the FOREIGN caster's OWN enemy-side aura/accum ability
+                // against whether IT currently applies to THIS actor's resolved victim this turn
+                // (it feeds `activeAbilityStatuses('enemy', resolveCtx(...), actor.id, targetId)`
+                // below) — so the relevant "opposing victim" is the ACTING actor's own `hasVictim`,
+                // the same discriminator the local (non-foreign) contexts in this function use.
+                noOpposingVictim: !hasVictim,
             });
             foreignCtxMemo.set(casterId, c);
         }
@@ -2270,6 +2282,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
+        // SP-4d: see preDebuffGateCtx's matching note above — same `hasVictim` discriminator.
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
@@ -2379,6 +2393,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
+        // SP-4d: see preDebuffGateCtx's matching note above — same `hasVictim` discriminator.
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
@@ -2643,6 +2659,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         roundCrit,
         enemyHpPct,
+        // SP-4d: see preDebuffGateCtx's matching note above — same `hasVictim` discriminator.
+        // This is the ctx `gateFiringAbilities` gates against just below, i.e. the one that
+        // actually reaches the Hermes-shaped repro (a self-shield gated on `enemy-debuff eq 0`).
+        noOpposingVictim: !hasVictim,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,

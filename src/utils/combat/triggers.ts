@@ -1811,6 +1811,32 @@ export function buildActorConditionContext(
          *  field is threaded here so a future reactive consumer only needs an IntentExecContext
          *  delegate, not another hand-enumerated layer. */
         enemyShielded?: boolean;
+        /** SP-4d — forwarded verbatim to `buildRoundContext`'s `noOpposingVictim` (see that
+         *  function's doc for the full rationale). Default false/omitted preserves every
+         *  existing caller's behaviour (`enemyDebuffCount`/`enemyDotCount`/`enemyShielded` stay
+         *  resolvable). This wrapper serves THREE structurally different call sites, which is why
+         *  the flag lives on `shared` rather than being hard-coded here — each caller alone knows
+         *  whether IT has an opposing victim this evaluation:
+         *   - `playerTurn.ts`'s `foreignCasterCtx` (a foreign ally's aura/accum gate, evaluated
+         *     against the ACTING actor's current turn) sets this to the acting actor's own
+         *     `!hasVictim` — the aura is being asked to apply against THIS turn's target.
+         *   - `engine.ts`'s `seedPassiveTimedStatuses` (combat-start passive seeding) leaves this
+         *     unset/false — at combat start there is always a real opposing roster (SP-4b-2a/b
+         *     make a roster-less run structurally impossible), just with zero debuffs/DoTs/shield
+         *     on it yet, which are real `0`/`false` answers, not an absent subject.
+         *   - `buildDrainContext` (reactive drain-time) leaves this unset/false DELIBERATELY: at
+         *     drain time `enemy-debuff`/`enemy-dot-count`/`enemy-shield` read a persistent
+         *     per-owner store (`snapshot(ownerId)`, `corrosionEntries`/etc.) that answers about the
+         *     opposing SIDE this owner has been engaging, not a single per-cast resolved victim —
+         *     there is no "this reactive event's victim" concept threaded into `IntentExecContext`
+         *     the way `enemy` is threaded through a cast-time turn, and manufacturing one here
+         *     would either be a guess or require new plumbing outside this task's scope. Forcing
+         *     it `true` unconditionally would also risk silently breaking a real `gte`-gated
+         *     reactive ability that legitimately reads a nonzero count today — an unmeasured
+         *     regression, not a fix. See `enemyShielded`'s own doc above: buildDrainContext never
+         *     populates it anyway, so this path already answers a real (if usually-empty) `false`
+         *     for `enemy-shield` today and continues to. */
+        noOpposingVictim?: boolean;
         /** Owner was hit by a direct attack this round. Default false. Populated by
          *  buildDrainContext (D-PR8). */
         wasHitThisRound?: boolean;
@@ -1878,6 +1904,7 @@ export function buildActorConditionContext(
         turnsTaken: shared.turnsTaken,
         enemiesHitThisCast: shared.enemiesHitThisCast,
         allyTeamNames: shared.allyTeamNames,
+        noOpposingVictim: shared.noOpposingVictim,
     });
 }
 
@@ -2168,6 +2195,14 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
 // phantom — this ctx has no victim and never did. It remains a names-existence approximation: an
 // "enemy has a buff" / "self has a debuff" gate only needs to know the status is present. No
 // fixture exercises a conditional enemy aura/accum, so this is inert for current goldens.
+//
+// SP-4d: `noOpposingVictim: true` is EXPLICIT, not incidental — this constant already passes
+// literal `0`s for every entry count, which `buildRoundContext` would otherwise sum into a real
+// (satisfiable-by-`eq 0`) `enemyDebuffCount`/`enemyDotCount` of exactly 0, and default
+// `enemyShielded` to a real `false`. `tsc` cannot flag a missing optional field, and a call site
+// that "looks obviously zero, obviously fine" is exactly the shape that has already bitten this
+// rung once elsewhere. This ctx has no victim and never did, so it must say so explicitly rather
+// than relying on its zeroed inputs to happen to produce the same answer.
 const NEUTRAL_NAMES_CTX = buildRoundContext({
     selfBuffNames: [],
     landedEnemyDebuffCount: 0,
@@ -2175,6 +2210,7 @@ const NEUTRAL_NAMES_CTX = buildRoundContext({
     infernoEntryCount: 0,
     bombCount: 0,
     effectiveCritRate: 0,
+    noOpposingVictim: true,
 });
 
 /** Union of self-buff NAMES held by the given owners (e.g. all enemy attackers).

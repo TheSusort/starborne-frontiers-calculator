@@ -125,19 +125,44 @@ export function buildRoundContext(state: {
      *  leave undefined (do NOT pass []) to keep the manual assume-met fallback (single-ship DPS).
      *  Only the live combat engine's drain context supplies a real array. */
     allyTeamNames?: string[];
+    /** SP-4d — true when this round/reaction has NO opposing victim to ask a per-victim question
+     *  about (e.g. an ally-targeted cast that resolves nobody). Default `false`/omitted preserves
+     *  every existing caller's behaviour unchanged (a real victim, or the DPS-assumption default).
+     *
+     *  WHY THIS EXISTS: `enemyDebuffCount` and `enemyDotCount` below are SUMS of entry-array
+     *  lengths (`landedEnemyDebuffCount`, `corrosionEntryCount`, `infernoEntryCount`, `bombCount`,
+     *  `genericCount`) that this function's callers compute unconditionally and that are
+     *  themselves required numbers — they read exactly `0` both when there is no opposing victim
+     *  AND when there is a real victim carrying no debuffs/DoTs. Those two situations must answer
+     *  differently (unresolvable vs. a real `0`), and no arithmetic on the counts alone can tell
+     *  them apart — only the caller, which alone knows whether it resolved a victim this round,
+     *  can say so. This flag is that explicit signal.
+     *
+     *  EFFECT: when `true`, `enemyDebuffCount`, `enemyDotCount`, and `enemyShielded` are all left
+     *  absent on the returned context regardless of what the constituent counts/`state.enemyShielded`
+     *  say — see each field's own assignment below. Every OTHER field on this context is
+     *  unaffected; side-wide subjects (`enemy-buff`, `enemy-destroyed`, `enemy-adjacent`,
+     *  `enemy-stealth-count`, `enemy-type`) do not read through this flag at all and keep
+     *  answering, because a real opposing roster is always guaranteed to exist even on a turn
+     *  that resolves no single victim. */
+    noOpposingVictim?: boolean;
 }): ConditionContext {
+    const hasVictim = !state.noOpposingVictim;
     return {
         selfBuffNames: state.selfBuffNames,
-        enemyDebuffCount:
-            state.landedEnemyDebuffCount +
-            state.corrosionEntryCount +
-            state.infernoEntryCount +
-            state.bombCount +
-            // SP-E (Task E3 forward-note): now that generic DoTs become live (Voron/Orel
-            // transform), fold genericCount in here too — closes the DoT-vs-debuff asymmetry
-            // vs enemyDotCount below, which already includes it (E2). Inert (0) for every
-            // existing ship without a live generic DoT.
-            (state.genericCount ?? 0),
+        // SP-4d: absent (not a fabricated 0) when this round has no opposing victim — see
+        // `noOpposingVictim`'s doc above for why the sum alone can't distinguish the two.
+        enemyDebuffCount: hasVictim
+            ? state.landedEnemyDebuffCount +
+              state.corrosionEntryCount +
+              state.infernoEntryCount +
+              state.bombCount +
+              // SP-E (Task E3 forward-note): now that generic DoTs become live (Voron/Orel
+              // transform), fold genericCount in here too — closes the DoT-vs-debuff asymmetry
+              // vs enemyDotCount below, which already includes it (E2). Inert (0) for every
+              // existing ship without a live generic DoT.
+              (state.genericCount ?? 0)
+            : undefined,
         effectiveCritRate: state.effectiveCritRate,
         enemyType: state.enemyType,
         // DPS-assumption defaults (overridable for live-engine population)
@@ -152,7 +177,11 @@ export function buildRoundContext(state: {
         targetRepairedThisRound: state.targetRepairedThisRound ?? false,
         selfShielded: state.selfShielded ?? false,
         selfShieldFull: state.selfShieldFull ?? false,
-        enemyShielded: state.enemyShielded ?? false,
+        // SP-4d: absent when there is no opposing victim (see `noOpposingVictim`'s doc) — a
+        // no-victim turn must not read as "the enemy has no shield" (a real, satisfiable `false`),
+        // it must read as "there is no enemy to ask about" (unresolvable). With a victim, keeps
+        // the pre-existing default-false behaviour untouched.
+        enemyShielded: hasVictim ? (state.enemyShielded ?? false) : undefined,
         wasHitThisRound: state.wasHitThisRound ?? false,
         firstActivator: state.firstActivator ?? false,
         isLastStanding: state.lastStanding ?? false,
@@ -164,11 +193,14 @@ export function buildRoundContext(state: {
         // SP-D — DoT-ONLY subtotal, derived from the SAME entry counts already folded into
         // enemyDebuffCount above. Deliberately excludes landedEnemyDebuffCount (control/marker
         // debuffs) — that is the whole DoT-ONLY point of this subject vs `enemy-debuff`.
-        enemyDotCount:
-            state.corrosionEntryCount +
-            state.infernoEntryCount +
-            state.bombCount +
-            (state.genericCount ?? 0),
+        // SP-4d: absent (not a fabricated 0) when there is no opposing victim — same reasoning as
+        // enemyDebuffCount above; see `noOpposingVictim`'s doc.
+        enemyDotCount: hasVictim
+            ? state.corrosionEntryCount +
+              state.infernoEntryCount +
+              state.bombCount +
+              (state.genericCount ?? 0)
+            : undefined,
         // SP-4d: these five are NOT defaulted. An absent reading means the subject does not exist
         // (no victim resolved this turn), and evaluateConditions answers that honestly; inventing
         // `100` / `0` / `1` here is exactly the phantom the rung deletes, and it hid itself by

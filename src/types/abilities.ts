@@ -457,8 +457,10 @@ export type ConditionSubject =
     | 'enemy-dot-count'
     // Ship-kit W8 Task 13 (Meiying): binary gate -- the enemy THIS on-enemy-destroyed reaction
     // just killed carried at least one debuff (of any kind) at the moment it died. Distinct from
-    // `enemy-debuff` (which reads the FIGHT-WIDE enemyDebuffCount/enemyDebuffNames, not a specific
-    // victim) -- this subject is keyed to the SLAIN unit via the reactive intent's
+    // `enemy-debuff` (which, at CAST time, reads enemyDebuffCount/enemyDebuffNames for the ONE
+    // opposing victim THIS turn's cast resolves -- SP-4d: absent, not fabricated, when it resolves
+    // none -- and, at REACTIVE drain time, reads a persistent per-owner store instead of any single
+    // resolved victim) -- this subject is keyed to the SLAIN unit via the reactive intent's
     // eventCtx.victimId (threaded by the on-enemy-destroyed listener, mirroring victimId's use in
     // every other Wave 5/7 reactive seam), so a kill on an UNDEBUFFED enemy correctly evaluates to
     // 0 even while OTHER living enemies carry debuffs. Live-derived by the engine

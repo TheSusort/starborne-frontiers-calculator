@@ -5,7 +5,26 @@ export interface ConditionContext {
     selfBuffNames: string[];
     selfDebuffNames: string[];
     enemyBuffNames: string[];
-    enemyDebuffCount: number;
+    /** SP-4d: OPTIONAL, and absent means "there is no opposing victim to count debuffs on" — not
+     *  "the victim has zero debuffs". Per-victim, like `enemyHpPct`/`enemyDotCount`/`enemyShielded`:
+     *  a no-victim turn (an ally-targeted cast that resolves nobody) must not be indistinguishable
+     *  from a real victim with no debuffs, because an `eq 0` gate is satisfiable by the former and
+     *  must not be by the latter (see `evaluateCondition`'s `enemy-debuff` arm). `buildRoundContext`
+     *  derives this from entry-array lengths that are themselves 0 on both a no-victim turn AND a
+     *  debuff-free victim — see its `noOpposingVictim` flag for how the two are told apart.
+     *
+     *  COMPOSITION WITH `enemyDebuffNames` (the OTHER optional sentinel on this field pair, which
+     *  means something completely different): `enemyDebuffNames` absent means "the caller has not
+     *  opted into name matching" and falls back to reading THIS field; `enemyDebuffNames` present
+     *  (even as `[]`) means "a real name-matched answer, read it directly, `enemyDebuffCount` is
+     *  irrelevant". The two absences do not collide because callers only ever populate
+     *  `enemyDebuffNames` when they have a real resolved victim to read names off of (see
+     *  `roundContext.ts` / `engine.ts`'s `tgt ? {enemyDebuffNames: ...} : {}` gating) — so on a
+     *  no-victim turn `enemyDebuffNames` is ALSO absent, the name-gated branch never engages, and
+     *  a name-gated `enemy-debuff` condition falls through to this field, which is itself absent.
+     *  A name-gated gate with no victim is therefore unresolvable via the SAME path as the bare
+     *  gate, not a separately-guarded one. */
+    enemyDebuffCount?: number;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for `enemy-debuff`
      *  conditions that carry a `buffName` (e.g. Tygr's "to enemies with Stasis or Disable",
      *  Incinerator's "to enemies afflicted with Inferno"). OPTIONAL SENTINEL: `undefined` means
@@ -16,7 +35,8 @@ export interface ConditionContext {
      *  requirement) never populates this; only the live combat engine (real/positional target)
      *  opts in. Control/marker debuff names come from `ownerDebuffNamesFor`; DoT names (Inferno/
      *  Corrosion/Bomb) are synthesized base-type names since DoTs are tracked as counted entry
-     *  arrays with no names of their own (see roundContext.ts). */
+     *  arrays with no names of their own (see roundContext.ts). See `enemyDebuffCount`'s own doc
+     *  for how this sentinel composes with SP-4d's no-opposing-victim sentinel. */
     enemyDebuffNames?: string[];
     enemyType?: EnemyBaseClass;
     effectiveCritRate: number; // 0..100
@@ -51,9 +71,13 @@ export interface ConditionContext {
      *  the engine; defaults false (DPS mode / no shield). Narrower than `selfShielded`. */
     selfShieldFull?: boolean;
     /** True when the condition owner's TARGET currently has a shield (the resolved victim's
-     *  shieldPool > 0) — the target-side mirror of `selfShielded`. Live-derived by the engine;
-     *  defaults false (DPS mode's dummy victim carries no shield pool). Used by Malvex's charged
-     *  "If the target has a Shield, it gains Barrier for 1 hit". */
+     *  shieldPool > 0) — the target-side mirror of `selfShielded`. Live-derived by the engine.
+     *  SP-4d: THREE distinct states now — `true`/`false` are real per-victim readings (DPS mode's
+     *  configured stand-in reads `false`, a real shield-carrying victim reads `true`); `undefined`
+     *  means there is no opposing victim to ask about at all (a no-victim turn), which
+     *  `evaluateCondition`'s `enemy-shield` arm keeps distinct from `false` — collapsing it to
+     *  `false` (as `?? false`/`? 1 : 0` did before this rung) let an `eq 0`/`lte` gate fire against
+     *  nobody. Used by Malvex's charged "If the target has a Shield, it gains Barrier for 1 hit". */
     enemyShielded?: boolean;
     /** True when the condition owner was hit by a direct attack this round (damage landed
      *  on shield or HP). Live-derived by the engine; defaults false (DPS / not-yet-hit). */
@@ -116,9 +140,16 @@ export interface ConditionContext {
     /** SP-D — per-target DoT-ONLY entry subtotal (corrosion + inferno + bomb entry-array
      *  lengths, +acidicDecay once SP-E adds it). Distinct from `enemyDebuffCount`, which also
      *  folds in landed CONTROL/marker debuffs — `enemy-dot-count` must never be satisfied by a
-     *  non-DoT debuff (e.g. Stasis). Default 0 (DPS-safe / no DoTs). Derived by buildRoundContext
-     *  from the SAME corrosionEntryCount/infernoEntryCount/bombCount already threaded through the
-     *  funnel for `enemyDebuffCount` — no new engine seam required. */
+     *  non-DoT debuff (e.g. Stasis). Derived by buildRoundContext from the SAME
+     *  corrosionEntryCount/infernoEntryCount/bombCount already threaded through the funnel for
+     *  `enemyDebuffCount` — no new engine seam required. SP-4d: OPTIONAL, and absent means "there
+     *  is no opposing victim to count DoTs on" — not "the victim carries zero DoTs". Same
+     *  per-victim distinction as `enemyDebuffCount`/`enemyHpPct`/`enemyShielded`: the entry-array
+     *  lengths this is summed from are themselves 0 on both a no-victim turn AND a DoT-free real
+     *  victim, so `buildRoundContext` needs its own `noOpposingVictim` signal (not the counts) to
+     *  tell the two apart. `evaluateCondition`'s bare `enemy-dot-count` arm reads this field
+     *  as-is — no `?? 0` — so the absence propagates instead of being fabricated back into a
+     *  satisfiable 0. */
     enemyDotCount?: number;
     /** SP-D — optional per-family DoT entry count lookup, for `enemy-dot-count` conditions that
      *  carry a `buffName` (Belladonna's "3+ Acidic Decay"). Absent/missing family → 0 (the
@@ -170,7 +201,10 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             // (no buffName, OR the caller left enemyDebuffNames undefined — the DPS-parity
             // sentinel) falls back to the legacy name-agnostic count of ALL landed enemy
             // debuffs + DoTs. See the ConditionContext.enemyDebuffNames doc for the sentinel
-            // rationale.
+            // rationale. SP-4d: `enemyDebuffCount` is itself optional now — this line already
+            // returns it as-is (no `?? 0`), so an absent reading (no opposing victim) propagates
+            // as `undefined` rather than being fabricated into a satisfiable 0. See
+            // ConditionContext.enemyDebuffCount's own doc for how the two sentinels compose.
             if (cond.buffName && ctx.enemyDebuffNames)
                 return countNames(ctx.enemyDebuffNames, cond.buffName);
             return ctx.enemyDebuffCount;
@@ -200,8 +234,13 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'enemies-hit-this-cast':
             return ctx.enemiesHitThisCast;
         case 'enemy-dot-count':
+            // Named-family branch (Belladonna's "3+ Acidic Decay") is untouched by SP-4d: it is
+            // runtime-inert today (no DoT family exists in the game yet — `enemyDotFamilyCounts`
+            // reads every family as 0 regardless of victim), so there is no live no-victim
+            // fabrication to close here. The bare branch below is: `?? 0` would re-fabricate the
+            // exact absence `enemyDotCount`'s own doc says must propagate.
             if (cond.buffName) return ctx.enemyDotFamilyCounts?.[cond.buffName] ?? 0;
-            return ctx.enemyDotCount ?? 0;
+            return ctx.enemyDotCount;
         case 'killed-enemy-had-debuff':
             return ctx.killedEnemyHadDebuff ? 1 : 0;
         case 'stat-vs-target': {
@@ -245,8 +284,12 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.selfShielded ? 1 : 0;
         case 'self-shield-full':
             return ctx.selfShieldFull ? 1 : 0;
+        // SP-4d: `undefined` (no opposing victim) must stay `undefined`, not collapse to `0` — a
+        // ternary (`ctx.enemyShielded ? 1 : 0`) would treat "no victim" and "victim, no shield"
+        // identically, which is exactly the fabrication an `eq 0`/`lte` gate can exploit against
+        // nobody. Real `true`/`false` still resolve to 1/0 as before.
         case 'enemy-shield':
-            return ctx.enemyShielded ? 1 : 0;
+            return ctx.enemyShielded === undefined ? undefined : ctx.enemyShielded ? 1 : 0;
         case 'not-hit-this-round':
             return ctx.wasHitThisRound ? 0 : 1;
         case 'first-activator':
