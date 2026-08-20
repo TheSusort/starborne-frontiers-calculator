@@ -187,8 +187,6 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     // at M4. Inert to the folds under test: every gate reads the VICTIM's own statuses.
     position: 'M1',
     speed: 2000, // ahead of every victim/enemy, so the focus's Stealth is up before anyone fires
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -300,8 +298,6 @@ const playerAttackerBase = (speed: number): Partial<CombatEngineInput> => ({
     affinityDamageModifier: 0,
     affinityCritCap: 100,
     affinityCritPenalty: 0,
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     healTargetId: 'attacker',
     mode: 'healing',

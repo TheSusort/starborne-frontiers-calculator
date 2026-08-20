@@ -112,8 +112,6 @@ const BASE = (
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: scalingPurgeSkills(),
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

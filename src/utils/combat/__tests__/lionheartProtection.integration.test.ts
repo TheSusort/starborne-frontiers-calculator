@@ -127,8 +127,6 @@ const BASE_INPUT: CombatEngineInput = {
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [] }, // the focus deals no offence itself; it is only a bystander.
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],

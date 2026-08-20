@@ -383,8 +383,6 @@ const REGRESSION_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: reduceOnlySkill(1),
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

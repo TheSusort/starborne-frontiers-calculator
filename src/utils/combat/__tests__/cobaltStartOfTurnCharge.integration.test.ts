@@ -158,8 +158,6 @@ const buildInput = (opts: {
         defensePenetration: 0,
         chargeCount: opts.chargeCount,
         shipSkills: { slots },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: opts.numRounds,
         selfBuffs: [],
         enemyDebuffs: [],

@@ -50,8 +50,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     defensePenetration: 10,
     chargeCount: 0,
     shipSkills: plainSkills(),
-    enemyDefense: 8000,
-    enemyHp: 400000,
     numRounds: 6,
     selfBuffs: [],
     enemyDebuffs: [],

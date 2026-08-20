@@ -172,8 +172,6 @@ const quixilverFixture = (opts: {
     shipSkills: {
         slots: [{ slot: 'active', abilities: [noopDamage()] }, quixilverPassiveSlot()],
     },
-    enemyDefense: 0,
-    enemyHp: HP,
     numRounds: opts.numRounds,
     selfBuffs: [],
     enemyDebuffs: [],

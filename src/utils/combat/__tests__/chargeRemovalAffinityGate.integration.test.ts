@@ -91,8 +91,6 @@ const buildInput = (
             { slot: 'passive', abilities: [chargeAbilityUnderTest] },
         ],
     },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

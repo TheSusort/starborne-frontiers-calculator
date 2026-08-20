@@ -100,8 +100,6 @@ function baseInput(
                 ...(passiveAbilities.length > 0 ? [passiveSlot(passiveAbilities)] : []),
             ],
         },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],

@@ -237,8 +237,6 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     // too — which is precisely the sequence under test.
     position: 'M1',
     speed: 2000, // ahead of every victim/enemy, so the focus's Stealth is up before anyone fires
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

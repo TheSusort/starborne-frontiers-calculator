@@ -268,8 +268,6 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: nuqtuFocusSkills(),
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -448,8 +446,6 @@ describe('Nuqtu (enemy-side) — team symmetry: an enemy Nuqtu reacts to a PLAYE
             shipSkills: {
                 slots: [{ slot: 'active', abilities: [selfBuffOnCast('atk-buf', 'Damage Up I')] }],
             },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],

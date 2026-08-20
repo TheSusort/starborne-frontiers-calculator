@@ -107,8 +107,6 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [] },
-    enemyDefense: 0,
-    enemyHp: 10_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -1012,8 +1010,6 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: shipSkillsNoSW,
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: NUM_ROUNDS,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -1232,8 +1228,6 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: healerSkills(),
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -1451,8 +1445,6 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: skills(),
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 10,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -1790,8 +1782,6 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [] },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -2132,8 +2122,6 @@ const POS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [basicAttackSlot()] },
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -2570,8 +2558,6 @@ describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-track
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: focusSkills(noopActive),
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: NUM_ROUNDS,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -2771,7 +2757,6 @@ describe('D-PR8 Task 6 integration — Synaptic Resonance fires on enemy repair 
                     crit: 0,
                     critDamage: 0,
                     numRounds: 3,
-                    enemyHp: 1_000_000_000,
                     hp: 1_000_000,
                     speed: 100, // focus acts AFTER the enemy ally (200) — irrelevant for the listener,
                     // but mirrors the established deficit→heal cadence.
@@ -2819,7 +2804,6 @@ describe('D-PR8 Task 6 integration — Synaptic Resonance fires on enemy repair 
                 crit: 0,
                 critDamage: 0,
                 numRounds: 3,
-                enemyHp: 1_000_000_000,
                 hp: 1_000_000,
                 speed: 100,
                 shipSkills: buildSynapticShipSkills(),
@@ -3607,8 +3591,6 @@ function makeShroudInput(
                 { slot: 'passive', abilities: [fortifyingShroudAbility] },
             ],
         },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -3766,8 +3748,6 @@ describe('D-PR11 integration — Fortifying Shroud: enemy-side mirror (team-agno
             shipSkills: {
                 slots: [{ slot: 'active', abilities: [noopDmgActive] }],
             },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
@@ -3965,8 +3945,6 @@ describe('D-PR reactive cleanse — Reactive Ward (on-attacked) cleanses 1 / 2-o
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [] },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -4126,8 +4104,6 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [] },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: NUM_ROUNDS,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -4441,8 +4417,6 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [basicAttack()] },
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 6,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -4983,7 +4957,6 @@ describe('H2.2 integration — Shield gear set grants 4% maxHP shield pool (full
                 critDamage: 0,
                 numRounds: 1,
                 hp: 40_000,
-                enemyHp: 1_000_000_000,
                 shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
                 teamActors: engineTeam,
                 __testTapActors: (actors) => {
@@ -5146,7 +5119,6 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
                     // nominal 1000 as that intake's damage taken, so the grant pins to
                     // 0.42 × 1_000 = 420 exactly (no mitigation arithmetic in the assertion).
                     defence: 0,
-                    enemyHp: 1_000_000_000,
                     healTargetId: 'attacker',
                     mode: 'healing',
                     shipSkills,
@@ -5197,7 +5169,6 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
                     numRounds: NUM_ROUNDS,
                     hp: CARRIER_HP,
                     defence: 0,
-                    enemyHp: 1_000_000_000,
                     healTargetId: 'attacker',
                     mode: 'healing',
                     shipSkills: {
@@ -5387,7 +5358,6 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
                 numRounds: 1,
                 hp: HEALER_HP,
                 speed: 10, // healer is slow → enemy + tank act first
-                enemyHp: 1_000_000_000,
                 healTargetId: 'tank', // the over-repaired ally is a team actor, NOT the focus
                 mode: 'healing',
                 teamActors: [tankActor(20)], // tank acts before the healer (inert)
@@ -5558,7 +5528,6 @@ describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shiel
                 numRounds: 1,
                 hp: 10_000,
                 speed: 100, // focus acts first → casts the shield before allies
-                enemyHp: 1_000_000_000,
                 shipSkills,
                 teamActors: [passiveAlly('rf-ally-1', 10_000), passiveAlly('rf-ally-2', 10_000)],
             })
@@ -5595,7 +5564,6 @@ describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shiel
                 numRounds: 1,
                 hp: 10_000,
                 speed: 100,
-                enemyHp: 1_000_000_000,
                 shipSkills,
                 teamActors: [passiveAlly('rf-ally-1', 10_000), passiveAlly('rf-ally-2', 10_000)],
             })
@@ -5708,7 +5676,6 @@ describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shiel
                 hp: 100_000_000, // huge → focus survives; the AP shield never caps out
                 defence: 0,
                 speed: 1, // focus acts AFTER the enemy hit so AP fires at round top
-                enemyHp: 1_000_000_000,
                 healTargetId: 'attacker',
                 mode: 'healing',
                 shipSkills,
@@ -5776,7 +5743,6 @@ describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shiel
                 numRounds: 3,
                 hp: 100_000_000,
                 speed: 100,
-                enemyHp: 1_000_000_000,
                 shipSkills,
             })
         );
@@ -5905,7 +5871,6 @@ describe('Lifeline (incoming-shield-grant)', () => {
             defence: 0,
             hp: 10_000,
             speed: 1,
-            enemyHp: 1_000_000_000,
             healTargetId: 'attacker',
             mode: 'healing',
             ...overrides,

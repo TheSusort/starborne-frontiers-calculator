@@ -302,8 +302,6 @@ const focusCast = (
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots },
-    enemyDefense: 0,
-    enemyHp: HP,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

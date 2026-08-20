@@ -308,8 +308,6 @@ describe('Ship-kit W5 Task B2: single-entry roster edge case (positional, no nei
         critDamage: 0,
         defensePenetration: 0,
         chargeCount: 0,
-        enemyDefense: 0,
-        enemyHp: 1_000_000_000,
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -324,7 +322,6 @@ describe('Ship-kit W5 Task B2: single-entry roster edge case (positional, no nei
         hp: 1_000_000_000,
         speed: 100,
         hacking: 200,
-        enemySecurity: 0,
     };
 
     const runDots = (caster: Ship) => {

@@ -32,8 +32,6 @@ describe('C1 Task 5: "cleanse all" removes every removable debuff (player-side)'
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [] },
-        enemyDefense: 0,
-        enemyHp: 10_000_000,
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],

@@ -175,8 +175,6 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
             },
         ],
     },
-    enemyDefense: 0,
-    enemyHp: HP,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

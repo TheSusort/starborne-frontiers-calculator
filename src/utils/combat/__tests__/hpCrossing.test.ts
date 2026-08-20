@@ -79,8 +79,6 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [] },
-    enemyDefense: 0,
-    enemyHp: 10_000_000,
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -781,7 +779,6 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
                 // DPS mode: NO healTargetId. Opponent present but inert (0 attack).
                 healTargetId: undefined,
                 mode: 'dps',
-                enemyHp: 10_000_000,
                 shipSkills: {
                     slots: [{ slot: 'passive', abilities: [crossingBuff(false)] }],
                 },
@@ -817,7 +814,6 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
                 hp: 10_000,
                 healTargetId: undefined,
                 mode: 'dps',
-                enemyHp: 10_000_000,
                 enemyAttackers: [manualEnemy('atk1', 6500)],
                 shipSkills: {
                     slots: [{ slot: 'passive', abilities: [crossingBuff(false)] }],
@@ -858,7 +854,6 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
                 hp: 10_000,
                 healTargetId: undefined,
                 mode: 'dps',
-                enemyHp: 10_000_000,
                 enemyAttackers: [manualEnemy('atk1', 3500)],
                 shipSkills: {
                     slots: [{ slot: 'passive', abilities: [crossingBuff(false)] }],

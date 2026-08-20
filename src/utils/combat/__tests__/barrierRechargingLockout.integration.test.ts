@@ -323,8 +323,6 @@ describe('Barrier Recharging: the CAST-path gate (a charge-slot Barrier grant vs
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [{ slot: 'active', abilities: [noopDamage('focus-noop')] }] },
-        enemyDefense: 0,
-        enemyHp: HP,
         numRounds: 2,
         selfBuffs: [],
         enemyDebuffs: [],

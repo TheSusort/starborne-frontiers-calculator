@@ -79,8 +79,6 @@ const dpsBase = (
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills,
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000, // indestructible dummy → no spurious kill; Overload accrues uninterrupted
     numRounds: 4,
     selfBuffs: [],
     enemyDebuffs: [],

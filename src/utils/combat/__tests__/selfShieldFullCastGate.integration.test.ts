@@ -94,8 +94,6 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     target: parsedTarget('front'),
     pattern: basePattern(),
     shipSkills: { slots: [{ slot: 'active', abilities: [gatedFullShieldBuff(), noopDamage()] }] },
-    enemyDefense: 0,
-    enemyHp: HP,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],

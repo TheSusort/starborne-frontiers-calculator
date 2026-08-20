@@ -209,8 +209,6 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
             chargeCount: 0,
             // Active slot fires damage + two debuffs onto the targeted enemy (enemy-front).
             shipSkills: { slots: [damageWithTwoDebuffsSlot()] },
-            enemyDefense: 0,
-            enemyHp: 1_000_000_000,
             numRounds: 1,
             selfBuffs: [],
             // No scheduled enemy debuffs — all debuffs are ability-sourced (per-victim via targetId).

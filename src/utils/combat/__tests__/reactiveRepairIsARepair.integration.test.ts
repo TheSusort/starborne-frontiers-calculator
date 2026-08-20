@@ -140,8 +140,6 @@ function runRuinerVsHeliodor() {
                 { slot: 'passive', abilities: passiveAbilitiesOf(RUINER_R2) },
             ],
         },
-        enemyDefense: 0,
-        enemyHp: 500_000,
         numRounds: 2,
         selfBuffs: [],
         enemyDebuffs: [],

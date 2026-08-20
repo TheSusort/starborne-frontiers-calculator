@@ -108,8 +108,6 @@ const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineIn
     target: parsedTarget('front'),
     pattern: basePattern(),
     shipSkills: { slots: [{ slot: 'active', abilities: [gatedBarrier(), noopDamage()] }] },
-    enemyDefense: 0,
-    enemyHp: HP,
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -227,7 +225,6 @@ describe('enemy-shield gate — Malvex ACTIVE self-shield, built from the real s
             attack: 1000,
             hp: MALVEX_HP,
             shipSkills: MALVEX_SKILLS,
-            enemyHp: HP,
             enemyAttackers: [enemyActor('enemy-1', 'M1', [], 1, 0)],
             ...overrides,
         });

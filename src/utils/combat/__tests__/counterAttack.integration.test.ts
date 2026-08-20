@@ -72,8 +72,6 @@ const counterBase = (
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: skills,
-    enemyDefense: 0,
-    enemyHp: 1_000_000_000,
     numRounds: 3,
     selfBuffs: [],
     enemyDebuffs: [],
