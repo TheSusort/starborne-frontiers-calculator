@@ -4,9 +4,13 @@ import {
     calculateMultiplierFactor,
     calculateHardViolation,
     evictOldestIfFull,
+    calculateTotalScore,
+    clearScoreCache,
 } from '../scoring';
 import { BaseStats } from '../../../types/stats';
 import { StatBonus, StatPriority } from '../../../types/autogear';
+import { makeTestShip } from '../fastScoring/__tests__/fixtures/testInventory';
+import { GearPiece } from '../../../types/gear';
 
 const baseStats: BaseStats = {
     hp: 50000,
@@ -206,5 +210,67 @@ describe('evictOldestIfFull', () => {
         const evicted: string[] = [];
         evictOldestIfFull(m, 2, (k) => evicted.push(k));
         expect(evicted).toEqual(['a']);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// scoreCache invalidation
+// ---------------------------------------------------------------------------
+describe('clearScoreCache', () => {
+    function makeWeapon(attack: number): GearPiece {
+        return {
+            id: 'w-1',
+            slot: 'weapon',
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'attack', value: attack, type: 'flat' },
+            subStats: [],
+            setBonus: null,
+        };
+    }
+
+    const ship = makeTestShip({ id: 'cache-ship' });
+    const equipment = { weapon: 'w-1' } as const;
+    const priorities: StatPriority[] = [{ stat: 'attack', weight: 1 }];
+    const noEngineering = () => undefined;
+
+    function score(attack: number): number {
+        return calculateTotalScore(
+            ship,
+            equipment,
+            priorities,
+            () => makeWeapon(attack),
+            noEngineering
+        );
+    }
+
+    it('makes calculateTotalScore observe changed gear stats', () => {
+        clearScoreCache();
+        const low = score(1000);
+
+        // Same ship, same equipment IDS — only the gear's stats changed. The
+        // cache key does not describe stats, so without a clear this returns
+        // the stale score.
+        clearScoreCache();
+        const high = score(9000);
+
+        expect(high).toBeGreaterThan(low);
+    });
+
+    it('produces a stable score across repeated clears with identical gear stats', () => {
+        // Repeated scoring of the same gear stats after independent cache
+        // clears must agree with each other, while a changed stat after a
+        // clear must still produce a different score (no stale value leaks
+        // through).
+        clearScoreCache();
+        const first = score(2000);
+        clearScoreCache();
+        const second = score(2000);
+        clearScoreCache();
+        const third = score(8000);
+
+        expect(second).toBe(first);
+        expect(third).not.toBe(first);
     });
 });

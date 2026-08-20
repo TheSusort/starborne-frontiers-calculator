@@ -1445,6 +1445,34 @@ const DocumentationPage: React.FC = () => {
                                             the Upgrade Analysis tab in the Gear page.
                                         </li>
                                         <li>
+                                            <strong>Include calibrated gear:</strong> When enabled,
+                                            gear calibrated to other ships is included in the
+                                            search. On its own it scores that gear at its base stats
+                                            — without the calibration bonus, which belongs to the
+                                            other ship.
+                                        </li>
+                                        <li>
+                                            <strong>Assume all gear is calibrated:</strong> When
+                                            enabled, every calibration-eligible piece (5-6 star,
+                                            level 16) is scored as if it were calibrated to this
+                                            ship. Without it, an already-calibrated piece competes
+                                            against uncalibrated gear while holding a bonus that
+                                            gear could equally have, so the optimizer keeps
+                                            recommending whatever you calibrated first. The two
+                                            calibration options are independent: &quot;Include
+                                            calibrated gear&quot; decides what is available, this
+                                            one decides how it is scored — with both on, gear
+                                            calibrated elsewhere is included and gets the bonus too.
+                                            With &quot;Use upgraded stats&quot; on, gear below level
+                                            16 is included as well, since it would be eligible once
+                                            upgraded. Your ship&apos;s current gear is scored the
+                                            same way, so the before/after difference is the gain
+                                            from swapping gear rather than from calibrating what you
+                                            already wear. Suggested pieces needing calibration are
+                                            marked; calibration is a limited resource, so check that
+                                            the result is one you can actually afford.
+                                        </li>
+                                        <li>
                                             <strong>Optimize implants:</strong> When enabled, the
                                             algorithm will also optimize your ship&apos;s implants
                                             (Major and 3 Minor slots). Ultimate implants are not

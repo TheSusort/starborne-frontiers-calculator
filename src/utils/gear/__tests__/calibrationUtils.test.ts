@@ -4,6 +4,7 @@ import {
     getCalibratedMainStat,
     getBaseMainStat,
     reverseCalibrationStatValue,
+    applyCalibrationToStat,
 } from '../calibrationUtils';
 import { GearPiece } from '../../../types/gear';
 import { Stat } from '../../../types/stats';
@@ -169,4 +170,33 @@ describe('reverseCalibrationStatValue', () => {
             expect(reversed).toBe(stat.value);
         }
     );
+});
+
+// ---------------------------------------------------------------------------
+// applyCalibrationToStat
+// ---------------------------------------------------------------------------
+describe('applyCalibrationToStat', () => {
+    it('doubles flat attack', () => {
+        const stat: Stat = { name: 'attack', value: 1000, type: 'flat' };
+        expect(applyCalibrationToStat(stat, 6)).toBe(2000);
+    });
+
+    it('adds 7 percentage points to a percentage stat at 6 stars', () => {
+        const stat: Stat = { name: 'attack', value: 30, type: 'percentage' };
+        expect(applyCalibrationToStat(stat, 6)).toBe(37);
+    });
+
+    it('adds 5 percentage points to a percentage stat at 5 stars', () => {
+        const stat: Stat = { name: 'attack', value: 30, type: 'percentage' };
+        expect(applyCalibrationToStat(stat, 5)).toBe(35);
+    });
+
+    it('multiplies flat hp by 1.5 at 6 stars and 1.525 at 5 stars', () => {
+        expect(applyCalibrationToStat({ name: 'hp', value: 5000, type: 'flat' }, 6)).toBe(7500);
+        expect(applyCalibrationToStat({ name: 'hp', value: 4000, type: 'flat' }, 5)).toBe(6100);
+    });
+
+    it('adds a flat 5 to speed', () => {
+        expect(applyCalibrationToStat({ name: 'speed', value: 20, type: 'flat' }, 6)).toBe(25);
+    });
 });

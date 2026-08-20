@@ -22,6 +22,7 @@ import {
 } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
+import { clearScoreCache } from '../../utils/autogear/scoring';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
 import { GEAR_SETS, SHIP_TYPES, ShipTypeName, getLimitStatLabel } from '../../constants';
@@ -50,6 +51,10 @@ import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
+import {
+    withAssumedCalibration,
+    makeAssumedCalibrationGetter,
+} from '../../utils/gear/assumedCalibration';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
 import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
@@ -159,6 +164,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: boolean;
                 optimizeImplants: boolean;
                 includeCalibratedGear: boolean;
+                assumeCalibrated: boolean;
                 useArenaModifiers: boolean;
                 excludedImplantTypes: string[];
                 fleetBuffs: FleetBuff[];
@@ -309,6 +315,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: false,
                 optimizeImplants: false,
                 includeCalibratedGear: false,
+                assumeCalibrated: false,
                 useArenaModifiers: false,
                 excludedImplantTypes: [],
                 fleetBuffs: [],
@@ -519,6 +526,16 @@ export const AutogearPage: React.FC = () => {
             };
         }
 
+        // Drop memoised scores from any previous run. The scoreCache key
+        // describes equipment IDS, not the gear's stats, so a run whose gear
+        // stats differ from the last one ("Use upgraded stats", "Assume all
+        // gear is calibrated", or a gear piece edited since) would otherwise
+        // read stale scores. Only GeneticStrategy clears it itself; TwoPass,
+        // SetFirst and BeamSearch do not. Clearing once per team run (not per
+        // ship) keeps all within-run caching intact — the key already includes
+        // ship.id, so cross-ship reuse was negligible.
+        clearScoreCache();
+
         const startTime = performance.now();
         // eslint-disable-next-line no-console
         console.log('Starting team optimization...');
@@ -593,6 +610,7 @@ export const AutogearPage: React.FC = () => {
                 tryToCompleteSets: shipConfig.tryToCompleteSets,
                 optimizeImplants: shipConfig.optimizeImplants,
                 includeCalibratedGear: shipConfig.includeCalibratedGear,
+                assumeCalibrated: shipConfig.assumeCalibrated,
                 useArenaModifiers: shipConfig.useArenaModifiers,
                 fleetBuffs: shipConfig.fleetBuffs,
                 excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
@@ -695,6 +713,15 @@ export const AutogearPage: React.FC = () => {
                     return !shipConfig.ignoreUnleveled || gear.level > 0;
                 });
 
+            // "Assume all gear is calibrated": score every calibration-eligible
+            // piece as if calibrated to this ship. This array feeds the fast
+            // path's gear registry; the getter below feeds the slow path.
+            const scoredInventory = shipConfig.assumeCalibrated
+                ? availableInventory.map((gear) =>
+                      withAssumedCalibration(gear, shipConfig.useUpgradedStats)
+                  )
+                : availableInventory;
+
             // Pre-filter implants to keep only top candidates per slot
             // This dramatically reduces the search space for the genetic algorithm
             // Always include currently equipped implants so GA can decide to keep or swap
@@ -703,12 +730,12 @@ export const AutogearPage: React.FC = () => {
             );
             const filteredInventory = shipConfig.optimizeImplants
                 ? filterTopImplantsPerSlot(
-                      availableInventory,
+                      scoredInventory,
                       shipConfig.statPriorities,
                       equippedImplantIds,
                       shipConfig.statBonuses
                   )
-                : availableInventory;
+                : scoredInventory;
             performanceTracker.endTimer('FilterInventory');
 
             // eslint-disable-next-line no-console
@@ -720,7 +747,13 @@ export const AutogearPage: React.FC = () => {
             // calculateTotalStats applies the calibration bonus only when
             // gear.calibration.shipId === the target ship's id, so no reversal
             // is needed here.
-            const getGearForShip = shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece;
+            const baseGearGetter = shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece;
+            // Assumed calibration wraps OUTSIDE the upgraded-stats getter, so
+            // the bonus lands on the simulated level-16 main stat rather than
+            // the level-0 one.
+            const getGearForShip = shipConfig.assumeCalibrated
+                ? makeAssumedCalibrationGetter(baseGearGetter, shipConfig.useUpgradedStats)
+                : baseGearGetter;
 
             performanceTracker.startTimer('FindOptimalGear');
             const strategyResult: AutogearResult = await Promise.resolve(
@@ -779,7 +812,7 @@ export const AutogearPage: React.FC = () => {
             const currentStats = calculateTotalStats(
                 ship.baseStats,
                 ship.equipment,
-                shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece,
+                getGearForShip,
                 ship.refits,
                 ship.implants,
                 getEngineeringStatsForShipType(ship.type),
@@ -789,7 +822,7 @@ export const AutogearPage: React.FC = () => {
             const suggestedStats = calculateTotalStats(
                 ship.baseStats,
                 suggestedEquipment,
-                shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece,
+                getGearForShip,
                 ship.refits,
                 suggestedImplants,
                 getEngineeringStatsForShipType(ship.type),
@@ -1234,6 +1267,7 @@ export const AutogearPage: React.FC = () => {
                                                     }
                                                     ship={ship}
                                                     useUpgradedStats={shipConfig.useUpgradedStats}
+                                                    assumeCalibrated={shipConfig.assumeCalibrated}
                                                     isPrinting={isPrinting}
                                                     optimizeImplants={shipConfig.optimizeImplants}
                                                     onToggleStarred={toggleStarred}
@@ -1490,6 +1524,9 @@ export const AutogearPage: React.FC = () => {
                     includeCalibratedGear={
                         shipSettings ? getShipConfig(shipSettings.id).includeCalibratedGear : false
                     }
+                    assumeCalibrated={
+                        shipSettings ? getShipConfig(shipSettings.id).assumeCalibrated : false
+                    }
                     onShipSelect={(ship) => {
                         if (selectedShips.length > 0) {
                             handleShipSelect(ship, 0);
@@ -1691,6 +1728,11 @@ export const AutogearPage: React.FC = () => {
                             updateShipConfig(shipSettings.id, { includeCalibratedGear });
                         }
                     }}
+                    onAssumeCalibratedChange={(assumeCalibrated) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { assumeCalibrated });
+                        }
+                    }}
                     activeSeason={activeSeason}
                     useArenaModifiers={
                         shipSettings ? getShipConfig(shipSettings.id).useArenaModifiers : false
@@ -1716,6 +1758,7 @@ export const AutogearPage: React.FC = () => {
                                 showSecondaryRequirements: false,
                                 optimizeImplants: false,
                                 includeCalibratedGear: false,
+                                assumeCalibrated: false,
                                 useArenaModifiers: false,
                                 excludedImplantTypes: [],
                                 fleetBuffs: [],

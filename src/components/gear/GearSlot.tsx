@@ -17,6 +17,7 @@ interface GearSlotProps {
     excludeLockShipId?: string;
     /** Forwarded to GearPieceDisplay for calibration-active check */
     suggestedForShipId?: string;
+    assumedCalibration?: boolean;
 }
 
 export const GearSlot: React.FC<GearSlotProps> = memo(
@@ -30,6 +31,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
         onLockShip,
         excludeLockShipId,
         suggestedForShipId,
+        assumedCalibration,
     }) => {
         const isImplant = gear?.slot.startsWith('implant_');
         const tooltipRef = useRef<HTMLDivElement>(null);
@@ -101,6 +103,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                             onLockShip={onLockShip}
                             excludeLockShipId={excludeLockShipId}
                             suggestedForShipId={suggestedForShipId}
+                            assumedCalibration={assumedCalibration}
                             showSetName={true}
                         />
                     </Tooltip>
