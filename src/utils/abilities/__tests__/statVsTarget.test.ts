@@ -67,14 +67,18 @@ describe('stat-vs-target condition', () => {
             )
         ).toBe(false);
     });
-    it('unset target stat defaults to 0 (crit power: no enemy field → gate met)', () => {
+    it('SP-4d: an unset target stat is an ABSENT subject, not a fabricated 0 — the gate does not fire', () => {
+        // Before SP-4d task 1 this arm defaulted an absent target to 0, so a `gt` comparator read
+        // TRUE against nobody (the named residual documented at playerTurn.ts's victimStatGateCtx
+        // and tripwired by noVictimResidualTripwires.test.ts case (c)). `targetCritPower` omitted
+        // here means the same thing case (c) describes: no victim to compare against.
         const cond = {
             subject: 'stat-vs-target' as const,
             derivable: true,
             compareStat: 'crit-power' as const,
             statComparator: 'gt' as const,
         };
-        expect(conditionMet(cond, makeConditionContext({ selfCritPower: 150 }))).toBe(true);
+        expect(conditionMet(cond, makeConditionContext({ selfCritPower: 150 }))).toBe(false);
     });
 });
 

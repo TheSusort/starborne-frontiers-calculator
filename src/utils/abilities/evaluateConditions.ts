@@ -28,7 +28,13 @@ export interface ConditionContext {
     enemyAdjacentCount: number;
     enemyDestroyedCount: number;
     selfHpPct: number; // 0..100
-    enemyHpPct: number; // 0..100
+    /** SP-4d: OPTIONAL, and absent means "there is no enemy to ask about" — not "an enemy at full
+     *  health". Absent on a no-victim turn (an ally-targeted cast resolves nobody) and at drain
+     *  time (the fight-wide reading it used to carry described no actor on the board). Every arm
+     *  that reads it returns `undefined` when it is absent; `conditionMet` rejects that before the
+     *  comparator switch. Do NOT reintroduce a `?? 100` here or at any builder — that default is
+     *  the phantom this rung deletes (spec §3.2: it was materialised in TWO layers). */
+    enemyHpPct?: number; // 0..100
     targetHpPct?: number; // 0..100 — heal target's live HP%, threaded in healing mode only
     /** True when the condition owner has the lowest Speed among its (player) team
      *  (ties → all tied qualify). Optional; defaults to true via buildRoundContext (a lone
@@ -125,8 +131,10 @@ export interface ConditionContext {
     killedEnemyHadDebuff?: boolean;
 }
 
-/** Resolve one condition to a count (>= 0). 0 means "not met". */
-export function evaluateCondition(cond: Condition, ctx: ConditionContext): number {
+/** Resolve one condition to a count (>= 0), or `undefined` when the condition's SUBJECT DOES NOT
+ *  EXIST (SP-4d). `undefined` is not "zero" and not "unknown": it means the question cannot be
+ *  asked, so `conditionMet` refuses it regardless of comparator and `scaledBonus` pays nothing. */
+export function evaluateCondition(cond: Condition, ctx: ConditionContext): number | undefined {
     // SP-F F4: `ally-on-team` (Isha/Nayra's reciprocal Override gate) is a LIVE roster check when
     // the team-sim provides ally ship names; otherwise it falls back to the manual assume-met path
     // (single-ship DPS has no roster → a "if X is on the same team" gate is treated as met). Handled
@@ -178,14 +186,20 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.stealthedEnemyCount ?? 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
+        // SP-4d: was `?? 1` — a cast that resolved no victim booked a footprint of ONE. Absent now
+        // means no footprint was recorded, which does not resolve. Tygr's `gte 2` and Berserker's
+        // `gte 3` are unaffected either way; an `lte`/`eq 0` reader is the case this closes.
         case 'enemies-hit-this-cast':
-            return ctx.enemiesHitThisCast ?? 1;
+            return ctx.enemiesHitThisCast;
         case 'enemy-dot-count':
             if (cond.buffName) return ctx.enemyDotFamilyCounts?.[cond.buffName] ?? 0;
             return ctx.enemyDotCount ?? 0;
         case 'killed-enemy-had-debuff':
             return ctx.killedEnemyHadDebuff ? 1 : 0;
         case 'stat-vs-target': {
+            // The OWNER always exists, so an absent self reading is a caller omission (0), not a
+            // missing subject. The TARGET is the subject: absent means nobody to compare against,
+            // and a `gt` comparator against a fabricated 0 was TRUE against nobody (spec §2).
             const self =
                 cond.compareStat === 'crit-power'
                     ? (ctx.selfCritPower ?? 0)
@@ -194,21 +208,25 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
                       : (ctx.selfCurrentHp ?? 0);
             const target =
                 cond.compareStat === 'crit-power'
-                    ? (ctx.targetCritPower ?? 0)
+                    ? ctx.targetCritPower
                     : cond.compareStat === 'speed'
-                      ? (ctx.targetSpeed ?? 0)
-                      : (ctx.targetCurrentHp ?? 0);
+                      ? ctx.targetSpeed
+                      : ctx.targetCurrentHp;
+            if (target === undefined) return undefined;
             return (cond.statComparator === 'lt' ? self < target : self > target) ? 1 : 0;
         }
-        case 'hp-threshold':
-            return evalHpThreshold(cond, ctx) ? 1 : 0;
-        // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as
-        // SCALING sources for HP-proportional modifiers (Akula/Tithonus) — perUnit
-        // is "per HP point". As a bare gate they pass while the enemy lives.
+        case 'hp-threshold': {
+            const met = evalHpThreshold(cond, ctx);
+            return met === undefined ? undefined : met ? 1 : 0;
+        }
+        // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as SCALING sources
+        // for HP-proportional modifiers (Akula/Tithonus) — perUnit is "per HP point". As a bare
+        // gate they pass while the enemy lives. SP-4d: with no enemy neither question resolves —
+        // and note the missing-HP arm must NOT compute `100 - 0`, which would pay the FULL bonus.
         case 'enemy-hp-pct':
             return ctx.enemyHpPct;
         case 'enemy-hp-missing-pct':
-            return 100 - ctx.enemyHpPct;
+            return ctx.enemyHpPct === undefined ? undefined : 100 - ctx.enemyHpPct;
         case 'self-hp-missing-pct':
             return 100 - ctx.selfHpPct;
         case 'lowest-speed-ally':
@@ -251,13 +269,16 @@ function countNames(names: string[], filter?: string): number {
 // 'self' (e.g. "if at full HP"), or the heal target's live HP when hpSubject is 'target'
 // (reactive crossing gates — healing mode only; absent targetHpPct defaults to 100 so the
 // condition is inert under DPS assumptions). Under DPS assumptions all three are 100.
-function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean {
+function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean | undefined {
     const hp =
         cond.hpSubject === 'self'
             ? ctx.selfHpPct
             : cond.hpSubject === 'target'
               ? (ctx.targetHpPct ?? 100)
               : ctx.enemyHpPct;
+    // SP-4d: only the enemy/default subject can be absent — `selfHpPct` is required and the heal
+    // target's reading keeps its documented 100 default (healing-mode inertness, not a phantom).
+    if (hp === undefined) return undefined;
     const t = cond.hpPercent ?? 0;
     return cond.hpComparator === 'above' ? hp > t : hp < t;
 }
@@ -269,6 +290,11 @@ function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean {
  */
 export function conditionMet(cond: Condition, ctx: ConditionContext): boolean {
     const count = evaluateCondition(cond, ctx);
+    // SP-4d, AND THE ORDER IS THE POINT: an absent subject is refused here, upstream of the
+    // comparator. Falling through with a 0 would leave the parser's negation idiom
+    // (`eq`/`countThreshold: 0`) and any `lte` gate satisfiable by a subject that does not exist —
+    // the same phantom in a new direction. See absentSubject.test.ts's two comparator-proof cases.
+    if (count === undefined) return false;
     if (cond.countComparator != null && cond.countThreshold != null) {
         switch (cond.countComparator) {
             case 'gte':
@@ -338,7 +364,10 @@ export function scaledBonus(ability: Ability, ctx: ConditionContext): number {
     // Sum across the scaling source's anyOf OR-group so a binary "X or Y" bonus (Rikra's
     // Taunted/Provoked) fires on either; a lone condition is a singleton group → unchanged.
     const count = anyOfGroupIndices(ability.conditions, idx).reduce(
-        (sum, i) => sum + evaluateCondition(ability.conditions[i], ctx),
+        // SP-4d: an absent subject contributes 0 rather than its fabricated reading. Measured
+        // inert on the shipped corpus (spec §6: Akula and Tithonus are the only readers, both are
+        // attackers, and every evaluation in the suite carries a live per-victim value).
+        (sum, i) => sum + (evaluateCondition(ability.conditions[i], ctx) ?? 0),
         0
     );
     const bonus = count * ability.scaling.perUnit;

@@ -934,7 +934,9 @@ function chargeGainFromSkill(args: {
         const scale =
             !primary || primary.countComparator != null
                 ? 1
-                : evaluateCondition(primary, args.ctxFor.get(ability.id) ?? args.fallbackCtx);
+                : // SP-4d: an unresolvable scaling source contributes no charge.
+                  (evaluateCondition(primary, args.ctxFor.get(ability.id) ?? args.fallbackCtx) ??
+                  0);
         gain += scale * ability.config.amount;
     }
     return gain;
