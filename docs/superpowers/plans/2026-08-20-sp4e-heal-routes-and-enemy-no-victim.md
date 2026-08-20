@@ -51,7 +51,7 @@ before starting. **Ships as ONE PR** off `af4f05ae`.
 | `src/utils/combat/playerTurn.ts` | Site A: `recipientsFor`, `lowestHpAllyId`; `HealingRuntimeCtx.teamBattle` | 2, 4 |
 | `src/utils/combat/triggers.ts` | Site B: `reactiveRecipients`, the reactive-heal pool gate | 2 |
 | `src/utils/combat/engine.ts` | Site C: `procStandingLeeches*`; `TurnBindings.legacyVictim`; `selectTurnTarget`; the enemy turn body; counters | 2, 4, 5 |
-| `src/components/skills/abilityDefaults.ts`, `AbilityCard.tsx` | Skill editor must author + display the new target | 1 |
+| `src/components/skills/AbilityCard.tsx` | Skill editor target option — **Task 6**, not 1 (see Task 1 Step 10) | 6 |
 | `src/pages/DocumentationPage.tsx` | In-app docs for the new routing rule | 6 |
 | `src/constants/changelog.ts` | `UNRELEASED_CHANGES` entry | 6 |
 | `src/utils/abilities/__tests__/lowestHpAllySelector.test.ts` | **Create** — parser + roster-inventory gate | 1, 3 |
@@ -207,11 +207,23 @@ In `src/utils/combat/supportRecipients.ts`, add a guard at the top of the functi
 Run: `npx vitest run src/utils/combat/__tests__/lowestHpAllyRouting.test.ts`
 Expected: PASS.
 
-- [ ] **Step 10: Add the editor surface**
+- [ ] **Step 10: Do NOT add the editor surface yet — it moves to Task 6**
 
-In `src/components/skills/abilityDefaults.ts` and `src/components/skills/AbilityCard.tsx`, add
-`'lowest-hp-ally'` wherever the ally-side targets are listed, labelled **"Lowest HP ally"** (plain
-text, no emoji). The engine must never honour a target the editor cannot author or display.
+⚠️ **Corrected after review (2026-08-20).** Adding `'lowest-hp-ally'` to `AbilityCard.tsx`'s
+`TARGET_OPTIONS` in this task makes a **user-authorable crash**: `recipientsFor`
+(`playerTurn.ts`) does not route the variant until Task 2, so it reaches
+`resolveSupportRecipients`, which now throws; and `reactiveRecipients` resolves it to
+`[intent.ownerId]` — the caster, the one answer the selector forbids. A reviewer built the repro:
+author a heal with that target, run any healing-mode sim with another living ally, and
+`runPlayerTurn` throws.
+
+So this task leaves the editor option OUT, with a comment at the `TARGET_OPTIONS` site saying why,
+and **Task 6 adds it** once all three routing sites are live. The engine must never honour a target
+the editor cannot author — but the editor must never offer one the engine cannot route.
+
+`abilityDefaults.ts` needs no change either way: its only `AbilityTarget` surface is
+`DEFAULT_TARGETS: Record<AbilityType, AbilityTarget>`, a default per ability *type*, with no
+ally-target list to extend. Changing an existing default would be a behaviour change.
 
 - [ ] **Step 11: Fix every switch from Step 4, adding a `never` guard to each**
 
@@ -853,14 +865,30 @@ emoji:
     'Combat sim: enemy support ships that cast on their own allies no longer register your focus ship as a target on that turn.',
 ```
 
-- [ ] **Step 3: Update the in-app docs**
+- [ ] **Step 3: Add the editor surface (moved here from Task 1)**
+
+Now that all three routing sites are live, add to `src/components/skills/AbilityCard.tsx`'s
+`TARGET_OPTIONS`, in ally-side order after `'all-allies'`:
+
+```ts
+    { value: 'lowest-hp-ally', label: 'Lowest HP ally' },
+```
+
+and delete the placeholder comment Task 1 left at that spot explaining why it was absent. Verify by
+authoring one in the running app (`npm start`, port 3000) that a heal with this target resolves to
+the worst-HP ally and does not throw — the crash this deferral exists to prevent.
+
+`abilityDefaults.ts` needs no change: its only `AbilityTarget` surface is `DEFAULT_TARGETS:
+Record<AbilityType, AbilityTarget>`, a per-ability-type default with no ally-target list.
+
+- [ ] **Step 4: Update the in-app docs**
 
 In `src/pages/DocumentationPage.tsx`, in the combat-sim/skills section, state the recipient rule:
 a ship whose text names a worst-HP ally heals that ally regardless of its targeting pattern;
 otherwise an ally-targeted repair follows the ship's pattern. Use existing UI components from
 `src/components/ui/` — no raw HTML with inline Tailwind.
 
-- [ ] **Step 4: Final verification**
+- [ ] **Step 5: Final verification**
 
 Run: `npx tsc --noEmit && npm run lint && npm run format:check && npm test`
 Expected: all pass.
@@ -868,14 +896,14 @@ Expected: all pass.
 ⚠️ Do **not** run `npm run format` — it rewrites the whole tree and drags in main's pre-existing
 Prettier drift. If `format:check` fails, run Prettier on your changed files only.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "docs(combat): sweep stale routing comments, changelog and in-app docs"
+git commit -m "docs(combat): editor surface, sweep stale routing comments, changelog and in-app docs"
 ```
 
-- [ ] **Step 6: Open the PR**
+- [ ] **Step 7: Open the PR**
 
 Body must carry, per the spec's acceptance rules:
 1. the **attributed** golden-movement list from Tasks 2, 3 and 5, each move tied to C1, C2 or a
