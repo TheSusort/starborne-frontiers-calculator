@@ -64,7 +64,7 @@ import {
     type SubAttackOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars, VictimDefenseProfile } from './victimDamage';
-import { victimHitDamage } from './victimDamage';
+import { victimHitDamage, victimDefenceMitigation } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake, conditionMet } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
@@ -4814,6 +4814,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  chunk. The transfer block (Task 4) skips when set → a redirected chunk's own
                  *  cascade was already precomputed, so it never re-triggers (loop-safe). */
                 isProtectionTransfer?: boolean;
+                /** The DEFENCE mitigation factor the CALLER already folded into `rawDamage` for
+                 *  this victim (`victimDefenceMitigation`). Read ONLY by the Protection transfer
+                 *  block, which must divide by the exact factor that was applied to recover the
+                 *  pre-defence amount. Absent → the block falls back to re-deriving one from the
+                 *  victim's live defence (see the fallback's note for what that misses). */
+                targetMitigation?: number;
                 /** Epic PR12 (A): true when this victim IS the attacker's resolved anchor/primary
                  *  target (Nosorog's `requirePrimaryTarget` reflect gate). Undefined/true for every
                  *  non-positional (inherently single-target) call site; explicitly false only for
@@ -4930,13 +4936,30 @@ export function runCombat(rawInput: CombatEngineInput): {
             ) {
                 const protectors = protectorsFor(victim);
                 if (protectors.length > 0) {
-                    // `damage` was already mitigated by whatever defence the caller used at its
-                    // read site — for a defense-substitution victim (Meatshield R4), that's the
-                    // CARRIER's substituted defence, not the victim's own. Recomputing `targetMit`
-                    // must use that same substituted value or the recovered pre-defence `P` (and
-                    // therefore every protector chunk) is skewed. `substitutedDefenceFor` is a
-                    // no-op fallback to `victimDef` when no carrier applies, so this is
-                    // byte-identical to before for every non-substitution case.
+                    // `damage` arrives ALREADY mitigated by the caller's own defence read, and the
+                    // cascade recovers the pre-defence amount `P = damage / targetMit` so a
+                    // redirected chunk can be re-mitigated on the PROTECTOR's defence instead. So
+                    // `targetMit` must be EXACTLY the factor the caller applied — anything else
+                    // rescales `P` and skews every chunk.
+                    //
+                    // The positional apply path (every cast in the sim) therefore hands its own
+                    // factor down as `cause.targetMitigation`, computed by the same
+                    // `victimDefenceMitigation` that produced the hit. Re-deriving it here instead
+                    // dropped two terms the caller had folded in and read a third from the wrong
+                    // place: the attacker's defence PENETRATION (a 50%-pen hit inflated the chunk
+                    // by ~7%), the victim's `defenceModifierPct` (Defense Shred), and
+                    // `effectiveStatsOf(...).defence` — the BUFF-FOLDED stat — where the caller's
+                    // `victimDefenseProfileOf` reads the raw `victim.stats.defence` (a +100%
+                    // Defense buff inflated the chunk by ~13%).
+                    //
+                    // The fallback below still serves the non-positional direct-damage callers
+                    // (bomb/detonation applies, reactive procs), which do not compute a per-victim
+                    // profile at all. It is the pre-fix expression, kept byte-identical so those
+                    // paths do not move: `substitutedDefenceFor` recovers a defense-substitution
+                    // victim's CARRIER defence (Meatshield R4), and is a no-op pass-through to
+                    // `victimDef` when no carrier applies. It remains blind to penetration and to
+                    // `defenceModifierPct`; closing that would mean threading a profile into those
+                    // callers too, which nothing in the corpus currently exercises.
                     const victimDef = effectiveStatsOf(
                         statusEngine,
                         selfBuffLookup,
@@ -4944,7 +4967,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ).defence;
                     const targetDef = substitutedDefenceFor(victim, victimDef);
                     const targetMit =
-                        targetDef > 0 ? 1 - calculateDamageReduction(targetDef) / 100 : 1;
+                        cause.targetMitigation ??
+                        (targetDef > 0 ? 1 - calculateDamageReduction(targetDef) / 100 : 1);
                     const cascade = protectionCascade(
                         damage,
                         targetMit,
@@ -4969,7 +4993,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // sets up the deferred DoT-transform, which acts per redirected chunk).
                         // SP-U U1: `sink` serves both sides (ids are globally unique), so no
                         // per-side selection is needed here.
+                        //
+                        // `perStackIntake[s]` is sub-hit s's OWN booked intake. Collected rather
+                        // than only summed because the log emits ONE row per sub-hit (the player
+                        // sees N separate procs in-game — "4643 ×3" is three rows, not one).
+                        // Collected DURING the loop but emitted AFTER it, at exactly the point the
+                        // single aggregate row used to be emitted, so the event ORDER relative to
+                        // everything the sub-hits themselves raise (hp-changed, shield-destroyed,
+                        // ship-destroyed, a deferred DoT application) is unchanged — only the row
+                        // count and the per-row amount move.
                         let intakeTotal = 0;
+                        const perStackIntake: number[] = [];
                         for (let s = 0; s < chunk.stacks; s++) {
                             const outcome = applyVictimDamage(chunk.perStack, p.actor, sink, {
                                 killerId: cause.killerId,
@@ -4979,6 +5013,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 bombPortion: 0,
                             });
                             intakeTotal += outcome.incomingBooked;
+                            perStackIntake.push(outcome.incomingBooked);
                         }
                         // We sum the intake the funnel RECORDED per sub-hit (`incomingBooked`) rather
                         // than `chunk.total − transformedToDot` — that subtraction wrongly counts a
@@ -5003,6 +5038,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // `intakeTotal` at ±~1e-10; the 1e-9 threshold suppresses that phantom
                         // near-zero emission (a real chunk is always >> 1e-9, so this never affects a
                         // genuine remainder).
+                        //
+                        // The 1e-9 threshold is applied TWICE, deliberately, and the two guards
+                        // answer different questions:
+                        //   • The OUTER guard (`intakeTotal > 1e-9`, unchanged) still gates the two
+                        //     NUMERIC channels — `roundPerTargetDamage` and `creditDealt` — on the
+                        //     chunk's TOTAL, so those totals are byte-identical to before. It also
+                        //     gates the whole emission block, which is what keeps a fully
+                        //     DoT-transformed chunk at ZERO rows.
+                        //   • The INNER guard (per row, below) suppresses an individual phantom
+                        //     sub-hit. Needed now that rows are per sub-hit: a chunk whose total is
+                        //     real but whose s-th sub-hit booked nothing (fully blocked/transformed
+                        //     at that sub-hit) would otherwise print a ~0 row that describes no
+                        //     damage. It cannot move a numeric total — the totals are summed above
+                        //     from every sub-hit, ungated.
                         if (intakeTotal > 1e-9) {
                             protectionRedirected += intakeTotal;
                             roundPerTargetDamage.set(
@@ -5019,16 +5068,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                             if (cause.killerId) {
                                 creditDealt(cause.killerId, p.actor.id, intakeTotal);
                             }
-                            bus.emit({
-                                type: 'reactive-damage-performed',
-                                sourceId: victim.id,
-                                targetId: p.actor.id,
-                                round: r,
-                                amount: intakeTotal,
-                                reactive: true,
-                                duringTurnOf: actingActorId,
-                                triggerActorId: actingActorId,
-                            });
+                            // One LOG-ONLY row per redirected SUB-HIT, each carrying that sub-hit's
+                            // own booked intake, so the combat log reads the way the game does (an
+                            // N-stack protector shows N procs). Purely a display split:
+                            // `reactive-damage-performed` has NO combat listener and feeds only
+                            // buildCombatLog's `attack` entry — verified across every consumer
+                            // (battleSimulator's LOG_EVENT_TYPES subscription, triggers.ts's
+                            // reactive-stamping set, buildCombatLog's handler, and the audit
+                            // fingerprint, which reduces entries to a de-duplicated SET of kinds).
+                            for (const perStack of perStackIntake) {
+                                if (perStack <= 1e-9) continue;
+                                bus.emit({
+                                    type: 'reactive-damage-performed',
+                                    sourceId: victim.id,
+                                    targetId: p.actor.id,
+                                    round: r,
+                                    amount: perStack,
+                                    reactive: true,
+                                    duringTurnOf: actingActorId,
+                                    triggerActorId: actingActorId,
+                                });
+                            }
                         }
                     });
                     // Lionheart R4: a consumable protector loses ALL Protection after it
@@ -5973,6 +6033,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 byDirectDamage?: boolean;
                 bombPortion?: number;
                 isReflected?: boolean;
+                /** A2: the defence mitigation factor already folded into `damage` for this
+                 *  victim, supplied by the positional apply. See applyVictimDamage's
+                 *  `cause.targetMitigation`. */
+                targetMitigation?: number;
             } = {
                 killerId: actingActorId,
                 byDirectDamage: true,
@@ -6008,7 +6072,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyVictim: CombatActor,
             // Epic PR12 (A): forwarded to applyVictimDamage's cause.isPrimaryTarget (Nosorog's
             // reflect gate). Undefined at every pre-PR12 call site → byte-identical.
-            isPrimaryTarget?: boolean
+            isPrimaryTarget?: boolean,
+            // A2: the defence mitigation factor already folded into `damage` for this victim,
+            // supplied by the positional apply. See applyVictimDamage's `cause.targetMitigation`.
+            targetMitigation?: number
         ): VictimDamageOutcome =>
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
             // H1 T4: positional player→enemy hits are all-direct (no detonation slice here), so
@@ -6018,6 +6085,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 byDirectDamage: true,
                 shieldPenetrationPct: attackerShieldPenOf(actingActorId),
                 isPrimaryTarget,
+                targetMitigation,
             });
         // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
@@ -6637,7 +6705,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
-                isAnchor?: boolean
+                isAnchor?: boolean,
+                /** A2: the defence mitigation factor already folded into `damage` for this
+                 *  victim — forwarded into `cause.targetMitigation` so the Protection cascade
+                 *  divides by the factor that was applied instead of re-deriving one. */
+                targetMitigation?: number
             ) => VictimDamageOutcome;
             // E2 (per-victim leech): OPTIONAL per-direction hook. drivePositionalApply is ONE
             // helper shared by all three sites (focus / team / enemy); since standing (player→
@@ -6738,11 +6810,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // rather than all under the first attack row. Save/restore rather than clear:
                     // a reflect proc re-enters the funnel from INSIDE this call and still belongs
                     // to the same sub-attack.
-                    applyToVictim: (victim, damage, isAnchor, subAttackIndex) => {
+                    applyToVictim: (victim, damage, isAnchor, subAttackIndex, targetMitigation) => {
                         const prevSubAttack = currentSubAttackIndex;
                         currentSubAttackIndex = subAttackIndex;
                         try {
-                            return args.applyToVictim(victim, damage, isAnchor);
+                            return args.applyToVictim(victim, damage, isAnchor, targetMitigation);
                         } finally {
                             currentSubAttackIndex = prevSubAttack;
                         }
@@ -7031,16 +7103,31 @@ export function runCombat(rawInput: CombatEngineInput): {
             return () => {
                 let delivered = 0;
                 for (const { victim, roleScale } of victims) {
+                    // Read the profile ONCE and derive both the hit and the mitigation factor from
+                    // it, exactly as the firing hit's positional loop does — so the factor handed
+                    // to `applyToVictim` is provably the one baked into `damage`.
+                    const defenseProfile = victimDefenseProfileOf(victim, profileOpts);
                     const damage = victimHitDamage(
                         hit.scalars,
-                        victimDefenseProfileOf(victim, profileOpts),
+                        defenseProfile,
                         hit.didCrit,
                         roleScale
                     );
                     if (!(damage > 0)) continue;
                     // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
                     // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
-                    const outcome = tb.applyToVictim(victim, damage, false);
+                    // 4th arg: this instance is a SECOND positional damage path into the funnel, so
+                    // it owes the Protection cascade the same mitigation factor the firing hit
+                    // hands down. Omitting it left this path on the fallback re-derivation — the
+                    // very defect the firing path was fixed for (penetration and buff-folded
+                    // defence both dropped), so a passive-slot instance landing on a protected
+                    // victim over-transferred to the protector.
+                    const outcome = tb.applyToVictim(
+                        victim,
+                        damage,
+                        false,
+                        victimDefenceMitigation(defenseProfile, hit.scalars.defensePenetrationPct)
+                    );
                     // Credit the intake the funnel RECORDED, exactly as the firing hit's emitHit
                     // does — a Protection cascade / incoming block / DoT transform all move the
                     // number, and re-crediting the pre-funnel hit would double-count.
@@ -7213,11 +7300,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // resolved VictimDamageOutcome (both impls wrap applyOutgoingToEnemy /
             // applyIncomingToTarget, which already surface it from E1). Epic PR12 (A): third
             // param forwards drivePositionalApply's isAnchor through to applyVictimDamage's
-            // cause.isPrimaryTarget (Nosorog's reflect gate).
+            // cause.isPrimaryTarget (Nosorog's reflect gate). A2: the fourth param forwards the
+            // defence mitigation factor the positional loop already applied, so the Protection
+            // cascade can divide by it rather than re-deriving one (see `cause.targetMitigation`).
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
-                isAnchor?: boolean
+                isAnchor?: boolean,
+                targetMitigation?: number
             ) => VictimDamageOutcome;
         }
         const playerTurnBindings: TurnBindings = {
@@ -7230,8 +7320,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyBuffNamesUnion: playerEnemyBuffNames,
             stealthedEnemyCount: playerStealthedEnemyCount,
             healEventOnly: false,
-            applyToVictim: (victim, damage, isAnchor) =>
-                applyOutgoingToEnemy(damage, victim, isAnchor),
+            applyToVictim: (victim, damage, isAnchor, targetMitigation) =>
+                applyOutgoingToEnemy(damage, victim, isAnchor, targetMitigation),
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
@@ -7254,8 +7344,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
             // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
             // player actor (applyIncomingToTarget), not as a player damage row.
-            applyToVictim: (victim, damage, isAnchor) =>
-                applyIncomingToTarget(damage, victim, undefined, isAnchor),
+            applyToVictim: (victim, damage, isAnchor, targetMitigation) =>
+                applyIncomingToTarget(
+                    damage,
+                    victim,
+                    // The default `cause` only materializes when the arg is OMITTED, so passing
+                    // targetMitigation means restating the direct-damage defaults it carries.
+                    { killerId: actingActorId, byDirectDamage: true, targetMitigation },
+                    isAnchor
+                ),
         };
         const turnBindings = (side: Side): TurnBindings =>
             side === 'player' ? playerTurnBindings : enemyTurnBindings;
