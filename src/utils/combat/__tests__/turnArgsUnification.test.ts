@@ -284,6 +284,26 @@ function makePr6bRuntime(): PlayerActorRuntime {
                         conditions: [],
                         config: { type: 'damage', multiplier: 100 },
                     },
+                    // #341: an EXECUTE rider gated on the derived reading. `PlayerTurnResult` no
+                    // longer carries `enemyHpPct` — the round row reads the roster at the round
+                    // head instead — so the derivation is now observed through the gate that
+                    // actually consumes it. Strictly stronger than the field read it replaces: it
+                    // proves the number reaches `conditionsMet`, not merely that it was computed.
+                    {
+                        id: 'pr6b-exec',
+                        type: 'additional-damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [
+                            {
+                                subject: 'hp-threshold',
+                                derivable: true,
+                                hpComparator: 'below',
+                                hpPercent: 75,
+                            },
+                        ],
+                        config: { type: 'additional-damage', stat: 'hp', pct: 10 },
+                    },
                 ],
             },
         ],
@@ -368,19 +388,29 @@ function makePr6bArgs(runtime: PlayerActorRuntime, enemyCurrentHp: number): Play
 // ---------------------------------------------------------------------------
 
 describe('PR6b — enemyHpPct derived from victim currentHp', () => {
-    it('victim at FULL HP → enemyHpPct === 100', () => {
+    // The gate is "below 75%" on an `additional-damage` rider worth 10% of the actor's 10,000 max
+    // HP, so `secondaryDamage` IS the readout: 0 while the gate is unmet, 1000 once it is met.
+    // (The rider is `additional-damage`, not a second `damage` ability: `runPlayerTurn` assumes one
+    // base-damage ability per skill, so a second one would not add.) #341 deleted `PlayerTurnResult.enemyHpPct` (the round row now reads the enemy
+    // roster at the round head, so the per-turn display field had no consumer left); the
+    // derivation itself is unchanged and still gates, which is what these two cases now assert.
+    it('victim at FULL HP → the derived reading is 100, so a "below 75%" rider does NOT fire', () => {
         // currentHp === maxHp: no decline → pct = 100 * (1 - 0/maxHp) = 100.
         const runtime = makePr6bRuntime();
         const result = runPlayerTurn(makePr6bArgs(runtime, PR6B_MAX_HP));
-        expect(result.enemyHpPct).toBe(100);
+        expect(result.secondaryDamage).toBe(0);
+        expect(result.directDamage).toBe(5000); // the base ability alone
     });
 
-    it('victim at HALF HP → enemyHpPct === 50', () => {
+    it('victim at HALF HP → the derived reading is 50, so the rider DOES fire', () => {
         // currentHp = maxHp/2: decline = 5_000_000 → pct = 100 * (1 - 0.5) = 50.
         // The arg object carries NO enemyHpDecline field (param removed in PR6b);
         // the derivation reads enemy.currentHp directly inside runPlayerTurn.
         const runtime = makePr6bRuntime();
         const result = runPlayerTurn(makePr6bArgs(runtime, PR6B_MAX_HP / 2));
-        expect(result.enemyHpPct).toBe(50);
+        // `directDamage` INCLUDES its secondary sub-bucket, so the rider shows up in both: the
+        // 5000 base plus the 1000 the gate just unlocked.
+        expect(result.secondaryDamage).toBe(1000);
+        expect(result.directDamage).toBe(6000);
     });
 });

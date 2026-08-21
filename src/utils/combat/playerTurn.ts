@@ -238,17 +238,10 @@ export interface PassiveSlotHit {
     target: Ability['target'];
 }
 
-/** DISPLAY ONLY. The round chart needs a number for a turn that struck nobody; this is NOT a
- *  reading of any enemy's HP, and the gate-facing `enemyHpPct` on the same turn is ABSENT.
- *  Kept at 100 so the chart and every golden stay byte-identical across SP-4d. The honest display
- *  value for a multi-enemy roster is a separate question — filed with #331. */
-export const DISPLAY_ENEMY_HP_PCT_NO_VICTIM = 100;
-
 /** Everything one player actor's turn contributes to the round's RoundData row. */
 export interface PlayerTurnResult {
     action: 'active' | 'charged';
     roundCrit: boolean;
-    enemyHpPct: number;
     dotsConfig: DoTApplicationConfig;
     dotsLanded: boolean;
     activeSelfBuffs: ActiveBuff[];
@@ -4581,7 +4574,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         action,
         roundCrit,
         hitCrits,
-        enemyHpPct: enemyHpPct ?? DISPLAY_ENEMY_HP_PCT_NO_VICTIM,
         // SP-4c-2b: a no-victim cast inflicted no DoT on anybody, so the round row reports NONE —
         // neither landed nor resisted. Both engine derivations read this pair, and each is wrong if
         // only `dotsLanded` is touched: `appliedDoTs: dotsConfig` (engine.ts:11240) would display
