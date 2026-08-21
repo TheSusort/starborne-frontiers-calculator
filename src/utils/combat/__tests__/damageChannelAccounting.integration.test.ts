@@ -5,13 +5,13 @@
  *   • the per-victim POSITIONAL channel — `RoundData.perTargetDealt` (source → victim → dealt),
  *     written by `drivePositionalApply` → `creditDealt`;
  *   • the LEGACY scalar sink — `rawTotals` / `cumulativeDamage`, written by `creditDamage`
- *     against the dummy `enemy` actor.
+ *     against the (SP-4c-2d deleted) dummy `enemy` actor.
  *
  * Which one a cast uses is decided TWICE, and until this file existed the two decisions could
  * disagree:
  *   • VICTIM SELECTION (`selectTurnTarget` → `resolvePositionalTarget`) is liveness-aware: it
- *     only ever returns an opposing actor with `currentHp > 0`, else it hands back the legacy
- *     victim (and bumps `legacyVictimFallbackCount`);
+ *     only ever returns an opposing actor with `currentHp > 0`, else it returns NO victim at all
+ *     (and bumps `noVictimTurnCount`) — since SP-4e on both sides;
  *   • the APPLY GATE (`isPositional(...) && target && pattern && turn.positionalScalars`) was
  *     purely STRUCTURAL — "does any opposing actor carry a board position?" — and a position
  *     survives its owner's death.
@@ -30,11 +30,7 @@
  * `deathFallback.integration.test.ts` and re-pinned here as the ONLY such state).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-    runCombat,
-    __getLegacyVictimFallbackCount,
-    __resetLegacyVictimFallbackCount,
-} from '../engine';
+import { runCombat, __getNoVictimTurnCount, __resetNoVictimTurnCount } from '../engine';
 import type { CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
 import { bareInput, bareEnemy, damageKit } from '../__testutils__/bareRosterFixture';
@@ -82,7 +78,7 @@ const legacyIn = (round: RoundData): number => round.directDamage;
 describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
     beforeEach(() => {
         setupKeyedTestRng(12345);
-        __resetLegacyVictimFallbackCount();
+        __resetNoVictimTurnCount();
     });
 
     // SP-4c-2a INVERTED THIS TEST, the same way SP-4b-2b inverted the empty-roster case below. Its
@@ -132,7 +128,7 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         expect(result.rounds.map(positionalIn)).toEqual([PER_CAST, PER_CAST, PER_CAST, PER_CAST]);
         // ...and NOT also into the legacy sink.
         expect(result.rawTotals.cumulative).toBe(0);
-        expect(__getLegacyVictimFallbackCount()).toBe(0);
+        expect(__getNoVictimTurnCount()).toBe(0);
     });
 
     it('killing a targetable roster ENDS the match — the neither-channel state is now unreachable', () => {
@@ -180,7 +176,7 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
 
         for (const shape of shapes) {
             setupKeyedTestRng(12345);
-            __resetLegacyVictimFallbackCount();
+            __resetNoVictimTurnCount();
             const result = runCombat(shape.input());
 
             // A living victim exists for a round iff the enemy has not yet been destroyed.
@@ -227,24 +223,24 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
  * same 10 000 per cast, with the opposing roster's MAX HP as the only variable — except that the
  * roster under test is now the PLAYER side.
  *
- * THE ONE STRUCTURAL ASYMMETRY, and why the mirror is not assertion-for-assertion identical.
- * `TurnBindings.legacyVictim` is a DIFFERENT KIND OF OBJECT on the two sides:
+ * THE STRUCTURAL ASYMMETRY THAT SHAPED THIS MIRROR — now HISTORY, kept because it is still why
+ * the mirror is not assertion-for-assertion identical to the suite above. `TurnBindings.legacyVictim`
+ * used to be a DIFFERENT KIND OF OBJECT on the two sides:
  *   • player side → the dummy `enemy`, an indestructible wall (`hp 1_000_000_000`, never records
  *     destroyed). A never-targetable enemy roster therefore still had somewhere to book, which is
  *     what USED to make a player-side "0-max-HP pressure sources credit the LEGACY sink" case
  *     possible. SP-4c-2a's floor (`withTargetableHp` in normalizeRoster.ts) removed the premise: no
  *     enemy roster is never-targetable any more, and that case is now the inverted
  *     "a former 0-max-HP pressure source is FLOORED … credits the PER-VICTIM channel" case below.
- *     The asymmetry itself is unchanged and still explains the mirror's shape — the two sides'
- *     `legacyVictim` objects remain different kinds of thing.
  *   • enemy side → the HEAL TARGET, a real player actor drawn from
  *     `allPlayerActors = [attacker, ...teamCombatActors]`.
- * Because the heal target is itself a roster member, "every placed player member at max hp 0"
- * necessarily makes the enemy's own legacy sink a 0-max-HP actor — i.e. the whole player side is a
- * CORPSE from round 1 (`destroyedRound === 1`, `targetHpPctStart === 0`). The enemy then correctly
- * WHIFFS, which is case (b) — the one legitimate neither-channel state the player-side suite already
- * carves out — rather than crediting a sink. That is asserted below WITH its liveness evidence, so
- * the zero is proven to be a corpse-whiff and can never be mistaken for a dropped credit.
+ * SP-4e (#335) DELETED the field on both sides, so the two objects no longer exist to differ — the
+ * enemy resolves NO VICTIM where it used to resolve the heal target. The shape below is unchanged
+ * either way: with every placed player member at max hp 0, the whole player side is a CORPSE from
+ * round 1 (`destroyedRound === 1`, `targetHpPctStart === 0`) and the enemy correctly WHIFFS — case
+ * (b), the one legitimate neither-channel state the player-side suite already carves out — rather
+ * than crediting a sink. That is asserted below WITH its liveness evidence, so the zero is proven
+ * to be a corpse-whiff and can never be mistaken for a dropped credit.
  *
  * CONSEQUENCE — the enemy-side conversion is PROVABLY INERT, and these tests say so honestly.
  * `isPositional(p, R)` and `resolvesPositionalVictim(p, R)` differ on exactly one input class: `R`
@@ -353,7 +349,7 @@ const enemyLegacyIn = (round: RoundData, incomingDamage: number): number =>
 describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting invariant', () => {
     beforeEach(() => {
         setupKeyedTestRng(12345);
-        __resetLegacyVictimFallbackCount();
+        __resetNoVictimTurnCount();
     });
 
     it('a LIVING positioned player roster takes every enemy cast in the PER-VICTIM channel', () => {
@@ -375,7 +371,7 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
         );
         // ...and nothing into the enemy-side legacy channel.
         expect(result.healing!.rounds.map((r) => r.incomingDamage)).toEqual([0, 0, 0, 0]);
-        expect(__getLegacyVictimFallbackCount()).toBe(0);
+        expect(__getNoVictimTurnCount()).toBe(0);
     });
 
     it('an enemy RETARGETS onto the heal target when the front ally dies, still per-victim', () => {
@@ -406,10 +402,11 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
         // sink" claim CANNOT credit a sink, and the reason is structural, not a defect — and it is
         // also why this case SURVIVES while its player-side original was inverted by SP-4c-2a's
         // floor: the floor is enemy-side only, so a max-HP-0 PLAYER roster is still constructible.
-        // The enemy's `legacyVictim` IS the heal
-        // target, which is itself one of the max-HP-0 members. So this shape books into neither
-        // channel — and the assertions below prove that zero is case (b), a whiff against a corpse,
-        // rather than the §4B defect (an accounted-for number falling between the channels).
+        // Every placed player member is a corpse, so the enemy resolves nobody (before SP-4e it
+        // resolved the heal target — itself one of the max-HP-0 members — and short-circuited on it
+        // being dead). So this shape books into neither channel, and the assertions below prove that
+        // zero is case (b), a whiff against a corpse, rather than the §4B defect (an accounted-for
+        // number falling between the channels).
         const result = runCombat(playerSideWithMaxHp(0));
 
         expect(result.rounds.map(enemyPositionalIn)).toEqual([0, 0, 0, 0]);
@@ -417,9 +414,12 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
         // The liveness evidence that makes the zero legitimate: dead before the first cast lands.
         expect(result.healing!.destroyedRound).toBe(1);
         expect(result.healing!.rounds.map((r) => r.targetHpPctStart)).toEqual([0, 0, 0, 0]);
-        // The fallback object was still CONSULTED every round — which is exactly why SP-4c cannot
-        // gate on this counter being zero (see `__getLegacyVictimFallbackCount`'s doc comment).
-        expect(__getLegacyVictimFallbackCount()).toBe(ROUNDS);
+        // SP-4e: the enemy resolves NO VICTIM every round and takes a no-victim turn (before the
+        // rung it consulted the fallback object and then short-circuited on it being dead). Either
+        // way nothing is booked — which is why this counter's non-zero was never SP-4c's exit
+        // condition, and is not SP-4e's either. It is the LIVENESS evidence for the zeros above:
+        // the enemy really did take four turns, and they really did find nobody.
+        expect(__getNoVictimTurnCount()).toBe(ROUNDS);
     });
 
     it('INVARIANT (enemy side): no round books into both channels, and a round with a living victim books into exactly one', () => {
@@ -435,7 +435,7 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
 
         for (const shape of shapes) {
             setupKeyedTestRng(12345);
-            __resetLegacyVictimFallbackCount();
+            __resetNoVictimTurnCount();
             const result = runCombat(playerSideWithMaxHp(shape.maxHp));
 
             let bookedRounds = 0;

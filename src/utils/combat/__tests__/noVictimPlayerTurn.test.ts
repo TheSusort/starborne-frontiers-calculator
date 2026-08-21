@@ -17,7 +17,7 @@
  * So the third case pins the thing the rung is actually named for: that the turn had NO VICTIM.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { runCombat, __getNoVictimPlayerTurnCount, __resetNoVictimPlayerTurnCount } from '../engine';
+import { runCombat, __getNoVictimTurnCount, __resetNoVictimTurnCount } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
 import { bareInput, bareAlly, bareEnemy, BARE_ALLY_ID } from '../__testutils__/bareRosterFixture';
@@ -128,7 +128,7 @@ describe('SP-4c-2b: an ally-targeted player cast still acts', () => {
         setupKeyedTestRng(12345);
         // Module-level, so it needs a per-case reset (same contract as the sibling counters in
         // `dummyReachability.test.ts`).
-        __resetNoVictimPlayerTurnCount();
+        __resetNoVictimTurnCount();
     });
 
     it('the support ship takes its turn every round', () => {
@@ -180,10 +180,15 @@ describe('SP-4c-2b: an ally-targeted player cast still acts', () => {
         // target at all) and neither does the roster member (it is enemy-side; the boundary gives it
         // the enemy-side front default, which resolves against the targetable focus).
         //
+        // SP-4e renamed this counter from `noVictimPlayerTurnCount`: it now counts no-victim turns on
+        // BOTH sides, since the enemy side's fallback victim is gone too. The enumeration above is
+        // what keeps the expected value at 2 rather than 2-plus-the-enemy's — that enemy resolves a
+        // real victim, so a 3 here would mean the enemy side lost a resolution it used to have.
+        //
         // Deliberately `toBe`, not `toBeGreaterThan(0)`: a count that drifted upward would mean turns
         // are resolving no victim that used to resolve one, which is as much a regression as the ghost
         // coming back.
         supportRun();
-        expect(__getNoVictimPlayerTurnCount()).toBe(2);
+        expect(__getNoVictimTurnCount()).toBe(2);
     });
 });

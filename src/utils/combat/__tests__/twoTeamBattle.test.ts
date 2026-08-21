@@ -1511,17 +1511,24 @@ describe('H1 Task 8 follow-up — simulateBattle end-to-end shield extraction lo
 });
 
 // ===========================================================================
-// Bug repro: dead-legacy-victim binding permanently skips an ally-targeted enemy
-// caster's turn once the FOCUS player (playerTeam[0], engine id 'attacker') dies.
+// Bug repro: a dead fallback-victim binding permanently skipped an ally-targeted enemy
+// caster's turn once the FOCUS player (playerTeam[0], engine id 'attacker') died.
 //
-// Diagnosed chain: an ally-targeted caster's parsed target has side:'ally' →
-// resolvePositionalTarget returns null by design → selectTurnTarget falls back to
-// the enemy side's legacyVictim, which simulateBattle sets to the FOCUS player id
-// (a vestigial binding). Once the focus dies, the enemy walk's
-// `targetDead = tgt.currentHp <= 0` short-circuits the WHOLE turn to cadence-only
-// (no skill fired) — even though this caster (a pure supporter, Graphite-style) never
-// needed an opposing victim in the first place. Positional attackers are unaffected
-// because they re-resolve a LIVING player every turn.
+// Diagnosed chain (HISTORY — SP-4e removed its first link): an ally-targeted caster's
+// parsed target has side:'ally' → resolvePositionalTarget returns null by design →
+// selectTurnTarget fell back to the enemy side's fallback victim, which simulateBattle
+// set to the FOCUS player id (a vestigial binding). Once the focus died, the enemy
+// walk's `targetDead = tgt.currentHp <= 0` short-circuited the WHOLE turn to
+// cadence-only (no skill fired) — even though this caster (a pure supporter,
+// Graphite-style) never needed an opposing victim in the first place. Positional
+// attackers were unaffected because they re-resolve a LIVING player every turn.
+//
+// SP-4e deleted the fallback outright, so an ally-targeted enemy caster resolves NO
+// victim whether the focus is alive or dead, and the dead-target skip can only fire on
+// a genuinely resolved corpse. The three cases below still pin the OUTCOME (the
+// supporter keeps acting; a damage caster that needs a victim does not), which is what
+// this describe block is for; the fourth case, added by SP-4e, pins the live-anchor
+// half the original diagnosis never reached.
 // ===========================================================================
 
 describe('bug repro: enemy supporter turn skipped after the focus player dies', () => {
@@ -1645,15 +1652,25 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         expect(round4Entries.some((e) => e.kind === 'shield')).toBe(true);
     });
 
-    it('negative/pin: an enemy ATTACKER (damage skill) bound to the dead legacy victim still skips its turn', () => {
+    it('negative/pin: an enemy ATTACKER (damage skill) that resolves nobody delivers NOTHING', () => {
         // Mirror of the repro above, but the second enemy fires a plain `damage` ability
         // (target 'enemy' — set by the skill-text parser regardless of the raw targeting
         // column) while its RAW activeTarget/activePattern columns are ally-shaped, so
-        // resolvePositionalTarget still returns null (side:'ally' → null by design) and
-        // selectTurnTarget falls back to the legacy victim exactly like the supporter.
-        // UNLIKE the supporter, this skill's firing ability DOES need an opposing victim
-        // (type 'damage', target 'enemy') — so the deferred death-fallback-retargeting work
-        // item is explicitly OUT of scope and this actor's turn must keep skipping.
+        // resolvePositionalTarget returns null (side:'ally' → null by design) exactly like
+        // the supporter. UNLIKE the supporter, this skill's firing ability DOES need an
+        // opposing victim (type 'damage', target 'enemy') — so the deferred
+        // death-fallback-retargeting work item is explicitly OUT of scope and this actor must
+        // deliver nothing.
+        //
+        // ⚠️ SP-4e CHANGED THE MECHANISM UNDER THIS CASE, and the title changed with it. It used
+        // to read "…bound to the dead legacy victim still skips its turn", and the mechanism was
+        // the enemy site's DEAD-TARGET SKIP: the fabricated focus-player anchor was dead, and
+        // `skillNeedsOpposingVictim` sent the whole turn to cadence-only. With the fallback
+        // deleted this actor resolves NO victim in EVERY round (alive focus or dead), so it now
+        // takes the no-victim turn instead — which delivers 0 because `runPlayerTurn` fences its
+        // damage assembly on `hasVictim`. The OUTCOME asserted below is unchanged, which is the
+        // point; the route to it is not. See the engine's own note at `skipDeadTargetTurn` for
+        // the measurement that the old route is now unreachable suite-wide.
         const result = simulateBattle({
             playerTeam: [
                 {
@@ -1775,10 +1792,19 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
     it('threshold flip: an ally-only ACTIVE runs but the enemy-facing CHARGED skill skips, per-round, at the charge threshold', () => {
         // Exercises the action-selection mirror inside the dead-target check: the predicate
         // must inspect the skill that WOULD fire this turn, not a fixed slot. The supporter's
-        // active is ally-only (must keep running against the dead legacy binding) while its
-        // charged skill is a plain damage nuke (must skip when it would fire). chargeCount=2 →
-        // R1 active(bank→1), R2 active(bank→2, focus now dead), R3 charged-would-fire → SKIP
-        // (dead-path cadence resets the bank to 0 without firing), R4 active again.
+        // active is ally-only (must keep running) while its charged skill is a plain damage nuke
+        // (must deliver nothing when it would fire). chargeCount=2 → R1 active(bank→1),
+        // R2 active(bank→2, focus now dead), R3 charged-would-fire → NO BUFF AND NO DAMAGE,
+        // R4 active again (the cadence consumed the bank at cap and reset it).
+        //
+        // SP-4e: as with the sibling case above, the ROUTE changed and the outcome did not.
+        // Pre-rung, R3 took the dead-target skip (the charged nuke needs a victim and the
+        // fabricated anchor was a corpse) and the cadence advanced manually. Now the actor
+        // resolves NO victim, `runPlayerTurn` runs and advances the same cadence internally,
+        // and the nuke's damage is fenced to 0 — so R3 still grants nothing and lands nothing,
+        // and R4 is still back on the active. What this case pins is therefore the CHARGE
+        // THRESHOLD's effect on action selection, which is unchanged; it no longer covers the
+        // dead-target skip, and nothing does.
         const GRAPHITE_ACTIVE_TEXT =
             'This unit grants <unit-skill>Overclock III</unit-skill> for 2 turns and a ' +
             '<unit-damage>shield equal to 120%</unit-damage> of its attack.';
@@ -1882,6 +1908,154 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         expect(dealsDamage(3)).toBe(false);
         // R4: the dead-path cadence reset the bank to 0 → back to the ally-only ACTIVE → runs.
         expect(grantsBuff(4)).toBe(true);
+    });
+
+    // =======================================================================
+    // SP-4e Task 5 (#335, spec §5 class C2) — the LIVE-ANCHOR half.
+    //
+    // The three cases above all pin the DEAD-anchor behaviour. This one pins the class with
+    // real consequences, and the one #335's own narrative missed: 324 measured rows where the
+    // player roster is ALIVE and PLACED, the heal anchor is alive, and the enemy caster's
+    // parsed target is ally-side — so `resolvePositionalTarget` returns null by design and
+    // `selectTurnTarget` used to hand back `legacyVictim: healTarget`, i.e. the FOCUS PLAYER.
+    // Those turns DID run; they ran against a FABRICATED victim, and any enemy-facing clause
+    // on the cast landed on a player the cast never targeted.
+    //
+    // After 4e the enemy side answers exactly as the player side has since 4c-2b: no living
+    // positional victim ⇒ a NO-VICTIM turn. The support still lands (the turn runs), nothing
+    // names a victim, and the focus is untouched.
+    // =======================================================================
+    it('an ally-targeted enemy supporter, with a LIVING placed player roster, resolves NO victim and still lands its support', () => {
+        // Mixed cast: an enemy-facing DoT clause AND an ally-facing buff clause. The DoT is
+        // what makes the fabricated victim OBSERVABLE, on both axes at once — it names its
+        // victim in the log (`dot-applied`) and it drains that victim's HP on later rounds
+        // (`dot-ticked`). A pure supporter leaves no such trace: its cast computes no damage
+        // and inflicts nothing, so the fabricated binding is invisible from outside the engine.
+        // The RAW targeting column ('allies') is what drives the ParsedTarget's `side: 'ally'`
+        // and therefore the always-null positional selection; the DoT's own ability target is
+        // enemy-facing regardless of that column (same mechanism as the 'negative/pin' case).
+        const DOT_PLUS_SUPPORT_TEXT =
+            'This unit applies <unit-skill>Corrosion III</unit-skill> for 3 turns and grants ' +
+            '<unit-skill>Overclock III</unit-skill> for 2 turns to allies.';
+
+        const result = simulateBattle({
+            playerTeam: [
+                // Focus (playerTeam[0] → engine id 'attacker'): the vestigial heal anchor, and
+                // therefore the fabricated victim. Immortal-HP so a hit LANDS rather than
+                // killing it (a death would confound the assertion with the dead-anchor path).
+                {
+                    ship: makeShip('focus', 'Focus', FRONT),
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 120,
+                    },
+                },
+                // A second LIVING, PLACED player — the roster is alive and targetable, which is
+                // what separates this class from the dead-anchor cases above.
+                {
+                    ship: makeShip('survivor', 'Survivor', BACK),
+                    position: 'M3',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 110,
+                    },
+                },
+            ],
+            enemyTeam: [
+                // The supporter under test: ally-shaped raw targeting → ParsedTarget side
+                // 'ally' → positional selection always null.
+                {
+                    ship: makeShip('supporter', 'Supporter', {
+                        activeTarget: 'allies',
+                        activePattern: 'Pattern-Support-Double-Pickaxe-Range-0',
+                        activeSkillText: DOT_PLUS_SUPPORT_TEXT,
+                        type: 'Supporter',
+                    }),
+                    position: 'M2',
+                    statOverrides: {
+                        attack: 5_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 90,
+                    },
+                },
+                // A harmless enemy-side ally so the support clauses have a second recipient.
+                // attack 0 → it can never be the source of player-side damage, which keeps the
+                // focus-untouched assertion attributable to the supporter alone.
+                {
+                    ship: makeShip('buddy', 'Buddy', FRONT),
+                    position: 'M1',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 80,
+                    },
+                },
+            ],
+            rounds: 3,
+        });
+
+        const FOCUS = 'attacker';
+        const SUPPORTER = 'e:supporter:0';
+        const PLAYER_SIDE_IDS = new Set([FOCUS, 'p:survivor:1']);
+
+        const supporterEntries = result.combatLog.flatMap(
+            (r) => r.turns.find((t) => t.actorId === SUPPORTER)?.entries ?? []
+        );
+
+        // Premise: the focus is alive for the whole fixture, so this is the live-anchor class
+        // and not a relabelled dead-anchor case.
+        for (const round of result.rounds) {
+            expect(round.ships.find((s) => s.actorId === FOCUS)?.alive).toBe(true);
+        }
+
+        // (1) THE TURN RAN: the support still lands on the supporter's own side — both the
+        // caster and its M1 buddy sit in the support footprint.
+        const buffed = supporterEntries
+            .filter((e) => e.kind === 'buff' && e.note === 'Overclock III')
+            .flatMap((e) => e.targets.map((t) => t.targetId));
+        expect(new Set(buffed)).toEqual(new Set([SUPPORTER, 'e:buddy:1']));
+
+        // (2) NO VICTIM IS NAMED. There is nobody to key a per-victim store by, so contract §B
+        // requires the absence of a targetId — consumers must read "there is no enemy", never
+        // "an enemy with neutral stats". Nothing this turn emits may name a PLAYER as a target;
+        // today the DoT clause lands `dot-applied` on the focus every round.
+        const playerTargets = supporterEntries.flatMap((e) =>
+            e.targets
+                .filter((t) => PLAYER_SIDE_IDS.has(t.targetId))
+                .map((t) => `${e.kind}→${t.targetId}`)
+        );
+        expect(playerTargets).toEqual([]);
+
+        // (3) THE FOCUS IS UNTOUCHED. Today the fabricated binding lands a real Corrosion
+        // stack on it every round, and those stacks tick its HP down from round 2 onward.
+        for (const round of result.rounds) {
+            const focus = round.ships.find((s) => s.actorId === FOCUS)!;
+            expect(focus.incomingDamage).toBe(0);
+            expect(focus.hpPct).toBe(100);
+        }
     });
 });
 

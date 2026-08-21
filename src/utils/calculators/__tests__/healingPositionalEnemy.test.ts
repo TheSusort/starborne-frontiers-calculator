@@ -509,11 +509,12 @@ describe('SP-3b: the healing calculator fights a real positioned enemy', () => {
     //
     // ⚠️ THE MAJORITY PRODUCTION CONFIG, and it silently delivered ZERO.
     // `resolvePositionalTarget` returns `null` for `target.side === 'ally'`
-    // (positionalBinding.ts), so `selectTurnTarget` falls back to `tb.legacyVictim` — the
-    // vestigial dummy. But `willApplyPositionally` (the focus cast site in engine.ts) checks only
+    // (positionalBinding.ts). Before SP-4c-2b `selectTurnTarget` then fell back to the vestigial
+    // dummy; today it answers NO VICTIM, on either side (SP-4e retired the enemy half too). But
+    // `willApplyPositionally` (the focus cast site in engine.ts) checks only
     // `resolvesPositionalVictim && target != null && pattern != null` and NEVER the target's side,
-    // so it stays TRUE while the bound victim is the position-less dummy; the positional apply then resolves
-    // footprint victims from `tgt.position === undefined`, finds none, and delivers nothing.
+    // so it stays TRUE — deliberately, see its own note — and the cast still delivers nothing,
+    // which is what this case pins.
     //
     // `docs/ship-targeting.csv` has 20 ships with an ally-side `active_target` — AEGIS, Chimei,
     // Cultivator, Flamel, Graphite, Grif, Harvester, Hayyan, Heliodor, Hermes, Howler, Makoli,

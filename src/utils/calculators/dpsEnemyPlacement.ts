@@ -29,8 +29,9 @@ export const DEFAULT_ENEMY_SLOT: Position = 'M4';
  *
  * Position alone does NOT route a cast. `selectTurnTarget` requires
  * `resolvesPositionalVictim(actor.position, opposingRoster) && target` — with no ParsedTarget it
- * short-circuits, however well-positioned the roster is: a PLAYER actor then resolves NO victim
- * (SP-4c-2b) and an ENEMY actor falls back to `legacyVictim: healTarget`. (Until SP-4c-2d the
+ * short-circuits, however well-positioned the roster is: the actor then resolves NO victim, on
+ * either side (player since SP-4c-2b, enemy since SP-4e — the enemy's `healTarget` fallback and the
+ * field that held it are deleted). (Until SP-4c-2d the
  * player-side fallback was the dummy. A missing target USED to keep the dummy in the turn order
  * too, via the `dummyEnemyIsVestigial` gate's `t?.side === 'enemy'` conjunct; that gate was deleted
  * in SP-4c-2c and SP-4c-2d deleted the actor, so only the targeting short-circuit remains.) That
