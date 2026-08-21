@@ -6015,6 +6015,32 @@ export function runCombat(rawInput: CombatEngineInput): {
                 intakeFor(victimId).convertedToShield += amount;
             },
         };
+        // #355 B1: how much damage a detonation/burst apply actually DELIVERED, for the numeric
+        // channels its caller books by hand (`roundPerTargetDamage`, `creditDealt`,
+        // `perActorDetonation`, a standing `'detonation'` leech).
+        //
+        // WHY THE CALLERS CANNOT JUST BOOK THE AMOUNT THEY PASSED IN. A burst arrives at
+        // `applyVictimDamage` stamped `byDirectDamage: true` with the whole amount in
+        // `bombPortion`, and only the two CONSUMABLE steps (Hit Mitigation, Shield Converter) carry
+        // a `bombPortion === 0` guard. The incoming-block step, the Protection cascade and the
+        // standing Voron/Orel transform have no such guard, so all three fire on a burst and all
+        // three make the funnel record something OTHER than what the caller passed in. #293 swept
+        // every direct-damage caller onto `incomingBooked` for exactly this reason; the detonation
+        // sites were left behind and double-counted every redirected chunk (Meatshield/Lionheart
+        // Protection is live corpus kit, so this was reachable, not theoretical).
+        //
+        // The two terms, and why the split is not arbitrary:
+        //  • `incomingBooked` — the victim's OWN booked intake, so a blocked or DoT-transformed
+        //    slice drops out. A transform's deferred amount re-books later, per tick, on the DoT
+        //    path; booking it here too would count it twice.
+        //  • `protectionRedirected` — the slice a Protection cascade moved to protectors. It DID
+        //    land, just on another row, and the cascade already books each protector's
+        //    `roundPerTargetDamage` + `creditDealt` itself. So it belongs in the whole-attack totals
+        //    (`perActorDetonation`, the leech basis: "% of damage dealt" counts a Protection
+        //    redirect and does NOT count a DoT transform — locked rule) but NOT in the victim's own
+        //    per-target rows, which is why those read `incomingBooked` alone.
+        const detonationDelivered = (outcome: AppliedVictimDamage): number =>
+            outcome.incomingBooked + (outcome.protectionRedirected ?? 0);
         // H1 T4: the effective shield penetration % of an attacker, resolved from its static
         // ActorStats.shieldPenetration (threaded in Tasks 1-2). Defaults to 0 for an unknown id
         // or an attacker that never set the stat → byte-identical for fixtures without pen.
@@ -7379,13 +7405,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     pendingBombs: victim.pendingBombs,
                     victimHp: tb.victimMaxHpFor(victim),
                 });
+                let bombDelivered = 0;
                 if (result.bomb > 0) {
-                    applyVictimDamage(result.bomb, victim, sink, {
+                    const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
                         killerId: actorId,
                         byDirectDamage: true,
                         bombPortion: result.bomb, // full shield drain, no pen
                         shieldPenetrationPct: 0,
                     });
+                    bombDelivered = detonationDelivered(bombOutcome);
                     bus.emit({
                         type: 'bomb-detonated',
                         actorId,
@@ -7397,17 +7425,33 @@ export function runCombat(rawInput: CombatEngineInput): {
                         round: r,
                         stacks: result.bombStacks,
                         damage: result.bomb,
+                        // The EVENT keeps the pre-funnel burst value on purpose — it announces what
+                        // the bomb was worth, the same way `attacked` reports a hit's pre-transfer
+                        // value. Only the numeric channels below move to the delivered amount.
                     });
+                    // #355 B1: the victim's own row gets its OWN booked intake — a Protection
+                    // cascade already booked the redirected chunk on each protector's row, so
+                    // adding it here too counted it twice.
                     roundPerTargetDamage.set(
                         victim.id,
-                        (roundPerTargetDamage.get(victim.id) ?? 0) + result.bomb
+                        (roundPerTargetDamage.get(victim.id) ?? 0) + bombOutcome.incomingBooked
                     );
                     // SP-F F1: the detonating caster (actorId) is the source-attacker.
-                    creditDealt(actorId, victim.id, result.bomb);
+                    creditDealt(actorId, victim.id, bombOutcome.incomingBooked);
                 }
                 const bypass = result.inferno + result.corrosion;
+                let bypassDelivered = 0;
                 if (bypass > 0) {
-                    applyVictimDamage(bypass, victim, sink, { byDirectDamage: false }); // DoT → bypass shield
+                    // DoT → bypass shield. `byDirectDamage: false` makes every divergence step in
+                    // the funnel skip (block, Protection cascade and both transforms are each gated
+                    // on it), so `incomingBooked === bypass` here by construction and the reads
+                    // below are byte-identical today. Routed through the same accessor anyway so
+                    // this site cannot silently drift the day one of those gates loosens — the
+                    // reconciliation suite pins that.
+                    const bypassOutcome = applyVictimDamage(bypass, victim, sink, {
+                        byDirectDamage: false,
+                    });
+                    bypassDelivered = detonationDelivered(bypassOutcome);
                     bus.emit({
                         type: 'dot-detonated',
                         targetId: victim.id,
@@ -7416,14 +7460,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                     });
                     roundPerTargetDamage.set(
                         victim.id,
-                        (roundPerTargetDamage.get(victim.id) ?? 0) + bypass
+                        (roundPerTargetDamage.get(victim.id) ?? 0) + bypassOutcome.incomingBooked
                     );
                     // SP-F F1: the detonating caster (actorId) is the source-attacker — NOT
                     // whoever originally applied the ticking DoT stacks (the existing,
                     // accepted `perActorDetonation.set(actorId, …)` convention below).
-                    creditDealt(actorId, victim.id, bypass);
+                    creditDealt(actorId, victim.id, bypassOutcome.incomingBooked);
                 }
-                const dealt = result.bomb + bypass;
+                // The whole-attack tally, so it stays on the SAME basis as `perTargetDealt` (the
+                // DPS page derives `direct = dealt - detonation - dots`; the two folds disagreeing
+                // is what pushes phantom damage into the Direct row).
+                const dealt = bombDelivered + bypassDelivered;
                 if (dealt > 0) {
                     perActorDetonation.set(actorId, (perActorDetonation.get(actorId) ?? 0) + dealt);
                 }
@@ -7448,19 +7495,25 @@ export function runCombat(rawInput: CombatEngineInput): {
             sourceId: string,
             damage: number
         ): void => {
-            applyVictimDamage(damage, victim, sink, {
+            const outcome = applyVictimDamage(damage, victim, sink, {
                 killerId: sourceId,
                 byDirectDamage: true,
                 bombPortion: damage, // full shield drain, no pen — bomb-burst precedent
                 shieldPenetrationPct: 0,
             });
+            // #355 B1: book what the funnel RECORDED, not the burst we passed in — see
+            // `detonationDelivered`. Per-victim rows take `incomingBooked`; the whole-attack tally
+            // adds back the Protection-redirected slice (it landed, on the protectors' rows).
             roundPerTargetDamage.set(
                 victim.id,
-                (roundPerTargetDamage.get(victim.id) ?? 0) + damage
+                (roundPerTargetDamage.get(victim.id) ?? 0) + outcome.incomingBooked
             );
             // SP-F F1: the bomb's ORIGINAL applier (sourceId) — never the forcing caster.
-            creditDealt(sourceId, victim.id, damage);
-            perActorDetonation.set(sourceId, (perActorDetonation.get(sourceId) ?? 0) + damage);
+            creditDealt(sourceId, victim.id, outcome.incomingBooked);
+            perActorDetonation.set(
+                sourceId,
+                (perActorDetonation.get(sourceId) ?? 0) + detonationDelivered(outcome)
+            );
         };
 
         // Shared positioned timed-burst loop. A POSITIONED actor carrying timed
@@ -7500,21 +7553,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                         damage,
                     }),
                 creditDetonation: (sourceId, damage) => {
-                    applyVictimDamage(damage, actor, sink, {
+                    const outcome = applyVictimDamage(damage, actor, sink, {
                         killerId: sourceId,
                         byDirectDamage: true,
                         bombPortion: damage, // full shield drain, no pen
                         shieldPenetrationPct: 0,
                     });
+                    // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
+                    const delivered = detonationDelivered(outcome);
                     roundPerTargetDamage.set(
                         actor.id,
-                        (roundPerTargetDamage.get(actor.id) ?? 0) + damage
+                        (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
                     );
                     // SP-F F1: the bomb's applier (sourceId) bursting on the bursting actor's own turn.
-                    creditDealt(sourceId, actor.id, damage);
+                    creditDealt(sourceId, actor.id, outcome.incomingBooked);
                     perActorDetonation.set(
                         sourceId,
-                        (perActorDetonation.get(sourceId) ?? 0) + damage
+                        (perActorDetonation.get(sourceId) ?? 0) + delivered
                     );
                     // Site 2 of the leech-channel class (spec §3): the burst channel now pays the
                     // applier's standing damage-dealt leech. `'detonation'` is the channel, so a
@@ -7525,7 +7580,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
                     // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
                     // reads "directly damaged as a primary target"). Standing direction only.
-                    procStandingLeechesPerVictim(sourceId, damage, 'detonation');
+                    //
+                    // #355 B1: paid on the DELIVERED amount. "% of damage dealt" is the final
+                    // on-screen number — a Protection redirect counts (the damage landed, on the
+                    // protector) and a DoT transform does not (it has not been dealt yet; it books
+                    // per tick). `detonationDelivered` is exactly that basis.
+                    procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
                 },
             });
 
@@ -7559,21 +7619,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                         damage,
                     }),
                 creditDetonation: (sourceId, damage) => {
-                    applyVictimDamage(damage, actor, sink, {
+                    const outcome = applyVictimDamage(damage, actor, sink, {
                         killerId: sourceId,
                         byDirectDamage: true,
                         bombPortion: damage, // full shield drain, no pen (bomb-style)
                         shieldPenetrationPct: 0,
                     });
+                    // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
+                    const delivered = detonationDelivered(outcome);
                     roundPerTargetDamage.set(
                         actor.id,
-                        (roundPerTargetDamage.get(actor.id) ?? 0) + damage
+                        (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
                     );
                     // SP-F F1: the accumulator's applier (sourceId).
-                    creditDealt(sourceId, actor.id, damage);
+                    creditDealt(sourceId, actor.id, outcome.incomingBooked);
                     perActorDetonation.set(
                         sourceId,
-                        (perActorDetonation.get(sourceId) ?? 0) + damage
+                        (perActorDetonation.get(sourceId) ?? 0) + delivered
                     );
                     // Site 2 of the leech-channel class (spec §3): the burst channel now pays the
                     // applier's standing damage-dealt leech. `'detonation'` is the channel, so a
@@ -7584,7 +7646,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
                     // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
                     // reads "directly damaged as a primary target"). Standing direction only.
-                    procStandingLeechesPerVictim(sourceId, damage, 'detonation');
+                    //
+                    // #355 B1: paid on the DELIVERED amount, same basis as the sibling bomb burst
+                    // above — a Protection redirect counts, a DoT transform does not.
+                    procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
                 },
             });
         };
