@@ -30,6 +30,8 @@ import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { protectionCascade } from '../protectionTransfer';
+import { createStatusEngine } from '../statusEngine';
+import { toSimBuffs } from '../../calculators/dpsBuffHelpers';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -127,19 +129,14 @@ const totalIncoming = (input: CombatEngineInput, id: string): number => {
     return sum;
 };
 
-/** Count of reactive-damage-performed events targeting `id`. */
-const reactiveEventsTargeting = (input: CombatEngineInput, id: string): number => {
-    const bus = createEventBus();
-    let n = 0;
-    bus.on(
-        'reactive-damage-performed',
-        (e: Extract<CombatEvent, { type: 'reactive-damage-performed' }>) => {
-            if (e.targetId === id) n++;
-        }
-    );
-    runCombat({ ...input, bus });
-    return n;
-};
+/** The focus's ACTIVE self-buff names, read from the same status engine the run uses. Proves a
+ *  fixture's self-buff actually landed — a buff that silently fails to apply makes a "buffed vs
+ *  unbuffed" comparison vacuous, since the two arms become the same board. (Scheduled `selfBuffs`
+ *  are pre-applied config, so they emit no `buff-applied` event; the snapshot is the observable.) */
+const activeSelfBuffNames = (input: CombatEngineInput): string[] =>
+    createStatusEngine({ selfBuffs: input.selfBuffs, enemyDebuffs: input.enemyDebuffs })
+        .snapshot('attacker')
+        .activeSelfBuffs.map((b) => b.buffName);
 
 /** The `amount` of every reactive-damage-performed event targeting `id`, in emission order. */
 const reactiveAmountsTargeting = (input: CombatEngineInput, id: string): number[] => {
@@ -154,6 +151,11 @@ const reactiveAmountsTargeting = (input: CombatEngineInput, id: string): number[
     runCombat({ ...input, bus });
     return amounts;
 };
+
+/** Count of reactive-damage-performed events targeting `id`. Derived from the amounts helper so
+ *  the two cannot drift; declared AFTER it so there is no temporal dead zone. */
+const reactiveEventsTargeting = (input: CombatEngineInput, id: string): number =>
+    reactiveAmountsTargeting(input, id).length;
 
 const ENEMY_ATTACK = 1000;
 const PROTECTOR_DEFENCE = 300; // < victim defence (0) so the redirected chunk is amplified.
@@ -929,9 +931,22 @@ describe('Protection transfer — the cascade divides by the caller’s own miti
         // Control: unbuffed. Passes before and after the fix — it pins the oracle.
         expect(totalIncoming(build(false), 'prot-1')).toBeCloseTo(expectedChunk, 4);
 
-        // Non-vacuity: the buff changes the victim's LIVE effective defence (that is what the
-        // funnel's old recompute read), even though the caller's damage read did not move. Both
-        // facts have to hold for this fixture to be measuring the divergence it claims.
+        // NON-VACUITY, and asserted rather than assumed (CodeRabbit, PR #353): every other
+        // assertion here passes when `build(true)` never applies the buff at all — `build(true)`
+        // would simply BE `build(false)`, which the control already pins. Two halves, because a
+        // silent failure could sit in either. (i) the buff is ACTIVE, and only in the buffed arm:
+        expect(activeSelfBuffNames(build(true))).toContain('Defense Up');
+        expect(activeSelfBuffNames(build(false))).not.toContain('Defense Up');
+        // (ii) `parsedEffects.defense` is a key that actually produces a DEFENCE bonus — a rename
+        // or a typo there would leave the buff active but inert, which is the same vacuum.
+        expect(toSimBuffs([defenceUp(100)])).toContainEqual(
+            expect.objectContaining({ stat: 'defence', value: 100 })
+        );
+
+        // The buff moves the victim's LIVE effective defence (what the funnel's old recompute
+        // read) while leaving the caller's damage read where it was. Both facts have to hold for
+        // this fixture to measure the divergence it claims — the first is pinned above, the
+        // second by the equality below.
         const unbuffedVictim = totalIncoming(build(false), 'attacker');
         const buffedVictim = totalIncoming(build(true), 'attacker');
         expect(unbuffedVictim).toBeCloseTo(0.7 * ENEMY_ATTACK * mit(VICTIM_DEFENCE), 4);
@@ -1489,5 +1504,127 @@ describe('per-victim damage accounting under a Protection redirect (positional)'
         expect(c.dealt['prot-1']).toBeUndefined();
         // The victim's row is untouched by the protector's block — it still keeps only 70%.
         expect(c.taken['ally-1']).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// CodeRabbit (PR #353): the always-active PASSIVE SLOT's own damage instance is a SECOND positional
+// path into `applyVictimDamage`, and it was not handing the cascade its mitigation factor. It
+// computes a per-victim `victimDefenseProfileOf` exactly like the firing hit does, so it owed the
+// same factor — omitting it left this one path on the fallback re-derivation, which is blind to the
+// attacker's defence penetration. A passive-slot instance landing on a protected victim therefore
+// over-transferred to the protector while the firing hit beside it was correct.
+describe('Protection transfer — the PASSIVE-SLOT instance divides by its own mitigation too', () => {
+    const FOCUS_ATTACK = 1000;
+    const PEN_PCT = 50;
+    const VICTIM_DEFENCE = 500; // → the attacker sees 250 through 50% penetration.
+    const ACTIVE_PCT = 100; // pre-defence P of the firing hit = FOCUS_ATTACK.
+    const PASSIVE_PCT = 50; // pre-defence P of the passive instance = FOCUS_ATTACK / 2.
+
+    const damageAbility = (id: string, multiplier: number, target: Ability['target']): Ability => ({
+        id,
+        type: 'damage',
+        target,
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier },
+    });
+
+    const build = (withProt: boolean): CombatEngineInput => ({
+        attack: FOCUS_ATTACK,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: PEN_PCT,
+        chargeCount: 0,
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [damageAbility('ps-active', ACTIVE_PCT, 'enemy')] },
+                {
+                    slot: 'passive',
+                    abilities: [damageAbility('ps-passive', PASSIVE_PCT, 'all-enemies')],
+                },
+            ],
+        },
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        healTargetId: 'attacker',
+        mode: 'healing',
+        position: 'M4',
+        target: { raw: 'front', side: 'enemy', selection: 'front' } as ParsedTarget,
+        pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} } as ParsedPattern,
+        enemyAttackers: [
+            {
+                id: 'enemy-front',
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defence: VICTIM_DEFENCE,
+                    hp: 1_000_000_000,
+                    speed: 1,
+                },
+                chargeCount: 0,
+                startCharged: false,
+                position: 'M4',
+                shipSkills: { slots: [] },
+            },
+            {
+                id: 'enemy-protector',
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defence: PROTECTOR_DEFENCE,
+                    hp: 1_000_000_000,
+                    speed: 1,
+                },
+                chargeCount: 0,
+                startCharged: false,
+                shipSkills: { slots: withProt ? [protectionAuraPassive(3)] : [] },
+            },
+        ],
+    });
+
+    it('a passive-slot instance does not inflate the protector’s chunk under defence penetration', () => {
+        // The protector is unpositioned, but the passive slot's `all-enemies` footprint still lands
+        // on it DIRECTLY, so its total intake mixes a direct hit with the redirect. Assert the
+        // redirected rows instead — `reactive-damage-performed` fires only for a cascade chunk, so
+        // this reads the transfer alone with no subtraction.
+        const rows = reactiveAmountsTargeting(build(true), 'enemy-protector');
+
+        // Six rows: two redirected instances (the firing hit and the passive one) × 3 Protection
+        // stacks each, per the per-stack logging this PR introduces.
+        expect(rows).toHaveLength(6);
+
+        // Each instance redirects 30% of its PRE-DEFENCE amount, re-mitigated on the protector and
+        // split across 3 stacks. P is FOCUS_ATTACK for the firing hit and FOCUS_ATTACK/2 for the
+        // passive instance, both by construction (no crit, no affinity, no other modifiers).
+        const perStack = (P: number) => (0.3 * P * mit(PROTECTOR_DEFENCE)) / 3;
+        const firingStack = perStack(FOCUS_ATTACK);
+        const passiveStack = perStack(FOCUS_ATTACK / 2);
+        for (const row of rows.slice(0, 3)) expect(row).toBeCloseTo(firingStack, 4);
+        // THE CORE ASSERTION. Pre-fix this path recovered P from the victim's UNPENETRATED defence
+        // (mit(500)) while the caller had mitigated with mit(250), inflating the passive instance's
+        // chunk by ≈7.1% — the firing rows above stayed correct, which is exactly why only a
+        // passive-slot-specific fixture catches it.
+        for (const row of rows.slice(3)) expect(row).toBeCloseTo(passiveStack, 4);
+
+        // NON-VACUITY: the two instances are separable (so a passive-only defect cannot hide behind
+        // the firing rows), and the penetration is live — the victim's intake tracks mit(250).
+        expect(firingStack).toBeCloseTo(passiveStack * 2, 6);
+        expect(totalIncoming(build(false), 'enemy-front')).toBeCloseTo(
+            (FOCUS_ATTACK + FOCUS_ATTACK / 2) * mit(VICTIM_DEFENCE * (1 - PEN_PCT / 100)),
+            4
+        );
     });
 });

@@ -64,7 +64,7 @@ import {
     type SubAttackOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars, VictimDefenseProfile } from './victimDamage';
-import { victimHitDamage } from './victimDamage';
+import { victimHitDamage, victimDefenceMitigation } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake, conditionMet } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
@@ -7103,16 +7103,31 @@ export function runCombat(rawInput: CombatEngineInput): {
             return () => {
                 let delivered = 0;
                 for (const { victim, roleScale } of victims) {
+                    // Read the profile ONCE and derive both the hit and the mitigation factor from
+                    // it, exactly as the firing hit's positional loop does — so the factor handed
+                    // to `applyToVictim` is provably the one baked into `damage`.
+                    const defenseProfile = victimDefenseProfileOf(victim, profileOpts);
                     const damage = victimHitDamage(
                         hit.scalars,
-                        victimDefenseProfileOf(victim, profileOpts),
+                        defenseProfile,
                         hit.didCrit,
                         roleScale
                     );
                     if (!(damage > 0)) continue;
                     // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
                     // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
-                    const outcome = tb.applyToVictim(victim, damage, false);
+                    // 4th arg: this instance is a SECOND positional damage path into the funnel, so
+                    // it owes the Protection cascade the same mitigation factor the firing hit
+                    // hands down. Omitting it left this path on the fallback re-derivation — the
+                    // very defect the firing path was fixed for (penetration and buff-folded
+                    // defence both dropped), so a passive-slot instance landing on a protected
+                    // victim over-transferred to the protector.
+                    const outcome = tb.applyToVictim(
+                        victim,
+                        damage,
+                        false,
+                        victimDefenceMitigation(defenseProfile, hit.scalars.defensePenetrationPct)
+                    );
                     // Credit the intake the funnel RECORDED, exactly as the firing hit's emitHit
                     // does — a Protection cascade / incoming block / DoT transform all move the
                     // number, and re-crediting the pre-funnel hit would double-count.
