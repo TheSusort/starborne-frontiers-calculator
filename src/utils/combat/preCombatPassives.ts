@@ -95,6 +95,31 @@ export function applyPreCombatShipPassives(plans: PreCombatPlanLike[]): AppliedP
                     continue;
                 }
 
+                // SP-4e follow-up (whole-branch review, FIX 1): `'lowest-hp-ally'` cannot be
+                // resolved honestly here. This pass runs pre-fight, BEFORE actor/roster
+                // construction — nothing has taken damage yet, so there is no currentHp/maxHp
+                // view to rank allies against, and `PreFightStatBlock` (this pass's only stat
+                // surface) has no `currentHp` field at all to fake one with. Falling through to
+                // the `else [owner]` arm below would silently grant to the CASTER — the one
+                // answer the whole selector exists to prevent (see the type's own doc comment
+                // and the deleted `?? actor.id` tail / `resolveSupportRecipients` throw this
+                // branch mirrors). An arbitrary source-order tie-break (since every unit is
+                // conceptually at 100% HP pre-fight) would be answer-shaped but meaningless, not
+                // "the lowest HP ally" — worse than refusing. Throwing, not silently defaulting
+                // to a tie-break, matches the exhaustiveness idiom at engine.ts's
+                // `passiveSlotPattern` (~line 6949): loud instead of silent. Corpus-dead today —
+                // `buildShipAbilities`/the skill-text parser emits no `pre-combat-stat` ability
+                // with an HP-based selector — so this cannot fire for any target the parser
+                // currently produces at this site; it exists only to catch a future one before it
+                // ships as a silent self-grant. If a real pre-fight "weakest ally" mechanic is
+                // ever authored, it needs its own live-HP-free ranking rule, not this selector.
+                if (ability.target === 'lowest-hp-ally') {
+                    throw new Error(
+                        `applyPreCombatShipPassives: 'lowest-hp-ally' has no live HP view ` +
+                            `pre-fight and cannot be resolved (owner ${owner.id})`
+                    );
+                }
+
                 const perAllyFactor = config.perAdjacentAlly ? adjacentPlans.length : 1;
                 // Recipient set: adjacent-allies grants gated by `requiresAdjacentRole` go
                 // ONLY to the adjacent allies matching that role (Madax → "that Supporter's

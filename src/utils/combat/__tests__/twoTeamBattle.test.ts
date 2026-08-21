@@ -1755,29 +1755,33 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
 
         // Round 1 (focus alive): the non-positional attacker's ability DOES fire — its
         // computed damage is credited via `ability-performed` regardless of the victim it
-        // resolves to. Its legacy-victim fallback lands on the side's dummy sink rather than a
-        // real opposing actor, so no `attacked` event follows and the combat log's now-empty
-        // attack entry is correctly pruned as a phantom row (Task 4) — the SAME shape as round
-        // 4's genuine skip.
+        // resolves to. It resolves NO victim at all: the ally-shaped raw targeting sends
+        // `resolvePositionalTarget` to null regardless of whether focus is alive, so this is a
+        // no-victim turn (SP-4c-2b/4d) even though nobody died here — no `attacked` event
+        // follows, and the combat log's now-empty attack entry is correctly pruned as a phantom
+        // row (Task 4) — the SAME no-victim shape round 4 lands in below, for a different reason
+        // (there, focus really is dead).
         // SP-F F1 note: pre-F1, `damageDealt` (then `ability-performed.damage` summed by
         // actorId) was the one signal that still told the two cases apart, because it didn't
         // require a real per-victim landing. Post-F1, `damageDealt` is re-derived from
         // `perTargetDealt` (an attacker×victim channel), so a hit that never lands on a real
-        // roster victim — exactly this legacy-dummy-fallback case — no longer surfaces via
-        // `damageDealt` either. This is the SAME class of adjacent, out-of-scope gap the F1
-        // audit calls "case-c" (real damage computed but unattributable to any victim); F1
-        // does not fix it, so BOTH rounds now read 0 here. `turnOrder` doesn't distinguish
-        // them either (the actor's turn opens in both rounds) — there is currently no
-        // BattleResult-level signal for "fired but hit nobody" vs "genuinely skipped"; the
-        // round-4 assertions below (the test's actual subject) still verify the skip itself.
+        // roster victim — exactly this no-victim case — no longer surfaces via `damageDealt`
+        // either. This is the SAME class of adjacent, out-of-scope gap the F1 audit calls
+        // "case-c" (real damage computed but unattributable to any victim); F1 does not fix it,
+        // so BOTH rounds now read 0 here. `turnOrder` doesn't distinguish them either (the
+        // actor's turn opens in both rounds) — there is currently no BattleResult-level signal
+        // for "fired but hit nobody"; the round-4 assertions below (the test's actual subject)
+        // still verify the no-victim outcome itself.
         const round1 = result.rounds.find((r) => r.round === 1);
         const round1Ship = round1?.ships.find((s) => s.actorId === DEADBOUND);
         expect(round1Ship?.damageDealt).toBe(0);
 
         // Round 4 (focus long dead, no positional re-target available): the attacker's turn
-        // stays cadence-only — no skill-fired-derived entries at all. This is the PRESERVED
-        // (not fixed) old short-circuit behavior for actors that actually need an opposing
-        // victim.
+        // resolves no victim — the SAME no-victim-turn mechanism as round 1 above, NOT the old
+        // dead-target-skip short-circuit (deleted this branch; see the sibling test's header a
+        // few dozen lines up). `hasVictim` is false whether focus is alive or dead here, so
+        // `runPlayerTurn` fences every skill-fired-derived entry the same way regardless: no
+        // skill-fired-derived entries at all.
         const round4 = result.combatLog.find((r) => r.round === 4);
         const round4Turn = round4?.turns.find((t) => t.actorId === DEADBOUND);
         expect(round4Turn).toBeDefined();
@@ -1789,7 +1793,7 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         expect(round4Ship?.damageDealt).toBe(0);
     });
 
-    it('threshold flip: an ally-only ACTIVE runs but the enemy-facing CHARGED skill skips, per-round, at the charge threshold', () => {
+    it('threshold flip: an ally-only ACTIVE runs but the enemy-facing CHARGED skill resolves no victim, per-round, at the charge threshold', () => {
         // Exercises the action-selection mirror inside the dead-target check: the predicate
         // must inspect the skill that WOULD fire this turn, not a fixed slot. The supporter's
         // active is ally-only (must keep running) while its charged skill is a plain damage nuke
@@ -1901,9 +1905,10 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
 
         // R2: focus is dead but the would-fire skill is the ally-only ACTIVE → runs.
         expect(grantsBuff(2)).toBe(true);
-        // R3: bank hit the threshold → would-fire is the enemy-facing CHARGED skill → the
-        // dead-target skip applies: no buff, and no damage lands on anyone from the corpse
-        // binding.
+        // R3: bank hit the threshold → would-fire is the enemy-facing CHARGED skill → it
+        // resolves NO victim (the no-victim-turn rule — see this test's header: the dead-target
+        // skip this used to be is deleted, and nothing here covers it any more): no buff, and
+        // no damage lands on anyone.
         expect(grantsBuff(3)).toBe(false);
         expect(dealsDamage(3)).toBe(false);
         // R4: the dead-path cadence reset the bank to 0 → back to the ally-only ACTIVE → runs.

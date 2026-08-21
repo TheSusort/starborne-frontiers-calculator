@@ -214,6 +214,9 @@ describe('hit-counted Barrier — reactive path (triggers.ts executeIntent, cfg.
             playerIds: ['holder'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no live-HP view, so "nobody" is the honest
+            // answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
     };
 

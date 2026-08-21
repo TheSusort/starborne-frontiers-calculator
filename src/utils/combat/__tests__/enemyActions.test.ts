@@ -173,6 +173,9 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
             playerIds: ['grif'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no live-HP view, so "nobody" is the honest
+            // default; `overrides` may still replace it.
+            lowestHpAllyIdFor: () => undefined,
             ...overrides,
         };
     };

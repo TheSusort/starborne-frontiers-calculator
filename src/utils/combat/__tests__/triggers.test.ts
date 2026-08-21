@@ -2744,6 +2744,9 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             recordResisted: () => {},
             healing,
             oncePerCombatFired,
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
         return { ctx, applied };
     };
@@ -3142,6 +3145,9 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
     };
 
@@ -3259,6 +3265,9 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             playerIds: ['A'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
             healing,
             ...(selfHpPctFor !== undefined ? { selfHpPctFor } : {}),
         };
@@ -3346,6 +3355,9 @@ describe('debuff-resisted reports the resolved counter target (combat-log fideli
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
         ctx.bus.on('debuff-resisted', (e) =>
             emitted.push(e as { type: string; targetId?: string })
@@ -3425,6 +3437,9 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             playerIds: PLAYER_IDS,
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
     };
 
@@ -3586,6 +3601,9 @@ describe('Overload lifecycle Task 3: executeIntent remove-self-buff branch', () 
             playerIds: [ownerId],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
     };
 

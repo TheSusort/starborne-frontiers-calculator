@@ -174,6 +174,9 @@ function makePurgeCtx(removedCount: number): {
         playerIds: ['caster1'],
         lastTurnCtxByActor: new Map(),
         recordResisted: () => {},
+        // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is the
+        // honest answer, supplied explicitly rather than by omission.
+        lowestHpAllyIdFor: () => undefined,
     };
 
     // Suppress the unused-variable warning on purgeSpy

@@ -340,6 +340,9 @@ function makeMostBuffsCtx(enemyWithMostBuffs?: (ownerId: string) => string | und
         lastTurnCtxByActor: new Map(),
         recordResisted: () => {},
         enemyWithMostBuffs,
+        // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is the
+        // honest answer, supplied explicitly rather than by omission.
+        lowestHpAllyIdFor: () => undefined,
     };
 
     return { ctx, purgedCalls };

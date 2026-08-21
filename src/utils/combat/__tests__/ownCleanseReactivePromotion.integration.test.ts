@@ -623,6 +623,9 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
             healing,
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is the
+            // honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
         return { ctx, applied, credits };
     };

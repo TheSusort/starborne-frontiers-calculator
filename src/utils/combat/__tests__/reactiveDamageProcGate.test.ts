@@ -110,6 +110,9 @@ function makeCtx(opts?: {
         // `enemy` dummy. Without this delegate every case here would no-op before reaching the
         // proc gate it is about — green, and completely vacuous.
         livingOpposingActorIds: () => ['victim1'],
+        // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is the
+        // honest answer, supplied explicitly rather than by omission.
+        lowestHpAllyIdFor: () => undefined,
     } as IntentExecContext;
 }
 

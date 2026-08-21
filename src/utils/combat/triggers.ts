@@ -1540,12 +1540,22 @@ export interface IntentExecContext {
     /** SP-4e: the `'lowest-hp-ally'` selector, resolved by the ENGINE (it owns live HP and
      *  buff-aware max HP) over the OWNER's OWN side — the lowest currentHp/maxHp living same-side
      *  ally, owner EXCLUDED, ties broken by source order. `undefined` means NO recipient (the
-     *  owner is the only living candidate; "the OTHER ally" is nobody, never a self-target), and
-     *  an ABSENT delegate (DPS mode / unit-test contexts with no healing ctx) means the same — the
-     *  reactive recipient resolver produces an empty list either way rather than falling back to
-     *  the owner. Deliberately NOT footprint-narrowed: a named selector reaches its ally wherever
-     *  they stand. Shares its ranking with the cast path via `lowestHpAllyRecipients`. */
-    lowestHpAllyIdFor?: (ownerId: string) => string | undefined;
+     *  owner is the only living candidate; "the OTHER ally" is nobody, never a self-target).
+     *
+     *  REQUIRED (not optional, unlike this context's other delegates) since the whole-branch
+     *  review's FIX 3: every other reader in this file goes through `ctx.foo?.(...)`, where a
+     *  missing delegate and a delegate that legitimately answers "nothing to do" are both
+     *  `undefined` and indistinguishable — fine for gates with a safe inert default, wrong here,
+     *  because `undefined` is ALSO this selector's real "nobody to heal" answer. A context built
+     *  without the field (a second engine entry point, a refactor that splits this literal) would
+     *  silently no-op every `'lowest-hp-ally'` consumer (Valkyrie's on-bomb-detonated repair,
+     *  Volk's passive repair) rather than fail loudly, matching the class `resolveSupportRecipients`
+     *  already throws on for the cast path. Requiring the field turns that class into a `tsc`
+     *  compile error at the one production call site (`engine.ts`) instead of a runtime miss, which
+     *  is strictly better than a throw. A context that has no live-HP view at all (DPS mode,
+     *  healing-less unit tests) must supply `() => undefined` explicitly — that is a real answer
+     *  ("this context can never resolve a recipient"), not an accidental omission. */
+    lowestHpAllyIdFor: (ownerId: string) => string | undefined;
     /** Whether `ownerId` was hit by a direct attack this round, feeding the
      *  `not-hit-this-round` gate at drain time. Engine-populated from the combat-wide
      *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
@@ -2530,7 +2540,9 @@ export function reactiveRecipients(
     // variant fell into the trailing "anything else" bucket and silently resolved to
     // `[intent.ownerId]` — the caster, the one recipient its text forbids.
     if (intent.ability.target === 'lowest-hp-ally') {
-        const rid = ctx.lowestHpAllyIdFor?.(intent.ownerId);
+        // FIX 3: the delegate is REQUIRED on IntentExecContext now — no `?.` needed, and none
+        // wanted: a missing delegate is a caller bug, not a legitimate "nobody to heal" answer.
+        const rid = ctx.lowestHpAllyIdFor(intent.ownerId);
         return rid === undefined ? [] : [rid];
     }
     const base =
@@ -3049,7 +3061,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // anything — falling through to the owner-only gain below would be the self-target the
         // variant forbids.
         if (intent.ability.target === 'lowest-hp-ally') {
-            const rid = ctx.lowestHpAllyIdFor?.(intent.ownerId);
+            // FIX 3: required delegate — see IntentExecContext.lowestHpAllyIdFor's doc comment.
+            const rid = ctx.lowestHpAllyIdFor(intent.ownerId);
             if (rid !== undefined) {
                 ctx.grantAllyCharges(cfg.amount, { recipientIds: [rid], emitBus: ctx.bus });
             }
@@ -3141,9 +3154,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // named selector is never footprint-narrowed, and that helper's `resolveSupportRecipients`
         // throws on this target by design. Un-armed, the variant fell through the whole chain to
         // the trailing `[intent.ownerId]` — a self-grant, the one answer its text forbids.
+        // FIX 3: required delegate — see IntentExecContext.lowestHpAllyIdFor's doc comment.
         const selectorRecipientId =
             intent.ability.target === 'lowest-hp-ally'
-                ? ctx.lowestHpAllyIdFor?.(intent.ownerId)
+                ? ctx.lowestHpAllyIdFor(intent.ownerId)
                 : undefined;
         const recipients =
             intent.ability.target === 'lowest-hp-ally'
