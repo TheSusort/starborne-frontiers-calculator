@@ -690,12 +690,20 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
 
 describe('Cultivator (enemy-side) — team symmetry: an enemy Cultivator repairs its OWN cleansed ally', () => {
     it('repairs the OTHER enemy ally the player just debuffed (positional: the non-positional dummy target has no `ally`-selection candidate)', () => {
-        // NOTE: an 'ally'-target cleanse's enemy-caster branch picks via lowestHpEnemyAllyId(),
-        // which iterates `healing.enemyIds` — the EXPLICIT enemyAttackers list only (NOT the
-        // singular non-positional dummy `enemy` target, which the player's non-positional debuff
-        // always lands on regardless of enemyAttackers — verified manually). So a genuine SECOND
-        // EnemyAttacker (not the dummy) is required here, positionally targeted by the player
-        // (mirrors enemyCleanse.integration.test.ts's positional harness).
+        // NOTE: an 'ally'-target cleanse resolves over `healing.enemyIds` for an enemy caster —
+        // the EXPLICIT enemyAttackers list only. So a genuine SECOND EnemyAttacker is required
+        // here, positionally targeted by the player (mirrors enemyCleanse.integration.test.ts's
+        // positional harness).
+        //
+        // CORRECTED (SP-4e fix wave 1): this note used to say the enemy-caster branch "picks via
+        // lowestHpEnemyAllyId()". That branch is GONE — SP-4e Task 4 deleted the mode-flag arms, so
+        // `recipientsFor` now hands `'ally'` the caster's whole own side narrowed by its support
+        // footprint. This fixture's enemy Cultivator carries no pattern, so nothing narrows and it
+        // cleanses BOTH itself and 'enemy-ally'; only 'enemy-ally' actually holds a debuff, so
+        // `cleanse-performed.targets` is still exactly `['enemy-ally']` and the repair below is
+        // unchanged in value. Same answer, different reason — the class where a green test silently
+        // changes meaning. The widened reach itself is pinned on a REAL kit, both placements, in
+        // `plainAllyCleanseFootprintReach.integration.test.ts`.
         const enemyCultivator: EnemyAttacker = {
             id: 'enemy-cultivator',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: CULTIVATOR_HP, speed: 10 },

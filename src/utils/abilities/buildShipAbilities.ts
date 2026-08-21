@@ -1057,10 +1057,20 @@ function flipBareSupportTarget(
     // The recipient scope for a BARE active/charged pure-support cast (no named recipient).
     // Heals pass 'all-allies' — a support healer heals EVERYONE in its pattern footprint (AoE,
     // "just like buffs"; the engine intersects all-allies with the support pattern). Cleanses
-    // (and the default) keep 'ally' — single-recipient, unchanged. An EXPLICIT recipient
-    // ("the ally with the most missing health" → Volk) sets explicitTarget and never reaches
-    // this branch; since SP-4e Task 3 that recipient is also parsed as 'lowest-hp-ally' rather
-    // than 'ally', so it stays a single named selector either way.
+    // (and the default) keep 'ally'.
+    //
+    // What that 'ally' now MEANS on the cast path changed under the parser's feet, so do not read
+    // it as "single-recipient" any more: since SP-4e Task 4 the engine's `recipientsFor`
+    // (playerTurn.ts) resolves a cast-slot 'ally' to the caster's own side narrowed by the support
+    // footprint — the SAME answer it gives 'all-allies'. Owner ruling 2026-08-21 confirms that as
+    // the game rule (a plain 'ally' cleanse covers the allies its co-cast buff covers), so the
+    // parsed value is deliberately left alone rather than flipped to 'all-allies'. The distinction
+    // is a NO-OP for cast routing and still load-bearing on the REACTIVE path, where
+    // `reactiveRecipients` (triggers.ts) treats 'ally' as the ONE ally the triggering event named.
+    //
+    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
+    // and never reaches this branch; since SP-4e Task 3 that recipient is parsed as
+    // 'lowest-hp-ally', which IS a genuine single-recipient target on every path.
     bareActiveScope: 'ally' | 'all-allies' = 'ally'
 ): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
@@ -2252,7 +2262,11 @@ function abilitiesFromText(
                       role,
                       // AoE: a bare support-cast heal repairs every ally in the pattern footprint
                       // (like all-allies buffs), not a single ally. Volk-style explicit "most
-                      // missing health" sets explicitTarget and stays a single 'ally'.
+                      // missing health" sets explicitTarget and stays a single recipient — since
+                      // SP-4e Task 3 it is parsed as 'lowest-hp-ally', not 'ally'. (A bare CLEANSE
+                      // still parses as 'ally', but since SP-4e Task 4 that is no longer a
+                      // narrower CAST reach than this 'all-allies' — the two resolve identically
+                      // in `recipientsFor`; see flipBareSupportTarget's `bareActiveScope` doc.)
                       'all-allies'
                   )
                 : h.kind === 'shield'

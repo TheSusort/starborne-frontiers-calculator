@@ -3895,6 +3895,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // `isEnemyCaster`/`teamBattle` lowest-HP routing and the `[healing.targetId]`
             // fallback. Routing now comes from the ability's TEXT, not from the run mode, so the
             // two sides are symmetric by construction rather than by two mirrored branches.
+            //
+            // ⚠️ `'ally'` MEANS THREE DIFFERENT THINGS in this engine. It is not a typo when you
+            // find them disagreeing — each is the right answer for its own path, and none of the
+            // three is derivable from the others:
+            //   1. HERE (the CAST path) — the caster's whole own side narrowed by its support
+            //      footprint, not one ally. Owner ruling 2026-08-21: a plain `'ally'` clause covers
+            //      the same allies as its co-cast buff, and on every shipped kit that reaches this
+            //      branch the sibling clause in the SAME sentence parses to `all-allies`
+            //      ("grants Defense Up III **and** cleanses 1 debuff"). So `'ally'` and
+            //      `'all-allies'` resolve IDENTICALLY here — the parsed distinction survives only
+            //      because it still matters on path 2. The 10 shipped abilities that land here are
+            //      all cleanses (AEGIS, Cultivator ×2, Harvester, Makoli, Nyxen ×2, Paracelsus,
+            //      Purifier ×2); plain-`'ally'` cast heals and shields are corpus-empty. Pinned by
+            //      `plainAllyCleanseFootprintReach.integration.test.ts`, both placements.
+            //   2. The REACTIVE path (`reactiveRecipients`, triggers.ts) — ONE ally, derived from
+            //      the triggering EVENT (`cleansedAllyIds` / `damagedAllyId`, falling back to the
+            //      heal anchor). Deliberately NOT this branch's footprint meaning: a passive that
+            //      says "repairs THAT ally" names a specific ally the event identified.
+            //   3. The standing-leech proc (`procStandingLeechesPerVictim`, engine.ts) — the player
+            //      heal anchor, or NOBODY for an enemy owner. Corpus-dead and logged as an open
+            //      residual at its own site.
             const base = target === 'self' ? [actor.id] : ownSideIds;
             return supportRecipients(target, base, { ability, fromPassive });
         };

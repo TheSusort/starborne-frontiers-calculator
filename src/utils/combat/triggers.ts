@@ -2492,6 +2492,29 @@ function payloadFromConfig(cfg: {
  * falling back to fallbackTargetId (the heal target). 'all-allies': fans out to every same-side
  * id (ctx.playerIds). 'lowest-hp-ally': the engine-resolved selector (see below). Anything else
  * (self, enemy, …): the owner only.
+ *
+ * ⚠️ `'ally'` HERE IS NOT `'ally'` ON THE CAST PATH, and the difference is intended. Since SP-4e
+ * Task 4, `recipientsFor` (playerTurn.ts) resolves a cast-slot `'ally'` to the caster's whole own
+ * side narrowed by its support footprint — identically to `'all-allies'`. This function keeps the
+ * single-recipient meaning, because a reactive clause names a SPECIFIC ally that the triggering
+ * event identified ("repairs THAT ally", "cleanses 1 debuff from that ally"), not a footprint. So
+ * the heal-vs-cleanse target distinction the parser still emits is a no-op on the cast path and
+ * load-bearing here. (Third meaning, for completeness: the standing-leech proc's `'ally'` arm in
+ * engine.ts is the player heal anchor, or nobody for an enemy owner — see its OPEN RESIDUAL block.)
+ *
+ * Note the knock-on from Task 4's widening: `cleansedAllyIds` comes from
+ * `cleanse-performed.targets`, which a cast `'ally'` cleanse now fills with every footprint ally
+ * that actually lost a debuff, so a "repairs that ally" passive fans out over all of them rather
+ * than one. In the shipped corpus that is exactly ONE ship — **Cultivator**, the only kit carrying
+ * both a plain-`'ally'` cast cleanse and an `'ally'` `on-own-cleanse` repair (measured SP-4e fix
+ * wave 1). Hayyan has the same passive but its cast cleanse is already `'all-allies'`, so it
+ * fanned out before Task 4 and is unchanged by it. Pinned end-to-end, both placements, by
+ * `plainAllyCleanseFootprintReach.integration.test.ts`.
+ *
+ * The OPPOSING-side twin of that knock-on is `cleansedEnemyIds` (stamped from the same
+ * `cleanse-performed.targets` on `on-enemy-cleansed`, ~:1226): Pestilence's "inflicts Corrosion II
+ * on all cleansed enemies" now lands on every ally an opposing plain-`'ally'` cleanse touched,
+ * where pre-Task-4 there was only ever one.
  */
 export function reactiveRecipients(
     intent: Intent,

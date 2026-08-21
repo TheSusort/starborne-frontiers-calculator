@@ -738,6 +738,15 @@ const HealingCalculatorPage: React.FC = () => {
     // "rescued" ally would silently suppress the very warning this exists to raise. The union stays
     // in the helper (tested there) and goes live the moment team-actor targeting is threaded into
     // the adapter — a named follow-up, not an oversight.
+    //
+    // ⚠️ HOW WIDE "UNFILTERED" IS, since SP-4e Task 4 — INTENDED FOR NOW (owner ruling 2026-08-21).
+    // "Unfiltered" used to be nearly harmless: a plain `'ally'` support clause resolved to the single
+    // heal anchor, so no narrowing meant "the anchor, unnarrowed". It now resolves to the caster's
+    // whole own side (`recipientsFor`, playerTurn.ts), so on a team actor — which this page threads
+    // NO pattern to — an ally-targeted clause reaches the ENTIRE player side, the team actor itself
+    // included. That is the deliberate meaning of `supportFootprintAllyIds`'s `undefined` ("do not
+    // narrow"), left as-is rather than split into "no ally reach" vs "not threaded". It resolves
+    // itself the same way this warning's union does: by threading real team-actor patterns.
     const placementWarnings = useMemo(() => {
         const allies = [
             // `position` stays `undefined` for an unplaced ship — `resolveHealingPlayerPlacement`

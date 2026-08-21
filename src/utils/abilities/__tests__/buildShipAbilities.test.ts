@@ -1456,11 +1456,22 @@ describe('buildShipAbilities', () => {
     // Bare repair/cleanse (no target phrase) on a PURE-SUPPORT active/charged skill (no damage
     // component) targets allies, not the caster. HEALS route to 'all-allies' — a support healer
     // repairs EVERYONE in its pattern footprint (AoE, "just like buffs"; the engine intersects
-    // all-allies with the support pattern). CLEANSES stay single 'ally'. An EXPLICIT recipient
-    // ("the ally with the most missing health" → Volk) sets explicitTarget and stays a single
-    // recipient — since SP-4e Task 3 that named recipient is 'lowest-hp-ally' rather than 'ally'.
-    // The parser defaults bare to 'self'; the flip lives in abilitiesFromText where the
-    // slot + damage component are known.
+    // all-allies with the support pattern). CLEANSES keep the parsed value 'ally'.
+    //
+    // The cases below assert PARSED VALUES, which is all they ever did — but the heal-vs-cleanse
+    // difference they show is no longer a difference in CAST REACH. Since SP-4e Task 4 the engine's
+    // `recipientsFor` resolves a cast-slot 'ally' to the caster's own side narrowed by the support
+    // footprint, i.e. exactly what it gives 'all-allies' (owner ruling 2026-08-21: a plain 'ally'
+    // cleanse covers the allies its co-cast buff covers). So the two targets resolve identically
+    // here, and 'ally' is kept only because it still means ONE event-derived ally on the REACTIVE
+    // path (`reactiveRecipients`, triggers.ts). Do not "fix" a cleanse's reach by reading this
+    // block: the reach lives in the engine, pinned by
+    // `plainAllyCleanseFootprintReach.integration.test.ts`.
+    //
+    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
+    // and stays a genuine single recipient on every path — since SP-4e Task 3 it is parsed as
+    // 'lowest-hp-ally' rather than 'ally'. The parser defaults bare to 'self'; the flip lives in
+    // abilitiesFromText where the slot + damage component are known.
     describe('bare repair → all-allies (AoE) / cleanse → ally on pure-support active/charged skills', () => {
         it('Hermes active bare repair → AoE heal (all-allies)', () => {
             const s = ship({ activeSkillText: 'This Unit Repairs 27% of its Max HP.' });

@@ -4113,7 +4113,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // a `'lowest-hp-ally'` arm that applies to the SELECTED recipient's own pool. Every other
     // target flavour there keeps its long-standing anchor-only application — `'ally'` →
     // `[healTarget.id]`, `'all-allies'` → the whole roster credited but only the anchor's pool
-    // touched — and widening those is Task 4's scope, not this rung's. The tests that pin the
+    // touched. An earlier draft of this sentence said "widening those is Task 4's scope, not this
+    // rung's". Task 4 has SHIPPED and it did NOT widen them: it changed `recipientsFor` only, so
+    // both leech procs still answer `'ally'` with the anchor while `recipientsFor` answers it with
+    // the caster's support footprint. That divergence is deliberate and recorded as an OPEN
+    // RESIDUAL at the `'ally'` arm below (with the three reasons it was not a drop-in); it belongs
+    // to no scheduled task, so do not read this paragraph as a pending deletion. The tests that pin the
     // anchor-only behaviour are named, not line-numbered, in `leech.test.ts`: Test 3
     // "detonation scope: no leech on direct rounds; leech = burst × pct on the burst round" and
     // Test 8 "all-allies: directHeal credited once per recipient (playerIds order)". Note that the
@@ -4210,19 +4215,24 @@ export function runCombat(rawInput: CombatEngineInput): {
             // promised Task 4 would retire the `ally` arm — it did not, and that promise expired).
             // Task 4 changed what a plain `'ally'` means in `recipientsFor`: the caster's support
             // footprint, on both sides. THIS proc's `ally` arm still says "the player heal anchor,
-            // nobody for an enemy owner", so the two now DISAGREE. It was left alone deliberately:
-            // the arm is corpus-dead (every standing leech that survives the reactive partition
-            // targets `self` — Magnolia, Malvex, Quixilver, Valerian; Valkyrie's ally-facing one is
-            // `on-bomb-detonated`, so it is reactive and never enters this map), and aligning it
-            // needs a footprint route this proc has no access to — it holds no `supportRecipients`
-            // binding. Deleting the arm is NOT a drop-in either: control would fall through to the
-            // final `[sourceId]` else-arm, i.e. a self-repair, which is a third answer and the wrong
-            // one. So: no live behaviour rides on it, and closing it is its own task.
-            //
-            // Corpus reach is unchanged: every passive leech that survives the reactive partition
-            // into `standingLeeches` targets `self` (Magnolia, Malvex, Quixilver, Valerian;
-            // Valkyrie's ally-facing one is `on-bomb-detonated`, so it is reactive and never
-            // enters this map). Neither ally-facing arm has a live entry today.
+            // nobody for an enemy owner", so the two now DISAGREE. It was left alone deliberately,
+            // for three reasons:
+            //   (a) the arm is CORPUS-DEAD. `standingLeeches` is built from passive-slot heal/shield
+            //       abilities with basis `'damage-dealt'` that survive the reactive partition, and
+            //       the whole corpus contributes exactly TWO, both `self`: Magnolia (heal 40%) and
+            //       Valerian (heal 15%) — re-measured over all 147 rows of docs/ship-skills.csv,
+            //       SP-4e fix wave 1. (An earlier list also named Malvex and Quixilver: those are
+            //       `damage-taken` shields and live in the SIBLING map that feeds
+            //       `procTakenLeechesPerVictim`, never here. Valkyrie's ally-facing leech is
+            //       `on-bomb-detonated`, hence reactive, and it carries `'lowest-hp-ally'` rather
+            //       than a plain `'ally'` — so it would not reach this arm even if it did land in
+            //       this map.) Neither ally-facing arm has a live entry today.
+            //   (b) aligning it needs a footprint route this proc has no access to — it holds no
+            //       `supportRecipients` binding.
+            //   (c) deleting the arm is NOT a drop-in: control would fall through to the final
+            //       `[sourceId]` else-arm, i.e. a self-repair, which is a third answer and the wrong
+            //       one.
+            // So: no live behaviour rides on it, and closing it is its own task.
             const selectorRecipientId =
                 e.target === 'lowest-hp-ally' ? lowestHpAllyIdForOwner(sourceId) : undefined;
             const recipients =

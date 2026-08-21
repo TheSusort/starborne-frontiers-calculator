@@ -37,6 +37,18 @@ export function resolveSupportRecipients(args: {
     }
 
     const { footprintAllyIds, baseRecipients } = args;
+    // ⚠️ `undefined` means "DO NOT NARROW", and it deliberately does NOT distinguish "this pattern
+    // reaches no ally" from "no pattern was threaded here". Kept as-is by owner ruling 2026-08-21;
+    // do not split it into two outcomes.
+    //
+    // Since SP-4e Task 4 that fallback is much wider than it looks. `recipientsFor` (playerTurn.ts)
+    // now hands a plain `'ally'` clause the caster's whole own side as `baseRecipients`, where it
+    // used to hand a single id (the heal anchor / the lowest-HP ally). So on any caster with a
+    // non-support pattern — most visibly the healing calculator's TEAM actors, which are threaded
+    // no pattern at all and therefore run on `DEFAULT_BASE_PATTERN` (see HealingCalculatorPage's
+    // placement-warning block) — an ally-targeted support clause reaches EVERY same-side actor,
+    // the caster included. Intended for now; it narrows on its own once real team-actor patterns
+    // are threaded into the adapter.
     if (footprintAllyIds === undefined) return baseRecipients;
 
     const allowed = new Set(footprintAllyIds);
