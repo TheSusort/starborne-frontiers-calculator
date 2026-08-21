@@ -230,9 +230,30 @@ describe('DPSRoundChart surfaces walked-team damage from a real page-shaped run'
         // nodes), and against the exact figures so a zeroed aggregate cannot pass.
         const hasText = (expected: string) => (_: string, el: Element | null) =>
             el?.textContent?.trim() === expected;
+        // #331: `teamDamage` is the WHOLE SIDE's round output, so the row prints it as the round
+        // total and breaks out the allies' share (side total − this ship's own round damage).
+        // eslint-disable-next-line no-console
+        console.error(
+            'VIOLET:',
+            JSON.stringify(
+                [...document.querySelectorAll('.text-violet-400')].map((e) => e.textContent)
+            )
+        );
+        const focusRound = result.rounds[round - 1].totalRoundDamage;
+        const alliesShare = teamDamage - focusRound;
+        expect(alliesShare).toBeGreaterThan(0);
         expect(
-            screen.getByText(hasText(`Team damage: ${teamDamage.toLocaleString()}`))
+            screen.getByText(
+                hasText(
+                    `Team round total: ${teamDamage.toLocaleString()} (this ship + ${alliesShare.toLocaleString()} from allies)`
+                )
+            )
         ).toBeInTheDocument();
+        // The dashed overlay's cumulative is the side total's running sum — it must NOT be the
+        // focus's cumulative plus that (which would count the focus twice).
+        expect(combined).toBe(
+            result.rounds.slice(0, round).reduce((sum, r) => sum + (r.teamDamage ?? 0), 0)
+        );
         expect(
             screen.getByText(hasText(`Total (with team): ${combined.toLocaleString()}`))
         ).toBeInTheDocument();

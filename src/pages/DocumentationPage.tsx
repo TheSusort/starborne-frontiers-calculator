@@ -2618,13 +2618,20 @@ const DocumentationPage: React.FC = () => {
                                         crit rate, crit damage, defense penetration, hacking,
                                         defense, HP) and an affinity selector auto-filled from the
                                         ship&apos;s data and fully editable. Team ships deal real
-                                        damage shown separately as{' '}
-                                        <span className="text-primary">Team damage</span> — it
-                                        reduces the enemy&apos;s HP (so HP-threshold gates fire at
-                                        the right round) without being added to the attacker&apos;s
-                                        DPS totals, keeping the comparison between attacker
-                                        configurations meaningful. Team ships apply their own DoTs
-                                        and debuffs on their actual turns using their own stats and
+                                        damage, and the round chart reports it as{' '}
+                                        <span className="text-primary">Team round total</span> — the
+                                        whole side&apos;s output for that round, this ship plus
+                                        every ally, with the allies&apos; own share broken out
+                                        beside it. The side total is the number to compare when you
+                                        swap the attacker: a different attacker buffs its allies
+                                        differently and feeds their reactions differently, so it
+                                        changes what the rest of the team puts out, and neither
+                                        figure alone shows that. Team damage reduces the
+                                        enemy&apos;s HP (so HP-threshold gates fire at the right
+                                        round) and is never added to the attacker&apos;s own DPS
+                                        totals, so the per-config DPS comparison stays a clean
+                                        measure of the attacker. Team ships apply their own DoTs and
+                                        debuffs on their actual turns using their own stats and
                                         affinity, fire their own reactive triggers (crit-triggered
                                         effects, charge-on-inflict, start-of-round buffs), and grant
                                         ally-wide buffs and charge gains to the whole team —
@@ -2637,10 +2644,10 @@ const DocumentationPage: React.FC = () => {
                                         so picking one manually has no effect; they apply in full
                                         only when a ship&apos;s own skill grants them. On the round
                                         chart, the attacker keeps its solid cumulative line and a
-                                        dashed &quot;with team&quot; line shows the combined team
-                                        total (attacker plus team damage); because the enemy dies on
-                                        that combined total, the kill mark sits on the dashed line
-                                        at the round it empties the HP pool.
+                                        dashed &quot;with team&quot; line shows the side&apos;s
+                                        running total; because the enemy dies on that total, the
+                                        kill mark sits on the dashed line at the round it empties
+                                        the HP pool.
                                     </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">

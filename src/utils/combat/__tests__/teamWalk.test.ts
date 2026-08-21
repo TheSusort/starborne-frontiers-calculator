@@ -145,6 +145,12 @@ const baseInput = (overrides: Partial<DPSSimulationInput> = {}): DPSSimulationIn
     ...overrides,
 });
 
+/** The walked team's OWN contribution. `RoundData.teamDamage` is the whole player side since #331
+ *  (the focus is IN it, because swapping the focus changes what the team does), so the team's own
+ *  share is that minus the focus's own round total. */
+const teamOwn = (r: { teamDamage?: number; totalRoundDamage: number }): number =>
+    (r.teamDamage ?? 0) - r.totalRoundDamage;
+
 describe('walked team actors (Task 4)', () => {
     // 1. Team debuff walks → attacker damage higher; debuff-applied carries team sourceId.
     it('a walked team enemy-debuff (Defense Down) raises attacker damage and emits the team sourceId', () => {
@@ -271,15 +277,17 @@ describe('walked team actors (Task 4)', () => {
         // exact single-application value on round 1, where there is exactly one entry.
         const expectedTick = stacks * (tier / 100) * teamAttack * 1 * 1;
         // Team applies on round 1 (speed 140, before attacker) → ticks on the enemy turn r1.
-        // No team damage ability → team direct is 0, so round-1 teamDamage == the inferno tick.
-        expect(result.rounds[0].teamDamage ?? 0).toBeCloseTo(expectedTick, 0);
+        // No team damage ability → team direct is 0, so the team's OWN round-1 share is the tick.
+        expect(teamOwn(result.rounds[0])).toBeCloseTo(expectedTick, 0);
         // Round 2: two inferno entries are ticking (applied on turns 1 and 2), no team direct.
-        // teamDamage must be exactly 2 × the single-entry tick from round 1.
-        expect(result.rounds[1].teamDamage ?? 0).toBeCloseTo(2 * expectedTick, 0);
+        // The team's own share must be exactly 2 × the single-entry tick from round 1.
+        expect(teamOwn(result.rounds[1])).toBeCloseTo(2 * expectedTick, 0);
     });
 
-    // 5. HP-delta complement: totalRoundDamage + teamDamage reconciles with the enemy HP decline.
-    it('totalRoundDamage + teamDamage reconciles with the enemy HP decline each round', () => {
+    // 5. HP-delta: `teamDamage` IS the side's output, so it alone reconciles with the enemy HP
+    //    decline. Before #331 this needed `totalRoundDamage + teamDamage`; adding the focus's own
+    //    total now would double-count it, which is the clearest statement of what the field means.
+    it('teamDamage alone reconciles with the enemy HP decline each round', () => {
         const enemyHp = 5_000_000;
         const team = walkedTeam(damageSkills(120), {
             id: 'tdelta',
@@ -290,7 +298,7 @@ describe('walked team actors (Task 4)', () => {
         // NEXT round's entering enemyHpPct. enemyHpPct is rounded to an int → ±1% tolerance.
         let cumulative = 0;
         for (let i = 0; i < result.rounds.length - 1; i++) {
-            cumulative += result.rounds[i].totalRoundDamage + (result.rounds[i].teamDamage ?? 0);
+            cumulative += result.rounds[i].teamDamage ?? 0;
             const expectedPct = Math.max(0, 100 * (1 - cumulative / enemyHp));
             // enemyHpPct is rounded to an int; the per-round sums round each channel → ±1.5%.
             expect(Math.abs(result.rounds[i + 1].enemyHpPct - expectedPct)).toBeLessThanOrEqual(
@@ -389,7 +397,7 @@ describe('walked team actors (Task 4)', () => {
         };
 
         // (a) Only the ATTACKER has Focus Mark (via its own self-buff ability). The team gate
-        // reads the team's OWN buffs (which lack it) → team damage 0 → teamDamage 0.
+        // reads the team's OWN buffs (which lack it) → the team contributes nothing of its own.
         const attackerWithBuff: ShipSkills = {
             slots: [
                 {
@@ -405,7 +413,7 @@ describe('walked team actors (Task 4)', () => {
         const aRes = simulateDPS(
             baseInput({ shipSkills: attackerWithBuff, teamActors: [teamGatedOnly], rounds: 3 })
         );
-        expect(aRes.rounds.every((r) => (r.teamDamage ?? 0) === 0)).toBe(true);
+        expect(aRes.rounds.every((r) => teamOwn(r) === 0)).toBe(true);
 
         // (b) The team grants ITSELF Focus Mark (self-targeted buff ability in its own kit,
         // applied before its damage in the same cast). The gate PASSES → team damage > 0.
@@ -421,7 +429,7 @@ describe('walked team actors (Task 4)', () => {
             { id: 'tgate', stats: teamStats({ attack: 15000 }) }
         );
         const bRes = simulateDPS(baseInput({ teamActors: [teamSelfGrantThenDamage], rounds: 3 }));
-        expect(bRes.rounds.every((r) => (r.teamDamage ?? 0) > 0)).toBe(true);
+        expect(bRes.rounds.every((r) => teamOwn(r) > 0)).toBe(true);
     });
 
     // 9. Determinism: two identical walked-team runs are JSON-equal.
@@ -709,11 +717,13 @@ describe('ally-target routing (Task 5)', () => {
         const fastAttacker = simulateDPS(
             baseInput({ shipSkills: attackerSkills, teamActors: [teamSlow], rounds: 3 })
         );
-        // Team damage flows because the attacker's all-allies buff reached the team.
-        expect(fastAttacker.rounds.every((r) => (r.teamDamage ?? 0) > 0)).toBe(true);
+        // Team damage flows because the attacker's all-allies buff reached the team. Measured as
+        // the team's OWN share — `teamDamage` includes the focus since #331, and the focus deals
+        // damage every round either way, so the raw field cannot see this gate at all.
+        expect(fastAttacker.rounds.every((r) => teamOwn(r) > 0)).toBe(true);
 
         // Reverse timing: team FASTER (140) acts before the attacker → round 1 gate fails
-        // (Marker not yet applied), so round-1 teamDamage is 0; from round 2 it flows.
+        // (Marker not yet applied), so the team's own round-1 share is 0; from round 2 it flows.
         const teamFast = walkedTeam(
             { slots: [{ slot: 'active', abilities: [gatedTeamDamage] }] },
             { id: 'tmk', speed: 140, stats: teamStats({ attack: 15000 }) }
@@ -721,8 +731,8 @@ describe('ally-target routing (Task 5)', () => {
         const fastTeam = simulateDPS(
             baseInput({ shipSkills: attackerSkills, teamActors: [teamFast], rounds: 3 })
         );
-        expect(fastTeam.rounds[0].teamDamage ?? 0).toBe(0);
-        expect(fastTeam.rounds[1].teamDamage ?? 0).toBeGreaterThan(0);
+        expect(teamOwn(fastTeam.rounds[0])).toBe(0);
+        expect(teamOwn(fastTeam.rounds[1])).toBeGreaterThan(0);
     });
 
     // 4. Ally charge grant accelerates EVERY player actor's charged cadence, capped per actor.
