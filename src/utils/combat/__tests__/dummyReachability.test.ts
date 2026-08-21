@@ -106,8 +106,8 @@ import {
     runCombat,
     __getNoVictimTurnCount,
     __resetNoVictimTurnCount,
-    __getEnemySiteVictimTurnCounts,
-    __resetEnemySiteVictimTurnCounts,
+    __getResolvedVictimTurnCounts,
+    __resetResolvedVictimTurnCounts,
     SENTINEL_ENEMY_ACTOR_ID,
 } from '../engine';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
@@ -411,39 +411,33 @@ describe('the shapes that used to reach the dummy sink', () => {
 });
 
 /**
- * SP-4e fix wave 1 — the OTHER unfalsifiable claim this rung created, made executable.
+ * A RESOLVED VICTIM IS ALIVE — the property, not any one branch's precondition.
  *
- * #335 deleted the `|| tgt === undefined` arm from the enemy site's turn skip, which left
- * `skipDeadTargetTurn` with one entrant: a RESOLVED victim that is already dead. The engine carries
- * a measured claim (0 hits across the whole suite, where the pre-rung tree hit it in 4 files) plus a
- * structural argument that the precondition is now unconstructible — `resolvePositionalTarget`
- * builds its `byCell` from `position !== undefined && currentHp > 0` and every return path draws
- * from that map or returns null, and nothing between the call and the check mutates HP.
+ * `resolvePositionalTarget` builds its `byCell` from `position !== undefined && currentHp > 0` and
+ * every return path draws from that map or returns null, so no caller can be handed a corpse. SP-4e
+ * first pinned this as the gate on the enemy site's `skipDeadTargetTurn` branch, whose entire
+ * precondition was that unsatisfiable state; #346 deleted the branch and MOVED the instrument to
+ * `selectTurnTarget` — the resolver's only production consumer, and the one place all three turn
+ * sites (focus, walked team, enemy) pass through. So the counts below now cover every side, which
+ * is why they read higher than the enemy-only turn count.
  *
- * The rung shipped that as a 20-line comment while giving `legacyVictim` a tree-walking tripwire —
- * and, worse, RELABELLED the two `twoTeamBattle` cases that used to reach the branch by accident, so
- * nothing covered it at all. This is the replacement. It reads the branch's own precondition
- * (`dead`) BEFORE the `skillNeedsOpposingVictim` gate narrows it, which is the stronger claim: a
- * dead resolved victim is IMPOSSIBLE, not merely harmless.
- *
- * NON-VACUITY is the whole difficulty with a zero over an unsatisfiable branch — the repo's own
+ * NON-VACUITY is the whole difficulty with a zero over an unsatisfiable state — the repo's own
  * fixture-vacuity defect class in counter form. Two things answer it:
- *  1. IN-SUITE: `resolved` counts the same check's live arm from the same three lines, so a
- *     `dead: 0` next to a `resolved: 3` proves the instrument is wired to a site that fires. A
- *     broken reading (wrong accessor, un-run fixture, a check that moved) reads `resolved: 0` and
- *     fails here.
+ *  1. IN-SUITE: `resolved` counts the live arm from the same two lines, so a `dead: 0` next to a
+ *     `resolved: 4` proves the instrument is wired to a site that fires. A broken reading (wrong
+ *     accessor, un-run fixture, a check that moved) reads `resolved: 0` and fails here.
  *  2. BY MUTATION, recorded because no fixture can do it: dropping the `&& a.currentHp > 0` conjunct
  *     from `positionalBinding.ts`'s `byCell` makes a corpse resolvable, and the second case below
- *     then reads `dead: 2` and goes RED. That is the proof that this zero is a finding rather than a
- *     tautology (task-5-report.md, fix wave 1).
+ *     then reads a non-zero `dead` and goes RED. That is the proof that this zero is a finding
+ *     rather than a tautology (SP-4e task-5-report.md; re-verified for #346 after the move).
  */
 describe('A DEAD RESOLVED VICTIM IS UNCONSTRUCTIBLE', () => {
     beforeEach(() => {
         setupKeyedTestRng(12345);
-        __resetEnemySiteVictimTurnCounts();
+        __resetResolvedVictimTurnCounts();
     });
 
-    it('LIVENESS + ZERO: the enemy site resolves a LIVING victim on every turn it takes', () => {
+    it('LIVENESS + ZERO: every turn that binds a victim binds a LIVING one', () => {
         const { result } = collectTurns({
             ...bareInput(),
             enemyAttackers: attackingEnemy(),
@@ -453,8 +447,10 @@ describe('A DEAD RESOLVED VICTIM IS UNCONSTRUCTIBLE', () => {
         expect(dealtBy(result, 1, BARE_ENEMY_ID)).toEqual({ attacker: PER_CAST });
         expect(dealtBy(result, BARE_ROUNDS, BARE_ENEMY_ID)).toEqual({ attacker: PER_CAST });
 
-        // The non-zero half — the reading that makes the zero mean something.
-        expect(__getEnemySiteVictimTurnCounts()).toEqual({ resolved: BARE_ROUNDS, dead: 0 });
+        // The non-zero half — the reading that makes the zero mean something. Both sides count:
+        // the focus binds the enemy on each of its turns and the enemy binds the focus on each of
+        // its own, so a 2-round run with one enemy books 2 + 2.
+        expect(__getResolvedVictimTurnCounts()).toEqual({ resolved: 2 * BARE_ROUNDS, dead: 0 });
     });
 
     it('a player victim KILLED mid-run is RETARGETED, never re-resolved as a corpse', () => {
@@ -483,7 +479,10 @@ describe('A DEAD RESOLVED VICTIM IS UNCONSTRUCTIBLE', () => {
         expect(dealtBy(result, 3, BARE_ENEMY_ID)).toEqual({ [BARE_ALLY_ID]: PER_CAST });
         expect(dealtBy(result, 4, BARE_ENEMY_ID)).toEqual({ [BARE_ALLY_ID]: PER_CAST });
 
-        expect(__getEnemySiteVictimTurnCounts()).toEqual({ resolved: 4, dead: 0 });
+        // 10 = the enemy's 4 turns + the walked ally's 4 + the focus's 2 (it dies in round 2 and
+        // takes no turn after). Every one of them bound a LIVING victim — including the enemy's
+        // rounds 3-4, which is the interesting half: its previous victim is lying dead on the board.
+        expect(__getResolvedVictimTurnCounts()).toEqual({ resolved: 10, dead: 0 });
     });
 });
 

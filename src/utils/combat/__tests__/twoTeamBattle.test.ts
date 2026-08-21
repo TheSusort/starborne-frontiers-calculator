@@ -1669,8 +1669,13 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         // deleted this actor resolves NO victim in EVERY round (alive focus or dead), so it now
         // takes the no-victim turn instead — which delivers 0 because `runPlayerTurn` fences its
         // damage assembly on `hasVictim`. The OUTCOME asserted below is unchanged, which is the
-        // point; the route to it is not. See the engine's own note at `skipDeadTargetTurn` for
-        // the measurement that the old route is now unreachable suite-wide.
+        // point; the route to it is not.
+        //
+        // #346 finished the job: the skip, its `skillNeedsOpposingVictim` gate and the helper
+        // itself are DELETED, so there is no longer a second route this case could silently swap
+        // back onto. ⚠️ It is still NOT a pin on the absence of a fabricated victim — this case
+        // and its sibling stay green either way (they assert an outcome both routes produce).
+        // `noVictimEnemyBindsNobody.integration.test.ts` is the pin.
         const result = simulateBattle({
             playerTeam: [
                 {
