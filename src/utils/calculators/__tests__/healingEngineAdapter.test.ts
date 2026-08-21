@@ -298,9 +298,17 @@ describe('simulateHealing adapter', () => {
                 ]),
             })
         );
-        // The focus heals the ally target for the caster's hp-basis (10000×10% = 1000),
-        // credited to the focus actor's directHeal.
-        expect(teamTarget.rounds[0].directHeal).toBe(1000);
+        // The focus heals the ally target for the caster's hp-basis (10000×10% = 1000).
+        //
+        // SP-4e Task 4: a plain `'ally'` heal routes over the caster's target pattern, and this
+        // fixture has no support pattern (so nothing narrows it) — the cast therefore reaches BOTH
+        // own-side actors and the SOURCE-axis `directHeal` is 2 × 1000. Pre-4e it routed to
+        // `[healing.targetId]` alone and read 1000. The claim being made here is about the BASIS
+        // (the caster's hp, not the recipient's 8000), so read the recipient axis for `t1` — that
+        // isolates the per-recipient amount from how many recipients the cast reached.
+        expect(teamTarget.rounds[0].perRecipient?.['t1']?.directHeal).toBe(1000);
+        // …and the source-axis row is the sum over both recipients, not a third number.
+        expect(teamTarget.rounds[0].directHeal).toBe(2000);
     });
 
     // ── Test 6: pressure — intake/absorb/HP flow + effectiveHealing once deficit ─

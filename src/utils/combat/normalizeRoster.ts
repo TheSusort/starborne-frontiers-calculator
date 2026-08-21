@@ -67,8 +67,8 @@ function placeSide(
  *
  * Both are load-bearing and independently required: `selectTurnTarget` needs
  * `resolvesPositionalVictim(...) && target` (no target → the selection short-circuits; before
- * SP-4c-2d that fell back to the dummy, and since 4c-2b/4c-2d a player actor gets NO victim while
- * an enemy actor gets `legacyVictim: healTarget`), and the
+ * SP-4c-2d that fell back to the dummy on the player side and to the heal target on the enemy one,
+ * and since SP-4e BOTH sides answer with NO victim), and the
  * positional APPLY gate additionally needs `pattern != null`. With a target but no pattern the cast
  * resolves onto the real enemy and still credits `cumulativeDamage` through the legacy single-apply
  * (the credit is suppressed only when the POSITIONAL branch is taken), but never runs the

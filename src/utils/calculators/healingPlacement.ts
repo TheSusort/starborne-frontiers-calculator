@@ -44,8 +44,10 @@ function neutralHealTargetSlot(healerSlot: Position): Position {
  *
  * Seeds a cell the HEALER's own support footprint covers, because an off-footprint heal target
  * receives **nothing at all**: `resolveSupportRecipients` FILTERS the recipient list by the footprint
- * and never expands it, and a single-`ally` heal's base is just `[healTargetId]`. That zero is
- * game-faithful and deliberately not softened — so the defaults must simply not walk into it.
+ * and never expands it, so an off-footprint id is dropped whether it arrived as the whole own-side
+ * roster (a plain `'ally'`/`'all-allies'` heal since SP-4e Task 4) or, before that rung, as the
+ * single-element `[healTargetId]` base. That zero is game-faithful and deliberately not softened —
+ * so the defaults must simply not walk into it.
  *
  * Selection order:
  *   1. a covered cell that is neither the healer's own cell nor the FRONT column (decision 2's

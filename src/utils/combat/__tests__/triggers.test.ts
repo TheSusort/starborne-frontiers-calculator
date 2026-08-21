@@ -2721,7 +2721,11 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e: the reactive heal branch now applies to the RESOLVED recipient's own pool
+            // (previously only to `targetId`), so this double must model production, where
+            // `recipientActor` resolves every roster id. A blanket `() => undefined` here would
+            // make the repair land nowhere and this suite would stop observing consumption at all.
+            recipientActor: (id) => (id === 'A' ? ({ id: 'A' } as CombatActor) : undefined),
         };
         const ctx: IntentExecContext = {
             round: 1,
@@ -2740,6 +2744,9 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             recordResisted: () => {},
             healing,
             oncePerCombatFired,
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
         return { ctx, applied };
     };
@@ -3138,6 +3145,9 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
     };
 
@@ -3235,7 +3245,10 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e: see the identical note on the once-per-combat double above — the reactive
+            // heal branch resolves `recipientActor` now, so an always-undefined stub would make
+            // this suite's `applied` array permanently empty and its gate assertions vacuous.
+            recipientActor: (id) => (id === 'A' ? ({ id: 'A' } as CombatActor) : undefined),
         };
         const ctx: IntentExecContext = {
             round: 1,
@@ -3252,6 +3265,9 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             playerIds: ['A'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
             healing,
             ...(selfHpPctFor !== undefined ? { selfHpPctFor } : {}),
         };
@@ -3339,6 +3355,9 @@ describe('debuff-resisted reports the resolved counter target (combat-log fideli
             playerIds: ['attacker'],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
         ctx.bus.on('debuff-resisted', (e) =>
             emitted.push(e as { type: string; targetId?: string })
@@ -3418,6 +3437,9 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             playerIds: PLAYER_IDS,
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
     };
 
@@ -3470,10 +3492,15 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
 
     const buildHealCtx = (): {
         ctx: IntentExecContext;
-        applied: number[];
+        applied: Array<{ raw: number; id: string | undefined }>;
         credits: Array<{ bucket: string; amount: number }>;
     } => {
-        const applied: number[] = [];
+        // SP-4e fix wave 1: `applied` records the RECIPIENT, not just the amount. As a bare
+        // `number[]` it counted APPLICATIONS, so a production mis-route that repaired the anchor
+        // instead of the resolved recipient left every assertion below green — the reviewer proved
+        // it by rewriting the executor's `recipientActor(rid)` to `recipientActor(targetId)` and
+        // watching all four recipient-routing tests still pass. The id is the discriminator.
+        const applied: Array<{ raw: number; id: string | undefined }> = [];
         const credits: Array<{ bucket: string; amount: number }> = [];
         const healing: HealingRuntimeCtx = {
             targetId: 'tank',
@@ -3481,14 +3508,16 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => 1000,
-            applyHealToTarget: (raw) => {
-                applied.push(raw);
+            applyHealToTarget: (raw, victim) => {
+                applied.push({ raw, id: victim?.id });
                 return { consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: PLAYER_IDS,
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e: production resolves every roster id here (`allActorsById.get`), and the
+            // reactive heal branch now reads it to pick whose pool to repair. Model that.
+            recipientActor: (id) => (PLAYER_IDS.includes(id) ? ({ id } as CombatActor) : undefined),
         };
         const ctx: IntentExecContext = {
             ...buildBuffCtx(),
@@ -3502,22 +3531,32 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
 
         executeIntent(makeHealIntent('tank'), ctx);
 
-        // 10% of owner hp (1000) = 100, consumed by the heal target.
-        expect(applied).toEqual([100]);
+        // 10% of owner hp (1000) = 100, consumed by the heal target — and it is the ANCHOR's
+        // pool that is drained, because here the damaged ally IS the anchor.
+        expect(applied).toEqual([{ raw: 100, id: 'tank' }]);
         expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
         expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });
 
-    it('heal intent with damagedAllyId ≠ healing.targetId credits directHeal but does NOT touch the target pool', () => {
+    it('heal intent with damagedAllyId ≠ healing.targetId repairs THAT ally, not the target', () => {
         const { ctx, applied, credits } = buildHealCtx();
 
-        // The damaged ally is 'team1', NOT the heal target 'tank' — locks the
-        // recipient-vs-target consumption split for the 4d multi-target future.
+        // The damaged ally is 'team1', NOT the heal target 'tank' — this pins the ROUTING half,
+        // which is unchanged: the repair goes to 'team1'.
         executeIntent(makeHealIntent('team1'), ctx);
 
-        expect(applied).toHaveLength(0);
+        // SP-4e Task 2 (the pool gate): before this change the executor credited gross directHeal
+        // for 'team1' and then restored HP only to the ANCHOR ('tank'), so a non-anchor recipient
+        // was healed NOTHING — `applied` was empty and no effectiveHeal was credited. The old
+        // assertion pinned that no-op as if it were the rule ("locks the recipient-vs-target
+        // consumption split for the 4d multi-target future"); 4e IS that future, and the rule is
+        // that a reactive repair lands on the recipient it resolved. Graphite's "grants the ally
+        // Repair Over Time" and Cultivator's "that ally" now actually repair that ally.
+        // The recipient id is the load-bearing half: `[{ raw: 100 }]` alone would also be
+        // produced by a regression that repaired the ANCHOR ('tank') instead of 'team1'.
+        expect(applied).toEqual([{ raw: 100, id: 'team1' }]);
         expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
-        expect(credits.some((c) => c.bucket === 'effectiveHeal')).toBe(false);
+        expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });
 });
 
@@ -3562,6 +3601,9 @@ describe('Overload lifecycle Task 3: executeIntent remove-self-buff branch', () 
             playerIds: [ownerId],
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is
+            // the honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
     };
 

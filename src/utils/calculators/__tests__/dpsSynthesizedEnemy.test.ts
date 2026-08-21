@@ -1,21 +1,22 @@
 /**
  * SP-4b-2a: a DPS caller that supplies no roster still fights a real, positioned enemy. Before
  * this, the focus fired into the dummy sink: `perTargetDealt` came back EMPTY while the damage
- * total looked plausible, and the legacyVictim fallback (SP-4c's keystone) was consulted.
+ * total looked plausible, and the per-side fallback victim (SP-4c's keystone) was consulted.
+ *
+ * SP-4e retired that fallback on both sides, so the "was the fallback consulted?" question no
+ * longer has an object to ask about. Its successor is `noVictimTurnCount`: the focus resolves a
+ * REAL positioned victim on every turn, so no turn in this fixture may be a no-victim turn.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS, SYNTHESIZED_DPS_ENEMY_ID } from '../dpsSimulator';
 import { setupKeyedTestRng } from '../rateAccumulator';
-import {
-    __getLegacyVictimFallbackCount,
-    __resetLegacyVictimFallbackCount,
-} from '../../combat/engine';
+import { __getNoVictimTurnCount, __resetNoVictimTurnCount } from '../../combat/engine';
 import { baseInput } from '../__testutils__/dpsRealEnemyFixture';
 
 describe('the DPS calculator never runs without an enemy', () => {
     beforeEach(() => {
         setupKeyedTestRng(12345);
-        __resetLegacyVictimFallbackCount();
+        __resetNoVictimTurnCount();
     });
 
     it('routes a scalar-only input per-victim onto a synthesized enemy', () => {
@@ -31,9 +32,9 @@ describe('the DPS calculator never runs without an enemy', () => {
         expect(dealt.some((d) => d.amount > 0)).toBe(true);
     });
 
-    it('never consults the legacyVictim fallback', () => {
+    it('never runs a no-victim turn — the synthesized enemy is always resolvable', () => {
         simulateDPS(baseInput());
-        expect(__getLegacyVictimFallbackCount()).toBe(0);
+        expect(__getNoVictimTurnCount()).toBe(0);
     });
 
     it('carries the caller scalars onto the synthesized enemy', () => {

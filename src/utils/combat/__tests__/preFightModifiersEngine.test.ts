@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { CombatActor, createActor } from '../state';
 import { runCombat, CombatEngineInput } from '../engine';
-import { createEventBus, CombatEvent } from '../events';
+import { createEventBus } from '../events';
 import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { emptyPreFightModifiers } from '../preFight';
 import type { PreFightCombatModifiers } from '../preFight';
@@ -219,7 +219,15 @@ const healerTeamInput = (): TeamActorInput[] => [
     },
 ];
 
-/** Run a 2-round healing battle and return the round-order heal-performed amounts. */
+/** Run a 2-round healing battle and return the round-order repair landed ON THE FOCUS.
+ *
+ *  SP-4e Task 4: `HEAL_ALLY_SKILLS` is a plain single-`'ally'` heal, which now routes over the
+ *  caster's target pattern instead of `[healing.targetId]`. This fixture is non-positional, so
+ *  `supportFootprintAllyIds` returns undefined and nothing narrows the pattern — the repair
+ *  reaches BOTH own-side actors (the focus AND `team1`, the caster itself). `heal-performed.amount`
+ *  is the whole cast's total, so it doubled. These cases are about the MODIFIER FOLD on one
+ *  recipient, not about how many recipients there are, so read the focus's own `perTarget` row:
+ *  that isolates the fold and stays correct however wide the recipient set gets. */
 const healAmounts = (args: {
     healerPreFight?: PreFightCombatModifiers;
     focusPreFight?: PreFightCombatModifiers;
@@ -230,7 +238,10 @@ const healAmounts = (args: {
     }
     const bus = createEventBus();
     const amounts: number[] = [];
-    bus.on('heal-performed', (e) => amounts.push((e as CombatEvent & { amount: number }).amount));
+    bus.on('heal-performed', (e) => {
+        const own = e.perTarget?.find((t) => t.targetId === 'attacker');
+        if (own) amounts.push(own.amount);
+    });
     runCombat(
         BASE_INPUT({
             numRounds: 2,
@@ -245,7 +256,7 @@ const healAmounts = (args: {
 };
 
 describe('F3 — heal channels fold at heal time', () => {
-    it('baseline: the ally repair is 12,500 each round (no preFight)', () => {
+    it("baseline: the focus's share of the ally repair is 12,500 each round (no preFight)", () => {
         expect(healAmounts({})).toEqual([12_500, 12_500]);
     });
 

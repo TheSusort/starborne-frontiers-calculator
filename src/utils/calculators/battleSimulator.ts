@@ -1072,8 +1072,10 @@ export function simulateBattle(
         // presence below (SP-U U5), not from `mode`. `mode: 'battle'` is the run-kind, not a
         // flag the pipeline is switched on by — it anchors `healTarget` to the focus actor
         // (engine.ts) so the heal/shield pipeline stays active with no vestigial `healTargetId`
-        // needed. A player single-`ally` heal/shield resolves the lowest-HP living player ally
-        // (team-symmetric with the enemy side).
+        // needed. SP-4e Task 4: recipient choice no longer depends on this run kind at all — a
+        // single-`ally` heal/shield routes over the caster's support footprint and a text-named
+        // worst-HP ally routes to that ally, identically here and in the healing calculator. The
+        // `teamBattle` flag that made `mode: 'battle'` mean "lowest-HP routing" is gone.
         mode: 'battle',
         teamActors,
         enemyAttackers,

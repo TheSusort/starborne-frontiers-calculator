@@ -1048,7 +1048,7 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * `role` is threaded from the ship (`ship.type`, the ship-class field) so rule B can read the class.
  */
 function flipBareSupportTarget(
-    target: 'self' | 'ally' | 'all-allies',
+    target: 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally',
     explicitTarget: boolean,
     slot: SkillSlot,
     hasDamage: boolean,
@@ -1057,11 +1057,22 @@ function flipBareSupportTarget(
     // The recipient scope for a BARE active/charged pure-support cast (no named recipient).
     // Heals pass 'all-allies' — a support healer heals EVERYONE in its pattern footprint (AoE,
     // "just like buffs"; the engine intersects all-allies with the support pattern). Cleanses
-    // (and the default) keep 'ally' — single-recipient, unchanged. An EXPLICIT recipient
-    // ("the ally with the most missing health" → Volk) sets explicitTarget and never reaches
-    // this branch, so it stays a single 'ally'.
+    // (and the default) keep 'ally'.
+    //
+    // What that 'ally' now MEANS on the cast path changed under the parser's feet, so do not read
+    // it as "single-recipient" any more: since SP-4e Task 4 the engine's `recipientsFor`
+    // (playerTurn.ts) resolves a cast-slot 'ally' to the caster's own side narrowed by the support
+    // footprint — the SAME answer it gives 'all-allies'. Owner ruling 2026-08-21 confirms that as
+    // the game rule (a plain 'ally' cleanse covers the allies its co-cast buff covers), so the
+    // parsed value is deliberately left alone rather than flipped to 'all-allies'. The distinction
+    // is a NO-OP for cast routing and still load-bearing on the REACTIVE path, where
+    // `reactiveRecipients` (triggers.ts) treats 'ally' as the ONE ally the triggering event named.
+    //
+    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
+    // and never reaches this branch; since SP-4e Task 3 that recipient is parsed as
+    // 'lowest-hp-ally', which IS a genuine single-recipient target on every path.
     bareActiveScope: 'ally' | 'all-allies' = 'ally'
-): 'self' | 'ally' | 'all-allies' {
+): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
         !explicitTarget &&
         target === 'self' &&
@@ -1094,6 +1105,12 @@ function flipBareSupportTarget(
         }
     }
 
+    // SP-4e: every flip branch above additionally requires `target === 'self'` — 'lowest-hp-ally'
+    // never satisfies that, so it always falls through every branch and passes through unchanged,
+    // regardless of `explicitTarget`. (Since Task 3 the parser DOES emit it — Pallas, Volk and
+    // Valkyrie — always with explicitTarget=true, though that is not what this function's
+    // structure guarantees.) Do not add a flip arm for it — a named selector is never a "bare"
+    // support target.
     return target;
 }
 
@@ -1101,12 +1118,12 @@ function flipBareSupportTarget(
  *  to all allies (Graphite: Overclock + shield). Standalone self shields ("gains a shield…")
  *  stay self. Explicit recipients and damage-rider skills are unchanged. */
 function flipBareSupportShieldTarget(
-    target: 'self' | 'ally' | 'all-allies',
+    target: 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally',
     explicitTarget: boolean,
     slot: SkillSlot,
     hasDamage: boolean,
     hasCoCastAllAlliesGrant: boolean
-): 'self' | 'ally' | 'all-allies' {
+): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
         hasCoCastAllAlliesGrant &&
         !explicitTarget &&
@@ -2245,7 +2262,11 @@ function abilitiesFromText(
                       role,
                       // AoE: a bare support-cast heal repairs every ally in the pattern footprint
                       // (like all-allies buffs), not a single ally. Volk-style explicit "most
-                      // missing health" sets explicitTarget and stays a single 'ally'.
+                      // missing health" sets explicitTarget and stays a single recipient — since
+                      // SP-4e Task 3 it is parsed as 'lowest-hp-ally', not 'ally'. (A bare CLEANSE
+                      // still parses as 'ally', but since SP-4e Task 4 that is no longer a
+                      // narrower CAST reach than this 'all-allies' — the two resolve identically
+                      // in `recipientsFor`; see flipBareSupportTarget's `bareActiveScope` doc.)
                       'all-allies'
                   )
                 : h.kind === 'shield'

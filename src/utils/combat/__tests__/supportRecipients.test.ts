@@ -30,7 +30,7 @@ describe('resolveSupportRecipients', () => {
             ).toEqual(['a']);
         });
 
-        it('ally → intersection (whiff when heal target off-pattern)', () => {
+        it('ally → intersection (whiff when the only base id is off-pattern)', () => {
             expect(
                 resolveSupportRecipients({
                     target: 'ally',
@@ -41,7 +41,7 @@ describe('resolveSupportRecipients', () => {
             ).toEqual([]);
         });
 
-        it('ally → heal target kept when on-pattern', () => {
+        it('ally → base id kept when on-pattern', () => {
             expect(
                 resolveSupportRecipients({
                     target: 'ally',

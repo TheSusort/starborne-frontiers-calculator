@@ -115,6 +115,7 @@ import {
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
+import { allyHpFraction, lowestHpAllyRecipients } from './supportRecipients';
 import { consumeExposed, exposedIncomingPct } from './exposedStatus';
 import {
     HIT_MITIGATION_DOT_ROUNDS,
@@ -213,9 +214,12 @@ function registerActorAbilityStatuses(
     // actors, enemy attacker ids for enemy actors. Named `playerIds` historically; for enemy
     // actors the engine passes the enemy team's ids so cross-enemy buffs land on the enemy side.
     playerIds: string[],
-    // Heal target id (healing mode) — the recipient a single-`ally` Cheat-Death-family
-    // firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal target) →
-    // the carve-out falls back to [ownerId]. Irrelevant for every non-carve-out status.
+    // Heal target id (healing mode) — the recipient a single-`ally`/`lowest-hp-ally`
+    // Cheat-Death-family firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal
+    // target): the `'ally'` carve-out falls back to [ownerId], but the `'lowest-hp-ally'`
+    // carve-out falls back to [] — the owner is the one answer that selector forbids (see the
+    // fence's own comment at the recipients computation below). Irrelevant for every
+    // non-carve-out status.
     healTargetId?: string
 ): {
     timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
@@ -309,12 +313,50 @@ function registerActorAbilityStatuses(
             // (Hermes "grants Cheat Death to the lowest-HP ally"), fallback [ownerId] when no heal
             // target; `all-allies` (Hayyan) keeps every player. The global ally → all-players rule
             // for every OTHER cast-path buff is UNCHANGED.
+            //
+            // SP-4e: `'lowest-hp-ally'` joins BOTH ally arms. On the CARVE-OUT arm the match is
+            // purely DEFENSIVE and is expected to stay dead — do not read it as a Hermes fix.
+            // Measured against the corpus (`docs/ship-skills.csv`, 2026-08-20): the only
+            // firing-slot Cheat Death grants are Hermes (charged, `'ally'`) and Hayyan (charged,
+            // `'all-allies'`); Tycho's and Yazid's are passive-slot, which `castPathCheatDeath`
+            // already excludes. Hermes's charged text is "This Unit repairs 37% of its Max HP and
+            // adds 1 charge to the Charged Skill. / If the target has less than 40% HP, it grants
+            // Cheat Death." — it names NO ally selector (no "most missing health" / "lowest
+            // current health" / "the other ally" in any of its five rows), so Task 3's parser flip
+            // cannot turn it into `'lowest-hp-ally'`. `castPathCheatDeath` is keyed on the BUFF
+            // NAME, so nothing else can reach this arm with the variant either. The match exists
+            // so the two single-ally flavours cannot diverge if a future kit does land here.
+            //
+            // NO OWNER FALLBACK FOR THE SELECTOR. The `'ally'` flavour names the heal ANCHOR, and
+            // `[ownerId]` is a sane stand-in for it when there is no anchor (DPS mode —
+            // `healTargetId` is optional). The selector flavour names "the OTHER ally", so the
+            // owner is the one answer it forbids: with no anchor to narrow to it resolves to
+            // NOBODY, matching every other SP-4e site (`undefined` → empty recipient list). An
+            // un-fenced `healTargetId ?? ownerId` here would have been exactly the self-grant this
+            // rung exists to prevent.
+            //
+            // KNOWN APPROXIMATION on the non-carve-out arm: this function runs at actor
+            // CONSTRUCTION, before any HP has moved and before `healingCtx` exists, so there is no
+            // live-HP view here to resolve the selector against — and the statuses it registers
+            // (auras / accumulating / timed-recipient lists) outlive any single instant anyway, so
+            // a setup-time snapshot would be a wrong answer dressed as a precise one. The variant
+            // therefore inherits plain `'ally'`'s roster-wide fan-out, which over-applies exactly
+            // as plain `'ally'` already does. What matters is that it must NOT fall through to the
+            // trailing `[ownerId]`: a self-only grant is the one answer "the OTHER ally" forbids,
+            // and that is what an un-armed variant would have got here.
             const recipients: string[] =
                 side === 'enemy'
                     ? [] // enemy-side statuses have no player recipients; the timed-enemy application path never reads recipients
-                    : castPathCheatDeath && ability.target === 'ally'
-                      ? [healTargetId ?? ownerId]
-                      : ability.target === 'ally' || ability.target === 'all-allies'
+                    : castPathCheatDeath &&
+                        (ability.target === 'ally' || ability.target === 'lowest-hp-ally')
+                      ? healTargetId !== undefined
+                          ? [healTargetId]
+                          : ability.target === 'lowest-hp-ally'
+                            ? [] // selector + no anchor → nobody; NEVER the owner (see above)
+                            : [ownerId]
+                      : ability.target === 'ally' ||
+                          ability.target === 'all-allies' ||
+                          ability.target === 'lowest-hp-ally'
                         ? playerIds
                         : [ownerId];
             // A hit-counted grant is never an aura: an aura is re-evaluated per round against
@@ -1255,11 +1297,13 @@ export interface CombatEngineInput {
      *  without `healTargetId` throws, and `healTargetId` with a mode other than `'healing'` or
      *  `'battle'` throws. */
     mode?: RunMode;
-    /** Apply heals to EACH recipient's own actor (per-recipient application), WITHOUT adopting
-     *  `mode: 'battle'`'s lowest-HP single-`ally` routing. The healing calculator sets this
-     *  once it runs positionally: its heals must follow the caster's support PATTERN, which is the
-     *  game's rule for every ship (Volk's lowest-HP repair is its PASSIVE, not a pattern effect).
-     *  `mode: 'battle'` implies this behaviour too, so the battle sim is unaffected.
+    /** Apply heals to EACH recipient's own actor (per-recipient application). This is the
+     *  APPLICATION axis and nothing more: since SP-4e Task 4 recipient CHOICE comes from the
+     *  ability's own target on every run — a text-named worst-HP ally routes to that ally, and
+     *  everything else routes over the caster's support PATTERN, which is the game's rule for every
+     *  ship. (The retired `teamBattle` flag used to make `mode: 'battle'` pick lowest-HP routing for
+     *  a plain `'ally'`; that conflated the two axes and is gone.) The healing calculator sets this
+     *  once it runs positionally; `mode: 'battle'` implies it too, so the battle sim is unaffected.
      *  Absent/false → heals apply only to `healTargetId` (legacy single-target accounting). */
     perRecipientHealApply?: boolean;
     /** The opposing roster — REQUIRED on every run since SP-4b-2b, and never empty (the boundary
@@ -1699,79 +1743,101 @@ function convertHitToSelfDot(
     return damage;
 }
 /**
- * TEST-ONLY instrumentation for the SP-4 ladder. Counts how many times a turn resolved its victim
- * through `tb.legacyVictim` — the per-side fallback victim (cluster C, the keystone). It is the
- * ladder's gate, not a debug aid. It was the dummy until SP-4c-2d; what is left is the ENEMY side's
- * `legacyVictim: healTarget` (see below).
+ * TEST-ONLY. Counts turns — on EITHER side — that resolved **NO VICTIM**: an actor whose parsed
+ * target names nobody living on the opposing board, so `selectTurnTarget` returns `tgt: undefined`
+ * and the turn runs with every victim-derived read absent (contract §B: "there is no enemy", never
+ * "an enemy with neutral stats").
  *
- * WHAT IT MEASURES, precisely: that the fallback object was **CONSULTED** — `selectTurnTarget`
- * returned `tb.legacyVictim` because no living positional victim resolved. That is strictly weaker
- * than "the legacy sink was **CREDITED**", and the two come apart. A consultation is followed by a
- * scalar credit only when the roster was never targetable (every placed opposing actor at max
- * `hp === 0`) or empty.
+ * ONE RULE, ONE COUNTER (SP-4e, #335). Until this rung there were two counters, because there were
+ * two rules: the player side had answered "no victim" since SP-4c-2b, while the ENEMY side still
+ * fell back to a per-side stand-in object (`TurnBindings.legacyVictim`, bound to the heal target) —
+ * and the second counter existed to measure CONSULTATIONS of that object, which is a strictly
+ * different event from "the turn had no victim". SP-4e deleted the field, so both the object and the
+ * distinction are gone; `noVictimTurnCount` now covers both sides. The old name
+ * (`noVictimPlayerTurnCount`) was renamed with it: a counter whose name has gone false is the exact
+ * failure the deleted block warned about.
  *
- * ⚠️ SP-4c-2b NARROWED THIS COUNTER TO THE **ENEMY SIDE**. `selectTurnTarget` now returns
- * `tgt: undefined` for a player actor that resolved nobody, WITHOUT touching this counter, and
- * increments `noVictimPlayerTurnCount` (below) instead. That is not bookkeeping taste: this
- * counter's whole definition is "the fallback object was CONSULTED", and after 4c-2b the player
- * side has no fallback object to consult — folding those turns in here would make the name false.
- * So a player-side no-victim turn is invisible to this counter BY DESIGN; read the new one.
- * Between 4c-2b and 4c-2d the dummy ghost was still the player side's `tb.legacyVictim`, simply
- * never handed out; SP-4c-2d deleted the actor, so that binding is now `undefined`.
+ * WHAT IT IS NOT. It is not a credit counter — nothing is booked on a no-victim turn by construction
+ * (the damage assembly is victim-fenced, so the cast deals literal 0). It counts SELECTIONS, so it
+ * moves on turns that go on to do plenty (a supporter's buff/shield/heal still lands) as well as on
+ * turns that do almost nothing.
  *
- * WHAT THAT LEAVES HERE: enemy-side consultations of `legacyVictim: healTarget`, which split TWO
- * ways on `b22d2870` and both halves count here — an earlier draft of this paragraph named only the
- * first, which understated the counter by a fifth:
- *   • 1,341 rows where the heal anchor is itself undefined, so the consultation yields no victim and
- *     the enemy turn takes its cadence-only skip;
- *   • ~335 rows that resolve to the heal target itself — a REAL player actor, not a dummy at all,
- *     which is why this counter's zero was never the enemy side's exit condition.
- * `dummyReachability.test.ts`'s header names the same two classes but deliberately carries NO
- * figures (SP-4c-2c rewrote it), so this block is the only place the counts live — do not go
- * looking for a second copy to reconcile against. Re-homing that anchor is SP-4e's job.
+ * WHAT MOVED IT WHEN THE RULE UNIFIED (measured on `af4f05ae`, whole suite, per-file aggregation of
+ * the enemy-side fallback consultations this counter absorbed — spec §5's table):
+ *   • 1,341 rows / 12 files: `parsedSide=enemy`, DPS mode, every opposing actor dead, no anchor.
+ *     Already `tgt: undefined` before this rung, so already skipping; they now run a no-victim turn
+ *     and move only where such a turn has a self-effect (a self-buff, a charge step beyond the
+ *     cadence, a DoT tick).
+ *   • 324 rows / 10 files: `parsedSide=ally`, battle mode, the opposing roster ALIVE and placed.
+ *     These are the ones with consequences — an ally-targeted enemy supporter used to resolve the
+ *     FOCUS PLAYER as the victim of a cast that never targeted them.
+ *   • 15 rows / 3 files stayed on the dead-target skip and did NOT come here.
  *
- * HISTORICAL NOTE (do not act on it). This block used to name the mid-run **whiff window** — a
- * roster that WAS targetable and has since been killed — as a KNOWN NON-ZERO RESIDUE of
- * consultations without credits, and warned SP-4c not to expect a zero here. That residue was
- * PLAYER-side, and it is gone twice over: SP-4c-1 (#329) ends the fight at the end of the turn that
- * wipes a side, so no player turn runs against an all-dead roster, and the whole-suite Proxy
- * measurement on `b22d2870` found 3,206 player-side fallback rows of which **100% had an ally-side
- * parsed target** and zero were a whiffing enemy-targeted cast (contract §A.1). Whatever remains of
- * that shape now routes to `noVictimPlayerTurnCount`, not here.
- *
- * Module-level and NOT reset per run: `__resetLegacyVictimFallbackCount` is the test's job.
+ * Module-level and NOT reset per run: `__resetNoVictimTurnCount` is the test's job. Vitest isolates
+ * modules per test FILE, so each file reads only its own runs.
  */
-let legacyVictimFallbackCount = 0;
-export function __getLegacyVictimFallbackCount(): number {
-    return legacyVictimFallbackCount;
+let noVictimTurnCount = 0;
+export function __getNoVictimTurnCount(): number {
+    return noVictimTurnCount;
 }
-export function __resetLegacyVictimFallbackCount(): void {
-    legacyVictimFallbackCount = 0;
+export function __resetNoVictimTurnCount(): void {
+    noVictimTurnCount = 0;
 }
 /**
- * TEST-ONLY. Counts PLAYER turns that resolved **NO VICTIM** (SP-4c-2b) — an ally-targeted cast with
- * nobody on the opposing side to anchor on. Distinct from `legacyVictimFallbackCount` above, which by
- * its own definition counts CONSULTATIONS of a fallback object: after 4c-2b the player side has no
- * fallback to consult, so folding these turns into that counter would make its name false.
+ * TEST-ONLY EXECUTABLE TRIPWIRE (SP-4e). Counts iterations of the AGGREGATE `procStandingLeeches`
+ * entry loop — the `!positional` half of the standing-leech fork, whose live twin is
+ * `procStandingLeechesPerVictim`. The aggregate half is UNREACHABLE (see the block on the proc
+ * itself for the measurement), and this counter is how that claim stays true: `leech.test.ts` —
+ * the file that owns standing-leech coverage on every target flavour — asserts it is still 0 after
+ * its whole suite has run. A comment cannot fail; this can.
  *
- * It is not a credit counter either — nothing is booked on a no-victim turn by construction (the
- * damage assembly is victim-fenced, so the cast deals literal 0). SP-4c-2c made it the SOLE holder
- * of a job it previously only shared: it is the only MOVING number `dummyReachability.test.ts` can
- * read in-file, since 4c-2c retired the dummy's turn (which killed the only route that could move
- * the former credit counter, deleted in that rung). Be precise about what that buys, because the
- * two counters are easy to conflate: every ZERO in that file reads `legacyVictimFallbackCount`, not
- * this one, so this non-zero proves only that the FIXTURE RUNS A LIVE PATH — the zeros are not
- * coming from cases that never ran. The CONSULTATION counter's own liveness is pinned cross-file at
- * `damageChannelAccounting.integration.test.ts:422`.
+ * Deliberately NOT a `throw`: the arm is dead, but a throw at the loop head would turn a future
+ * reachability change into a crash in a user's browser rather than a red test. Deliberately not
+ * gated on an env flag either — an unreachable `++` costs nothing in production.
  *
- * Module-level and NOT reset per run: `__resetNoVictimPlayerTurnCount` is the test's job.
+ * Module-level and NOT reset per run: `__resetAggregateStandingLeechApplications` is the test's job.
+ * Vitest isolates modules per test FILE, so each file reads only its own runs.
  */
-let noVictimPlayerTurnCount = 0;
-export function __getNoVictimPlayerTurnCount(): number {
-    return noVictimPlayerTurnCount;
+let aggregateStandingLeechApplications = 0;
+export function __getAggregateStandingLeechApplications(): number {
+    return aggregateStandingLeechApplications;
 }
-export function __resetNoVictimPlayerTurnCount(): void {
-    noVictimPlayerTurnCount = 0;
+export function __resetAggregateStandingLeechApplications(): void {
+    aggregateStandingLeechApplications = 0;
+}
+/**
+ * TEST-ONLY EXECUTABLE TRIPWIRE (SP-4e fix wave 1) for the enemy site's `skipDeadTargetTurn`.
+ *
+ * That branch fires only on a RESOLVED victim that is already dead, and since #335 deleted the
+ * `|| tgt === undefined` arm it has no other entrant. The claim on the branch is that the
+ * precondition is now UNCONSTRUCTIBLE: `resolvePositionalTarget` builds its `byCell` from
+ * `position !== undefined && currentHp > 0` (positionalBinding.ts:135-137) and every one of its
+ * return paths draws from that map or returns null, so a resolved victim is alive by construction,
+ * and nothing between the selection call and the check mutates HP.
+ *
+ * That claim used to live only in a comment, and a comment cannot fail — this can:
+ *  • `dead` counts turns reaching the check with `tgt !== undefined && tgt.currentHp <= 0`, i.e.
+ *    the branch's own precondition BEFORE the `skillNeedsOpposingVictim` gate narrows it (the
+ *    stronger reading: a dead resolved victim is impossible at all, not merely harmless).
+ *  • `resolved` counts turns reaching the check WITH a victim, and exists so the zero above is not
+ *    the repo's fixture-vacuity defect in counter form. Both are incremented from the same three
+ *    lines, so a `dead: 0` alongside a `resolved: > 0` proves the instrument is wired to a live
+ *    site — the reading `dummyReachability.test.ts` asserts.
+ *
+ * Deliberately NOT a `throw`: the state is unconstructible today, but a throw at a turn head would
+ * turn a future reachability change into a crash in a user's browser rather than a red test.
+ *
+ * Module-level and NOT reset per run: `__resetEnemySiteVictimTurnCounts` is the test's job. Vitest
+ * isolates modules per test FILE, so each file reads only its own runs.
+ */
+let enemySiteResolvedVictimTurns = 0;
+let enemySiteDeadVictimTurns = 0;
+export function __getEnemySiteVictimTurnCounts(): { resolved: number; dead: number } {
+    return { resolved: enemySiteResolvedVictimTurns, dead: enemySiteDeadVictimTurns };
+}
+export function __resetEnemySiteVictimTurnCounts(): void {
+    enemySiteResolvedVictimTurns = 0;
+    enemySiteDeadVictimTurns = 0;
 }
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
@@ -2409,9 +2475,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     // containers) and nothing TICKS them (the dummy's turn was retired in SP-4c-2c). They survive
     // for exactly one reason: `executeIntent`'s `ctx.corrosionEntries` / `ctx.infernoEntries` /
     // `ctx.genericDoTEntries` / `ctx.pendingBombs`, which `buildDrainContext` reads as the
-    // drain-time DoT-count condition scalars (`corrosionEntryCount` & co., triggers.ts). Retiring
-    // that side-biased read is a later rung's job, so the containers stay — empty, but present, so
-    // the scalars keep answering 0 rather than crashing.
+    // drain-time DoT-count condition scalars (`corrosionEntryCount` & co., triggers.ts). So the
+    // containers stay — empty, but present, so the scalars keep answering 0 rather than crashing.
+    //
+    // ⚠️ This used to say retiring that side-biased read was "a later rung's job". SP-4e is the
+    // LAST rung of this epic and it did not retire it, so nothing is scheduled: it is an OPEN
+    // RESIDUAL, not a pending deletion. Anyone picking it up owns the read in `buildDrainContext`,
+    // not these declarations.
     //
     // `landDotOn`'s `(victim?.corrosionEntries ?? ctx.corrosionEntries)` tail can still reach them
     // if a reactive intent resolves an id no actor carries; SP-4c-2d Task 1 made a VICTIMLESS
@@ -2486,8 +2556,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // actor there — this is byte-identical to the former vestigial `healTargetId: focus.id`
     // binding `battleSimulator` used purely to keep healingCtx built and unlock the enemy roster.
     // Every downstream focus-carve-out (`healTarget && actor.id === healTarget.id`) and the
-    // healingCtx anchor thus resolve exactly as before. Real-vs-real team heals still route to the
-    // lowest-HP living ally via `lowestHpAllyId` (the `teamBattle` path), NOT this anchor.
+    // healingCtx anchor thus resolve exactly as before. The anchor is an ACCOUNTING anchor, not a
+    // recipient: since SP-4e a single-`ally` heal routes over the caster's support footprint and a
+    // text-named worst-HP ally routes via `lowestHpAllyId`, on either side and in either mode —
+    // neither reads this anchor.
     const runMode: RunMode = input.mode ?? 'dps';
 
     // Explicitness guards. These do NOT infer a mode — they refuse an input whose mode and data
@@ -2719,14 +2791,14 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // SP-4c-2d: THE DUMMY `enemy` ACTOR IS GONE. A block here used to inventory what was still
     // true of it; there is nothing left to inventory. It is not built, not a member of `allActors`
-    // or `allActorsById`, not a turn-taker, not a player-offense sink, not a DoT carrier, and not
-    // any side's `legacyVictim`. The literal `'enemy'` survives ONLY as `SENTINEL_ENEMY_ACTOR_ID`,
-    // the id the side-wide scheduled-debuff bucket emits `buff-expired` under.
+    // or `allActorsById`, not a turn-taker, not a player-offense sink, and not a DoT carrier. The
+    // literal `'enemy'` survives ONLY as `SENTINEL_ENEMY_ACTOR_ID`, the id the side-wide
+    // scheduled-debuff bucket emits `buff-expired` under.
     //
     // Every "keep it so its DoTs still tick" / "keep it so a cast always has a victim" argument in
-    // this file's history is dead. Do not resurrect one from an older comment or commit: a player
-    // actor that resolves nobody runs a NO-VICTIM turn (`noVictimPlayerTurnCount`, SP-4c-2b) and
-    // that is the correct answer.
+    // this file's history is dead. Do not resurrect one from an older comment or commit: since
+    // SP-4e there is no per-side fallback victim on EITHER side, and an actor that resolves nobody
+    // runs a NO-VICTIM turn (`noVictimTurnCount`) — that is the correct answer.
     //
     // ⚠️ `hasPositionedEnemyRoster` WENT WITH IT, and its deletion is the one part of this that is
     // a claim rather than a removal, so state the proof. It asked "does a real, positioned
@@ -3330,12 +3402,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Constructed whenever `healTarget` is set — which
     // includes `'battle'` runs (battle mode anchors `healTarget` to the focus actor above), NOT
-    // healing mode only. That is exactly why `teamBattle: runMode === 'battle'` two lines below
-    // exists: this ctx is shared by both modes and needs to tell them apart.
+    // healing mode only. The ctx is therefore shared by both modes, and since SP-4e it no longer
+    // needs to tell them apart for ROUTING: recipient choice comes from the ability's target, not
+    // from the run mode (the `teamBattle: runMode === 'battle'` flag that used to sit here is
+    // gone). `perRecipientApply` below is the one mode-derived axis left, and it is APPLICATION
+    // only — the healing calculator opts in explicitly, and a battle run always wants it.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
         ? {
               targetId: healTarget.id,
-              teamBattle: runMode === 'battle',
               perRecipientApply: (input.perRecipientHealApply ?? false) || runMode === 'battle',
               credit: (actorId, bucket, amount) => {
                   healFor(actorId)[bucket] += amount;
@@ -3397,6 +3471,34 @@ export function runCombat(rawInput: CombatEngineInput): {
               recipientActor: (id) => allActorsById.get(id),
           }
         : undefined;
+
+    /**
+     * SP-4e: the `'lowest-hp-ally'` selector, resolved SIDE-RELATIVE to `ownerId` — over the
+     * owner's OWN roster on either side (locked team symmetry). Lowest currentHp/maxHp, owner
+     * EXCLUDED, ties broken by source order; `undefined` when the owner is the only living
+     * candidate ("the OTHER ally" is nobody, never a self-target).
+     *
+     * ONE ranking for the whole engine: this delegates to `lowestHpAllyRecipients`, the same
+     * helper the cast path (`recipientsFor` in playerTurn) binds — a second hand-copied ranking is
+     * the shape that produced the one-directional defects in #306. `allyHpFraction` over the
+     * healing ctx supplies the buff-aware max HP the helper's doc requires, and both `playerIds`
+     * and `enemyIds` are fixed source-order arrays, which is what makes the tie-break the
+     * documented one.
+     *
+     * Feeds `IntentExecContext.lowestHpAllyIdFor` (reactives) and the standing-leech procs.
+     * `undefined` without a healing ctx (DPS mode): there is no live HP view to rank over, and the
+     * consumers answer "no recipient" rather than falling back to the owner.
+     */
+    const lowestHpAllyIdForOwner = (ownerId: string): string | undefined => {
+        if (!healingCtx) return undefined;
+        const ownerActor = allActorsById.get(ownerId);
+        if (!ownerActor) return undefined;
+        return lowestHpAllyRecipients({
+            casterId: ownerId,
+            candidateIds: ownerActor.side === 'enemy' ? healingCtx.enemyIds : healingCtx.playerIds,
+            hpFractionOf: (id) => allyHpFraction({ id, healing: healingCtx }),
+        })[0];
+    };
 
     /**
      * SP-3b Task 7: mirror ONE LANDED repair onto the RECIPIENT axis (`perRecipient`).
@@ -3891,6 +3993,39 @@ export function runCombat(rawInput: CombatEngineInput): {
     // standing crit/critDamage (base+gear stats — the per-turn folded effectiveCrit only
     // exists mid-turn). NO heal-performed emission (chain guard: leech procs never feed
     // on-ally-critically-repaired). Healing mode only; inert when no leeches registered.
+    //
+    // ⚠️ UNREACHABLE as of SP-4e (measured, 2026-08-20), and TRIPWIRED — see below.
+    //
+    // THE EVIDENCE IS THE MEASUREMENT, not a structural argument. A `console.error` probe on the
+    // leech loop below recorded ZERO hits across the whole suite (6,006 tests) while a probe at the
+    // function entry recorded 12,194 calls: every one is filtered out by `amount <= 0` / `!entries`
+    // before the loop. The reachability chain is that this proc's ONLY feed (`creditDamage`) is
+    // called from exactly two sites, both inside `if (!positional)`, and no fixture in the corpus
+    // reaches either with a registered leech entry. Do NOT restate that as "positional is always
+    // true": `positional` (see the gate in the turn loop) is also false when there is no target,
+    // no pattern, or no `positionalScalars` — none of which is about having a victim. The zero is
+    // an empirical fact about the corpus, not a theorem.
+    //
+    // TRIPWIRE (executable, not a comment): the loop head bumps
+    // `aggregateStandingLeechApplications`, and `leech.test.ts` — the file that owns standing-leech
+    // coverage on self / ally / all-allies / detonation scope — asserts it is still 0 once its
+    // whole suite has run. A change that makes this arm reachable turns that file RED instead of
+    // silently activating untested code.
+    //
+    // KEPT, NOT DELETED: it is the non-positional half of a deliberate `!positional`/`positional`
+    // fork (its live twin is `procStandingLeechesPerVictim` below), and deleting one half of such a
+    // fork is how the two drift — the leech-channel defect class closed in #328.
+    //
+    // ⚠️ BUT DO NOT CITE THAT FORK AS "TWO COPIES KEPT IN SYNC": they have ALREADY drifted, and
+    // this half is the weaker one. (1) Its `'ally'` arm has no `ownerIsEnemy` guard, while the
+    // per-victim twin's does. (2) It resolves its owner from `runtimesById`, which is PLAYER-side
+    // only — so for an enemy owner this proc returns before the loop, and its `'lowest-hp-ally'`
+    // arm is structurally dead on the enemy side. This half is therefore NOT team-symmetric, and
+    // the locked symmetry rule is satisfied only by the per-victim twin. Anything added here still
+    // has to be added there (that is the anti-drift rule), but the reverse does not hold, and only
+    // the per-victim copy can be covered by a test — do not write a fixture claiming to cover this
+    // one. Making this half symmetric is a real fix, not this rung's scope; the tripwire is what
+    // guarantees the question comes back before the code goes live.
     const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: number): void => {
         if (!healingCtx || amount <= 0) return;
         const entries = standingLeeches.get(sourceId);
@@ -3898,6 +4033,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         const owner = runtimesById.get(sourceId);
         if (!owner) return;
         for (const e of entries) {
+            // The tripwire (see the ⚠️ block above). Bumped BEFORE the scope filter so it counts
+            // every entry this dead arm actually walks, not only the ones that pay out.
+            aggregateStandingLeechApplications++;
             if (e.scope === 'detonation' && channel !== 'detonation') continue;
             let raw = amount * (e.pct / 100);
             if (e.kind === 'heal') {
@@ -3906,16 +4044,47 @@ export function runCombat(rawInput: CombatEngineInput): {
                     raw *= 1 + owner.critDamage / 100;
                 }
             }
+            // SP-4e: the named selector resolves SIDE-RELATIVE to the leech's owner
+            // (lowestHpAllyIdForOwner), owner excluded; `undefined` → NO recipient, never the
+            // owner. Distinct from the `ally` arm below, which names the player heal ANCHOR.
+            const selectorRecipientId =
+                e.target === 'lowest-hp-ally' ? lowestHpAllyIdForOwner(sourceId) : undefined;
             const recipients =
-                e.target === 'ally'
-                    ? [healTarget!.id]
-                    : e.target === 'all-allies'
-                      ? healingCtx.playerIds
-                      : [sourceId];
+                e.target === 'lowest-hp-ally'
+                    ? selectorRecipientId === undefined
+                        ? []
+                        : [selectorRecipientId]
+                    : e.target === 'ally'
+                      ? [healTarget!.id]
+                      : e.target === 'all-allies'
+                        ? healingCtx.playerIds
+                        : [sourceId];
             for (const rid of recipients) {
+                // SP-4e: a SELECTOR-resolved recipient applies to its OWN pool — the shape
+                // `procStandingLeechesPerVictim` already uses. Every other target keeps this
+                // aggregate path's long-standing anchor-only application, which is why arming the
+                // selector here is zero-churn: no existing entry takes this branch.
+                //
+                // ⚠️ An earlier draft ended that sentence with "widening those is Task 4's scope,
+                // not this rung's". Task 4 has SHIPPED and it widened NOTHING here: it changed
+                // `recipientsFor` (playerTurn.ts) only, so a cast `'ally'` now means the caster's
+                // support footprint while BOTH leech procs still answer `'ally'` with the anchor.
+                // That divergence is deliberate and belongs to no scheduled task — the three
+                // reasons are recorded once, at the per-victim twin's `'ally'` arm (its OPEN
+                // RESIDUAL block). Do not read this paragraph as a pending deletion.
+                const selectorActor =
+                    selectorRecipientId !== undefined ? healingCtx.recipientActor(rid) : undefined;
                 if (e.kind === 'heal') {
                     healingCtx.credit(sourceId, 'directHeal', raw);
-                    if (rid === healTarget!.id) {
+                    if (selectorActor) {
+                        const { consumed, overheal } = healingCtx.applyHealToTarget(
+                            raw,
+                            selectorActor
+                        );
+                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
+                        healingCtx.credit(sourceId, 'overheal', overheal);
+                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
+                    } else if (rid === healTarget!.id) {
                         const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
                         healingCtx.credit(sourceId, 'effectiveHeal', consumed);
                         healingCtx.credit(sourceId, 'overheal', overheal);
@@ -3926,7 +4095,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
-                    if (rid === healTarget!.id) healingCtx.grantShieldToTarget(raw);
+                    if (selectorActor) healingCtx.grantShieldToTarget(raw, selectorActor);
+                    else if (rid === healTarget!.id) healingCtx.grantShieldToTarget(raw);
                 }
             }
         }
@@ -3946,9 +4116,25 @@ export function runCombat(rawInput: CombatEngineInput): {
     // It REUSES procStandingLeeches's fold math (pct → raw, healModifier, heal-crit draw) but does
     // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor) /
     // grantShieldToTarget(raw, actor)), resolving each recipient's actor — so a covered enemy's
-    // leech can repair the right ally, not just the heal target. procStandingLeeches is left
-    // UNTOUCHED (its `rid === healTarget.id` pool-gating is load-bearing for the non-positional
-    // all-allies case, leech.test.ts:355-404).
+    // leech can repair the right ally, not just the heal target.
+    //
+    // WHAT THE AGGREGATE `procStandingLeeches` NOW DOES (rewritten SP-4e fix wave 1 — the previous
+    // wording said it was left "UNTOUCHED", which stopped being true the moment SP-4e armed its
+    // selector arm, and cited a line range that had drifted twice over). It was touched: it gained
+    // a `'lowest-hp-ally'` arm that applies to the SELECTED recipient's own pool. Every other
+    // target flavour there keeps its long-standing anchor-only application — `'ally'` →
+    // `[healTarget.id]`, `'all-allies'` → the whole roster credited but only the anchor's pool
+    // touched. An earlier draft of this sentence said "widening those is Task 4's scope, not this
+    // rung's". Task 4 has SHIPPED and it did NOT widen them: it changed `recipientsFor` only, so
+    // both leech procs still answer `'ally'` with the anchor while `recipientsFor` answers it with
+    // the caster's support footprint. That divergence is deliberate and recorded as an OPEN
+    // RESIDUAL at the `'ally'` arm below (with the three reasons it was not a drop-in); it belongs
+    // to no scheduled task, so do not read this paragraph as a pending deletion. The tests that pin the
+    // anchor-only behaviour are named, not line-numbered, in `leech.test.ts`: Test 3
+    // "detonation scope: no leech on direct rounds; leech = burst × pct on the burst round" and
+    // Test 8 "all-allies: directHeal credited once per recipient (playerIds order)". Note that the
+    // aggregate proc is itself UNREACHABLE and tripwired (see its own ⚠️ block) — those two tests
+    // exercise THIS per-victim proc.
     //
     // RECIPIENT RESOLUTION: via `allRuntimesById` (NOT allActorsById) — the focus attacker is
     // keyed 'attacker', not its real id. `self` → the acting owner; `ally` → the heal target;
@@ -4022,24 +4208,58 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             }
             // Recipient routing is SIDE-RELATIVE: "allies" means the owner's own side.
-            // `ally` (the single designated recipient) has no enemy-side equivalent — the player
-            // heal target is a player-only concept — and no corpus ship reaches it here: every
-            // passive leech that survives the reactive partition into `standingLeeches` targets
-            // `self` (Magnolia, Malvex, Quixilver, Valerian; Valkyrie's `ally` one is
-            // `on-bomb-detonated`, so it is reactive and never enters this map). An enemy owner
-            // therefore resolves to NO recipient rather than silently repairing a PLAYER — the
-            // same nothing it got before enemy owners were registered at all. Wire a real rule
-            // here if a future enemy kit needs one.
+            //
+            // `ally` (the single designated recipient) is the one arm with no enemy-side
+            // equivalent, because it names the PLAYER HEAL ANCHOR — a player-only concept, not
+            // "an ally" in any general sense. An enemy owner therefore resolves to NO recipient
+            // rather than silently repairing a PLAYER: the same nothing it got before enemy
+            // owners were registered at all.
+            //
+            // SP-4e correction: "no enemy-side equivalent" is no longer a statement about
+            // single-recipient ally targeting in general. `lowest-hp-ally` — the selector the
+            // ability's own TEXT names (Pallas, Volk, Valkyrie) — IS a single ally target with a
+            // symmetric enemy-side answer, because it resolves over the OWNER's own roster on
+            // either side. It gets its arm below; only the anchor-flavoured `ally` stays
+            // player-only.
+            //
+            // ⚠️ OPEN RESIDUAL, and NOT a Task-4 deliverable (an earlier draft of this comment
+            // promised Task 4 would retire the `ally` arm — it did not, and that promise expired).
+            // Task 4 changed what a plain `'ally'` means in `recipientsFor`: the caster's support
+            // footprint, on both sides. THIS proc's `ally` arm still says "the player heal anchor,
+            // nobody for an enemy owner", so the two now DISAGREE. It was left alone deliberately,
+            // for three reasons:
+            //   (a) the arm is CORPUS-DEAD. `standingLeeches` is built from passive-slot heal/shield
+            //       abilities with basis `'damage-dealt'` that survive the reactive partition, and
+            //       the whole corpus contributes exactly TWO, both `self`: Magnolia (heal 40%) and
+            //       Valerian (heal 15%) — re-measured over all 147 rows of docs/ship-skills.csv,
+            //       SP-4e fix wave 1. (An earlier list also named Malvex and Quixilver: those are
+            //       `damage-taken` shields and live in the SIBLING map that feeds
+            //       `procTakenLeechesPerVictim`, never here. Valkyrie's ally-facing leech is
+            //       `on-bomb-detonated`, hence reactive, and it carries `'lowest-hp-ally'` rather
+            //       than a plain `'ally'` — so it would not reach this arm even if it did land in
+            //       this map.) Neither ally-facing arm has a live entry today.
+            //   (b) aligning it needs a footprint route this proc has no access to — it holds no
+            //       `supportRecipients` binding.
+            //   (c) deleting the arm is NOT a drop-in: control would fall through to the final
+            //       `[sourceId]` else-arm, i.e. a self-repair, which is a third answer and the wrong
+            //       one.
+            // So: no live behaviour rides on it, and closing it is its own task.
+            const selectorRecipientId =
+                e.target === 'lowest-hp-ally' ? lowestHpAllyIdForOwner(sourceId) : undefined;
             const recipients =
-                e.target === 'ally'
-                    ? ownerIsEnemy
+                e.target === 'lowest-hp-ally'
+                    ? selectorRecipientId === undefined
                         ? []
-                        : [healTarget!.id]
-                    : e.target === 'all-allies'
+                        : [selectorRecipientId]
+                    : e.target === 'ally'
                       ? ownerIsEnemy
-                          ? healingCtx.enemyIds
-                          : healingCtx.playerIds
-                      : [sourceId];
+                          ? []
+                          : [healTarget!.id]
+                      : e.target === 'all-allies'
+                        ? ownerIsEnemy
+                            ? healingCtx.enemyIds
+                            : healingCtx.playerIds
+                        : [sourceId];
             for (const rid of recipients) {
                 // Resolve the recipient's live actor for the pool application (Task-1 closures
                 // take an explicit victim). Runtime maps, not allActorsById: the focus is 'attacker'.
@@ -6726,8 +6946,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                 case 'self':
                 case 'ally':
                 case 'all-allies':
+                case 'lowest-hp-ally':
                 case 'adjacent-allies':
                     return DEFAULT_BASE_PATTERN;
+                default: {
+                    // Exhaustiveness guard: a new AbilityTarget variant must be classified here
+                    // explicitly rather than silently inheriting a footprint. Ability configs are
+                    // user-persisted and unvalidated on read, so a stale/imported config can carry
+                    // a target string outside the union at runtime, defeating the compile-time
+                    // `never` check — `return _exhaustive` would then hand back that raw string
+                    // mistyped as `ParsedPattern`, and a downstream `resolveCells` reading
+                    // `.shape`/`.cells` off a string silently yields an empty footprint. Throw
+                    // instead: same compile-time exhaustiveness strength, loud instead of silent.
+                    const exhaustive: never = abilityTarget;
+                    throw new Error(
+                        `passiveSlotPattern: unhandled AbilityTarget ${String(exhaustive)}`
+                    );
+                }
             }
         };
         /**
@@ -6940,17 +7175,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // been removed from this interface; the credit/intake & emit TAILS stay per-kind (→ PR7).
         interface TurnBindings {
             opposingRoster: CombatActor[];
-            // ENEMY SIDE ONLY: the heal target, which can be undefined once enemy attackers no
-            // longer require one (SP-U U5 R6 decouple). `selectTurnTarget` returns
-            // `tgt: undefined` in that enemy-side no-victim case; the enemy turn then skips its
-            // attack (cadence-only), mirroring the dead-target path. Re-homing that anchor is
-            // rung 4e's job.
-            //
-            // The PLAYER side's binding was the dummy `enemy` sink. SP-4c-2b stopped
-            // `selectTurnTarget` ever handing it out (a player actor that resolves nobody runs a
-            // NO-VICTIM turn instead) and SP-4c-2d deleted the actor, so the player binding is
-            // `undefined` — kept only because the field is per-side and the enemy half is live.
-            legacyVictim: CombatActor | undefined;
+            // SP-4e (#335): there is NO per-side fallback victim any more. `legacyVictim` used to
+            // live here — the dummy sink on the player side (deleted in SP-4c-2d) and the heal
+            // target on the enemy side. Both are gone: an actor that resolves no living positional
+            // victim runs a NO-VICTIM turn on either side. Do not reintroduce a stand-in; the
+            // absence of a victim is the answer, and `runPlayerTurn`/`buildTurnArgs` already speak
+            // it (contract §B).
             victimDefenceFor: (tgt: CombatActor) => number;
             victimMaxHpFor: (tgt: CombatActor) => number;
             enemyTypeArg: EnemyBaseClass | undefined;
@@ -6971,8 +7201,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
         const playerTurnBindings: TurnBindings = {
             opposingRoster: enemyAttackerActors,
-            // SP-4c-2d: was the dummy `enemy` actor. Nothing consults it — see the field's doc.
-            legacyVictim: undefined,
             // SP-F F5: Meatshield defense-substitution (approximation) — see the
             // substitutedDefenceFor doc comment above for the full rule.
             victimDefenceFor: (tgt) => substitutedDefenceFor(tgt, tgt.stats.defence),
@@ -6986,7 +7214,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
-            legacyVictim: healTarget,
             // SP-F F5: Meatshield defense-substitution (approximation) — see the
             // substitutedDefenceFor doc comment above for the full rule.
             victimDefenceFor: (tgt) =>
@@ -7232,9 +7459,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         // Unified positional target selection (bySide unification PR6a). Reproduces the
-        // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against
-        // its opposing roster, else fall back to the side's legacy victim — which since SP-4c-2b/2d
-        // exists on the ENEMY side only (`healTarget`); the player side's was the deleted dummy.
+        // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against its
+        // opposing roster. SP-4e: there is no per-side fallback left to fall back TO — an actor
+        // that resolves nobody gets `tgt: undefined` whichever side it is on.
         // SP-F F5: on a charge-firing turn, resolve against the CHARGED target axis instead of
         // the active one (parsedChargedTargetFor falls back to the active target when unset →
         // byte-identical for every non-divergent ship).
@@ -7262,19 +7489,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                           }
                       )
                     : null;
-            // SP-4c-2b: the PLAYER side no longer falls back to the dummy ghost. An ally-targeted
-            // cast resolves nobody on the opposing side (contract §A.1: 100% of the 3,206 measured
-            // fallback rows have an ally-side parsed target), and the honest answer is "no victim"
-            // — the turn still RUNS (both player call sites below run it rather than skipping, so
-            // the repair/buff still lands); every victim-derived read answers "there is no enemy"
-            // instead of reading a ghost's neutral stats. The ENEMY side keeps
-            // `legacyVictim: healTarget`; re-homing that anchor is 4e's job, not this rung's.
-            if (selected == null && a.side === 'player') {
-                noVictimPlayerTurnCount++;
+            // SP-4e: ONE rule for both sides. An actor that resolves no living positional victim
+            // runs a NO-VICTIM turn — the honest answer, and the only one that does not silence a
+            // supporter. The turn still RUNS (every call site below runs it rather than skipping,
+            // so the repair/buff still lands); every victim-derived read answers "there is no
+            // enemy" instead of reading a stand-in's stats (contract §B).
+            //
+            // The enemy side used to fall back to `legacyVictim: healTarget`, so an ally-targeted
+            // enemy supporter resolved the FOCUS PLAYER as the victim of a cast that never targeted
+            // them — 324 measured rows (spec §5 class C2), and the class #335's own narrative
+            // missed. On the player side this has been the answer since SP-4c-2b (contract §A.1:
+            // 100% of the 3,206 measured player-side fallback rows had an ally-side parsed target).
+            if (selected == null) {
+                noVictimTurnCount++;
                 return { tgt: undefined };
             }
-            if (selected == null) legacyVictimFallbackCount++;
-            return { tgt: selected ?? tb.legacyVictim };
+            return { tgt: selected };
         };
 
         // Unified runPlayerTurn argument builder (bySide unification PR6a). Produces the
@@ -7299,13 +7529,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
             // E3 (AoE purge): footprint victim ids for an 'all-enemies' on-cast purge.
-            // Computed ONLY when positional — `tgt.position != null` is the positional
-            // discriminator (when nothing positional resolved, `selectTurnTarget` returns the
-            // position-less heal-target sink on the ENEMY side and, since SP-4c-2b/2d, no victim at
-            // all on the PLAYER side — it was the position-less dummy sink before that; since
-            // SP-4b-1's normalization boundary that means
-            // an absent/never-targetable opposing roster or the mid-run whiff window, no longer
-            // "the DPS/healing calculators", which now supply real placed enemies). footprintVictims
+            // Computed ONLY when positional — `tgt?.position != null` is the positional
+            // discriminator (when nothing positional resolved, `selectTurnTarget` returns NO victim
+            // at all — on EITHER side since SP-4e (#335), so `tgt` is `undefined` here and the
+            // optional chain short-circuits. The player side has answered that since SP-4c-2b; the
+            // ENEMY side used to return the position-less heal-target sink, and the position-less
+            // dummy sink stood on the player side before 4c-2b/2d — both are deleted, and there is
+            // no per-side fallback victim left. Since SP-4b-1's normalization boundary a null
+            // resolution means an absent/never-targetable opposing roster, an ally-side parsed
+            // target, or the mid-run whiff window — no longer "the DPS/healing calculators", which
+            // now supply real placed enemies). footprintVictims
             // is the same pure resolver the AoE
             // damage path uses; covered cells are included (status removal is uniform across the
             // footprint). Non-positional → undefined → the playerTurn purge loop falls back to
@@ -8429,6 +8662,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // 'adjacent-enemies' anchor resolution). See IntentExecContext.
                         adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
                         footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
+                        // SP-4e: the 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
+                        // closure is already side-relative to the OWNER it is asked about, which is
+                        // the correct scoping for a drain whose intents can carry either side's
+                        // owner id, and it shares the cast path's single ranking.
+                        lowestHpAllyIdFor: lowestHpAllyIdForOwner,
                     });
                 }
             }
@@ -9616,12 +9854,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // branch (C1) but keyed to THIS team actor's own board position
                             // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
                             // focus attacker's. When positional selection resolves nobody — not
-                            // positional, no parsed target, or no living positioned enemy — a team
-                            // actor is PLAYER-side, so `selectTurnTarget` now answers "no victim":
-                            // since SP-4c-2b it hands out nothing on that side. The binding it would
-                            // have handed out, `playerTurnBindings.legacyVictim`, still held the
-                            // dummy ghost until SP-4c-2d deleted the actor; it is `undefined` now.
-                            // Either way this path does not fall back to any stand-in victim.
+                            // positional, no parsed target, or no living positioned enemy —
+                            // `selectTurnTarget` answers "no victim": since SP-4c-2b on this side,
+                            // and since SP-4e on both. There is no stand-in victim left to fall
+                            // back to anywhere in this file.
                             // SP-F F5: charge-aware (mirrors the focus site) — resolve BOTH the
                             // target and the footprint pattern from the CHARGED axes on a
                             // charge-firing turn (each falls back to the active axis when unset).
@@ -9972,37 +10208,72 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // focus-turn (C1) and team-turn (C2) branches, but the OPPOSING roster from the
                             // enemy's view is the PLAYER TEAM (`allPlayerActors` = focus + walked team), the
                             // acting position is THIS enemy's board position (`actor.position`), and its
-                            // parsed target rides on `enemyTargetById` (keyed by enemy actor id). When
-                            // the selection is null — not positional, no parsed target, or no living
-                            // positioned player — we diverge NOTHING from the legacy `healTarget` victim
-                            // binding: the enemy's whole turn (defence/hp/decline lookup, the runPlayerTurn
-                            // bind, AND the applyIncomingToTarget intake) reads `tgt === healTarget!`, so
-                            // every existing path stays byte-identical. No existing test threads an enemy
-                            // target → this branch never fires for them.
+                            // parsed target rides on `enemyTargetById` (keyed by enemy actor id).
+                            // SP-4e (#335): when the selection is null — not positional, no parsed
+                            // target, or no living positioned player — this side no longer diverges
+                            // from the player one. It used to fall back to `legacyVictim: healTarget`
+                            // and read that stand-in for the WHOLE turn (defence/hp/decline lookup,
+                            // the runPlayerTurn bind, AND the applyIncomingToTarget intake), so an
+                            // ally-targeted enemy supporter resolved the FOCUS PLAYER as the victim
+                            // of a cast that never targeted them. Now it runs a NO-VICTIM turn, and
+                            // every victim-derived read below is conditional on `tgt`.
                             // SP-F F5: resolve from the CHARGED target axis on a charge-firing turn
                             // (falls back to the active target when unset → byte-identical).
                             const enemyTarget = enemyWillFireCharged
                                 ? parsedChargedTargetFor(actor)
                                 : parsedTargetFor(actor);
-                            // The enemy's victim THIS turn: the positionally-selected player actor, else the
-                            // legacy heal target. A full CombatActor in both cases, so every per-victim
-                            // binding below derives from `tgt` uniformly (defence/maxHp/decline, the
-                            // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
+                            // The enemy's victim THIS turn: the positionally-selected player actor,
+                            // or NOBODY. Every per-victim binding below derives from `tgt` uniformly
+                            // (defence/maxHp/decline, the runPlayerTurn `enemy`+containers, and the
+                            // applyIncomingToTarget intake), each guarded on its presence.
                             const { tgt } = selectTurnTarget(actor);
-                            // Narrowed dead-legacy-victim skip: a dead `tgt` only forces the
-                            // cadence-only short-circuit below when the actor's WOULD-BE firing
-                            // skill actually needs a living opposing victim (a `damage` ability,
-                            // or any enemy-facing ability — debuff/dot/purge/control/etc.). An
+                            // Narrowed dead-target skip: a dead `tgt` only forces the cadence-only
+                            // short-circuit below when the actor's WOULD-BE firing skill actually
+                            // needs a living opposing victim (a `damage` ability, or any
+                            // enemy-facing ability — debuff/dot/purge/control/etc.). An
                             // ally-targeted support cast (buffs/shields/heals only) never reads
-                            // `tgt`'s HP/defence, so it must still fire even when the legacy
-                            // binding (simulateBattle's vestigial focus-player healTargetId) is
-                            // dead — otherwise every ally-targeted enemy caster permanently stops
-                            // acting the moment the focus player dies (bug repro:
-                            // twoTeamBattle.test.ts "bug repro: enemy supporter turn skipped
-                            // after the focus player dies"). Mirrors runPlayerTurn's OWN action
-                            // selection (preTurn, playerTurn.ts) exactly so the predicate inspects
-                            // the SAME skill that would actually fire. (SP-F F5: now sourced from
-                            // the single shared enemyWillFireCharged boolean above.)
+                            // `tgt`'s HP/defence, so it must still fire against a corpse —
+                            // otherwise an enemy caster whose resolved anchor has just died stops
+                            // acting (bug repro: twoTeamBattle.test.ts "bug repro: enemy supporter
+                            // turn skipped after the focus player dies"). Mirrors runPlayerTurn's
+                            // OWN action selection (preTurn, playerTurn.ts) exactly so the
+                            // predicate inspects the SAME skill that would actually fire. (SP-F F5:
+                            // now sourced from the single shared enemyWillFireCharged boolean.)
+                            //
+                            // ⚠️ SP-4e — MEASURED UNREACHABLE, and left in place deliberately.
+                            // `tgt` is now the POSITIONALLY-resolved victim or nothing, so a dead
+                            // `tgt` no longer means "the vestigial focus-player anchor died", which
+                            // was the ONLY way this branch was ever entered. And
+                            // `resolvePositionalTarget` builds its `byCell` from actors with
+                            // `position !== undefined && currentHp > 0` (positionalBinding.ts:135-137)
+                            // and EVERY one of its return paths draws from that map or returns null
+                            // — Concentrate Fire, Taunt, Provoke, the stealth filter and
+                            // `selectTargets` all read it — and nothing between that call and here
+                            // mutates HP, so `tgt !== undefined && tgt.currentHp <= 0` is
+                            // unsatisfiable. Probed with a `console.error` in the skip body over the
+                            // WHOLE suite (547 files / 6037 tests): 0 hits, where the pre-rung tree
+                            // hit it in 4 files.
+                            //
+                            // AND THAT CLAIM IS NOW EXECUTABLE, not merely commented (fix wave 1).
+                            // The two increments below feed `__getEnemySiteVictimTurnCounts`, which
+                            // `dummyReachability.test.ts` reads as `{ resolved: > 0, dead: 0 }` —
+                            // the `dead` half is this branch's precondition BEFORE the
+                            // `skillNeedsOpposingVictim` gate, and the `resolved` half is its
+                            // vacuity guard (same instrument, live site, non-zero). A comment cannot
+                            // fail; this can. It replaces the coverage the two relabelled
+                            // `twoTeamBattle` cases used to supply by accident.
+                            //
+                            // NOT deleted here, for three reasons. (1) The no-victim turn now
+                            // produces the same OUTCOME this skip did — a firing skill that needs a
+                            // victim delivers 0 either way, because `runPlayerTurn` fences its damage
+                            // assembly on `hasVictim` — so the branch is redundant rather than wrong.
+                            // (2) It is the only remaining consumer of `skillNeedsOpposingVictim` on
+                            // this path, so deleting it deletes that helper's last caller too.
+                            // (3) No test can cover an unsatisfiable branch, so the deletion cannot
+                            // be de-risked by coverage — it belongs in its own scoped change with
+                            // this tripwire as its gate, not at the tail of a long PR.
+                            // `twoTeamBattle.test.ts`'s "negative/pin" and "threshold flip" cases
+                            // carry the corresponding coverage note.
                             const enemyWouldFireAction: 'active' | 'charged' = enemyWillFireCharged
                                 ? 'charged'
                                 : 'active';
@@ -10010,6 +10281,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 enemyRuntime.castSkills,
                                 enemyWouldFireAction
                             );
+                            if (tgt !== undefined) {
+                                enemySiteResolvedVictimTurns++;
+                                if (tgt.currentHp <= 0) enemySiteDeadVictimTurns++;
+                            }
                             const skipDeadTargetTurn =
                                 tgt !== undefined &&
                                 tgt.currentHp <= 0 &&
@@ -10137,62 +10412,108 @@ export function runCombat(rawInput: CombatEngineInput): {
                                       enemyTurnStasisHitVictims.add(targetId);
                                   }
                                 : undefined;
-                            if (skipDeadTargetTurn || tgt === undefined) {
+                            if (skipDeadTargetTurn) {
                                 // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                                 // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
                                 // application events — a dead target is untouched (old short-circuit).
                                 // The `&& actor.chargeCount > 0` term is redundant (hasChargedSkill already
                                 // implies chargeCount >= 1); the helper's internal guard handles it.
-                                // SP-U U5 (R6 decouple): `tgt === undefined` — no positional target AND no
-                                // legacy heal anchor — takes this same cadence-only skip (the enemy has no
-                                // victim this turn). Never reached in the existing corpus (the heal anchor is
-                                // always defined when an enemy attacker acts); the `else` below narrows `tgt`
-                                // to a defined CombatActor for the whole real-turn body.
+                                //
+                                // SP-4e (#335): the `|| tgt === undefined` arm that used to share this
+                                // branch is GONE. A no-victim enemy turn is not a skip — it RUNS through
+                                // the `else` below, exactly as the player sites have since SP-4c-2b, so an
+                                // ally-targeted enemy supporter still lands its support. Only a genuinely
+                                // DEAD resolved victim short-circuits here, and only for a firing skill
+                                // that needs a living one. The `else` therefore no longer narrows `tgt` to
+                                // a defined CombatActor: every victim-derived read in it is guarded.
                                 advanceChargeCadence(actor, enemyRuntime.hasChargedSkill, bus, r);
-                                // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
-                                // produced no ctx either; this actor has no live DoTs to attribute).
+                                // No enemyTurn → no lastTurnCtxByActor update. This actor has no live
+                                // DoTs to attribute, so nothing reads the missing entry.
+                                //
+                                // ⚠️ DO NOT restate this as "parity: the old dead path produced no ctx
+                                // either" — that is what stood here and it is FALSE now. The old branch
+                                // also swallowed every `tgt === undefined` turn, and those turns
+                                // published nothing. Since #335 they run the `else` instead, which sets
+                                // `lastTurnCtxByActor` UNCONDITIONALLY. Measured on this branch, whole
+                                // suite: **1,695** enemy no-victim turns across 26 files reach that
+                                // `set` — corroborated by Task 5's Probe A, which counted the same
+                                // 1,695 from the selection site.
+                                //
+                                // ⚠️ 1,695 is the POPULATION, not the DELTA — do not restate it as
+                                // "1,695 turns that previously published none". Pre-#335 the ~335 C2
+                                // rows (ally-side parsed target, LIVE roster, anchor alive) resolved
+                                // the anchor as their victim, so they took the `else` and DID publish a
+                                // ctx. Only the rows whose anchor was itself undefined published
+                                // nothing: C1's 1,341 + C3's 15 = **~1,356**, and that is the delta.
+                                // The two numbers answer different questions; conflating them is the
+                                // error this rung kept catching.
+                                //
+                                // Either way it is a real publication delta, not parity;
+                                // it moved no golden because the only consumer is an enemy DoT tick
+                                // attributed to this actor, and a no-victim turn applies no DoT.
                             } else {
                                 // D-PR3 Task 9: victim-side incoming %-reduction against the bound
                                 // target on the AGGREGATE (non-positional) damage path — Iridium-as-tank.
-                                // `tgt` is the victim (healTarget on the legacy path); `actor` is the
-                                // acting enemy attacker. The non-crit baseline is the reduction with
-                                // didCrit:false; the crit-family DELTA is the extra reduction a crit adds.
-                                // Guarded by length so a victim with no incoming abilities passes 0/0 →
-                                // byte-identical. (The positional enemy path applies its own per-sub-hit
-                                // reduction via drivePositionalApply; this fold serves the legacy single-apply.)
-                                const tgtIncoming = incomingAbilitiesOf(tgt.id);
-                                const incomingReductionNonCritPct = tgtIncoming.length
-                                    ? incomingReductionForHit(tgtIncoming, {
-                                          didCrit: false,
-                                          attackerStealthed: isStealthed(actor.id),
-                                          victimStealthed: isStealthed(tgt.id),
-                                          victimStasised: isStasised(tgt.id),
-                                          hitIndexThisRound: 0,
-                                          attackerHasDot: attackerHasDot(actor.id),
-                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
-                                          victimHasShield: hasShield(tgt.id),
-                                          selfHpPct: selfHpPctOf(tgt.id),
-                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
-                                              actor.id
-                                          ),
-                                      })
-                                    : 0;
-                                const incomingReductionCritAll = tgtIncoming.length
-                                    ? incomingReductionForHit(tgtIncoming, {
-                                          didCrit: true,
-                                          attackerStealthed: isStealthed(actor.id),
-                                          victimStealthed: isStealthed(tgt.id),
-                                          victimStasised: isStasised(tgt.id),
-                                          hitIndexThisRound: 0,
-                                          attackerHasDot: attackerHasDot(actor.id),
-                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
-                                          victimHasShield: hasShield(tgt.id),
-                                          selfHpPct: selfHpPctOf(tgt.id),
-                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
-                                              actor.id
-                                          ),
-                                      })
-                                    : 0;
+                                // `tgt` is the victim; `actor` is the acting enemy attacker. The non-crit
+                                // baseline is the reduction with didCrit:false; the crit-family DELTA is
+                                // the extra reduction a crit adds. Guarded by length so a victim with no
+                                // incoming abilities passes 0/0 → byte-identical. (The positional enemy
+                                // path applies its own per-sub-hit reduction via drivePositionalApply;
+                                // this fold serves the legacy single-apply.)
+                                //
+                                // SP-4e: fenced on the victim's PRESENCE, not just on the ability list.
+                                // With no victim there is nobody whose incoming channel could reduce
+                                // anything, and the two args default to 0 inside runPlayerTurn — which is
+                                // also what the two PLAYER cast sites pass (they never thread these at
+                                // all), so the no-victim enemy turn matches them. Safe to fence: both
+                                // args feed ONLY `damageCritMultiplier`/`nonCritFactor`, whose every
+                                // consumer (`directDamage`/`secondaryDamage`/`conditionalDamage`, and
+                                // `passiveDamage` through `directDamage`) is already `hasVictim`-fenced
+                                // in playerTurn.ts. Neither reaches `turnCtx` or `positionalScalars`, the
+                                // two things this turn PUBLISHES as standing state — checked, because
+                                // fencing a value that is also published is the defect that once silenced
+                                // every supporter's reactive debuffs.
+                                let incomingReductionNonCritPct = 0;
+                                let incomingReductionCritAll = 0;
+                                if (tgt !== undefined) {
+                                    const tgtIncoming = incomingAbilitiesOf(tgt.id);
+                                    incomingReductionNonCritPct = tgtIncoming.length
+                                        ? incomingReductionForHit(tgtIncoming, {
+                                              didCrit: false,
+                                              attackerStealthed: isStealthed(actor.id),
+                                              victimStealthed: isStealthed(tgt.id),
+                                              victimStasised: isStasised(tgt.id),
+                                              hitIndexThisRound: 0,
+                                              attackerHasDot: attackerHasDot(actor.id),
+                                              victimHasBarrierRecharging: hasBarrierRecharging(
+                                                  tgt.id
+                                              ),
+                                              victimHasShield: hasShield(tgt.id),
+                                              selfHpPct: selfHpPctOf(tgt.id),
+                                              attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                                  actor.id
+                                              ),
+                                          })
+                                        : 0;
+                                    incomingReductionCritAll = tgtIncoming.length
+                                        ? incomingReductionForHit(tgtIncoming, {
+                                              didCrit: true,
+                                              attackerStealthed: isStealthed(actor.id),
+                                              victimStealthed: isStealthed(tgt.id),
+                                              victimStasised: isStasised(tgt.id),
+                                              hitIndexThisRound: 0,
+                                              attackerHasDot: attackerHasDot(actor.id),
+                                              victimHasBarrierRecharging: hasBarrierRecharging(
+                                                  tgt.id
+                                              ),
+                                              victimHasShield: hasShield(tgt.id),
+                                              selfHpPct: selfHpPctOf(tgt.id),
+                                              attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                                  actor.id
+                                              ),
+                                          })
+                                        : 0;
+                                }
                                 // F3: crit-conditional pre-fight damage modifiers, mirrored from
                                 // the positional incomingReductionFor site (crit hits only, via
                                 // the crit-family delta). Same sign convention: the channel is a
@@ -10200,8 +10521,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // terms are negated (victim incomingCritDamage -10 → +10 reduction
                                 // on crits; attacker outgoingCritDamage -10 → its crits deal 10%
                                 // less). Absent → 0 → byte-identical.
+                                // SP-4e: only the VICTIM term is fenced. The ACTING enemy's own
+                                // `outgoingCritDamage` is not victim-derived, so it keeps applying
+                                // on a no-victim turn — collapsing the whole expression would have
+                                // silently dropped a modifier that has nothing to do with the victim.
                                 const preFightCritFamilyPct =
-                                    -(tgt.preFight?.incomingCritDamage ?? 0) -
+                                    -(tgt?.preFight?.incomingCritDamage ?? 0) -
                                     (actor.preFight?.outgoingCritDamage ?? 0);
                                 const incomingReductionCritFamilyPct =
                                     incomingReductionCritAll -
@@ -10294,13 +10619,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
                                 // SP-D: record this cast's footprint size (mirrors the focus/team
                                 // sites, including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback).
-                                // `tgt` is guaranteed defined in this branch (the enclosing
-                                // `if (skipDeadTargetTurn || tgt === undefined)` already bailed
-                                // otherwise — an enemy attacker always resolves a real victim, the
-                                // no-victim concept is player-ally-cast-only), so this is a no-op
-                                // for the enemy side; kept identical to the other two sites so all
-                                // three read the same expression rather than two agreeing by
-                                // construction and one by accident.
+                                //
+                                // ⚠️ SP-4e (#335) MADE THE `0` ARM LIVE ON THIS SIDE. The comment
+                                // that stood here read "`tgt` is guaranteed defined in this branch
+                                // (the enclosing `if (skipDeadTargetTurn || tgt === undefined)`
+                                // already bailed otherwise — an enemy attacker always resolves a
+                                // real victim, the no-victim concept is player-ally-cast-only), so
+                                // this is a no-op for the enemy side". Every clause of that is now
+                                // false: the `|| tgt === undefined` arm is DELETED (see the skip
+                                // above), an enemy attacker that resolves no victim is exactly what
+                                // #335 fixed, and the no-victim rule is BOTH sides'.
+                                //
+                                // So this is not a no-op here any more. On a no-victim enemy turn
+                                // `aoeVictimIds` is `undefined` (`buildTurnArgs` gates it on
+                                // `tgt?.position != null`), the `??` falls through, and
+                                // `(tgt !== undefined ? 1 : 0)` records a footprint of **0** —
+                                // "this cast hit no enemy" — for the first time on this side, on
+                                // every one of the ~1,695 measured no-victim enemy turns. That is
+                                // the honest reading for a cast that reached nobody, and it is the
+                                // same expression the two player sites have recorded since SP-4d
+                                // Task 8: all three sites read one expression rather than two
+                                // agreeing by construction and one by accident.
                                 enemiesHitThisCastByActor.set(
                                     actor.id,
                                     enemyTurnArgs.aoeVictimIds?.length ??
@@ -10413,10 +10752,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 enemyPassiveSlotLanded = true;
                                 stagedEnemyPassiveSlotHit?.();
                             };
-                            // `tgt !== undefined` narrows the victim for this block (SP-U U5 R6): a
+                            // `tgt !== undefined` narrows the victim for this block (SP-U U5 R6).
+                            //
+                            // ⚠️ SP-4e (#335) INVERTED THE REASON, and the reason is what tells the
+                            // next reader whether the term is removable. It used to read: "a
                             // positive `damage` is only produced by the non-skip `else` above, which
-                            // runs only when `tgt` is defined — byte-identical (the term is always true
-                            // when damage > 0 in the existing corpus).
+                            // runs only when `tgt` is defined". The `else` now runs precisely when
+                            // `tgt` is UNDEFINED too — that is the no-victim turn. The conjunct is
+                            // still always true when `damage > 0`, but for the opposite reason: with
+                            // no victim `runPlayerTurn` fences its whole damage assembly on
+                            // `hasVictim`, so `damage` comes back 0 and a no-victim turn cannot
+                            // enter this block at all. The term is therefore what KEEPS that fence
+                            // honest at this seam rather than a redundant narrowing — drop it and a
+                            // future non-zero no-victim `damage` falls into a block that
+                            // dereferences `tgt` throughout.
                             if (damage > 0 && tgt !== undefined) {
                                 // Phase-5 per-victim accounting notes (see detailed notes below): (1) the
                                 // damage-taken leech now fires PER VICTIM on the positional path too (E2 T5,
@@ -10435,9 +10784,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // Route the enemy's incoming damage. Two mutually-exclusive paths:
                                 //
                                 //  - NON-positional (legacy): a SINGLE applyIncomingToTarget(damage, tgt)
-                                //    drains the bound victim (tgt === healTarget! on the legacy path → the
-                                //    no-arg-equivalent call, byte-identical). Returns the shield/HP/Barrier
-                                //    outcome consumed by the damage-taken leech block below.
+                                //    drains the POSITIONALLY-RESOLVED victim. (Until SP-4e this note read
+                                //    "tgt === healTarget! on the legacy path → the no-arg-equivalent call,
+                                //    byte-identical", because the non-positional path bound the heal anchor
+                                //    as a fallback victim. It does not: `tgt` is the resolved victim or
+                                //    nothing, and a no-victim turn never reaches here — the
+                                //    `damage > 0 && tgt !== undefined` gate above fences it out.) Returns
+                                //    the shield/HP/Barrier outcome consumed by the damage-taken leech
+                                //    block below.
                                 //
                                 //  - POSITIONAL (Task 9): drivePositionalApply lands the firing hit per-victim
                                 //    across the LIVE PLAYER roster (origin full / covered half) via the

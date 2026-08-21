@@ -85,7 +85,7 @@ export interface EnemyAttackerInput {
      *  the cell; an EXPLICIT cell also beats another enemy's invented one on a collision. */
     position?: Position;
     /** Parsed target selection. Position alone does NOT route a cast — with no ParsedTarget,
-     *  `selectTurnTarget` short-circuits to `legacyVictim` however well-positioned the roster.
+     *  `selectTurnTarget` short-circuits to NO VICTIM however well-positioned the roster.
      *  The boundary fills that gap now (`DEFAULT_FRONT_ENEMY_TARGET`), so the short-circuit is
      *  unreachable from here; the adapter still SUBSTITUTES an ally-side target, which is a
      *  matchup policy the boundary deliberately does not apply — see `offensiveTarget`. */
@@ -350,10 +350,11 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * ENGINE's, not this adapter's: `normalizeCombatRoster` fills both axes on `runCombat`'s first line
  * and the duplicate derivation here was retired. It is load-bearing, not tidiness: a team actor's
  * axes are sourced exclusively from `teamTargetById`/`teamPatternById`, so an actor missing them
- * would resolve NO opposing victim at all — `selectTurnTarget` returns `tgt: undefined` on the
- * player side since SP-4c-2b — and its offensive clause would deliver nothing. Before SP-4c-2d that
- * same miss short-circuited to `legacyVictim` — the dummy — and the actor's `basis:'damage-dealt'`
- * riders then scaled off the sink's 10,000 defence instead of the real enemy's.
+ * would resolve NO opposing victim at all — `selectTurnTarget` returns `tgt: undefined` (on the
+ * player side since SP-4c-2b, on both since SP-4e) — and its offensive clause would deliver
+ * nothing. Before SP-4c-2d that same miss short-circuited to the dummy sink, and the actor's
+ * `basis:'damage-dealt'` riders then scaled off that sink's 10,000 defence instead of the real
+ * enemy's.
  * What this adapter still owns is the ally-side SUBSTITUTION (`offensiveTarget`), which is
  * a matchup policy rather than a fill — the boundary only fills what is ABSENT.
  *
@@ -364,14 +365,15 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * game-faithful and deliberately not softened — correct default placement (`healingPlacement.ts`,
  * via `defaultHealTargetSlot`) is the only mitigation.
  *
- * There is no fallback opponent on the PLAYER side any more. Every case that used to route a player
+ * There is no fallback opponent on EITHER side any more. Every case that used to route a player
  * cast to the vestigial dummy — a roster with no targetable member (every enemy at max hp 0), a
  * placed actor whose target resolves to no living victim (the mid-run whiff window), missing
  * target/pattern axes, and an EMPTY roster — now yields "no victim": SP-4c-2b made
  * `selectTurnTarget` return `tgt: undefined` for a player actor that resolves nobody, and SP-4c-2d
- * deleted the actor itself. The ENEMY side still ends in `selected ?? legacyVictim`, but its
- * `legacyVictim` is the HEAL TARGET — a real, positioned player actor — not the dummy; re-homing
- * that anchor is rung 4e's job. See the LEGACY_SINK_* comment below.
+ * deleted the actor itself. The ENEMY side used to end in a fallback to the HEAL TARGET — a real,
+ * positioned player actor, not the dummy — and SP-4e (#335) deleted that too: an ally-targeted
+ * enemy support ship now resolves NO victim instead of anchoring on the focus player. See the
+ * LEGACY_SINK_* comment below.
  *
  * `enemies: []` is a SUPPORTED shape and reaches this function from production: it means "nothing
  * shoots back", and `effectiveEnemies` turns it into ONE inert PRACTICE TARGET (`practiceTarget`
@@ -483,10 +485,9 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
      *     (SP-4c-2b). The engine's `positional` gate is fenced on `tgt !== undefined`, and
      *     `runPlayerTurn` fences its own damage assembly on `hasVictim`, so an offensive clause in
      *     the cast delivers exactly ZERO and `perTargetDealt` stays empty.
-     *   - ENEMY side (a support ship the user picked as an opponent): `selectTurnTarget` still ends
-     *     in `selected ?? tb.legacyVictim`, and the enemy side's `legacyVictim` is the HEAL TARGET —
-     *     so the cast anchors on that one player actor instead of the cell its own pattern was
-     *     meant to walk.
+     *   - ENEMY side (a support ship the user picked as an opponent): the SAME answer since
+     *     SP-4e. It used to fall back to the HEAL TARGET, so the cast anchored on that one player
+     *     actor instead of the cell its own pattern was meant to walk; that fallback is deleted.
      * Either way the supplied ally-side axis cannot do the offensive job, which is why it is
      * substituted here rather than forwarded.
      *
@@ -548,9 +549,10 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // The parsed axes mirror the enemy branch below EXACTLY, and for the same reason: a team
     // actor's target/pattern are sourced ONLY from `teamTargetById`/`teamPatternById`, which are
     // populated only from `t.target`/`t.pattern`. With neither, `selectTurnTarget` WOULD resolve NO
-    // victim at all (`tgt: undefined` on the player side since SP-4c-2b) however well-positioned the
-    // roster is, and the actor's offensive clause would deliver nothing. Before SP-4c-2d the same
-    // miss short-circuited to `legacyVictim` — the dummy — and the actor's `basis:'damage-dealt'`
+    // victim at all (`tgt: undefined` on the player side since SP-4c-2b, on both since SP-4e)
+    // however well-positioned the roster is, and the actor's offensive clause would deliver
+    // nothing. Before SP-4c-2d the same
+    // miss short-circuited to the dummy sink, and the actor's `basis:'damage-dealt'`
     // riders then computed against the sink's 10,000 defence instead of the real enemy's (measured
     // 2579 vs 7753 on a walked ally with attack 10,000 vs an enemy at defence 1,000 — a ~3× error
     // that surfaced as `teamHealing`). It bit the DEFAULT production config, whose heal target walks
@@ -624,15 +626,16 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             affinityCritPenalty: aff.critPenalty,
             position: enemySlots[i],
             // A kitless/manual enemy has no parsed targeting, so it would have NO ParsedTarget and
-            // fall back to `legacyVictim` — which on the ENEMY side is the HEAL TARGET, not a cell
-            // its own pattern chose. (Before SP-4c-2d the player side had a dummy fallback here too;
-            // that actor is gone.) That ABSENT case is now the engine boundary's job
+            // resolve NO victim at all. (Before SP-4e the enemy side fell back to the HEAL TARGET
+            // here, and before SP-4c-2d the player side fell back to the dummy; both are gone.)
+            // That ABSENT case is now the engine boundary's job
             // (`normalizeCombatRoster` fills the same
             // `DEFAULT_FRONT_ENEMY_TARGET`); `offensiveTarget` is kept here for the half it owns —
             // an ALLY-side parsed target is SUBSTITUTED rather than forwarded, which a fill cannot
             // do because the axis is present. That half is live: the page feeds every enemy its
             // REAL parsed targeting, so a support ship picked as an enemy — 20 of them have an
-            // ally-side active target — would otherwise fall through to that heal-target anchor.
+            // ally-side active target — would otherwise run its offensive clause with no victim at
+            // all (before SP-4e: against the fabricated heal-target anchor).
             target: offensiveTarget(e.target),
             // Filled by `normalizeCombatRoster`, not here — see the team-actor branch above.
             pattern: e.pattern,
@@ -692,8 +695,10 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         pattern: input.healerTargeting?.active?.pattern,
         chargedTarget: chargedOffensiveTarget(input.healerTargeting?.charged?.target),
         chargedPattern: input.healerTargeting?.charged?.pattern,
-        // Heals apply to each recipient the caster's support pattern covers — WITHOUT
-        // teamBattle's lowest-HP routing, which is not the game's rule (only Volk's passive is).
+        // Heals apply to each recipient the caster's support pattern covers. Recipient CHOICE is
+        // no longer a mode flag: a ship whose text names a worst-HP ally (Pallas, Volk, Valkyrie)
+        // carries the 'lowest-hp-ally' target and routes there on any run; everything else routes
+        // over the pattern. SP-4e retired `teamBattle`, which conflated the two.
         perRecipientHealApply: true,
     });
 

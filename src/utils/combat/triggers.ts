@@ -1537,6 +1537,25 @@ export interface IntentExecContext {
     /** Living ally ids on the owner's ACTIVE support pattern footprint (reactives). Absent when
      *  non-positional or the owner has no support pattern → legacy team-wide routing. */
     footprintAllyIdsFor?: (ownerId: string) => string[] | undefined;
+    /** SP-4e: the `'lowest-hp-ally'` selector, resolved by the ENGINE (it owns live HP and
+     *  buff-aware max HP) over the OWNER's OWN side — the lowest currentHp/maxHp living same-side
+     *  ally, owner EXCLUDED, ties broken by source order. `undefined` means NO recipient (the
+     *  owner is the only living candidate; "the OTHER ally" is nobody, never a self-target).
+     *
+     *  REQUIRED (not optional, unlike this context's other delegates) since the whole-branch
+     *  review's FIX 3: every other reader in this file goes through `ctx.foo?.(...)`, where a
+     *  missing delegate and a delegate that legitimately answers "nothing to do" are both
+     *  `undefined` and indistinguishable — fine for gates with a safe inert default, wrong here,
+     *  because `undefined` is ALSO this selector's real "nobody to heal" answer. A context built
+     *  without the field (a second engine entry point, a refactor that splits this literal) would
+     *  silently no-op every `'lowest-hp-ally'` consumer (Valkyrie's on-bomb-detonated repair,
+     *  Volk's passive repair) rather than fail loudly, matching the class `resolveSupportRecipients`
+     *  already throws on for the cast path. Requiring the field turns that class into a `tsc`
+     *  compile error at the one production call site (`engine.ts`) instead of a runtime miss, which
+     *  is strictly better than a throw. A context that has no live-HP view at all (DPS mode,
+     *  healing-less unit tests) must supply `() => undefined` explicitly — that is a real answer
+     *  ("this context can never resolve a recipient"), not an accidental omission. */
+    lowestHpAllyIdFor: (ownerId: string) => string | undefined;
     /** Whether `ownerId` was hit by a direct attack this round, feeding the
      *  `not-hit-this-round` gate at drain time. Engine-populated from the combat-wide
      *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
@@ -2481,13 +2500,51 @@ function payloadFromConfig(cfg: {
  * 'ally'-target: prefers eventCtx.cleansedAllyIds (Phase 3 PR-H: fans out over EVERY actually-
  * cleansed ally — Cultivator's "that ally"), then eventCtx.damagedAllyId (the ally that was hit),
  * falling back to fallbackTargetId (the heal target). 'all-allies': fans out to every same-side
- * id (ctx.playerIds). Anything else (self, enemy, …): the owner only.
+ * id (ctx.playerIds). 'lowest-hp-ally': the engine-resolved selector (see below). Anything else
+ * (self, enemy, …): the owner only.
+ *
+ * ⚠️ `'ally'` HERE IS NOT `'ally'` ON THE CAST PATH, and the difference is intended. Since SP-4e
+ * Task 4, `recipientsFor` (playerTurn.ts) resolves a cast-slot `'ally'` to the caster's whole own
+ * side narrowed by its support footprint — identically to `'all-allies'`. This function keeps the
+ * single-recipient meaning, because a reactive clause names a SPECIFIC ally that the triggering
+ * event identified ("repairs THAT ally", "cleanses 1 debuff from that ally"), not a footprint. So
+ * the heal-vs-cleanse target distinction the parser still emits is a no-op on the cast path and
+ * load-bearing here. (Third meaning, for completeness: the standing-leech proc's `'ally'` arm in
+ * engine.ts is the player heal anchor, or nobody for an enemy owner — see its OPEN RESIDUAL block.)
+ *
+ * Note the knock-on from Task 4's widening: `cleansedAllyIds` comes from
+ * `cleanse-performed.targets`, which a cast `'ally'` cleanse now fills with every footprint ally
+ * that actually lost a debuff, so a "repairs that ally" passive fans out over all of them rather
+ * than one. In the shipped corpus that is exactly ONE ship — **Cultivator**, the only kit carrying
+ * both a plain-`'ally'` cast cleanse and an `'ally'` `on-own-cleanse` repair (measured SP-4e fix
+ * wave 1). Hayyan has the same passive but its cast cleanse is already `'all-allies'`, so it
+ * fanned out before Task 4 and is unchanged by it. Pinned end-to-end, both placements, by
+ * `plainAllyCleanseFootprintReach.integration.test.ts`.
+ *
+ * The OPPOSING-side twin of that knock-on is `cleansedEnemyIds` (stamped from the same
+ * `cleanse-performed.targets` on `on-enemy-cleansed`, ~:1226): Pestilence's "inflicts Corrosion II
+ * on all cleansed enemies" now lands on every ally an opposing plain-`'ally'` cleanse touched,
+ * where pre-Task-4 there was only ever one.
  */
 export function reactiveRecipients(
     intent: Intent,
     ctx: IntentExecContext,
     fallbackTargetId: string
 ): string[] {
+    // SP-4e: resolved by the engine (it owns live HP), side-relative to the OWNER.
+    // Undefined → no recipient (Pallas's "the OTHER ally" with nobody else alive).
+    //
+    // Returns EARLY, above `footprintFilteredRecipients`, for two reasons that point the same way:
+    // a named selector is never narrowed by the support footprint (spec §1.2), and the footprint
+    // filter's `resolveSupportRecipients` THROWS on this target by design. Before this arm the
+    // variant fell into the trailing "anything else" bucket and silently resolved to
+    // `[intent.ownerId]` — the caster, the one recipient its text forbids.
+    if (intent.ability.target === 'lowest-hp-ally') {
+        // FIX 3: the delegate is REQUIRED on IntentExecContext now — no `?.` needed, and none
+        // wanted: a missing delegate is a caller bug, not a legitimate "nobody to heal" answer.
+        const rid = ctx.lowestHpAllyIdFor(intent.ownerId);
+        return rid === undefined ? [] : [rid];
+    }
     const base =
         intent.ability.target === 'ally'
             ? intent.eventCtx?.cleansedAllyIds?.length
@@ -2509,6 +2566,18 @@ export function reactiveRecipients(
  * applies only to the abilities whose own clause names the pattern: Graphite's "adds N charges to
  * the charged skill of all allies within the active pattern", AEGIS's and Cultivator's ally-scoped
  * triggers. Everything else reaches any same-side ally.
+ *
+ * ⚠️ A TEXT-NAMED ally selector never gets here at all, and `patternScoped` is not what keeps it
+ * out. `'lowest-hp-ally'` is not footprint-scoped on ANY slot (SP-4e, user-confirmed 2026-08-20):
+ * the ability's own text names which ally it reaches, so a pattern cannot narrow it even if the
+ * ability also carried `patternScoped`. Each of the three callers therefore resolves it and returns
+ * ABOVE this function — `reactiveRecipients`, the reactive charge branch, and the reactive buff
+ * branch — and each passes an already-resolved single id, never the selector. This function is NOT
+ * a second line of defence for them: its `patternScoped !== true` early return would hand a
+ * selector-targeted ability back its whole `baseRecipients` (every same-side ally), and only a
+ * selector ability that ALSO set `patternScoped` would reach `resolveSupportRecipients` and hit its
+ * by-design throw. So the three early returns are the guarantee; if you add a fourth caller, resolve
+ * the selector there too.
  *
  * AEGIS/Cultivator caveat: in their wording the pattern scopes the TRIGGER ("when an ally within
  * the active pattern is …"), not the recipient. Filtering their recipients is an approximation —
@@ -2984,6 +3053,21 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
             return;
         }
+        // SP-4e: the named selector bumps exactly ONE same-side ally — the engine resolves it
+        // (live HP), owner EXCLUDED. Handled ahead of the ally/all-allies arm below, and
+        // deliberately NOT routed through `footprintFilteredRecipients`: a named selector is never
+        // footprint-narrowed, and that helper's `resolveSupportRecipients` throws on this target by
+        // design. `undefined` (owner is the only living candidate) returns without granting
+        // anything — falling through to the owner-only gain below would be the self-target the
+        // variant forbids.
+        if (intent.ability.target === 'lowest-hp-ally') {
+            // FIX 3: required delegate — see IntentExecContext.lowestHpAllyIdFor's doc comment.
+            const rid = ctx.lowestHpAllyIdFor(intent.ownerId);
+            if (rid !== undefined) {
+                ctx.grantAllyCharges(cfg.amount, { recipientIds: [rid], emitBus: ctx.bus });
+            }
+            return;
+        }
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
         // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
@@ -3064,31 +3148,48 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // lives on another recipient.
         const isAllyTarget =
             intent.ability.target === 'ally' || intent.ability.target === 'all-allies';
-        const recipients = footprintFilteredRecipients(
-            intent,
-            ctx,
-            intent.ability.target === 'adjacent-allies'
-                ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
-                : // H3.7: an on-shield-applied reaction (Resonating Fury) fans an ally/all-allies
-                  // grant out to EXACTLY the recipients of the triggering shield cast — the same
-                  // event-derived recipient routing as repairedAllyIds (Font of Power), keyed on
-                  // eventCtx.shieldRecipientIds. The recipients are same-side by construction (a
-                  // shield to oneself or an ally), so the granter itself appears here iff it
-                  // self-shielded — no extra ally filtering needed.
-                  isAllyTarget && intent.eventCtx?.shieldRecipientIds?.length
-                  ? intent.eventCtx.shieldRecipientIds
-                  : // NOTE: repairedAllyIds/damagedAllyId stay scoped to target === 'ally'
-                    // (NOT isAllyTarget) on purpose — only shield routing accepts all-allies.
-                    // Do not "harmonize" these to isAllyTarget; it would broaden Font of Power /
-                    // on-ally-attacked recipients and drift goldens.
-                    intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
-                    ? intent.eventCtx.repairedAllyIds
-                    : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
-                      ? [intent.eventCtx.damagedAllyId]
-                      : isAllyTarget
-                        ? ctx.playerIds
-                        : [intent.ownerId]
-        );
+        // SP-4e: the named selector grants to exactly ONE same-side ally — engine-resolved from
+        // live HP, owner EXCLUDED, `undefined` → nobody. Resolved BESIDE the chain below rather
+        // than inside it, because it must bypass `footprintFilteredRecipients` on both counts: a
+        // named selector is never footprint-narrowed, and that helper's `resolveSupportRecipients`
+        // throws on this target by design. Un-armed, the variant fell through the whole chain to
+        // the trailing `[intent.ownerId]` — a self-grant, the one answer its text forbids.
+        // FIX 3: required delegate — see IntentExecContext.lowestHpAllyIdFor's doc comment.
+        const selectorRecipientId =
+            intent.ability.target === 'lowest-hp-ally'
+                ? ctx.lowestHpAllyIdFor(intent.ownerId)
+                : undefined;
+        const recipients =
+            intent.ability.target === 'lowest-hp-ally'
+                ? selectorRecipientId === undefined
+                    ? []
+                    : [selectorRecipientId]
+                : footprintFilteredRecipients(
+                      intent,
+                      ctx,
+                      intent.ability.target === 'adjacent-allies'
+                          ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
+                          : // H3.7: an on-shield-applied reaction (Resonating Fury) fans an ally/all-allies
+                            // grant out to EXACTLY the recipients of the triggering shield cast — the same
+                            // event-derived recipient routing as repairedAllyIds (Font of Power), keyed on
+                            // eventCtx.shieldRecipientIds. The recipients are same-side by construction (a
+                            // shield to oneself or an ally), so the granter itself appears here iff it
+                            // self-shielded — no extra ally filtering needed.
+                            isAllyTarget && intent.eventCtx?.shieldRecipientIds?.length
+                            ? intent.eventCtx.shieldRecipientIds
+                            : // NOTE: repairedAllyIds/damagedAllyId stay scoped to target === 'ally'
+                              // (NOT isAllyTarget) on purpose — only shield routing accepts all-allies.
+                              // Do not "harmonize" these to isAllyTarget; it would broaden Font of Power /
+                              // on-ally-attacked recipients and drift goldens.
+                              intent.ability.target === 'ally' &&
+                                intent.eventCtx?.repairedAllyIds?.length
+                              ? intent.eventCtx.repairedAllyIds
+                              : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
+                                ? [intent.eventCtx.damagedAllyId]
+                                : isAllyTarget
+                                  ? ctx.playerIds
+                                  : [intent.ownerId]
+                  );
         // D-PR10: dynamic caster-attack snapshot. A buff carrying the `attackFlatPctOfCaster`
         // sentinel ("N% of the caster's attack") freezes a concrete `attackFlat` from the
         // CASTER's effective attack at grant time (the same last-turn ctx value that
@@ -3790,10 +3891,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // emit) → fall back to the aggregate overhealAmount routed to healing.targetId below.
         const overhealByAlly =
             cfg.basis === 'overheal' ? intent.eventCtx?.overhealByAlly : undefined;
-        // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
-        // reaction repairs THAT ally) over the healing target. Identical today for single-target
-        // healing-mode runs, but the per-ally overheal map (when present) supersedes it so an AoE
+        // Recipients: an 'ally'-target heal prefers eventCtx.cleansedAllyIds, then
+        // eventCtx.damagedAllyId (an ally-damage reaction repairs THAT ally), then the healing
+        // target. The per-ally overheal map (when present) supersedes all of that, so an AoE
         // overheal shield fans out to every over-repaired ally.
+        //
+        // ⚠️ This used to add "identical today for single-target healing-mode runs". That is FALSE
+        // twice over now. (1) SP-4e Task 4 made a cast `'ally'` cleanse fan out over the caster's
+        // support footprint, so `cleansedAllyIds` — read from `cleanse-performed.targets` — can
+        // carry SEVERAL ids, and Cultivator's "repairs that ally" now repairs each of them.
+        // (2) SP-4e Task 2 replaced this branch's anchor-only pool gate, so a resolved recipient
+        // that is NOT the heal target genuinely gains HP. Neither of those is single-target.
         const recipients =
             overhealByAlly && Object.keys(overhealByAlly).length > 0
                 ? Object.keys(overhealByAlly)
@@ -3811,9 +3919,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
             // destroyed, but `recipients = ctx.playerIds` then still includes that dead
-            // caster — inflating gross directHeal/shield by one phantom share. The live
-            // heal target's effectiveHeal/overheal/shield are already isolated by the
-            // `rid === ctx.healing.targetId` guard below and are unaffected.
+            // caster — inflating gross directHeal/shield by one phantom share.
+            //
+            // ⚠️ The old tail of that sentence — "the live heal target's
+            // effectiveHeal/overheal/shield are already isolated by the
+            // `rid === ctx.healing.targetId` guard below" — names a guard that NO LONGER EXISTS.
+            // SP-4e Task 2 replaced it with `ctx.healing.recipientActor(rid)`, so every resolved
+            // recipient's own pool is touched, not just the anchor's. What keeps a dead recipient
+            // out is THIS `continue` and nothing else: it now protects the applied figures as well
+            // as the gross ones, which makes it more load-bearing than when it was written, not
+            // less. Do not remove it on the grounds that a downstream guard covers it.
             //
             // Determinism (byte-identical goldens): an `rid` may have NO runtime entry
             // (an unwalked legacy team actor). A MISSING runtime is treated as ALIVE —
@@ -3846,14 +3961,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.healing.credit(intent.ownerId, 'directHeal', raw);
                 healPerTarget.push({ targetId: rid, amount: raw });
                 healSum += raw;
-                if (rid === ctx.healing.targetId) {
-                    const { consumed, overheal } = ctx.healing.applyHealToTarget(raw);
+                // SP-4e: apply to the RESOLVED recipient's own pool, mirroring the reactive
+                // SHIELD branch below (which has always resolved recipientActor). The old
+                // `rid === ctx.healing.targetId` gate credited gross for every recipient but
+                // restored HP only to the anchor — invisible while every reactive 'ally' heal
+                // routed to the anchor anyway, a silent no-op the moment one does not.
+                const recipientActor = ctx.healing.recipientActor(rid);
+                if (recipientActor) {
+                    const { consumed, overheal } = ctx.healing.applyHealToTarget(
+                        raw,
+                        recipientActor
+                    );
                     ctx.healing.credit(intent.ownerId, 'effectiveHeal', consumed);
                     ctx.healing.credit(intent.ownerId, 'overheal', overheal);
-                    // Recipient axis (SP-3b Task 7): a reactive repair only APPLIES to the heal
-                    // target (the gross directHeal above is credited for every recipient, but no
-                    // other recipient's pool is touched), so only this branch may mirror. Gated on
-                    // `perRecipientApply` to keep a legacy run's `perRecipient` empty.
+                    // Recipient axis (SP-3b Task 7): mirror where the repair LANDED — which, since
+                    // SP-4e, is every recipient whose pool this loop actually touched, not just the
+                    // anchor. Gated on `perRecipientApply` to keep a legacy run's `perRecipient`
+                    // empty.
                     if (ctx.healing.perRecipientApply) {
                         ctx.healing.creditRecipient?.(rid, 'directHeal', raw);
                         ctx.healing.creditRecipient?.(rid, 'effectiveHeal', consumed);

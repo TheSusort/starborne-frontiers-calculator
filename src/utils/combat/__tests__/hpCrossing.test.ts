@@ -470,6 +470,9 @@ describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scru
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
             oncePerCombatFired: new Set<string>(),
+            // FIX 3: now required — this suite has no live-HP view, so "nobody" is the honest
+            // answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
             ...(selfHpPctFor !== undefined ? { selfHpPctFor } : {}),
         };
     };

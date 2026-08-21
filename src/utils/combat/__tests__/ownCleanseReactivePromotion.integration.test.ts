@@ -26,6 +26,7 @@ import { createEventBus, CombatEvent } from '../events';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
 import { createStatusEngine } from '../statusEngine';
 import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
+import type { CombatActor } from '../state';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -564,10 +565,14 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
 
     const buildHealCtx = (): {
         ctx: IntentExecContext;
-        applied: number[];
+        applied: Array<{ raw: number; id: string | undefined }>;
         credits: Array<{ actorId: string; bucket: string; amount: number }>;
     } => {
-        const applied: number[] = [];
+        // SP-4e fix wave 1: `applied` records the RECIPIENT, not just the amount. `credits` is
+        // keyed by the crediting OWNER ('cultivator'), so neither array could distinguish
+        // "repaired team1" from "repaired the anchor" — the reviewer mis-routed the executor to
+        // `recipientActor(ctx.healing.targetId)` and every assertion here stayed green.
+        const applied: Array<{ raw: number; id: string | undefined }> = [];
         const credits: Array<{ actorId: string; bucket: string; amount: number }> = [];
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         se.beginRound(1);
@@ -577,14 +582,19 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => 1000,
-            applyHealToTarget: (raw) => {
-                applied.push(raw);
+            applyHealToTarget: (raw, victim) => {
+                applied.push({ raw, id: victim?.id });
                 return { consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: PLAYER_IDS,
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e Task 2: the reactive heal branch resolves `recipientActor` to decide whose
+            // pool to repair (it used to repair only `targetId`). Production resolves every roster
+            // id via `allActorsById.get`, so a blanket `() => undefined` here would repair nobody
+            // and every consumption assertion below would pass vacuously.
+            recipientActor: (id) =>
+                PLAYER_IDS.includes(id) ? ({ id } as unknown as CombatActor) : undefined,
         };
         const ctx: IntentExecContext = {
             round: 1,
@@ -613,6 +623,9 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
             healing,
+            // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is the
+            // honest answer, supplied explicitly rather than by omission.
+            lowestHpAllyIdFor: () => undefined,
         };
         return { ctx, applied, credits };
     };
@@ -624,17 +637,24 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
         expect(credits.filter((c) => c.bucket === 'directHeal')).toEqual([
             { actorId: 'cultivator', bucket: 'directHeal', amount: 800 },
         ]);
-        // ...but the pool-consumption path (applyHealToTarget/effectiveHeal) only fires when the
-        // recipient equals healing.targetId ('tank') — 'team1' never triggers it, proving the
-        // routing did NOT fall back to healing.targetId when cleansedAllyIds named someone else.
-        expect(applied).toHaveLength(0);
-        expect(credits.some((c) => c.bucket === 'effectiveHeal')).toBe(false);
+        // ...and, since SP-4e Task 2, it is REPAIRED too. Exactly one pool application, for the one
+        // resolved recipient ('team1'). The routing claim in this test's name is what it still
+        // pins — it did NOT fall back to healing.targetId — but the old evidence for that claim
+        // was "no pool was consumed at all", which was the pool-gate DEFECT (gross credit for
+        // every recipient, HP restored only to the anchor), not the routing rule. One application
+        // of 800 with only 'team1' in the fan-out is the same routing claim, positively evidenced.
+        // The recipient id is what makes that positive: `[{ raw: 800 }]` alone would also be
+        // produced by a repair of the anchor 'tank'.
+        expect(applied).toEqual([{ raw: 800, id: 'team1' }]);
+        expect(credits.filter((c) => c.bucket === 'effectiveHeal')).toEqual([
+            { actorId: 'cultivator', bucket: 'effectiveHeal', amount: 800 },
+        ]);
     });
 
     it('a SINGLE cleansedAllyIds entry EQUAL to healing.targetId consumes the pool (effectiveHeal credited)', () => {
         const { ctx, applied, credits } = buildHealCtx();
         executeIntent(makeHealIntent(['tank']), ctx);
-        expect(applied).toEqual([800]);
+        expect(applied).toEqual([{ raw: 800, id: 'tank' }]);
         expect(credits).toContainEqual({
             actorId: 'cultivator',
             bucket: 'effectiveHeal',
@@ -647,15 +667,22 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
         executeIntent(makeHealIntent(['team1', 'tank']), ctx);
         // Both recipients are credited directHeal (one entry per recipient in the fan-out loop)...
         expect(credits.filter((c) => c.bucket === 'directHeal')).toHaveLength(2);
-        // ...but only 'tank' (matching healing.targetId) consumes the pool.
-        expect(applied).toEqual([800]);
-        expect(credits.filter((c) => c.bucket === 'effectiveHeal')).toHaveLength(1);
+        // ...and since SP-4e Task 2 BOTH consume their own pool. Previously only 'tank' (matching
+        // healing.targetId) did, so the other cleansed ally was credited gross and healed nothing —
+        // the silent no-op this rung removed. "Fan out to EVERY cleansed ally" is now true of the
+        // repair itself, not just of the accounting. The ids are the discriminator: without them
+        // `[800, 800]` is equally consistent with the anchor being repaired twice.
+        expect(applied).toEqual([
+            { raw: 800, id: 'team1' },
+            { raw: 800, id: 'tank' },
+        ]);
+        expect(credits.filter((c) => c.bucket === 'effectiveHeal')).toHaveLength(2);
     });
 
     it('NO cleansedAllyIds (absent) falls back to the plain healing.targetId (PR1 contract, unchanged for every OTHER ally-target reactive)', () => {
         const { ctx, applied, credits } = buildHealCtx();
         executeIntent(makeHealIntent(undefined), ctx);
-        expect(applied).toEqual([800]);
+        expect(applied).toEqual([{ raw: 800, id: 'tank' }]);
         expect(credits).toContainEqual({
             actorId: 'cultivator',
             bucket: 'effectiveHeal',
@@ -666,12 +693,20 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
 
 describe('Cultivator (enemy-side) — team symmetry: an enemy Cultivator repairs its OWN cleansed ally', () => {
     it('repairs the OTHER enemy ally the player just debuffed (positional: the non-positional dummy target has no `ally`-selection candidate)', () => {
-        // NOTE: an 'ally'-target cleanse's enemy-caster branch picks via lowestHpEnemyAllyId(),
-        // which iterates `healing.enemyIds` — the EXPLICIT enemyAttackers list only (NOT the
-        // singular non-positional dummy `enemy` target, which the player's non-positional debuff
-        // always lands on regardless of enemyAttackers — verified manually). So a genuine SECOND
-        // EnemyAttacker (not the dummy) is required here, positionally targeted by the player
-        // (mirrors enemyCleanse.integration.test.ts's positional harness).
+        // NOTE: an 'ally'-target cleanse resolves over `healing.enemyIds` for an enemy caster —
+        // the EXPLICIT enemyAttackers list only. So a genuine SECOND EnemyAttacker is required
+        // here, positionally targeted by the player (mirrors enemyCleanse.integration.test.ts's
+        // positional harness).
+        //
+        // CORRECTED (SP-4e fix wave 1): this note used to say the enemy-caster branch "picks via
+        // lowestHpEnemyAllyId()". That branch is GONE — SP-4e Task 4 deleted the mode-flag arms, so
+        // `recipientsFor` now hands `'ally'` the caster's whole own side narrowed by its support
+        // footprint. This fixture's enemy Cultivator carries no pattern, so nothing narrows and it
+        // cleanses BOTH itself and 'enemy-ally'; only 'enemy-ally' actually holds a debuff, so
+        // `cleanse-performed.targets` is still exactly `['enemy-ally']` and the repair below is
+        // unchanged in value. Same answer, different reason — the class where a green test silently
+        // changes meaning. The widened reach itself is pinned on a REAL kit, both placements, in
+        // `plainAllyCleanseFootprintReach.integration.test.ts`.
         const enemyCultivator: EnemyAttacker = {
             id: 'enemy-cultivator',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: CULTIVATOR_HP, speed: 10 },

@@ -1456,10 +1456,22 @@ describe('buildShipAbilities', () => {
     // Bare repair/cleanse (no target phrase) on a PURE-SUPPORT active/charged skill (no damage
     // component) targets allies, not the caster. HEALS route to 'all-allies' — a support healer
     // repairs EVERYONE in its pattern footprint (AoE, "just like buffs"; the engine intersects
-    // all-allies with the support pattern). CLEANSES stay single 'ally'. An EXPLICIT recipient
-    // ("the ally with the most missing health" → Volk) sets explicitTarget and stays a single
-    // 'ally'. The parser defaults bare to 'self'; the flip lives in abilitiesFromText where the
-    // slot + damage component are known.
+    // all-allies with the support pattern). CLEANSES keep the parsed value 'ally'.
+    //
+    // The cases below assert PARSED VALUES, which is all they ever did — but the heal-vs-cleanse
+    // difference they show is no longer a difference in CAST REACH. Since SP-4e Task 4 the engine's
+    // `recipientsFor` resolves a cast-slot 'ally' to the caster's own side narrowed by the support
+    // footprint, i.e. exactly what it gives 'all-allies' (owner ruling 2026-08-21: a plain 'ally'
+    // cleanse covers the allies its co-cast buff covers). So the two targets resolve identically
+    // here, and 'ally' is kept only because it still means ONE event-derived ally on the REACTIVE
+    // path (`reactiveRecipients`, triggers.ts). Do not "fix" a cleanse's reach by reading this
+    // block: the reach lives in the engine, pinned by
+    // `plainAllyCleanseFootprintReach.integration.test.ts`.
+    //
+    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
+    // and stays a genuine single recipient on every path — since SP-4e Task 3 it is parsed as
+    // 'lowest-hp-ally' rather than 'ally'. The parser defaults bare to 'self'; the flip lives in
+    // abilitiesFromText where the slot + damage component are known.
     describe('bare repair → all-allies (AoE) / cleanse → ally on pure-support active/charged skills', () => {
         it('Hermes active bare repair → AoE heal (all-allies)', () => {
             const s = ship({ activeSkillText: 'This Unit Repairs 27% of its Max HP.' });
@@ -2588,7 +2600,7 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Pallas: active "heals for" verb → ally leech + noCrit', () => {
+        it('Pallas: active "heals for" verb → lowest-hp-ally leech + noCrit', () => {
             const s = ship({
                 activeSkillText:
                     'This Unit deals <unit-damage>200% damage</unit-damage>. The other ally with the lowest current health percentage heals for 20% of the damage dealt and this repair cannot critically hit.',
@@ -2597,12 +2609,15 @@ describe('buildShipAbilities', () => {
             const heal = active?.abilities.find((a) => a.type === 'heal');
             expect(heal).toMatchObject({
                 type: 'heal',
-                target: 'ally',
+                // SP-4e Task 3: the text NAMES the recipient by live HP, so the builder carries
+                // the selector through instead of a generic 'ally' the engine resolves off the
+                // teamBattle run-mode flag — and a named selector is never footprint-narrowed.
+                target: 'lowest-hp-ally',
                 config: { type: 'heal', pct: 20, basis: 'damage-dealt', noCrit: true },
             });
         });
 
-        it('Valkyrie: passive detonation dual-recipient → ally + self leech, scope detonation', () => {
+        it('Valkyrie: passive detonation dual-recipient → lowest-hp-ally + self leech, scope detonation', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.',
@@ -2618,7 +2633,8 @@ describe('buildShipAbilities', () => {
                     leechScope: 'detonation',
                 });
             }
-            expect(heals.map((h) => h.target).sort()).toEqual(['ally', 'self']);
+            // SP-4e Task 3: the ally half is the named worst-HP selector.
+            expect(heals.map((h) => h.target).sort()).toEqual(['lowest-hp-ally', 'self']);
         });
 
         it('Quixilver active: shield self, basis damage-dealt, no leechScope', () => {

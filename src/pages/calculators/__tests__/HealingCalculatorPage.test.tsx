@@ -211,7 +211,20 @@ describe('HealingCalculatorPage', () => {
         // reported before the fix. (Raw, not effective: the heal target defaults behind the healer, so
         // it takes no fire and every point is overheal — an independent axis, decision 2's accepted
         // trade-off, not a healing failure.)
-        expect(screen.getByText('Direct Heal (raw)').parentElement).toHaveTextContent('320,000');
+        //
+        // Read from the RECIPIENT axis. SP-4e Task 4 made a plain `'ally'` repair route over the
+        // caster's target pattern instead of to the configured heal target alone, and this healer
+        // stands on its own support footprint — so the SOURCE-axis "Direct Heal (raw)" tile now
+        // reports 640,000 (two covered recipients × 320,000). That widening is the new routing rule;
+        // the claim this case exists to make is about the heal TARGET's share, which is unmoved.
+        const byAlly = screen.getByRole('region', { name: 'Healing by ally' });
+        const targetRow = within(byAlly)
+            .getAllByRole('row')
+            .filter((r) => r.textContent?.includes('Primary'));
+        expect(targetRow).toHaveLength(1);
+        expect(targetRow[0]).toHaveTextContent('320,000');
+        // …and the source-axis tile is the SUM over the covered recipients, not a third number.
+        expect(screen.getByText('Direct Heal (raw)').parentElement).toHaveTextContent('640,000');
         // The heal target is unplaced, so it takes the coverage-aware M1 and the untouched team ship
         // is the one that gives way. The heal target must NOT be the one named.
         expect(screen.queryByText(/^Heal Target is outside/)).not.toBeInTheDocument();

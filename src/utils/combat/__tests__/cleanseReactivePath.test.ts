@@ -253,7 +253,12 @@ function makeCtx(opts?: {
             grantShieldToTarget: () => {},
             playerIds: [OWNER_ID],
             enemyIds: [],
-            recipientActor: () => undefined,
+            // SP-4e fix wave 1: production supplies `(id) => allActorsById.get(id)`, which
+            // resolves every roster id. `() => undefined` mis-modelled that — the reactive heal
+            // branch reads it to pick whose pool to drain, so an always-undefined stub silently
+            // repairs nobody. That exact mis-modelling is what moved 8 tests in this task.
+            recipientActor: (id: string) =>
+                id === OWNER_ID ? ({ id: OWNER_ID } as CombatActor) : undefined,
         },
     } as unknown as IntentExecContext;
 }
@@ -538,7 +543,9 @@ describe('Task 3: reactive cleanse executor — procChance + crit-count', () => 
             grantShieldToTarget: () => {},
             playerIds: [OWNER_ID],
             enemyIds: [],
-            recipientActor: () => undefined,
+            // Faithful to production (see the note on the main double above).
+            recipientActor: (id: string) =>
+                id === OWNER_ID ? ({ id: OWNER_ID } as CombatActor) : undefined,
         };
         executeIntent(intent, ctx);
         // This is still call 1 to the gate (early-return did NOT consume it) → should not fire.

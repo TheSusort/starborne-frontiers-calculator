@@ -188,7 +188,14 @@ describe('healingGoldenParity', () => {
 
     // ── Scenario 4: reactive cleanse on crit-repair ──────────────────────────
     // crit 50. The healer heals an ALLY (a walked team actor t1, speed 10 so the healer
-    // acts first), routing the heal to the bombard target. A passive cleanse triggers on
+    // acts first). SP-4e Task 4: a plain `'ally'` heal routes over the caster's target pattern
+    // rather than to `[healing.targetId]`, and this fixture has no support pattern (so nothing
+    // narrows it) — the cast reaches BOTH own-side actors, the healer included. The golden moved
+    // accordingly and the movement is exactly that: a `perRecipient.attacker` row that MIRRORS
+    // `t1`'s row byte-for-byte, plus the source-axis totals (`directHeal`, `totalRoundHealing`,
+    // `cumulativeHealing`) doubling. `t1`'s own rows, the `didCrit` cadence (the crit gate rolls
+    // once per CAST, not per recipient) and the top-level heal-target `overheal` are all
+    // UNCHANGED, so what this scenario exists to pin is intact. A passive cleanse triggers on
     // 'on-ally-critically-repaired' (count 1, target self) — it fires only on the casts that
     // crit. With the back-loaded gate at rate 0.5, crits land on casts 2, 4, 6, 8, 10.
     // C1 T4: the reactive cleanse now performs REAL removal and credits the ACTUAL count
@@ -2355,6 +2362,12 @@ describe('healingGoldenParity', () => {
     //   R1 enter 100%: enemy 7000 → tank HP 3000 (30%). Healer charged turn: gate (tank 30% < 40)
     //       PASSES → Cheat Death GRANTED to the tank (round 1, duration Infinity). Charged heal
     //       6000 (deficit 7000 → effective 6000, overheal 0) → tank HP 3000 + 6000 = 9000 (90%).
+    //       SP-4e Task 4: the charged HEAL's plain `'ally'` target now routes over the caster's
+    //       target pattern (unnarrowed here — no support pattern), so the healer takes a SECOND
+    //       6000 share of its own. It is at full HP (the enemy's `front enemy` selection lands on
+    //       the M4 tank), so that share is 100% overheal: the tank's HP curve, `targetHpPct` and
+    //       the Cheat-Death timeline are all unchanged, and the only movement is the SOURCE-axis
+    //       `directHeal` 6000 → 12000 (plus the matching round-1 overheal).
     //   R2 enter 90%: active slot empty → no heal. enemy 7000 → tank HP 2000 (20%). No recovery.
     //   R3 enter 20%: active slot empty → no heal. enemy 7000 would drop HP 2000 → −5000 (LETHAL)
     //       → the persistent Cheat Death (granted R1, never expired) INTERCEPTS → HP floored at 1
@@ -2448,9 +2461,16 @@ describe('healingGoldenParity', () => {
         scenario27Input
     );
 
-    // Supplementary: the cast-path grant lands on the tank ONLY (narrowed 'ally') on the
-    // gate-passing charged round 1 (duration Infinity), then the persistent grant intercepts the
-    // later lethal hit on round 3 — the run completes with NO destroyedRound.
+    // Supplementary: the cast-path grant lands on the tank ONLY on the gate-passing charged round
+    // 1 (duration Infinity), then the persistent grant intercepts the later lethal hit on round 3
+    // — the run completes with NO destroyedRound.
+    //
+    // ⚠️ "tank ONLY" is about the Cheat-Death GRANT, and it survives SP-4e Task 4 for a reason that
+    // is NOT the `'ally'` target: a Cheat-Death-family cast grant does not go through
+    // `recipientsFor` at all — engine.ts's `castPathCheatDeath` carve-out routes it to
+    // `[healTargetId ?? ownerId]` (and, since Task 2's fence, to `[]` for `'lowest-hp-ally'` with
+    // no anchor). The charged HEAL beside it, which DOES go through `recipientsFor`, widened to the
+    // whole own side — hence `directHeal` below.
     it('scenario 27: Cheat Death granted round 1 (tank only), saves the round-3 lethal hit', () => {
         idCounter = 0;
         const bus = createEventBus();
@@ -2474,8 +2494,11 @@ describe('healingGoldenParity', () => {
         // The run completes all 3 rounds with no death recorded.
         expect(result.summary.destroyedRound).toBeUndefined();
         expect(result.rounds).toHaveLength(3);
-        // One-time charged heal on round 1, then nothing; enemy 7000 every round.
-        expect(result.rounds.map((r) => r.directHeal)).toEqual([6000, 0, 0]);
+        // One-time charged heal on round 1, then nothing; enemy 7000 every round. 12000 = two
+        // 6000 shares (tank + healer) — see the arithmetic block above. The tank's own share is
+        // still 6000, which is what the unchanged `targetHpPct` curve below proves.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([12000, 0, 0]);
+        expect(result.rounds[0].perRecipient?.['tank']?.directHeal).toBe(6000);
         expect(result.rounds.map((r) => r.incomingDamage)).toEqual([7000, 7000, 7000]);
         // Entering HP%: 100 → 90 (after the R1 heal) → 20 (after the R2 unhealed hit).
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 90, 20]);
@@ -2619,5 +2642,307 @@ describe('healingGoldenParity', () => {
         // No reactive ever fired (neither the Grif damage proc nor the Vigor Up self-buff), and no
         // healing leaked from the enemy's no-op cleanse.
         expect(result.summary.totalHealing).toBe(0);
+    });
+
+    // =========================================================================
+    // SP-4e Task 2 — THE REACTIVE-HEAL POOL GATE, NUMERICALLY PINNED.
+    //
+    // WHY THESE TWO SCENARIOS EXIST. Task 2 replaced the reactive heal branch's anchor-only
+    // application (`if (rid === ctx.healing.targetId)`) with per-recipient application: a reactive
+    // heal now drains the pool of whichever recipient it resolved, not only the heal anchor's.
+    // Before the change a non-anchor recipient was credited gross `directHeal` and had ZERO HP
+    // restored. That is a real, user-visible behaviour change in the combat sim, and NOTHING in
+    // this file exercised it: an instrumented probe of the exact new behaviour (`rid !==
+    // healing.targetId && consumed > 0`) over 374 files / 3535 tests recorded 518 hits, and
+    // healingGoldenParity took **ZERO** of them. `realKitFingerprints.test.ts` took 292 — but that
+    // suite is deliberately STRUCTURAL (see its header) and delegates numbers to this file, so no
+    // snapshot could move. These two scenarios close that gap: they are the numeric pin.
+    //
+    // ⚠️ THE ROW-LEVEL BUCKETS ARE THE ANCHOR'S, NOT THE TEAM'S. `rounds[].effectiveHealing` /
+    // `overheal` / `targetHpPct` / `incomingDamage` all read `perRecipient[healTargetId]` (see
+    // HealingRoundData's doc). The load-bearing assertions below are therefore on the RECIPIENT
+    // axis (`summary.perRecipient` / `rounds[].perRecipient`), which is the only axis that can see
+    // a non-anchor ally's HP move. The focus healer is keyed `'attacker'` on that axis.
+    // =========================================================================
+
+    // ── Scenario 29: all-allies reactive heal — the WOUNDED NON-ANCHOR really heals ──
+    // HAND-VERIFIED. Focus healer (hp 10000, speed 200) carries a passive on-ally-attacked
+    // `all-allies` heal (pct 8, basis 'hp'). Two walked team actors: 'vanguard' (hp 50000,
+    // speed 90, front-most at M4 so the enemy's 'front enemy' selection lands on IT) and 'tank'
+    // (hp 100000, speed 80, M1) which is the heal ANCHOR (`healTargetId`). A bare-kit enemy
+    // (attack 2000, multiplier 100, one hit, speed 50 → acts last) deals 2000/round to the
+    // vanguard; defence 0, crit 0, neutral affinity.
+    //
+    // One `attacked` event per round → the unfiltered reaction fires ONCE, fanning `all-allies`
+    // over every player id (the owner included). Raw per recipient = owner effectiveMaxHp 10000
+    // × 8% = 800; healModifier / outgoing / incoming all 0 and reactive heals never crit → bare
+    // 800 × 3 recipients = 2400 gross `directHeal`/round, credited to the focus owner.
+    //
+    // WHERE IT LANDS (the point of the scenario). Reactive heals drain AFTER the enemy's turn
+    // body, so at drain time the vanguard is down 2000 (R1) and more later, while the anchor and
+    // the healer are untouched at full HP:
+    //   • vanguard → 800 EFFECTIVE, 0 overheal, every round (its deficit never falls below 800:
+    //     net −2000 + 800 = −1200/round);
+    //   • tank (anchor) → 0 effective, 800 overheal;
+    //   • attacker (the healer itself) → 0 effective, 800 overheal.
+    // Over 4 rounds: perRecipient vanguard 3200/0, tank 0/3200, attacker 0/3200.
+    //
+    // BEFORE SP-4e Task 2 the same fixture produced `perRecipient` containing ONLY `tank`
+    // (0 effective / 3200 overheal): the vanguard and the healer were credited gross and healed
+    // nothing at all. `rounds[].directHeal` was identical (2400) — which is exactly why a
+    // gross-only golden cannot see this defect.
+    const scenario29Input = () => {
+        const teamMate = (
+            id: string,
+            hp: number,
+            speed: number,
+            position: TeamActorInput['position']
+        ): TeamActorInput => ({
+            id,
+            position,
+            speed,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+        });
+        return BASE({
+            rounds: 4,
+            healer: { ...HEALER, speed: 200 },
+            healTargetId: 'tank',
+            teamActors: [teamMate('vanguard', 50000, 90, 'M4'), teamMate('tank', 100000, 80, 'M1')],
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'all-allies',
+                                trigger: 'on-ally-attacked',
+                                config: { type: 'heal', pct: 8, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100 },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+    };
+
+    snap(
+        'all-allies reactive heal: the wounded NON-ANCHOR ally gains HP (SP-4e pool gate)',
+        scenario29Input
+    );
+
+    // Supplementary: the recipient axis is the whole point. Reverting the pool gate to
+    // `rid === ctx.healing.targetId` deletes the 'vanguard' and 'attacker' entries entirely and
+    // turns every assertion below RED, while `rounds[].directHeal` stays 2400 either way.
+    it('scenario 29: the wounded non-anchor ally consumes 800/round; anchor and healer overheal', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario29Input());
+
+        // Gross fan-out: 3 recipients × 800, credited to the focus owner, every round.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([2400, 2400, 2400, 2400]);
+
+        // The WOUNDED non-anchor really heals: 800 effective, 0 overheal, every round.
+        expect(result.rounds.map((r) => r.perRecipient?.vanguard?.effectiveHealing)).toEqual([
+            800, 800, 800, 800,
+        ]);
+        expect(result.rounds.map((r) => r.perRecipient?.vanguard?.overheal)).toEqual([0, 0, 0, 0]);
+        expect(result.summary.perRecipient?.vanguard).toEqual({
+            totalEffectiveHealing: 3200,
+            totalOverheal: 3200 - 3200, // 0 — spelled out so the pairing with 3200 is deliberate
+        });
+
+        // The anchor and the healer are at full HP, so their identical 800/round is pure overheal.
+        expect(result.summary.perRecipient?.tank).toEqual({
+            totalEffectiveHealing: 0,
+            totalOverheal: 3200,
+        });
+        expect(result.summary.perRecipient?.attacker).toEqual({
+            totalEffectiveHealing: 0,
+            totalOverheal: 3200,
+        });
+
+        // Row-level buckets are the ANCHOR's view (see the ⚠️ note above) — the tank is never hit
+        // and never wounded, so they read 0 effective / 800 overheal and a flat 100% HP. This
+        // pairing is the trap the scenario exists to document: a healing golden that only reads
+        // these rows is blind to every non-anchor recipient.
+        expect(result.rounds.map((r) => r.effectiveHealing)).toEqual([0, 0, 0, 0]);
+        expect(result.rounds.map((r) => r.overheal)).toEqual([800, 800, 800, 800]);
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 100, 100, 100]);
+    });
+
+    // ── Scenario 30: a NON-ANCHOR actor's own `self` reactive repair ──
+    // HAND-VERIFIED. The same behaviour change, second shape — and the one nobody attributed when
+    // Task 2 landed: ~48 of the 518 probe hits were `self`-targeted reactives. A walked actor's
+    // own "at the start of its turn, this Unit repairs N% of its Max HP" resolves ONE recipient,
+    // the owner, and when the owner is not the heal anchor the old gate restored NOTHING while
+    // still crediting gross. Every enemy and every walked ally with such a passive was affected.
+    //
+    // 'bystander' (hp 50000, speed 90, front-most at M4) carries a passive start-of-turn `self`
+    // heal (pct 10, basis 'hp') → raw 5000/turn. 'tank' (hp 100000, speed 80, M1) is the anchor.
+    // The focus healer (speed 200) has an EMPTY kit — it only anchors the run, so every number
+    // below is the bystander's own doing (`teamHealing`, not `rounds[].directHeal`). A bare-kit
+    // enemy (attack 2000, multiplier 100, speed 50) deals 2000/round to the bystander.
+    //
+    // Cadence: speed 90 vs the enemy's 50 → the bystander's start-of-turn repair fires BEFORE the
+    // round's hit. R1 it is at full HP → 5000 all overheal. From R2 its deficit at repair time is
+    // exactly the previous round's unhealed 2000 → 2000 effective, 3000 overheal, and the repair
+    // returns it to full each time, so the deficit never accumulates.
+    //   ⇒ teamHealing 5000 × 4 = 20000 gross; perRecipient bystander 6000 effective / 14000
+    //     overheal; per-round effective [0, 2000, 2000, 2000].
+    //
+    // BEFORE SP-4e Task 2: `perRecipient` was EMPTY (no entry at all) and the bystander's HP never
+    // moved — yet `teamHealing` read the same 5000/round. Gross accounting for a repair that did
+    // not happen.
+    const scenario30Input = () => {
+        const bystander: TeamActorInput = {
+            id: 'bystander',
+            position: 'M4',
+            speed: 90,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'start-of-turn',
+                                config: { type: 'heal', pct: 10, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 50000,
+            },
+        };
+        const tank: TeamActorInput = {
+            id: 'tank',
+            position: 'M1',
+            speed: 80,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 100000,
+            },
+        };
+        return BASE({
+            rounds: 4,
+            healer: { ...HEALER, speed: 200 },
+            healTargetId: 'tank',
+            teamActors: [bystander, tank],
+            shipSkills: { slots: [] },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100 },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+    };
+
+    snap(
+        "non-anchor actor's own self reactive repair actually restores HP (SP-4e pool gate)",
+        scenario30Input
+    );
+
+    // Supplementary: gross vs landed, on the one actor that owns both. `teamHealing` is identical
+    // with and without the pool gate — only the recipient axis distinguishes them.
+    it('scenario 30: a non-anchor self-repair credits 5000/round gross AND lands 0/2000/2000/2000', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario30Input());
+
+        // Gross (source axis): the bystander is not the focus, so its repair lands in teamHealing.
+        // This number is UNCHANGED by the pool gate — it is the half that was always credited.
+        expect(result.rounds.map((r) => r.teamHealing)).toEqual([5000, 5000, 5000, 5000]);
+        expect(result.summary.teamTotalHealing).toBe(20000);
+
+        // Landed (recipient axis): R1 at full HP → all overheal; from R2 the previous round's
+        // 2000 of damage is the whole deficit → exactly 2000 effective, 3000 overheal.
+        expect(result.rounds.map((r) => r.perRecipient?.bystander?.effectiveHealing)).toEqual([
+            0, 2000, 2000, 2000,
+        ]);
+        expect(result.rounds.map((r) => r.perRecipient?.bystander?.overheal)).toEqual([
+            5000, 3000, 3000, 3000,
+        ]);
+        expect(result.summary.perRecipient?.bystander).toEqual({
+            totalEffectiveHealing: 6000,
+            totalOverheal: 14000,
+        });
+
+        // The anchor never heals and is never hit — the focus healer has no kit at all.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 0]);
+        expect(result.summary.perRecipient?.tank).toBeUndefined();
     });
 });
