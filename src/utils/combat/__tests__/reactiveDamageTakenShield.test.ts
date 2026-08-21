@@ -124,7 +124,6 @@ function makeShieldCtx(grantShieldToTarget: (raw: number, actor: CombatActor) =>
                 { effectiveAttack: 10000, affinityMult: 1, effectiveMaxHp: MAX_HP } as never,
             ],
         ]),
-        enemyHp: 100000,
         recordResisted: () => {},
         healing,
         // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is the

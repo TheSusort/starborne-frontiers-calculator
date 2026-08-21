@@ -133,7 +133,6 @@ function makeBuffCtx(): IntentExecContext & { appliedActorIds: string[] } {
         lastTurnCtxByActor: new Map([
             [GRANTER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
         ]),
-        enemyHp: 100000,
         recordResisted: () => {},
     } as unknown as IntentExecContext & { appliedActorIds: string[] };
 

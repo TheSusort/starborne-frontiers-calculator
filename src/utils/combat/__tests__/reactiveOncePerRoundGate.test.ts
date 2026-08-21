@@ -103,7 +103,6 @@ function makeCtx(opts?: {
         lastTurnCtxByActor: new Map([
             [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1, effectiveMaxHp: 10000 } as never],
         ]),
-        enemyHp: 100000,
         recordResisted: () => {},
         applyReactiveDamage: opts?.applyReactiveDamage,
         oncePerRoundConsumed: opts?.oncePerRoundConsumed,

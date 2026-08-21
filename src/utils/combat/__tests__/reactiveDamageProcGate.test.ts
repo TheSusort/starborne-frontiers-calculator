@@ -101,7 +101,6 @@ function makeCtx(opts?: {
                 } as never,
             ],
         ]),
-        enemyHp: 100000,
         recordResisted: () => {},
         procChanceGates: opts?.procChanceGates,
         applyReactiveDamage: opts?.applyReactiveDamage,

@@ -143,7 +143,6 @@ function makeCtx(opts?: {
                 } as never,
             ],
         ]),
-        enemyHp: 100000,
         recordResisted: () => {},
         procChanceGates: opts?.procChanceGates,
     } as unknown as IntentExecContext & { buffAppliedEvents: string[] };
@@ -207,7 +206,6 @@ function makeAdjacentCtx(opts?: {
         lastTurnCtxByActor: new Map([
             [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
         ]),
-        enemyHp: 100000,
         recordResisted: () => {},
         ...(opts?.includeAdjacentDelegate
             ? {
