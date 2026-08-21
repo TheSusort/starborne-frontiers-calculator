@@ -6,6 +6,7 @@ import {
     withAssumedCalibration,
     makeAssumedCalibrationGetter,
 } from '../../../gear/assumedCalibration';
+import { buildGearScoringInputs } from '../../gearScoringInputs';
 import { GearPiece } from '../../../../types/gear';
 import { TEST_BASE_STATS, makeTestShip } from './fixtures/testInventory';
 
@@ -108,5 +109,51 @@ describe('assumed calibration: composition with upgraded stats', () => {
         });
         const getter = makeAssumedCalibrationGetter(upgradedGetter, true);
         expect(getter('w-2')?.mainStat?.value).toBe(2400);
+    });
+});
+
+describe('upgraded stats: fast/slow parity', () => {
+    // A sub-16 piece whose simulated level-16 main stat is 4x its raw one.
+    const RAW = makeWeapon({
+        id: 'w-2',
+        level: 0,
+        mainStat: { name: 'attack', value: 300, type: 'flat' },
+    });
+    const upgradedGetter = (_id: string): GearPiece => ({
+        ...RAW,
+        mainStat: { name: 'attack', value: 1200, type: 'flat' },
+    });
+
+    /**
+     * The fast path reads the inventory ARRAY, the slow path reads the GETTER.
+     * Build both the way a real run does, then compare what each reports.
+     */
+    function bothPaths(assumeCalibrated: boolean) {
+        const { scoredInventory, getGearForShip } = buildGearScoringInputs({
+            availableInventory: [RAW],
+            getGearPiece: () => RAW,
+            upgradedGearGetter: upgradedGetter,
+            useUpgradedStats: true,
+            assumeCalibrated,
+        });
+        return {
+            fast: fastPathAttack(scoredInventory[0]),
+            slow: slowPathAttack(getGearForShip(RAW.id)!),
+        };
+    }
+
+    it('agree with upgraded stats ON and assumed calibration OFF', () => {
+        const { fast, slow } = bothPaths(false);
+        expect(fast).toBe(slow);
+        // The simulated level-16 main stat, not the stored level-0 one.
+        expect(slow).toBe(1200);
+    });
+
+    it('agree with upgraded stats ON and assumed calibration ON', () => {
+        const { fast, slow } = bothPaths(true);
+        expect(fast).toBe(slow);
+        // Flat attack calibration doubles, and it doubles the SIMULATED value:
+        // 1200 x 2, not 300 x 2.
+        expect(slow).toBe(2400);
     });
 });

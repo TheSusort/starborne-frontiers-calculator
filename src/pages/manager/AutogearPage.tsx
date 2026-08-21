@@ -51,10 +51,7 @@ import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
-import {
-    withAssumedCalibration,
-    makeAssumedCalibrationGetter,
-} from '../../utils/gear/assumedCalibration';
+import { buildGearScoringInputs } from '../../utils/autogear/gearScoringInputs';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
 import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
@@ -713,14 +710,16 @@ export const AutogearPage: React.FC = () => {
                     return !shipConfig.ignoreUnleveled || gear.level > 0;
                 });
 
-            // "Assume all gear is calibrated": score every calibration-eligible
-            // piece as if calibrated to this ship. This array feeds the fast
-            // path's gear registry; the getter below feeds the slow path.
-            const scoredInventory = shipConfig.assumeCalibrated
-                ? availableInventory.map((gear) =>
-                      withAssumedCalibration(gear, shipConfig.useUpgradedStats)
-                  )
-                : availableInventory;
+            // The array feeds the fast path's gear registry, the getter feeds
+            // the slow path, and both are built from one source so the two
+            // paths cannot score the same piece differently.
+            const { scoredInventory, getGearForShip } = buildGearScoringInputs({
+                availableInventory,
+                getGearPiece,
+                upgradedGearGetter,
+                useUpgradedStats: shipConfig.useUpgradedStats,
+                assumeCalibrated: shipConfig.assumeCalibrated,
+            });
 
             // Pre-filter implants to keep only top candidates per slot
             // This dramatically reduces the search space for the genetic algorithm
@@ -740,20 +739,6 @@ export const AutogearPage: React.FC = () => {
 
             // eslint-disable-next-line no-console
             console.log(`Available inventory size for ${ship.name}: ${filteredInventory.length}`);
-
-            // Gear getter for this ship.
-            // Stored mainStat values are always BASE (uncalibrated) — the import
-            // pipeline normalises calibrated gear at import time.
-            // calculateTotalStats applies the calibration bonus only when
-            // gear.calibration.shipId === the target ship's id, so no reversal
-            // is needed here.
-            const baseGearGetter = shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece;
-            // Assumed calibration wraps OUTSIDE the upgraded-stats getter, so
-            // the bonus lands on the simulated level-16 main stat rather than
-            // the level-0 one.
-            const getGearForShip = shipConfig.assumeCalibrated
-                ? makeAssumedCalibrationGetter(baseGearGetter, shipConfig.useUpgradedStats)
-                : baseGearGetter;
 
             performanceTracker.startTimer('FindOptimalGear');
             const strategyResult: AutogearResult = await Promise.resolve(
