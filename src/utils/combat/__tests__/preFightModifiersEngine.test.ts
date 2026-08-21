@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { CombatActor, createActor } from '../state';
 import { runCombat, CombatEngineInput } from '../engine';
-import { createEventBus, CombatEvent } from '../events';
+import { createEventBus } from '../events';
 import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { emptyPreFightModifiers } from '../preFight';
 import type { PreFightCombatModifiers } from '../preFight';
@@ -239,10 +239,7 @@ const healAmounts = (args: {
     const bus = createEventBus();
     const amounts: number[] = [];
     bus.on('heal-performed', (e) => {
-        const ev = e as CombatEvent & {
-            perTarget?: { targetId: string; amount: number }[];
-        };
-        const own = ev.perTarget?.find((t) => t.targetId === 'attacker');
+        const own = e.perTarget?.find((t) => t.targetId === 'attacker');
         if (own) amounts.push(own.amount);
     });
     runCombat(

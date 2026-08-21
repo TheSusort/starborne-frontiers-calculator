@@ -2046,7 +2046,7 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         // (2) NO VICTIM IS NAMED. There is nobody to key a per-victim store by, so contract §B
         // requires the absence of a targetId — consumers must read "there is no enemy", never
         // "an enemy with neutral stats". Nothing this turn emits may name a PLAYER as a target;
-        // today the DoT clause lands `dot-applied` on the focus every round.
+        // before SP-4e the DoT clause landed `dot-applied` on the focus every round.
         const playerTargets = supporterEntries.flatMap((e) =>
             e.targets
                 .filter((t) => PLAYER_SIDE_IDS.has(t.targetId))
@@ -2054,8 +2054,8 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         );
         expect(playerTargets).toEqual([]);
 
-        // (3) THE FOCUS IS UNTOUCHED. Today the fabricated binding lands a real Corrosion
-        // stack on it every round, and those stacks tick its HP down from round 2 onward.
+        // (3) THE FOCUS IS UNTOUCHED. Before SP-4e the fabricated binding landed a real Corrosion
+        // stack on it every round, and those stacks ticked its HP down from round 2 onward.
         for (const round of result.rounds) {
             const focus = round.ships.find((s) => s.actorId === FOCUS)!;
             expect(focus.incomingDamage).toBe(0);

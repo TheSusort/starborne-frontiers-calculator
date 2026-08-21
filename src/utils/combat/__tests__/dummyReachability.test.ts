@@ -99,7 +99,7 @@
  * `LIVENESS` case's subject — the no-victim turn — is the fourth home, and since SP-4e it reads the
  * same counter as every zero here, so the guard is finally in-file rather than cross-file.
  */
-import { readdirSync, readFileSync, statSync } from 'fs';
+import { readdirSync, readFileSync, lstatSync } from 'fs';
 import { join } from 'path';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
@@ -508,8 +508,10 @@ const LEGACY_VICTIM = /\blegacyVictim\b/;
 /** Whole-line comments (`//…`, `/*…`, ` *…`). Trailing comments after code are left in, which only
  *  makes the tripwire STRICTER — there is no risk of a false pass from that direction. */
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;
-/** This file defines the tripwire, so it necessarily contains the identifier in real code. */
-const SELF = join(__dirname, 'dummyReachability.test.ts');
+/** This file defines the tripwire, so it necessarily contains the identifier in real code.
+ *  Derived from `__filename` (not a hardcoded basename) so a rename of this file can't silently
+ *  desync the exclusion from the file it's meant to exclude. */
+const SELF = __filename;
 
 const codeOf = (file: string): string =>
     readFileSync(file, 'utf8')
@@ -520,7 +522,9 @@ const codeOf = (file: string): string =>
 const tsFilesUnder = (dir: string): string[] =>
     readdirSync(dir).flatMap((entry) => {
         const full = join(dir, entry);
-        if (statSync(full).isDirectory()) return tsFilesUnder(full);
+        const stat = lstatSync(full);
+        if (stat.isSymbolicLink()) return [];
+        if (stat.isDirectory()) return tsFilesUnder(full);
         return /\.tsx?$/.test(entry) ? [full] : [];
     });
 
