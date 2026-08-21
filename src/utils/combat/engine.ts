@@ -5136,7 +5136,29 @@ export function runCombat(rawInput: CombatEngineInput): {
             // existing generic-DoT path both turn-start tick sites already read). Fully inert (no
             // lookup beyond the empty-array default) for every actor without a
             // 'transform-incoming-to-dot' ability → byte-identical for every existing fixture.
-            if (cause?.byDirectDamage && !carriesBarrier && damage > 0) {
+            // `bombPortion === 0` (OWNER RULING): "transforms the damage received" on Voron/Orel is
+            // specifically DIRECT damage. Bomb detonation damage and bomb-splash damage are
+            // DETONATION damage, so neither transforms — a burst and a splash both arrive stamped
+            // `byDirectDamage: true` with their whole amount in `bombPortion` (the burst sites'
+            // `bombPortion: damage`, the splash site's `bombPortion: splash`), and this clause is
+            // what excludes them. Same definition of a direct hit the rest of this funnel uses
+            // (`byDirectDamage === true && bombPortion === 0` — the threshold-shield check's
+            // `isDirect`, Exposed's consumption guard, and the Hit Mitigation / Shield Converter
+            // steps below), which is what now makes this step and its one-shot siblings AGREE about
+            // a burst instead of disagreeing.
+            //
+            // MIXED DIRECT + BOMB HIT: a single apply can carry `byDirectDamage: true` with
+            // `0 < bombPortion < damage` (a cast that lands a direct hit AND detonates in the same
+            // apply). `bombPortion === 0` is false there, so the whole mixed hit lands untransformed
+            // rather than transforming just its direct slice — the same deliberate, conservative
+            // consequence of reusing the funnel's `isDirect` definition that the Hit Mitigation step
+            // documents, and consistent with it by construction.
+            if (
+                cause?.byDirectDamage &&
+                (cause.bombPortion ?? 0) === 0 &&
+                !carriesBarrier &&
+                damage > 0
+            ) {
                 const attackerId = cause?.killerId ?? '';
                 const transformAbilities = incomingAbilitiesOf(victim.id).filter(
                     (a) => a.config.type === 'transform-incoming-to-dot'
@@ -5211,12 +5233,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             // All five together enforce the Exposed invariant: consume ONLY on a hit that actually
             // READ the block.
             //
-            // The `bombPortion === 0` clause is why the two steps now DISAGREE about a bomb burst:
-            // the sibling above still converts one. That asymmetry is not an oversight in either
-            // step — for a free standing passive there is no consumable to waste, so whether a burst
-            // should convert is a pure damage-magnitude question about that passive's own text, and
-            // it is on the backlog. Answering it there must not drag this clause with it: a burst
-            // must never SPEND the one-shot regardless of how that question lands.
+            // The `bombPortion === 0` clause used to make the two steps DISAGREE about a bomb
+            // burst, because the standing sibling above converted one. RESOLVED (owner ruling,
+            // #355): Voron/Orel transform DIRECT damage only, and a bomb burst / bomb splash is
+            // DETONATION damage, so the sibling now carries this same clause and the two agree. The
+            // reason each one carries it still differs — here it is "never SPEND a one-shot on a
+            // hit that did not read it", there it is the magnitude rule — so neither clause should
+            // be removed on the strength of the other.
             //
             // MIXED DIRECT + BOMB HIT: a single apply can carry `byDirectDamage: true` with
             // `0 < bombPortion < damage` — a cast that both lands a direct hit and detonates a bomb
