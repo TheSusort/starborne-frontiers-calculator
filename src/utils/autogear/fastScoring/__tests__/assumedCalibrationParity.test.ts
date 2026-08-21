@@ -157,3 +157,32 @@ describe('upgraded stats: fast/slow parity', () => {
         expect(slow).toBe(2400);
     });
 });
+
+describe('an unresolvable candidate', () => {
+    // Not reachable from AutogearPage today — getGearPiece resolves over the
+    // same array availableInventory is filtered from. Guarded because the two
+    // views disagreeing is the whole defect class, and this seam is exported.
+    const ORPHAN = makeWeapon({ id: 'orphan' });
+
+    function inputsFor(useUpgradedStats: boolean, assumeCalibrated: boolean) {
+        return buildGearScoringInputs({
+            availableInventory: [ORPHAN],
+            getGearPiece: () => undefined,
+            upgradedGearGetter: () => undefined,
+            useUpgradedStats,
+            assumeCalibrated,
+        });
+    }
+
+    it.each([
+        ['both toggles off', false, false],
+        ['upgraded stats on', true, false],
+        ['assumed calibration on', false, true],
+        ['both toggles on', true, true],
+    ])('is answered identically by both paths — %s', (_label, upgraded, calibrated) => {
+        const { scoredInventory, getGearForShip } = inputsFor(upgraded, calibrated);
+        // Were these to disagree, the fast path would score the piece off the
+        // array while calculateTotalStats skipped it (statsCalculator: !gear).
+        expect(getGearForShip(ORPHAN.id)).toBe(scoredInventory[0]);
+    });
+});

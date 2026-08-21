@@ -56,13 +56,23 @@ export function buildGearScoringInputs({
     const baseGearGetter = useUpgradedStats ? upgradedGearGetter : getGearPiece;
     // Assumed calibration wraps OUTSIDE the upgraded-stats getter, so the bonus
     // lands on the simulated level-16 main stat rather than the level-0 one.
-    const getGearForShip = assumeCalibrated
+    const transformedGearGetter = assumeCalibrated
         ? makeAssumedCalibrationGetter(baseGearGetter, useUpgradedStats)
         : baseGearGetter;
 
-    // A piece the getter cannot resolve keeps its array entry rather than
-    // vanishing from the candidate pool.
-    const scoredInventory = availableInventory.map((piece) => getGearForShip(piece.id) ?? piece);
+    // A candidate the getter cannot resolve keeps its array entry rather than
+    // vanishing from the pool.
+    const scoredInventory = availableInventory.map(
+        (piece) => transformedGearGetter(piece.id) ?? piece
+    );
+
+    // The getter answers every candidate id from the array itself — the SAME
+    // object, so the two views cannot report different stats for a candidate,
+    // including one only the array could resolve. Ids outside the pool (gear
+    // equipped on the ship but filtered out of it) fall through unchanged.
+    const scoredById = new Map(scoredInventory.map((piece) => [piece.id, piece]));
+    const getGearForShip = (id: string): GearPiece | undefined =>
+        scoredById.get(id) ?? transformedGearGetter(id);
 
     return { scoredInventory, getGearForShip };
 }
