@@ -24,10 +24,8 @@ import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/aff
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import {
     type ExtraActionGrant,
-    selectFiringSkill,
     hasUsableChargedSkill,
     modifierTotalsFromAbilities,
-    skillNeedsOpposingVictim,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
 import { foldActorBuffTotals, effectiveStatsOf, liveDebuffLandingChance } from './effectiveStats';
@@ -43,7 +41,6 @@ import {
     MAX_SELECTION_TICKS,
     emptyActorDamage,
     emptyActorHealing,
-    advanceChargeCadence,
     recordDestroyed,
 } from './state';
 import {
@@ -1781,7 +1778,10 @@ function convertHitToSelfDot(
  *   • 324 rows / 10 files: `parsedSide=ally`, battle mode, the opposing roster ALIVE and placed.
  *     These are the ones with consequences — an ally-targeted enemy supporter used to resolve the
  *     FOCUS PLAYER as the victim of a cast that never targeted them.
- *   • 15 rows / 3 files stayed on the dead-target skip and did NOT come here.
+ *   • 15 rows / 3 files stayed on the dead-target skip and did NOT come here. That skip is GONE
+ *     since #346 (its surviving precondition — a RESOLVED victim already dead — was
+ *     unconstructible), so this bullet is history: at `af4f05ae` the branch still carried the
+ *     `|| tgt === undefined` arm those rows entered by.
  *
  * Module-level and NOT reset per run: `__resetNoVictimTurnCount` is the test's job. Vitest isolates
  * modules per test FILE, so each file reads only its own runs.
@@ -1816,38 +1816,49 @@ export function __resetAggregateStandingLeechApplications(): void {
     aggregateStandingLeechApplications = 0;
 }
 /**
- * TEST-ONLY EXECUTABLE TRIPWIRE (SP-4e fix wave 1) for the enemy site's `skipDeadTargetTurn`.
+ * TEST-ONLY EXECUTABLE TRIPWIRE: A TURN NEVER BINDS A DEAD VICTIM — ON EITHER SIDE.
  *
- * That branch fires only on a RESOLVED victim that is already dead, and since #335 deleted the
- * `|| tgt === undefined` arm it has no other entrant. The claim on the branch is that the
- * precondition is now UNCONSTRUCTIBLE: `resolvePositionalTarget` builds its `byCell` from
- * `position !== undefined && currentHp > 0` (positionalBinding.ts:135-137) and every one of its
- * return paths draws from that map or returns null, so a resolved victim is alive by construction,
- * and nothing between the selection call and the check mutates HP.
+ * The property is `resolvePositionalTarget`'s, not any one call site's: it builds its `byCell`
+ * from actors with `position !== undefined && currentHp > 0` (positionalBinding.ts) and EVERY one
+ * of its return paths draws from that map or returns null — Concentrate Fire, Taunt, Provoke, the
+ * stealth filter and `selectTargets` all read it. So a resolved victim is alive by construction.
  *
- * That claim used to live only in a comment, and a comment cannot fail — this can:
- *  • `dead` counts turns reaching the check with `tgt !== undefined && tgt.currentHp <= 0`, i.e.
- *    the branch's own precondition BEFORE the `skillNeedsOpposingVictim` gate narrows it (the
- *    stronger reading: a dead resolved victim is impossible at all, not merely harmless).
- *  • `resolved` counts turns reaching the check WITH a victim, and exists so the zero above is not
- *    the repo's fixture-vacuity defect in counter form. Both are incremented from the same three
- *    lines, so a `dead: 0` alongside a `resolved: > 0` proves the instrument is wired to a live
- *    site — the reading `dummyReachability.test.ts` asserts.
+ * Measured HERE, at `selectTurnTarget`, because that is the resolver's ONLY production consumer
+ * and all three turn sites (focus, walked team, enemy) go through it — so one instrument covers
+ * every side. #346 widened it from the enemy site alone, where SP-4e first placed it as the gate
+ * on `skipDeadTargetTurn`; that branch is now deleted (its precondition was this same
+ * unsatisfiable state) and the counters outlived it, because the claim they pin never belonged to
+ * the branch.
+ *
+ *  • `dead` counts turns that bound a victim with `currentHp <= 0`. Zero is the claim.
+ *  • `resolved` counts turns that bound a victim at all, and exists so the zero above is not the
+ *    repo's fixture-vacuity defect in counter form. Both are incremented from the same two lines,
+ *    so a `dead: 0` alongside a `resolved: > 0` proves the instrument is wired to a live site —
+ *    the reading `dummyReachability.test.ts` asserts.
  *
  * Deliberately NOT a `throw`: the state is unconstructible today, but a throw at a turn head would
  * turn a future reachability change into a crash in a user's browser rather than a red test.
  *
- * Module-level and NOT reset per run: `__resetEnemySiteVictimTurnCounts` is the test's job. Vitest
+ * ⚠️ WHAT THESE COUNTS DO NOT SEE. They sit on the arm that returns a RESOLVED victim, so a new
+ * fabricated-fallback arm added ahead of them — the pre-#335 `?? healTarget` shape — would bind a
+ * victim they never count, and both numbers would read as if nothing happened. That class has its
+ * own pin, which does not rely on a counter at all:
+ * `noVictimEnemyBindsNobody.integration.test.ts` asserts that an ally-targeted enemy cast's
+ * enemy-facing half lands on NOBODY (mutation-verified against exactly that fallback). Keep the two
+ * separate: this instrument answers "was a bound victim ever dead", that one answers "was a victim
+ * ever fabricated".
+ *
+ * Module-level and NOT reset per run: `__resetResolvedVictimTurnCounts` is the test's job. Vitest
  * isolates modules per test FILE, so each file reads only its own runs.
  */
-let enemySiteResolvedVictimTurns = 0;
-let enemySiteDeadVictimTurns = 0;
-export function __getEnemySiteVictimTurnCounts(): { resolved: number; dead: number } {
-    return { resolved: enemySiteResolvedVictimTurns, dead: enemySiteDeadVictimTurns };
+let resolvedVictimTurns = 0;
+let deadVictimTurns = 0;
+export function __getResolvedVictimTurnCounts(): { resolved: number; dead: number } {
+    return { resolved: resolvedVictimTurns, dead: deadVictimTurns };
 }
-export function __resetEnemySiteVictimTurnCounts(): void {
-    enemySiteResolvedVictimTurns = 0;
-    enemySiteDeadVictimTurns = 0;
+export function __resetResolvedVictimTurnCounts(): void {
+    resolvedVictimTurns = 0;
+    deadVictimTurns = 0;
 }
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
@@ -7528,6 +7539,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 noVictimTurnCount++;
                 return { tgt: undefined };
             }
+            // Tripwire (see __getResolvedVictimTurnCounts): every turn that binds a victim, and how
+            // many of those victims were already dead. The second count is the one that must stay
+            // 0 — `resolvePositionalTarget` cannot hand back a corpse, and this is where that claim
+            // becomes falsifiable for all three turn sites at once.
+            resolvedVictimTurns++;
+            if (selected.currentHp <= 0) deadVictimTurns++;
             return { tgt: selected };
         };
 
@@ -7847,9 +7864,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
             /** SP-4b-2 D4: this turn's scheduled enemy effects AFTER its landing/resist draw.
-             *  `undefined` only where the turn result itself is out of reach (the enemy site's
-             *  hoisted capture on a dead-target / non-positional turn) — `victimEnemyBuffs` then
-             *  keeps its raw bucket read, which is the pre-fix behaviour. */
+             *  `undefined` only where the turn itself produced none — `victimEnemyBuffs` then keeps
+             *  its raw bucket read, which is the pre-fix behaviour. (This used to add "the enemy
+             *  site's hoisted capture on a dead-target turn"; #346 deleted both the dead-target
+             *  skip and the hoist — the enemy site reads the value straight off its turn result.) */
             scheduledEnemyEffects: PlayerTurnResult['scheduledEnemyEffects'] | undefined;
         }
         /** One footprint victim's `attacked` signal within ONE sub-attack. */
@@ -10223,9 +10241,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // — the exact same predicate runPlayerTurn's own action decision reads
                             // (playerTurn.ts:~1044). Safe here because advanceChargeCadence (which
                             // consumes/resets the charge) runs INSIDE runPlayerTurn, AFTER the
-                            // decision. Drives the charge-aware target/pattern resolution below AND
-                            // (renamed from the former inline `enemyWouldFireAction` derivation)
-                            // the dead-target firing-skill check just below.
+                            // decision. Drives the charge-aware target/pattern resolution below.
+                            // (It also fed a dead-target firing-skill check, via an
+                            // `enemyWouldFireAction`/`selectFiringSkill` pair; #346 deleted that
+                            // branch and the pair with it.)
                             const enemyWillFireCharged =
                                 enemyRuntime.hasChargedSkill && actor.charges >= actor.chargeCount;
                             // Positional target selection (Task C3, side-symmetric, GATED). Mirrors the
@@ -10251,68 +10270,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // (defence/maxHp/decline, the runPlayerTurn `enemy`+containers, and the
                             // applyIncomingToTarget intake), each guarded on its presence.
                             const { tgt } = selectTurnTarget(actor);
-                            // Narrowed dead-target skip: a dead `tgt` only forces the cadence-only
-                            // short-circuit below when the actor's WOULD-BE firing skill actually
-                            // needs a living opposing victim (a `damage` ability, or any
-                            // enemy-facing ability — debuff/dot/purge/control/etc.). An
-                            // ally-targeted support cast (buffs/shields/heals only) never reads
-                            // `tgt`'s HP/defence, so it must still fire against a corpse —
-                            // otherwise an enemy caster whose resolved anchor has just died stops
-                            // acting (bug repro: twoTeamBattle.test.ts "bug repro: enemy supporter
-                            // turn skipped after the focus player dies"). Mirrors runPlayerTurn's
-                            // OWN action selection (preTurn, playerTurn.ts) exactly so the
-                            // predicate inspects the SAME skill that would actually fire. (SP-F F5:
-                            // now sourced from the single shared enemyWillFireCharged boolean.)
-                            //
-                            // ⚠️ SP-4e — MEASURED UNREACHABLE, and left in place deliberately.
-                            // `tgt` is now the POSITIONALLY-resolved victim or nothing, so a dead
-                            // `tgt` no longer means "the vestigial focus-player anchor died", which
-                            // was the ONLY way this branch was ever entered. And
-                            // `resolvePositionalTarget` builds its `byCell` from actors with
-                            // `position !== undefined && currentHp > 0` (positionalBinding.ts:135-137)
-                            // and EVERY one of its return paths draws from that map or returns null
-                            // — Concentrate Fire, Taunt, Provoke, the stealth filter and
-                            // `selectTargets` all read it — and nothing between that call and here
-                            // mutates HP, so `tgt !== undefined && tgt.currentHp <= 0` is
-                            // unsatisfiable. Probed with a `console.error` in the skip body over the
-                            // WHOLE suite (547 files / 6037 tests): 0 hits, where the pre-rung tree
-                            // hit it in 4 files.
-                            //
-                            // AND THAT CLAIM IS NOW EXECUTABLE, not merely commented (fix wave 1).
-                            // The two increments below feed `__getEnemySiteVictimTurnCounts`, which
-                            // `dummyReachability.test.ts` reads as `{ resolved: > 0, dead: 0 }` —
-                            // the `dead` half is this branch's precondition BEFORE the
-                            // `skillNeedsOpposingVictim` gate, and the `resolved` half is its
-                            // vacuity guard (same instrument, live site, non-zero). A comment cannot
-                            // fail; this can. It replaces the coverage the two relabelled
-                            // `twoTeamBattle` cases used to supply by accident.
-                            //
-                            // NOT deleted here, for three reasons. (1) The no-victim turn now
-                            // produces the same OUTCOME this skip did — a firing skill that needs a
-                            // victim delivers 0 either way, because `runPlayerTurn` fences its damage
-                            // assembly on `hasVictim` — so the branch is redundant rather than wrong.
-                            // (2) It is the only remaining consumer of `skillNeedsOpposingVictim` on
-                            // this path, so deleting it deletes that helper's last caller too.
-                            // (3) No test can cover an unsatisfiable branch, so the deletion cannot
-                            // be de-risked by coverage — it belongs in its own scoped change with
-                            // this tripwire as its gate, not at the tail of a long PR.
-                            // `twoTeamBattle.test.ts`'s "negative/pin" and "threshold flip" cases
-                            // carry the corresponding coverage note.
-                            const enemyWouldFireAction: 'active' | 'charged' = enemyWillFireCharged
-                                ? 'charged'
-                                : 'active';
-                            const enemyFiringSkillForDeadCheck = selectFiringSkill(
-                                enemyRuntime.castSkills,
-                                enemyWouldFireAction
-                            );
-                            if (tgt !== undefined) {
-                                enemySiteResolvedVictimTurns++;
-                                if (tgt.currentHp <= 0) enemySiteDeadVictimTurns++;
-                            }
-                            const skipDeadTargetTurn =
-                                tgt !== undefined &&
-                                tgt.currentHp <= 0 &&
-                                skillNeedsOpposingVictim(enemyFiringSkillForDeadCheck);
                             // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
                             // positional apply (footprint expansion). An enemy with a target but NO pattern
                             // stays on the legacy single-apply path (same `pattern != null` guard as the
@@ -10322,87 +10279,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                             const enemyPattern = enemyWillFireCharged
                                 ? parsedChargedPatternFor(actor)
                                 : parsedPatternFor(actor);
-                            let damage = 0;
-                            // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
-                            // scoped inside the else block below; this flag carries its roundCrit out.
-                            let enemyTurnDidCrit = false;
-                            // H1 T4: the detonation slice of `damage` (enemyTurn.detonationDamage),
-                            // hoisted out of the else block so the post-else apply call can pass it as
-                            // `bombPortion` (the bomb portion drains the shield in FULL, no penetration).
-                            // Stays 0 on the dead-target path and for any bare enemy with no detonate().
-                            let enemyDetonationDamage = 0;
-                            // Hoisted for per-hit `attacked` emission (Phase 4c Task 3): populated from
-                            // enemyTurn.hitCrits in the ship-backed branch; stays [] on the dead-target
-                            // path and on the manual flat-enemy path (which has no hitCrits to surface).
-                            let enemyHitCrits: boolean[] = [];
-                            // Hoisted positional-apply state (Task 9): the enemy-site mirror of the focus/team
-                            // sites. enemyPositional gates BOTH the drivePositionalApply call AND the single-
-                            // apply suppression below; enemyScalars carries this turn's firing-hit scalars out
-                            // of the else block (enemyTurn is scoped inside it). Both stay false/null on the
-                            // dead-target path and whenever the enemy is non-positional → legacy single-apply.
-                            let enemyPositional = false;
-                            let enemyScalars: AttackerDamageScalars | undefined;
-                            // SP-4b-2 D6: the enemy turn's passive-slot damage instance, hoisted for
-                            // the same reason as enemyScalars (enemyTurn is scoped inside the else
-                            // block). Undefined on the dead-target / non-positional paths.
-                            let enemyPassiveSlotHit: PassiveSlotHit | undefined;
-                            // Sub-project I, PR I2: the enemy turn's per-victim outgoing-modifier
-                            // ingredients, hoisted out of the else block (enemyTurn is scoped inside
-                            // it) so the enemy drivePositionalApply site can pass it. Undefined on the
-                            // dead-target / non-positional paths → perVictimOutgoingDeltaPct returns 0
-                            // for every victim (byte-identical).
-                            let enemyPerVictimOutgoing: PlayerTurnResult['perVictimOutgoing'];
-                            // SP-4b-2 D4: the enemy turn's scheduled enemy-debuff effects AFTER its
-                            // own landing/resist draw, hoisted out of the else block (enemyTurn is
-                            // scoped inside it) so the enemy drivePositionalApply site can pass it.
-                            // Team-symmetric mirror of the focus/team sites. Undefined on the
-                            // dead-target / non-positional paths → victimEnemyBuffs keeps its raw
-                            // read (byte-identical).
-                            let enemyScheduledEnemyEffects:
-                                | PlayerTurnResult['scheduledEnemyEffects']
-                                | undefined;
-                            // Sub-project I, PR I2: the pre-turn per-victim status snapshot
-                            // (team-symmetric mirror of the focus/team sites' preTurnVictimStatus),
-                            // captured just before `runPlayerTurn` below mutates the status engine.
-                            let enemyPreTurnVictimStatus:
-                                | Map<string, PreTurnVictimStatusSnapshot>
-                                | undefined;
-                            // Per-victim crit: the enemy turn's per-victim crit resolver, hoisted out
-                            // of the else block (enemyTurn is scoped inside it) so the enemy
-                            // drivePositionalApply site can pass it. Undefined on the dead-target /
-                            // non-positional paths → covered victims fall back to hitCrits (byte-identical).
-                            let enemyRollVictimCrit:
-                                | ((victimAffinity: AffinityName) => boolean)
-                                | undefined;
-                            // PR3: the per-victim detonation recipe for the enemy positional path,
-                            // hoisted out of the else block (enemyTurn is scoped inside it). When the
-                            // enemy fires a positional detonate skill, runPlayerTurn returns the recipe
-                            // (detonationDamage 0) and the per-victim loop at the enemy drivePositionalApply
-                            // site consumes it. Stays undefined on the dead-target path and for any bare
-                            // enemy with no detonate() → the loop never runs (byte-identical).
-                            let enemyPositionalDetonation: DetonationRecipe | undefined;
-                            // Task 5 (per-victim crit signal): the enemy turn's deferred ability-performed
-                            // payload, hoisted out of the else block (enemyTurn is scoped inside it) so the
-                            // enemy drivePositionalApply site can emit it post-apply with the true per-victim
-                            // crit signal. Present ⟺ enemyPositional true (same suppression condition).
-                            let enemyDeferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
-                            // R-cast: same hoist as its six siblings — `enemyTurn` is scoped inside the
-                            // block far above, so the deferred support pass and its fallback basis have to
-                            // be carried out to where the flush runs.
-                            let enemyResolveCastSupport: PlayerTurnResult['resolveCastSupport'];
-                            let enemyDirectDamage = 0;
-                            // Intra-cast clause order: the enemy cast's held-back enemy-debuff
-                            // landings, hoisted for the same reason as the payload above (enemyTurn is
-                            // scoped inside the else block) so the flush can run after this turn's
-                            // damage — positional or not. Empty for a dead-target/flat-card turn.
-                            let enemyDeferredApplications: PlayerTurnResult['deferredEnemyApplications'] =
-                                [];
-                            // PR8: the enemy cast's per-sub-attack debuff applier, hoisted for the
-                            // same scoping reason as the list above — the positional drive call sits
-                            // OUTSIDE the else block that declares `enemyTurn`. Undefined on a
-                            // dead-target/flat-card turn and for any cast with no gated debuff
-                            // clause, which the helper's `?.` call already tolerates.
-                            let enemyApplyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
                             // Task 5: the per-victim crit aggregate from the enemy positional apply, hoisted
                             // out of the `if (damage > 0)` block. Present only when the positional apply
                             // actually ran; when the enemy turn is positional but deals 0 damage (apply
@@ -10436,296 +10312,266 @@ export function runCombat(rawInput: CombatEngineInput): {
                                       enemyTurnStasisHitVictims.add(targetId);
                                   }
                                 : undefined;
-                            if (skipDeadTargetTurn) {
-                                // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
-                                // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
-                                // application events — a dead target is untouched (old short-circuit).
-                                // The `&& actor.chargeCount > 0` term is redundant (hasChargedSkill already
-                                // implies chargeCount >= 1); the helper's internal guard handles it.
-                                //
-                                // SP-4e (#335): the `|| tgt === undefined` arm that used to share this
-                                // branch is GONE. A no-victim enemy turn is not a skip — it RUNS through
-                                // the `else` below, exactly as the player sites have since SP-4c-2b, so an
-                                // ally-targeted enemy supporter still lands its support. Only a genuinely
-                                // DEAD resolved victim short-circuits here, and only for a firing skill
-                                // that needs a living one. The `else` therefore no longer narrows `tgt` to
-                                // a defined CombatActor: every victim-derived read in it is guarded.
-                                advanceChargeCadence(actor, enemyRuntime.hasChargedSkill, bus, r);
-                                // No enemyTurn → no lastTurnCtxByActor update. This actor has no live
-                                // DoTs to attribute, so nothing reads the missing entry.
-                                //
-                                // ⚠️ DO NOT restate this as "parity: the old dead path produced no ctx
-                                // either" — that is what stood here and it is FALSE now. The old branch
-                                // also swallowed every `tgt === undefined` turn, and those turns
-                                // published nothing. Since #335 they run the `else` instead, which sets
-                                // `lastTurnCtxByActor` UNCONDITIONALLY. Measured on this branch, whole
-                                // suite: **1,695** enemy no-victim turns across 26 files reach that
-                                // `set` — corroborated by Task 5's Probe A, which counted the same
-                                // 1,695 from the selection site.
-                                //
-                                // ⚠️ 1,695 is the POPULATION, not the DELTA — do not restate it as
-                                // "1,695 turns that previously published none". Pre-#335 the ~335 C2
-                                // rows (ally-side parsed target, LIVE roster, anchor alive) resolved
-                                // the anchor as their victim, so they took the `else` and DID publish a
-                                // ctx. Only the rows whose anchor was itself undefined published
-                                // nothing: C1's 1,341 + C3's 15 = **~1,356**, and that is the delta.
-                                // The two numbers answer different questions; conflating them is the
-                                // error this rung kept catching.
-                                //
-                                // Either way it is a real publication delta, not parity;
-                                // it moved no golden because the only consumer is an enemy DoT tick
-                                // attributed to this actor, and a no-victim turn applies no DoT.
-                            } else {
-                                // D-PR3 Task 9: victim-side incoming %-reduction against the bound
-                                // target on the AGGREGATE (non-positional) damage path — Iridium-as-tank.
-                                // `tgt` is the victim; `actor` is the acting enemy attacker. The non-crit
-                                // baseline is the reduction with didCrit:false; the crit-family DELTA is
-                                // the extra reduction a crit adds. Guarded by length so a victim with no
-                                // incoming abilities passes 0/0 → byte-identical. (The positional enemy
-                                // path applies its own per-sub-hit reduction via drivePositionalApply;
-                                // this fold serves the legacy single-apply.)
-                                //
-                                // SP-4e: fenced on the victim's PRESENCE, not just on the ability list.
-                                // With no victim there is nobody whose incoming channel could reduce
-                                // anything, and the two args default to 0 inside runPlayerTurn — which is
-                                // also what the two PLAYER cast sites pass (they never thread these at
-                                // all), so the no-victim enemy turn matches them. Safe to fence: both
-                                // args feed ONLY `damageCritMultiplier`/`nonCritFactor`, whose every
-                                // consumer (`directDamage`/`secondaryDamage`/`conditionalDamage`, and
-                                // `passiveDamage` through `directDamage`) is already `hasVictim`-fenced
-                                // in playerTurn.ts. Neither reaches `turnCtx` or `positionalScalars`, the
-                                // two things this turn PUBLISHES as standing state — checked, because
-                                // fencing a value that is also published is the defect that once silenced
-                                // every supporter's reactive debuffs.
-                                let incomingReductionNonCritPct = 0;
-                                let incomingReductionCritAll = 0;
-                                if (tgt !== undefined) {
-                                    const tgtIncoming = incomingAbilitiesOf(tgt.id);
-                                    incomingReductionNonCritPct = tgtIncoming.length
-                                        ? incomingReductionForHit(tgtIncoming, {
-                                              didCrit: false,
-                                              attackerStealthed: isStealthed(actor.id),
-                                              victimStealthed: isStealthed(tgt.id),
-                                              victimStasised: isStasised(tgt.id),
-                                              hitIndexThisRound: 0,
-                                              attackerHasDot: attackerHasDot(actor.id),
-                                              victimHasBarrierRecharging: hasBarrierRecharging(
-                                                  tgt.id
-                                              ),
-                                              victimHasShield: hasShield(tgt.id),
-                                              selfHpPct: selfHpPctOf(tgt.id),
-                                              attackerTauntedOrProvoked: attackerTauntedOrProvoked(
-                                                  actor.id
-                                              ),
-                                          })
-                                        : 0;
-                                    incomingReductionCritAll = tgtIncoming.length
-                                        ? incomingReductionForHit(tgtIncoming, {
-                                              didCrit: true,
-                                              attackerStealthed: isStealthed(actor.id),
-                                              victimStealthed: isStealthed(tgt.id),
-                                              victimStasised: isStasised(tgt.id),
-                                              hitIndexThisRound: 0,
-                                              attackerHasDot: attackerHasDot(actor.id),
-                                              victimHasBarrierRecharging: hasBarrierRecharging(
-                                                  tgt.id
-                                              ),
-                                              victimHasShield: hasShield(tgt.id),
-                                              selfHpPct: selfHpPctOf(tgt.id),
-                                              attackerTauntedOrProvoked: attackerTauntedOrProvoked(
-                                                  actor.id
-                                              ),
-                                          })
-                                        : 0;
-                                }
-                                // F3: crit-conditional pre-fight damage modifiers, mirrored from
-                                // the positional incomingReductionFor site (crit hits only, via
-                                // the crit-family delta). Same sign convention: the channel is a
-                                // REDUCTION, leader values are benefit/penalty-phrased, so both
-                                // terms are negated (victim incomingCritDamage -10 → +10 reduction
-                                // on crits; attacker outgoingCritDamage -10 → its crits deal 10%
-                                // less). Absent → 0 → byte-identical.
-                                // SP-4e: only the VICTIM term is fenced. The ACTING enemy's own
-                                // `outgoingCritDamage` is not victim-derived, so it keeps applying
-                                // on a no-victim turn — collapsing the whole expression would have
-                                // silently dropped a modifier that has nothing to do with the victim.
-                                const preFightCritFamilyPct =
-                                    -(tgt?.preFight?.incomingCritDamage ?? 0) -
-                                    (actor.preFight?.outgoingCritDamage ?? 0);
-                                const incomingReductionCritFamilyPct =
-                                    incomingReductionCritAll -
-                                    incomingReductionNonCritPct +
-                                    preFightCritFamilyPct;
-                                // Sub-project I, PR I2: snapshot BEFORE runPlayerTurn (the enemy's
-                                // opposing roster is the PLAYER team — allPlayerActors).
-                                enemyPreTurnVictimStatus =
-                                    snapshotPreTurnVictimStatus(allPlayerActors);
-                                const enemyTurnArgs = buildTurnArgs(actor, tgt);
-                                const enemyTurn = runPlayerTurn({
-                                    ...enemyTurnArgs,
-                                    deferAbilityPerformedToEngine: enemyWillApplyPositionally,
-                                    onHitBreakStasis: enemyBreakHook,
-                                    incomingReductionNonCritPct,
-                                    incomingReductionCritFamilyPct,
-                                });
-                                // §4.5: resolve Stasis break for player victims hit by this enemy.
-                                if (enemyTurnStasisHitVictims.size > 0) {
-                                    // KNOWN LIMITATION — see the focus site's note above its own
-                                    // `reInflictedStasis` read (search
-                                    // `turnStasisHitVictims.size > 0`) for the full explanation;
-                                    // this read has the same pre-positional-drive ordering.
-                                    const reInflictedStasis = enemyTurn.inflictedEnemyDebuffs.some(
-                                        (ab) => isStasis(ab.buffName)
-                                    );
-                                    if (!reInflictedStasis) {
-                                        for (const victimId of enemyTurnStasisHitVictims) {
-                                            stasisBreakPending.set(victimId, true);
-                                        }
-                                    }
-                                }
-                                // Total damage the enemy dealt to the bound target this turn. secondary/
-                                // conditional are display sub-buckets ALREADY inside directDamage (do NOT
-                                // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
-                                // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
-                                damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
-                                // H1 T4: hoist the detonation slice for the post-else apply (bombPortion).
-                                enemyDetonationDamage = enemyTurn.detonationDamage;
-                                // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
-                                enemyTurnDidCrit = enemyTurn.roundCrit;
-                                // Hoist per-hit crit array for the per-hit `attacked` emit (Phase 4c Task 3).
-                                enemyHitCrits = enemyTurn.hitCrits;
-                                // Positional gate (Task 9, enemy site): mirror of the focus/team gates, but
-                                // the OPPOSING roster from the enemy's view is the PLAYER team
-                                // (allPlayerActors), the parsed target rides on enemyTargetById, and the
-                                // parsed pattern on enemyPatternById. When true, the firing-hit damage lands
-                                // per-victim via drivePositionalApply (below) against the live player roster
-                                // and the legacy single-apply is SUPPRESSED. "No production caller threads
-                                // position+target+pattern for an enemy yet → false for every golden" was
-                                // true when written and is NOT true now — SP-U U5 already corrected it (see
-                                // the note at the `if (enemyPositional)` body below: the 2v2/3v3/healing
-                                // goldens thread enemy positions and patterns), and since SP-4b-1 the
-                                // normalization boundary places and targets every supplied enemy, so this
-                                // is the ordinary path whenever a caller passes `enemyAttackers`.
-                                enemyPositional =
-                                    resolvesPositionalVictim(actor.position, allPlayerActors) &&
-                                    enemyTarget != null &&
-                                    enemyPattern != null &&
-                                    enemyTurn.positionalScalars != null;
-                                enemyScalars = enemyTurn.positionalScalars;
-                                enemyPassiveSlotHit = enemyTurn.passiveSlotHit;
-                                // Sub-project I, PR I2: capture the enemy turn's per-victim
-                                // outgoing-modifier ingredients (team-symmetric mirror of the
-                                // focus/team sites).
-                                enemyPerVictimOutgoing = enemyTurn.perVictimOutgoing;
-                                // SP-4b-2 D4: capture the enemy turn's gated scheduled enemy effects.
-                                enemyScheduledEnemyEffects = enemyTurn.scheduledEnemyEffects;
-                                // Per-victim crit: capture the enemy turn's per-victim crit resolver.
-                                enemyRollVictimCrit = enemyTurn.rollVictimCrit;
-                                // Task 5: capture the deferred ability-performed payload (present ⟺ the
-                                // enemy inline emit was suppressed, i.e. enemyPositional true).
-                                enemyDeferredAbilityPerformed = enemyTurn.deferredAbilityPerformed;
-                                enemyResolveCastSupport = enemyTurn.resolveCastSupport;
-                                enemyDirectDamage = enemyTurn.directDamage;
-                                // Clause order: capture the held-back landings for the post-damage flush.
-                                // PR8: THIS array identity is what the positional drive splices at a
-                                // sub-attack boundary AND what the fallback flush below drains — the
-                                // two must be the same object or the enemy path silently keeps
-                                // once-per-cast arrival. Both captures happen HERE, before the drive
-                                // call, so the helper sees them.
-                                enemyDeferredApplications = enemyTurn.deferredEnemyApplications;
-                                enemyApplyDebuffsForSubAttack = enemyTurn.applyDebuffsForSubAttack;
-                                // PR3: capture the per-victim detonation recipe (returned whenever
-                                // `positional: true` was set for this enemy turn — see the positional
-                                // hint gate). Consumed by the enemy-site per-victim detonation loop below.
-                                enemyPositionalDetonation = enemyTurn.positionalDetonation;
-                                // Record the enemy actor's round-scoped ctx (parity with player/team branches;
-                                // its own future DoT entries would tick with this ctx).
-                                lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
-                                // SP-D: record this cast's footprint size (mirrors the focus/team
-                                // sites, including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback).
-                                //
-                                // ⚠️ SP-4e (#335) MADE THE `0` ARM LIVE ON THIS SIDE. The comment
-                                // that stood here read "`tgt` is guaranteed defined in this branch
-                                // (the enclosing `if (skipDeadTargetTurn || tgt === undefined)`
-                                // already bailed otherwise — an enemy attacker always resolves a
-                                // real victim, the no-victim concept is player-ally-cast-only), so
-                                // this is a no-op for the enemy side". Every clause of that is now
-                                // false: the `|| tgt === undefined` arm is DELETED (see the skip
-                                // above), an enemy attacker that resolves no victim is exactly what
-                                // #335 fixed, and the no-victim rule is BOTH sides'.
-                                //
-                                // So this is not a no-op here any more. On a no-victim enemy turn
-                                // `aoeVictimIds` is `undefined` (`buildTurnArgs` gates it on
-                                // `tgt?.position != null`), the `??` falls through, and
-                                // `(tgt !== undefined ? 1 : 0)` records a footprint of **0** —
-                                // "this cast hit no enemy" — for the first time on this side, on
-                                // every one of the ~1,695 measured no-victim enemy turns. That is
-                                // the honest reading for a cast that reached nobody, and it is the
-                                // same expression the two player sites have recorded since SP-4d
-                                // Task 8: all three sites read one expression rather than two
-                                // agreeing by construction and one by accident.
-                                enemiesHitThisCastByActor.set(
-                                    actor.id,
-                                    enemyTurnArgs.aoeVictimIds?.length ??
-                                        (tgt !== undefined ? 1 : 0)
-                                );
-                                // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
-                                // its own active self-buffs and the debuffs it landed on the heal target,
-                                // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
-                                // into any sim value. Empty for a bare enemy → no entry recorded for it.
-                                // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
-                                // applied this turn) rather than landedEnemyDebuffs (the shared per-target
-                                // window, which would leak other attackers' debuffs into this enemy's group).
-                                // resistedEnemyDebuffs = the TIMED debuffs THIS enemy attempted but were
-                                // resisted by its hacking-vs-security landing roll (display-only — Task R1).
-                                // resistedEnemyDots = the DoTs THIS enemy attempted this turn that were
-                                // resisted by the SAME landing roll (the whole turn's DoTs share one
-                                // dotsLanded draw — all land or all miss together). Only corrosion/inferno
-                                // are modelled by EnemyDoTState; any bomb entry is skipped (display-only —
-                                // Task R3).
-                                // The guard also fires on resists alone so a fully-resisted enemy (nothing
-                                // landed) still gets an entry and surfaces its resisted debuffs/DoTs.
-                                const resistedEnemyDots: EnemyDoTState[] =
-                                    !enemyTurn.dotsLanded && enemyTurn.dotsConfig.length > 0
-                                        ? enemyTurn.dotsConfig
-                                              .filter(
-                                                  (d) =>
-                                                      d.type === 'corrosion' || d.type === 'inferno'
-                                              )
-                                              .map((d) => ({
-                                                  type: d.type as 'corrosion' | 'inferno',
-                                                  tier: d.tier,
-                                                  stacks: d.stacks,
-                                              }))
-                                        : [];
-                                if (
-                                    enemyTurn.activeSelfBuffs.length > 0 ||
-                                    enemyTurn.inflictedEnemyDebuffs.length > 0 ||
-                                    enemyTurn.resistedEnemyDebuffs.length > 0 ||
-                                    resistedEnemyDots.length > 0
-                                ) {
-                                    let entry = roundEnemyEffects.get(actor.id);
-                                    if (!entry) {
-                                        entry = {
-                                            selfBuffs: [],
-                                            debuffs: [],
-                                            resistedDebuffs: [],
-                                            resistedDots: [],
-                                        };
-                                        roundEnemyEffects.set(actor.id, entry);
-                                    }
-                                    entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
-                                    entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
-                                    entry.resistedDebuffs.push(...enemyTurn.resistedEnemyDebuffs);
-                                    entry.resistedDots.push(...resistedEnemyDots);
-                                }
-                                // Extra-action grants: bump this enemy's pending-action count so it is re-picked
-                                // for an extra turn (full-actor completeness — mirrors the attacker and walked-team branches).
-                                // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
-                                // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
-                                // undefined (enemy's "allies" are enemy-side, not the player team).
-                                processExtraActionGrants(actor, enemyTurn.extraActionGrants);
+                            // D-PR3 Task 9: victim-side incoming %-reduction against the bound
+                            // target on the AGGREGATE (non-positional) damage path — Iridium-as-tank.
+                            // `tgt` is the victim; `actor` is the acting enemy attacker. The non-crit
+                            // baseline is the reduction with didCrit:false; the crit-family DELTA is
+                            // the extra reduction a crit adds. Guarded by length so a victim with no
+                            // incoming abilities passes 0/0 → byte-identical. (The positional enemy
+                            // path applies its own per-sub-hit reduction via drivePositionalApply;
+                            // this fold serves the legacy single-apply.)
+                            //
+                            // SP-4e: fenced on the victim's PRESENCE, not just on the ability list.
+                            // With no victim there is nobody whose incoming channel could reduce
+                            // anything, and the two args default to 0 inside runPlayerTurn — which is
+                            // also what the two PLAYER cast sites pass (they never thread these at
+                            // all), so the no-victim enemy turn matches them. Safe to fence: both
+                            // args feed ONLY `damageCritMultiplier`/`nonCritFactor`, whose every
+                            // consumer (`directDamage`/`secondaryDamage`/`conditionalDamage`, and
+                            // `passiveDamage` through `directDamage`) is already `hasVictim`-fenced
+                            // in playerTurn.ts. Neither reaches `turnCtx` or `positionalScalars`, the
+                            // two things this turn PUBLISHES as standing state — checked, because
+                            // fencing a value that is also published is the defect that once silenced
+                            // every supporter's reactive debuffs.
+                            let incomingReductionNonCritPct = 0;
+                            let incomingReductionCritAll = 0;
+                            if (tgt !== undefined) {
+                                const tgtIncoming = incomingAbilitiesOf(tgt.id);
+                                incomingReductionNonCritPct = tgtIncoming.length
+                                    ? incomingReductionForHit(tgtIncoming, {
+                                          didCrit: false,
+                                          attackerStealthed: isStealthed(actor.id),
+                                          victimStealthed: isStealthed(tgt.id),
+                                          victimStasised: isStasised(tgt.id),
+                                          hitIndexThisRound: 0,
+                                          attackerHasDot: attackerHasDot(actor.id),
+                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
+                                          victimHasShield: hasShield(tgt.id),
+                                          selfHpPct: selfHpPctOf(tgt.id),
+                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                              actor.id
+                                          ),
+                                      })
+                                    : 0;
+                                incomingReductionCritAll = tgtIncoming.length
+                                    ? incomingReductionForHit(tgtIncoming, {
+                                          didCrit: true,
+                                          attackerStealthed: isStealthed(actor.id),
+                                          victimStealthed: isStealthed(tgt.id),
+                                          victimStasised: isStasised(tgt.id),
+                                          hitIndexThisRound: 0,
+                                          attackerHasDot: attackerHasDot(actor.id),
+                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
+                                          victimHasShield: hasShield(tgt.id),
+                                          selfHpPct: selfHpPctOf(tgt.id),
+                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
+                                              actor.id
+                                          ),
+                                      })
+                                    : 0;
                             }
+                            // F3: crit-conditional pre-fight damage modifiers, mirrored from
+                            // the positional incomingReductionFor site (crit hits only, via
+                            // the crit-family delta). Same sign convention: the channel is a
+                            // REDUCTION, leader values are benefit/penalty-phrased, so both
+                            // terms are negated (victim incomingCritDamage -10 → +10 reduction
+                            // on crits; attacker outgoingCritDamage -10 → its crits deal 10%
+                            // less). Absent → 0 → byte-identical.
+                            // SP-4e: only the VICTIM term is fenced. The ACTING enemy's own
+                            // `outgoingCritDamage` is not victim-derived, so it keeps applying
+                            // on a no-victim turn — collapsing the whole expression would have
+                            // silently dropped a modifier that has nothing to do with the victim.
+                            const preFightCritFamilyPct =
+                                -(tgt?.preFight?.incomingCritDamage ?? 0) -
+                                (actor.preFight?.outgoingCritDamage ?? 0);
+                            const incomingReductionCritFamilyPct =
+                                incomingReductionCritAll -
+                                incomingReductionNonCritPct +
+                                preFightCritFamilyPct;
+                            // Sub-project I, PR I2: snapshot BEFORE runPlayerTurn (the enemy's
+                            // opposing roster is the PLAYER team — allPlayerActors).
+                            const enemyPreTurnVictimStatus =
+                                snapshotPreTurnVictimStatus(allPlayerActors);
+                            const enemyTurnArgs = buildTurnArgs(actor, tgt);
+                            const enemyTurn = runPlayerTurn({
+                                ...enemyTurnArgs,
+                                deferAbilityPerformedToEngine: enemyWillApplyPositionally,
+                                onHitBreakStasis: enemyBreakHook,
+                                incomingReductionNonCritPct,
+                                incomingReductionCritFamilyPct,
+                            });
+                            // §4.5: resolve Stasis break for player victims hit by this enemy.
+                            if (enemyTurnStasisHitVictims.size > 0) {
+                                // KNOWN LIMITATION — see the focus site's note above its own
+                                // `reInflictedStasis` read (search
+                                // `turnStasisHitVictims.size > 0`) for the full explanation;
+                                // this read has the same pre-positional-drive ordering.
+                                const reInflictedStasis = enemyTurn.inflictedEnemyDebuffs.some(
+                                    (ab) => isStasis(ab.buffName)
+                                );
+                                if (!reInflictedStasis) {
+                                    for (const victimId of enemyTurnStasisHitVictims) {
+                                        stasisBreakPending.set(victimId, true);
+                                    }
+                                }
+                            }
+                            // Total damage the enemy dealt to the bound target this turn. secondary/
+                            // conditional are display sub-buckets ALREADY inside directDamage (do NOT
+                            // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
+                            // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
+                            const damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
+                            // H1 T4: the detonation slice, passed to the apply call below as
+                            // `bombPortion` (a bomb portion drains the shield in FULL, no penetration).
+                            const enemyDetonationDamage = enemyTurn.detonationDamage;
+                            // Task 8: the cast's any-hit crit outcome, for the `attacked` emit below.
+                            const enemyTurnDidCrit = enemyTurn.roundCrit;
+                            // Phase 4c Task 3: the per-hit crit array, for the per-hit `attacked` emit.
+                            const enemyHitCrits = enemyTurn.hitCrits;
+                            // Positional gate (Task 9, enemy site): mirror of the focus/team gates, but
+                            // the OPPOSING roster from the enemy's view is the PLAYER team
+                            // (allPlayerActors), the parsed target rides on enemyTargetById, and the
+                            // parsed pattern on enemyPatternById. When true, the firing-hit damage lands
+                            // per-victim via drivePositionalApply (below) against the live player roster
+                            // and the legacy single-apply is SUPPRESSED. "No production caller threads
+                            // position+target+pattern for an enemy yet → false for every golden" was
+                            // true when written and is NOT true now — SP-U U5 already corrected it (see
+                            // the note at the `if (enemyPositional)` body below: the 2v2/3v3/healing
+                            // goldens thread enemy positions and patterns), and since SP-4b-1 the
+                            // normalization boundary places and targets every supplied enemy, so this
+                            // is the ordinary path whenever a caller passes `enemyAttackers`.
+                            const enemyPositional =
+                                resolvesPositionalVictim(actor.position, allPlayerActors) &&
+                                enemyTarget != null &&
+                                enemyPattern != null &&
+                                enemyTurn.positionalScalars != null;
+                            const enemyScalars = enemyTurn.positionalScalars;
+                            const enemyPassiveSlotHit = enemyTurn.passiveSlotHit;
+                            // Sub-project I, PR I2: capture the enemy turn's per-victim
+                            // outgoing-modifier ingredients (team-symmetric mirror of the
+                            // focus/team sites).
+                            const enemyPerVictimOutgoing = enemyTurn.perVictimOutgoing;
+                            // SP-4b-2 D4: capture the enemy turn's gated scheduled enemy effects.
+                            const enemyScheduledEnemyEffects = enemyTurn.scheduledEnemyEffects;
+                            // Per-victim crit: capture the enemy turn's per-victim crit resolver.
+                            const enemyRollVictimCrit = enemyTurn.rollVictimCrit;
+                            // Task 5: capture the deferred ability-performed payload (present ⟺ the
+                            // enemy inline emit was suppressed, i.e. enemyPositional true).
+                            const enemyDeferredAbilityPerformed =
+                                enemyTurn.deferredAbilityPerformed;
+                            const enemyResolveCastSupport = enemyTurn.resolveCastSupport;
+                            const enemyDirectDamage = enemyTurn.directDamage;
+                            // Clause order: capture the held-back landings for the post-damage flush.
+                            // PR8: THIS array identity is what the positional drive splices at a
+                            // sub-attack boundary AND what the fallback flush below drains — the
+                            // two must be the same object or the enemy path silently keeps
+                            // once-per-cast arrival. Both captures happen HERE, before the drive
+                            // call, so the helper sees them.
+                            const enemyDeferredApplications = enemyTurn.deferredEnemyApplications;
+                            const enemyApplyDebuffsForSubAttack =
+                                enemyTurn.applyDebuffsForSubAttack;
+                            // PR3: capture the per-victim detonation recipe (returned whenever
+                            // `positional: true` was set for this enemy turn — see the positional
+                            // hint gate). Consumed by the enemy-site per-victim detonation loop below.
+                            const enemyPositionalDetonation = enemyTurn.positionalDetonation;
+                            // Record the enemy actor's round-scoped ctx (parity with player/team branches;
+                            // its own future DoT entries would tick with this ctx).
+                            //
+                            // This `set` is UNCONDITIONAL, including on a no-victim enemy turn — the
+                            // measurement that used to live on the deleted dead-target skip, kept here
+                            // because it is a fact about this line. Whole suite: **1,695** enemy
+                            // no-victim turns across 26 files reach it. ⚠️ 1,695 is the POPULATION,
+                            // not the DELTA — do not restate it as "1,695 turns that previously
+                            // published none". Pre-#335 the ~335 ally-side-target rows whose anchor
+                            // was alive resolved that anchor as their victim, so they already reached
+                            // here; only the rows whose anchor was itself undefined published nothing
+                            // (1,341 + 15 = **~1,356**, the delta). The two numbers answer different
+                            // questions, and conflating them is the error that rung kept catching.
+                            // It moved no golden either way: the only consumer is an enemy DoT tick
+                            // attributed to this actor, and a no-victim turn applies no DoT.
+                            lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
+                            // SP-D: record this cast's footprint size (mirrors the focus/team
+                            // sites, including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback).
+                            //
+                            // ⚠️ SP-4e (#335) MADE THE `0` ARM LIVE ON THIS SIDE. The comment
+                            // that stood here read "`tgt` is guaranteed defined in this branch
+                            // (the enclosing `if (skipDeadTargetTurn || tgt === undefined)`
+                            // already bailed otherwise — an enemy attacker always resolves a
+                            // real victim, the no-victim concept is player-ally-cast-only), so
+                            // this is a no-op for the enemy side". Every clause of that is now
+                            // false: an enemy attacker that resolves no victim is exactly what
+                            // #335 fixed, and the no-victim rule is BOTH sides'. The `if` it
+                            // cited no longer exists at all — #335 deleted the `tgt === undefined`
+                            // arm and #346 deleted the rest, so this site is unconditional.
+                            //
+                            // So this is not a no-op here any more. On a no-victim enemy turn
+                            // `aoeVictimIds` is `undefined` (`buildTurnArgs` gates it on
+                            // `tgt?.position != null`), the `??` falls through, and
+                            // `(tgt !== undefined ? 1 : 0)` records a footprint of **0** —
+                            // "this cast hit no enemy" — for the first time on this side, on
+                            // every one of the ~1,695 measured no-victim enemy turns. That is
+                            // the honest reading for a cast that reached nobody, and it is the
+                            // same expression the two player sites have recorded since SP-4d
+                            // Task 8: all three sites read one expression rather than two
+                            // agreeing by construction and one by accident.
+                            enemiesHitThisCastByActor.set(
+                                actor.id,
+                                enemyTurnArgs.aoeVictimIds?.length ?? (tgt !== undefined ? 1 : 0)
+                            );
+                            // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
+                            // its own active self-buffs and the debuffs it landed on the heal target,
+                            // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
+                            // into any sim value. Empty for a bare enemy → no entry recorded for it.
+                            // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
+                            // applied this turn) rather than landedEnemyDebuffs (the shared per-target
+                            // window, which would leak other attackers' debuffs into this enemy's group).
+                            // resistedEnemyDebuffs = the TIMED debuffs THIS enemy attempted but were
+                            // resisted by its hacking-vs-security landing roll (display-only — Task R1).
+                            // resistedEnemyDots = the DoTs THIS enemy attempted this turn that were
+                            // resisted by the SAME landing roll (the whole turn's DoTs share one
+                            // dotsLanded draw — all land or all miss together). Only corrosion/inferno
+                            // are modelled by EnemyDoTState; any bomb entry is skipped (display-only —
+                            // Task R3).
+                            // The guard also fires on resists alone so a fully-resisted enemy (nothing
+                            // landed) still gets an entry and surfaces its resisted debuffs/DoTs.
+                            const resistedEnemyDots: EnemyDoTState[] =
+                                !enemyTurn.dotsLanded && enemyTurn.dotsConfig.length > 0
+                                    ? enemyTurn.dotsConfig
+                                          .filter(
+                                              (d) => d.type === 'corrosion' || d.type === 'inferno'
+                                          )
+                                          .map((d) => ({
+                                              type: d.type as 'corrosion' | 'inferno',
+                                              tier: d.tier,
+                                              stacks: d.stacks,
+                                          }))
+                                    : [];
+                            if (
+                                enemyTurn.activeSelfBuffs.length > 0 ||
+                                enemyTurn.inflictedEnemyDebuffs.length > 0 ||
+                                enemyTurn.resistedEnemyDebuffs.length > 0 ||
+                                resistedEnemyDots.length > 0
+                            ) {
+                                let entry = roundEnemyEffects.get(actor.id);
+                                if (!entry) {
+                                    entry = {
+                                        selfBuffs: [],
+                                        debuffs: [],
+                                        resistedDebuffs: [],
+                                        resistedDots: [],
+                                    };
+                                    roundEnemyEffects.set(actor.id, entry);
+                                }
+                                entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                                entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
+                                entry.resistedDebuffs.push(...enemyTurn.resistedEnemyDebuffs);
+                                entry.resistedDots.push(...resistedEnemyDots);
+                            }
+                            // Extra-action grants: bump this enemy's pending-action count so it is re-picked
+                            // for an extra turn (full-actor completeness — mirrors the attacker and walked-team branches).
+                            // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
+                            // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
+                            // undefined (enemy's "allies" are enemy-side, not the player team).
+                            processExtraActionGrants(actor, enemyTurn.extraActionGrants);
                             // ── SP-4b-2 D6, task-18 finding 3: the enemy's passive-slot instance is
                             // STAGED HERE, OUTSIDE the `damage > 0` gate below ──────────────────
                             // Team symmetry is LOCKED, and the two player-side sites stage theirs
@@ -10881,8 +10727,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         tb,
                                         {
                                             tgt,
-                                            pattern: enemyPattern!,
-                                            target: enemyTarget!,
+                                            // No `!` needed: `enemyPositional` is a const whose
+                                            // conjunction includes both non-null checks, so the
+                                            // gate above narrows them (it could not while these
+                                            // were `let`s written inside a nested block).
+                                            pattern: enemyPattern,
+                                            target: enemyTarget,
                                             preTurnVictimStatus: enemyPreTurnVictimStatus,
                                             scalars: enemyScalars!,
                                             hitCrits: enemyHitCrits,
