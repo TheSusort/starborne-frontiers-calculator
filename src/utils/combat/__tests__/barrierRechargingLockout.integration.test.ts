@@ -111,7 +111,6 @@ describe('Barrier Recharging: real 3-turn cooldown (re-arm gate)', () => {
             grantExtraAction: () => {},
             playerIds,
             lastTurnCtxByActor: new Map(),
-            enemyHp: 100000,
             recordResisted: () => {},
             // FIX 3: now required — this suite has no live-HP view, so "nobody" is the honest
             // answer, supplied explicitly rather than by omission.

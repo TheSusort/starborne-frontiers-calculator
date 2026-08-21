@@ -1427,13 +1427,18 @@ export function registerReactiveListeners(args: {
  *  effective-attack/affinity) come from `runtimes.get(intent.ownerId)` and
  *  `lastTurnCtxByActor.get(intent.ownerId)` — NOT from a single attacker.
  *
- *  ⚠️ DELETING A FIELD HERE: `tsc` is NOT a completeness proof for this type (#342). Around a dozen
- *  test fixtures build their ctx as `{ … } as unknown as IntentExecContext`, and a double cast
- *  through `unknown` disables excess-property checking — so a fixture that keeps setting a deleted
- *  field compiles clean forever, and nothing will ever say so. SP-4d leaned on "a missed site is a
- *  compile error, not a silent survivor" and left 12 dead `enemyHp` properties across 8 files
- *  behind (#342 removed them; their `cumulativeDamage` siblings had been removed by hand in the
- *  same rung, which is what made the omission look deliberate).
+ *  ⚠️ DELETING A FIELD HERE: `tsc` is NOT a completeness proof for this type (#342). Test fixtures
+ *  build their ctx with a CAST — 17 sites use `as unknown as IntentExecContext` and 11 use a plain
+ *  `as IntentExecContext` — and BOTH forms suppress excess-property checking, so a fixture that
+ *  keeps setting a deleted field compiles clean forever and nothing will ever say so. SP-4d leaned
+ *  on "a missed site is a compile error, not a silent survivor" and left 14 dead `enemyHp`
+ *  properties across 10 files behind (#342 removed them; their `cumulativeDamage` siblings had been
+ *  removed by hand in the same rung, which is what made the omission look deliberate).
+ *
+ *  ⚠️⚠️ AND #342 ITSELF FIRST SWEPT ONLY THE DOUBLE-CAST FORM, because that is the shape the issue
+ *  quoted — leaving 2 survivors behind the single-cast one (CodeRabbit caught one of the two on the
+ *  PR). Enumerate the cast FORMS before trusting a grep:
+ *  `grep -rl "as IntentExecContext\|as unknown as IntentExecContext" src`.
  *
  *  So when you delete a field from this interface: GREP the fixtures for the field name as well as
  *  running `tsc`. Scope the grep — `enemyHp` is still a live field on `CombatEngineInput`, which is
