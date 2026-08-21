@@ -91,6 +91,31 @@ export interface VictimDefenseProfile {
 }
 
 /**
+ * The DEFENCE factor this victim applies to an incoming hit — the `(1 − damageReduction/100)`
+ * term of `victimHitDamage` below, isolated so a consumer that needs to UNDO the mitigation can
+ * read the exact factor that was applied instead of re-deriving one from the victim's live stats.
+ *
+ * The engine's Protection cascade is that consumer: it recovers the pre-defence amount `P` from
+ * an already-mitigated hit (`P = damage / targetMitigation`) so a redirected chunk can be
+ * re-mitigated on the PROTECTOR's defence. A re-derivation there silently omitted whatever the
+ * caller had folded in — the attacker's defence penetration, and the difference between the
+ * victim's raw and buff-folded defence stat — and skewed every chunk. Exported so the two can
+ * never drift again: `victimHitDamage` applies this and nothing else as its defence term.
+ *
+ * @param v    this victim's defensive profile (defence + defenceModifierPct)
+ * @param defensePenetrationPct the ATTACKER's effective defence penetration, percent
+ */
+export function victimDefenceMitigation(
+    v: VictimDefenseProfile,
+    defensePenetrationPct: number
+): number {
+    const effectiveDefense =
+        v.defence * (1 + v.defenceModifierPct / 100) * (1 - defensePenetrationPct / 100);
+    const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
+    return 1 - damageReduction / 100;
+}
+
+/**
  * Damage dealt to a single victim by ONE hit of a multi-hit skill.
  *
  * @param s        attacker-side scalars (fixed across victims)
@@ -112,10 +137,9 @@ export function victimHitDamage(
     const preCritDamage = s.effectiveAttack * (s.multiplierPct / 100) + s.secondaryStatValue;
     const perHitShare = s.hits > 0 ? preCritDamage / s.hits : 0;
 
-    // Per-VICTIM defense (mirrors playerTurn.ts:1115-1117).
-    const effectiveDefense =
-        v.defence * (1 + v.defenceModifierPct / 100) * (1 - s.defensePenetrationPct / 100);
-    const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
+    // Per-VICTIM defense (mirrors playerTurn.ts:1115-1117). Delegated to victimDefenceMitigation
+    // so the engine's Protection cascade can divide by the SAME factor this applies.
+    const defenceMitigation = victimDefenceMitigation(v, s.defensePenetrationPct);
 
     // Per-VICTIM affinity (attacker vs this victim), matching computeAffinityModifiers.
     // SP-F F4: a forced-affinity override supersedes the real matchup — offensive advantage
@@ -141,7 +165,7 @@ export function victimHitDamage(
     // divergence from a single-victim (delta === 0) evaluation.
     const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
     const nonCritFactor =
-        (1 - damageReduction / 100) * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
+        defenceMitigation * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
 
     const hitCritMultiplier = 1 + (didCrit ? 1 : 0) * (s.effectiveCritDamage / 100);
 

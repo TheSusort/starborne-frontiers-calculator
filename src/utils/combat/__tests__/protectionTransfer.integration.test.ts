@@ -141,6 +141,20 @@ const reactiveEventsTargeting = (input: CombatEngineInput, id: string): number =
     return n;
 };
 
+/** The `amount` of every reactive-damage-performed event targeting `id`, in emission order. */
+const reactiveAmountsTargeting = (input: CombatEngineInput, id: string): number[] => {
+    const bus = createEventBus();
+    const amounts: number[] = [];
+    bus.on(
+        'reactive-damage-performed',
+        (e: Extract<CombatEvent, { type: 'reactive-damage-performed' }>) => {
+            if (e.targetId === id) amounts.push(e.amount);
+        }
+    );
+    runCombat({ ...input, bus });
+    return amounts;
+};
+
 const ENEMY_ATTACK = 1000;
 const PROTECTOR_DEFENCE = 300; // < victim defence (0) so the redirected chunk is amplified.
 const mit = (defence: number): number =>
@@ -204,10 +218,37 @@ describe('Protection damage transfer (integration)', () => {
         // …and it is genuinely re-mitigated (protector defence > 0 → chunk < the raw 30% slice).
         expect(protectorWith).toBeLessThan(0.3 * ENEMY_ATTACK);
 
-        // One aggregate reactive-damage-performed surfaces per protector (the per-stack sub-hits
-        // are applied via recursive applyVictimDamage but the HP-curve/log surface is one event
-        // carrying chunk.total — see the wiring; the brief's "one per stack" comment is inaccurate).
-        expect(reactiveEventsTargeting(withProtector(true), 'attacker')).toBe(1);
+        // One reactive-damage-performed per redirected SUB-HIT (3 stacks → 3 rows), matching what
+        // the game shows the player. See the dedicated per-stack test below for the amounts.
+        expect(reactiveEventsTargeting(withProtector(true), 'attacker')).toBe(3);
+    });
+
+    it('a 3-stack protector logs THREE reactive-damage rows (one per redirected sub-hit), each carrying that sub-hit’s own booked intake', () => {
+        // The game shows N separate procs for an N-stack protector ("4643 ×3" as three rows), not
+        // one aggregate. The engine already APPLIES the chunk as `stacks` separate sub-hits; this
+        // pins that the LOG surfaces them one-for-one.
+        const build = (stacks: number): CombatEngineInput =>
+            BASE_INPUT({
+                selfBuffs: [protectionAccum(stacks)],
+                teamActors: [teamActor('ally-1', 0)],
+                enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+            });
+
+        const amounts = reactiveAmountsTargeting(build(3), 'attacker');
+        expect(amounts).toHaveLength(3);
+
+        // Each row carries its OWN sub-hit intake (chunk.total / 3), not the aggregate.
+        const expectedChunk = 0.3 * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+        for (const a of amounts) expect(a).toBeCloseTo(expectedChunk / 3, 4);
+        // …and the rows still sum to the full chunk — the display split moved no total.
+        expect(amounts.reduce((s, a) => s + a, 0)).toBeCloseTo(expectedChunk, 4);
+        // The per-row amount is genuinely a THIRD, not the aggregate repeated (the instrument
+        // would fail if the emission had simply been duplicated N times).
+        expect(amounts[0]).toBeLessThan(expectedChunk * 0.9);
+
+        // The count tracks the STACK count, so it is reading the sub-hit loop and not a constant:
+        // a 1-stack protector still logs exactly one row.
+        expect(reactiveAmountsTargeting(build(1), 'attacker')).toHaveLength(1);
     });
 
     it('redirect keeps the TARGET affinity, not the protector matchup', () => {
@@ -746,6 +787,160 @@ describe('Protection transfer — enemy-side symmetry (protector + victim on the
         // The protector actually took damage (the redirect fired), not a zero no-op.
         expect(protectorWith).toBeGreaterThan(0);
     });
+
+    it('recovers the pre-defence amount using the mitigation the CALLER applied, including the attacker’s defence PENETRATION', () => {
+        // The cascade recovers `P` (the pre-defence hit) by dividing the mitigated `damage` the
+        // caller handed the funnel by the target's mitigation factor. If the funnel re-derives
+        // that factor instead of being told it, any mitigation term the caller applied but the
+        // funnel does not model skews P — and with it every protector chunk. Defence PENETRATION
+        // is exactly such a term: the caller mitigates on `defence × (1 − pen/100)`, the funnel's
+        // old recompute read the raw defence.
+        //
+        // `P` is invariant here BY CONSTRUCTION: no crit, no affinity edge, no outgoing/incoming
+        // modifiers, multiplier 1× — so the pre-defence amount is exactly the focus's attack stat,
+        // whatever mitigation the victim ends up applying. That makes `0.3 × FOCUS_ATTACK ×
+        // mit(D_p)` the correct chunk for BOTH the pen and the no-pen run, which is what the
+        // control below pins.
+        const FOCUS_ATTACK = ENEMY_ATTACK;
+        const VICTIM_DEFENCE = 500;
+
+        const build = (pen: number): CombatEngineInput => ({
+            attack: FOCUS_ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: pen,
+            chargeCount: 0,
+            shipSkills: { slots: [positionalBasicAttack()] },
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            mode: 'healing',
+            position: 'M4',
+            target: parsedTargetFront,
+            pattern: basePattern,
+            enemyAttackers: [
+                {
+                    id: 'enemy-front',
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: VICTIM_DEFENCE, // non-zero, so penetration actually changes the mitigation
+                        hp: 1_000_000_000,
+                        speed: 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M4',
+                    shipSkills: { slots: [] },
+                },
+                {
+                    id: 'enemy-protector',
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: PROTECTOR_DEFENCE,
+                        hp: 1_000_000_000,
+                        speed: 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: { slots: [protectionAuraPassive(3)] },
+                },
+            ],
+        });
+
+        const expectedChunk = 0.3 * FOCUS_ATTACK * mit(PROTECTOR_DEFENCE);
+
+        // Control (no penetration): the funnel's recompute and the caller's read agree, so this
+        // arm passes both before and after the fix. It is here to prove the oracle above is the
+        // right number, not an arbitrary constant.
+        const noPenVictim = totalIncoming(build(0), 'enemy-front');
+        expect(noPenVictim).toBeCloseTo(0.7 * FOCUS_ATTACK * mit(VICTIM_DEFENCE), 4);
+        expect(totalIncoming(build(0), 'enemy-protector')).toBeCloseTo(expectedChunk, 4);
+
+        // With 50% penetration the caller mitigates on HALF the victim's defence — proven by the
+        // victim's own remainder, which must track mit(250), not mit(500). (Without this the
+        // fixture could be vacuous: a penetration that never reached the damage read would leave
+        // both arms identical and the assertion below meaningless.)
+        const penVictim = totalIncoming(build(50), 'enemy-front');
+        expect(penVictim).toBeCloseTo(0.7 * FOCUS_ATTACK * mit(VICTIM_DEFENCE / 2), 4);
+        expect(penVictim).toBeGreaterThan(noPenVictim);
+
+        // THE CORE ASSERTION: the protector's chunk is still 30% of the SAME pre-defence amount.
+        // Pre-fix the funnel recovered P from mit(500) while the caller had used mit(250),
+        // inflating the chunk by mit(250)/mit(500) ≈ 1.071.
+        expect(totalIncoming(build(50), 'enemy-protector')).toBeCloseTo(expectedChunk, 4);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// The mitigation the cascade divides by must be the mitigation the CALLER applied — not a value
+// the funnel re-derives from the victim's live stats. The two used to be computed independently
+// and drifted for any victim whose mitigation the caller sourced differently from
+// `effectiveStatsOf(...).defence`.
+describe('Protection transfer — the cascade divides by the caller’s own mitigation', () => {
+    /** A plain (non-accumulating) self-buff that raises the owner's Defense by `pct`%. */
+    const defenceUp = (pct: number): SelectedGameBuff => ({
+        id: 'def-up-1',
+        buffName: 'Defense Up',
+        stacks: 1,
+        parsedEffects: { defense: pct },
+        isStackable: false,
+    });
+
+    const VICTIM_DEFENCE = 500;
+
+    /** The FOCUS is the victim here (it is the only actor in this harness that reliably carries a
+     *  SCHEDULED self-buff — see the file header), sitting front-most in row M so the enemy's
+     *  `front` selection binds to it; the protector is an aura-granted team actor behind it. */
+    const build = (buffed: boolean): CombatEngineInput =>
+        BASE_INPUT({
+            selfBuffs: buffed ? [defenceUp(100)] : [],
+            defence: VICTIM_DEFENCE,
+            position: 'M4',
+            healTargetId: 'attacker',
+            teamActors: [
+                {
+                    ...teamActor('prot-1', PROTECTOR_DEFENCE, [protectionAuraPassive(3)]),
+                    position: 'M1',
+                },
+            ],
+            enemyAttackers: [{ ...manualEnemy('enemy-1', ENEMY_ATTACK), position: 'T1' }],
+        });
+
+    it('a defence-BUFFED victim does not inflate its protector’s chunk', () => {
+        // `P` (pre-defence) is ENEMY_ATTACK by construction — no crit, no affinity, no
+        // outgoing/incoming modifiers — so the protector's chunk is 0.3 × ENEMY_ATTACK × mit(D_p)
+        // regardless of what the victim's own mitigation turns out to be.
+        const expectedChunk = 0.3 * ENEMY_ATTACK * mit(PROTECTOR_DEFENCE);
+
+        // Control: unbuffed. Passes before and after the fix — it pins the oracle.
+        expect(totalIncoming(build(false), 'prot-1')).toBeCloseTo(expectedChunk, 4);
+
+        // Non-vacuity: the buff changes the victim's LIVE effective defence (that is what the
+        // funnel's old recompute read), even though the caller's damage read did not move. Both
+        // facts have to hold for this fixture to be measuring the divergence it claims.
+        const unbuffedVictim = totalIncoming(build(false), 'attacker');
+        const buffedVictim = totalIncoming(build(true), 'attacker');
+        expect(unbuffedVictim).toBeCloseTo(0.7 * ENEMY_ATTACK * mit(VICTIM_DEFENCE), 4);
+        expect(buffedVictim).toBeCloseTo(unbuffedVictim, 6);
+
+        // THE CORE ASSERTION. Pre-fix the funnel divided by mit(1000) (the buffed live stat) while
+        // the caller had mitigated with mit(500), inflating the chunk by ≈12.8%.
+        expect(totalIncoming(build(true), 'prot-1')).toBeCloseTo(expectedChunk, 4);
+    });
 });
 
 // ───────────────────────────────────────────────────────────────────────────────────────
@@ -968,6 +1163,13 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
         const tickSum = genericDotSum(input, 'prot-1');
         const expectedChunk = 0.3 * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
         expect(tickSum).toBeCloseTo(expectedChunk, 4);
+
+        // …and NOTHING is logged as instant redirected damage. The per-sub-hit emission (one row
+        // per redirected stack) must still suppress the float sliver a fully transformed sub-hit
+        // leaves behind: three phantom ~1e-10 rows would be three lies in the log. The same helper
+        // reports 3 for an untransformed 3-stack protector (see the per-stack test above), so a
+        // zero here is a real suppression, not a dead instrument.
+        expect(reactiveEventsTargeting(input, 'prot-1')).toBe(0);
     });
 
     it('ENEMY side (team symmetry): identical redirect-to-DoT behavior when the protector + victim are on the ENEMY side', () => {
@@ -1266,9 +1468,13 @@ describe('per-victim damage accounting under a Protection redirect (positional)'
                 c.incoming['prot-1'].shieldAbsorbed -
                 c.incoming['prot-1'].barrierAbsorbed
         ).toBeCloseTo(0, 6);
-        // The redirect is no longer silent in the log either: the row that explains where the
-        // protector's barrier absorption came from now fires.
-        expect(reactiveEventsTargeting(fixture([activeSelfBuffSlot('Barrier')]), 'prot-1')).toBe(1);
+        // The redirect is no longer silent in the log either: the rows that explain where the
+        // protector's barrier absorption came from now fire — one per redirected sub-hit, because
+        // Barrier leaves each sub-hit's `.incoming` recorded (it is netted out by barrierAbsorbed,
+        // not un-booked), so every sub-hit clears the phantom threshold.
+        expect(reactiveEventsTargeting(fixture([activeSelfBuffSlot('Barrier')]), 'prot-1')).toBe(
+            PROT_STACKS
+        );
     });
 
     it('still books nothing for a chunk the protector’s own block ability fully absorbed', () => {

@@ -4,6 +4,7 @@ import { resolveCells, type CellRole } from '../targeting/resolvePattern';
 import { resolvePositionalTarget, type ActorTargetingStatus } from './positionalBinding';
 import {
     victimHitDamage,
+    victimDefenceMitigation,
     type AttackerDamageScalars,
     type VictimDefenseProfile,
 } from './victimDamage';
@@ -247,7 +248,17 @@ export function applyPositionalDamage(args: {
         victim: CombatActor,
         damage: number,
         isAnchor?: boolean,
-        subAttackIndex?: number
+        subAttackIndex?: number,
+        /**
+         * The DEFENCE mitigation factor already folded into `damage` for THIS victim
+         * (`victimDefenceMitigation(defenseProfileOf(victim), scalars.defensePenetrationPct)`).
+         * Handed down rather than re-derived downstream so the engine's Protection cascade can
+         * recover the pre-defence amount by dividing by the factor that was actually applied —
+         * a re-derivation from the victim's live stats omits the attacker's penetration and
+         * reads a buff-folded defence the caller never used. Trailing and optional so existing
+         * stub callers compile unchanged.
+         */
+        targetMitigation?: number
     ) => VictimDamageOutcome;
     emitHit?: (
         victim: CombatActor,
@@ -401,16 +412,25 @@ export function applyPositionalDamage(args: {
                 subCritVictimIds.push(victim.id);
             }
             const equipReductionPct = incomingReductionFor?.(victim, didCrit, h) ?? 0;
+            // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
+            // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
+            const defenseProfile = defenseProfileOf(victim);
             const dmgBase = victimHitDamage(
                 scalars,
-                defenseProfileOf(victim),
+                defenseProfile,
                 didCrit,
                 roleScale,
                 equipReductionPct
             );
             const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
-            const outcome = applyToVictim(victim, dmg, isAnchor, h);
+            const outcome = applyToVictim(
+                victim,
+                dmg,
+                isAnchor,
+                h,
+                victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct)
+            );
             // Credit the victim the intake the funnel actually RECORDED for it, not the hit we
             // computed. The two differ whenever the funnel altered the hit before recording it: a
             // Protection cascade diverted a chunk to an ally (booked on that ally's own row by the
