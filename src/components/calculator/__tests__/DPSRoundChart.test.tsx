@@ -232,13 +232,6 @@ describe('DPSRoundChart surfaces walked-team damage from a real page-shaped run'
             el?.textContent?.trim() === expected;
         // #331: `teamDamage` is the WHOLE SIDE's round output, so the row prints it as the round
         // total and breaks out the allies' share (side total − this ship's own round damage).
-        // eslint-disable-next-line no-console
-        console.error(
-            'VIOLET:',
-            JSON.stringify(
-                [...document.querySelectorAll('.text-violet-400')].map((e) => e.textContent)
-            )
-        );
         const focusRound = result.rounds[round - 1].totalRoundDamage;
         const alliesShare = teamDamage - focusRound;
         expect(alliesShare).toBeGreaterThan(0);
