@@ -96,6 +96,45 @@ const enemyDebuffer = (id: string, name: string, attack: number): Ship => ({
         'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns.',
 });
 
+/**
+ * The differential oracle's SOLO baseline: `subject` ALONE on the player side, facing the
+ * caller's OWN enemy roster verbatim.
+ *
+ * Why this exists (and why the canned `buildStandardScenario` is wrong for it): the differential
+ * oracle asks "does this ship behave differently when it has ALLIES?". Answering that requires
+ * the two arms to differ in exactly one variable — the allies. Baselining against
+ * `buildStandardScenario` changed TWO: it swapped the allies out AND swapped the opponents
+ * (three canned fillers at security 20, fixed affinities, fixed attack) for the composition's
+ * real random-corpus enemies. Opponent variance then reads as ally interference. That confound
+ * produced real false positives: at seed 335 a Makoli differential whose own ddmin had reduced
+ * the composition to `player:[Makoli]` — literally zero allies, so ally interference was
+ * impossible by construction — still reported `missing:[cleanse]` against the canned baseline.
+ * Re-run against the composition's own enemies, the same case collapses to no diff at all.
+ *
+ * Consequences worth knowing before using this:
+ *  - The subject keeps its composition POSITION and `statOverrides` (the placement is passed
+ *    through unchanged), so the only board difference is the absent allies.
+ *  - The subject becomes `playerTeam[0]`, i.e. the engine's reserved focus id `'attacker'`. It
+ *    was already the focus under `buildStandardScenario`, so this does NOT change (or fix) the
+ *    focus-vs-walked instrumentation asymmetry — that stays a separate problem handled by the
+ *    caller's excluded-kind restriction.
+ *  - Alone against four real enemies, a fragile subject dies where it survived in the
+ *    composition. That is a genuine loss of comparable placements, not a bug here; the caller's
+ *    survived-the-whole-battle guard is what drops those.
+ *
+ * Pure: builds an input, runs nothing. The caller must run both arms under the SAME seed.
+ */
+export function buildSameEnemyBaseline(
+    subject: BattlePlacement,
+    enemyTeam: BattlePlacement[],
+    rounds?: number
+): BattleSimulationInput {
+    if (enemyTeam.length === 0) {
+        throw new Error('buildSameEnemyBaseline: enemyTeam is empty');
+    }
+    return { playerTeam: [subject], enemyTeam: [...enemyTeam], rounds };
+}
+
 export function buildStandardScenario(reviewed: Ship, overrides: ScenarioOverrides = {}): BattleSimulationInput {
     const hpScale = overrides.reviewedHpScale ?? 1;
     const atkScale = overrides.enemyAttackScale ?? 1;
