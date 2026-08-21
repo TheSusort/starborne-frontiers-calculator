@@ -1,6 +1,11 @@
 import { PLACEMENTS, type Placement, type PlacementDiff } from '../../src/utils/combat/audit/types';
 
-const DEFAULT_SEEDS = 5;
+/** Raised 5 -> 30 (2026-08-21). K=5 is a false-positive generator: it produced 12 findings where
+ *  K=15 produced 2, and the Enforcer `debuff-resisted` triage measured the `focus` path needing 24
+ *  seeds before it was observed AT ALL — so a small union reads a landing-RNG artifact as a
+ *  one-sided path gap. K=30 (~6 min at ~11.8s/seed, from 67s) is the floor that clears that
+ *  artifact. See enforcerDebuffResistedNoise.test.ts. */
+const DEFAULT_SEEDS = 30;
 
 function parsePositiveIntArg(flag: string, raw: string | undefined): number {
     const n = Number(raw);

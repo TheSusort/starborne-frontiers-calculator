@@ -25,7 +25,7 @@ const diff: PlacementDiff = {
 
 describe('parsePlacementArgs', () => {
     it('defaults to 5 seeds', () => {
-        expect(parsePlacementArgs([]).seeds).toBe(5);
+        expect(parsePlacementArgs([]).seeds).toBe(30);
     });
 
     it('parses --seeds and --base-seed', () => {
@@ -36,7 +36,7 @@ describe('parsePlacementArgs', () => {
     });
 
     it('ignores unrecognized tokens', () => {
-        expect(parsePlacementArgs(['--nope', 'x']).seeds).toBe(5);
+        expect(parsePlacementArgs(['--nope', 'x']).seeds).toBe(30);
     });
 
     it('rejects a non-numeric --seeds, naming the offending token', () => {
