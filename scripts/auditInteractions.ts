@@ -3,7 +3,7 @@ import { parseAuditArgs } from './lib/auditArgs';
 import { loadShipSkillRecords, csvAvailable } from './lib/shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from './lib/shipDataSnapshot';
 import { buildTraceShip } from './lib/traceShipFactory';
-import { buildStandardScenario } from './lib/traceScenario';
+import { buildInertAllyBaseline } from './lib/traceScenario';
 import { writeLedger } from './lib/interactionLedger';
 import { tagShip } from '../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../src/utils/combat/audit/compose';
@@ -20,6 +20,7 @@ import type {
     BattleSimulationInput,
 } from '../src/utils/calculators/battleSimulator';
 import type { Position } from '../src/types/encounters';
+import type { Ship } from '../src/types/ship';
 
 // ---------------------------------------------------------------------------
 // Corpus loading — same pattern as compose.test.ts's buildTaggedCorpus: names collected from
@@ -76,47 +77,157 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 }
 
 // ---------------------------------------------------------------------------
-// Focus-vs-walked fingerprint fix (a): the engine's focus actor (playerTeam[0], reserved id
-// 'attacker') rides richer top-level instrumentation than a walked ally (`p:<id>:<idx>`), so a
-// ship's solo fingerprint (always as focus, via buildStandardScenario) vs its composition
-// fingerprint (as whichever slot composeBattle drew it into) can differ purely from
-// instrumentation, not real interference. FOCUS_ONLY_KINDS is populated by the calibration gate
-// BEFORE any fuzzing: it runs the raw (unrestricted) differential across an inert-only battery,
-// and since inert ships (empty class tag set) have no interaction primitives, ANY diff kind that
-// shows up there is by construction harness noise, never a real behavioural difference. The
-// filtering is order-independent — filtering the diff's missing/extra arrays after the fact is
-// equivalent to filtering the underlying kind sets before diffing — so this stays a cheap
-// post-hoc filter rather than a re-fingerprint.
+// Focus-vs-walked fingerprint fix (a) — HISTORY, and why the name outlived the problem. The
+// engine's focus actor (playerTeam[0], reserved id 'attacker') rides richer top-level
+// instrumentation than a walked ally (`p:<id>:<idx>`). Every earlier baseline took the subject's
+// fingerprint as playerTeam[0] while the composition took it at whatever slot composeBattle drew,
+// so the two could differ purely from instrumentation. FOCUS_ONLY_KINDS is populated by the
+// calibration gate BEFORE any fuzzing: it runs the raw (unrestricted) differential across an
+// inert-only battery, and since inert ships (empty class tag set) have no interaction primitives,
+// ANY diff kind that shows up there is by construction harness noise, never a real behavioural
+// difference. The filtering is order-independent — filtering the diff's missing/extra arrays after
+// the fact is equivalent to filtering the underlying kind sets before diffing — so this stays a
+// cheap post-hoc filter rather than a re-fingerprint.
+//
+// `buildInertAllyBaseline` RETIRES that specific asymmetry: the subject keeps its array index, so
+// focus stays focus, a walked ally stays walked, and the actor id is byte-identical between the
+// arms — which also stops the ownerId-keyed rate-gate RNG re-drawing every crit and landing roll.
+// (Asserted end-to-end, at every player index, in
+// scripts/lib/__tests__/differentialBaseline.regression.test.ts.)
+//
+// The exclusion set nonetheless survived recalibration under the new baseline, and by a wider
+// margin than before — see the leave-one-out table below. What it is filtering is no longer an
+// instrumentation or opponent artifact; it is the last remaining mechanism, RECIPIENT ATTRIBUTION,
+// described in the next block. The constant keeps its historical name so the git history stays
+// searchable; do not read it as a claim about which mechanism is active.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// THE BASELINE (2026-08-21) — `buildInertAllyBaseline`, not the canned `buildStandardScenario`.
+// Read that function's docstring for the mechanism; what follows is the measurement, because it
+// changes how the numbers further down should be read. THREE designs were built and measured, and
+// the middle one is recorded here because its failure mode is the instructive part.
+//
+// (1) CANNED (original) — `buildStandardScenario`: three synthetic filler enemies at security 20
+//     with fixed affinities and a fixed attack, two canned allies, the subject re-pinned to M4 as
+//     playerTeam[0], a full 30 rounds. Four variables moved at once, so opponent variance read as
+//     ally interference. Not a theory: at seed 300/count 100, SIX of its ten differentials ddmin'd
+//     to a player side of exactly ONE ship — zero allies, ally interference impossible by
+//     construction — and it reported one anyway. Same at seed 1/count 150: 5 of 9.
+// (2) SOLO same-enemy — subject alone against the composition's own enemies. Fixed the opponent
+//     confound and broke something worse: the subject lost the three bodies soaking incoming
+//     attacks and died alone where it had survived in the composition. REJECTED.
+// (3) INERT-ALLY (current) — same cells, same stats, same enemies, same array index, ally KITS
+//     swapped for inert ships. The only variable left is the one under test.
+//
+// Measured across all three on identical seeds. "comparable" is placements where the subject
+// survived BOTH arms; everything else is invisible to the oracle:
+//
+//   seed 1 / count 150      canned            solo              inert
+//     comparable            37/600            10/600            155/600
+//     findings              9                 2                 18
+//   seed 300 / count 100
+//     comparable            29/400             6/400             67/400
+//     findings              10                2                 7
+//   seed 1000 / count 700
+//     comparable            161/2800          21/2800           691/2800
+//     findings              43                7                 108
+//   INERT-ONLY CALIBRATION BATTERY, seed 1 / count 40
+//     comparable            4/160              2/160            52/160
+//
+// Read those two rows together, because the finding COUNT alone is misleading in both directions.
+// Per comparable placement the inert baseline reports 15.6% (108/691) against the canned
+// baseline's 26.7% (43/161) — it removes roughly 40% of the reports as confound — but it inspects
+// 4.3x as many placements, so the absolute triage load goes UP, from 43 to 108 at count 700. That
+// is the intended trade: the canned baseline was cheap because it was blind.
+//
+// The calibration gate is the sharpest of these numbers. It exists to hard-fail when a residual
+// diff survives the restriction, and under the canned baseline it was reaching that verdict from
+// 4 comparisons out of 160. It now reaches it from 52, and those 52 produce 17 raw diffs that the
+// exclusion set filters — so the gate is now actually exercising the thing it certifies instead of
+// passing because it saw nothing.
+//
+// Because "no diff" and "never compared" are indistinguishable in the output, both the calibration
+// gate and the fuzz loop print their comparable-placement count, with an explicit VACUOUS warning
+// at zero. That instrumentation is what made design (2)'s failure visible instead of silent, and
+// it is the reason it never shipped.
+//
+// The seed-335 Makoli case is pinned as a regression in
+// scripts/lib/__tests__/differentialBaseline.regression.test.ts, both arms asserted, along with
+// the property the whole design turns on: the subject mints the SAME actor id in both arms at
+// every player index.
 // ---------------------------------------------------------------------------
 
 // Empirically (see the Task 10 report), the dominant source of inert-battery noise turned out
 // NOT to be pure actor-slot instrumentation but a broader class of "externally-driven" kinds —
 // confirmed by reading buildCombatLog.ts's event→entry mapping: each of these kinds is logged
 // under the RECIPIENT/VICTIM's actorId, not the caster's, so its presence reflects what OTHER
-// ships in the battle did to this one (which necessarily differs between the canned
-// buildStandardScenario opponents and composeBattle's real random-corpus opponents), not this
-// ship's own kit logic:
-//   - 'death'/'cheat-death'   — whether incoming damage was lethal this run (opponent power)
+// ships in the battle did to this one, not this ship's own kit logic:
+//   - 'death'/'cheat-death'   — whether incoming damage was lethal this run
 //   - 'buff-expired'          — books to the RECIPIENT: no granter is tracked at expiry time, so
 //                               unlike its `buff` counterpart (granter-attributed, see below)
 //                               this fires whenever ANY other unit's buff on this ship runs out
 //   - 'debuff-resisted'       — actorId = e.sourceId ?? e.targetId; even when this ship is the
-//                               caster, "resisted or not" hinges on the TARGET's security stat,
-//                               which varies hugely between canned (security 20) and real corpus
-//                               opponents
+//                               caster, "resisted or not" hinges on the TARGET's security stat
+//                               and on a landing roll
 //   - 'dot-ticked'/'detonation' — actorId = e.targetId (victim of someone else's DoT)
 //   - 'shield-destroyed'      — actorId = e.victimId (shield broken by incoming damage)
 // Seeded here so calibration doesn't depend on a single small battery happening to sample every
 // one of these; the calibration gate still empirically tops this set up (and hard-fails if a
 // residual diff survives even the top-up) rather than trusting the seed blindly.
 //
-// CORRECTED (review): this set is NOT superseded by the `survivedWholeBattle` guard below and is
-// NOT dead weight — the two fixes solve different problems. `survivedWholeBattle` only handles
+// UPDATED for the inert-ally baseline. The mechanism these exclusions were originally justified
+// by — "the canned opponents at security 20 differ from the real corpus opponents" — is GONE, and
+// so are three more: both arms now face the identical enemy roster, on identical cells, with
+// identical stats and turn order, and the subject holds the same array index so its actor id (and
+// therefore its rate-gate RNG sub-stream) does not change. Every confound the previous two designs
+// leaned on has been removed.
+//
+// The exclusions survive anyway, on the mechanism the ORIGINAL rationale named and nothing since
+// has touched: RECIPIENT ATTRIBUTION. Each of these kinds books to the recipient/victim, so it
+// reports what OTHER ships did to the subject — and swapping interacting allies for inert ones
+// genuinely changes that. An ally that buffs the subject makes `buff-expired` fire on it later; an
+// ally that cleanses the subject's DoT stops `dot-ticked`; an ally that shields it produces
+// `shield-destroyed`. Those are ally EFFECTS ON the subject, not the subject's own kit behaving
+// differently, which is what the oracle is supposed to report.
+//
+// RECALIBRATION, leave-one-out over the SAME battles (drop exactly one kind from the exclusion
+// set, re-restrict the already-collected raw diffs, count the extra findings). Re-run on the
+// inert-ally baseline at seed 1/count 150 (18 findings, 155 comparable), seed 300/count 100 (7
+// findings, 67 comparable) and seed 1000/count 700 (108 findings, 691 comparable, 316 raw diffs):
+//     kind              extra findings if dropped (s1c150 / s300c100 / s1000c700)   verdict
+//     death                       +0 /  +0 /   +0    keep — UNREACHABLE, not cleared (see below)
+//     cheat-death                 +0 /  +0 /   +1    keep — load-bearing, if only just
+//     buff-expired               +44 / +11 / +137    keep — by far the largest single contributor
+//     debuff-resisted            +14 /  +5 /  +48    keep
+//     dot-ticked                  +9 /  +4 /  +32    keep
+//     detonation                  +1 /  +0 /   +0    keep
+//     shield-destroyed            +5 /  +6 /  +24    keep
+//
+// So the answer to "can any of them come back now that the confounds are gone" is NO — and more
+// firmly than before the change, not less. Retiring the whole set would take seed 1000/count 700
+// from 108 findings to 316. The one honest asterisk is `death`: `survivedWholeBattle` requires the
+// subject alive at the last round of BOTH runs, so a comparable subject essentially cannot emit
+// `death` at all. Its +0 means the entry is inert, not that it was tested and cleared. Removing an
+// inert entry buys nothing, so it stays.
+//
+// This recalibration is on a much LARGER sample than the pre-change numbers below (691 comparable
+// placements against 161), so unlike the earlier rounds it is not sample-starved. `buff` stays OUT
+// of the set — it is granter-attributed, so a `buff` diff is the subject's own grant behaviour
+// changing — but note its earlier justification ("appeared in ZERO raw diffs at count 150") is now
+// stale: it appears in 20 raw diffs at seed 1000/count 700. The reason to keep it out is the
+// attribution argument, not that negative.
+//
+// CORRECTED (review): this set is NOT superseded by the `survivedWholeBattle` guard below, nor by
+// the inert-ally baseline — all three solve different problems. `survivedWholeBattle` only handles
 // premature-death cascades (a ship dying early empties its whole remaining kind-set on one side).
-// This exclusion set is what handles opponent-driven log noise: on the REAL 148-ship corpus
-// (not the inert-only calibration battery), forcing this set empty and re-running the
-// differential oracle produces additional opponent-noise differentials that the guard does NOT
-// catch. Both fixes are necessary; neither subsumes the other. Excluding these kinds trades away
+// The inert-ally baseline only equalises everything about the two boards EXCEPT the ally kits.
+// This exclusion set
+// is what handles the log noise that survives both: on the REAL 148-ship corpus (not the inert-only
+// calibration battery), forcing this set empty and re-running the differential oracle produces
+// additional externally-driven differentials that neither of the other two catches — measured again
+// AFTER the baseline change (the leave-one-out table above), not merely asserted. All three are
+// necessary; none subsumes another. Excluding these kinds trades away
 // differential-oracle coverage for them audit-wide — the ablation oracle is unaffected and remains
 // the live signal for bugs in these areas (see the Task 10 report's "Differential sensitivity
 // trade-off" concern).
@@ -133,6 +244,10 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // tokens, and all 31 agreed across the solo and composition arms, so the kind is present and
 // stable rather than simply absent. Confirmed end-to-end at the ledger level too: `--seed 1
 // --count 40` with and without the exclusion writes a BYTE-IDENTICAL ledger.
+//
+// PRE-BASELINE-CHANGE numbers, kept for provenance — these were taken against the canned
+// `buildStandardScenario` baseline and are NOT the current behaviour. The current equivalents are
+// in the leave-one-out table above.
 //
 // The other seven exclusions remain load-bearing over the same corpus: dropping all of them takes
 // seed 1/count 150 from 6 findings to 20. The per-kind numbers below are OCCURRENCE counts across
@@ -158,7 +273,12 @@ function rosterPosition(result: BattleResult, actorId: string | undefined): Posi
 // noise by construction). It does NOT run a "guard-only, no exclusions" configuration against the
 // real corpus, so calibration passing clean is not evidence that the exclusion set could safely
 // be dropped — the 6→20 regression above only shows up when actually fuzzing the real corpus,
-// which calibration by design does not do. Note the converse also held for 'buff': calibration was
+// which calibration by design does not do. How much the gate is worth now has a number on it: it
+// compares 52 of 160 placements at seed 1/count 40 (it was 4/160 under the canned baseline and
+// 2/160 under the rejected solo one) and those 52 produce 17 raw diffs the exclusion set filters,
+// so it is genuinely exercising what it certifies. The comparable-placement count is printed on
+// every run for exactly this reason — a gate that inspected nothing used to look identical to a
+// gate that passed. Note the converse also held for 'buff': calibration was
 // clean both with and without it, which is exactly why dropping it required the real-corpus run
 // rather than a calibration pass.
 const BASE_EXCLUDED_KINDS = new Set<string>([
@@ -198,27 +318,50 @@ function survivedWholeBattle(result: BattleResult, actorId: string): boolean {
     return last.ships.find((s) => s.actorId === actorId)?.alive ?? false;
 }
 
-/** Runs the differential oracle for one PLAYER-side placement: builds its standard solo
- *  scenario, runs it under the SAME seed, and diffs solo-as-focus vs its composition slot,
- *  applying the FOCUS_ONLY_KINDS restriction. Returns the RAW (unrestricted) diff alongside the
- *  restricted one so the calibration gate can inspect what got filtered. Returns {null, null}
- *  (not comparable) when the ship died before completing either run — see
- *  `survivedWholeBattle`. */
+/** Runs the differential oracle for one PLAYER-side placement, identified by its INDEX in
+ *  `compInput.playerTeam` (not by object identity — ddmin rebuilds the array, and the index is
+ *  also what decides the subject's actor id): builds the baseline board via
+ *  `buildInertAllyBaseline` — same cells, same stats, same enemies, ally KITS swapped for inert
+ *  ones — runs it under the SAME seed, and diffs baseline vs composition, applying the
+ *  FOCUS_ONLY_KINDS restriction.
+ *
+ *  Returns the RAW (unrestricted) diff alongside the restricted one so the calibration gate can
+ *  inspect what got filtered, plus `comparable` — false when the ship died before completing
+ *  either run (see `survivedWholeBattle`), in which case both diffs are null. `comparable` is NOT
+ *  cosmetic: "no diff" and "never compared" are the same {null, null} to a caller that only reads
+ *  the diffs, so without it a run that compared NOTHING reports exactly like a clean one. That is
+ *  not hypothetical — an intermediate design that emptied the player side instead of neutering it
+ *  drove the comparable rate to 21/2800 while the finding count looked reassuringly small.
+ *
+ *  A corollary of the baseline's shape: a composition whose player side is a single ship diffs
+ *  against a BYTE-IDENTICAL battle and can never produce a finding, which is correct (no allies ⇒
+ *  no ally interference) and is what stops ddmin from "minimizing" a differential down to a solo
+ *  player team. */
 function playerDifferential(
-    placement: BattlePlacement,
+    subjectIndex: number,
+    compInput: BattleSimulationInput,
     compResult: BattleResult,
-    seed: number
-): { raw: FingerprintDiff | null; restricted: FingerprintDiff | null } {
-    const soloInput = buildStandardScenario(placement.ship);
+    seed: number,
+    inertPool: readonly Ship[]
+): { comparable: boolean; raw: FingerprintDiff | null; restricted: FingerprintDiff | null } {
+    const placement = compInput.playerTeam[subjectIndex];
+    const soloInput = buildInertAllyBaseline(
+        compInput.playerTeam,
+        subjectIndex,
+        compInput.enemyTeam,
+        inertPool,
+        seed,
+        compInput.rounds
+    );
     const soloResult = runSeededBattle(soloInput, seed);
-    const soloActorId = resolveActorId(soloResult, 'player', 'M4');
+    const soloActorId = resolveActorId(soloResult, 'player', placement.position);
     const compActorId = resolveActorId(compResult, 'player', placement.position);
 
     if (
         !survivedWholeBattle(soloResult, soloActorId) ||
         !survivedWholeBattle(compResult, compActorId)
     ) {
-        return { raw: null, restricted: null };
+        return { comparable: false, raw: null, restricted: null };
     }
 
     const raw = runDifferential(
@@ -228,7 +371,7 @@ function playerDifferential(
         soloActorId,
         compActorId
     );
-    return { raw, restricted: restrictDiff(raw) };
+    return { comparable: true, raw, restricted: restrictDiff(raw) };
 }
 
 // ---------------------------------------------------------------------------
@@ -243,17 +386,32 @@ function playerDifferential(
 interface CalibrationResult {
     clean: boolean;
     detail: string;
+    /** How many placements the differential arm of the gate actually COMPARED. A clean verdict
+     *  backed by zero comparisons is vacuous, not reassuring — see `playerDifferential`. */
+    comparablePlacements: number;
+    placementsChecked: number;
 }
 
 function runCalibration(tagged: TaggedShip[], seed: number, count: number): CalibrationResult {
     const inert = tagged.filter((t) => t.classes.size === 0);
+    // The battery AND the baseline fillers come from the same inert set. Corpus order is stable
+    // (loadTaggedCorpus walks a Map built from the CSV then the snapshot), so the pool order —
+    // which `buildInertAllyBaseline`'s shuffle consumes — is stable too.
+    const inertPool = inert.map((t) => t.ship);
     if (inert.length === 0) {
-        return { clean: false, detail: 'no inert ships (empty class tag set) found in the corpus' };
+        return {
+            clean: false,
+            detail: 'no inert ships (empty class tag set) found in the corpus',
+            comparablePlacements: 0,
+            placementsChecked: 0,
+        };
     }
 
     const invariantFailures: string[] = [];
     const reproFailures: string[] = [];
     const rawDiffs: FingerprintDiff[] = [];
+    let comparablePlacements = 0;
+    let placementsChecked = 0;
 
     for (let i = 0; i < count; i++) {
         const s = seed + i;
@@ -267,6 +425,8 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
             return {
                 clean: false,
                 detail: `engine crash on an INERT composition (seed ${s}) — no documented fix applies to this, it's a real bug: ${message}`,
+                comparablePlacements,
+                placementsChecked,
             };
         }
 
@@ -281,8 +441,16 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
             if (repro.length > 0) {
                 reproFailures.push(`seed ${s}: ${repro.map((v) => v.detail).join('; ')}`);
             }
-            for (const placement of compInput.playerTeam) {
-                const { raw } = playerDifferential(placement, compResult, s);
+            for (let idx = 0; idx < compInput.playerTeam.length; idx++) {
+                const { comparable, raw } = playerDifferential(
+                    idx,
+                    compInput,
+                    compResult,
+                    s,
+                    inertPool
+                );
+                placementsChecked++;
+                if (comparable) comparablePlacements++;
                 if (raw) rawDiffs.push(raw);
             }
         } catch (err) {
@@ -290,6 +458,8 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
             return {
                 clean: false,
                 detail: `engine crash while checking an INERT composition (seed ${s}) — no documented fix applies to this, it's a real bug: ${message}`,
+                comparablePlacements,
+                placementsChecked,
             };
         }
     }
@@ -300,11 +470,18 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
         return {
             clean: false,
             detail: [...invariantFailures, ...reproFailures].join(' | '),
+            comparablePlacements,
+            placementsChecked,
         };
     }
 
     if (rawDiffs.length === 0) {
-        return { clean: true, detail: 'no fix needed — inert battery produced zero raw findings' };
+        return {
+            clean: true,
+            detail: 'no fix needed — inert battery produced zero raw findings',
+            comparablePlacements,
+            placementsChecked,
+        };
     }
 
     // Fix (a): apply the seeded BASE_EXCLUDED_KINDS restriction first.
@@ -314,6 +491,8 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
         return {
             clean: true,
             detail: `fix (a) applied — base externally-driven-kind exclusion: [${[...BASE_EXCLUDED_KINDS].join(', ')}]`,
+            comparablePlacements,
+            placementsChecked,
         };
     }
 
@@ -333,12 +512,16 @@ function runCalibration(tagged: TaggedShip[], seed: number, count: number): Cali
             detail:
                 `fix (a) insufficient even after empirical top-up — ${stillFailing.length} ` +
                 `inert differential(s) survive restriction: ${JSON.stringify(stillFailing[0])}`,
+            comparablePlacements,
+            placementsChecked,
         };
     }
 
     return {
         clean: true,
         detail: `fix (a) applied — base set + empirical top-up excluded: [${[...FOCUS_ONLY_KINDS].join(', ')}]`,
+        comparablePlacements,
+        placementsChecked,
     };
 }
 
@@ -470,14 +653,22 @@ function minimizeInvariant(input: BattleSimulationInput, v: InvariantViolation, 
     return minimizeComposition(input, stillFails);
 }
 
-function minimizeDifferential(input: BattleSimulationInput, placementShipId: string, seed: number) {
+function minimizeDifferential(
+    input: BattleSimulationInput,
+    placementShipId: string,
+    seed: number,
+    inertPool: readonly Ship[]
+) {
     const stillFails = (candidate: BattleSimulationInput): boolean => {
         try {
-            const placement = candidate.playerTeam.find((p) => p.ship.id === placementShipId);
-            if (!placement) return false;
+            // Re-resolved per candidate BY INDEX: ddmin drops placements, so the subject's index
+            // moves, and the index is what `buildInertAllyBaseline` and the engine's actor-id
+            // minting both key on.
+            const idx = candidate.playerTeam.findIndex((p) => p.ship.id === placementShipId);
+            if (idx < 0) return false;
             const compResult = safeRun(candidate, seed);
             if (!compResult) return false;
-            const { restricted } = playerDifferential(placement, compResult, seed);
+            const { restricted } = playerDifferential(idx, candidate, compResult, seed, inertPool);
             return restricted !== null;
         } catch {
             return false;
@@ -542,10 +733,38 @@ function main(): void {
         process.exit(1);
     }
     console.log(`CALIBRATION: clean (${calibration.detail})`);
+    console.log(
+        `CALIBRATION differential coverage: ${calibration.comparablePlacements}/` +
+            `${calibration.placementsChecked} placements were comparable` +
+            (calibration.comparablePlacements === 0
+                ? ' — VACUOUS: the gate compared nothing, so "clean" says nothing about the ' +
+                  'exclusion set. Raise --count.'
+                : '')
+    );
+
+    // Baseline fillers: the same inert set the calibration gate is built from. Derived once and
+    // threaded explicitly rather than held in module state — the draw must be a pure function of
+    // (seed, subject, pool) for the oracle and its ddmin to stay reproducible.
+    const inertPool = tagged.filter((t) => t.classes.size === 0).map((t) => t.ship);
+    if (inertPool.length === 0) {
+        console.error(
+            'no inert ships (empty class tag set) in the corpus — cannot build baselines'
+        );
+        process.exit(1);
+    }
+    console.log(`Inert baseline filler pool: ${inertPool.length} ships.`);
 
     const shipClassesById = new Map(tagged.map((t) => [t.ship.id, t.classes] as const));
     const findings: Finding[] = [];
     let compositionsRun = 0;
+    // Differential-oracle coverage, printed alongside the finding counts. A low differential
+    // finding count is only good news if the oracle actually compared something: the
+    // survived-the-whole-battle guard still skips most placements, because a wiped team's ships
+    // are dead at the trimmed last round. Roughly a quarter of placements are comparable under the
+    // inert-ally baseline (691/2800 at seed 1000/count 700) against a twentieth under the canned
+    // one (161/2800), so this number is also the headline evidence for the baseline design.
+    let differentialPlacements = 0;
+    let differentialComparable = 0;
 
     for (let i = 0; i < count; i++) {
         const s = seed + i;
@@ -593,11 +812,20 @@ function main(): void {
             findings.push(crashFinding(allNames(compInput), allPositions(compInput), s, err));
         }
 
-        for (const placement of compInput.playerTeam) {
+        for (let idx = 0; idx < compInput.playerTeam.length; idx++) {
+            const placement = compInput.playerTeam[idx];
             try {
-                const { restricted } = playerDifferential(placement, compResult, s);
+                const { comparable, restricted } = playerDifferential(
+                    idx,
+                    compInput,
+                    compResult,
+                    s,
+                    inertPool
+                );
+                differentialPlacements++;
+                if (comparable) differentialComparable++;
                 if (!restricted) continue;
-                const min = minimizeDifferential(compInput, placement.ship.id, s);
+                const min = minimizeDifferential(compInput, placement.ship.id, s, inertPool);
                 findings.push({
                     ...differentialFinding(placement, restricted, s),
                     minimalRepro: toMinimalRepro(min),
@@ -621,6 +849,10 @@ function main(): void {
 
     const { confirmed, needsTriage } = writeLedger(findings, { compositionsRun }, 'docs');
     console.log(`compositionsRun: ${compositionsRun}`);
+    console.log(
+        `differential coverage: ${differentialComparable}/${differentialPlacements} ` +
+            'player placements comparable (the rest were skipped by survivedWholeBattle)'
+    );
     console.log(`confirmed: ${confirmed.length}`);
     console.log(`needsTriage: ${needsTriage.length}`);
     console.log('Wrote docs/interaction-audit-ledger.{json,md}');

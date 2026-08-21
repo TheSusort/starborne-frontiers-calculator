@@ -3,7 +3,7 @@ import { parseAuditArgs } from '../auditArgs';
 
 describe('parseAuditArgs', () => {
     it('defaults to seed=1, count=10 with no flags', () => {
-        expect(parseAuditArgs([])).toEqual({ seed: 1, count: 10 });
+        expect(parseAuditArgs([])).toEqual({ seed: 1, count: 150 });
     });
 
     it('parses --seed and --count', () => {
@@ -15,7 +15,7 @@ describe('parseAuditArgs', () => {
     });
 
     it('leaves the default when only one flag is given', () => {
-        expect(parseAuditArgs(['--seed', '5'])).toEqual({ seed: 5, count: 10 });
+        expect(parseAuditArgs(['--seed', '5'])).toEqual({ seed: 5, count: 150 });
         expect(parseAuditArgs(['--count', '2'])).toEqual({ seed: 1, count: 2 });
     });
 });

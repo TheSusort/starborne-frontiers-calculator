@@ -25,7 +25,7 @@ const diff: PlacementDiff = {
 
 describe('parsePlacementArgs', () => {
     it('defaults to 5 seeds', () => {
-        expect(parsePlacementArgs([]).seeds).toBe(5);
+        expect(parsePlacementArgs([]).seeds).toBe(30);
     });
 
     it('parses --seeds and --base-seed', () => {
@@ -36,7 +36,7 @@ describe('parsePlacementArgs', () => {
     });
 
     it('ignores unrecognized tokens', () => {
-        expect(parsePlacementArgs(['--nope', 'x']).seeds).toBe(5);
+        expect(parsePlacementArgs(['--nope', 'x']).seeds).toBe(30);
     });
 
     it('rejects a non-numeric --seeds, naming the offending token', () => {
@@ -130,5 +130,38 @@ describe('renderPlacementLedgerMarkdown', () => {
         const md = renderPlacementLedgerMarkdown([diff], health);
         expect(md).toMatch(/heal target/i);
         expect(md).toContain('positionalTeamBattle');
+    });
+
+    it('annotates an already-triaged finding so nobody re-triages it', () => {
+        const triaged: PlacementDiff = {
+            shipName: 'Enforcer',
+            from: 'enemy',
+            to: 'focus',
+            missing: ['debuff-resisted'] as CombatLogEntryKind[],
+        };
+        const md = renderPlacementLedgerMarkdown([triaged], health);
+        expect(md).toContain('TRIAGED, seed noise, do not re-triage.');
+        expect(md).toContain('enforcerDebuffResistedNoise.test.ts');
+    });
+
+    it('annotates only the triaged KIND, not every kind the same ship reports', () => {
+        const mixed: PlacementDiff = {
+            shipName: 'Enforcer',
+            from: 'enemy',
+            to: 'focus',
+            missing: ['debuff-resisted', 'heal'] as CombatLogEntryKind[],
+        };
+        const md = renderPlacementLedgerMarkdown([mixed], health);
+        const annotated = md.split('\n').filter((l) => l.includes('TRIAGED, seed noise'));
+        expect(annotated).toHaveLength(1);
+        expect(annotated[0]).toContain('`debuff-resisted`');
+    });
+
+    it('leaves an untriaged ship’s finding unannotated', () => {
+        const md = renderPlacementLedgerMarkdown(
+            [{ ...diff, missing: ['debuff-resisted'] as CombatLogEntryKind[] }],
+            health
+        );
+        expect(md).not.toContain('TRIAGED, seed noise');
     });
 });
