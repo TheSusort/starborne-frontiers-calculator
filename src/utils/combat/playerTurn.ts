@@ -3180,9 +3180,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     happens exactly ONCE, after `runPlayerTurn` returns, via the caller's own aggregate
         //     apply. So a mid-cast kill inside this loop is impossible — including on the
         //     symmetric reverse invocation (an enemy actor's turn against a player `enemy`/tgt,
-        //     e.g. healing mode's tank) — and a target already dead BEFORE the cast is caught by
-        //     the turn-level `skipDeadTargetTurn` guard (engine.ts ~9595), which skips calling
-        //     `runPlayerTurn` at all rather than letting it fire hits into a corpse.
+        //     e.g. healing mode's tank).
+        //     ⚠️ SP-4e (#335): this bullet used to END by citing "a target already dead BEFORE
+        //     the cast is caught by the turn-level `skipDeadTargetTurn` guard (engine.ts ~9595),
+        //     which skips calling `runPlayerTurn` at all". That cited MECHANISM no longer holds
+        //     (and the line reference was stale even then — grep the symbol): the guard exists only
+        //     at the ENEMY call site while this function is walked by BOTH sides, and since #335
+        //     it is measured-unreachable, because a resolved victim is drawn from
+        //     `positionalBinding`'s living-only `byCell` and can no longer be a corpse (tripwired
+        //     in `dummyReachability.test.ts`'s `A DEAD RESOLVED VICTIM IS UNCONSTRUCTIBLE`). The
+        //     derivation does not need it: the primary argument above is self-sufficient, and an
+        //     already-dead bound target is now impossible one step EARLIER, at resolution.
         //   Everything below is CORROBORATION: it shows no OTHER actor's mid-round work can
         //   decline the bound target's HP either, so the target is alive at every cast this loop
         //   can reach and not merely un-killable by this loop.

@@ -106,6 +106,8 @@ import {
     runCombat,
     __getNoVictimTurnCount,
     __resetNoVictimTurnCount,
+    __getEnemySiteVictimTurnCounts,
+    __resetEnemySiteVictimTurnCounts,
     SENTINEL_ENEMY_ACTOR_ID,
 } from '../engine';
 import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
@@ -405,6 +407,83 @@ describe('the shapes that used to reach the dummy sink', () => {
         expect(result.rounds).toHaveLength(1);
 
         expect(noVictimTurns()).toBe(0);
+    });
+});
+
+/**
+ * SP-4e fix wave 1 — the OTHER unfalsifiable claim this rung created, made executable.
+ *
+ * #335 deleted the `|| tgt === undefined` arm from the enemy site's turn skip, which left
+ * `skipDeadTargetTurn` with one entrant: a RESOLVED victim that is already dead. The engine carries
+ * a measured claim (0 hits across the whole suite, where the pre-rung tree hit it in 4 files) plus a
+ * structural argument that the precondition is now unconstructible — `resolvePositionalTarget`
+ * builds its `byCell` from `position !== undefined && currentHp > 0` and every return path draws
+ * from that map or returns null, and nothing between the call and the check mutates HP.
+ *
+ * The rung shipped that as a 20-line comment while giving `legacyVictim` a tree-walking tripwire —
+ * and, worse, RELABELLED the two `twoTeamBattle` cases that used to reach the branch by accident, so
+ * nothing covered it at all. This is the replacement. It reads the branch's own precondition
+ * (`dead`) BEFORE the `skillNeedsOpposingVictim` gate narrows it, which is the stronger claim: a
+ * dead resolved victim is IMPOSSIBLE, not merely harmless.
+ *
+ * NON-VACUITY is the whole difficulty with a zero over an unsatisfiable branch — the repo's own
+ * fixture-vacuity defect class in counter form. Two things answer it:
+ *  1. IN-SUITE: `resolved` counts the same check's live arm from the same three lines, so a
+ *     `dead: 0` next to a `resolved: 3` proves the instrument is wired to a site that fires. A
+ *     broken reading (wrong accessor, un-run fixture, a check that moved) reads `resolved: 0` and
+ *     fails here.
+ *  2. BY MUTATION, recorded because no fixture can do it: dropping the `&& a.currentHp > 0` conjunct
+ *     from `positionalBinding.ts`'s `byCell` makes a corpse resolvable, and the second case below
+ *     then reads `dead: 2` and goes RED. That is the proof that this zero is a finding rather than a
+ *     tautology (task-5-report.md, fix wave 1).
+ */
+describe('A DEAD RESOLVED VICTIM IS UNCONSTRUCTIBLE', () => {
+    beforeEach(() => {
+        setupKeyedTestRng(12345);
+        __resetEnemySiteVictimTurnCounts();
+    });
+
+    it('LIVENESS + ZERO: the enemy site resolves a LIVING victim on every turn it takes', () => {
+        const { result } = collectTurns({
+            ...bareInput(),
+            enemyAttackers: attackingEnemy(),
+        });
+
+        // The path ran: the enemy acted and booked onto the focus, both rounds.
+        expect(dealtBy(result, 1, BARE_ENEMY_ID)).toEqual({ attacker: PER_CAST });
+        expect(dealtBy(result, BARE_ROUNDS, BARE_ENEMY_ID)).toEqual({ attacker: PER_CAST });
+
+        // The non-zero half — the reading that makes the zero mean something.
+        expect(__getEnemySiteVictimTurnCounts()).toEqual({ resolved: BARE_ROUNDS, dead: 0 });
+    });
+
+    it('a player victim KILLED mid-run is RETARGETED, never re-resolved as a corpse', () => {
+        // The hardest shape available: make the enemy's own resolved victim die to the enemy's own
+        // cast and keep the fight going. The focus holds exactly two casts' worth of HP, and a
+        // second placed player actor (M3, behind the focus at the M4 front) keeps the player side
+        // from being wiped — SP-4c-1 would otherwise end the match on the killing turn and there
+        // would be no later turn to re-resolve anything in. `mode: 'battle'` is load-bearing for
+        // the same reason: a DPS measurement run terminates on the focus's own death (engine.ts's
+        // focus-death exit), so rounds 3-4 would not exist to be observed.
+        const { result, destroyed } = collectTurns({
+            ...bareInput(),
+            mode: 'battle',
+            hp: 2 * PER_CAST,
+            numRounds: 4,
+            enemyAttackers: attackingEnemy(),
+            teamActors: [{ ...bareAlly(), position: 'M3' }],
+        });
+
+        // The path ran: the enemy really did kill its own victim, and really did keep acting after.
+        expect(destroyed()).toEqual(['attacker']);
+        expect(dealtBy(result, 1, BARE_ENEMY_ID)).toEqual({ attacker: PER_CAST });
+        expect(dealtBy(result, 2, BARE_ENEMY_ID)).toEqual({ attacker: PER_CAST });
+        // ...and the victim MOVED to the survivor rather than staying on the corpse. This is the
+        // same fact the counter reports, observed from outside: a corpse is not resolvable.
+        expect(dealtBy(result, 3, BARE_ENEMY_ID)).toEqual({ [BARE_ALLY_ID]: PER_CAST });
+        expect(dealtBy(result, 4, BARE_ENEMY_ID)).toEqual({ [BARE_ALLY_ID]: PER_CAST });
+
+        expect(__getEnemySiteVictimTurnCounts()).toEqual({ resolved: 4, dead: 0 });
     });
 });
 

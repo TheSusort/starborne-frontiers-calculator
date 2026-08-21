@@ -1806,6 +1806,40 @@ export function __resetAggregateStandingLeechApplications(): void {
     aggregateStandingLeechApplications = 0;
 }
 /**
+ * TEST-ONLY EXECUTABLE TRIPWIRE (SP-4e fix wave 1) for the enemy site's `skipDeadTargetTurn`.
+ *
+ * That branch fires only on a RESOLVED victim that is already dead, and since #335 deleted the
+ * `|| tgt === undefined` arm it has no other entrant. The claim on the branch is that the
+ * precondition is now UNCONSTRUCTIBLE: `resolvePositionalTarget` builds its `byCell` from
+ * `position !== undefined && currentHp > 0` (positionalBinding.ts:135-137) and every one of its
+ * return paths draws from that map or returns null, so a resolved victim is alive by construction,
+ * and nothing between the selection call and the check mutates HP.
+ *
+ * That claim used to live only in a comment, and a comment cannot fail — this can:
+ *  • `dead` counts turns reaching the check with `tgt !== undefined && tgt.currentHp <= 0`, i.e.
+ *    the branch's own precondition BEFORE the `skillNeedsOpposingVictim` gate narrows it (the
+ *    stronger reading: a dead resolved victim is impossible at all, not merely harmless).
+ *  • `resolved` counts turns reaching the check WITH a victim, and exists so the zero above is not
+ *    the repo's fixture-vacuity defect in counter form. Both are incremented from the same three
+ *    lines, so a `dead: 0` alongside a `resolved: > 0` proves the instrument is wired to a live
+ *    site — the reading `dummyReachability.test.ts` asserts.
+ *
+ * Deliberately NOT a `throw`: the state is unconstructible today, but a throw at a turn head would
+ * turn a future reachability change into a crash in a user's browser rather than a red test.
+ *
+ * Module-level and NOT reset per run: `__resetEnemySiteVictimTurnCounts` is the test's job. Vitest
+ * isolates modules per test FILE, so each file reads only its own runs.
+ */
+let enemySiteResolvedVictimTurns = 0;
+let enemySiteDeadVictimTurns = 0;
+export function __getEnemySiteVictimTurnCounts(): { resolved: number; dead: number } {
+    return { resolved: enemySiteResolvedVictimTurns, dead: enemySiteDeadVictimTurns };
+}
+export function __resetEnemySiteVictimTurnCounts(): void {
+    enemySiteResolvedVictimTurns = 0;
+    enemySiteDeadVictimTurns = 0;
+}
+/**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
  * CURRENT effective speed (selectNextBySpeed) until the pool drains — every actor takes one
@@ -7484,13 +7518,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
             // E3 (AoE purge): footprint victim ids for an 'all-enemies' on-cast purge.
-            // Computed ONLY when positional — `tgt.position != null` is the positional
-            // discriminator (when nothing positional resolved, `selectTurnTarget` returns the
-            // position-less heal-target sink on the ENEMY side and, since SP-4c-2b/2d, no victim at
-            // all on the PLAYER side — it was the position-less dummy sink before that; since
-            // SP-4b-1's normalization boundary that means
-            // an absent/never-targetable opposing roster or the mid-run whiff window, no longer
-            // "the DPS/healing calculators", which now supply real placed enemies). footprintVictims
+            // Computed ONLY when positional — `tgt?.position != null` is the positional
+            // discriminator (when nothing positional resolved, `selectTurnTarget` returns NO victim
+            // at all — on EITHER side since SP-4e (#335), so `tgt` is `undefined` here and the
+            // optional chain short-circuits. The player side has answered that since SP-4c-2b; the
+            // ENEMY side used to return the position-less heal-target sink, and the position-less
+            // dummy sink stood on the player side before 4c-2b/2d — both are deleted, and there is
+            // no per-side fallback victim left. Since SP-4b-1's normalization boundary a null
+            // resolution means an absent/never-targetable opposing roster, an ally-side parsed
+            // target, or the mid-run whiff window — no longer "the DPS/healing calculators", which
+            // now supply real placed enemies). footprintVictims
             // is the same pure resolver the AoE
             // damage path uses; covered cells are included (status removal is uniform across the
             // footprint). Non-positional → undefined → the playerTurn purge loop falls back to
@@ -10196,22 +10233,36 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // `tgt` is now the POSITIONALLY-resolved victim or nothing, so a dead
                             // `tgt` no longer means "the vestigial focus-player anchor died", which
                             // was the ONLY way this branch was ever entered. And
-                            // `resolvePositionalTarget` builds every candidate set from actors with
-                            // `currentHp > 0` (positionalBinding.ts:136) and nothing between that
-                            // call and here can kill one, so `tgt !== undefined && tgt.currentHp <= 0`
-                            // is now unsatisfiable. Probed with a `console.error` in the skip body
-                            // over the WHOLE suite (547 files / 6037 tests): 0 hits, where the
-                            // pre-rung tree hit it in 4 files.
+                            // `resolvePositionalTarget` builds its `byCell` from actors with
+                            // `position !== undefined && currentHp > 0` (positionalBinding.ts:135-137)
+                            // and EVERY one of its return paths draws from that map or returns null
+                            // — Concentrate Fire, Taunt, Provoke, the stealth filter and
+                            // `selectTargets` all read it — and nothing between that call and here
+                            // mutates HP, so `tgt !== undefined && tgt.currentHp <= 0` is
+                            // unsatisfiable. Probed with a `console.error` in the skip body over the
+                            // WHOLE suite (547 files / 6037 tests): 0 hits, where the pre-rung tree
+                            // hit it in 4 files.
                             //
-                            // NOT deleted here, for two reasons. (1) The no-victim turn now produces
-                            // the same OUTCOME this skip did — a firing skill that needs a victim
-                            // delivers 0 either way, because `runPlayerTurn` fences its damage
-                            // assembly on `hasVictim` — so the branch is redundant rather than wrong,
-                            // and removing it is a separate change with its own red test. (2) It is
-                            // the only remaining consumer of `skillNeedsOpposingVictim` on this path;
-                            // dropping both together is a scoped follow-up, not a side effect of
-                            // retiring the fallback. `twoTeamBattle.test.ts`'s "negative/pin" and
-                            // "threshold flip" cases carry the corresponding coverage note.
+                            // AND THAT CLAIM IS NOW EXECUTABLE, not merely commented (fix wave 1).
+                            // The two increments below feed `__getEnemySiteVictimTurnCounts`, which
+                            // `dummyReachability.test.ts` reads as `{ resolved: > 0, dead: 0 }` —
+                            // the `dead` half is this branch's precondition BEFORE the
+                            // `skillNeedsOpposingVictim` gate, and the `resolved` half is its
+                            // vacuity guard (same instrument, live site, non-zero). A comment cannot
+                            // fail; this can. It replaces the coverage the two relabelled
+                            // `twoTeamBattle` cases used to supply by accident.
+                            //
+                            // NOT deleted here, for three reasons. (1) The no-victim turn now
+                            // produces the same OUTCOME this skip did — a firing skill that needs a
+                            // victim delivers 0 either way, because `runPlayerTurn` fences its damage
+                            // assembly on `hasVictim` — so the branch is redundant rather than wrong.
+                            // (2) It is the only remaining consumer of `skillNeedsOpposingVictim` on
+                            // this path, so deleting it deletes that helper's last caller too.
+                            // (3) No test can cover an unsatisfiable branch, so the deletion cannot
+                            // be de-risked by coverage — it belongs in its own scoped change with
+                            // this tripwire as its gate, not at the tail of a long PR.
+                            // `twoTeamBattle.test.ts`'s "negative/pin" and "threshold flip" cases
+                            // carry the corresponding coverage note.
                             const enemyWouldFireAction: 'active' | 'charged' = enemyWillFireCharged
                                 ? 'charged'
                                 : 'active';
@@ -10219,6 +10270,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 enemyRuntime.castSkills,
                                 enemyWouldFireAction
                             );
+                            if (tgt !== undefined) {
+                                enemySiteResolvedVictimTurns++;
+                                if (tgt.currentHp <= 0) enemySiteDeadVictimTurns++;
+                            }
                             const skipDeadTargetTurn =
                                 tgt !== undefined &&
                                 tgt.currentHp <= 0 &&
@@ -10531,13 +10586,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
                                 // SP-D: record this cast's footprint size (mirrors the focus/team
                                 // sites, including the SP-4d Task 8 `tgt`-gated 0-vs-1 fallback).
-                                // `tgt` is guaranteed defined in this branch (the enclosing
-                                // `if (skipDeadTargetTurn || tgt === undefined)` already bailed
-                                // otherwise — an enemy attacker always resolves a real victim, the
-                                // no-victim concept is player-ally-cast-only), so this is a no-op
-                                // for the enemy side; kept identical to the other two sites so all
-                                // three read the same expression rather than two agreeing by
-                                // construction and one by accident.
+                                //
+                                // ⚠️ SP-4e (#335) MADE THE `0` ARM LIVE ON THIS SIDE. The comment
+                                // that stood here read "`tgt` is guaranteed defined in this branch
+                                // (the enclosing `if (skipDeadTargetTurn || tgt === undefined)`
+                                // already bailed otherwise — an enemy attacker always resolves a
+                                // real victim, the no-victim concept is player-ally-cast-only), so
+                                // this is a no-op for the enemy side". Every clause of that is now
+                                // false: the `|| tgt === undefined` arm is DELETED (see the skip
+                                // above), an enemy attacker that resolves no victim is exactly what
+                                // #335 fixed, and the no-victim rule is BOTH sides'.
+                                //
+                                // So this is not a no-op here any more. On a no-victim enemy turn
+                                // `aoeVictimIds` is `undefined` (`buildTurnArgs` gates it on
+                                // `tgt?.position != null`), the `??` falls through, and
+                                // `(tgt !== undefined ? 1 : 0)` records a footprint of **0** —
+                                // "this cast hit no enemy" — for the first time on this side, on
+                                // every one of the ~1,695 measured no-victim enemy turns. That is
+                                // the honest reading for a cast that reached nobody, and it is the
+                                // same expression the two player sites have recorded since SP-4d
+                                // Task 8: all three sites read one expression rather than two
+                                // agreeing by construction and one by accident.
                                 enemiesHitThisCastByActor.set(
                                     actor.id,
                                     enemyTurnArgs.aoeVictimIds?.length ??
@@ -10650,10 +10719,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 enemyPassiveSlotLanded = true;
                                 stagedEnemyPassiveSlotHit?.();
                             };
-                            // `tgt !== undefined` narrows the victim for this block (SP-U U5 R6): a
+                            // `tgt !== undefined` narrows the victim for this block (SP-U U5 R6).
+                            //
+                            // ⚠️ SP-4e (#335) INVERTED THE REASON, and the reason is what tells the
+                            // next reader whether the term is removable. It used to read: "a
                             // positive `damage` is only produced by the non-skip `else` above, which
-                            // runs only when `tgt` is defined — byte-identical (the term is always true
-                            // when damage > 0 in the existing corpus).
+                            // runs only when `tgt` is defined". The `else` now runs precisely when
+                            // `tgt` is UNDEFINED too — that is the no-victim turn. The conjunct is
+                            // still always true when `damage > 0`, but for the opposite reason: with
+                            // no victim `runPlayerTurn` fences its whole damage assembly on
+                            // `hasVictim`, so `damage` comes back 0 and a no-victim turn cannot
+                            // enter this block at all. The term is therefore what KEEPS that fence
+                            // honest at this seam rather than a redundant narrowing — drop it and a
+                            // future non-zero no-victim `damage` falls into a block that
+                            // dereferences `tgt` throughout.
                             if (damage > 0 && tgt !== undefined) {
                                 // Phase-5 per-victim accounting notes (see detailed notes below): (1) the
                                 // damage-taken leech now fires PER VICTIM on the positional path too (E2 T5,
@@ -10672,9 +10751,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // Route the enemy's incoming damage. Two mutually-exclusive paths:
                                 //
                                 //  - NON-positional (legacy): a SINGLE applyIncomingToTarget(damage, tgt)
-                                //    drains the bound victim (tgt === healTarget! on the legacy path → the
-                                //    no-arg-equivalent call, byte-identical). Returns the shield/HP/Barrier
-                                //    outcome consumed by the damage-taken leech block below.
+                                //    drains the POSITIONALLY-RESOLVED victim. (Until SP-4e this note read
+                                //    "tgt === healTarget! on the legacy path → the no-arg-equivalent call,
+                                //    byte-identical", because the non-positional path bound the heal anchor
+                                //    as a fallback victim. It does not: `tgt` is the resolved victim or
+                                //    nothing, and a no-victim turn never reaches here — the
+                                //    `damage > 0 && tgt !== undefined` gate above fences it out.) Returns
+                                //    the shield/HP/Barrier outcome consumed by the damage-taken leech
+                                //    block below.
                                 //
                                 //  - POSITIONAL (Task 9): drivePositionalApply lands the firing hit per-victim
                                 //    across the LIVE PLAYER roster (origin full / covered half) via the

@@ -10,8 +10,9 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
  *
  * Positions are load-bearing, not cosmetic: `resolvesPositionalVictim` (positionalBinding.ts) needs
  * the acting actor to carry one AND the opposing roster to hold a targetable member (placed, max
- * hp > 0), or `selectTurnTarget` falls back to the vestigial dummy and the focus never damages the
- * real enemy.
+ * hp > 0), or `selectTurnTarget` resolves NO victim and the focus damages nobody — it runs a
+ * no-victim turn (the same rule on both sides since SP-4e/#335; before SP-4c-2b/2d the player side
+ * fell back to the vestigial dummy, which is deleted, and the enemy side to the heal anchor).
  *
  * Since SP-4b-1 these are also the values `normalizeCombatRoster` — the engine's ONE accommodation
  * boundary, `runCombat`'s first line — auto-places with, so a CALLER no longer has to supply a
