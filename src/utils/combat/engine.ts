@@ -1002,11 +1002,19 @@ const ALL_ENEMIES_PATTERN: ParsedPattern = {
 // scalar credit channel AND its positional twin. It used to be a bare sum over the scalar
 // `roundDamage` map, which a positional run never writes — so every accumulator drained on
 // schedule for exactly 0.
+//
+// #345: `emitAccumulatorDetonated` is called once per burst, so an APPLIER-scoped reaction can
+// observe it — the sibling of `processBombs`' `emitBombDetonated`, which this function went
+// without. Valkyrie's "when an Echoing Burst explodes on an enemy … repair 5% of damage dealt"
+// rode the Bomb event instead, which meant it fired on any teammate's Bomb and never once on her
+// own burst. Emitted BEFORE `creditDetonation` (the same order `processBombs` uses); the reaction
+// it enqueues drains later regardless.
 function processAccumulators(args: {
     pendingAccumulators: PendingAccumulator[];
     /** Direct damage the ACCUMULATING side (the side that applied these accumulators — i.e. the
      *  bursting actor's OPPOSING roster) has dealt so far this round. */
     gatheredDirect: number;
+    emitAccumulatorDetonated?: (actorId: string, damage: number) => void;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
     for (let i = args.pendingAccumulators.length - 1; i >= 0; i--) {
@@ -1014,7 +1022,9 @@ function processAccumulators(args: {
         acc.accumulated += args.gatheredDirect;
         acc.roundsRemaining -= 1;
         if (acc.roundsRemaining <= 0) {
-            args.creditDetonation(acc.sourceId, acc.accumulated * (acc.pct / 100));
+            const damage = acc.accumulated * (acc.pct / 100);
+            args.emitAccumulatorDetonated?.(acc.sourceId, damage);
+            args.creditDetonation(acc.sourceId, damage);
             args.pendingAccumulators.splice(i, 1);
         }
     }
@@ -4235,7 +4245,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             //       SP-4e fix wave 1. (An earlier list also named Malvex and Quixilver: those are
             //       `damage-taken` shields and live in the SIBLING map that feeds
             //       `procTakenLeechesPerVictim`, never here. Valkyrie's ally-facing leech is
-            //       `on-bomb-detonated`, hence reactive, and it carries `'lowest-hp-ally'` rather
+            //       `on-own-echoing-burst-detonated` (`on-bomb-detonated` until #345 corrected the
+            //       mechanism), hence reactive, and it carries `'lowest-hp-ally'` rather
             //       than a plain `'ally'` — so it would not reach this arm even if it did land in
             //       this map.) Neither ally-facing arm has a live entry today.
             //   (b) aligning it needs a footprint route this proc has no access to — it holds no
@@ -7427,6 +7438,19 @@ export function runCombat(rawInput: CombatEngineInput): {
             processAccumulators({
                 pendingAccumulators: actor.pendingAccumulators,
                 gatheredDirect,
+                // #345: `actorId` is the accumulator's APPLIER (whose Echoing Burst this is) and
+                // `victimId` the holder it burst on — the same actorId/victimId split the sibling
+                // `bomb-detonated` emit above uses. Inside the shared `applyPositionedTimedBurst`,
+                // so both sides emit it: a player Valkyrie's burst on an enemy and an enemy
+                // Valkyrie's burst on a player ship announce themselves identically.
+                emitAccumulatorDetonated: (actorId, damage) =>
+                    bus.emit({
+                        type: 'accumulator-detonated',
+                        actorId,
+                        victimId: actor.id,
+                        round: r,
+                        damage,
+                    }),
                 creditDetonation: (sourceId, damage) => {
                     applyVictimDamage(damage, actor, sink, {
                         killerId: sourceId,

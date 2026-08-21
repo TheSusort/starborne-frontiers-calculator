@@ -140,13 +140,24 @@ export type AbilityTrigger =
     | 'on-ally-crit'
     | 'on-stasis-applied'
     // VICTIM-scoped: a Bomb bursts on an opposing actor, regardless of who caused it
-    // ("When a Bomb explodes on an enemy …" — Demolisher's splash/charge-removal, Valkyrie).
+    // ("When a Bomb explodes on an enemy …" — Demolisher's splash/charge-removal). NOT
+    // Valkyrie: an Echoing Burst is not a Bomb — see 'on-own-echoing-burst-detonated'.
     | 'on-bomb-detonated'
     // DETONATOR-scoped: THIS unit actively causes a Bomb to detonate ("When this Unit
     // detonates a Bomb …" — Lingshe's Stealth grant). Filtered on the bomb-detonated event's
     // `detonatorId` (the actor whose skill forced/triggered the burst), NOT `actorId` (the
     // bomb's original applier). Natural countdown expiry has no detonator → never fires this.
     | 'on-self-bomb-detonated'
+    // APPLIER-scoped: an Echoing Burst THIS unit applied reaches the end of its countdown and
+    // detonates on an opposing actor ("When an Echoing Burst explodes on an enemy …" —
+    // Valkyrie's self + lowest-HP-ally repair; #345, owner-confirmed 2026-08-21: only her own
+    // burst may fire it). Rides `accumulator-detonated`, NOT `bomb-detonated`: an Echoing Burst
+    // is an accumulate-then-detonate container (`PendingAccumulator`), a different mechanism
+    // from the Bomb DoT, so a teammate's Bomb can never reach this trigger and Valkyrie's
+    // repair can never reach the Bomb listeners (Demolisher's splash, Lingshe's Stealth).
+    // Filtered on the event's `actorId` (the accumulator's applier) — there is no "detonator"
+    // to key off, since the burst is a timed expiry nobody actively causes.
+    | 'on-own-echoing-burst-detonated'
     | 'on-attacked'
     | 'on-ally-attacked'
     | 'on-ally-destroyed'
@@ -296,6 +307,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-bomb-detonated',
     // Ship-kit W7 (Lingshe): DETONATOR-scoped bomb-detonation reaction (see AbilityTrigger).
     'on-self-bomb-detonated',
+    // #345 (Valkyrie): APPLIER-scoped Echoing Burst detonation reaction (see AbilityTrigger).
+    'on-own-echoing-burst-detonated',
     'on-attacked',
     'on-ally-attacked',
     'on-destroyed',

@@ -3,10 +3,14 @@
  *
  * Two distinct bomb-detonation semantics previously collapsed onto ONE trigger
  * (`on-bomb-detonated`):
- *   - Demolisher / Valkyrie: "When a Bomb explodes on an enemy …" — VICTIM-scoped, fires on any
- *     bomb bursting on the opposing side.  → stays `on-bomb-detonated`.
+ *   - Demolisher: "When a Bomb explodes on an enemy …" — VICTIM-scoped, fires on any bomb bursting
+ *     on the opposing side.  → stays `on-bomb-detonated`.
  *   - Lingshe: "When this Unit detonates a Bomb …" — DETONATOR-scoped, fires only when THIS unit
  *     actively causes a detonation.  → new `on-self-bomb-detonated`.
+ *
+ * #345 later split a THIRD reading out of the same trigger: Valkyrie's "When an Echoing Burst
+ * explodes on an enemy …" is not about the Bomb DoT at all (an Echoing Burst is an
+ * accumulate-then-detonate container) → APPLIER-scoped `on-own-echoing-burst-detonated`.
  *
  * Separately, Warden's "when this Unit inflicts a Debuff, it inflicts Out. Damage Down II" was
  * mis-parsed as `on-cast` (the existing recognizer only matched the gerund "inflicting/applying",

@@ -256,20 +256,26 @@ describe('SP-4e: a text-named worst-HP repair reaches the worst-HP ally, not the
 // Valkyrie — the BATTLE-mode arm (spec §6 item 4).
 //
 // Her dual repair ("this Unit and the ally with the lowest current health percentage repair 5% of
-// damage dealt") rides `trigger: 'on-bomb-detonated'`, so nothing above reaches it: the healing
-// harness never detonates anything. An earlier report called her change "parse-only today" — that
-// was WRONG, and it was reached by measuring the wrong quantity. `BattleRound.ships[].healingReceived`
-// documents that it excludes reactive-heal channels (battleSimulator.ts, `healingReceived`), so it
-// reads 0 for every actor in the run below even while 22 repairs land. The combat log's `heal`
-// entries are the channel that observes them.
+// damage dealt") rides a DETONATION trigger, so nothing above reaches it: the healing harness never
+// detonates anything. An earlier report called her change "parse-only today" — that was WRONG, and
+// it was reached by measuring the wrong quantity. `BattleRound.ships[].healingReceived` documents
+// that it excludes reactive-heal channels (battleSimulator.ts, `healingReceived`), so it reads 0
+// for every actor in the run below even while every repair lands. The combat log's `heal` entries
+// are the channel that observes them.
 //
-// Fixture: Valkyrie as the focus at M4, plus a real Demolisher at M3 whose active inflicts Bomb III
-// and whose kit detonates it. The trigger is bomb-family (skillTextParser.ts:1365 — "an Echoing
-// Burst explodes" is one named bomb-type effect among several), so a plain Bomb III detonation pays
-// her repair; which detonation qualifies is not what this test is about, the RECIPIENT is. The two
+// Fixture: Valkyrie as the focus at M4, plus a real Demolisher at M3 as the second ally. The two
 // enemies are synthetic, high-HP and low-Security, so nothing survives-or-dies differently between
-// arms and the bomb always lands (at security 150 the infliction was resisted every round and the
-// fixture observed nothing at all).
+// arms and every infliction lands (at security 150 they were resisted every round and the fixture
+// observed nothing at all).
+//
+// #345: what PAYS the repair is her OWN Echoing Burst — the accumulate-then-detonate effect her
+// charged skill inflicts — bursting on an enemy, and nothing else. It used to be Demolisher's
+// Bomb III detonations, on the premise that "an Echoing Burst explodes" was one named bomb-type
+// effect among several; it is not one, and that premise cost her the mechanic her text names (her
+// own burst emitted no event at all). So the payout count moved 22 → 8, all of it re-sourced.
+// Demolisher stays in the fixture as the second ally the selector has to find — his Bombs no
+// longer reach her repair. Which detonation qualifies is not what this test is about, the
+// RECIPIENT is; the count is here purely as the anti-vacuity floor.
 // ===========================================================================
 
 /** Deliberately NOT `{...ship}` with a patched ShipSkills: `simulateBattle` derives skills from the
@@ -392,21 +398,23 @@ describe("SP-4e: Valkyrie's detonation repair moves off herself onto the worst-H
         const legacy = battleHealTargets('legacy');
         const selector = battleHealTargets('selector');
 
-        // Anti-vacuity: the fixture really does detonate bombs and really does pay the repair.
-        expect(legacy.length).toBe(22);
+        // Anti-vacuity: the fixture really does detonate her Echoing Burst and really does pay the
+        // repair. Four bursts × the two halves of the dual repair (#345 re-sourced these from
+        // Demolisher's Bombs, which used to pay 11 pairs).
+        expect(legacy.length).toBe(8);
         // A re-route, not a new or lost repair: same number of heal payouts, same amounts.
         expect(selector.length).toBe(legacy.length);
         const amounts = (rows: { amount: number }[]) => rows.map((r) => r.amount).sort();
         expect(amounts(selector)).toEqual(amounts(legacy));
 
         // LEGACY: `reactiveRecipients` resolved a plain `'ally'` to the caster, so BOTH halves of
-        // the dual repair landed on Valkyrie — 11 + 11 on the focus id. This is the defect.
-        expect(countByRecipient(legacy)).toEqual({ attacker: 22 });
+        // the dual repair landed on Valkyrie — 4 + 4 on the focus id. This is the defect.
+        expect(countByRecipient(legacy)).toEqual({ attacker: 8 });
         // SELECTOR: the ally half goes to the living same-side ally with the lowest HP fraction
         // (Demolisher, the only other ally); the self half still — correctly — lands on her.
         expect(countByRecipient(selector)).toEqual({
-            attacker: 11,
-            'p:trace:Demolisher:1': 11,
+            attacker: 4,
+            'p:trace:Demolisher:1': 4,
         });
     });
 });

@@ -18,7 +18,8 @@ import type { AbilityTarget } from '../../../types/abilities';
  *                        of the damage dealt"
  *   Volk     · passive  "repairs 30% of its Max HP to the ally with the most missing health"
  *   Valkyrie · passive  "this Unit and the ally with the lowest current health percentage repair
- *                        5% of damage dealt"  (on-bomb-detonated; ALSO emits a mirrored 'self')
+ *                        5% of damage dealt"  (on-own-echoing-burst-detonated since #345; ALSO
+ *                        emits a mirrored 'self')
  *
  * Both blocks read `docs/ship-skills.csv` — the parser's source of truth (CLAUDE.md), NOT any
  * ships constant — via `scripts/lib/shipSkillCsv`, whose `loadShipSkillRecords` is built on the

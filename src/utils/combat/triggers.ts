@@ -345,6 +345,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
  *    fires when THIS OWNER performs its CHARGED skill — Spearhead). One enqueue per cast.
  *  - on-bomb-detonated → bomb-detonated (global)
+ *  - on-own-echoing-burst-detonated → accumulator-detonated where actorId === ownerId and the
+ *    holder opposes the owner (APPLIER-scoped: an Echoing Burst THIS owner applied burst on an
+ *    enemy — Valkyrie's dual repair; #345). Stamps victimId + triggerDamage.
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
  *  - on-attacked → attacked where targetId === ownerId (target-scoped; fires when THIS OWNER is
@@ -905,6 +908,41 @@ export function registerReactiveListeners(args: {
                     // Team-symmetric: any owner registered on either side gates identically.
                     bus.on('bomb-detonated', (e) => {
                         if (e.detonatorId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-own-echoing-burst-detonated':
+                    // #345 (Valkyrie): APPLIER-scoped — fires only when an Echoing Burst THIS
+                    // owner applied detonates, and only on an opposing holder ("When an Echoing
+                    // Burst explodes on an ENEMY …"). Rides its own `accumulator-detonated` event,
+                    // so a Bomb burst can never reach it: that was the bug — her repair rode
+                    // `bomb-detonated`, firing on teammates' Bombs and never on her own burst.
+                    //
+                    // Keys off `actorId` (the accumulator's applier), unlike the sibling
+                    // `on-self-bomb-detonated`, which keys off `detonatorId`. A timed expiry has
+                    // no detonator, so applier-scope is the only reading of "her own burst".
+                    //
+                    // The `isOpposing` guard is what excludes an ally-side burst: a SECOND
+                    // Valkyrie's Echoing Burst detonating on one of the owner's own ships is not
+                    // "on an enemy" — and being a different applier, it fails the actorId check
+                    // too. Team-symmetric: `isOpposing` resolves relative to the registered owner.
+                    //
+                    // Stamps the burst payout as `triggerDamage`: the repair's basis is
+                    // `damage-dealt` ("repair 5% of damage dealt"), which reads exactly that
+                    // channel — the same lane the on-bomb-detonated listener stamps for
+                    // Demolisher's splash. `victimId` is stamped for symmetry with that listener
+                    // (no corpus consumer routes off it here — the repair goes to the owner's own
+                    // side, self + lowest-HP ally).
+                    bus.on('accumulator-detonated', (e) => {
+                        if (e.actorId !== ownerId) return;
+                        if (!isOpposing(e.victimId)) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                victimId: e.victimId,
+                                triggerDamage: e.damage,
+                            },
+                        });
                     });
                     break;
                 case 'on-stasis-applied':
@@ -1548,7 +1586,7 @@ export interface IntentExecContext {
      *  `undefined` and indistinguishable — fine for gates with a safe inert default, wrong here,
      *  because `undefined` is ALSO this selector's real "nobody to heal" answer. A context built
      *  without the field (a second engine entry point, a refactor that splits this literal) would
-     *  silently no-op every `'lowest-hp-ally'` consumer (Valkyrie's on-bomb-detonated repair,
+     *  silently no-op every `'lowest-hp-ally'` consumer (Valkyrie's Echoing Burst repair,
      *  Volk's passive repair) rather than fail loudly, matching the class `resolveSupportRecipients`
      *  already throws on for the cast path. Requiring the field turns that class into a `tsc`
      *  compile error at the one production call site (`engine.ts`) instead of a runtime miss, which
@@ -3012,10 +3050,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // same reader `selfDebuffNames`/`buildActorConditionContext` already use for a target's
     // debuffs); no victimId (every other reactive trigger, or DPS mode) → false, byte-identical.
     // Ship-kit W8 (CodeRabbit round): explicitly gated on trigger==='on-enemy-destroyed' — other
-    // triggers (on-deal-damage, on-bomb-detonated, on-ally-crit-dot, on-self-crit-dot,
-    // on-enemy-dot-damage, on-ally-debuff-inflicted) also stamp eventCtx.victimId, but with
-    // different semantics (the current cast's target, not a killed unit); without this guard
-    // their victimId would be misread here as "the enemy this trigger just killed".
+    // triggers (on-deal-damage, on-bomb-detonated, on-own-echoing-burst-detonated,
+    // on-ally-crit-dot, on-self-crit-dot, on-enemy-dot-damage, on-ally-debuff-inflicted) also
+    // stamp eventCtx.victimId, but with different semantics (the current cast's target, not a
+    // killed unit); without this guard their victimId would be misread here as "the enemy this
+    // trigger just killed".
     const drainCtx =
         intent.ability.trigger === 'on-enemy-destroyed' && intent.eventCtx?.victimId !== undefined
             ? {
