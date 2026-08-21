@@ -2753,6 +2753,18 @@ const DocumentationPage: React.FC = () => {
                                         ally.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Skills that name the worst-hurt ally:
+                                        </span>{' '}
+                                        a repair whose text names <em>which</em> ally it helps
+                                        &mdash; Pallas, Volk and Valkyrie in the current roster
+                                        &mdash; ignores the pattern and repairs the ally with the
+                                        lowest share of health remaining wherever it stands. The
+                                        caster is never that ally, so with no other ally alive the
+                                        repair lands on nobody. An out-of-reach placement warning
+                                        does not apply to these repairs.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Healing by ally:</span> under
                                         the charts, a breakdown table lists effective healing and
                                         overheal for each ship a repair actually landed on, with the
@@ -3421,6 +3433,24 @@ const DocumentationPage: React.FC = () => {
                                     and to reactive passives (such as start-of-round charge grants).
                                     Text that says &quot;(All) allies&quot; means all allies{' '}
                                     <em>in the pattern</em>, not every ship on your roster.
+                                </p>
+                                <p className="text-theme-text mb-2">
+                                    <span className="text-primary">
+                                        The one exception &mdash; a named ally:
+                                    </span>{' '}
+                                    when a skill&apos;s own text names <em>which</em> ally it helps
+                                    &mdash; &quot;the ally with the lowest current health
+                                    percentage&quot;, &quot;the ally with the most missing
+                                    health&quot; &mdash; it reaches that ally wherever it stands,
+                                    and the ship&apos;s targeting pattern does not narrow it.
+                                    Pallas, Volk and Valkyrie are the ships in the current roster
+                                    whose skills read this way, and it applies whether the effect
+                                    sits on an active, charged or passive skill. The ally is always
+                                    the worst-hurt one by share of health remaining, never the
+                                    caster itself &mdash; so if no other ally is alive, the repair
+                                    lands on nobody rather than on the caster. Every other
+                                    ally-targeted repair, shield, buff, cleanse or charge grant
+                                    follows the pattern as described above.
                                 </p>
                             </div>
 

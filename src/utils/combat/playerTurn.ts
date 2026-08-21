@@ -925,8 +925,14 @@ function chargeGainFromSkill(args: {
         // lowest-HP ALLY into the caster's OWN charge instead, which is the same self-target
         // mistake the variant exists to forbid — a worse answer than the known approximation on
         // the 'ally' side (grantAllyCharges bumps every same-side actor, so a single-ally grant is
-        // over-applied; that approximation is pre-existing and shared with plain 'ally', and
-        // narrowing it is not this rung's scope).
+        // over-applied; that approximation is pre-existing and shared with plain 'ally').
+        //
+        // That over-application is an OPEN RESIDUAL belonging to no scheduled task — SP-4e Task 6
+        // is the epic's last rung, so do not read the earlier "not this rung's scope" wording as a
+        // pending fix. It is also CORPUS-DEAD: every ability carrying `'lowest-hp-ally'` in the
+        // shipped roster is a HEAL, never a charge (all five of them — Pallas/active,
+        // Volk/passive1+2, Valkyrie/passive1+2 — pinned by the inventory gate in
+        // `lowestHpAllySelector.test.ts`). Only a hand-authored charge ability can reach it.
         const isAlly =
             ability.target === 'ally' ||
             ability.target === 'all-allies' ||
@@ -1345,11 +1351,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         anchor: actor.position,
         sameSideLiving: sameSideLiving ?? [],
     });
-    // The firing skill's support footprint narrows the CAST's ally recipients. A PASSIVE-slot
-    // support ability is not part of the cast, so the pattern does not govern it (user-verified
-    // 2026-07-31 via Volk: its active buffs stay on-pattern, its passive repair reaches the ally
-    // with the most missing health wherever that ally stands). The exception is a passive whose
-    // own clause names the pattern — `Ability.patternScoped`, see the flag's doc comment.
+    // The firing skill's support footprint narrows the CAST's ally recipients. TWO things escape it,
+    // and they are independent — do not collapse them into one rule:
+    //
+    //  (1) SLOT. A PASSIVE-slot support ability is not part of the cast, so the pattern does not
+    //      govern it (user-verified 2026-07-31 via Volk: its active buffs stay on-pattern, its
+    //      passive repair reaches the ally with the most missing health wherever that ally stands).
+    //      The exception is a passive whose own clause names the pattern —
+    //      `Ability.patternScoped`, see the flag's doc comment. That is what `scopedByFootprint`
+    //      below decides, and it is the ONLY axis this predicate knows about.
+    //
+    //  (2) TARGET (SP-4e, user-confirmed 2026-08-20). A TEXT-NAMED ally selector is never
+    //      footprint-scoped **on either slot**. The Volk observation above was originally recorded
+    //      as a fact about his passive slot, but the load-bearing half of it is the selector: his
+    //      text names "the ally with the most missing health", and a named ally is reached wherever
+    //      it stands. `'lowest-hp-ally'` (Pallas, Volk, Valkyrie) therefore bypasses
+    //      `supportRecipients` entirely — `recipientsFor` returns for it BEFORE calling this, and
+    //      `resolveSupportRecipients` THROWS on the target by design so a future caller cannot
+    //      quietly narrow it. Put a named selector on an ACTIVE skill and it still ignores the
+    //      pattern; that is not the passive-slot rule leaking, it is rule (2).
+    //
+    // Everything left over — a plain `'ally'`, `'all-allies'`, `'adjacent-allies'` on the cast slot
+    // — IS narrowed, including plain `'ally'` since SP-4e Task 4 (see `recipientsFor`).
     const scopedByFootprint = (ability: Ability | undefined, fromPassive: boolean): boolean =>
         !fromPassive || ability?.patternScoped === true;
     const supportRecipients = (

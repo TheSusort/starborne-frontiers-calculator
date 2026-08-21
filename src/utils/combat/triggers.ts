@@ -2555,6 +2555,18 @@ export function reactiveRecipients(
  * the charged skill of all allies within the active pattern", AEGIS's and Cultivator's ally-scoped
  * triggers. Everything else reaches any same-side ally.
  *
+ * ⚠️ A TEXT-NAMED ally selector never gets here at all, and `patternScoped` is not what keeps it
+ * out. `'lowest-hp-ally'` is not footprint-scoped on ANY slot (SP-4e, user-confirmed 2026-08-20):
+ * the ability's own text names which ally it reaches, so a pattern cannot narrow it even if the
+ * ability also carried `patternScoped`. Each of the three callers therefore resolves it and returns
+ * ABOVE this function — `reactiveRecipients`, the reactive charge branch, and the reactive buff
+ * branch — and each passes an already-resolved single id, never the selector. This function is NOT
+ * a second line of defence for them: its `patternScoped !== true` early return would hand a
+ * selector-targeted ability back its whole `baseRecipients` (every same-side ally), and only a
+ * selector ability that ALSO set `patternScoped` would reach `resolveSupportRecipients` and hit its
+ * by-design throw. So the three early returns are the guarantee; if you add a fourth caller, resolve
+ * the selector there too.
+ *
  * AEGIS/Cultivator caveat: in their wording the pattern scopes the TRIGGER ("when an ally within
  * the active pattern is …"), not the recipient. Filtering their recipients is an approximation —
  * but it is exactly the behaviour that shipped before this rule, so flagging them is status-quo,
@@ -3865,10 +3877,17 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // emit) → fall back to the aggregate overhealAmount routed to healing.targetId below.
         const overhealByAlly =
             cfg.basis === 'overheal' ? intent.eventCtx?.overhealByAlly : undefined;
-        // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
-        // reaction repairs THAT ally) over the healing target. Identical today for single-target
-        // healing-mode runs, but the per-ally overheal map (when present) supersedes it so an AoE
+        // Recipients: an 'ally'-target heal prefers eventCtx.cleansedAllyIds, then
+        // eventCtx.damagedAllyId (an ally-damage reaction repairs THAT ally), then the healing
+        // target. The per-ally overheal map (when present) supersedes all of that, so an AoE
         // overheal shield fans out to every over-repaired ally.
+        //
+        // ⚠️ This used to add "identical today for single-target healing-mode runs". That is FALSE
+        // twice over now. (1) SP-4e Task 4 made a cast `'ally'` cleanse fan out over the caster's
+        // support footprint, so `cleansedAllyIds` — read from `cleanse-performed.targets` — can
+        // carry SEVERAL ids, and Cultivator's "repairs that ally" now repairs each of them.
+        // (2) SP-4e Task 2 replaced this branch's anchor-only pool gate, so a resolved recipient
+        // that is NOT the heal target genuinely gains HP. Neither of those is single-target.
         const recipients =
             overhealByAlly && Object.keys(overhealByAlly).length > 0
                 ? Object.keys(overhealByAlly)
@@ -3886,9 +3905,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
             // destroyed, but `recipients = ctx.playerIds` then still includes that dead
-            // caster — inflating gross directHeal/shield by one phantom share. The live
-            // heal target's effectiveHeal/overheal/shield are already isolated by the
-            // `rid === ctx.healing.targetId` guard below and are unaffected.
+            // caster — inflating gross directHeal/shield by one phantom share.
+            //
+            // ⚠️ The old tail of that sentence — "the live heal target's
+            // effectiveHeal/overheal/shield are already isolated by the
+            // `rid === ctx.healing.targetId` guard below" — names a guard that NO LONGER EXISTS.
+            // SP-4e Task 2 replaced it with `ctx.healing.recipientActor(rid)`, so every resolved
+            // recipient's own pool is touched, not just the anchor's. What keeps a dead recipient
+            // out is THIS `continue` and nothing else: it now protects the applied figures as well
+            // as the gross ones, which makes it more load-bearing than when it was written, not
+            // less. Do not remove it on the grounds that a downstream guard covers it.
             //
             // Determinism (byte-identical goldens): an `rid` may have NO runtime entry
             // (an unwalked legacy team actor). A MISSING runtime is treated as ALIVE —

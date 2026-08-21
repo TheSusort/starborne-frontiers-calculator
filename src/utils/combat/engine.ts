@@ -2475,9 +2475,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     // containers) and nothing TICKS them (the dummy's turn was retired in SP-4c-2c). They survive
     // for exactly one reason: `executeIntent`'s `ctx.corrosionEntries` / `ctx.infernoEntries` /
     // `ctx.genericDoTEntries` / `ctx.pendingBombs`, which `buildDrainContext` reads as the
-    // drain-time DoT-count condition scalars (`corrosionEntryCount` & co., triggers.ts). Retiring
-    // that side-biased read is a later rung's job, so the containers stay — empty, but present, so
-    // the scalars keep answering 0 rather than crashing.
+    // drain-time DoT-count condition scalars (`corrosionEntryCount` & co., triggers.ts). So the
+    // containers stay — empty, but present, so the scalars keep answering 0 rather than crashing.
+    //
+    // ⚠️ This used to say retiring that side-biased read was "a later rung's job". SP-4e is the
+    // LAST rung of this epic and it did not retire it, so nothing is scheduled: it is an OPEN
+    // RESIDUAL, not a pending deletion. Anyone picking it up owns the read in `buildDrainContext`,
+    // not these declarations.
     //
     // `landDotOn`'s `(victim?.corrosionEntries ?? ctx.corrosionEntries)` tail can still reach them
     // if a reactive intent resolves an id no actor carries; SP-4c-2d Task 1 made a VICTIMLESS
@@ -4058,9 +4062,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             for (const rid of recipients) {
                 // SP-4e: a SELECTOR-resolved recipient applies to its OWN pool — the shape
                 // `procStandingLeechesPerVictim` already uses. Every other target keeps this
-                // aggregate path's long-standing anchor-only application (widening those is
-                // Task 4's scope, not this rung's), which is why arming the selector here is
-                // zero-churn: no existing entry takes this branch.
+                // aggregate path's long-standing anchor-only application, which is why arming the
+                // selector here is zero-churn: no existing entry takes this branch.
+                //
+                // ⚠️ An earlier draft ended that sentence with "widening those is Task 4's scope,
+                // not this rung's". Task 4 has SHIPPED and it widened NOTHING here: it changed
+                // `recipientsFor` (playerTurn.ts) only, so a cast `'ally'` now means the caster's
+                // support footprint while BOTH leech procs still answer `'ally'` with the anchor.
+                // That divergence is deliberate and belongs to no scheduled task — the three
+                // reasons are recorded once, at the per-victim twin's `'ally'` arm (its OPEN
+                // RESIDUAL block). Do not read this paragraph as a pending deletion.
                 const selectorActor =
                     selectorRecipientId !== undefined ? healingCtx.recipientActor(rid) : undefined;
                 if (e.kind === 'heal') {
@@ -10416,8 +10427,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // that needs a living one. The `else` therefore no longer narrows `tgt` to
                                 // a defined CombatActor: every victim-derived read in it is guarded.
                                 advanceChargeCadence(actor, enemyRuntime.hasChargedSkill, bus, r);
-                                // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
-                                // produced no ctx either; this actor has no live DoTs to attribute).
+                                // No enemyTurn → no lastTurnCtxByActor update. This actor has no live
+                                // DoTs to attribute, so nothing reads the missing entry.
+                                //
+                                // ⚠️ DO NOT restate this as "parity: the old dead path produced no ctx
+                                // either" — that is what stood here and it is FALSE now. The old branch
+                                // also swallowed every `tgt === undefined` turn, and those turns
+                                // published nothing. Since #335 they run the `else` instead, which sets
+                                // `lastTurnCtxByActor` UNCONDITIONALLY. Measured on this branch, whole
+                                // suite: 1,695 enemy no-victim turns across 26 files now publish a ctx
+                                // where they previously published none — independently corroborated by
+                                // Task 5's Probe A, which counted the same 1,695 no-victim enemy turns
+                                // from the selection site. That is a real publication delta, not parity;
+                                // it moved no golden because the only consumer is an enemy DoT tick
+                                // attributed to this actor, and a no-victim turn applies no DoT.
                             } else {
                                 // D-PR3 Task 9: victim-side incoming %-reduction against the bound
                                 // target on the AGGREGATE (non-positional) damage path — Iridium-as-tank.
