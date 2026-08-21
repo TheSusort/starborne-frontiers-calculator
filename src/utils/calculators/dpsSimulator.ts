@@ -205,16 +205,24 @@ export interface RoundData {
      *  `summary.totalDamage` exactly. */
     totalRoundDamage: number;
     cumulativeDamage: number;
-    /** All-channel non-focus player (team) damage this round: direct (incl. its
-     *  secondary/conditional components), DoT ticks from entries team actors applied, and
-     *  detonation bursts from their bombs/accumulators. Set ONLY when walked team actors exist;
-     *  undefined on attacker-only runs (legacy RoundData shape preserved).
+    /** All-channel damage the WHOLE PLAYER SIDE dealt this round — the focus INCLUDED, plus every
+     *  walked team actor: direct (incl. its secondary/conditional components), DoT ticks from
+     *  entries any of them applied, and detonation bursts from their bombs/accumulators. Set ONLY
+     *  when walked team actors exist; undefined on attacker-only runs (legacy RoundData shape
+     *  preserved), so PRESENCE means "this run had team ships" and the VALUE is the side total.
      *
-     *  RE-DERIVED alongside the focus's rows (SP-4b-1): the engine folds this out of the scalar
-     *  `roundDamage` map, whose team writer is suppressed the moment a walked team actor resolves
-     *  positionally — which is now every DPS-page run — so `simulateDPS` recomputes it from the
-     *  walked team ids' `perTargetDealt` totals. `totalRoundDamage + teamDamage` tracks the
-     *  round's enemy-HP delta, but as a DAMAGE-DEALT sum it books overkill on a killing round. */
+     *  ⚠️ The focus is IN this number (#331, owner ruling). It used to be non-focus-only, which
+     *  made it unusable for the comparison the DPS page exists for: swapping the focus ship changes
+     *  what the rest of the team does — its buffs raise their damage, its casts feed their reactions
+     *  — so the question is "what does this side put out with this ship in it", and neither the
+     *  focus's own total nor the others' total answers it alone. Subtract `totalRoundDamage` if you
+     *  want the team's own contribution back.
+     *
+     *  RE-DERIVED alongside the focus's rows (SP-4b-1), from `perTargetDealt` over the whole
+     *  player-side id list. The engine's own scalar fold reads 0 for any actor that resolved
+     *  positionally — which is now every DPS-page run — so it is not a usable source; see the
+     *  ⚠️ note at `teamRoundDamage` in engine.ts. As a DAMAGE-DEALT sum this books overkill on a
+     *  killing round. */
     teamDamage?: number;
     /** Number of EXTRA focus-actor turns this round (extra actions). Set only when
      *  ≥ 1 — undefined preserves the legacy RoundData shape (golden snapshots). */
@@ -364,8 +372,9 @@ export interface DPSSimulationSummary {
     totalDetonationDamage: number;
     totalSecondaryDamage: number;
     totalConditionalDamage: number;
-    /** Total non-focus player (team) damage across all rounds. Present only when walked
-     *  team actors exist; the focus-only DPS fields above are unaffected by team damage. */
+    /** Total damage the WHOLE PLAYER SIDE dealt across all rounds — the focus INCLUDED (#331; see
+     *  `RoundData.teamDamage` for why). Present only when walked team actors exist. The focus-only
+     *  DPS fields above are unaffected: subtract `totalDamage` to recover the team's own share. */
     teamTotalDamage?: number;
 }
 
@@ -754,10 +763,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // violet tooltip row, the dashed "with team" overlay and its legend entry, and `killRoundFor`
     // falls back to focus-only and reports a LATER kill round than the sim produced.
     //
-    // The group shape is NOT the focus's: an explicit list of walked team ids, because
-    // `perTargetDealt` is keyed by attacker across BOTH sides — the engine's "every non-focus
-    // entry" subtraction is only safe on the player-credit-only scalar map, and applied here it
-    // would fold the ENEMY's output into the player's team aggregate.
+    // The group is an EXPLICIT id list — the focus plus the walked team ids — never "every entry
+    // that is not the focus". `perTargetDealt` is keyed by attacker across BOTH sides, so that
+    // subtraction (which is what the engine's scalar map does, safely, being player-credit-only)
+    // would fold the ENEMY's output into the player's side total here.
     //
     // Replacement (not addition), mirroring the focus: the two channels are mutually exclusive per
     // cast — the `!teamPositional` gate above, `applyReactiveDamage` (which since SP-4c-2d calls
@@ -765,8 +774,16 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // the positional DoT/detonation sites which call `creditDealt` only. A run with no walked team
     // actors at all (`walkedTeamIds.length === 0`) has nothing to re-derive here.
     const walkedTeamIds = engineTeamActors?.filter((t) => t.walk).map((t) => t.id) ?? [];
+    // The group is the WHOLE PLAYER SIDE — the focus INCLUDED. Swapping the focus ship changes what
+    // the rest of the team does (its buffs raise their damage, its casts feed their reactions), so
+    // "what does this side put out with this ship in it" is the number that makes two configs
+    // comparable; the focus's own output alone cannot answer it. Presence still means "this run had
+    // team ships" (the `walkedTeamIds.length > 0` gate), so a run with no team keeps the field
+    // absent and the legacy RoundData shape.
     const perRoundTeamDamage =
-        walkedTeamIds.length > 0 ? actorsDamagePerRound(reportedRounds, walkedTeamIds) : null;
+        walkedTeamIds.length > 0
+            ? actorsDamagePerRound(reportedRounds, [FOCUS_ACTOR_ID, ...walkedTeamIds])
+            : null;
     if (perRoundTeamDamage) {
         // Rounded per row, preserving the integer contract the engine's own
         // `Math.round(teamRoundDamage)` gave this field (the chart prints it with toLocaleString).

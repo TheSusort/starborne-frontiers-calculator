@@ -28,16 +28,25 @@ interface DPSRoundChartProps {
 /** Per-ship dataKey for its cumulative team-damage overlay line. */
 const teamKey = (shipId: string) => `${shipId}__team`;
 
-/** True when any of the ship's rounds reports walked-team damage. */
+/**
+ * True when the walked team contributed damage OF ITS OWN in some round.
+ *
+ * `RoundData.teamDamage` is the whole player side since #331 — the focus is IN it — so a bare
+ * `> 0` would be true for every run that fields a team at all, including a buff-only ally that
+ * deals nothing: the dashed overlay would sit exactly on the solid line and the violet row would
+ * restate the round total. Subtracting the focus's own round total gets the team's share back, and
+ * keeps the chart's team features appearing exactly when they did before.
+ */
 const hasTeamDamage = (ship: ShipSimResult): boolean =>
-    ship.result.rounds.some((r) => (r.teamDamage ?? 0) > 0);
+    ship.result.rounds.some((r) => (r.teamDamage ?? 0) - r.totalRoundDamage > 0);
 
 /**
  * 1-based round in which the enemy HP pool is first emptied, or null.
  *
- * When the ship has walked-team damage, the enemy dies on COMBINED damage
- * (attacker cumulative + team cumulative through that round) — matching how the
- * engine models HP%/gates. Without team damage, it's the attacker cumulative alone.
+ * When the ship has walked-team damage the enemy dies on the WHOLE SIDE's cumulative output, which
+ * since #331 is what `teamDamage` accumulates to on its own — adding `cumulativeDamage` (the focus's
+ * own running total) on top would count the focus twice and report an early kill. Without team
+ * damage there is no side total to read, so it is the focus's cumulative alone.
  */
 const killRoundFor = (ship: ShipSimResult, enemyHp?: number): number | null => {
     if (!enemyHp || enemyHp <= 0) return null;
@@ -45,11 +54,10 @@ const killRoundFor = (ship: ShipSimResult, enemyHp?: number): number | null => {
         const idx = ship.result.rounds.findIndex((r) => r.cumulativeDamage >= enemyHp);
         return idx === -1 ? null : idx + 1;
     }
-    let teamRunning = 0;
+    let sideRunning = 0;
     for (let i = 0; i < ship.result.rounds.length; i++) {
-        const r = ship.result.rounds[i];
-        teamRunning += r.teamDamage ?? 0;
-        if (r.cumulativeDamage + teamRunning >= enemyHp) return i + 1;
+        sideRunning += ship.result.rounds[i].teamDamage ?? 0;
+        if (sideRunning >= enemyHp) return i + 1;
     }
     return null;
 };
@@ -154,9 +162,12 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                                 )}
                             </div>
                         )}
-                        {roundData && (roundData.teamDamage ?? 0) > 0 && (
+                        {roundData && (roundData.teamDamage ?? 0) - roundDamage > 0 && (
                             <p className="text-xs pl-2 text-violet-400">
-                                Team damage: {(roundData.teamDamage ?? 0).toLocaleString()}
+                                {`Team round total: ${(roundData.teamDamage ?? 0).toLocaleString()} `}
+                                <span className="text-theme-text-secondary">
+                                    {`(this ship + ${((roundData.teamDamage ?? 0) - roundDamage).toLocaleString()} from allies)`}
+                                </span>
                             </p>
                         )}
                         <p className="text-xs text-theme-text-secondary pl-2">
@@ -187,10 +198,11 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
 
     if (ships.length === 0) return null;
 
-    // Ships whose sim included walked team actors get a separate (non-stacked) combined
-    // total overlay line: attacker cumulative + team cumulative ("total team effort").
-    // The enemy actually dies when this combined total empties the HP pool, so this is
-    // the line that carries the kill mark when a team is configured.
+    // Ships whose sim included walked team actors get a separate (non-stacked) overlay line: the
+    // WHOLE SIDE's cumulative output ("total team effort"). The enemy actually dies when that total
+    // empties the HP pool, so this is the line that carries the kill mark when a team is
+    // configured. Since #331 `teamDamage` already IS the side's round output, so the line is just
+    // its running sum.
     const teamShips = ships.filter(hasTeamDamage);
     const teamCumulative = new Map<string, number>();
     // SP-U U6: when the enemy actually dies (real, destructible target) the run terminates
@@ -210,11 +222,12 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
         });
         teamShips.forEach((ship) => {
             const roundData = ship.result.rounds[r - 1];
+            // #331: `teamDamage` is the whole side's round output (focus included), so its running
+            // sum IS the combined total — it must not be added to the focus's own cumulative.
             const running = (teamCumulative.get(ship.id) ?? 0) + (roundData?.teamDamage ?? 0);
             teamCumulative.set(ship.id, running);
-            // Combined total = attacker cumulative this round + team cumulative this round
-            // (both held flat past the kill round via lastCumulative/teamCumulative above).
-            point[teamKey(ship.id)] = (lastCumulative.get(ship.id) ?? 0) + running;
+            // Held flat past the kill round: a round the trimmed run never reported adds 0.
+            point[teamKey(ship.id)] = running;
         });
         chartData.push(point);
     }

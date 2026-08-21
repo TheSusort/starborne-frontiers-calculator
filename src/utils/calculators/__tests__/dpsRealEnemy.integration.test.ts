@@ -239,12 +239,16 @@ describe('DPS calculator with a real positioned enemy', () => {
         expect(result.summary.teamTotalDamage ?? 0).toBeGreaterThan(0);
 
         // Reconciliation (not a magic number — adding an actor shifts every RNG draw): each row's
-        // teamDamage is exactly that round's per-victim channel summed over the walked team ids,
-        // and the summary is the total of the same, mirroring the focus re-derivation.
+        // teamDamage is exactly that round's per-victim channel summed over the WHOLE PLAYER SIDE
+        // — the focus plus the walked team ids (#331: the focus is in the side total, because
+        // swapping it changes what the team does) — and the summary is the total of the same.
         result.rounds.forEach((r) => {
-            expect(r.teamDamage ?? 0).toBe(Math.round(dealtBySource(r, 'team-1')));
+            expect(r.teamDamage ?? 0).toBe(
+                Math.round(dealtBySource(r, 'attacker') + dealtBySource(r, 'team-1'))
+            );
         });
-        expect(result.summary.teamTotalDamage).toBe(Math.round(teamDealt));
+        const focusDealt = result.rounds.reduce((sum, r) => sum + dealtBySource(r, 'attacker'), 0);
+        expect(result.summary.teamTotalDamage).toBe(Math.round(focusDealt + teamDealt));
 
         // The enemy's OWN output must never leak into the player-side team aggregate. The enemy
         // deals real damage in this fixture, so the per-round equality above is a LIVE exclusion
