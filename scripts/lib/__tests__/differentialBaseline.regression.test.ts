@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { buildSameEnemyBaseline, buildStandardScenario } from '../traceScenario';
+import { buildInertAllyBaseline, buildStandardScenario } from '../traceScenario';
 import { buildTraceShip } from '../traceShipFactory';
 import { loadShipSkillRecords, csvAvailable } from '../shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from '../shipDataSnapshot';
@@ -8,25 +8,25 @@ import { composeBattle, type TaggedShip } from '../../../src/utils/combat/audit/
 import { runSeededBattle } from '../../../src/utils/combat/audit/seededBattle';
 import { runDifferential } from '../../../src/utils/combat/audit/fingerprint';
 import type {
-    BattlePlacement,
     BattleResult,
     BattleSimulationInput,
 } from '../../../src/utils/calculators/battleSimulator';
 import type { Position } from '../../../src/types/encounters';
+import type { Ship } from '../../../src/types/ship';
 import type { FingerprintDiff } from '../../../src/utils/combat/audit/types';
 
 /**
- * FINDING-003 regression — the concrete case that justified `buildSameEnemyBaseline`.
+ * FINDING-003 regression — the concrete case that moved the differential oracle off the canned
+ * `buildStandardScenario` baseline.
  *
- * `scripts/auditInteractions.ts`'s differential oracle reported a Makoli differential at seed 335
- * whose OWN ddmin reduced the composition to `player:[Makoli] / enemy:[Nuqtu]` — a single player
- * ship, i.e. ZERO allies, so the "ally interference" the oracle claims to detect was impossible by
- * construction. The finding was opponent variance leaking in through the canned
- * `buildStandardScenario` baseline (three synthetic fillers at security 20) being compared against
- * a real-corpus opponent.
+ * `scripts/auditInteractions.ts` reported a Makoli differential at seed 335 whose OWN ddmin
+ * reduced the composition to `player:[Makoli] / enemy:[Nuqtu]` — a single player ship, i.e. ZERO
+ * allies, so the "ally interference" the oracle claims to detect was impossible by construction.
+ * It was opponent variance leaking in: the canned baseline fought three synthetic fillers at
+ * security 20 while the composition fought a real corpus ship.
  *
  * Both arms are asserted, deliberately. Asserting only the collapse would pass just as happily if
- * the seed no longer produced a Makoli, if the corpus drifted, or if the differential returned null
+ * the seed stopped producing a Makoli, if the corpus drifted, or if the differential returned null
  * for some unrelated reason — the vacuous-but-green failure mode this repo keeps paying for. The
  * canned arm is the proof that the case is still LIVE and that the oracle can still report a diff
  * here at all.
@@ -41,7 +41,9 @@ function requireReferenceData(): void {
     }
 }
 
+let corpusCache: TaggedShip[] | null = null;
 function buildTaggedCorpus(): TaggedShip[] {
+    if (corpusCache) return corpusCache;
     const namesByUpper = new Map<string, string>();
     for (const r of loadShipSkillRecords()) namesByUpper.set(r.name.toUpperCase(), r.name);
     for (const [upper, data] of loadShipDataByName()) {
@@ -53,8 +55,12 @@ function buildTaggedCorpus(): TaggedShip[] {
         if (!ship) continue;
         tagged.push({ ship, classes: tagShip(ship) });
     }
+    corpusCache = tagged;
     return tagged;
 }
+
+const inertPoolFrom = (tagged: TaggedShip[]): Ship[] =>
+    tagged.filter((t) => t.classes.size === 0).map((t) => t.ship);
 
 const SEED = 335;
 
@@ -64,11 +70,13 @@ function actorIdAt(result: BattleResult, side: 'player' | 'enemy', position: Pos
     return entry.actorId;
 }
 
-/** The oracle's arm under the CANNED baseline (the pre-change behaviour). */
+/** The oracle's arm under the CANNED baseline (the original behaviour). */
 function cannedArmDiff(
-    placement: BattlePlacement,
+    compInput: BattleSimulationInput,
+    subjectIndex: number,
     compResult: BattleResult
 ): FingerprintDiff | null {
+    const placement = compInput.playerTeam[subjectIndex];
     const soloResult = runSeededBattle(buildStandardScenario(placement.ship), SEED);
     return runDifferential(
         soloResult,
@@ -79,33 +87,44 @@ function cannedArmDiff(
     );
 }
 
-/** The oracle's arm under the SAME-ENEMY baseline (the post-change behaviour). */
-function sameEnemyArmDiff(
-    placement: BattlePlacement,
+/** The oracle's arm under the INERT-ALLY baseline (the current behaviour). */
+function inertArmDiff(
     compInput: BattleSimulationInput,
-    compResult: BattleResult
+    subjectIndex: number,
+    compResult: BattleResult,
+    pool: readonly Ship[]
 ): FingerprintDiff | null {
-    const soloInput = buildSameEnemyBaseline(placement, compInput.enemyTeam, compInput.rounds);
-    const soloResult = runSeededBattle(soloInput, SEED);
+    const placement = compInput.playerTeam[subjectIndex];
+    const baseline = buildInertAllyBaseline(
+        compInput.playerTeam,
+        subjectIndex,
+        compInput.enemyTeam,
+        pool,
+        SEED,
+        compInput.rounds
+    );
+    const baselineResult = runSeededBattle(baseline, SEED);
     return runDifferential(
-        soloResult,
+        baselineResult,
         compResult,
         placement.ship.name,
-        actorIdAt(soloResult, 'player', placement.position),
+        actorIdAt(baselineResult, 'player', placement.position),
         actorIdAt(compResult, 'player', placement.position)
     );
 }
 
-describe('same-enemy differential baseline — FINDING-003 (Makoli, seed 335)', () => {
+describe('differential baseline — FINDING-003 (Makoli, seed 335)', () => {
     let minimized: BattleSimulationInput;
-    let subject: BattlePlacement;
+    let pool: Ship[];
 
     beforeAll(() => {
         requireReferenceData();
         // The ddmin'd repro, rebuilt from the fuzz composition it came from rather than
         // hand-transcribed: at seed 335 the minimizer kept playerTeam[0] (Makoli) and
         // enemyTeam[0] (Nuqtu) and dropped the rest.
-        const compInput = composeBattle(SEED, buildTaggedCorpus());
+        const tagged = buildTaggedCorpus();
+        pool = inertPoolFrom(tagged);
+        const compInput = composeBattle(SEED, tagged);
         expect(compInput.playerTeam[0].ship.name).toBe('Makoli');
         expect(compInput.enemyTeam[0].ship.name).toBe('Nuqtu');
         minimized = {
@@ -113,7 +132,6 @@ describe('same-enemy differential baseline — FINDING-003 (Makoli, seed 335)', 
             enemyTeam: [compInput.enemyTeam[0]],
             rounds: compInput.rounds,
         };
-        subject = minimized.playerTeam[0];
     });
 
     it('has no allies at all, so ally interference is impossible by construction', () => {
@@ -122,14 +140,14 @@ describe('same-enemy differential baseline — FINDING-003 (Makoli, seed 335)', 
 
     it('the CANNED baseline still reports a differential here (the case is live)', () => {
         const compResult = runSeededBattle(minimized, SEED);
-        const diff = cannedArmDiff(subject, compResult);
+        const diff = cannedArmDiff(minimized, 0, compResult);
         expect(diff).not.toBeNull();
         expect([...diff!.missingInComposition, ...diff!.extraInComposition]).toContain('cleanse');
     });
 
-    it('the SAME-ENEMY baseline collapses it to no diff at all', () => {
+    it('the INERT-ALLY baseline collapses it to no diff at all', () => {
         const compResult = runSeededBattle(minimized, SEED);
-        expect(sameEnemyArmDiff(subject, minimized, compResult)).toBeNull();
+        expect(inertArmDiff(minimized, 0, compResult, pool)).toBeNull();
     });
 
     it('reports no differential for ANY single-player-ship composition — the structural guarantee', () => {
@@ -143,7 +161,7 @@ describe('same-enemy differential baseline — FINDING-003 (Makoli, seed 335)', 
             rounds: other.rounds,
         };
         const soloResult = runSeededBattle(solo, 336);
-        const baseline = buildSameEnemyBaseline(solo.playerTeam[0], solo.enemyTeam, solo.rounds);
+        const baseline = buildInertAllyBaseline(solo.playerTeam, 0, solo.enemyTeam, pool, 336);
         const baselineResult = runSeededBattle(baseline, 336);
         const position = solo.playerTeam[0].position;
         expect(
@@ -155,5 +173,30 @@ describe('same-enemy differential baseline — FINDING-003 (Makoli, seed 335)', 
                 actorIdAt(soloResult, 'player', position)
             )
         ).toBeNull();
+    });
+
+    // The property the baseline design turns on, checked end-to-end rather than argued: on a real
+    // multi-ship composition the subject must mint the SAME actor id in both arms. If it did not,
+    // the ownerId-keyed rate-gate RNG would re-draw every crit and landing roll between the arms
+    // and the oracle would be comparing two different dice, not two different ally sets.
+    it('gives the subject the same actor id in both arms, at every player index', () => {
+        const compInput = composeBattle(SEED, buildTaggedCorpus());
+        expect(compInput.playerTeam.length).toBeGreaterThan(1);
+        const compResult = runSeededBattle(compInput, SEED);
+        for (let idx = 0; idx < compInput.playerTeam.length; idx++) {
+            const placement = compInput.playerTeam[idx];
+            const baseline = buildInertAllyBaseline(
+                compInput.playerTeam,
+                idx,
+                compInput.enemyTeam,
+                pool,
+                SEED,
+                compInput.rounds
+            );
+            const baselineResult = runSeededBattle(baseline, SEED);
+            expect(actorIdAt(baselineResult, 'player', placement.position)).toBe(
+                actorIdAt(compResult, 'player', placement.position)
+            );
+        }
     });
 });

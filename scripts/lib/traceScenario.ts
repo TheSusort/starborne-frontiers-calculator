@@ -1,6 +1,7 @@
 import type { Ship, AffinityName } from '../../src/types/ship';
 import type { Position } from '../../src/types/encounters';
 import type { BattlePlacement, BattleSimulationInput } from '../../src/utils/calculators/battleSimulator';
+import { mulberry32 } from '../../src/utils/calculators/rateAccumulator';
 
 export interface ScenarioOverrides {
     rounds?: number;
@@ -97,42 +98,116 @@ const enemyDebuffer = (id: string, name: string, attack: number): Ship => ({
 });
 
 /**
- * The differential oracle's SOLO baseline: `subject` ALONE on the player side, facing the
- * caller's OWN enemy roster verbatim.
+ * The differential oracle's BASELINE board: the same battle the composition ran, with every ally
+ * except `subject` swapped for an INERT ship — same board cell, same stat overrides, no
+ * interaction kit — and the enemy roster passed through verbatim.
  *
- * Why this exists (and why the canned `buildStandardScenario` is wrong for it): the differential
- * oracle asks "does this ship behave differently when it has ALLIES?". Answering that requires
- * the two arms to differ in exactly one variable — the allies. Baselining against
- * `buildStandardScenario` changed TWO: it swapped the allies out AND swapped the opponents
- * (three canned fillers at security 20, fixed affinities, fixed attack) for the composition's
- * real random-corpus enemies. Opponent variance then reads as ally interference. That confound
- * produced real false positives: at seed 335 a Makoli differential whose own ddmin had reduced
- * the composition to `player:[Makoli]` — literally zero allies, so ally interference was
- * impossible by construction — still reported `missing:[cleanse]` against the canned baseline.
- * Re-run against the composition's own enemies, the same case collapses to no diff at all.
+ * WHAT THE ORACLE IS ASKING, and why two earlier designs answered a different question. The
+ * question is "does this ship behave differently BECAUSE OF ITS ALLIES?", so the two arms must
+ * differ in exactly one variable.
  *
- * Consequences worth knowing before using this:
- *  - The subject keeps its composition POSITION and `statOverrides` (the placement is passed
- *    through unchanged), so the only board difference is the absent allies.
- *  - The subject becomes `playerTeam[0]`, i.e. the engine's reserved focus id `'attacker'`. It
- *    was already the focus under `buildStandardScenario`, so this does NOT change (or fix) the
- *    focus-vs-walked instrumentation asymmetry — that stays a separate problem handled by the
- *    caller's excluded-kind restriction.
- *  - Alone against four real enemies, a fragile subject dies where it survived in the
- *    composition. That is a genuine loss of comparable placements, not a bug here; the caller's
- *    survived-the-whole-battle guard is what drops those.
+ *  - `buildStandardScenario` (the original baseline) changed at least four: it swapped the allies
+ *    out, swapped the opponents for three canned fillers at security 20 with fixed affinities and
+ *    a fixed attack, re-pinned the subject to M4 as `playerTeam[0]`, and ran a full 30 rounds
+ *    instead of ending in a wipe. Opponent variance read as ally interference. Measured: at seed
+ *    300/count 100 six of its ten differentials ddmin'd to a player side of exactly ONE ship —
+ *    zero allies, so ally interference was impossible by construction — and it reported one anyway.
+ *  - Holding the enemies fixed but EMPTYING the player side fixed the opponent confound and broke
+ *    something else: the subject lost the three bodies that were soaking incoming attacks, so it
+ *    died alone where it had survived in the composition. Comparable placements fell from 161/2800
+ *    to 21/2800 (seed 1000/count 700) and the calibration gate dropped to inspecting 2 of 160
+ *    placements. 40 of 43 pre-change findings did not collapse — they became invisible.
+ *
+ * This design separates those. Holding position, stats and count fixed and varying only the ally
+ * KITS means:
+ *  - the subject keeps three allies soaking damage and taking turns, so it survives the baseline
+ *    about as often as it survives the composition;
+ *  - the contrast is "interacting allies vs non-interacting allies" rather than "allies vs none",
+ *    which is what the oracle claims to measure;
+ *  - the subject keeps its ARRAY INDEX, so it mints the same actor id in both arms. Focus stays
+ *    focus and a walked ally stays walked, which retires the focus-vs-walked instrumentation
+ *    asymmetry for this comparison, and — because the rate-gate RNG is keyed by owner id — stops
+ *    the crit/landing streams re-drawing between the arms.
+ *
+ * The fillers inherit the REPLACED ally's `statOverrides` and cell, not their own base stats, so
+ * HP, attack, defence and above all SPEED are byte-identical between the arms: same turn order,
+ * same incoming-damage budget, same battle length. Only the kit (and with it affinity, faction and
+ * role, which ride the `Ship`) changes. "Inert" means an empty interaction-class tag set — the same
+ * premise the calibration gate already rests on. It is not a claim of zero influence: an inert ship
+ * still deals damage, and a role-reading pre-combat passive on the SUBJECT (Enforcer's
+ * "adjacent to a supporter") can notice that its neighbour's role changed.
+ *
+ * Filler selection is deterministic in `seed`: same seed, same subject and same pool always build
+ * the same board, which is what keeps the oracle reproducible and its ddmin stable. Fillers are
+ * distinct from each other AND from the subject, because a repeated ship on one side mints a
+ * duplicate actor id and `runCombat` throws on that.
+ *
+ * A one-ship player side returns the composition unchanged, so the two arms are byte-identical and
+ * no finding is possible. That is correct — no allies means no ally interference — and it is what
+ * stops ddmin from "minimizing" a differential down to a solo player team.
  *
  * Pure: builds an input, runs nothing. The caller must run both arms under the SAME seed.
  */
-export function buildSameEnemyBaseline(
-    subject: BattlePlacement,
-    enemyTeam: BattlePlacement[],
+export function buildInertAllyBaseline(
+    playerTeam: readonly BattlePlacement[],
+    subjectIndex: number,
+    enemyTeam: readonly BattlePlacement[],
+    inertPool: readonly Ship[],
+    seed: number,
     rounds?: number
 ): BattleSimulationInput {
     if (enemyTeam.length === 0) {
-        throw new Error('buildSameEnemyBaseline: enemyTeam is empty');
+        throw new Error('buildInertAllyBaseline: enemyTeam is empty');
     }
-    return { playerTeam: [subject], enemyTeam: [...enemyTeam], rounds };
+    if (subjectIndex < 0 || subjectIndex >= playerTeam.length) {
+        throw new Error(
+            `buildInertAllyBaseline: subjectIndex ${subjectIndex} is out of range for a ` +
+                `${playerTeam.length}-ship player team`
+        );
+    }
+
+    const subject = playerTeam[subjectIndex];
+    const allySlots = playerTeam.length - 1;
+    if (allySlots === 0) {
+        return { playerTeam: [subject], enemyTeam: [...enemyTeam], rounds };
+    }
+
+    // Distinct-by-identity requirement: the subject's own ship is excluded too, since the engine
+    // mints `p:<shipId>:<idx>` and two placements sharing a shipId on one side collide.
+    const excluded = new Set<string>([subject.ship.id]);
+    const usable = inertPool.filter((s) => !excluded.has(s.id));
+    if (usable.length < allySlots) {
+        throw new Error(
+            `buildInertAllyBaseline: need ${allySlots} distinct inert filler(s) but the pool ` +
+                `offers only ${usable.length} usable one(s) — a repeated ship on one side is an ` +
+                'illegal board and mints duplicate actor ids'
+        );
+    }
+
+    // Deterministic draw without replacement: a partial Fisher-Yates over a COPY of the usable
+    // pool, driven entirely by mulberry32(seed). Same seed + same pool + same subject => same
+    // board, every time. The pool order comes from the caller and must itself be stable.
+    const rng = mulberry32(seed);
+    const shuffled = [...usable];
+    const drawn: Ship[] = [];
+    for (let i = 0; i < allySlots; i++) {
+        const j = i + Math.floor(rng() * (shuffled.length - i));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        drawn.push(shuffled[i]);
+    }
+
+    let nextFiller = 0;
+    const baselineTeam = playerTeam.map((original, i) =>
+        i === subjectIndex
+            ? original
+            : {
+                  ship: drawn[nextFiller++],
+                  position: original.position,
+                  statOverrides: original.statOverrides,
+              }
+    );
+
+    return { playerTeam: baselineTeam, enemyTeam: [...enemyTeam], rounds };
 }
 
 export function buildStandardScenario(reviewed: Ship, overrides: ScenarioOverrides = {}): BattleSimulationInput {
