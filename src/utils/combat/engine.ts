@@ -10435,10 +10435,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // also swallowed every `tgt === undefined` turn, and those turns
                                 // published nothing. Since #335 they run the `else` instead, which sets
                                 // `lastTurnCtxByActor` UNCONDITIONALLY. Measured on this branch, whole
-                                // suite: 1,695 enemy no-victim turns across 26 files now publish a ctx
-                                // where they previously published none — independently corroborated by
-                                // Task 5's Probe A, which counted the same 1,695 no-victim enemy turns
-                                // from the selection site. That is a real publication delta, not parity;
+                                // suite: **1,695** enemy no-victim turns across 26 files reach that
+                                // `set` — corroborated by Task 5's Probe A, which counted the same
+                                // 1,695 from the selection site.
+                                //
+                                // ⚠️ 1,695 is the POPULATION, not the DELTA — do not restate it as
+                                // "1,695 turns that previously published none". Pre-#335 the ~335 C2
+                                // rows (ally-side parsed target, LIVE roster, anchor alive) resolved
+                                // the anchor as their victim, so they took the `else` and DID publish a
+                                // ctx. Only the rows whose anchor was itself undefined published
+                                // nothing: C1's 1,341 + C3's 15 = **~1,356**, and that is the delta.
+                                // The two numbers answer different questions; conflating them is the
+                                // error this rung kept catching.
+                                //
+                                // Either way it is a real publication delta, not parity;
                                 // it moved no golden because the only consumer is an enemy DoT tick
                                 // attributed to this actor, and a no-victim turn applies no DoT.
                             } else {
