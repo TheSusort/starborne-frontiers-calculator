@@ -3512,6 +3512,7 @@ exports[`kit fingerprints > Valkyrie 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "heal",
   ],
   "richEnemy": [
     "attack:active",
@@ -3521,6 +3522,7 @@ exports[`kit fingerprints > Valkyrie 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "heal",
   ],
   "wounded": [
     "attack:active",
@@ -3530,6 +3532,7 @@ exports[`kit fingerprints > Valkyrie 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "heal",
   ],
 }
 `;

@@ -281,10 +281,15 @@ describe('cluster 6 — on-bomb-detonated', () => {
 
     const VALKYRIE_P2 =
         'When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.';
-    it('Valkyrie: repair on Echoing-Burst detonation rides on-bomb-detonated', () => {
+    // #345: the earlier lock here ("rides on-bomb-detonated") was itself the bug, in the same
+    // shape as Lingshe's below. An Echoing Burst is not a Bomb — it is an accumulate-then-detonate
+    // container — so sharing the Bomb trigger fired her repair on any teammate's Bomb and never on
+    // her own burst (the accumulator path emitted no event at all). It now rides the APPLIER-scoped
+    // on-own-echoing-burst-detonated trigger on its own `accumulator-detonated` event.
+    it('Valkyrie: repair on Echoing-Burst detonation rides on-own-echoing-burst-detonated', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VALKYRIE_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
-        expect(heal?.trigger).toBe('on-bomb-detonated');
+        expect(heal?.trigger).toBe('on-own-echoing-burst-detonated');
     });
 
     const LINGSHE_P3 =

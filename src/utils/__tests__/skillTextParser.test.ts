@@ -1888,7 +1888,8 @@ describe('detectReactiveTrigger', () => {
 
     // Ship-kit W7: "this Unit DETONATES a Bomb" is DETONATOR-scoped → on-self-bomb-detonated
     // (fires only when Lingshe herself causes the burst), split OUT of the VICTIM-scoped
-    // on-bomb-detonated ("a Bomb explodes on an enemy" — Demolisher/Valkyrie).
+    // on-bomb-detonated ("a Bomb explodes on an enemy" — Demolisher; #345 moved Valkyrie's
+    // Echoing Burst reading onto its own on-own-echoing-burst-detonated).
     it('classifies a bomb-detonate self-buff as on-self-bomb-detonated — Lingshe', () => {
         const text =
             'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.';

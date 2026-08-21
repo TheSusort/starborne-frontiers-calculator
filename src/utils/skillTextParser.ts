@@ -1361,15 +1361,28 @@ const EVERY_TURN_RE = /\b(?:each|every)\s+turn\b/i;
 const STARTS_ROUND_WITH_RE = /\bstarts?\s+(?:each|every|the)\s+round\s+with\b/i;
 // VICTIM-scoped bomb-burst phrasing → on-bomb-detonated. Fires whenever a Bomb bursts on an
 // opposing actor, regardless of WHO caused it (the engine listener keys off the opposing victim).
-// Phase 3 PR-D: "explodes on (an|the) enemy" generalises the trigger beyond the literal word
-// "bomb" so Valkyrie's named bomb-type effect ("an Echoing Burst explodes on an enemy") also
-// rides on-bomb-detonated. Verified against docs/ship-skills.csv (grep "explod"): Demolisher
-// ("a/A bomb explodes on an enemy") and Valkyrie are the ONLY two rows using "explod" in the
-// whole corpus, so this alternate cannot co-trigger any other ship's kit.
+// Verified against docs/ship-skills.csv (grep "explod"): Demolisher ("a/A bomb explodes on an
+// enemy") and Valkyrie are the ONLY two rows using "explod" in the whole corpus.
 // Ship-kit W7: the DETONATOR-scoped "detonates a bomb" alternate was SPLIT OUT into
 // SELF_DETONATES_BOMB_RE below — it is a different trigger (on-self-bomb-detonated), fired only
 // when THIS unit actively causes the burst, not on any bomb bursting on an enemy.
-const BOMB_DETONATE_RE = /(?:bomb explodes|explodes on (?:an|the) enemy)/i;
+// #345: the effect-agnostic "explodes on (an|the) enemy" alternate was DROPPED. Phase 3 PR-D
+// added it to make Valkyrie's "an Echoing Burst explodes on an enemy" ride this same trigger, on
+// the premise that an Echoing Burst is a "named bomb-type effect". It is not one: it is an
+// accumulate-then-detonate container (see audit/classes.ts), unrelated to the Bomb DoT, and
+// sharing the trigger cost her the two properties her text asks for — her repair fired on any
+// teammate's Bomb, and never on her own burst. It now rides ECHOING_BURST_DETONATE_RE below.
+// Keep this alternate Bomb-specific: it is what Demolisher's splash and charge removal read.
+const BOMB_DETONATE_RE = /bomb explodes/i;
+// APPLIER-scoped Echoing Burst detonation → on-own-echoing-burst-detonated (Valkyrie's self +
+// lowest-HP-ally repair; #345). The optional tag group absorbs the closing </unit-aid> in the raw
+// CSV text ("an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy") so the SAME regex
+// matches raw and tag-stripped input — phrasePosTrigger scopes on RAW sentences, while
+// detectReactiveTrigger's clause resolver and the leech-scope reader work on stripped text.
+// Corpus-verified (docs/ship-skills.csv): Valkyrie's R1/R2 passives are the only rows naming an
+// Echoing Burst explosion, and her charged skill (which APPLIES the effect) says "inflicts …
+// Echoing Burst for 2 turns" — no "explodes" — so it cannot match here.
+const ECHOING_BURST_DETONATE_RE = /echoing\s+burst\s*(?:<[^>]*>)?\s*explodes/i;
 // DETONATOR-scoped "When this Unit detonates a Bomb …" → on-self-bomb-detonated (Lingshe's
 // Stealth grant). Corpus-verified (docs/ship-skills.csv, grep "detonates a"): Lingshe is the ONLY
 // ship whose reactive clause uses this phrasing (its OTHER passives use "inflicts a Bomb", a
@@ -1563,6 +1576,14 @@ export function detectReactiveTrigger(
     // victim-scoped "bomb explodes" family — the two are mutually exclusive by phrasing, but this
     // ordering makes the detonator reading win unambiguously.
     if (SELF_DETONATES_BOMB_RE.test(clause)) return 'on-self-bomb-detonated';
+    // #345: the APPLIER-scoped Echoing Burst reading is checked BEFORE the Bomb one for the same
+    // reason the detonator-scoped one is — the phrasings are mutually exclusive (an Echoing Burst
+    // clause never says "bomb explodes"), and this ordering makes the narrower reading win
+    // unambiguously. No corpus buff/debuff grant rides this clause today (Valkyrie's Echoing
+    // Burst sentence grants only repairs, which reach the trigger via the heal builder's
+    // detectEchoingBurstDetonatedTrigger); it is here so a future named grant in that sentence
+    // cannot silently fall through to the Bomb trigger.
+    if (ECHOING_BURST_DETONATE_RE.test(clause)) return 'on-own-echoing-burst-detonated';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
     // "when Cheat Death activates" → on-cheat-death-activated (Yazid's Barrier grant in the
     // repair sentence). Tycho's below-40%-HP Barrier is a different reactive (deferred), so this
@@ -2007,19 +2028,42 @@ export function parseSelfCritDotEffect(
 /**
  * Returns 'on-bomb-detonated' when `anchorPos` (the ability's raw-text anchor position) falls
  * inside the sentence carrying the VICTIM-scoped bomb-burst phrase (BOMB_DETONATE_RE — "bomb
- * explodes" / "explodes on an enemy"); otherwise undefined. Position-scoped on the RAW text
- * (mirrors detectAllyCritDotTrigger). This is the HEAL-builder counterpart to the charge-removal
- * (parseChargeRemoval, Demolisher) on-bomb-detonated reading of the same phrasing (Phase 3 PR-D:
- * Valkyrie's self+lowest-HP-ally repair on Echoing Burst detonation). The DETONATOR-scoped
- * "detonates a bomb" phrasing (Lingshe) is deliberately NOT matched here — it rides the separate
- * on-self-bomb-detonated trigger via detectReactiveTrigger (Ship-kit W7). Reference data:
- * docs/ship-skills.csv.
+ * explodes"); otherwise undefined. Position-scoped on the RAW text (mirrors
+ * detectAllyCritDotTrigger). This is the damage/heal-builder counterpart to the charge-removal
+ * (parseChargeRemoval, Demolisher) on-bomb-detonated reading of the same phrasing. The
+ * DETONATOR-scoped "detonates a bomb" phrasing (Lingshe) is deliberately NOT matched here — it
+ * rides the separate on-self-bomb-detonated trigger via detectReactiveTrigger (Ship-kit W7), and
+ * neither is the Echoing Burst phrasing, which rides detectEchoingBurstDetonatedTrigger below
+ * (#345). Reference data: docs/ship-skills.csv.
  */
 export function detectBombDetonatedTrigger(
     text: string | null | undefined,
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, BOMB_DETONATE_RE, anchorPos, 'on-bomb-detonated');
+}
+
+/**
+ * Returns 'on-own-echoing-burst-detonated' when `anchorPos` falls inside the sentence carrying the
+ * APPLIER-scoped Echoing Burst detonation phrase ("When an Echoing Burst explodes on an enemy" —
+ * Valkyrie's self + lowest-HP-ally repair); otherwise undefined. Position-scoped on the RAW text,
+ * exactly like its Bomb sibling above, so Valkyrie's OTHER passive sentence (the start-of-round
+ * Speed Up II grant, a separate <br>-delimited paragraph) never picks the trigger up.
+ *
+ * #345: this used to be one alternate inside BOMB_DETONATE_RE, which put her repair on the Bomb
+ * event — firing it on any Bomb bursting on an enemy and never on her own Echoing Burst, since
+ * the accumulator path emitted nothing. Reference data: docs/ship-skills.csv.
+ */
+export function detectEchoingBurstDetonatedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(
+        text,
+        ECHOING_BURST_DETONATE_RE,
+        anchorPos,
+        'on-own-echoing-burst-detonated'
+    );
 }
 
 // Pallas's TWO ally-crit reactive phrasings (live triggers; see types/abilities.ts):

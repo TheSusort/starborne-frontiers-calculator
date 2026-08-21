@@ -361,6 +361,36 @@ export type CombatEvent =
           stacks: number;
           damage: number;
       }
+    /** #345: an accumulate-then-detonate container (`PendingAccumulator` — Echoing Burst, the
+     *  only such effect in the corpus) reached the end of its countdown and burst on its holder.
+     *  ONE event per detonating entry, emitted from `processAccumulators` beside the burst's
+     *  `creditDetonation`, mirroring `processBombs`/`emitBombDetonated`.
+     *
+     *  Deliberately NOT a widening of `bomb-detonated`. An Echoing Burst is not a Bomb DoT (see
+     *  `audit/classes.ts`), and both of that event's listeners are Bomb-specific by their own
+     *  skill text — Demolisher's "when a Bomb explodes" splash + charge removal and Lingshe's
+     *  "when this Unit detonates a Bomb" Stealth grant. A discriminant field on the shared event
+     *  would have obliged every one of those listeners to filter it out correctly; a separate
+     *  event reaches only the one listener written for it.
+     *
+     *  `actorId` = the accumulator's APPLIER (`PendingAccumulator.sourceId`), the actor whose
+     *  Echoing Burst this is — the field the APPLIER-scoped `on-own-echoing-burst-detonated`
+     *  listener keys off. `victimId` = the actor it detonated ON (the holder, which is who takes
+     *  the damage). `damage` = the realized payout, `accumulated × pct/100`. There is no
+     *  `detonatorId` counterpart: a timed expiry is nobody's action.
+     *
+     *  ⚠️ The emit carries no effect NAME (`PendingAccumulator` stores none), so if a second
+     *  accumulate-detonate effect is ever modelled, an owner's `on-own-echoing-burst-detonated`
+     *  rider would fire for that one too. Harmless today — `ACCUMULATE_DETONATE_EFFECTS`
+     *  (skillTextParser) has exactly one entry, and Valkyrie's charged skill is its only
+     *  applier. Give the container a name before adding a second effect. */
+    | {
+          type: 'accumulator-detonated';
+          actorId: string;
+          victimId: string;
+          round: number;
+          damage: number;
+      }
     /** A `control` ability resolved on the cast path. `casterId` is the applying actor;
      *  `effect` is the control effect (e.g. 'stasis'). Present-only-when-fired; emitting it
      *  does NOT simulate the control's combat effect. */

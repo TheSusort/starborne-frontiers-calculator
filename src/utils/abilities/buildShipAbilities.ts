@@ -57,6 +57,7 @@ import {
     parseSelfCritDotEffect,
     detectSelfCritDotTrigger,
     detectBombDetonatedTrigger,
+    detectEchoingBurstDetonatedTrigger,
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
     detectStasisAppliedTrigger,
@@ -2164,11 +2165,18 @@ function abilitiesFromText(
                 // inflicts a Damage Over Time (DoT) effect with a critical hit" sentence rides
                 // the on-ally-crit-dot reactive trigger (self-target heal; position-scoped).
                 detectAllyCritDotTrigger(text, healPos) ??
-                // Valkyrie (Phase 3 PR-D): a self+lowest-HP-ally repair anchored in the "when an
-                // Echoing Burst explodes on an enemy" sentence rides the on-bomb-detonated
-                // reactive trigger (position-scoped). The HEAL-builder counterpart to Demolisher's
-                // charge removal (parseChargeRemoval) and Lingshe's buff grant (detectReactiveTrigger)
-                // readings of the same bomb-detonation phrasing.
+                // Valkyrie (#345): a self+lowest-HP-ally repair anchored in the "when an Echoing
+                // Burst explodes on an enemy" sentence rides the APPLIER-scoped
+                // on-own-echoing-burst-detonated trigger (position-scoped). Checked BEFORE the Bomb
+                // sibling below — and no longer reachable BY it, since an Echoing Burst is an
+                // accumulate-then-detonate container, not a Bomb DoT: sharing the Bomb trigger fired
+                // her repair on teammates' Bombs and never on her own burst.
+                detectEchoingBurstDetonatedTrigger(text, healPos) ??
+                // A repair anchored in a "when a Bomb explodes on an enemy" sentence rides the
+                // VICTIM-scoped on-bomb-detonated trigger (position-scoped). No corpus ship carries
+                // one today — Demolisher's readings of that phrasing are a charge removal
+                // (parseChargeRemoval) and a splash (the damage path above) — so this is the
+                // symmetric slot for a Bomb-worded repair, not a live route.
                 detectBombDetonatedTrigger(text, healPos) ??
                 // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
                 // sentence rides the on-enemy-purged reactive trigger (position-scoped).

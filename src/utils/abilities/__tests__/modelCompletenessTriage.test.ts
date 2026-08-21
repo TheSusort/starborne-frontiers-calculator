@@ -957,16 +957,22 @@ describe('confirm-GREEN-only — locked FPs', () => {
     const VALKYRIE_P2 =
         'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.<br /><br />This Unit starts combat fully Charged.';
 
-    it('Valkyrie: passive "When an Echoing Burst explodes on an enemy, ... repair 5% of damage dealt" does NOT mint a second accumulate-detonate application — it is a reactive heal off the existing on-bomb-detonated trigger (FP: parser-guard-filtered)', () => {
+    it('Valkyrie: passive "When an Echoing Burst explodes on an enemy, ... repair 5% of damage dealt" does NOT mint a second accumulate-detonate application — it is a reactive heal off the Echoing Burst detonation trigger (FP: parser-guard-filtered)', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: VALKYRIE_P2 }, 'passive');
         // FP: the passive merely REFERENCES an Echoing Burst detonating (to react with a heal);
         // it does not itself INFLICT Echoing Burst, so it must not mint its own
         // accumulate-detonate application. Dry-run confirmed: this text builds a start-of-round
-        // Speed Up II buff plus two `on-bomb-detonated` heal reactions (ally + self) — no
-        // accumulate-detonate ability anywhere in the passive slot.
+        // Speed Up II buff plus two heal reactions (ally + self) — no accumulate-detonate ability
+        // anywhere in the passive slot.
         expect(abilities.length).toBeGreaterThan(0);
         expect(abilities.every((a) => a.type !== 'accumulate-detonate')).toBe(true);
-        expect(abilities.filter((a) => a.trigger === 'on-bomb-detonated')).toHaveLength(2);
+        // #345: those two reactions ride the APPLIER-scoped on-own-echoing-burst-detonated trigger.
+        // They used to ride on-bomb-detonated, which is Bomb-DoT-scoped — a different mechanism,
+        // so the repair fired on teammates' Bombs and never on her own burst.
+        expect(
+            abilities.filter((a) => a.trigger === 'on-own-echoing-burst-detonated')
+        ).toHaveLength(2);
+        expect(abilities.filter((a) => a.trigger === 'on-bomb-detonated')).toHaveLength(0);
     });
 
     // Verbatim from docs/ship-skills.csv (charge_skill_text field).
