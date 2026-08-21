@@ -44,6 +44,42 @@ export interface PlacementHealth {
     symmetricShips: number;
 }
 
+/** A `(ship, kind)` pair that has already been triaged to a verdict of "seed noise, not a path
+ *  gap", so a future sweep that surfaces it again does not cost another triage. Matching is by
+ *  ship + kind and deliberately NOT by direction: a proc-gated kind that a given draw never
+ *  produced also never produces the reverse diff, so direction agreement is a consequence of the
+ *  noise, never independent evidence for or against it. */
+export interface TriagedNoiseEntry {
+    shipName: string;
+    kind: string;
+    note: string;
+}
+
+/** VERDICTS — each entry is backed by a committed test that fails if the verdict stops holding.
+ *  Add to this list only after measuring the kind's per-placement hit RATE over a seed window
+ *  several times wider than the sweep's K; a single wider re-run that happens to come back clean
+ *  is not a verdict. */
+export const TRIAGED_AS_SEED_NOISE: readonly TriagedNoiseEntry[] = [
+    {
+        shipName: 'Enforcer',
+        kind: 'debuff-resisted',
+        note:
+            'doubly RNG-gated (Defense Shred arms only on a crit, then has to FAIL a landing roll ' +
+            'against filler security 0–24 vs hacking 96). The three boards are an exact mirror — ' +
+            'the same four enemy fillers in every placement — so only the ownerId-keyed RNG ' +
+            'sub-stream differs. Measured over 40 seeds from base 20260805 (plain scenario): ' +
+            'focus 4 hits, team 2, enemy 5; first hit at offset +23 / +16 / +4 respectively, which ' +
+            'is exactly why a K=15 union catches enemy and misses the other two. Pinned by ' +
+            'src/utils/combat/audit/__tests__/enforcerDebuffResistedNoise.test.ts.',
+    },
+];
+
+function triagedNoiseFor(d: PlacementDiff, kind: string): TriagedNoiseEntry | undefined {
+    return TRIAGED_AS_SEED_NOISE.find(
+        (t) => t.shipName.toUpperCase() === d.shipName.toUpperCase() && t.kind === kind
+    );
+}
+
 export function buildPlacementLedgerJson(diffs: PlacementDiff[], health: PlacementHealth) {
     return { health, findingCount: diffs.length, findings: diffs };
 }
@@ -125,6 +161,14 @@ export function renderPlacementLedgerMarkdown(
                 `- **${d.shipName}** — fires as \`${d.from}\` but never as \`${d.to}\`: ` +
                     `${d.missing.map((k) => `\`${k}\``).join(', ')}`
             );
+            for (const kind of d.missing) {
+                const triaged = triagedNoiseFor(d, kind);
+                if (triaged) {
+                    lines.push(
+                        `  - \`${kind}\` — **TRIAGED, seed noise, do not re-triage.** ${triaged.note}`
+                    );
+                }
+            }
         }
         lines.push('');
     }
