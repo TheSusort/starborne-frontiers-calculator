@@ -86,7 +86,6 @@ import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
-    DISPLAY_ENEMY_HP_PCT_NO_VICTIM,
     HealingRuntimeCtx,
     PlayerActorRuntime,
     PlayerRoundCtx,
@@ -8365,21 +8364,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         // turn (dead heal-target OR stasised). Extracted from the two byte-identical sites
         // (handleDeadTargetSkip + the stasis gate) so the shape cannot drift.
         const pushSynthesizedFocusSkipTurn = (): void => {
-            // The row's `enemyHpPct` for a turn that never happened. SP-4d: this was the LAST
-            // reader of the `enemyHp` input — a scalar restored by 4c-2d when the dummy actor it
-            // described was deleted, dividing a cumulative-damage numerator (which positional
-            // credit never feeds) by a 1e9 denominator, so it reported 100 on all 152 measured
-            // calls. It is a DISPLAY value for a turn with no victim, so it now says so by name.
-            // Filed separately (with #331): on a round where the focus died, the chart therefore
-            // reports "Enemy HP: 100%" while the real enemy may be at 12% — that is the display
-            // layer's own question, and naming this constant is what makes it findable.
-            const enemyHpPct = DISPLAY_ENEMY_HP_PCT_NO_VICTIM;
+            // #341: this used to carry the row's `enemyHpPct` — a DISPLAY constant of 100, because a
+            // turn that never happened struck no victim to read one off. That was the reported bug:
+            // on a round where the focus died the chart said "Enemy HP: 100%" while the real enemy
+            // sat at 12%. The row now reads the enemy roster at the round head instead
+            // (`enteringEnemyHpPct`), which needs no per-turn value at all, so both the field and
+            // the constant are gone.
             const lastKnownCtx = lastTurnCtxByActor.get(focusActorId);
             focusTurns.push({
                 action: 'active',
                 roundCrit: false,
                 hitCrits: [],
-                enemyHpPct,
                 dotsConfig: [],
                 dotsLanded: true,
                 activeSelfBuffs: [],
@@ -8965,6 +8960,44 @@ export function runCombat(rawInput: CombatEngineInput): {
         // here (after the accumulator + drainIntentsFor are in scope) so its start-of-round
         // intents execute BEFORE any turn — no observable ordering change vs the old emit
         // site (nothing between beginRound and here emits an event).
+        // #341: the row's enemy-HP reading, captured HERE — before any turn of this round — so it
+        // is the enemy HP% ENTERING the round, which is the semantics the field has always carried
+        // and the one the chart tooltip needs: it is the reading an hp-threshold gate evaluated
+        // during this round was gated against, so a row showing 25% next to an execute ability that
+        // did not fire would be self-contradicting. (An end-of-round reading is a defensible chart
+        // value on its own, but it de-synchronises the number from the gate, so it is not a free
+        // swap — see `dpsSimulator.test.ts`'s execute-gate case, which reads this row to explain
+        // which round the gate switched on.)
+        //
+        // The value is the opposing roster's HP-WEIGHTED remainder. The DPS page — the only consumer
+        // of `RoundData.enemyHpPct`, via `DPSRoundChart` — fields exactly ONE enemy, so this IS that
+        // enemy's own live HP%; the weighting keeps it honest if the page ever fields more, and is
+        // the same convention `simulateDPS`'s `finalHpPct` already uses for the summary (HP% is an
+        // intensive per-actor ratio, so a mean of two percentages would let a scratch on a big
+        // enemy read like a kill on a small one).
+        //
+        // It used to be `lastAttackerTurn.enemyHpPct` — the focus's STRUCK VICTIM's reading — with a
+        // DISPLAY constant of 100 substituted whenever the focus struck nobody: an ally-targeted
+        // cast, or the synthesized skip row after the focus died. That is #341: the chart could
+        // report "Enemy HP: 100%" on a round where the real enemy sat at 12%. Reading the roster
+        // needs no stand-in, and answers a multi-enemy round with one number instead of naming
+        // whichever victim the focus happened to hit last.
+        const enteringEnemyHpPct = ((): number => {
+            const totalMaxHp = enemyAttackerActors.reduce(
+                (sum, a) => sum + recipientMaxHp(a.id),
+                0
+            );
+            // No HP anywhere to lose (an unspecified/zero-max roster) → nothing has been taken off
+            // it. Unreachable on a DPS run (`normalizeRoster` floors every enemy's max HP), but this
+            // expression also serves healing/battle-mode rows, which carry no such floor.
+            if (totalMaxHp <= 0) return 100;
+            const remaining = enemyAttackerActors.reduce(
+                (sum, a) => sum + Math.max(0, Math.min(a.currentHp, recipientMaxHp(a.id))),
+                0
+            );
+            return (remaining / totalMaxHp) * 100;
+        })();
+
         bus.emit({ type: 'round-started', round: r });
         // Drain point (a): start-of-round intents execute before the first turn.
         drainIntentsFor('player');
@@ -11200,7 +11233,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         const lastAttackerTurn = focusTurns[focusTurns.length - 1];
         const action = lastAttackerTurn.action;
         const roundCrit = lastAttackerTurn.roundCrit;
-        const enemyHpPct = lastAttackerTurn.enemyHpPct;
+        // #341: the row's enemy-HP reading, snapshotted at this round's HEAD (see
+        // `enteringEnemyHpPct`). Every row answers with the SAME expression, including the two that
+        // used to need a fabricated stand-in.
+        const enemyHpPct = enteringEnemyHpPct;
         const dotsConfig = lastAttackerTurn.dotsConfig;
         const dotsLanded = lastAttackerTurn.dotsLanded;
         // Display-only: hide a spent Cheat Death (the focus actor owns activeSelfBuffs).
@@ -11284,9 +11320,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         // procs, per-victim DoT and detonation ticks) books on the per-victim maps instead, per the
         // two-channel rule above. SP-4d deleted the `cumulativeTeamDamage` scalar that used to
         // accumulate this alongside `cumulativeDamage` for the focus-skip enemy-HP% denominator
-        // (pushSynthesizedFocusSkipTurn) — that was its only reader, and the row now uses
-        // `DISPLAY_ENEMY_HP_PCT_NO_VICTIM` instead. `totalTeamRaw` below is the real (and only
-        // remaining) team-damage accumulator, surfaced on the result as `teamTotal`.
+        // (pushSynthesizedFocusSkipTurn) — that was its only reader, and #341 replaced that
+        // derivation entirely: the row now reads the enemy roster at the round head
+        // (`enteringEnemyHpPct`), so neither the scalar nor the display constant that briefly
+        // stood in for it exists any more. `totalTeamRaw` below is the real (and only remaining)
+        // team-damage accumulator, surfaced on the result as `teamTotal`.
+        //
+        // ⚠️ This scalar fold is INCOMPLETE for a walked team actor that resolved positionally: its
+        // credit lands in `perTargetDealt` and never reaches here (#331). It is not the DPS-facing
+        // number — `simulateDPS` re-derives `RoundData.teamDamage`/`teamTotalDamage` from
+        // `perTargetDealt` for exactly that reason (SP-4b-1), and the fallback to this scalar is
+        // taken only when there are no walked team actors at all, where it is 0 either way.
         let teamRoundDamage = 0;
         for (const [id, d] of roundDamage) {
             if (id === focusActorId) continue;

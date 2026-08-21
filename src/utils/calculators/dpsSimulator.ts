@@ -165,12 +165,19 @@ export interface RoundData {
     chargeCount: number;
     /** This round's deterministic binary crit outcome (per-stream schedule). */
     didCrit: boolean;
-    /** Enemy HP% ENTERING this round (100 → 0) — the value hp-threshold conditions are gated
-     *  against. Read off the STRUCK VICTIM's live HP at the focus's last turn of the round
-     *  (`playerTurn`'s `enemyHpDecline`), which on a positional run — since SP-4b-2a, every DPS
-     *  run — is the real enemy's own HP curve, not a cumulative-damage scalar. The two used to
-     *  coincide on the roster-less dummy run, whose HP landed post-round; the boundary stopped
-     *  accepting an empty roster (SP-4b-2b) and SP-4c-2d deleted the actor, so that shape is gone. */
+    /** Enemy HP% ENTERING this round (100 → 0) — the value hp-threshold conditions evaluated during
+     *  the round were gated against, which is why it stays the ENTERING reading rather than the
+     *  more obvious end-of-round one: a row showing 25% beside an execute rider that did not fire
+     *  would contradict itself.
+     *
+     *  #341: this is the enemy ROSTER's HP-weighted remainder, snapshotted at the round head. It
+     *  used to be read off the focus's STRUCK VICTIM at its last turn of the round, which was wrong
+     *  in two ways. A row whose focus struck nobody — an ally-targeted cast, or a synthesized skip
+     *  row after the focus died — had no victim to read, and took a fabricated 100: the chart said
+     *  "Enemy HP: 100%" with the real enemy at 12%. And on a round where a faster ally acted first,
+     *  the "entering" value silently included that ally's damage. The DPS page fields exactly one
+     *  enemy, so this IS that enemy's own live HP%; the weighting (same convention as `finalHpPct`)
+     *  keeps it honest if the page ever fields more. */
     enemyHpPct: number;
     /** Direct (non-DoT, non-detonation) damage the focus dealt this round.
      *
