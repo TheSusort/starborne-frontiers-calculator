@@ -7,10 +7,19 @@ import type { Ability } from '../../types/abilities';
  * once per cast for sub-attack 0 and again per later sub-attack, with THAT sub-attack's live
  * anchor and footprint.
  *
- * `undefined` in the result is the non-positional dummy sink ("resolve to the turn's `enemy`"),
- * which is why the array is `(string | undefined)[]`. A positional caller never receives it: with
- * no anchor there is genuinely nobody to inflict, and inventing the sink there would record a
- * debuff on a target that does not exist.
+ * `undefined` in the result means "resolve to the turn's own bound victim" — the non-positional
+ * single-target answer, where the clause carries no victim id of its own and the caller lands it on
+ * whatever `enemy` the turn is bound to. That is why the array is `(string | undefined)[]`. A
+ * positional caller never receives it: with no anchor there is genuinely nobody to inflict, and
+ * inventing a stand-in there would record a debuff on a target that does not exist.
+ *
+ * #343: this used to be called "the dummy sink", after the immortal placeholder enemy actor that
+ * `undefined` resolved to before SP-4c-2d (#339) deleted it. The MECHANISM is unchanged and still
+ * live — a non-positional single-target clause still routes through `undefined` — but the actor it
+ * was named for is gone, so the name misled about what the thing IS while the behaviour it
+ * described stayed correct. Nothing here changes; only the vocabulary. Keeping past-tense
+ * references to the deleted actor searchable is deliberate (owner ruling); what had to go is the
+ * PRESENT-tense use of a dead name for a live mechanism.
  *
  * @param abTarget          the matching debuff ability's `target`; `undefined` when no ability
  *                          matched the status, which behaves as single-target (the ternary's tail).

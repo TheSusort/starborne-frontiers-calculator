@@ -1425,7 +1425,22 @@ export function registerReactiveListeners(args: {
  *  ONLY here (Phase 1 contract: listeners enqueue, the executor mutates). OWNER-ROUTED
  *  (Task 6): per-intent owner-specific values (charges, landing gates, sourceId, bomb
  *  effective-attack/affinity) come from `runtimes.get(intent.ownerId)` and
- *  `lastTurnCtxByActor.get(intent.ownerId)` — NOT from a single attacker. */
+ *  `lastTurnCtxByActor.get(intent.ownerId)` — NOT from a single attacker.
+ *
+ *  ⚠️ DELETING A FIELD HERE: `tsc` is NOT a completeness proof for this type (#342). Around a dozen
+ *  test fixtures build their ctx as `{ … } as unknown as IntentExecContext`, and a double cast
+ *  through `unknown` disables excess-property checking — so a fixture that keeps setting a deleted
+ *  field compiles clean forever, and nothing will ever say so. SP-4d leaned on "a missed site is a
+ *  compile error, not a silent survivor" and left 12 dead `enemyHp` properties across 8 files
+ *  behind (#342 removed them; their `cumulativeDamage` siblings had been removed by hand in the
+ *  same rung, which is what made the omission look deliberate).
+ *
+ *  So when you delete a field from this interface: GREP the fixtures for the field name as well as
+ *  running `tsc`. Scope the grep — `enemyHp` is still a live field on `CombatEngineInput`, which is
+ *  exactly why a blanket tree-wide tripwire on the name would block legitimate code rather than
+ *  catch a survivor. Prefer a typed factory (`Partial<IntentExecContext>` argument, cast INSIDE the
+ *  helper) over a fresh double cast in any new fixture — that keeps the compiler's grip on the
+ *  property names at no runtime cost. */
 export interface IntentExecContext {
     round: number;
     statusEngine: StatusEngine;

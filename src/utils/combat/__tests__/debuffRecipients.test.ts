@@ -3,8 +3,10 @@
  *
  * Extracted VERBATIM from playerTurn.ts's cast-time ternary so the cast-time path and PR8's
  * per-sub-attack path cannot drift. Every branch below mirrors one arm of that ternary; the
- * `undefined` recipient is the DPS/non-positional dummy sink ("resolve to the turn's `enemy`"),
- * which is why the return type is `(string | undefined)[]` and not `string[]`.
+ * `undefined` recipient means "resolve to the turn's own bound victim" — the DPS/non-positional
+ * single-target answer — which is why the return type is `(string | undefined)[]` and not
+ * `string[]`. (#343: it was called "the dummy sink" until the placeholder actor that name referred
+ * to was deleted in #339; the mechanism is the same one.)
  */
 import { describe, it, expect } from 'vitest';
 import { resolveDebuffRecipientIds } from '../debuffRecipients';
@@ -48,7 +50,7 @@ describe('resolveDebuffRecipientIds', () => {
         ).toEqual(['v1', 'v1-left', 'v1-right']);
     });
 
-    it('target-and-adjacent-enemies with no anchor: positional resolves to nothing, non-positional to the dummy sink', () => {
+    it("target-and-adjacent-enemies with no anchor: positional resolves to nothing, non-positional to the turn's bound victim", () => {
         const base = {
             abTarget: 'target-and-adjacent-enemies' as const,
             anchorId: undefined,
@@ -103,7 +105,7 @@ describe('resolveDebuffRecipientIds', () => {
         ).toEqual(['v1']);
     });
 
-    it('single-target resolves to the anchor; with no anchor, positional is empty and non-positional is the dummy sink', () => {
+    it("single-target resolves to the anchor; with no anchor, positional is empty and non-positional is the turn's bound victim", () => {
         expect(
             resolveDebuffRecipientIds({
                 abTarget: 'enemy',

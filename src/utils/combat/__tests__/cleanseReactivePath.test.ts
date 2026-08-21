@@ -238,7 +238,6 @@ function makeCtx(opts?: {
         grantExtraAction: () => {},
         playerIds: [OWNER_ID],
         lastTurnCtxByActor: new Map(),
-        enemyHp: 100000,
         recordResisted: () => {},
         procChanceGates: opts?.procChanceGates,
         // Minimal healing ctx: targetId = TARGET_ID (same as owner for 'self'),
