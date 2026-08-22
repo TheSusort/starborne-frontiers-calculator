@@ -216,6 +216,11 @@ export interface DPSShipConfig {
     /** Board slot this config fights from. The DPS run is positional (the enemy must be a real,
      *  targetable actor), so every player-side ship needs one. Absent → DEFAULT_ATTACKER_SLOT. */
     slot?: Position;
+    /** #363 follow-up: this config's ship faction — auto-filled on ship pick, threaded to
+     *  `DPSSimulationInput.faction` for faction-scoped ally grants (Fuying's "grants Tianchao
+     *  allies Stealth"). Absent for a manual config → unknown faction → never matches a faction
+     *  filter (conservative, mirroring `TeamShipConfig.faction`'s contract). */
+    faction?: FactionKey;
 }
 
 export type DPSShipConfigUpdateableField =

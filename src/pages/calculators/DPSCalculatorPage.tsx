@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
 import { Ship, AffinityName } from '../../types/ship';
+import { asFactionKey } from '../../constants/factions';
 import { computeAffinityModifiers } from '../../utils/calculators/affinityUtils';
 import {
     DPSShipConfig,
@@ -249,6 +250,10 @@ const DPSCalculatorPage: React.FC = () => {
                 shipSkills: t.shipSkills,
                 stats: t.stats,
                 affinity: t.affinity,
+                // #363 follow-up: forwarded to the engine by deriveTeamEngineActors' spread, same
+                // as affinity above — this was the missing link even though TeamShipConfig.faction
+                // and TeamActorInput.faction already existed.
+                faction: t.faction,
                 // Board slot — forwarded to the engine by deriveTeamEngineActors' spread. Defaults
                 // walk BACK from the front so team ships never start stacked on the attacker's slot.
                 // Collisions WITH the attacker are resolved per-config below (each config may sit on
@@ -310,6 +315,9 @@ const DPSCalculatorPage: React.FC = () => {
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
                     affinityCritPenalty: critPenalty,
+                    // #363 follow-up: the attacker config's own faction, mirroring `affinity`
+                    // above — see DPSSimulationInput.faction's doc. Absent for a manual config.
+                    faction: config.faction,
                     allyChargePerRound: config.allyChargePerRound,
                     enemyType,
                     // SP-2: opt into the display-only status timeline — the summary's buffed stats
@@ -340,6 +348,12 @@ const DPSCalculatorPage: React.FC = () => {
                             shipSkills: enemyConfig.shipSkills,
                             position: DEFAULT_ENEMY_SLOT,
                             affinity: enemyAffinity,
+                            // #363 follow-up: the enemy's own faction, mirroring how the healing
+                            // page threads an enemy's faction (`asFactionKey(enemyShip?.faction)`)
+                            // — without this an enemy-side Fuying grants Stealth to nobody on her
+                            // own (enemy) team. `enemyShip` is the picked-ship state; a manual
+                            // enemy (no ship picked) stays unknown-faction.
+                            faction: asFactionKey(enemyShip?.faction),
                         },
                     ],
                 })
@@ -351,6 +365,7 @@ const DPSCalculatorPage: React.FC = () => {
         // The whole enemy config (its offensive stats and kit feed the sim too, not just the
         // four scalars that used to live here).
         enemyConfig,
+        enemyShip,
         enemyDefense,
         enemyHp,
         enemySecurity,
@@ -457,6 +472,10 @@ const DPSCalculatorPage: React.FC = () => {
                         ship.thirdPassiveSkillText,
                     ]),
                     affinity: ship.affinity,
+                    // #363 follow-up: thread the picked ship's faction for faction-scoped ally
+                    // grants (Fuying's "grants Tianchao allies Stealth") — mirrors the healing
+                    // page's selectShipForConfig/selectShipForTeamSlot.
+                    faction: asFactionKey(ship.faction),
                     shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                 };
             })
@@ -516,6 +535,10 @@ const DPSCalculatorPage: React.FC = () => {
                     shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                     stats: combatStats,
                     affinity: ship.affinity,
+                    // #363 follow-up: thread the picked ship's faction — see selectShipForConfig's
+                    // comment. TeamShipConfig.faction already existed on the type; this is the
+                    // wiring that was missing on the DPS page.
+                    faction: asFactionKey(ship.faction),
                     // Walked skills supersede auto-fill stamping; clear any prior auto-filled
                     // entries while preserving the user's manual extras.
                     buffs: t.buffs.filter((b) => !b.autoFilled),

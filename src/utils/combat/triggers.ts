@@ -484,9 +484,18 @@ export function registerReactiveListeners(args: {
      *
      * Opt-in on `patternScoped === true`, which the parser already sets from the clause's own
      * words. Across all 149 corpus ships exactly four reactive abilities carry it on an
-     * affected-ally trigger (two on one supporter's `on-ally-attacked`, one on another's, two on a
-     * third's `on-ally-shield-destroyed`); every other reactive short-circuits on the first line
-     * and never even consults the resolver, so this is inert for them and costs them nothing.
+     * affected-ally trigger: AEGIS's two `on-ally-shield-destroyed` reactives (target `ally`),
+     * Cultivator's one `on-ally-attacked` repair (target `ally`), and Fuying's one
+     * `on-ally-attacked` Stasis (target `enemy`). Every other reactive short-circuits on the first
+     * line and never even consults the resolver, so this is inert for them and costs them nothing.
+     *
+     * Fuying's is the odd one out, and it is the one that actually leaked pre-fix: her recipient
+     * is the ENEMY she inflicts Stasis on, not the affected ally, so a check that (wrongly) looked
+     * at the RECIPIENT's footprint membership could never have caught her over-fire — the enemy is
+     * never on her own side's footprint at all. This gate has to inspect the AFFECTED ally (the one
+     * whose hit set the passive off) instead, which is exactly what `affectedAllyOutsideActivePattern`
+     * does below, and is why AEGIS/Cultivator (whose recipient IS the affected ally) were already
+     * correct by construction while Fuying alone needed the fix.
      *
      * Reads only — the listener stays enqueue-only. Fallbacks: see `footprintAllyIdsFor`'s doc.
      */

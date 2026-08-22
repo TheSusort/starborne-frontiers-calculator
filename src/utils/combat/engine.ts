@@ -2105,8 +2105,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // an ENEMY-side Fuying scopes to enemy Tianchao allies with no mirrored branch and no `side`
     // check. An actor absent from this map has an UNKNOWN faction and never matches a filter
     // (conservative) — the same contract roleByActorId/matchesRoleCategory already run on.
-    // Populated only by callers that supply factions (the team sim); left empty in single-ship
-    // DPS / manual runs, where no ally exists to narrow anyway.
+    // Populated by every caller that supplies factions — the healing team sim AND the DPS
+    // calculator's team-actor mode alike, both of which have real casting allies a faction-scoped
+    // grant needs to reach. Left empty only for a genuinely single-ship run (no picked ship, or a
+    // manual actor/config with no faction data), where there is no ally to narrow anyway.
     //
     // Hoisted here (rather than built alongside roleByActorId/nameByActorId, its siblings) so it
     // exists BEFORE the attacker/team-actor `registerActorAbilityStatuses` calls and the
@@ -3887,14 +3889,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     //  • FACTION — an actor whose faction is unknown never matches (conservative; the aura can only
     //    under-reach, never over-reach, when faction data is missing).
     //
-    // ⚠️ There is NO owner exclusion here, and adding one would be a bug. Fuying is herself a
-    // Tianchao ally and nothing about this aura singles her out; she falls out of the recipient set
-    // only because her ACTIVE pattern (`Pattern-Wings-Support-Not-Self-Range-2`) is Not-Self and so
-    // omits her own cell, and she is doubly inert because `self-stealth` fails for her (her grant is
-    // that same Not-Self cast, so she never holds Stealth). Hardcoding "the owner is never a
-    // recipient" would encode a fact about her GRANT's pattern into the AURA's recipient
-    // resolution, and would break silently the day a carrier's pattern includes its own cell, a
-    // ship self-grants Stealth, or a teammate grants Stealth to the carrier.
+    // ⚠️ There is NO owner exclusion here, and adding one would be a bug — see
+    // `allyScopedIncomingRecipients`'s own doc comment (incomingEffects.ts) for the full owner-
+    // inclusion argument; it owns this rule since it sits with the resolver. Short version: Fuying
+    // falls out of her own aura's recipient set only because her Not-Self pattern omits her own
+    // cell and `self-stealth` never holds true for her, not because of any hardcoded exclusion.
     //
     // Computed once, like the self-scoped pass: positions and patterns are fixed for the fight, and
     // the only dynamic input (which allies are still alive) cannot change an answer that matters —
