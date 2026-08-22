@@ -186,8 +186,11 @@ silently drop a parsed filter on any unrelated edit.
 
 ### 2.4 Accepted cost: this is a one-ship feature
 
-Measured over all 149 ships: **Fuying's three clauses are the only faction-scoped *recipient*
-clauses in the corpus.** Every other faction mention — 32 clauses across 9 factions — is a buff
+Measured over all 149 ships: **Fuying's four clauses are the only faction-scoped *recipient*
+clauses in the corpus** (the active Stealth grant plus the DR aura at all THREE refit tiers — R2
+and R3 carry character-identical text, which is what made an earlier count of 3 wrong: the
+measuring script deduped on (ship, sentence) and silently dropped one real observation). Every
+other faction mention — 31 clauses across 9 factions — is a buff
 *name* (`Tianchao Precision II`, `XAOC Swiftness III`, `Binderburg Resilience III`,
 `Everliving Regeneration II`, `Gelecek Contagion II`), which the parser already handles as an
 opaque `buffName` and which this change must not touch.

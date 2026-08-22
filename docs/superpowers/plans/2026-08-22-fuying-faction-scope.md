@@ -490,8 +490,11 @@ print('BUFF-NAMED (must NOT match):', len(named))
 PY
 ```
 
-Expected: `RECIPIENT-SCOPED: 3`, all Fuying (active grant + two DR aura refits), and
-`BUFF-NAMED: 32`. Record both numbers — Step 7 asserts against them.
+Expected: `RECIPIENT-SCOPED: 4`, all Fuying (active grant + the DR aura at all THREE refit
+tiers), and `BUFF-NAMED: 31`. Record both numbers — Step 7 asserts against them.
+
+⚠️ Do NOT dedup by (ship, sentence) when counting: Fuying's R2 and R3 aura clauses are
+character-identical, so a dedup collapses them and yields a wrong 3/32.
 
 The discriminator is that the faction word is immediately followed by `ally`/`allies`.
 `Tianchao allies` matches; `Tianchao Precision II` does not.
@@ -670,7 +673,7 @@ In `src/utils/skillTextParser.ts`, beside `detectGrantScope` (~:5637):
 
 ```ts
 // #363 (Fuying): faction words appear in the corpus in TWO roles, and only one is a recipient
-// scope. Measured over all 149 ships: 3 recipient-scoped clauses (all Fuying) vs 32 where the
+// scope. Measured over all 149 ships: 4 recipient-scoped clauses (all Fuying) vs 31 where the
 // faction is part of a BUFF NAME ("Tianchao Precision II", "XAOC Swiftness III", "Binderburg
 // Resilience III", "Everliving Regeneration II", "Gelecek Contagion II").
 //
@@ -714,12 +717,12 @@ Import `FACTIONS`, `FACTION_KEYS`, and `type FactionKey` from `../constants/fact
 Append to the test file from Step 2:
 
 ```ts
-    it('matches exactly the 3 recipient-scoped clauses in the corpus, and none of the 32 named', () => {
+    it('matches exactly the 4 recipient-scoped clauses in the corpus, and none of the 31 named', () => {
         // Guards the ONE thing this detector must get right: a faction inside a buff NAME is not
         // a recipient scope. Counts come from the Step 1 measurement over all 149 ships.
         const rows = readFileSync('docs/ship-skills.csv', 'utf8');
         const scoped = rows.match(/\b(?:Tianchao|XAOC|Binderburg|Everliving|Gelecek|Marauders|MPL|Atlas Syndicate|Frontier Legion|Terran Combine)\s+all(?:y|ies)\b/gi) ?? [];
-        expect(scoped).toHaveLength(3);
+        expect(scoped).toHaveLength(4);
     });
 ```
 
