@@ -351,6 +351,7 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         crit: 15,
         critDamage: 150,
         hp: 10000,
+        security: 0,
         defensePenetration: 10,
         defensePenetrationBuff: 5,
     };
@@ -548,6 +549,7 @@ describe('effectiveDamageStatsOf — dotDamage modifier folds into selfDotDamage
         crit: 15,
         critDamage: 150,
         hp: 10000,
+        security: 0,
         defensePenetration: 10,
         defensePenetrationBuff: 5,
     };
@@ -826,6 +828,7 @@ describe('attackFlat additive fold — adds AFTER the percentage term', () => {
             crit: 0,
             critDamage: 0,
             hp: 1,
+            security: 0,
             defensePenetration: 0,
             defensePenetrationBuff: 0,
         };

@@ -130,6 +130,26 @@ describe('parseSkillDamage', () => {
         expect(parseSkillDamage(text)).toBe(0);
     });
 
+    it('skips "take X% less DIRECT damage" (Fuying p3 — adjective between "less" and "damage")', () => {
+        // The sibling `more` guard four lines up uses a bare /\bmore\b/, which tolerates the
+        // adjective in "25% more direct damage". `less` was spelled /\bless\s+damage\b/ — adjacent
+        // only — so "30% less direct damage" slipped past it and parseInt returned 30, minting a
+        // phantom outgoing damage{30} ability from an INCOMING-reduction aura (#363).
+        const text =
+            'All Tianchao allies with <unit-skill>Stealth</unit-skill> take <unit-damage>30% less direct damage</unit-damage>.';
+        expect(parseSkillDamage(text)).toBe(0);
+    });
+
+    it('skips "less" separated from "damage" by more than one word', () => {
+        // Guards the shape rather than Fuying's exact wording: nothing about the fix should depend
+        // on there being exactly one adjective.
+        expect(
+            parseSkillDamage(
+                'This Unit takes <unit-damage>20% less incoming direct damage</unit-damage>.'
+            )
+        ).toBe(0);
+    });
+
     it('skips "Shield equal to X% of the damage dealt" (FrontLine p2 — shield scaled off damage, not an attack)', () => {
         const text =
             'When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
@@ -2649,6 +2669,32 @@ describe('parseChargeGain ally-crit trigger (Hermes)', () => {
 });
 
 describe('parseExtraAction', () => {
+    // #361: Prophet's grant is gated on RESISTING a debuff ("When this Unit resists a debuff
+    // infliction from an enemy, once per round, this Unit gains 1 extra action"), but the trigger
+    // ternary only recognised the two death phrasings and otherwise fell through to on-cast — so
+    // the ship took a free extra action EVERY round unconditionally, roughly doubling its output.
+    // Only Prophet's passive2/passive3 carry this phrasing in the whole corpus.
+    it('resolves a self-resist gated grant to on-debuff-resisted (Prophet, #361)', () => {
+        const text =
+            'This Unit has <unit-damage>45% shield penetration</unit-damage>.<br /><br />\nWhen an ally resists a debuff infliction from an enemy, this Unit gains <unit-damage>2% more shield penetration</unit-damage>.<br /><br />\nWhen this Unit resists a debuff infliction from an enemy, once per round, this Unit <unit-aid>gains 1 extra action</unit-aid>.';
+        expect(parseExtraAction(text)).toEqual({
+            oncePerRound: true,
+            conditions: [],
+            endOfRound: false,
+            trigger: 'on-debuff-resisted',
+        });
+    });
+
+    it('an ALLY-resist phrase does not claim the trigger', () => {
+        // Guard: the sibling clause in Prophet's own text is about an ALLY resisting and grants
+        // shield penetration, not an action. Only "this Unit resists" may set the trigger.
+        expect(
+            parseExtraAction(
+                'When an ally resists a debuff infliction from an enemy, this Unit gains 1 extra action.'
+            )?.trigger
+        ).toBeUndefined();
+    });
+
     // Real texts from docs/ship-skills.csv.
     it('Nuqtu: charged, gated on enemy having 3+ buffs', () => {
         const r = parseExtraAction(
@@ -2800,7 +2846,80 @@ describe('parseExtraAction', () => {
     });
 });
 
+describe('parseSecondaryDamage — stat MULTIPLE form (#361)', () => {
+    // Prophet's whole damage output is "damage equal to 50x its security" — a scalar MULTIPLE of a
+    // stat, not a percentage of attack. parseSkillDamage returned 0 (its content/following gate
+    // requires the word "damage") and parseSecondaryDamage's regex requires a literal '%', so the
+    // ship built exactly one ability (an extra-action passive) and emitted zero events in every
+    // fingerprint scenario. Measured: exactly 2 corpus rows use the form, both Prophet, both
+    // security.
+    it("parses Prophet's active: 50x its security -> security basis at 5000%", () => {
+        expect(
+            parseSecondaryDamage(
+                'This Unit deals damage equal to <unit-damage>50x</unit-damage> its security.'
+            )
+        ).toEqual({ stat: 'security', pct: 5000 });
+    });
+
+    it("parses Prophet's charged: 120x its security", () => {
+        expect(
+            parseSecondaryDamage(
+                'This Unit deals damage equal to <unit-damage>120x</unit-damage> its security.'
+            )
+        ).toEqual({ stat: 'security', pct: 12000 });
+    });
+
+    it('a multiple of an unrecognised stat parses as nothing rather than defaulting', () => {
+        // The executor's basis resolution is a ternary chain that falls through to HP, so a stat
+        // this parser cannot name must not reach it — silently dealing HP-scaled damage would be
+        // worse than dealing none.
+        expect(
+            parseSecondaryDamage(
+                'This Unit deals damage equal to <unit-damage>50x</unit-damage> its charisma.'
+            )
+        ).toBeNull();
+    });
+
+    it('does not mistake a percentage form for a multiple', () => {
+        // Guard: the existing "% of its Defense" rows must keep their own basis and pct.
+        expect(
+            parseSecondaryDamage(
+                'This Unit deals <unit-damage>damage equal to 30%</unit-damage> of its Defense.'
+            )
+        ).toEqual({ stat: 'defense', pct: 30 });
+    });
+});
+
 describe('parseHealAbilities', () => {
+    // #362: HEAL_REPAIR_RE anchors on /\brepairs?\b/, which also matches the word "Repairs" when it
+    // is part of a <unit-skill> status NAME. The lazy `[^%.;]*?` then walks across the closing tag
+    // to whatever percentage comes next in the sentence, fabricating a heal that is nowhere in the
+    // text. Zosimos's reworked charged skill is the first corpus row where a repair-bearing status
+    // name is followed by a percentage with no intervening '.' or ';' — 9 distinct such names exist
+    // (Inc. Repair Down I/II/III, Out. Repair Down II, Inc. Repair Up III, Repair Over Time I/II/III,
+    // Reversed Repairs), so the whole family is latent, not just this ship.
+    it('does NOT fabricate a heal from a repair-bearing status NAME (Zosimos charged, #362)', () => {
+        const text =
+            'This Unit inflicts <unit-skill>Reversed Repairs</unit-skill> for 1 turn and deals <unit-damage>300% damage</unit-damage>.';
+        expect(parseHealAbilities(text)).toEqual([]);
+    });
+
+    it('does NOT fabricate a heal from "Repair Over Time" followed by a percentage', () => {
+        // Shape guard, not a corpus row: proves the fix keys on the tag, not on Zosimos's wording.
+        const text =
+            'This Unit grants <unit-skill>Repair Over Time II</unit-skill> and deals <unit-damage>150% damage</unit-damage>.';
+        expect(parseHealAbilities(text)).toEqual([]);
+    });
+
+    it('still parses a real repair verb in a sentence that ALSO names a repair status', () => {
+        // The negative companion the fix must not break: the status name is masked, the verb is not.
+        const text =
+            'This Unit inflicts <unit-skill>Inc. Repair Down II</unit-skill> and <unit-damage>repairs itself for 25%</unit-damage> of its Max HP.';
+        expect(parseHealAbilities(text)).toEqual([
+            { kind: 'heal', pct: 25, basis: 'hp', target: 'self', explicitTarget: true },
+        ]);
+    });
+
     it('caster-HP heal to an ally', () => {
         expect(
             parseHealAbilities(
@@ -4527,6 +4646,26 @@ describe('target-repaired-this-round (Nayra)', () => {
 });
 
 describe('parseChargeRemoval', () => {
+    // #362: the on-enemy-repaired trigger was conjoined with the every-SECOND-repair cadence, so a
+    // refit row phrasing the cadence as plain "every repair" fell through to the on-cast default —
+    // the removal fired when Zosimos cast rather than when the enemy repaired. The trigger and the
+    // cadence are independent facts about the clause and are now read independently.
+    it('on-enemy-repaired removal, every SECOND repair — Zosimos passive2 (R3)', () => {
+        expect(
+            parseChargeRemoval(
+                "When an enemy performs a repair, this Unit adds 1 charge to its charged skill.<br /><br />\n\nAdditionally, this Unit removes 1 charge from the enemy's charged skill for every second repair they perform."
+            )
+        ).toEqual({ amount: 1, trigger: 'on-enemy-repaired', everyNthEvent: 2 });
+    });
+
+    it('on-enemy-repaired removal, EVERY repair — Zosimos passive3 (R4)', () => {
+        expect(
+            parseChargeRemoval(
+                "When an enemy performs a repair, this Unit adds 1 charge to its charged skill.<br /><br />\n\nAdditionally, this Unit removes 1 charge from the enemy's charged skill for every repair they perform."
+            )
+        ).toEqual({ amount: 1, trigger: 'on-enemy-repaired' });
+    });
+
     it('on-cast removal — Opal (amount 2)', () => {
         expect(
             parseChargeRemoval(

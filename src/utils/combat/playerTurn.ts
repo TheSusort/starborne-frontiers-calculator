@@ -2535,6 +2535,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             crit,
             critDamage,
             hp,
+            // #361: read off the actor rather than `runtime`, which carries no security — the
+            // fold (base + securityBuff, no affinity) matches liveDebuffLandingChance's effSec.
+            security: actor.stats.security ?? 0,
             defensePenetration,
             defensePenetrationBuff: defensePenetrationBuff + chargedOverdrivePen,
         },
@@ -2675,6 +2678,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const affinityMult = 1 + effAffinityDamageModifier / 100;
     const effectiveDefence = dmgStats.defence;
     const effectiveHp = dmgStats.hp;
+    const effectiveSecurity = dmgStats.security;
 
     // Per-round condition context for the Phase 1 condition engine. Built once
     // after landedEnemyDebuffs and effectiveCrit are known, but BEFORE Step 3
@@ -2844,12 +2848,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // processes on-cast self-shield grants (that block is gated on args.healing), so
         // shieldPool naturally stays 0 there too, EXCEPT for a "start of combat" pre-combat
         // shield seed (unconditional, seedPreCombatShields), which correctly still counts.
+        // #361: 'security' is a scalar MULTIPLE of the caster's security carried as pct = N*100
+        // (Prophet's "50x its security" -> 5000), so it divides by 100 like every other basis.
+        // Named explicitly rather than left to the trailing fall-through: this chain defaults to
+        // effectiveHp, so a basis the parser learns but this site does not would silently deal
+        // HP-scaled damage with no type error to catch it — widening SecondaryDamageStat produced
+        // ZERO tsc diagnostics, because nothing here is an exhaustive switch.
         const source =
             secondary.stat === 'defense'
                 ? effectiveDefence
                 : secondary.stat === 'shield'
                   ? actor.shieldPool
-                  : effectiveHp;
+                  : secondary.stat === 'security'
+                    ? effectiveSecurity
+                    : effectiveHp;
         secondaryStatValue = source * (secondary.pct / 100);
     }
 

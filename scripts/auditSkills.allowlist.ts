@@ -102,11 +102,25 @@ export const ALLOWLIST: AllowEntry[] = [
         'Sustainer',
         'Vindicator',
         'Xcellence',
+        // Prophet (#361): stat VERIFIED against docs/ship-data.json — shieldPenetration 45,
+        // matching its R4 "has 45% shield penetration" exactly, so parsing it would double-count
+        // as the rule intends. NOTE this entry covers the INNATE clause only; Prophet's sibling
+        // "when an ally resists a debuff infliction, this Unit gains 2% MORE shield penetration"
+        // is a permanently accumulating stat gain that is still unmodelled and tracked on #361 —
+        // it is a different clause and this allowlist entry is not a claim about it.
+        'Prophet',
     ].map((ship) => ({
         ship,
         rules: ['shield-penetration-innate'],
         reason: 'Shield penetration already filled as a ship stat by import/template data.',
     })),
+
+    // ── incoming-damage-reduction: the corpus's first ALLY-SCOPED reduction aura ──
+    {
+        ship: 'Fuying',
+        rules: ['incoming-damage-reduction'],
+        reason: "#363: \"All Tianchao allies with Stealth take 30% less direct damage\" is an aura on OTHER ships, gated on BOTH faction and a status. Every other ship this rule matches (Iridium/Anemone/Wusheng/Panon/Tormenter) reduces damage on ITSELF, which the 'incoming-reduction' ability type models; an ally-scoped, faction-and-status-gated aura needs plumbing that does not exist yet. Allowlisted as unmodelled, NOT as intentional: the modelling is tracked on #363. The separate defect where this clause was mis-parsed as a 30% outgoing ATTACK is fixed.",
+    },
 
     // Burst-explosion reference — not an accumulate-detonate application.
     {

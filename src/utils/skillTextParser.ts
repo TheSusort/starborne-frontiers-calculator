@@ -165,7 +165,14 @@ export function extractSkillNames(skillText: string | null | undefined): string[
 // Epic PR1 (skill-model gap, finding family 1): a <unit-damage> tag whose CONTENT says "X% less
 // damage" is an INCOMING-damage reduction (Voron "takes 20% less damage from DoTs", Malvex "takes
 // 10% less damage"), never an outgoing attack multiplier.
-const LESS_DAMAGE_RE = /\bless\s+damage\b/i;
+//
+// A bare `\bless\b`, deliberately mirroring the `\bmore\b` guard in parseSkillDamage: the previous
+// /\bless\s+damage\b/ required the two words ADJACENT, so Fuying's "30% less direct damage" slipped
+// through and parseInt minted a phantom outgoing damage{30} from a damage-reduction aura (#363).
+// Measured over all 149 corpus ships: every <unit-damage> tag whose content contains "less" is
+// incoming reduction (Fuying x3, Malvex, Voron) — there is no legitimate attack tag for the wider
+// pattern to suppress.
+const LESS_DAMAGE_RE = /\bless\b/i;
 // A tag reading "X% damage" immediately followed by " reduction …" (Tormenter "gains up to 30%
 // damage reduction as its health decreases") is the same incoming-reduction family — the
 // "reduction" noun sits just outside the tag, in the next ~15 chars.
@@ -356,6 +363,28 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // to", not "damage equal to" / the tag open). "their" joins "its"/"this Unit's" as a
     // pronoun ONLY the Shield-basis corpus rows use (FrontLine) — verified no corpus
     // Defense/HP row uses "their", so this is a strict superset with no new false positives.
+    // #361 — the stat MULTIPLE form, checked FIRST because it carries no '%' and so can never
+    // collide with the percentage pattern below. "This Unit deals damage equal to 50x its
+    // security" is 50 TIMES the stat, not 50% of attack, and is carried as pct = N * 100 so it
+    // rides the existing SecondaryDamage machinery unchanged.
+    //
+    // Unlike the percentage form, the "damage equal to" lead-in sits OUTSIDE the tag here, so it is
+    // required before the tag rather than optionally inside it — that lead-in is what makes the
+    // clause damage at all, and without it a bare "50x" tag elsewhere would be picked up blind.
+    //
+    // The stat comes from an explicit alternation, never a catch-all: the executor resolves the
+    // basis with a ternary chain that falls through to HP, so an unrecognised stat reaching it
+    // would silently deal HP-scaled damage. Returning null leaves such a clause unmodelled (and
+    // therefore still visible to audit:skills) rather than quietly wrong. Measured over all 149
+    // corpus ships: exactly 2 rows use this form — Prophet's active (50x) and charged (120x),
+    // both security.
+    const multiplePattern =
+        /damage\s+equal\s+to\s*<unit-damage>\s*(\d+(?:\.\d+)?)\s*x\s*<\/unit-damage>\s*(?:of\s+)?(?:its|their|this\s+unit'?s)?\s*(security)\b/i;
+    const multipleMatch = multiplePattern.exec(text);
+    if (multipleMatch) {
+        const times = parseFloat(multipleMatch[1]);
+        if (!isNaN(times)) return { stat: 'security', pct: times * 100 };
+    }
     const pattern =
         /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|their|this\s+unit'?s)\s+(?:current\s+)?(defense|(?:max\s+)?hp|shield)/i;
     const match = pattern.exec(text);
@@ -3432,8 +3461,18 @@ export function parseChargeRemoval(text: string | null | undefined): {
     const amount = raw === '' || raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
 
-    if (ENEMY_REPAIRS_RE.test(plain) && EVERY_SECOND_REPAIR_RE.test(plain)) {
-        return { amount, trigger: 'on-enemy-repaired', everyNthEvent: 2 };
+    // The enemy-repair TRIGGER and the every-Nth CADENCE are independent facts about the clause.
+    // They were conjoined, so Zosimos's R4 row — which phrases the cadence as plain "for every
+    // repair they perform" rather than "every second repair" — matched no branch and fell through
+    // to the on-cast default, firing the removal on Zosimos's own cast instead of on the enemy's
+    // repair (#362). Measured over all 149 corpus ships: Zosimos passive3 is the only row whose
+    // trigger this decoupling changes.
+    if (ENEMY_REPAIRS_RE.test(plain)) {
+        return {
+            amount,
+            trigger: 'on-enemy-repaired',
+            ...(EVERY_SECOND_REPAIR_RE.test(plain) ? { everyNthEvent: 2 } : {}),
+        };
     }
     if (BOMB_DETONATE_RE.test(plain)) {
         return { amount, trigger: 'on-bomb-detonated' };
@@ -3788,6 +3827,10 @@ const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
 // ally-destroyed phrasing (Harvester) → on-ally-destroyed. Default (no match) → on-cast.
 const EXTRA_ACTION_ENEMY_DESTROYED_RE = ENEMY_DEATH_PHRASING_RE;
 const EXTRA_ACTION_ALLY_DESTROYED_RE = /allied unit is destroyed|ally is destroyed/i;
+// #361 (Prophet): "When this Unit resists a debuff infliction from an enemy, once per round, this
+// Unit gains 1 extra action." Requires the SELF subject — an ally's resist grants Prophet shield
+// penetration in a sibling clause and must not fire an action.
+const EXTRA_ACTION_SELF_RESIST_RE = /\bwhen\s+this\s+unit\s+resists?\s+a\s+debuff\b/i;
 
 // "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
 // imperative "give one extra action". Lookbehind-free.
@@ -3801,10 +3844,15 @@ const EXTRA_ACTION_SELF_HP_RE = /\b(?:its|this unit'?s?)\s+hp\s+is\s+below\s+(\d
 export interface ExtraActionParse {
     oncePerRound: boolean;
     conditions: Condition[];
-    /** Death trigger detected from the clause (Phase 4b Task 10): on-enemy-destroyed
-     *  (Sokol/Liberator on-kill) or on-ally-destroyed (Harvester). Absent for the default
-     *  on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) — the builder defaults those to on-cast. */
-    trigger?: Extract<AbilityTrigger, 'on-enemy-destroyed' | 'on-ally-destroyed'>;
+    /** Reactive trigger detected from the clause. Death triggers (Phase 4b Task 10):
+     *  on-enemy-destroyed (Sokol/Liberator on-kill) or on-ally-destroyed (Harvester).
+     *  on-debuff-resisted (#361, Prophet): "when THIS UNIT resists a debuff infliction".
+     *  Absent for the default on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) — the builder
+     *  defaults those to on-cast. */
+    trigger?: Extract<
+        AbilityTrigger,
+        'on-enemy-destroyed' | 'on-ally-destroyed' | 'on-debuff-resisted'
+    >;
     /** "end of round" extra action (e.g. Harvester): the engine drains it AFTER all
      *  normal-pool actions for the round, regardless of speed-rank — not re-picked by
      *  speed. Default extra actions ("1 extra action", Liberator) stay speed-positioned. */
@@ -3867,13 +3915,21 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     // belong to the grant subclause.) Sokol/Harvester carry the death phrase in the grant clause
     // itself, so sentence-level detection covers all three.
     const sentenceUnmasked = sentence.split(ABBR_MARK).join(' ');
+    // #361: a grant gated on THIS UNIT resisting a debuff infliction (Prophet). Without this the
+    // ternary fell through to the on-cast default and the ship took a free extra action every
+    // round unconditionally — roughly doubling its output. Scoped to "this Unit resists" and NOT
+    // the bare resist phrase: Prophet's own text carries a sibling "when an ALLY resists" clause
+    // that grants shield penetration, and an ally's resist must never fire a self action. Only
+    // Prophet's passive2/passive3 carry this phrasing in the corpus.
     const trigger: ExtraActionParse['trigger'] = EXTRA_ACTION_ENEMY_DESTROYED_RE.test(
         sentenceUnmasked
     )
         ? 'on-enemy-destroyed'
         : EXTRA_ACTION_ALLY_DESTROYED_RE.test(sentenceUnmasked)
           ? 'on-ally-destroyed'
-          : undefined;
+          : EXTRA_ACTION_SELF_RESIST_RE.test(sentenceUnmasked)
+            ? 'on-debuff-resisted'
+            : undefined;
     return {
         oncePerRound: /once per round/i.test(clause),
         conditions,
@@ -4077,6 +4133,35 @@ const HEAL_DAMAGE_REACTION_RE =
 // "when (this unit) is critically hit" phrasing.
 const HEAL_CRIT_HIT_TRIGGER_RE = /\bis\s+criticall?y?\s+hit\b/i;
 
+/**
+ * Neutralises the word "repair" where it is part of a <unit-skill> STATUS NAME rather than a repair
+ * verb, so HEAL_REPAIR_RE cannot anchor on it (#362).
+ *
+ * HEAL_REPAIR_RE is /\brepairs?\b[^%.;]*?(\d+(?:\.\d+)?)\s*%/gi. `parseHealAbilities` strips unit
+ * tags BEFORE scanning, so by the time the regex runs a status name is indistinguishable from a
+ * verb — and the lazy `[^%.;]*?` then walks across the (now-gone) tag boundary to whatever
+ * percentage comes next in the sentence. Zosimos's charged skill ("inflicts Reversed Repairs for 1
+ * turn and deals 300% damage") fabricated a heal for 300% of max HP that way.
+ *
+ * Masking is done on the ORIGINAL tagged text, which is the only place the boundary still exists.
+ * The corpus has 9 distinct repair-bearing status names over 24 occurrences (Inc. Repair Down
+ * I/II/III, Out. Repair Down II, Inc. Repair Up III, Repair Over Time I/II/III, Reversed Repairs),
+ * so this closes a family rather than one row — only Zosimos happens to have a percentage inside
+ * the no-'.'-no-';' window today.
+ *
+ * A status name can never BE the repair verb, so nothing legitimate is suppressed: a real repair
+ * verb always sits outside the <unit-skill> tag and is left untouched. "Renewal" is chosen because
+ * no other pattern in this file matches it.
+ */
+function maskStatusNameRepairs(text: string): string {
+    return text.replace(/<unit-skill>(.*?)<\/unit-skill>/g, (whole, name: string) =>
+        whole.replace(
+            name,
+            name.replace(/\brepair(s?)\b/gi, (_m, plural: string) => `Renewal${plural}`)
+        )
+    );
+}
+
 // Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
 // the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").
 const HEAL_REPAIR_RE = /\brepairs?\b[^%.;]*?(\d+(?:\.\d+)?)\s*%/gi;
@@ -4259,7 +4344,10 @@ function parseHealEventCountScaling(
 
 export function parseHealAbilities(text: string | null | undefined): ParsedHealAbility[] {
     if (!text) return [];
-    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    // Mask repair-bearing STATUS NAMES before the tags are stripped — see maskStatusNameRepairs
+    // (#362). `plain` is local to this function, so the substitution cannot leak into buff-name
+    // parsing, which reads the untouched text via parseSkillEffects.
+    const plain = stripUnitTags(maskStatusNameRepairs(text)).replace(/<br\s*\/?>/gi, '. ');
     const results: ParsedHealAbility[] = [];
 
     const emit = (kind: ParsedHealAbility['kind'], re: RegExp): void => {
