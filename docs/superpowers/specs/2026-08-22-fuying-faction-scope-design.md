@@ -70,10 +70,14 @@ Purifier's pattern is `Not-Self`, and the Stealth grant is a **cast**, so it is 
 Fuying therefore never grants herself Stealth, and her own DR aura is inert on her.
 
 Note carefully **why** it is inert, because the two available reasons are not interchangeable and
-only one is correct — see §3: the aura is a *passive* and is not footprint-narrowed at all, so its
-recipient set **does** include her. What makes it inert is the `self-stealth` condition failing,
-not her absence from the recipient set. The "does *ally* include the caster" question therefore
-needs no owner ruling here, but it is not answered by excluding her.
+only one is correct — see §3. **Superseded reasoning, kept as a warning:** an earlier draft argued
+the aura is not footprint-narrowed and therefore includes her. The owner's `patternScoped` ruling
+reversed that premise, so the aura IS footprint-narrowed, and her Not-Self pattern drops her from
+the recipient set on the same terms as her grant.
+
+The CONCLUSION nonetheless stands, for a different reason: **no owner exclusion belongs in the
+code.** She drops out because the pattern is Not-Self, not because anything special-cases her. Do
+not add an owner check — see §3.
 
 ---
 
@@ -252,17 +256,30 @@ self-scoped, so the map has never needed to fan out.
 every qualifying same-side actor's list rather than only her own. The faction filter is applied at
 that fan-out, where `factionOf` is in scope, so `incomingReductionForHit` stays pure and unchanged.
 
-**The fan-out includes the owner.** This is the one place where §1's `Not-Self` reasoning does not
-carry, and getting it wrong is easy: the aura is a *passive* whose clause does not name the pattern,
-so it is not footprint-narrowed, so Fuying — herself a Tianchao ally — is in its recipient set. It
-is inert on her only because the `self-stealth` condition fails, since the *grant* (a cast) is
-Not-Self.
+**Do not special-case the owner — in either direction.** The reasoning here changed twice, so hold
+onto the rule rather than the argument.
 
-So the recipient set must be derived from the ability's target and `factionFilter` alone. Do **not**
-exclude the owner as an optimisation on the grounds that "Fuying never has Stealth" — that hardcodes
-a fact about her *grant's pattern* into the *aura's* recipient resolution, and it breaks silently
-the day any ship self-grants Stealth or a teammate grants it to her. Let the condition gate do the
-work it already does correctly.
+The rule: the recipient set is `footprint ∩ factionFilter`, resolved from the ability's own target
+and filter. Nothing about Fuying appears in it. She drops out because her pattern is `Not-Self`.
+
+The history, so nobody re-derives a superseded step: an earlier draft argued the aura was NOT
+footprint-narrowed (a passive whose clause does not name the pattern), which put her in her own
+recipient set and made her inert only via the failing `self-stealth` condition. The owner's ruling
+that the aura IS pattern-limited reverses that premise. Both drafts reach the same code — no owner
+check — but only the current one is true about *why*.
+
+Two failure modes to avoid, both of which look like tidying:
+- **Excluding the owner explicitly** ("Fuying never has Stealth, so skip her") hardcodes a fact
+  about her GRANT's pattern into the AURA's recipient resolution, and breaks silently the day any
+  ship self-grants Stealth or a teammate grants it to her.
+- **Handing the owner an un-narrowed copy of the aura.** The per-actor pass that collects each
+  actor's OWN passive-slot incoming abilities must SKIP ally-scoped `incoming-reduction`, or the
+  carrier receives a copy that bypasses her own footprint. Found during implementation, not
+  specified here beforehand.
+
+This is untestable through outcomes — every observable result is identical whether the owner is in
+the set or not — so assert the RECIPIENT SET directly. A pure exported recipient function
+(`allyScopedIncomingRecipients`) exists for exactly that reason.
 
 The existing per-actor collection must keep its current behaviour byte-for-byte: only an ability
 whose `target` is ally-plural fans out at all.
