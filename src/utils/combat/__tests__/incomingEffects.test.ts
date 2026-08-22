@@ -3,6 +3,7 @@ import {
     incomingReductionForHit,
     incomingBlockForIntake,
     addIncomingAbilityDeduped,
+    withLiveAllyScopedOwners,
 } from '../incomingEffects';
 import { Ability, IncomingCondition, IncomingHitContext } from '../../../types/abilities';
 
@@ -287,5 +288,57 @@ describe('addIncomingAbilityDeduped (#363 item 5)', () => {
         const list: Ability[] = [];
         const returned = addIncomingAbilityDeduped(list, auraCopy());
         expect(returned).toBe(list);
+    });
+});
+
+describe('withLiveAllyScopedOwners (#363 review Fix 1)', () => {
+    const aura: Ability = {
+        id: 'fuying-aura',
+        type: 'incoming-reduction',
+        target: 'all-allies',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 30,
+            critFamily: false,
+        },
+    };
+    const selfScoped: Ability = { ...aura, id: 'iridium-self', target: 'self' };
+    const alwaysAlive = () => true;
+    const neverAlive = () => false;
+
+    it('returns the SAME ARRAY REFERENCE when the recipient has no ally-scoped entries', () => {
+        // The self-scoped family's byte-identical path: no owner map at all, and an empty one.
+        const list = [selfScoped];
+        expect(withLiveAllyScopedOwners(list, undefined, neverAlive)).toBe(list);
+        expect(withLiveAllyScopedOwners(list, new Map(), neverAlive)).toBe(list);
+    });
+
+    it('keeps an ally-scoped entry while its owner lives and drops it once the owner is dead', () => {
+        const owners = new Map([['fuying-aura', 'fuying']]);
+        expect(withLiveAllyScopedOwners([aura], owners, alwaysAlive)).toEqual([aura]);
+        expect(withLiveAllyScopedOwners([aura], owners, neverAlive)).toEqual([]);
+    });
+
+    it('leaves a SELF-scoped entry alone even when the ally-scoped owner beside it is dead', () => {
+        // The lookup MISS is what preserves it — the filter never consults liveness for an id the
+        // fan-out pass did not record, so Iridium/Anemone/Wusheng/Panon/Tormenter/Voron cannot be
+        // collaterally silenced by a dead teammate's aura sharing their list.
+        const owners = new Map([['fuying-aura', 'fuying']]);
+        expect(withLiveAllyScopedOwners([selfScoped, aura], owners, neverAlive)).toEqual([
+            selfScoped,
+        ]);
+    });
+
+    it('asks liveness about the OWNER id, not the ability id', () => {
+        const asked: string[] = [];
+        withLiveAllyScopedOwners([aura], new Map([['fuying-aura', 'fuying']]), (id) => {
+            asked.push(id);
+            return true;
+        });
+        expect(asked).toEqual(['fuying']);
     });
 });

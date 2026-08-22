@@ -448,23 +448,43 @@ one of them wrong. Read these before touching anything Stealth-gated.
    reaction can fire on **every** qualifying hit within the window, so any once-per-round or
    once-per-ally cap must come from the ability's own TEXT, never be invented to tame it.
 
-### Consequence: an unenforced gate, measured
+### Consequence: an unenforced gate — measured, then CLOSED on this branch
 
 Fuying's R3/R4 passive reactive — "When an ally in Stealth within the active pattern is directly
-damaged, this Unit inflicts Stasis for 1 turn onto the enemy" — **does not check Stealth at all.**
+damaged, this Unit inflicts Stasis for 1 turn onto the enemy" — **did not check Stealth at all.**
 Measured at Task 3's HEAD in the `plain` fingerprint scenario: **40 `Stasis` log mentions, 0
-`Stealth`.** It fires with nobody Stealthed anywhere.
+`Stealth`.** It fired with nobody Stealthed anywhere.
 
-Not introduced by any task here, and the faction fix makes it *more* visibly wrong (on a team with
-no Tianchao ally, nobody is ever Stealthed and it still fires). Ruling 3 above makes it fully
-specifiable now: gate on the damaged ally holding Stealth, pattern-scoped, no invented cap.
-**Owner decision needed on scope** — widen this branch, or file as its own issue.
+Not introduced by any task here, and the faction fix made it *more* visibly wrong (on a team with
+no Tianchao ally, nobody is ever Stealthed and it still fired). Ruling 3 above made it fully
+specifiable: gate on the damaged ally holding Stealth, pattern-scoped, no invented cap.
+
+**RESOLVED — the owner widened this branch, and BOTH gates shipped here. No decision is pending.**
+
+Accepted behaviour, as implemented:
+
+1. **The damaged ally must hold the named status.** The parser reads it off the tagged trigger
+   phrase (`DR_ALLY_STATUS_RE`) through `resolveBuffName`, so an unrecognised name emits NO gate
+   rather than one that can never match, and the ability carries
+   `Ability.requireDamagedAllyStatus = 'Stealth'`. The listener matches it EXACTLY (not by
+   substring) against the damaged ally's live self-statuses, and an ally whose statuses cannot be
+   read at all never satisfies the gate. Because being hit does not consume Stealth (ruling 3), the
+   read is a plain live read with no pre/post-hit ordering rule.
+2. **The affected ally must stand inside the owner's active pattern.** `patternScoped` is honoured
+   on the affected-ally axis of the trigger, not merely on the recipient axis.
+3. **No cap was invented.** The reaction fires on every qualifying hit, per ruling 3.
+
+Coverage: `fuyingStasisStealthGate.integration.test.ts` (both arms of the status gate, through
+production slot routing) and `reactivePatternScopeGate.integration.test.ts` (both arms of the
+pattern gate, on a real board).
 
 ## 8. Not gaps — do not re-open
 
-- **The reactive Stasis passive** parses correctly, `patternScoped: true` included. Fuying is the
-  corpus's first *reactive* Stasis, which raises a question about the multi-hit tripwire's
-  coverage — that is noted on #357 and stays there.
+- **The reactive Stasis passive's PARSE** was never the gap: it parses correctly, `patternScoped:
+  true` included. Its two unenforced GATES were a real gap and are now closed on this branch — see
+  the section immediately above; do not re-open that either. What remains open is unrelated to both:
+  Fuying is the corpus's first *reactive* Stasis, which raises a question about the multi-hit
+  tripwire's coverage — that is noted on #357 and stays there.
 - **Prophet's innate 45% shield penetration** is allowlisted because `docs/ship-data.json` already
   carries `shieldPenetration: 45`; parsing it would double-count. Nothing here touches it.
 - **`Tianchao Precision`, `XAOC Swiftness`, and the other 32 faction-named buffs** are buff names,

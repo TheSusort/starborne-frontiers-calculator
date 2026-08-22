@@ -108,6 +108,26 @@ describe('parseExtendStatus — named arm (#363)', () => {
     it('returns null with no extend clause at all', () => {
         expect(parseExtendStatus('This Unit deals 100% damage.')).toBeNull();
     });
+
+    it('emits NO buffName for a status name that is not in BUFFS (review Fix 2)', () => {
+        // The trap this closes: a literal, unresolved `buffName` is matched by EXACT name against
+        // the target's live statuses in `extendAllBuffsDuration`, so it can never match anything —
+        // the clause would silently extend NOTHING. Omitting the field falls back to
+        // Sokol/Ripper/Lev's extend-everything behaviour, which is at worst too generous rather
+        // than inert. Unreachable in today's corpus (see the sweep below); this is the guard for
+        // the next named-extend ship, whose status name may be a typo, a DoT, or newly added.
+        expect(
+            parseExtendStatus('This Unit extends <unit-skill>Nebular Ague</unit-skill> by 2 turns.')
+        ).toEqual({ turns: 2, statusKind: 'buff' });
+    });
+
+    it('still resolves a name written with arabic numerals to its canonical roman form', () => {
+        // resolveBuffName's number↔roman normalization now applies to this arm too, so a corpus
+        // row writing "Attack Up 2" yields the canonical 'Attack Up II' that the status store keys.
+        expect(
+            parseExtendStatus('This Unit extends <unit-skill>Attack Up 2</unit-skill> by 1 turn.')
+        ).toEqual({ turns: 1, statusKind: 'buff', buffName: 'Attack Up II' });
+    });
 });
 
 describe('parseExtendStatus — corpus sweep (non-vacuity + non-disturbance)', () => {

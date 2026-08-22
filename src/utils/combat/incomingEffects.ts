@@ -69,6 +69,47 @@ export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ab
     return list;
 }
 
+/**
+ * #363 follow-up — DROPS ally-scoped incoming entries whose OWNER is no longer alive.
+ *
+ * OWNER-RULED 2026-08-22: an ally-scoped aura STOPS when its carrier dies. In a fight: round 2,
+ * Fuying alive, a Stealthed Anjian takes 10,000 → 7,000. Round 3, Fuying destroyed, the same hit on
+ * the same still-Stealthed Anjian → the full 10,000.
+ *
+ * WHY IT LIVES HERE AND NOT IN `incomingReductionForHit`. The fan-out pass writes the carrier's
+ * `Ability` object into each RECIPIENT's list, so the recipient-side read has no idea who the owner
+ * was — and `incomingReductionForHit` is a pure fold over `Ability[]` with a dozen call sites
+ * across the engine (block, transform, threshold-shield, reflection all share the same list). This
+ * filter sits on the LIST accessor instead, so every one of those consumers inherits the liveness
+ * rule at once and no per-hit signature has to grow an owner parameter.
+ *
+ * TEAM-SYMMETRIC BY CONSTRUCTION: the only side-dependent input is `isOwnerAlive`, which the engine
+ * wires from the combat-wide `allActorsById`, exactly like `affinityOf` / `actorById`. There is no
+ * `side` check and no mirrored branch.
+ *
+ * LIVE, NOT CAPTURED: this runs on every list read (i.e. per hit), so it reads the owner's CURRENT
+ * `destroyedRound`. Nothing about liveness is frozen at setup.
+ *
+ * BYTE-IDENTICAL FOR THE SELF-SCOPED FAMILY (Iridium, Anemone, Wusheng, Panon, Tormenter, Voron):
+ * a self-scoped entry never appears in `ownerByAllyScopedAbilityId`, and a recipient with no
+ * ally-scoped entries at all short-circuits to the SAME array reference — no copy, no filter.
+ * (A self-scoped entry would be moot anyway: its owner IS the victim, and a dead victim takes no
+ * hits. The lookup miss keeping it is the conservative answer either way.)
+ */
+export function withLiveAllyScopedOwners(
+    abilities: Ability[],
+    /** abilityId → owner actor id, for the ALLY-SCOPED entries fanned onto this recipient. */
+    ownerByAllyScopedAbilityId: Map<string, string> | undefined,
+    isOwnerAlive: (ownerId: string) => boolean
+): Ability[] {
+    if (ownerByAllyScopedAbilityId === undefined || ownerByAllyScopedAbilityId.size === 0)
+        return abilities;
+    return abilities.filter((a) => {
+        const ownerId = ownerByAllyScopedAbilityId.get(a.id);
+        return ownerId === undefined || isOwnerAlive(ownerId);
+    });
+}
+
 /** True when an incoming condition is satisfied by the hit context. Exported (SP-E) so the
  *  engine's applyVictimDamage transform hook can gate a 'transform-incoming-to-dot' ability's
  *  `condition` the same way incomingReductionForHit/incomingBlockForIntake do internally. */

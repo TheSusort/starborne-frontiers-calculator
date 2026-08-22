@@ -26,6 +26,7 @@ import { resolveSupportRecipients } from '../supportRecipients';
 import { allyScopedIncomingRecipients, incomingReductionForHit } from '../incomingEffects';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
+import { lazyFixture } from '../__testutils__/lazyFixture';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
@@ -873,42 +874,49 @@ const runBoard = (opts: { aura: boolean; m3Faction?: FactionKey }) => {
 };
 
 describe('Fuying Stealth DR aura (#363) — engine, on a real board', () => {
-    const withAura = runBoard({ aura: true });
-    const noAura = runBoard({ aura: false });
+    // Fix 3 (review): built on first ACCESS, not in the `describe` body — a describe body runs at
+    // COLLECTION time, before `beforeAll(requireReferenceData)`, so a fresh worktree without the
+    // gitignored `docs/` reference data crashed during collection instead of reporting the guard's
+    // readable message. Memoized, so both boards are still each run exactly once.
+    const withAura = lazyFixture(() => runBoard({ aura: true }));
+    const noAura = lazyFixture(() => runBoard({ aura: false }));
 
     it('all three Stealthed allies are actually HIT (ruling 2 — Stealth does not stop damage)', () => {
         // Non-vacuity gate: without this, every differential below could be 0 === 0.
         for (const id of ['ally-m3', 'ally-m2', 'ally-m1']) {
-            expect(noAura.direct.get(id)).toBeGreaterThan(0);
-            expect(withAura.direct.get(id)).toBeGreaterThan(0);
+            expect(noAura().direct.get(id)).toBeGreaterThan(0);
+            expect(withAura().direct.get(id)).toBeGreaterThan(0);
         }
     });
 
     it('reduces a DIRECT hit on the Stealthed Tianchao ally INSIDE her pattern by exactly 30%', () => {
-        expect(withAura.direct.get('ally-m3')!).toBeCloseTo(0.7 * noAura.direct.get('ally-m3')!, 5);
+        expect(withAura().direct.get('ally-m3')!).toBeCloseTo(
+            0.7 * noAura().direct.get('ally-m3')!,
+            5
+        );
     });
 
     it('a Stealthed Tianchao ally OUTSIDE her pattern takes FULL damage (owner ruling 1)', () => {
         // The assertion that distinguishes the shipped implementation from the reverted spec's
         // version, which argued the aura was not pattern-limited.
-        expect(withAura.direct.get('ally-m1')!).toBe(noAura.direct.get('ally-m1')!);
+        expect(withAura().direct.get('ally-m1')!).toBe(noAura().direct.get('ally-m1')!);
     });
 
     it('a Stealthed XAOC ally INSIDE her pattern takes FULL damage (faction narrowing)', () => {
-        expect(withAura.direct.get('ally-m2')!).toBe(noAura.direct.get('ally-m2')!);
+        expect(withAura().direct.get('ally-m2')!).toBe(noAura().direct.get('ally-m2')!);
     });
 
     it('does NOT reduce a DoT tick on the very ally whose direct hit it DID reduce', () => {
         // Same actor, same run as the 30% assertion above, so the aura is provably live on it —
         // which is what makes an unchanged tick evidence about `scope: 'direct'` rather than about
         // the ally being out of reach.
-        expect(withAura.dot.get('ally-m3')).toBeGreaterThan(0);
-        expect(withAura.dot.get('ally-m3')!).toBe(noAura.dot.get('ally-m3')!);
+        expect(withAura().dot.get('ally-m3')).toBeGreaterThan(0);
+        expect(withAura().dot.get('ally-m3')!).toBe(noAura().dot.get('ally-m3')!);
     });
 
     it('swapping the reduced ally to XAOC removes the reduction (same cell, same Stealth)', () => {
         const swapped = runBoard({ aura: true, m3Faction: 'XAOC' });
-        expect(swapped.direct.get('ally-m3')!).toBe(noAura.direct.get('ally-m3')!);
+        expect(swapped.direct.get('ally-m3')!).toBe(noAura().direct.get('ally-m3')!);
     });
 });
 
@@ -1146,5 +1154,173 @@ describe('Fuying Stealth DR aura (#363) — engine, enemy-side mirror (item 4)',
         const noAura = runEnemyAuraBoard({ aura: false });
         const withAura = runEnemyAuraBoard({ aura: true });
         expect(withAura).toBeCloseTo(0.7 * noAura, 5);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// #363 review follow-up (Fix 1) — THE AURA STOPS WHEN ITS CARRIER DIES.
+//
+// OWNER-RULED 2026-08-22. In a fight: round 2, Fuying alive, a Stealthed Tianchao ally takes
+// 10,000 → 7,000. Round 3, Fuying destroyed, the same hit on the same still-Stealthed ally →
+// the full 10,000.
+//
+// The bug this pins: the ally-scoped fan-out writes Fuying's aura `Ability` into each recipient's
+// `incomingAbilitiesById` list ONCE at setup, and the per-hit fold reads that list with no owner
+// identity at all — so a destroyed Fuying went on protecting her allies for the rest of the battle.
+//
+// Board (a two-enemy variant of the player-side board above, one ally instead of three):
+//   Fuying  T2, her real Pattern-Wings-Support-Not-Self-Range-2 → footprint {M2,M3,B1,B2,B3},
+//           and a SMALL hp pool in the dies-runs.
+//   ally-m3 M3, TIANCHAO, self-Stealth for 99 turns → inside the footprint, faction matches.
+//   enemy-1 M1, Pattern-Line-Range-2 @front, speed 500 → anchors the front-most M-row player
+//           (ally-m3) EVERY round. This is the measured hit.
+//   killer  T1, base pattern @front, speed 1 → acts LAST in the round and anchors the front-most
+//           T-row player, i.e. Fuying, for LETHAL damage. So round 1's measured hit lands while
+//           she is alive and round 2's lands after she is gone.
+//
+// Three runs, because two would not separate "she died" from "round 2 differs for some other
+// reason" (the ally's Stealth lapsing, the enemy's anchor moving, an AoE share changing):
+//   • dies + aura      — round 1 reduced, round 2 full   ← the rule
+//   • survives + aura  — BOTH rounds reduced             ← proves the ally is still Stealthed, still
+//                                                          in-pattern and still hit in round 2, so
+//                                                          round 2's recovery above is about DEATH
+//   • dies + no aura   — the full-damage yardstick both rounds
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+const LETHAL = 10_000_000;
+const FUYING_FRAGILE_HP = 1000;
+const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
+
+const ownerDeathBoard = (opts: { aura: boolean; fuyingSurvives: boolean }): CombatEngineInput => ({
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    numRounds: 2,
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: opts.fuyingSurvives ? HUGE_HP : FUYING_FRAGILE_HP,
+    speed: 2000,
+    mode: 'healing',
+    healTargetId: 'attacker',
+    faction: 'TIANCHAO',
+    position: 'T2',
+    pattern: wingsSupportNotSelf2(),
+    // Same snapshot-Stealth reasoning as the board above: the row-scan stealth filter restores
+    // every candidate only when the WHOLE player roster is Stealthed, and leaving Fuying visible
+    // would make her the only pickable target — nobody would ever hit ally-m3. It also keeps the
+    // `killer` below able to reach her.
+    selfBuffs: FUYING_SNAPSHOT_STEALTH,
+    shipSkills: { slots: [...(opts.aura ? [auraPassiveSlot()] : [])] },
+    teamActors: [stealthedAlly('ally-m3', 'M3', 'TIANCHAO')],
+    enemyAttackers: [
+        {
+            id: 'enemy-1',
+            stats: {
+                attack: ENEMY_ATTACK,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: HUGE_HP,
+                speed: 500, // after the ally's Stealth cast, before the killer
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M1',
+            target: frontTarget(),
+            pattern: lineRange2(),
+        },
+        {
+            id: 'killer',
+            stats: {
+                attack: LETHAL,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: HUGE_HP,
+                speed: 1, // LAST in the round, so round 1's measured hit precedes Fuying's death
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'T1', // Fuying's own row → `front` anchors on her
+            target: frontTarget(),
+            pattern: basePattern(),
+        },
+    ],
+});
+
+/** `enemy-1`'s direct damage on `ally-m3`, keyed by ROUND, plus the round Fuying was destroyed in.
+ *
+ *  ⚠️ SCOPED TO `enemy-1` ON PURPOSE, and the first draft was wrong without it. Once Fuying dies,
+ *  row T is empty, so the `killer`'s `front` anchor falls through to ally-m3 and dumps its LETHAL
+ *  10,000,000 into the round-2 total — which made the no-aura yardstick 2000× the real hit and the
+ *  comparison meaningless. `enemy-1`'s ordinary 5,000-attack line hit is the thing being measured;
+ *  the killer exists only to remove Fuying. */
+const runOwnerDeathBoard = (opts: { aura: boolean; fuyingSurvives: boolean }) => {
+    const bus = createEventBus();
+    const byRound = new Map<number, number>();
+    let fuyingDestroyedRound: number | undefined;
+    bus.on('attacked', (e) => {
+        if (e.targetId !== 'ally-m3' || e.attackerId !== 'enemy-1' || e.damage === undefined)
+            return;
+        byRound.set(e.round, (byRound.get(e.round) ?? 0) + e.damage);
+    });
+    bus.on('ship-destroyed', (e: CombatEvent) => {
+        if (e.type === 'ship-destroyed' && e.actorId === 'attacker') fuyingDestroyedRound = e.round;
+    });
+    runCombat({ ...ownerDeathBoard(opts), bus });
+    return { byRound, fuyingDestroyedRound };
+};
+
+describe('Fuying Stealth DR aura (#363) — a DESTROYED carrier stops protecting her allies', () => {
+    // `lazyFixture`, not a plain arrow: built on first ACCESS (so after
+    // `beforeAll(requireReferenceData)`, never during collection — Fix 3) and memoized, so each of
+    // the three boards runs exactly once across all four arms.
+    const dies = lazyFixture(() => runOwnerDeathBoard({ aura: true, fuyingSurvives: false }));
+    const survives = lazyFixture(() => runOwnerDeathBoard({ aura: true, fuyingSurvives: true }));
+    const noAura = lazyFixture(() => runOwnerDeathBoard({ aura: false, fuyingSurvives: false }));
+
+    it('PRECONDITION: the ally is hit in BOTH rounds of every run (nothing here is 0 === 0)', () => {
+        for (const [label, r] of [
+            ['dies+aura', dies()],
+            ['survives+aura', survives()],
+            ['dies+noAura', noAura()],
+        ] as const) {
+            expect([...r.byRound.keys()].sort(), `${label}: wrong rounds`).toEqual([1, 2]);
+            expect(r.byRound.get(1), `${label} r1`).toBeGreaterThan(0);
+            expect(r.byRound.get(2), `${label} r2`).toBeGreaterThan(0);
+        }
+    });
+
+    it('PRECONDITION: Fuying really is destroyed in round 1 of the dies-runs, and never in the survives-run', () => {
+        // The instrument's own hinge. Without this the "round 2 is full damage" assertion below
+        // could pass on a board where she simply never died and something else moved the number.
+        expect(dies().fuyingDestroyedRound).toBe(1);
+        expect(noAura().fuyingDestroyedRound).toBe(1);
+        expect(survives().fuyingDestroyedRound).toBeUndefined();
+    });
+
+    it('CONTROL: while she LIVES the ally is reduced 30% in BOTH rounds', () => {
+        // So the ally is provably still Stealthed, still inside the footprint and still being hit
+        // in round 2 — the only thing that changes in the dies-run is that she is dead.
+        const alive = survives();
+        const full = noAura();
+        expect(alive.byRound.get(1)!).toBeCloseTo(0.7 * full.byRound.get(1)!, 5);
+        expect(alive.byRound.get(2)!).toBeCloseTo(0.7 * full.byRound.get(2)!, 5);
+    });
+
+    it('reduces the round-1 hit (she is alive for it) and NOT the round-2 hit (she is dead)', () => {
+        const dead = dies();
+        const full = noAura();
+        expect(dead.byRound.get(1)!).toBeCloseTo(0.7 * full.byRound.get(1)!, 5);
+        expect(dead.byRound.get(2)!).toBe(full.byRound.get(2)!);
     });
 });

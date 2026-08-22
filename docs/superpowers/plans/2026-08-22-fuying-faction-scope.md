@@ -504,7 +504,6 @@ The discriminator is that the faction word is immediately followed by `ally`/`al
 Create `src/utils/combat/__tests__/fuyingFactionScope.integration.test.ts`:
 
 ```ts
-import { describe, it, expect } from 'vitest';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { detectGrantFactionScope } from '../../skillTextParser';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
@@ -974,44 +973,87 @@ At the build site (~:2866), use the directive's target instead of the hardcoded 
 - [ ] **Step 5: Fan the aura out in the engine**
 
 In `engine.ts`, at `incomingAbilitiesById` (~:3739). The existing loop keys each actor's OWN
-passive-slot abilities. Add a second pass that distributes ally-scoped ones:
+passive-slot abilities. Add a second pass that distributes ally-scoped ones.
+
+> ⚠️ **SUPERSEDED — the sample originally printed here was written BEFORE the owner ruled the aura
+> pattern-limited, and it is wrong in three ways. Do not implement it; the block below is the
+> shipped shape. Read `src/utils/combat/incomingEffects.ts` and `engine.ts`'s own comments as the
+> authority.**
+>
+> 1. It distributed to **every living same-side actor** narrowed only by faction. The owner then
+>    ruled (spec §7 ruling 2) that the aura is **pattern-limited**: a Stealthed Tianchao ally
+>    standing OUTSIDE Fuying's active pattern takes FULL damage. The shipped code carries
+>    `patternScoped: true` on the ability and threads the owner's support footprint.
+> 2. Its "⚠️ the owner IS a recipient" note argued the aura is **not** footprint-narrowed. The
+>    no-owner-exclusion rule survived the ruling and is still correct — but its *reason* changed:
+>    Fuying falls out of her own recipient set because her Not-Self pattern omits her own cell (and
+>    `self-stealth` never holds for her), not because nothing narrows the set.
+> 3. It said "the self-scoped collection above must be left untouched". That pass has to change:
+>    without a skip it also keys the ally-scoped aura onto its own CARRIER — un-narrowed, since
+>    Fuying is Tianchao and the faction filter passes — silently bypassing the footprint. The
+>    shipped first pass skips `incoming-reduction` + `target: 'all-allies'`, and pass 2 is the sole
+>    authority for that family.
 
 ```ts
-    // #363 (Fuying): the corpus's first ALLY-scoped incoming reduction. Every other member of
-    // this family is self-scoped, so the map has never needed to fan out. An ally-scoped aura
-    // must land on the RECIPIENTS' lists, because incomingReductionForHit is called with the
-    // VICTIM's abilities.
+    // Pass 1 (the pre-existing per-actor loop) gains ONE line, so an ally-scoped aura is not
+    // keyed onto its own carrier un-narrowed. Deliberately narrow to 'incoming-reduction': every
+    // member of the other four incoming families is `target: 'self'`.
+    if (a.config.type === 'incoming-reduction' && a.target === 'all-allies') continue;
+
+    // Pass 2 — #363 (Fuying): the corpus's first ALLY-scoped incoming reduction. Every other
+    // member of this family is self-scoped, so the map has never needed to fan out. An
+    // ally-scoped aura must land on the RECIPIENTS' lists, because incomingReductionForHit is
+    // called with the VICTIM's abilities.
     //
-    // ⚠️ The owner IS a recipient. The aura is a PASSIVE whose clause does not name the pattern,
-    // so it is not footprint-narrowed and Fuying — herself Tianchao — is in its own recipient set.
-    // It is inert on her only because `self-stealth` fails: her GRANT is a cast, narrowed by a
-    // Not-Self pattern, so she never holds Stealth. Do NOT "optimise" by excluding the owner —
-    // that hardcodes a fact about her grant's pattern into the aura's recipient resolution and
-    // breaks silently the day any ship self-grants Stealth or a teammate grants it to her.
+    // Narrowing goes through the SAME shared composition every other #363 site uses
+    // (`resolveSupportRecipients`: footprint first, then faction), wrapped as the pure,
+    // directly-assertable `allyScopedIncomingRecipients`:
+    //  • FOOTPRINT — consulted only when the ability is `patternScoped`. `footprintAllyIdsFor`
+    //    returning `undefined` means "do not narrow" per this codebase's convention, so a
+    //    non-positional fixture still sees the aura rather than being silenced.
+    //  • FACTION — an actor whose faction is unknown never matches (conservative).
+    //
+    // ⚠️ NO OWNER EXCLUSION, and adding one would be a bug — see
+    // `allyScopedIncomingRecipients`'s doc comment for the full argument.
+    const allyScopedOwnerByRecipient = new Map<string, Map<string, string>>();
     for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
             for (const a of slot.abilities) {
                 if (a.config.type !== 'incoming-reduction') continue;
-                if (a.target !== 'all-allies') continue; // self-scoped → already handled above
-                const ownerSide = isEnemySide(rt.actor.id) ? 'enemy' : 'player';
-                for (const recipient of bySide(ownerSide).livingIds()) {
-                    const f = factionOf(recipient);
-                    if (a.factionFilter && (f === undefined || !a.factionFilter.includes(f))) {
-                        continue; // conservative: unknown faction never matches
-                    }
-                    const list = incomingAbilitiesById.get(recipient) ?? [];
-                    if (!list.includes(a)) list.push(a);
-                    incomingAbilitiesById.set(recipient, list);
+                if (a.target !== 'all-allies') continue; // self-scoped → handled by pass 1
+                const ownerSide = rt.actor.side;
+                const recipients = allyScopedIncomingRecipients({
+                    ability: a,
+                    ownerId: rt.actor.id,
+                    livingSameSideIds: actorsBySide(ownerSide)
+                        .filter((x) => x.currentHp > 0)
+                        .map((x) => x.id),
+                    footprintAllyIds: bySide(ownerSide).footprintAllyIdsFor(rt.actor.id),
+                    factionOf,
+                });
+                for (const recipientId of recipients) {
+                    const list = incomingAbilitiesById.get(recipientId) ?? [];
+                    addIncomingAbilityDeduped(list, a); // id-keyed, not object-identity
+                    incomingAbilitiesById.set(recipientId, list);
+                    const owners =
+                        allyScopedOwnerByRecipient.get(recipientId) ?? new Map<string, string>();
+                    if (!owners.has(a.id)) owners.set(a.id, rt.actor.id);
+                    allyScopedOwnerByRecipient.set(recipientId, owners);
                 }
             }
         }
     }
+    // The RECIPIENT SET is fixed for the fight, but the OWNER's liveness is not: an ally-scoped
+    // aura STOPS when its carrier dies (owner-ruled). The read-time filter on the list accessor
+    // is what enforces that, and it leaves every self-scoped caller byte-identical.
+    const incomingAbilitiesOf = (id: string): Ability[] =>
+        withLiveAllyScopedOwners(
+            incomingAbilitiesById.get(id) ?? [],
+            allyScopedOwnerByRecipient.get(id),
+            isActorAlive
+        );
 ```
-
-Use whatever the surrounding code's same-side roster accessor actually is — grep for how
-`adjacentAllyIdsFor` / `bySide(...)` expose living same-side ids and match it. The self-scoped
-collection above must be left untouched.
 
 - [ ] **Step 6: Drop the allowlist entry**
 
@@ -1068,13 +1110,14 @@ reduction stops with it.
 
 Gate reuse only: 'self-stealth' already existed and is already used by
 Wusheng, so no new IncomingCondition. scope:'direct' means DoT ticks are
-unreduced, matching 'direct damage'. patternScoped: true — OWNER-RULED, a passive that does
-not name the pattern reaches allies wherever they stand.
+unreduced, matching 'direct damage'. patternScoped: true — OWNER-RULED, a
+Stealthed Tianchao ally standing OUTSIDE her active pattern takes FULL damage.
 
-The fan-out deliberately INCLUDES the owner. Fuying is a Tianchao ally and the
-aura is not footprint-narrowed; it is inert on her only because her GRANT is a
-Not-Self cast, so self-stealth fails. Excluding her would hardcode a fact
-about the grant's pattern into the aura's recipient resolution.
+The fan-out deliberately does NOT exclude the owner. Fuying falls out of her
+own recipient set because her Not-Self pattern omits her own cell, and she is
+doubly inert because self-stealth never holds for her. Hardcoding the
+exclusion would encode a fact about her GRANT's pattern into the AURA's
+recipient resolution.
 
 Drops the #365 allowlist entry; audit:skills back to 0 findings."
 ```

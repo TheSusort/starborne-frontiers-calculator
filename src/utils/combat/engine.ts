@@ -72,6 +72,7 @@ import {
     conditionMet,
     allyScopedIncomingRecipients,
     addIncomingAbilityDeduped,
+    withLiveAllyScopedOwners,
 } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
@@ -3895,9 +3896,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // falls out of her own aura's recipient set only because her Not-Self pattern omits her own
     // cell and `self-stealth` never holds true for her, not because of any hardcoded exclusion.
     //
-    // Computed once, like the self-scoped pass: positions and patterns are fixed for the fight, and
-    // the only dynamic input (which allies are still alive) cannot change an answer that matters —
-    // a dead actor takes no damage, so its presence in or absence from the footprint is moot.
+    // The RECIPIENT SET is computed once: positions and patterns are fixed for the fight, and the
+    // only dynamic input (which allies are still alive) cannot change an answer that matters — a
+    // dead actor takes no damage, so its presence in or absence from the footprint is moot.
+    //
+    // The OWNER's liveness is emphatically NOT captured here. Each distributed entry records which
+    // actor it came from in `allyScopedOwnerByRecipient`, and `incomingAbilitiesOf` filters dead
+    // owners out on every read — see `withLiveAllyScopedOwners` for the owner ruling (the aura
+    // stops when its carrier dies) and why the filter sits on the LIST accessor rather than inside
+    // `incomingReductionForHit`.
+    //
+    // recipientId → (abilityId → owner actor id). Keyed by ability id to MIRROR
+    // `addIncomingAbilityDeduped`'s own id-keyed dedupe: whichever owner won the dedupe race is the
+    // owner recorded, so the map can never disagree with the list it annotates.
+    const allyScopedOwnerByRecipient = new Map<string, Map<string, string>>();
     for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
@@ -3923,11 +3935,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // the exact same object appearing twice.
                     addIncomingAbilityDeduped(list, a);
                     incomingAbilitiesById.set(recipientId, list);
+                    // First writer wins, matching the dedupe above (a second owner offering an
+                    // ability with the SAME id never made it into `list`, so it must not claim
+                    // ownership of the entry that did).
+                    const owners =
+                        allyScopedOwnerByRecipient.get(recipientId) ?? new Map<string, string>();
+                    if (!owners.has(a.id)) owners.set(a.id, rt.actor.id);
+                    allyScopedOwnerByRecipient.set(recipientId, owners);
                 }
             }
         }
     }
-    const incomingAbilitiesOf = (id: string): Ability[] => incomingAbilitiesById.get(id) ?? [];
+    // Reads the owner's CURRENT liveness on every call (this closure runs per hit), so a destroyed
+    // carrier's aura stops protecting its allies from the moment it dies. Returns the stored array
+    // BY REFERENCE for any actor with no ally-scoped entries — i.e. every actor in the corpus's
+    // self-scoped incoming families — so that path is byte-identical.
+    const incomingAbilitiesOf = (id: string): Ability[] =>
+        withLiveAllyScopedOwners(
+            incomingAbilitiesById.get(id) ?? [],
+            allyScopedOwnerByRecipient.get(id),
+            isActorAlive
+        );
 
     // D-PR6: per-actor recipient-side incoming-heal-amplification abilities (Exuberance),
     // side-agnostic (a ship can be a heal recipient on either team). Built once from BOTH runtime

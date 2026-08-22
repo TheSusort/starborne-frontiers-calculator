@@ -1904,6 +1904,15 @@ const EXTEND_NAMED_STATUS_RE =
  * #363 (Fuying): a NAMED arm ("extends <unit-skill>Stealth</unit-skill> by 1 turn") is tried
  * FIRST, against the ORIGINAL (tagged) text — it is strictly more specific than the two generic
  * arms below, which require a literal 'buffs'/'debuffs' token and so can never match it.
+ *
+ * The named arm's captured phrase is resolved through `resolveBuffName`, so an UNRECOGNISED name
+ * emits NO `buffName` at all rather than a literal one. That is not cosmetic. `buffName` is matched
+ * by exact name against the target's live statuses in `extendAllBuffsDuration`, so a name that is
+ * not in `BUFFS` can never match anything and the clause silently extends NOTHING — strictly worse
+ * than the absent-`buffName` fallback, which extends every standing buff (Sokol/Ripper/Lev's
+ * behaviour). Unreachable today (Fuying's "Stealth" resolves exactly), but it is the trap waiting
+ * for the next named-extend ship, and it mirrors the precedent `DR_ALLY_STATUS_RE` already set for
+ * `detectDamageReactionTrigger`'s `allyStatusName`.
  */
 export function parseExtendStatus(
     text: string | null | undefined
@@ -1911,10 +1920,13 @@ export function parseExtendStatus(
     if (!text) return null;
     const named = EXTEND_NAMED_STATUS_RE.exec(text);
     if (named) {
+        const canonical = resolveBuffName(named[1]);
         return {
             turns: parseInt(named[2], 10),
             statusKind: 'buff',
-            buffName: named[1].trim(),
+            // Unresolved → omit the field entirely, falling back to the safe extend-everything
+            // behaviour instead of a name that can never match a real applied status.
+            ...(canonical !== undefined ? { buffName: canonical } : {}),
         };
     }
     const plain = stripUnitTags(text);

@@ -54,6 +54,7 @@ import { registerReactiveListeners, type Intent, type ReactiveAbility } from '..
 import { supportFootprintAllyIds } from '../supportFootprint';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
+import { lazyFixture } from '../__testutils__/lazyFixture';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -741,23 +742,23 @@ describe('#363 engine — the Stasis inflictor reacts only to hits inside its pa
         return { granted, direct, allyHits, stasis };
     };
 
-    const result = run();
+    const result = lazyFixture(run);
     const inside = () => footprintOver('Fuying', OWNER_CELL, PLAYER_CELLS);
 
     it('PRECONDITION: every ally really holds Stealth, so this board measures the FOOTPRINT', () => {
         // The vacuity trap this branch shipped twice: an arm that passes because the watched ally
         // never held the status the OTHER gate on this ability requires.
         for (const id of Object.keys(PLAYER_CELLS)) {
-            expect(result.granted.get(id), `${id} was granted nothing`).toBeDefined();
-            expect([...result.granted.get(id)!]).toContain('Stealth');
+            expect(result().granted.get(id), `${id} was granted nothing`).toBeDefined();
+            expect([...result().granted.get(id)!]).toContain('Stealth');
         }
     });
 
     it('PRECONDITION: every ally — the off-pattern one INCLUDED — really was directly hit', () => {
         for (const id of Object.keys(PLAYER_CELLS)) {
-            expect(result.direct.get(id), `${id} took no direct damage`).toBeGreaterThan(0);
+            expect(result().direct.get(id), `${id} took no direct damage`).toBeGreaterThan(0);
         }
-        expect(result.allyHits.length).toBe(6); // 3 victims × 2 rounds, one line attack each
+        expect(result().allyHits.length).toBe(6); // 3 victims × 2 rounds, one line attack each
     });
 
     it('PRECONDITION: the production resolver puts two allies inside the pattern and one outside', () => {
@@ -765,20 +766,20 @@ describe('#363 engine — the Stasis inflictor reacts only to hits inside its pa
     });
 
     it('ARM A — hits on the two allies INSIDE the pattern DO inflict Stasis, on the enemy', () => {
-        expect(result.stasis.length).toBeGreaterThan(0);
-        expect([...new Set(result.stasis)]).toEqual(['enemy-1']);
+        expect(result().stasis.length).toBeGreaterThan(0);
+        expect([...new Set(result().stasis)]).toEqual(['enemy-1']);
     });
 
     it('ARM B — the hits on the ally OUTSIDE the pattern inflict nothing (the closed gap)', () => {
         // Before the fix this board produced 6 applications — one per ally hit, the off-pattern
         // ally's two included. After it, exactly the 4 hits on the two in-pattern allies react.
         const insideIds = new Set(inside());
-        const insideHits = result.allyHits.filter((id) => insideIds.has(id));
-        const outsideHits = result.allyHits.filter((id) => !insideIds.has(id));
+        const insideHits = result().allyHits.filter((id) => insideIds.has(id));
+        const outsideHits = result().allyHits.filter((id) => !insideIds.has(id));
         expect(outsideHits.length).toBeGreaterThan(0); // there WERE hits to over-fire on
         expect(insideHits.length).toBe(4);
-        expect(result.stasis.length).toBe(insideHits.length);
-        expect(result.stasis.length).toBeLessThan(result.allyHits.length);
+        expect(result().stasis.length).toBe(insideHits.length);
+        expect(result().stasis.length).toBeLessThan(result().allyHits.length);
     });
 });
 
@@ -821,28 +822,29 @@ describe('#363 engine — the ally repair reaches only allies inside its pattern
         return { healed, allyHits };
     };
 
-    const result = run();
+    const result = lazyFixture(run);
     // Cultivator's real pattern is Circle-Support-Range-1; from T2 that covers M2 and M3.
     const inside = () => footprintOver('Cultivator', OWNER_CELL, PLAYER_CELLS);
 
     it('PRECONDITION: every ally was hit, and the resolver splits them 2 inside / 1 outside', () => {
-        expect(result.allyHits.length).toBe(6);
+        expect(result().allyHits.length).toBe(6);
         for (const id of Object.keys(PLAYER_CELLS)) {
-            expect(result.allyHits, `${id} was never hit`).toContain(id);
+            expect(result().allyHits, `${id} was never hit`).toContain(id);
         }
         expect(inside().sort()).toEqual(['ally-m2', 'ally-m3']);
     });
 
     it('ARM A — allies INSIDE the pattern are repaired', () => {
         for (const id of inside()) {
-            expect(result.healed.get(id), `${id} inside the pattern got no repair`).toBeGreaterThan(
-                0
-            );
+            expect(
+                result().healed.get(id),
+                `${id} inside the pattern got no repair`
+            ).toBeGreaterThan(0);
         }
     });
 
     it('ARM B — the ally OUTSIDE the pattern is not repaired at all', () => {
-        expect(result.healed.get('ally-m1')).toBeUndefined();
+        expect(result().healed.get('ally-m1')).toBeUndefined();
     });
 });
 
@@ -1006,7 +1008,7 @@ describe('#363 engine — the shield-destroyed reactions reach only units inside
         return { buffed, destroyed };
     };
 
-    const result = run({ ownerShielded: false });
+    const result = lazyFixture(() => run({ ownerShielded: false }));
     const inside = () =>
         footprintOver('AEGIS', AEGIS_CELL, { ...SHIELD_CELLS, [OWNER_ID]: AEGIS_CELL });
 
@@ -1014,7 +1016,7 @@ describe('#363 engine — the shield-destroyed reactions reach only units inside
         // The `undefined === undefined` trap: without this, ARM B would pass on an ally whose
         // shield was never destroyed at all.
         for (const id of Object.keys(SHIELD_CELLS)) {
-            expect(result.destroyed, `${id}'s shield was never destroyed`).toContain(id);
+            expect(result().destroyed, `${id}'s shield was never destroyed`).toContain(id);
         }
         expect(inside()).toContain('ally-in');
         expect(inside()).toContain(OWNER_ID);
@@ -1022,11 +1024,11 @@ describe('#363 engine — the shield-destroyed reactions reach only units inside
     });
 
     it('ARM A — the ally INSIDE the pattern is granted Defense Up II', () => {
-        expect(result.buffed).toContain('ally-in');
+        expect(result().buffed).toContain('ally-in');
     });
 
     it('ARM B — the ally OUTSIDE the pattern is granted nothing', () => {
-        expect(result.buffed).not.toContain('ally-out');
+        expect(result().buffed).not.toContain('ally-out');
     });
 
     it("the owner's OWN destroyed shield still self-reacts on a real board", () => {
