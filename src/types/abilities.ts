@@ -724,7 +724,7 @@ export type AbilityConfig =
            *  counters on one ship still fire independently. */
           counterGroupId?: string;
       }
-    | { type: 'additional-damage'; stat: 'hp' | 'defense' | 'shield'; pct: number }
+    | { type: 'additional-damage'; stat: 'hp' | 'defense' | 'shield' | 'security'; pct: number }
     | {
           /** PR9: a STANDALONE "removes X% of the enemy Shield" clause carried on its own
            *  merit, NOT gated on a purge landing (APEX/Laika/Malvex — "the other 3 corpus rows

@@ -109,6 +109,7 @@ const ADDITIONAL_DAMAGE_STAT_OPTIONS = [
     { value: 'hp', label: 'HP' },
     { value: 'defense', label: 'Defense' },
     { value: 'shield', label: 'Shield' },
+    { value: 'security', label: 'Security' },
 ];
 
 const DOT_TYPE_OPTIONS: { value: DoTType; label: string }[] = [
@@ -338,7 +339,7 @@ export const AbilityCard: React.FC<Props> = ({
                             onChange={(value) =>
                                 updateConfig({
                                     ...config,
-                                    stat: value as 'hp' | 'defense' | 'shield',
+                                    stat: value as 'hp' | 'defense' | 'shield' | 'security',
                                 })
                             }
                         />

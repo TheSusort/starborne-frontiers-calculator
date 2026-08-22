@@ -6,7 +6,10 @@ import type { Position } from './encounters';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
-export type SecondaryDamageStat = 'defense' | 'hp' | 'shield';
+// 'security' (#361): a scalar MULTIPLE of a stat rather than a percentage of attack —
+// Prophet's "deals damage equal to 50x its security", carried as pct 5000. The only corpus
+// form that is not a percentage-of-attack base multiplier.
+export type SecondaryDamageStat = 'defense' | 'hp' | 'shield' | 'security';
 
 export interface SecondaryDamage {
     stat: SecondaryDamageStat;

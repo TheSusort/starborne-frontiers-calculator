@@ -908,6 +908,35 @@ exports[`kit fingerprints > FrontLine 1`] = `
 }
 `;
 
+exports[`kit fingerprints > Fuying 1`] = `
+{
+  "plain": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "richEnemy": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+  "wounded": [
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "charge-changed",
+    "debuff",
+    "debuff-resisted",
+  ],
+}
+`;
+
 exports[`kit fingerprints > Gallant 1`] = `
 {
   "plain": [
@@ -2456,6 +2485,26 @@ exports[`kit fingerprints > Pestilence 1`] = `
     "debuff-resisted",
     "dot-applied",
     "dot-applied:active",
+  ],
+}
+`;
+
+exports[`kit fingerprints > Prophet 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
   ],
 }
 `;
@@ -4011,7 +4060,7 @@ exports[`kit fingerprints > Zosimos 1`] = `
 
 exports[`suite health > pins the corpus shape so a data refresh announces itself in ONE diff 1`] = `
 {
-  "digest": -1538500136,
-  "shipCount": 147,
+  "digest": 1685818079,
+  "shipCount": 149,
 }
 `;

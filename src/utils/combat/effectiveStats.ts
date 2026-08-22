@@ -148,6 +148,11 @@ export interface EffectiveDamageStats {
     critDamage: number;
     /** hp * (1 + hpBuff/100). Folded here (damage mode) — distinct from status-mode hp pass-through. */
     hp: number;
+    /** base + securityBuff, FLAT-additive and with NO affinity applied — the same fold
+     *  `liveDebuffLandingChance` uses for `effSec`, so the caster's security means one thing
+     *  everywhere. Exposed for the 'security' secondary-damage basis (#361, Prophet's
+     *  "damage equal to 50x its security"). */
+    security: number;
     /** base + base pen-buff + modifier pen + ability-DoT pen (the 4-source pipeline). */
     effectivePen: number;
     /** toDotAndPenModifiers(abilitySelfEffects, []).dotDamageModifier — self Out. DoT, for dotMult. */
@@ -177,6 +182,10 @@ export function effectiveDamageStatsOf(args: {
         crit: number;
         critDamage: number;
         hp: number;
+        /** 0 when the actor carries no security base — a base-less actor deals no
+         *  security-scaled damage. Deliberately NOT the landing-roll default of 100, which is a
+         *  defender-side convention for the hacking-vs-security comparison, not a damage basis. */
+        security: number;
         defensePenetration: number;
         defensePenetrationBuff: number;
     };
@@ -212,6 +221,7 @@ export function effectiveDamageStatsOf(args: {
         crit: base.crit + totals.critBuff,
         critDamage: base.critDamage + totals.critDamageBuff,
         hp: base.hp * (1 + totals.hpBuff / 100),
+        security: base.security + totals.securityBuff,
         effectivePen:
             base.defensePenetration +
             base.defensePenetrationBuff +

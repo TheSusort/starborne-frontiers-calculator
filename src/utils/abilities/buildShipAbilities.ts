@@ -1154,6 +1154,14 @@ function abilitiesFromText(
     const out: PositionedAbility[] = [];
 
     const mult = parseSkillDamage(text);
+    // #361: hoisted above the base-damage gate below (its own emit point is further down, at the
+    // `additional-damage` push) because the gate has to consult it. A skill whose ONLY damage is a
+    // stat-basis rider — Prophet's "damage equal to 50x its security" — still needs a base attack
+    // for that rider to ride: `additional-damage` is folded into an attack, not an attack itself,
+    // so without this the ship built a rider with nothing to attach to and never attacked at all
+    // (empty fingerprint, zero events). Measured over all 149 corpus ships: Prophet's two firing
+    // slots are the ONLY rows with mult 0 and a secondary; the 44 rows carrying both are unaffected.
+    const secForBaseGate = parseSecondaryDamage(text);
     // SP-F F1 — Panon's self-scoped "instead" replacement branch (active 80%/70% → 120%/90%,
     // charged 140%/100% → 170%/130% when Provoked/Taunted). Null for every other ship's text.
     const instead = parseInsteadDamageReplacement(text);
@@ -1194,7 +1202,7 @@ function abilitiesFromText(
             },
             pos: damagePos >= 0 ? damagePos : MAX_POS,
         });
-    } else if (mult > 0) {
+    } else if (mult > 0 || secForBaseGate) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
         // Ship-kit W5 (Demolisher bomb-splash): "This damage ignores Defense" — bypasses the
@@ -1405,7 +1413,7 @@ function abilitiesFromText(
         }
     }
 
-    const sec = parseSecondaryDamage(text);
+    const sec = secForBaseGate;
     if (sec) {
         // Anchor at the tag carrying the secondary % (value-targeted, like damage above);
         // fall back to the second <unit-damage> tag, then the first.
