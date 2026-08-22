@@ -4161,7 +4161,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 if (recipientActor) {
                     const { consumed, overheal } = ctx.healing.applyHealToTarget(
                         raw,
-                        recipientActor
+                        recipientActor,
+                        intent.ownerId
                     );
                     ctx.healing.credit(intent.ownerId, 'effectiveHeal', consumed);
                     ctx.healing.credit(intent.ownerId, 'overheal', overheal);

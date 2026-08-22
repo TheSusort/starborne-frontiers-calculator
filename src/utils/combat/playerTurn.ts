@@ -158,11 +158,22 @@ export interface HealingRuntimeCtx {
      *  local effectiveHp directly, never this accessor.) */
     applierMaxHp: (actorId: string) => number | undefined;
     /** Target-routed heal: consumed = min(raw, maxHp − currentHp); dead target → all overheal.
-     *  Mutates the victim's currentHp. Returns the split. `victim` defaults to the heal target
-     *  (E2 T1: optional per-victim override for positional AoE leech). */
+     *  Mutates the victim's currentHp. Returns the split.
+     *
+     *  ALL THREE PARAMETERS ARE REQUIRED, deliberately. `victim` lost its `= healTarget` default
+     *  and `repairSourceId` is not optional, so `tsc` reports an arity error at every call site
+     *  rather than letting a missed one compile. #362 credits a reversal kill to the REPAIR'S
+     *  SOURCE (R7), and an optional id would silently book `killerId: undefined` at exactly the
+     *  site someone forgot — a hand-enumerated layer, the shape that produced two silent failures
+     *  with green tests in #294/#296.
+     *
+     *  `repairSourceId` is the actor credited with the repair: the caster for a cast repair, the
+     *  APPLIER for a HoT tick (not the holder), the leeching actor for a leech, `intent.ownerId`
+     *  for a reactive. It is the same id the call site already passes to `healing.credit`. */
     applyHealToTarget: (
         raw: number,
-        victim?: CombatActor
+        victim: CombatActor,
+        repairSourceId: string
     ) => { consumed: number; overheal: number };
     /** Additive pool capped at the victim's max HP; drains before HP (enemy attacks, Task 8).
      *  Dead victim → no-op (returns 0). `victim` defaults to the heal target (E2 T1: optional
@@ -4083,7 +4094,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             healing.credit(creditId, 'hotHeal', raw);
             // Holder === target → the heal lands on the target; split consumption to the applier.
             if (actor.id === healing.targetId) {
-                const { consumed, overheal } = healing.applyHealToTarget(raw);
+                const { consumed, overheal } = healing.applyHealToTarget(raw, actor, creditId);
                 healing.credit(creditId, 'effectiveHeal', consumed);
                 healing.credit(creditId, 'overheal', overheal);
                 // Recipient axis (SP-3b Task 7): the tick lands on the HOLDER (this acting actor),
@@ -4224,7 +4235,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             // Abundant Renewal shields its over-repaired allies too.
                             let perTargetOverheal: number | undefined;
                             if (recipientActor) {
-                                const { overheal } = healing.applyHealToTarget(raw, recipientActor);
+                                const { overheal } = healing.applyHealToTarget(
+                                    raw,
+                                    recipientActor,
+                                    actor.id
+                                );
                                 if (overheal > 0) perTargetOverheal = overheal;
                             }
                             healTargets.push(rid);
@@ -4273,11 +4288,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             ? healing.recipientActor(rid)
                             : undefined;
                         if (perRecipientActor || rid === healing.targetId) {
-                            // applyHealToTarget defaults victim to the heal target when
-                            // perRecipientActor is undefined (healing-calculator single-target path).
+                            // `victim` no longer defaults to the heal target (Task 4, #362): resolve
+                            // it explicitly when perRecipientActor is undefined (the
+                            // healing-calculator single-target path). `recipientActor(targetId)` is
+                            // the same actor the removed default used — guaranteed resolvable
+                            // because the ctx was built FROM that actor (engine.ts `healTarget`).
+                            const victimActor =
+                                perRecipientActor ?? healing.recipientActor(healing.targetId)!;
                             const { consumed, overheal } = healing.applyHealToTarget(
                                 raw,
-                                perRecipientActor
+                                victimActor,
+                                actor.id
                             );
                             healing.credit(actor.id, 'effectiveHeal', consumed);
                             healing.credit(actor.id, 'overheal', overheal);

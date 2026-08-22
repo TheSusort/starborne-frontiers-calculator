@@ -3537,7 +3537,9 @@ export function runCombat(rawInput: CombatEngineInput): {
               // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
-              applyHealToTarget: (raw, victim = healTarget) => {
+              // `repairSourceId` (Task 4, #362): not read yet — Task 5 wires the R7 reversal-kill
+              // credit off this id. Accepted here only so every call site is forced to supply it.
+              applyHealToTarget: (raw, victim, repairSourceId) => {
                   // Dead target → all overheal. Otherwise consume up to the deficit against
                   // the target's CURRENT effective max HP (live ctx via recipientMaxHp).
                   if (victim.currentHp <= 0) {
@@ -4301,13 +4303,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (selectorActor) {
                         const { consumed, overheal } = healingCtx.applyHealToTarget(
                             raw,
-                            selectorActor
+                            selectorActor,
+                            sourceId
                         );
                         healingCtx.credit(sourceId, 'effectiveHeal', consumed);
                         healingCtx.credit(sourceId, 'overheal', overheal);
                         creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
                     } else if (rid === healTarget!.id) {
-                        const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
+                        const { consumed, overheal } = healingCtx.applyHealToTarget(
+                            raw,
+                            healTarget!,
+                            sourceId
+                        );
                         healingCtx.credit(sourceId, 'effectiveHeal', consumed);
                         healingCtx.credit(sourceId, 'overheal', overheal);
                         // Recipient axis (SP-3b Task 7): only the heal target's share LANDS here —
@@ -4492,7 +4499,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (recipientActor) {
                         const { consumed, overheal } = healingCtx.applyHealToTarget(
                             raw,
-                            recipientActor
+                            recipientActor,
+                            sourceId
                         );
                         healingCtx.credit(sourceId, 'effectiveHeal', consumed);
                         healingCtx.credit(sourceId, 'overheal', overheal);
@@ -4557,7 +4565,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
             if (e.kind === 'heal') {
                 healingCtx.credit(victim.id, 'directHeal', raw);
-                const { consumed, overheal } = healingCtx.applyHealToTarget(raw, victim);
+                const { consumed, overheal } = healingCtx.applyHealToTarget(raw, victim, victim.id);
                 healingCtx.credit(victim.id, 'effectiveHeal', consumed);
                 healingCtx.credit(victim.id, 'overheal', overheal);
                 // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
@@ -11282,7 +11290,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         if (e.kind === 'heal') {
                                             healingCtx.credit(healTarget!.id, 'directHeal', raw);
                                             const { consumed, overheal } =
-                                                healingCtx.applyHealToTarget(raw);
+                                                healingCtx.applyHealToTarget(
+                                                    raw,
+                                                    healTarget!,
+                                                    healTarget!.id
+                                                );
                                             healingCtx.credit(
                                                 healTarget!.id,
                                                 'effectiveHeal',

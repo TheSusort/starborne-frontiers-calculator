@@ -565,14 +565,16 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
 
     const buildHealCtx = (): {
         ctx: IntentExecContext;
-        applied: Array<{ raw: number; id: string | undefined }>;
+        applied: Array<{ raw: number; id: string | undefined; sourceId: string }>;
         credits: Array<{ actorId: string; bucket: string; amount: number }>;
     } => {
         // SP-4e fix wave 1: `applied` records the RECIPIENT, not just the amount. `credits` is
         // keyed by the crediting OWNER ('cultivator'), so neither array could distinguish
         // "repaired team1" from "repaired the anchor" — the reviewer mis-routed the executor to
         // `recipientActor(ctx.healing.targetId)` and every assertion here stayed green.
-        const applied: Array<{ raw: number; id: string | undefined }> = [];
+        // Task 4 (#362): `sourceId` records the `repairSourceId` the executor passed — the
+        // reactive branch always passes `intent.ownerId` ('cultivator' here).
+        const applied: Array<{ raw: number; id: string | undefined; sourceId: string }> = [];
         const credits: Array<{ actorId: string; bucket: string; amount: number }> = [];
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         se.beginRound(1);
@@ -582,8 +584,8 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => 1000,
-            applyHealToTarget: (raw, victim) => {
-                applied.push({ raw, id: victim?.id });
+            applyHealToTarget: (raw, victim, repairSourceId) => {
+                applied.push({ raw, id: victim?.id, sourceId: repairSourceId });
                 return { consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
@@ -645,7 +647,7 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
         // of 800 with only 'team1' in the fan-out is the same routing claim, positively evidenced.
         // The recipient id is what makes that positive: `[{ raw: 800 }]` alone would also be
         // produced by a repair of the anchor 'tank'.
-        expect(applied).toEqual([{ raw: 800, id: 'team1' }]);
+        expect(applied).toEqual([{ raw: 800, id: 'team1', sourceId: 'cultivator' }]);
         expect(credits.filter((c) => c.bucket === 'effectiveHeal')).toEqual([
             { actorId: 'cultivator', bucket: 'effectiveHeal', amount: 800 },
         ]);
@@ -654,7 +656,7 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
     it('a SINGLE cleansedAllyIds entry EQUAL to healing.targetId consumes the pool (effectiveHeal credited)', () => {
         const { ctx, applied, credits } = buildHealCtx();
         executeIntent(makeHealIntent(['tank']), ctx);
-        expect(applied).toEqual([{ raw: 800, id: 'tank' }]);
+        expect(applied).toEqual([{ raw: 800, id: 'tank', sourceId: 'cultivator' }]);
         expect(credits).toContainEqual({
             actorId: 'cultivator',
             bucket: 'effectiveHeal',
@@ -673,8 +675,8 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
         // repair itself, not just of the accounting. The ids are the discriminator: without them
         // `[800, 800]` is equally consistent with the anchor being repaired twice.
         expect(applied).toEqual([
-            { raw: 800, id: 'team1' },
-            { raw: 800, id: 'tank' },
+            { raw: 800, id: 'team1', sourceId: 'cultivator' },
+            { raw: 800, id: 'tank', sourceId: 'cultivator' },
         ]);
         expect(credits.filter((c) => c.bucket === 'effectiveHeal')).toHaveLength(2);
     });
@@ -682,7 +684,7 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
     it('NO cleansedAllyIds (absent) falls back to the plain healing.targetId (PR1 contract, unchanged for every OTHER ally-target reactive)', () => {
         const { ctx, applied, credits } = buildHealCtx();
         executeIntent(makeHealIntent(undefined), ctx);
-        expect(applied).toEqual([{ raw: 800, id: 'tank' }]);
+        expect(applied).toEqual([{ raw: 800, id: 'tank', sourceId: 'cultivator' }]);
         expect(credits).toContainEqual({
             actorId: 'cultivator',
             bucket: 'effectiveHeal',
