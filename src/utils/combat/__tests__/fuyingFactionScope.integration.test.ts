@@ -36,6 +36,7 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedPattern, ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { ActiveDoTStack, CombatActor } from '../state';
+import type { Ship } from '../../../types/ship';
 
 // `docs/` is gitignored reference data and a fresh worktree does not have it. Without this guard
 // the file fails to COLLECT rather than reporting a readable skip reason — copy the pattern from
@@ -491,6 +492,66 @@ describe('Fuying Stealth DR aura (#363) — build', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// #363 hardening (item 3) — corpus-inertness for the aura's regex arm.
+//
+// `npx tsx scripts/auditSkills.ts` reporting 0 findings only proves the arm MATCHED Fuying — an
+// over-greedy arm that ALSO matched some other ship's text would emit an extra ally-scoped aura
+// and produce no finding at all (a silent false positive, not a gap `audit:skills` is built to
+// see). This mirrors the "fires on Fuying alone" shape already used above for
+// `detectGrantFactionScope`, but for the ally-scoped `incoming-reduction` arm instead.
+// ---------------------------------------------------------------------------
+describe('Fuying Stealth DR aura (#363) — corpus inertness for the ally-scoped arm', () => {
+    /** Parses one skill-text clause in isolation, exactly like `scripts/auditSkills.ts`'s own
+     *  `abilitiesFor` helper: stuff it into `activeSkillText` on a bare, unrefit `Ship` so
+     *  `buildShipAbilities` runs the SAME regex arms production runs, independent of which real
+     *  slot the clause lives in. */
+    function abilitiesForText(text: string): Ability[] {
+        const ship = { refits: [], activeSkillText: text } as unknown as Ship;
+        return buildShipAbilities(ship).slots.flatMap((s) => s.abilities);
+    }
+
+    it('the ally-scoped incoming-reduction arm (target: all-allies) fires on Fuying alone across all 149 corpus ships', () => {
+        const hits: string[] = [];
+        for (const record of loadShipSkillRecords()) {
+            for (const text of [record.active, record.charge, ...record.passives]) {
+                if (!text) continue;
+                for (const a of abilitiesForText(text)) {
+                    if (a.config.type === 'incoming-reduction' && a.target === 'all-allies') {
+                        hits.push(record.name);
+                    }
+                }
+            }
+        }
+        // Non-vacuity: proves the sweep actually walked text containing the clause at all, not
+        // just that it found nothing anywhere.
+        expect(hits.length).toBeGreaterThan(0);
+        expect([...new Set(hits)]).toEqual(['Fuying']);
+    });
+
+    it('yields 15/15/30 for her three passive rows (refitLevel 0/2/4 → Passive R0/R2/R4)', () => {
+        const auraPctAt = (refitLevel: 0 | 2 | 4): number => {
+            const ship = buildTraceShip('Fuying', { refitLevel });
+            if (!ship) throw new Error('Fuying missing from the corpus');
+            const ability = buildShipAbilities(ship)
+                .slots.flatMap((s) => s.abilities)
+                .find((a) => a.config.type === 'incoming-reduction' && a.target === 'all-allies');
+            if (!ability || ability.config.type !== 'incoming-reduction') {
+                throw new Error(
+                    `Fuying built no ally-scoped incoming-reduction aura at refitLevel ${refitLevel}`
+                );
+            }
+            if (ability.config.pct === undefined) {
+                throw new Error(`Fuying's aura at refitLevel ${refitLevel} carries no pct`);
+            }
+            return ability.config.pct;
+        };
+        expect(auraPctAt(0)).toBe(15); // Passive R0
+        expect(auraPctAt(2)).toBe(15); // Passive R2
+        expect(auraPctAt(4)).toBe(30); // Passive R4 (the default used by every other test above)
+    });
+});
+
 describe('Fuying Stealth DR aura (#363) — the per-hit gate', () => {
     const aura = {
         id: 'x',
@@ -848,5 +909,242 @@ describe('Fuying Stealth DR aura (#363) — engine, on a real board', () => {
     it('swapping the reduced ally to XAOC removes the reduction (same cell, same Stealth)', () => {
         const swapped = runBoard({ aura: true, m3Faction: 'XAOC' });
         expect(swapped.direct.get('ally-m3')!).toBe(noAura.direct.get('ally-m3')!);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// #363 hardening (item 1) — the OWNER's own incoming-effects list must stay clean.
+//
+// `incomingAbilitiesById`'s first pass (engine.ts) keys each actor's OWN passive-slot
+// incoming-effect abilities onto that actor's own list, and explicitly SKIPS an ally-scoped
+// (`target: 'all-allies'`) incoming-reduction there — the second pass is its sole authority, and
+// it never revisits Fuying's own cell because her active pattern is Not-Self. Deleting that skip
+// would hand Fuying's own carrier a self-copy of her aura, bypassing the footprint entirely.
+//
+// This is unobservable on the board above: Fuying sits at T2 and the enemy's Line-Range-2 attack
+// (anchored in row M) never reaches her, so the stray self-copy has nothing to reduce. This board
+// moves her onto the attacked row instead (M4 — the front-most M-row cell) so she takes a direct
+// hit herself, and gives her the same snapshot self-Stealth idiom the board above uses for her
+// (she can never reach her own cell with a Not-Self cast, so a real self-cast is not an option)
+// so `self-stealth` is genuinely true for her when she is hit.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+const FUYING_SNAPSHOT_STEALTH = [
+    {
+        id: 'fuying-stealth-snapshot',
+        buffName: 'Stealth',
+        stacks: 1,
+        parsedEffects: {},
+        isStackable: false,
+    },
+];
+
+/** Fuying alone, at the front of row M, taking a direct hit from a single enemy. `abilities`
+ *  stands in for her passive slot — empty, her real aura, or (for the instrument check) a
+ *  hand-built SELF-scoped control sharing the aura's exact condition/scope/pct. */
+const selfHitBoard = (abilities: Ability[]): CombatEngineInput => ({
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    numRounds: 1,
+    selfBuffs: FUYING_SNAPSHOT_STEALTH,
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: HUGE_HP,
+    speed: 100,
+    mode: 'healing',
+    healTargetId: 'attacker',
+    faction: 'TIANCHAO',
+    position: 'M4', // front-most row-M cell — the enemy's Line-Range-2 front-target anchors here
+    pattern: wingsSupportNotSelf2(), // her real support pattern; irrelevant here (no allies to
+    // narrow a footprint for) but kept realistic rather than omitted.
+    shipSkills: { slots: abilities.length ? [{ slot: 'passive', abilities }] : [] },
+    enemyAttackers: [
+        {
+            id: 'enemy-1',
+            stats: {
+                attack: ENEMY_ATTACK,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: HUGE_HP,
+                speed: 1,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M1',
+            target: frontTarget(),
+            pattern: lineRange2(),
+        },
+    ],
+});
+
+const runSelfHitBoard = (abilities: Ability[]): number => {
+    const bus = createEventBus();
+    let direct = 0;
+    bus.on('attacked', (e) => {
+        if (e.targetId === 'attacker' && e.damage !== undefined) direct += e.damage;
+    });
+    runCombat({ ...selfHitBoard(abilities), bus });
+    return direct;
+};
+
+/** A hand-built SELF-scoped incoming-reduction sharing the real aura's exact condition/scope/pct
+ *  — used only to PROVE the instrument (that `self-stealth` really does read true for Fuying in
+ *  this fixture, and that the harness genuinely wires a reduction into a hit on the focus actor).
+ *  `target: 'self'` means pass 1's ally-scoped skip never applies to it, so it is unaffected by
+ *  the mutation this section pins. */
+const selfScopedStealthControl: Ability = {
+    id: 'self-scoped-control',
+    type: 'incoming-reduction',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'incoming-reduction',
+        scope: 'direct',
+        condition: 'self-stealth',
+        pct: 30,
+        critFamily: false,
+    },
+};
+
+describe("Fuying Stealth DR aura (#363) — the OWNER's own incoming list stays clean (pass-1 pin)", () => {
+    it('PRE-CONDITION: Fuying herself is actually hit directly, with no abilities on her kit', () => {
+        expect(runSelfHitBoard([])).toBeGreaterThan(0);
+    });
+
+    it(
+        'PROVE THE INSTRUMENT: a SELF-scoped control with the same condition genuinely reduces her ' +
+            'own damage by 30%, so self-stealth really is true for her and the harness wiring works',
+        () => {
+            const baseline = runSelfHitBoard([]);
+            const withControl = runSelfHitBoard([selfScopedStealthControl]);
+            expect(withControl).toBeCloseTo(0.7 * baseline, 5);
+        }
+    );
+
+    it('her own incoming damage is IDENTICAL with and without her own ALLY-SCOPED aura present', () => {
+        // Her aura is target: 'all-allies' and her active pattern is Not-Self — it must never
+        // reduce HER OWN damage. If pass 1's skip (engine.ts, `incomingAbilitiesById`'s first
+        // pass) is deleted, her own passive-slot copy of the aura would land on her OWN incoming
+        // list unguarded — and since she genuinely holds Stealth here (proved above), it would
+        // wrongly cut this by 30%, same as the self-scoped control does.
+        const noAura = runSelfHitBoard([]);
+        const withAura = runSelfHitBoard(auraPassiveSlot().abilities);
+        expect(withAura).toBe(noAura);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// #363 hardening (item 4) — no enemy-side fixture existed for the aura, even though the code is
+// side-agnostic by construction (`bySide`/`factionByActorId` carry no player/enemy branch) and the
+// changelog claims enemy Fuyings protect their own side the same way. Mirrors the player-side
+// "engine, on a real board" section above, with the sides swapped: an enemy Fuying, at her real
+// support position/pattern, with a Stealthed enemy Tianchao ally inside her footprint — hit by a
+// PLAYER attack instead of an enemy one.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/** A plain "deals 100% damage" active ability — the same shape `buildEnemyPlayerActorRuntime`
+ *  auto-synthesizes for a `shipSkills`-less manual enemy (engine.ts). The top-level FOCUS has no
+ *  equivalent auto-synthesis (`CombatEngineInput.shipSkills` is required, not optional), so a
+ *  focus that must actually attack — as the player-side one below does — needs this spelled out
+ *  explicitly rather than omitted. */
+const basicDamageAbility = (id: string): Ability => ({
+    id,
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100, hits: 1 },
+});
+
+const enemyAuraBoard = (opts: { aura: boolean }): CombatEngineInput => ({
+    attack: ENEMY_ATTACK,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    numRounds: 2,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: HUGE_HP,
+    speed: 1, // the PLAYER attacker fires LAST — after the enemy ally's self-Stealth cast lands
+    position: 'M1',
+    pattern: lineRange2(),
+    // `ignoresStealth: true`: the row-scan stealth filter (positionalBinding.ts) restores every
+    // candidate ONLY when the WHOLE opposing roster is stealthed — here just the M-row ally is,
+    // so an unfiltered scan would fall through to the (unstealthed) enemy-fuying at T2 instead.
+    // The player-side board above sidesteps this by cloaking its entire roster; that trick is not
+    // available here without ALSO stealthing enemy-fuying, which collides with an unrelated
+    // engine quirk (an enemy attacker with BOTH a `pattern` and its own active-slot on-cast
+    // ability skips that ability's real effect). `ignoresStealth` is the same escape hatch a
+    // stealth-bypassing ship uses in production (Ship-kit W6) and is orthogonal to the aura this
+    // section pins — target SELECTION under Stealth is already exhaustively covered above.
+    target: { ...frontTarget(), ignoresStealth: true },
+    shipSkills: { slots: [{ slot: 'active', abilities: [basicDamageAbility('focus-basic')] }] },
+    enemyAttackers: [
+        {
+            id: 'enemy-fuying',
+            chargeCount: 0,
+            startCharged: false,
+            faction: 'TIANCHAO',
+            position: 'T2', // her real support position
+            pattern: wingsSupportNotSelf2(), // her real support pattern → footprint {M2,M3,B1,B2,B3}
+            shipSkills: { slots: opts.aura ? [auraPassiveSlot()] : [] },
+            stats: { attack: 0, crit: 0, critDamage: 0, speed: 500, defence: 0, hp: HUGE_HP },
+        },
+        {
+            id: 'enemy-ally-tianchao',
+            chargeCount: 0,
+            startCharged: false,
+            faction: 'TIANCHAO',
+            position: 'M3', // inside enemy-fuying's footprint
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [stealthSelfBuff('enemy-ally-stealth')] }],
+            },
+            // Fires FIRST (highest speed on the board) so it is Stealthed before the player hits.
+            stats: { attack: 0, crit: 0, critDamage: 0, speed: 1000, defence: 0, hp: HUGE_HP },
+        },
+    ],
+});
+
+const runEnemyAuraBoard = (opts: { aura: boolean }): number => {
+    const bus = createEventBus();
+    let direct = 0;
+    bus.on('attacked', (e) => {
+        if (e.targetId === 'enemy-ally-tianchao' && e.damage !== undefined) direct += e.damage;
+    });
+    runCombat({ ...enemyAuraBoard(opts), bus });
+    return direct;
+};
+
+describe('Fuying Stealth DR aura (#363) — engine, enemy-side mirror (item 4)', () => {
+    it('PRE-CONDITION: the enemy Tianchao ally is actually hit directly, both with and without the aura', () => {
+        expect(runEnemyAuraBoard({ aura: false })).toBeGreaterThan(0);
+        expect(runEnemyAuraBoard({ aura: true })).toBeGreaterThan(0);
+    });
+
+    it('an ENEMY Fuying protects her own (enemy-side) Stealthed Tianchao ally by the same 30%, team-symmetrically', () => {
+        const noAura = runEnemyAuraBoard({ aura: false });
+        const withAura = runEnemyAuraBoard({ aura: true });
+        expect(withAura).toBeCloseTo(0.7 * noAura, 5);
     });
 });

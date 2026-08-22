@@ -71,6 +71,7 @@ import {
     incomingBlockForIntake,
     conditionMet,
     allyScopedIncomingRecipients,
+    addIncomingAbilityDeduped,
 } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
@@ -3900,9 +3901,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 });
                 for (const recipientId of recipients) {
                     const list = incomingAbilitiesById.get(recipientId) ?? [];
-                    // Identity-keyed dedupe: an actor present in BOTH runtime maps would otherwise
-                    // contribute the same Ability object twice and double the reduction.
-                    if (!list.includes(a)) list.push(a);
+                    // #363 item 5: id-keyed dedupe (addIncomingAbilityDeduped) — an actor present
+                    // in BOTH runtime maps would otherwise risk two DISTINCT Ability objects for
+                    // the same underlying ability contributing twice and doubling the reduction.
+                    // Object-identity dedupe (`list.includes(a)`) only caught the narrower case of
+                    // the exact same object appearing twice.
+                    addIncomingAbilityDeduped(list, a);
                     incomingAbilitiesById.set(recipientId, list);
                 }
             }

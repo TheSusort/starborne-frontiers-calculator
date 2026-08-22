@@ -210,6 +210,45 @@ describe('StatusEngine.extendAllBuffsDuration — buffName filter (#363)', () =>
 
         expect(selfBuffTurns(eng, 'a', 'Security Up III')).toBe(3); // grew — the filter is what stops this
     });
+
+    // #363 hardening (item 2): `s.buffName !== buffName` is EXACT-name equality. A substring
+    // rewrite (`s.buffName.includes(buffName)`) would leave every test above green, because none
+    // of them seed a status name that collides with "Stealth" as a sub/superstring. These two
+    // pin exactness in both directions.
+    it('does NOT extend a SUPERSTRING-colliding buff ("Greater Stealth" must not move when extending "Stealth")', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Stealth', 1), 'a');
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Greater Stealth', 2), 'a');
+
+        // PRE-CONDITION: both statuses are actually present before the extension runs.
+        expect(selfBuffTurns(eng, 'a', 'Stealth')).toBe(1);
+        expect(selfBuffTurns(eng, 'a', 'Greater Stealth')).toBe(2);
+
+        const affected = eng.extendAllBuffsDuration('a', 1, 'Stealth');
+
+        expect(affected).toBe(1);
+        expect(selfBuffTurns(eng, 'a', 'Stealth')).toBe(2);
+        // A `.includes` rewrite would match here too ("Greater Stealth".includes("Stealth")) and
+        // wrongly grow this to 3.
+        expect(selfBuffTurns(eng, 'a', 'Greater Stealth')).toBe(2);
+    });
+
+    it('does NOT extend when the named filter is a SUBSTRING of the held buff ("Steal" must not reach "Stealth")', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Stealth', 1), 'a');
+
+        // PRE-CONDITION.
+        expect(selfBuffTurns(eng, 'a', 'Stealth')).toBe(1);
+
+        // "Steal" names no real status — the point is purely that "Stealth".includes("Steal")
+        // would be true under a substring rewrite, in the OPPOSITE direction from the test above.
+        const affected = eng.extendAllBuffsDuration('a', 1, 'Steal');
+
+        expect(affected).toBe(0);
+        expect(selfBuffTurns(eng, 'a', 'Stealth')).toBe(1);
+    });
 });
 
 // ---------------------------------------------------------------------------

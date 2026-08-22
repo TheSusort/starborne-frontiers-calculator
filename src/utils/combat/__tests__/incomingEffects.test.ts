@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { incomingReductionForHit, incomingBlockForIntake } from '../incomingEffects';
+import {
+    incomingReductionForHit,
+    incomingBlockForIntake,
+    addIncomingAbilityDeduped,
+} from '../incomingEffects';
 import { Ability, IncomingCondition, IncomingHitContext } from '../../../types/abilities';
 
 const ctx = (over: Partial<IncomingHitContext> = {}): IncomingHitContext => ({
@@ -208,5 +212,80 @@ describe('incomingBlockForIntake', () => {
     });
     it('returns 0 with no block abilities', () => {
         expect(incomingBlockForIntake([], ctx({ hitIndexThisRound: 2 }), yes)).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// #363 item 5 — addIncomingAbilityDeduped, the id-keyed dedupe for the ally-scoped fan-out pass.
+// A DIRECT unit test rather than an engine scenario: the double-add this guards against needs an
+// actor present in BOTH runtime maps with two DISTINCT Ability objects for the same underlying
+// ability, which is not reachable through any real fixture today (the per-actor OWN-abilities
+// pass already guards the one known path that could put an actor in both maps). The guard itself
+// is still worth pinning directly, since object-identity dedupe (`list.includes(a)`) would have
+// looked identical on every test that only ever pushes ONE object per id.
+// ---------------------------------------------------------------------------
+describe('addIncomingAbilityDeduped (#363 item 5)', () => {
+    // Two DISTINCT objects sharing the same id — exactly the shape two different runtimes for one
+    // actor id would hand back for "the same" underlying ability.
+    const auraCopy = (): Ability => ({
+        id: 'fuying-aura',
+        type: 'incoming-reduction',
+        target: 'all-allies',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 30,
+            critFamily: false,
+        },
+    });
+
+    it('does not add a second entry sharing the first entry’s id', () => {
+        const list: Ability[] = [];
+        const first = auraCopy();
+        const second = auraCopy();
+        addIncomingAbilityDeduped(list, first);
+        addIncomingAbilityDeduped(list, second);
+        expect(list).toHaveLength(1);
+        expect(list[0]).toBe(first); // the FIRST object wins; the duplicate is dropped, not merged
+    });
+
+    it(
+        'PROVE THE INSTRUMENT: without id-keyed dedupe, two distinct objects for the same id would ' +
+            'both land and DOUBLE the reduction (30% -> 60%)',
+        () => {
+            const first = auraCopy();
+            const second = auraCopy();
+            // The OLD object-identity dedupe this replaces (`list.includes(a)`) — proves a naive
+            // rewrite back to identity-based dedupe would silently reopen the gap.
+            const identityDedupedList: Ability[] = [];
+            for (const a of [first, second])
+                if (!identityDedupedList.includes(a)) identityDedupedList.push(a);
+            expect(identityDedupedList).toHaveLength(2); // both land — the bug this item closes
+
+            const ctxStealthed = ctx({ victimStealthed: true });
+            expect(incomingReductionForHit(identityDedupedList, ctxStealthed)).toBe(60);
+
+            // The id-keyed dedupe this item introduces closes it.
+            const dedupedList: Ability[] = [];
+            addIncomingAbilityDeduped(dedupedList, first);
+            addIncomingAbilityDeduped(dedupedList, second);
+            expect(incomingReductionForHit(dedupedList, ctxStealthed)).toBe(30);
+        }
+    );
+
+    it('adds abilities with different ids independently', () => {
+        const list: Ability[] = [];
+        addIncomingAbilityDeduped(list, auraCopy());
+        addIncomingAbilityDeduped(list, { ...auraCopy(), id: 'some-other-ability' });
+        expect(list).toHaveLength(2);
+    });
+
+    it('returns the same list instance it mutates', () => {
+        const list: Ability[] = [];
+        const returned = addIncomingAbilityDeduped(list, auraCopy());
+        expect(returned).toBe(list);
     });
 });

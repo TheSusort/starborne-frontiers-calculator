@@ -51,6 +51,24 @@ export function allyScopedIncomingRecipients(args: {
     });
 }
 
+/**
+ * #363 follow-up (item 5) — appends `ability` onto `list` unless an ability with the SAME `id`
+ * is already present, then returns `list`. `incomingAbilitiesById`'s ally-scoped fan-out pass
+ * used to dedupe on OBJECT IDENTITY (`list.includes(ability)`), which only catches the case where
+ * BOTH runtime maps hand back the literal same `Ability` object for one actor id. Two distinct
+ * runtimes for the same actor id would each hand back a distinct object describing the SAME
+ * underlying ability, and `incomingReductionForHit` SUMS non-crit-family entries — so a 30% aura
+ * would silently double to 60%. Not reachable today (the per-actor OWN-abilities pass already
+ * guards the one known path that could put an actor in both runtime maps), but the fan-out pass
+ * had no equivalent guard of its own. Keying on `id` rather than object identity closes that gap
+ * regardless of how a duplicate might arise in the future. Mutates `list` in place (matches the
+ * call site's existing get-or-create-then-push idiom) and also returns it for convenience.
+ */
+export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ability[] {
+    if (!list.some((existing) => existing.id === ability.id)) list.push(ability);
+    return list;
+}
+
 /** True when an incoming condition is satisfied by the hit context. Exported (SP-E) so the
  *  engine's applyVictimDamage transform hook can gate a 'transform-incoming-to-dot' ability's
  *  `condition` the same way incomingReductionForHit/incomingBlockForIntake do internally. */
