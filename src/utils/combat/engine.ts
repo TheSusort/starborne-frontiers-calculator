@@ -66,7 +66,12 @@ import {
 } from './positionalApply';
 import type { AttackerDamageScalars, VictimDefenseProfile } from './victimDamage';
 import { victimHitDamage, victimDefenceMitigation } from './victimDamage';
-import { incomingReductionForHit, incomingBlockForIntake, conditionMet } from './incomingEffects';
+import {
+    incomingReductionForHit,
+    incomingBlockForIntake,
+    conditionMet,
+    allyScopedIncomingRecipients,
+} from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
 import { detonateContainers, type DetonationRecipe } from './detonation';
@@ -3824,6 +3829,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
             for (const a of slot.abilities) {
+                // #363: an ALLY-scoped incoming-reduction is NOT a self-effect, so it must not be
+                // keyed onto its own carrier here. The second pass below is its sole authority —
+                // it is the only place that applies the aura's footprint + faction narrowing, and
+                // collecting it here too would hand the carrier an un-narrowed copy (Fuying is
+                // Tianchao, so the faction filter would pass, and her Not-Self pattern's exclusion
+                // of her own cell would be silently bypassed). Deliberately narrow to
+                // 'incoming-reduction': every equipment/skill-text member of the other four
+                // families is `target: 'self'`, so nothing else changes.
+                if (a.config.type === 'incoming-reduction' && a.target === 'all-allies') continue;
                 if (
                     a.config.type === 'incoming-reduction' ||
                     a.config.type === 'incoming-block' ||
@@ -3838,6 +3852,61 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
         if (incoming.length) incomingAbilitiesById.set(rt.actor.id, incoming);
+    }
+
+    // #363 (Fuying): the corpus's first ALLY-scoped incoming reduction — "All Tianchao allies with
+    // Stealth take 30% less direct damage". Every other member of this family reduces damage on the
+    // CARRIER, so the map above has never needed to fan out: it keys each actor's OWN passive-slot
+    // abilities, and the victim-side read (`incomingAbilitiesOf(victim.id)`) therefore never saw a
+    // teammate's aura. An ally-scoped aura has to land on the RECIPIENTS' lists instead.
+    //
+    // Recipients = the carrier's living same-side roster, narrowed by the SAME shared composition
+    // every other #363 site uses (`resolveSupportRecipients`: footprint first, then faction):
+    //
+    //  • FOOTPRINT — the aura carries `patternScoped`, OWNER-RULED 2026-08-22: a Stealthed Tianchao
+    //    ally standing OUTSIDE Fuying's active pattern takes FULL damage. `footprintAllyIdsFor`
+    //    returns `undefined` for a non-positional / non-support pattern, which per this codebase's
+    //    convention means "do not narrow" — so a non-positional fixture still sees the aura.
+    //  • FACTION — an actor whose faction is unknown never matches (conservative; the aura can only
+    //    under-reach, never over-reach, when faction data is missing).
+    //
+    // ⚠️ There is NO owner exclusion here, and adding one would be a bug. Fuying is herself a
+    // Tianchao ally and nothing about this aura singles her out; she falls out of the recipient set
+    // only because her ACTIVE pattern (`Pattern-Wings-Support-Not-Self-Range-2`) is Not-Self and so
+    // omits her own cell, and she is doubly inert because `self-stealth` fails for her (her grant is
+    // that same Not-Self cast, so she never holds Stealth). Hardcoding "the owner is never a
+    // recipient" would encode a fact about her GRANT's pattern into the AURA's recipient
+    // resolution, and would break silently the day a carrier's pattern includes its own cell, a
+    // ship self-grants Stealth, or a teammate grants Stealth to the carrier.
+    //
+    // Computed once, like the self-scoped pass: positions and patterns are fixed for the fight, and
+    // the only dynamic input (which allies are still alive) cannot change an answer that matters —
+    // a dead actor takes no damage, so its presence in or absence from the footprint is moot.
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                if (a.config.type !== 'incoming-reduction') continue;
+                if (a.target !== 'all-allies') continue; // self-scoped → handled by the pass above
+                const ownerSide = rt.actor.side;
+                const recipients = allyScopedIncomingRecipients({
+                    ability: a,
+                    ownerId: rt.actor.id,
+                    livingSameSideIds: actorsBySide(ownerSide)
+                        .filter((x) => x.currentHp > 0)
+                        .map((x) => x.id),
+                    footprintAllyIds: bySide(ownerSide).footprintAllyIdsFor(rt.actor.id),
+                    factionOf,
+                });
+                for (const recipientId of recipients) {
+                    const list = incomingAbilitiesById.get(recipientId) ?? [];
+                    // Identity-keyed dedupe: an actor present in BOTH runtime maps would otherwise
+                    // contribute the same Ability object twice and double the reduction.
+                    if (!list.includes(a)) list.push(a);
+                    incomingAbilitiesById.set(recipientId, list);
+                }
+            }
+        }
     }
     const incomingAbilitiesOf = (id: string): Ability[] => incomingAbilitiesById.get(id) ?? [];
 

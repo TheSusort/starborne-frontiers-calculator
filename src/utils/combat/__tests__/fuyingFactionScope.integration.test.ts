@@ -6,19 +6,24 @@
  * TARGETING-IMMUNITY status, so the over-grant did not merely inflate a number — it made allies
  * unselectable who should be selectable.
  *
- * ⚠️ DELIBERATELY NO ASSERTION ABOUT FUYING'S OWN REACH. Nothing here asserts how MANY allies she
- * reaches, WHICH ones, or whether she is her own recipient. Those all depend on her support
- * footprint (`Pattern-Wings-Support-Not-Self-Range-2`), which is a SEPARATE axis owned by a
- * separate change — an assertion about it here would pass today and read as a regression caused by
- * that change tomorrow. What is pinned instead: the parser's answer, the built ability's
- * `factionFilter`, the pure resolver's intersection against a SYNTHETIC faction map, and (at the
- * engine level) a synthetic non-positional kit where NO footprint exists, so faction narrowing is
- * the only narrowing in play and cannot be confounded by anyone's pattern.
+ * ⚠️ THE GAP-1 SECTIONS DELIBERATELY ASSERT NOTHING ABOUT FUYING'S OWN REACH. Nothing above the
+ * Gap-2 banner asserts how MANY allies she reaches, WHICH ones, or whether she is her own
+ * recipient. Those all depend on her support footprint
+ * (`Pattern-Wings-Support-Not-Self-Range-2`), which is a SEPARATE axis owned by a separate change
+ * — an assertion about it there would pass today and read as a regression caused by that change
+ * tomorrow. What is pinned instead: the parser's answer, the built ability's `factionFilter`, the
+ * pure resolver's intersection against a SYNTHETIC faction map, and (at the engine level) a
+ * synthetic non-positional kit where NO footprint exists, so faction narrowing is the only
+ * narrowing in play and cannot be confounded by anyone's pattern.
+ *
+ * The Gap-2 section BELOW is the change that owns that axis, so it does assert the footprint — see
+ * its own banner.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { detectGrantFactionScope } from '../../skillTextParser';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { resolveSupportRecipients } from '../supportRecipients';
+import { allyScopedIncomingRecipients, incomingReductionForHit } from '../incomingEffects';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
@@ -27,7 +32,10 @@ import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/ship
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { BUFFS } from '../../../constants/buffs';
 import type { FactionKey } from '../../../constants/factions';
-import type { ShipSkills } from '../../../types/abilities';
+import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { ParsedPattern, ParsedTarget } from '../../targetingParser';
+import type { Position } from '../../../types/encounters';
+import type { ActiveDoTStack, CombatActor } from '../state';
 
 // `docs/` is gitignored reference data and a fresh worktree does not have it. Without this guard
 // the file fails to COLLECT rather than reporting a readable skip reason — copy the pattern from
@@ -417,5 +425,428 @@ describe('Fuying faction-scoped Stealth grant (#363) — engine wiring', () => {
             'e-xaoc',
         ]);
         expect(recipientsOf(buffs, 'Stealth')).toEqual(['e-caster', 'e-tianchao']);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// #363 Gap 2 — the ALLY-SCOPED Stealth damage-reduction aura.
+//
+// "All Tianchao allies with Stealth take 30% less direct damage" (R4; R2/R3 read 15%). It was not
+// applied AT ALL: every pre-existing member of the `incoming-reduction` family
+// (Iridium/Anemone/Wusheng/Panon/Tormenter/Voron) reduces damage on the CARRIER, so the engine's
+// per-actor incoming-effects map only ever keyed each actor's OWN passive-slot abilities and the
+// victim-side read never saw a teammate's aura.
+//
+// OWNER RULINGS this section encodes (2026-08-22) — ground truth, not derived from the clause text:
+//  1. The aura is PATTERN-LIMITED (`patternScoped: true`). A Stealthed Tianchao ally standing
+//     OUTSIDE Fuying's active pattern takes FULL damage. The limit is MECHANICAL: it governs the
+//     whole passive even though the words "within the active pattern" sit only in the passive's
+//     SECOND sentence (the Stasis reactive), and at R2 the aura ships alone with no pattern phrase
+//     at all. `markPatternScoped` reads an ability's OWN sentence and so would never flag it —
+//     which is why the parser arm sets the flag explicitly.
+//  2. Stealth affects only being CHOSEN as a target; damage lands normally on a Stealthed ship. So
+//     this aura is frequently live, and a fixture can and must get a Stealthed ally hit.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('Fuying Stealth DR aura (#363) — build', () => {
+    const auraOf = () =>
+        buildShipAbilities(fuyingShip())
+            .slots.flatMap((s) => s.abilities)
+            .find((a) => a.config.type === 'incoming-reduction');
+
+    it('builds an ally-scoped, faction-filtered direct-damage reduction at the R4 magnitude', () => {
+        // buildTraceShip defaults to refitLevel 4 and getShipSkillRows returns only the
+        // refit-active passive, so this is the R4 row → 30, not R2/R3's 15. No per-refit
+        // branching is needed in the parser.
+        const aura = auraOf();
+        expect(aura).toBeDefined();
+        expect(aura!.target).toBe('all-allies');
+        expect(aura!.factionFilter).toEqual(['TIANCHAO']);
+        // OWNER-RULED 2026-08-22: see ruling 1 in this section's header.
+        expect(aura!.patternScoped).toBe(true);
+        expect(aura!.config).toMatchObject({
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 30,
+            critFamily: false,
+        });
+    });
+
+    it('does not disturb the self-scoped members of the family (Wusheng keeps target self)', () => {
+        // Wusheng's "reduces direct damage by N% while Stealth is active" shares the aura's
+        // `self-stealth` condition and its `scope: 'direct'`, and is parsed by a sibling arm of the
+        // same function. It is the closest neighbour the new arm could have captured.
+        const wusheng = buildTraceShip('Wusheng');
+        if (!wusheng) throw new Error('Wusheng missing from the corpus');
+        const red = buildShipAbilities(wusheng)
+            .slots.flatMap((s) => s.abilities)
+            .filter((a) => a.config.type === 'incoming-reduction');
+        expect(red.length).toBeGreaterThan(0);
+        for (const a of red) {
+            expect(a.target).toBe('self');
+            expect(a.factionFilter).toBeUndefined();
+            expect(a.patternScoped).toBeUndefined();
+        }
+    });
+});
+
+describe('Fuying Stealth DR aura (#363) — the per-hit gate', () => {
+    const aura = {
+        id: 'x',
+        type: 'incoming-reduction',
+        target: 'all-allies',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 30,
+            critFamily: false,
+        },
+    } as const;
+    const base = {
+        didCrit: false,
+        attackerStealthed: false,
+        victimStealthed: true,
+        victimStasised: false,
+        hitIndexThisRound: 1,
+        attackerHasDot: false,
+        victimHasBarrierRecharging: false,
+        victimHasShield: false,
+        attackerTauntedOrProvoked: false,
+        selfHpPct: 100,
+    };
+
+    it('reduces a DIRECT hit on a Stealthed victim', () => {
+        expect(incomingReductionForHit([aura as never], base as never)).toBe(30);
+    });
+
+    it('does NOT reduce a DoT tick on the same victim — the clause says "direct damage"', () => {
+        expect(
+            incomingReductionForHit([aura as never], { ...base, dotType: 'inferno' } as never)
+        ).toBe(0);
+    });
+
+    it('does NOT reduce an unstealthed victim', () => {
+        expect(
+            incomingReductionForHit([aura as never], { ...base, victimStealthed: false } as never)
+        ).toBe(0);
+    });
+});
+
+describe('Fuying Stealth DR aura (#363) — recipient set', () => {
+    // `allyScopedIncomingRecipients` is the PRODUCTION rule the engine calls to decide whose
+    // incoming list the aura lands on. Asserting the SET (rather than a damage outcome) is the only
+    // way to pin the owner rule below: through Fuying every observable outcome is identical either
+    // way, because `self-stealth` fails for her regardless.
+    const auraOf = (): Ability => {
+        const a = buildShipAbilities(fuyingShip())
+            .slots.flatMap((s) => s.abilities)
+            .find((x) => x.config.type === 'incoming-reduction');
+        if (!a) throw new Error('Fuying built no incoming-reduction aura');
+        return a;
+    };
+    const FACTIONS_BY_ID: Record<string, FactionKey> = {
+        fuying: 'TIANCHAO',
+        anjian: 'TIANCHAO',
+        grif: 'XAOC',
+    };
+    const factionOf = (id: string): FactionKey | undefined => FACTIONS_BY_ID[id];
+
+    it('is footprint ∩ Tianchao', () => {
+        expect(
+            allyScopedIncomingRecipients({
+                ability: auraOf(),
+                ownerId: 'fuying',
+                livingSameSideIds: ['fuying', 'anjian', 'grif', 'manual'],
+                // Her real pattern is Not-Self, so her own cell is absent from her footprint.
+                footprintAllyIds: ['anjian', 'grif'],
+                factionOf,
+            })
+        ).toEqual(['anjian']);
+        // 'grif' is on-pattern but XAOC; 'manual' has no faction at all (unknown never matches).
+    });
+
+    it('does NOT exclude the OWNER — she is dropped by her Not-Self pattern, not by a rule', () => {
+        // The load-bearing assertion of this file. There is no `id !== ownerId` guard anywhere in
+        // the recipient resolution, so a carrier whose footprint DOES contain its own cell is its
+        // own recipient. Hardcoding an owner exclusion "because Fuying never has Stealth" would
+        // encode a fact about her GRANT's pattern into the AURA's recipient resolution, and would
+        // break silently the day a carrier self-grants Stealth or a teammate grants it to her.
+        expect(
+            allyScopedIncomingRecipients({
+                ability: auraOf(),
+                ownerId: 'fuying',
+                livingSameSideIds: ['fuying', 'anjian', 'grif'],
+                footprintAllyIds: ['fuying', 'anjian', 'grif'], // a self-inclusive support pattern
+                factionOf,
+            })
+        ).toEqual(['fuying', 'anjian']);
+    });
+
+    it('leaves the aura team-wide when there is no support footprint to narrow by', () => {
+        // `undefined` means "do not narrow" throughout this codebase — a non-positional or
+        // non-support pattern must not silence the aura.
+        expect(
+            allyScopedIncomingRecipients({
+                ability: auraOf(),
+                ownerId: 'fuying',
+                livingSameSideIds: ['fuying', 'anjian', 'grif'],
+                footprintAllyIds: undefined,
+                factionOf,
+            })
+        ).toEqual(['fuying', 'anjian']);
+    });
+
+    it('ignores the footprint entirely for an aura that is NOT patternScoped', () => {
+        // Guards the flag itself: strip `patternScoped` and the footprint stops applying, which is
+        // exactly the behaviour the reverted first draft of the spec argued for. This assertion is
+        // what makes the ENGINE fixture below a measurement of ruling 1 rather than of geometry.
+        const unscoped = { ...auraOf() };
+        delete unscoped.patternScoped;
+        expect(
+            allyScopedIncomingRecipients({
+                ability: unscoped,
+                ownerId: 'fuying',
+                livingSameSideIds: ['fuying', 'anjian', 'grif'],
+                footprintAllyIds: ['anjian'],
+                factionOf,
+            })
+        ).toEqual(['fuying', 'anjian']);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Engine end-to-end — a REAL board, because the pattern limit IS the thing under test.
+//
+// The whole player side is Stealthed. That is not decoration: the positional stealth filter drops
+// Stealthed cells from an enemy's candidate list UNLESS every candidate is Stealthed, so cloaking
+// everyone is what restores ordinary front-to-back selection and lets a Stealthed ally be hit at
+// all (owner ruling 2 — Stealth blocks being CHOSEN, not damage). Un-stealthing one ally to make it
+// a control would move the enemy's anchor and change the footprint under test, so the controls here
+// are "same board, aura absent" and "same board, faction swapped" instead.
+//
+// Geometry (all human-verifiable from patternOffsets.ts):
+//   Fuying is the FOCUS at T2 with her real `Pattern-Wings-Support-Not-Self-Range-2`
+//     → support footprint {M2, M3, B1, B2, B3}  (the table's own "Human-verified @ T2" line).
+//   The enemy fires `Pattern-Line-Range-2` and, sitting in row M, anchors on the front-most M-row
+//     player. M4 is empty, so that is `ally-m3` at M3; covered extends 2 steps back → M2, M1.
+//   So one attack lands on all three allies:
+//     M3  TIANCHAO, Stealthed, INSIDE  the footprint → reduced 30%
+//     M2  XAOC,     Stealthed, INSIDE  the footprint → FULL (faction narrowing)
+//     M1  TIANCHAO, Stealthed, OUTSIDE the footprint → FULL (ruling 1, the pattern limit)
+//
+// Every assertion is a per-victim DIFFERENTIAL against the identical board with the aura passive
+// removed from Fuying's kit. That is deliberate: origin and covered cells take different shares of
+// an AoE, so comparing two victims to each other would measure the AoE table, not the aura.
+// ---------------------------------------------------------------------------
+
+const HUGE_HP = 1_000_000_000;
+const ENEMY_ATTACK = 5000;
+
+const wingsSupportNotSelf2 = (): ParsedPattern => ({
+    raw: 'Pattern-Wings-Support-Not-Self-Range-2',
+    shape: 'wings',
+    range: 2,
+    modifiers: { support: true, notSelf: true },
+});
+const lineRange2 = (): ParsedPattern => ({
+    raw: 'Pattern-Line-Range-2',
+    shape: 'line',
+    range: 2,
+    modifiers: {},
+});
+const frontTarget = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
+
+/** A 99-turn self-Stealth cast (the idiom from incomingReductionEngine.test.ts). */
+const stealthSelfBuff = (id: string): Ability => ({
+    id,
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName: 'Stealth',
+        parsedEffects: {},
+        stacks: 1,
+        isStackable: false,
+        duration: 99,
+    },
+});
+
+/** Fuying's aura exactly as `buildShipAbilities` emits it from her R4 passive row. */
+const auraPassiveSlot = (): ShipSkills['slots'][number] => {
+    const aura = buildShipAbilities(fuyingShip())
+        .slots.flatMap((s) => s.abilities)
+        .find((a) => a.config.type === 'incoming-reduction');
+    if (!aura) throw new Error('Fuying built no incoming-reduction aura');
+    return { slot: 'passive', abilities: [aura] };
+};
+
+/** A Stealthed, positioned, harmless player victim. */
+const stealthedAlly = (id: string, position: Position, faction: FactionKey) => ({
+    id,
+    speed: 1000, // ahead of the enemy, so Stealth is up before it fires
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    faction,
+    position,
+    walk: {
+        shipSkills: {
+            slots: [{ slot: 'active' as const, abilities: [stealthSelfBuff(`${id}-stealth`)] }],
+        },
+        stats: inertWalkStats(HUGE_HP),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+/** A seeded corrosion stack attributed to the enemy, so its tick can resolve an applier ctx. */
+const corrosion = (): ActiveDoTStack => ({
+    stacks: 1,
+    tier: 10,
+    remainingRounds: 5,
+    sourceId: 'enemy-1',
+});
+
+const auraBoard = (opts: { aura: boolean; m3Faction?: FactionKey }): CombatEngineInput => ({
+    // Fuying herself is the focus, so `pattern` below IS her support pattern (the engine reads
+    // `input.pattern` for the focus actor) and `faction` is her Tianchao membership.
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    // TWO rounds, and it has to be two: a DoT tick resolves the APPLIER's turn context
+    // (`lastTurnCtxByActor`), and the enemy is deliberately the slowest actor on the board so that
+    // every ally is already Stealthed when it fires. Its context therefore does not exist until
+    // round 1 has finished, so a one-round fixture ticks nothing and the DoT assertion below would
+    // be vacuous (0 === 0). Both rounds are identical for the direct-damage ratio.
+    numRounds: 2,
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: HUGE_HP,
+    speed: 2000,
+    mode: 'healing',
+    healTargetId: 'attacker',
+    faction: 'TIANCHAO',
+    position: 'T2',
+    pattern: wingsSupportNotSelf2(),
+    // Fuying's own Stealth is a SNAPSHOT self-buff, not a self-cast like her allies' below. It has
+    // to be: her pattern is Not-Self, and a CAST-slot support clause is footprint-scoped, so a
+    // self-targeted cast of hers is narrowed away by her own footprint (she genuinely cannot Stealth
+    // herself in game — which is exactly why the aura is inert on her). The snapshot buff is only
+    // here so the positional stealth filter's "every candidate is Stealthed → restore all" branch
+    // fires and the enemy can pick a target at all; it is irrelevant to the aura, which never
+    // reaches her cell.
+    selfBuffs: [
+        {
+            id: 'fuying-stealth-snapshot',
+            buffName: 'Stealth',
+            stacks: 1,
+            parsedEffects: {},
+            isStackable: false,
+        },
+    ],
+    shipSkills: {
+        slots: [...(opts.aura ? [auraPassiveSlot()] : [])],
+    },
+    teamActors: [
+        stealthedAlly('ally-m3', 'M3', opts.m3Faction ?? 'TIANCHAO'),
+        stealthedAlly('ally-m2', 'M2', 'XAOC'),
+        stealthedAlly('ally-m1', 'M1', 'TIANCHAO'),
+    ],
+    enemyAttackers: [
+        {
+            id: 'enemy-1',
+            stats: {
+                attack: ENEMY_ATTACK,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: HUGE_HP,
+                speed: 1, // acts last → sees every ally's Stealth
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M1',
+            target: frontTarget(),
+            pattern: lineRange2(),
+        },
+    ],
+    // Seed the SAME DoT on the reduced ally in every run: its tick must not move, because the
+    // clause says "direct damage" and the ability is scope:'direct'.
+    __testTapActors: (actors: CombatActor[]) => {
+        for (const a of actors) if (a.id === 'ally-m3') a.corrosionEntries.push(corrosion());
+    },
+});
+
+/** Landed direct damage and DoT-tick damage per victim for one board. */
+const runBoard = (opts: { aura: boolean; m3Faction?: FactionKey }) => {
+    const bus = createEventBus();
+    const direct = new Map<string, number>();
+    const dot = new Map<string, number>();
+    bus.on('attacked', (e) => {
+        if (e.damage !== undefined)
+            direct.set(e.targetId, (direct.get(e.targetId) ?? 0) + e.damage);
+    });
+    bus.on('dot-ticked', (e) => dot.set(e.targetId, (dot.get(e.targetId) ?? 0) + e.damage));
+    runCombat({ ...auraBoard(opts), bus });
+    return { direct, dot };
+};
+
+describe('Fuying Stealth DR aura (#363) — engine, on a real board', () => {
+    const withAura = runBoard({ aura: true });
+    const noAura = runBoard({ aura: false });
+
+    it('all three Stealthed allies are actually HIT (ruling 2 — Stealth does not stop damage)', () => {
+        // Non-vacuity gate: without this, every differential below could be 0 === 0.
+        for (const id of ['ally-m3', 'ally-m2', 'ally-m1']) {
+            expect(noAura.direct.get(id)).toBeGreaterThan(0);
+            expect(withAura.direct.get(id)).toBeGreaterThan(0);
+        }
+    });
+
+    it('reduces a DIRECT hit on the Stealthed Tianchao ally INSIDE her pattern by exactly 30%', () => {
+        expect(withAura.direct.get('ally-m3')!).toBeCloseTo(0.7 * noAura.direct.get('ally-m3')!, 5);
+    });
+
+    it('a Stealthed Tianchao ally OUTSIDE her pattern takes FULL damage (owner ruling 1)', () => {
+        // The assertion that distinguishes the shipped implementation from the reverted spec's
+        // version, which argued the aura was not pattern-limited.
+        expect(withAura.direct.get('ally-m1')!).toBe(noAura.direct.get('ally-m1')!);
+    });
+
+    it('a Stealthed XAOC ally INSIDE her pattern takes FULL damage (faction narrowing)', () => {
+        expect(withAura.direct.get('ally-m2')!).toBe(noAura.direct.get('ally-m2')!);
+    });
+
+    it('does NOT reduce a DoT tick on the very ally whose direct hit it DID reduce', () => {
+        // Same actor, same run as the 30% assertion above, so the aura is provably live on it —
+        // which is what makes an unchanged tick evidence about `scope: 'direct'` rather than about
+        // the ally being out of reach.
+        expect(withAura.dot.get('ally-m3')).toBeGreaterThan(0);
+        expect(withAura.dot.get('ally-m3')!).toBe(noAura.dot.get('ally-m3')!);
+    });
+
+    it('swapping the reduced ally to XAOC removes the reduction (same cell, same Stealth)', () => {
+        const swapped = runBoard({ aura: true, m3Faction: 'XAOC' });
+        expect(swapped.direct.get('ally-m3')!).toBe(noAura.direct.get('ally-m3')!);
     });
 });

@@ -142,6 +142,7 @@ import {
 } from '../calculators/skillBuffAutoFill';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
+import { FACTIONS, FACTION_KEYS, type FactionKey } from '../../constants/factions';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -809,6 +810,17 @@ interface ParsedIncomingDamageReduction {
     pct?: number;
     hpScaling?: { perUnit: number; cap: number };
     matchIndex: number;
+    /** #363 (Fuying): the reduction applies to ALLIES, not the carrier. Absent → 'self', which
+     *  is what all six pre-existing phrasings (Iridium/Anemone/Panon/Wusheng/Tormenter/Voron)
+     *  are. */
+    target?: 'self' | 'all-allies';
+    /** #363: restrict ally recipients to these factions. Only meaningful with target
+     *  'all-allies'. */
+    factionFilter?: FactionKey[];
+    /** #363: the emitted ability carries `Ability.patternScoped`, so the engine narrows its
+     *  recipients to the carrier's ACTIVE support footprint. OWNER-RULED 2026-08-22 — see the
+     *  ally-aura arm below for why this is set despite the clause not naming the pattern. */
+    patternScoped?: boolean;
 }
 
 /**
@@ -919,6 +931,45 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
             pct: parseFloat(malvexM[1]),
             matchIndex: malvexM.index,
         });
+    }
+
+    // Fuying (#363): "All Tianchao allies with Stealth take N% less direct damage." The corpus's
+    // first ALLY-scoped reduction — every arm above reduces damage on the CARRIER. The faction is
+    // captured from the recipient phrase, so 'Tianchao Precision II' (a buff NAME) cannot reach
+    // this arm: the pattern requires 'allies' right after the faction word.
+    //
+    // The gate is the EXISTING `self-stealth` condition (Wusheng already uses it from skill text):
+    // "with Stealth" is a property of the VICTIM of the incoming hit, which is what that condition
+    // reads. Nothing new is needed for it.
+    const allyAuraM =
+        /all\s+([a-z]+(?:\s+[a-z]+)?)\s+allies\s+with\s+stealth\s+take\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage/i.exec(
+            plain
+        );
+    if (allyAuraM) {
+        const key = FACTION_KEYS.find(
+            (k) => FACTIONS[k].name.toLowerCase() === allyAuraM[1].trim().toLowerCase()
+        );
+        // Unrecognised faction word → emit NOTHING, so audit:skills keeps reporting the clause
+        // rather than silently applying an unfiltered ally-wide aura. Same closed-alternation
+        // discipline as Prophet's 'Nx its <stat>' arm (#361).
+        if (key) {
+            out.push({
+                scopes: ['direct'],
+                condition: 'self-stealth',
+                pct: parseFloat(allyAuraM[2]),
+                target: 'all-allies',
+                factionFilter: [key],
+                // OWNER-RULED 2026-08-22: the aura IS pattern-limited — a Stealthed Tianchao ally
+                // standing OUTSIDE Fuying's active pattern takes FULL damage. The limit is
+                // MECHANICAL, not textual: it governs the whole passive even though the words
+                // "within the active pattern" sit only in the passive's SECOND sentence (the
+                // Stasis reactive), and at R2 the aura ships alone with no pattern phrase at all.
+                // That is why it is set here rather than left to `markPatternScoped`, which reads
+                // the ability's OWN sentence and would (correctly, by the text) never flag it.
+                patternScoped: true,
+                matchIndex: allyAuraM.index,
+            });
+        }
     }
 
     return out;
@@ -2866,15 +2917,18 @@ function abilitiesFromText(
     // Epic PR12(C): the four incoming-damage-reduction phrasings (Anemone/Panon/Wusheng/
     // Tormenter). One or two abilities per directive (one per `scopes` entry — "all incoming
     // damage"/unscoped phrasings emit both 'direct' and 'dot').
+    // #363: plus Fuying's ALLY-scoped aura, the first in the family whose `target` is not 'self'.
     for (const dir of parseIncomingDamageReductionPhrasings(text)) {
         for (const scope of dir.scopes) {
             out.push({
                 ability: {
                     id: nextId(),
                     type: 'incoming-reduction',
-                    target: 'self',
+                    target: dir.target ?? 'self',
                     trigger: 'on-cast',
                     conditions: [],
+                    ...(dir.factionFilter ? { factionFilter: dir.factionFilter } : {}),
+                    ...(dir.patternScoped ? { patternScoped: true } : {}),
                     config: {
                         type: 'incoming-reduction',
                         scope,
