@@ -689,6 +689,11 @@ export const BUFFS: Buff[] = [
         type: 'debuff',
     },
     {
+        name: 'Reversed Repairs',
+        description: 'Incoming repairs damage this unit instead',
+        type: 'debuff',
+    },
+    {
         name: 'Charge Overdrive I',
         description: '+10% Defense Penetration',
         type: 'buff',
