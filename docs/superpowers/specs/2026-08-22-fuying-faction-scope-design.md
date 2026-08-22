@@ -412,6 +412,19 @@ one of them wrong. Read these before touching anything Stealth-gated.
 2. **The DR aura is PATTERN-LIMITED** — see §3. Anjian Stealthed inside her pattern gets the
    reduction; Wusheng Stealthed outside it takes FULL damage.
 
+   **"within the active pattern" governs the WHOLE passive, not just the sentence it sits in.**
+   That phrase appears only in sentence 2 (the Stasis reactive); the aura is sentence 1 and never
+   contains it, and at **R2 the aura ships alone with no pattern phrase anywhere in the passive**.
+   The limit therefore comes from the mechanic, not from the aura's own words — so it holds at R2
+   too, where there is no text to hang it on.
+
+   This runs AGAINST this codebase's convention, which is why it had to be asked rather than read:
+   `Ability.patternScoped` is documented as "the opt-BACK-IN for the handful of passives that name
+   the pattern **themselves**", and the locked rule treats a passive as un-narrowed unless its own
+   clause names the pattern. Both read the phrase as clause-scoped. For Fuying it is
+   passive-scoped. Do not generalise this to other ships without asking — it is a ruling about
+   THIS passive.
+
 3. **Being hit does NOT consume Stealth.** It ends by expiry (or the holder's own action), not by
    taking damage. Two consequences: the reactive "when an ally in Stealth … is directly damaged"
    gate needs no pre/post-hit ordering rule — the ally simply still holds Stealth — and the

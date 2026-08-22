@@ -1473,6 +1473,8 @@ literal 'buffs'/'debuffs' token and cannot reach this clause."
 
 ## Task 7: Branch verification and PR
 
+> Runs LAST — after Task 8.
+
 - [ ] **Step 1: Full green, from a clean state**
 
 ```bash
@@ -1518,6 +1520,107 @@ nothing.
 
 Untrack the spec, plan, and CSV (they live under gitignored `docs/`), following `7b94b444`. Delete
 the branch. Update `#363` with what shipped and what did not.
+
+---
+
+### Task 8: Fuying's reactive Stasis honours its own "ally in Stealth" gate
+
+**Owner-approved 2026-08-22 as in-scope for this branch** (same "with Stealth" clause family as the
+DR aura, same ship, same passive). Runs BEFORE Task 7.
+
+**The measured defect.** Her R3/R4 passive reads:
+
+```
+"When an ally in <unit-skill>Stealth</unit-skill> within the active pattern is directly damaged,
+ this Unit inflicts <unit-skill>Stasis</unit-skill> for 1 turn onto the enemy."
+```
+
+The Stealth precondition is not checked at all. Measured at Task 3's HEAD, `plain` fingerprint
+scenario: **40 `Stasis` log mentions, 0 `Stealth`.** It fires with nobody Stealthed anywhere. The
+faction fix makes it *more* visibly wrong — a team with no Tianchao ally now never has anyone
+Stealthed, and it still fires.
+
+**Owner rulings that make this fully specifiable (spec §7a — do not re-derive):**
+- Being hit does **not** consume Stealth. So there is no pre/post-hit ordering question: the
+  damaged ally simply still holds Stealth when the reaction resolves. Gate on the ally's live
+  status, no ordering rule, no state snapshot needed.
+- Therefore the reaction may fire on **every** qualifying hit in the window. Do **not** invent a
+  once-per-round or once-per-ally cap to tame the frequency — a cap is legitimate only if the
+  ability's TEXT says so, and this text says nothing. If the observed rate looks high, that is the
+  game, not a bug.
+- Stealth affects only being *chosen* as a target, so a Stealthed ally really does take direct
+  hits. The gate is reachable, not a corner case.
+
+**Files:**
+- Modify: `src/utils/combat/triggers.ts` — the `on-ally-attacked` reactive path (`roleFilter` and
+  `requireDamagedAllyAdjacent` are the existing per-damaged-ally gates to mirror; grep
+  `matchesRoleCategory` and `requireDamagedAllyAdjacent` in `registerReactiveListeners`)
+- Modify: `src/types/abilities.ts` — a new per-damaged-ally status gate on `Ability`
+- Modify: `src/utils/abilities/buildShipAbilities.ts` — set it from the parsed clause
+- Modify: `src/utils/skillTextParser.ts` — detect "an ally in <named status>" in the trigger phrase
+- Test: `src/utils/combat/__tests__/fuyingStasisStealthGate.integration.test.ts` (create)
+
+**Interfaces:**
+- Consumes: nothing from Tasks 4/6. Independent of the DR aura's mechanism.
+- Produces: a gate field on `Ability` (name it for what it is — the DAMAGED ALLY must hold a named
+  status — not `requireStealth`, since the mechanism is general even if Fuying is its only user).
+
+- [ ] **Step 1: Reproduce the defect as a number, before changing anything**
+
+Run the `plain` fingerprint scenario with Fuying as focus and count `Stasis` applications versus
+`Stealth` grants in the combat log. Record both. Expected at base: Stasis ~40, Stealth 0.
+This is the before-measurement; Step 6 compares against it.
+
+- [ ] **Step 2: Write the failing test, through PRODUCTION slot routing**
+
+Build Fuying's real kit via `buildTraceShip('Fuying')` (refitLevel 4 → the R4 passive) and
+`buildShipAbilities(ship)` — note `buildShipAbilities` takes a **`Ship`**, not
+`getShipSkillRows(ship)`. Two arms, both required:
+
+- an ally who holds Stealth and is inside her pattern is damaged → Stasis IS inflicted
+- an ally who holds NO Stealth is damaged → Stasis is NOT inflicted
+
+The second arm is the one that fails today. Assert on the enemy's Stasis status (or the
+`control-applied`/Stasis log rows), not on a count of log lines.
+
+- [ ] **Step 3: Run it to verify it fails**
+
+Expected: the no-Stealth arm FAILS (Stasis is inflicted when it should not be). The Stealth arm
+may already pass — that is fine and expected; it is the negative arm that carries the defect.
+
+- [ ] **Step 4: Parse the gate**
+
+Detect the named status in the TRIGGER phrase ("an ally in `<unit-skill>Stealth</unit-skill>`"),
+keying on the tag boundary the way `#362`'s `maskStatusNameRepairs` and Task 6's named-extend arm
+do — the `<unit-skill>` tags identify the status name exactly, so do not guess where a bare
+capitalised phrase ends. An unrecognised or absent status must yield **no gate**, leaving today's
+behaviour, rather than a gate that matches nothing.
+
+- [ ] **Step 5: Enforce it in the reactive listener**
+
+Mirror `roleFilter`'s existing shape: it filters on the DAMAGED ally
+(`registerReactiveListeners`, the `on-ally-attacked` branch, `e.targetId`). The new gate reads the
+damaged ally's live status store. An ally whose status cannot be read must NOT satisfy the gate
+(conservative, matching `matchesRoleCategory`'s unknown-never-matches rule).
+
+- [ ] **Step 6: Verify, and re-measure**
+
+Run your test (both arms green), then repeat Step 1's measurement. Stasis applications must drop
+to only those hits where a Stealthed ally was struck. Report both numbers — before and after — and
+sanity-check the after-number against the Stealth grants in the same log: Stasis should never
+exceed the qualifying hits.
+
+Then: `npm test` → 0 failures; `npx tsc --noEmit` and `npm run lint` → clean. Fuying's fingerprint
+WILL move (fewer Stasis rows) — re-baseline **by hand**, and confirm
+`git diff -- '*.snap' | grep -c '^+exports'` is `0`.
+
+**Prove the instrument:** revert only `triggers.ts` and confirm the no-Stealth arm goes red again.
+Use `git checkout <ref> -- <path>`, never `git stash push <path>`.
+
+- [ ] **Step 7: Commit**
+
+The message must carry the in-fight example: which ally, which turn, what the player sees before
+and after, plus the before/after Stasis counts.
 
 ---
 
