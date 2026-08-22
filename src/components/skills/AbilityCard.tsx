@@ -1046,20 +1046,31 @@ export const AbilityCard: React.FC<Props> = ({
                         options={TRIGGER_OPTIONS}
                         onChange={(value) => {
                             // triggerCritFilter applies to the attacked family (on-attacked +
-                            // on-ally-attacked, same engine contract); roleFilter only to
-                            // on-ally-attacked. Strip whatever the new trigger doesn't support
-                            // so the stored ability stays canonical.
+                            // on-ally-attacked, same engine contract); roleFilter and
+                            // requireDamagedAllyStatus (#363, Fuying's "when an ally in Stealth
+                            // is directly damaged") only to on-ally-attacked — both filter on the
+                            // DAMAGED ally, which no other trigger has. Strip whatever the new
+                            // trigger doesn't support so the stored ability stays canonical.
                             const trigger = value as AbilityTrigger;
-                            const { triggerCritFilter, roleFilter, ...rest } = ability;
+                            const {
+                                triggerCritFilter,
+                                roleFilter,
+                                requireDamagedAllyStatus,
+                                ...rest
+                            } = ability;
                             const keepCritFilter =
                                 trigger === 'on-attacked' || trigger === 'on-ally-attacked';
+                            const keepAllyFilters = trigger === 'on-ally-attacked';
                             onChange({
                                 ...rest,
                                 ...(keepCritFilter && triggerCritFilter !== undefined
                                     ? { triggerCritFilter }
                                     : {}),
-                                ...(trigger === 'on-ally-attacked' && roleFilter !== undefined
+                                ...(keepAllyFilters && roleFilter !== undefined
                                     ? { roleFilter }
+                                    : {}),
+                                ...(keepAllyFilters && requireDamagedAllyStatus !== undefined
+                                    ? { requireDamagedAllyStatus }
                                     : {}),
                                 trigger,
                             });

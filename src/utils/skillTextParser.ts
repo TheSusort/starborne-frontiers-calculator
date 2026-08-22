@@ -2857,6 +2857,16 @@ const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
 // UNDER-fire — widen the repetition group if such a CSV variant ever lands.
 const DR_ALLY_ROLES_RE =
     /when\s+an(?:other)?\s+ally\s+((?:attacker|defender|debuffer|supporter)s?(?:\s+or\s+(?:attacker|defender|debuffer|supporter)s?)*)\b/i;
+// #363 (Fuying R3/R4): a NAMED-STATUS precondition on the damaged ally — "When an ally IN
+// <unit-skill>Stealth</unit-skill> … is directly damaged". Matched against the TAGGED sentence so
+// the `<unit-skill>` boundary delimits the status name exactly, rather than guessing where a bare
+// capitalised phrase ends (the same reasoning as `maskStatusNameRepairs` in #362 and
+// EXTEND_NAMED_STATUS_RE above: the tag is information, and stripping it throws that away).
+// "with" is accepted alongside "in" because the corpus uses both prepositions for the same
+// standing-status idea ("allies with Stealth" in Fuying's own DR-aura sentence); no corpus
+// ally-reaction sentence uses "with" today, so this arm is purely defensive.
+const DR_ALLY_STATUS_RE =
+    /when\s+an(?:other)?\s+ally\s+(?:in|with)\s+<unit-skill>([^<]+)<\/unit-skill>/i;
 const ROLE_WORD_TO_CATEGORY: Record<string, ShipRoleCategory> = {
     attacker: 'ATTACKER',
     defender: 'DEFENDER',
@@ -2918,8 +2928,16 @@ const DR_HP_BELOW_RE = /while\s+below\s+(\d+)\s*%\s*hp/i;
  * condition so the executor evaluates the gate at drain time rather than firing on every
  * received attack. Ally-subject sentences never get it: DR_HP_BELOW_RE reads the OWNER's
  * HP, and no corpus ally-reaction carries an HP gate.
+ *
+ * `allyStatusName` (#363, Fuying R3/R4) is set when an ALLY-subject sentence names a standing
+ * status the damaged ally must hold — "When an ally in <unit-skill>Stealth</unit-skill> … is
+ * directly damaged". It is the canonical `BUFFS` name, resolved through `resolveBuffName` so an
+ * unrecognised phrase yields NO gate (leaving the pre-#363 un-gated behaviour) rather than a gate
+ * that can never match. Ally-subject only: a self-subject "while in Stealth" gate is
+ * `detectGrantConditions`' job and already has its own channel.
+ *
  * Reference data: docs/ship-skills.csv (Warden, Guardian, Shepherd, Opal, Flamel, Iridium,
- * Panguan, Stalwart, Makoli; ally-subject: Guardian, Refine, Graphite).
+ * Panguan, Stalwart, Makoli; ally-subject: Guardian, Refine, Graphite, Fuying).
  */
 export function detectDamageReactionTrigger(
     text: string,
@@ -2930,6 +2948,7 @@ export function detectDamageReactionTrigger(
           critFilter?: 'crit';
           hpBelowPct?: number;
           roleFilter?: ShipRoleCategory[];
+          allyStatusName?: string;
       }
     | undefined {
     const sentence = rawSentenceAround(text, pos);
@@ -2943,6 +2962,10 @@ export function detectDamageReactionTrigger(
               .split(/\s+or\s+/)
               .map((w) => ROLE_WORD_TO_CATEGORY[w.replace(/s$/, '')])
         : undefined;
+    // Read from the TAGGED sentence (tags are still present — rawSentenceAround only masks
+    // abbreviation periods), so the `<unit-skill>` boundary delimits the name exactly.
+    const statusM = allySubject ? DR_ALLY_STATUS_RE.exec(sentence) : null;
+    const allyStatusName = statusM ? resolveBuffName(statusM[1]) : undefined;
     const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
     if (allySubject ? DR_ALLY_CRIT_HIT_RE.test(scrubbed) : DR_CRIT_HIT_RE.test(scrubbed)) {
         const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
@@ -2951,6 +2974,7 @@ export function detectDamageReactionTrigger(
             critFilter: 'crit',
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
+            ...(allyStatusName ? { allyStatusName } : {}),
         };
     }
     if (
@@ -2962,6 +2986,7 @@ export function detectDamageReactionTrigger(
             trigger,
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
+            ...(allyStatusName ? { allyStatusName } : {}),
         };
     }
     return undefined;

@@ -914,19 +914,16 @@ exports[`kit fingerprints > Fuying 1`] = `
     "buff",
     "buff:active",
     "charge-changed",
-    "debuff",
   ],
   "richEnemy": [
     "buff",
     "buff:active",
     "charge-changed",
-    "debuff",
   ],
   "wounded": [
     "buff",
     "buff:active",
     "charge-changed",
-    "debuff",
   ],
 }
 `;

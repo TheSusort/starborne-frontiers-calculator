@@ -361,6 +361,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    own hits are on-attacked's job; an opposing-side target is never an ally.
  *    triggerCritFilter discriminates on the hit's own crit outcome (same contract as on-attacked);
  *    roleFilter (Graphite) matches the DAMAGED ally's role category via the optional roleOf lookup.
+ *    requireDamagedAllyStatus (#363 Fuying) requires the DAMAGED ally to be holding a named
+ *    status ("when an ally IN Stealth … is directly damaged") via the optional statusNamesOf
+ *    lookup; an ally whose statuses cannot be read never satisfies it (conservative, mirroring
+ *    roleFilter rather than requireDamagedAllyAdjacent's helper-absent-allows rule).
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
  *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not self)
@@ -421,11 +425,27 @@ export function registerReactiveListeners(args: {
      *  → all living same-side allies). Used to gate requireDamagedAllyAdjacent reactions. Optional:
      *  DPS/unit fixtures omit it (→ treat any ally as adjacent). */
     adjacentAllyIdsFor?: (ownerId: string) => string[];
+    /** #363 (Fuying): live SELF-status names held by an actor, keyed by actor id and
+     *  side-agnostic (the same read `selfBuffNamesForOwners` performs for either team) — gates
+     *  `requireDamagedAllyStatus` reactions against the DAMAGED ally. Optional: DPS/unit fixtures
+     *  omit it, and its absence makes the gate FAIL (never fire), mirroring `roleOf`'s
+     *  unknown-never-matches contract rather than `adjacentAllyIdsFor`'s absent-allows one — a
+     *  status gate that silently opened would restore the very defect it exists to fix. */
+    statusNamesOf?: (actorId: string) => string[];
     /** D-PR16: owner effective max HP resolver — gates Tenacity's incoming-damage-fraction
      *  filter. Optional: absent → the filter is skipped (no Tenacity in scope). */
     maxHpOf?: (ownerId: string) => number;
 }): void {
-    const { bus, perOwner, enqueue, isOpposing, roleOf, adjacentAllyIdsFor, maxHpOf } = args;
+    const {
+        bus,
+        perOwner,
+        enqueue,
+        isOpposing,
+        roleOf,
+        adjacentAllyIdsFor,
+        statusNamesOf,
+        maxHpOf,
+    } = args;
     // Same-side ally = NOT opposing AND not the owner itself (own events route to the
     // self-scoped triggers). For the player registration (opposing = enemy-side) this
     // is byte-identical to the old pattern.
@@ -1096,6 +1116,22 @@ export function registerReactiveListeners(args: {
                             ra.ability.requireDamagedAllyAdjacent &&
                             adjacentAllyIdsFor &&
                             !adjacentAllyIdsFor(ownerId).includes(e.targetId)
+                        ) {
+                            return;
+                        }
+                        // #363 Fuying R3/R4: fire only when the DAMAGED ally is currently holding
+                        // the named status ("when an ally IN Stealth … is directly damaged").
+                        // Being hit does not consume Stealth (owner-ruled), so the live read at
+                        // reaction time is the whole rule — no snapshot, no pre/post-hit ordering,
+                        // and no cap: every qualifying hit reacts, because the clause names none.
+                        // EXACT name match, so 'Attack Up I' is never satisfied by 'Attack Up II'.
+                        // Helper absent → the gate FAILS (unlike requireDamagedAllyAdjacent above,
+                        // which allows) — see statusNamesOf's contract. Pure read; the listener
+                        // stays enqueue-only.
+                        const requiredStatus = ra.ability.requireDamagedAllyStatus;
+                        if (
+                            requiredStatus !== undefined &&
+                            !(statusNamesOf?.(e.targetId) ?? []).includes(requiredStatus)
                         ) {
                             return;
                         }

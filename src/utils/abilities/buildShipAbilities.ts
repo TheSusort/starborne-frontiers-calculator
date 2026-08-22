@@ -3487,6 +3487,13 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 // engine's on-ally-attacked listener fires only when the damaged ally's
                 // role matches one of them.
                 if (reaction.roleFilter) ability.roleFilter = reaction.roleFilter;
+                // #363 (Fuying R3/R4): a named standing status the DAMAGED ally must hold
+                // ("when an ally IN Stealth … is directly damaged") → requireDamagedAllyStatus,
+                // enforced in the on-ally-attacked listener against that ally's live statuses.
+                // The parser only emits a canonical BUFFS name, so an unrecognised phrase leaves
+                // the field absent (un-gated, pre-#363 behaviour) rather than never firing.
+                if (reaction.allyStatusName)
+                    ability.requireDamagedAllyStatus = reaction.allyStatusName;
                 // Ally-damage-reaction BUFF grants land on the DAMAGED ally (spec-locked):
                 // Refine's recipient-less "grants Inc. Damage Down I" and Graphite's
                 // "grants the ally Repair Over Time III" both resolve via

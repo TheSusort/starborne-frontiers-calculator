@@ -3727,6 +3727,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             roleOf: (id) => roleByActorId.get(id),
             adjacentAllyIdsFor: (ownerId: string) =>
                 bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
+            // #363: live self-status names for `requireDamagedAllyStatus` (Fuying's "when an ally
+            // IN Stealth … is directly damaged"). The SAME closure serves both side
+            // registrations: `selfBuffNamesForOwners` keys 'self'-side statuses by the actor's own
+            // id and is side-agnostic (the read `isStealthed` and the targeting stealth-filter
+            // already share), so an enemy-side Fuying gates on her enemy-side allies' Stealth with
+            // no mirrored branch.
+            statusNamesOf: (actorId: string) => selfBuffNamesForOwners(statusEngine, [actorId]),
             // D-PR16: owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
             // id-keyed and side-agnostic, so the same closure serves both side registrations.
             maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),

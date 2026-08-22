@@ -1168,6 +1168,24 @@ export interface Ability {
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →
      *  any ally (existing behavior). */
     requireDamagedAllyAdjacent?: boolean;
+    /** #363 (Fuying R3/R4): an on-ally-attacked reactive fires only when the DAMAGED ally is
+     *  currently holding this NAMED status — "When an ally in Stealth within the active pattern
+     *  is directly damaged, this Unit inflicts Stasis". The name is a canonical `BUFFS` entry
+     *  (the parser resolves it from the trigger phrase's `<unit-skill>` tag and emits nothing
+     *  for an unrecognised name, so an absent field means today's un-gated behaviour).
+     *
+     *  Matched EXACTLY (not by substring) against the ally's live self-status names in the
+     *  listener, via registerReactiveListeners' `statusNamesOf`: 'Attack Up I' must not be
+     *  satisfied by 'Attack Up II'. An ally whose statuses cannot be read at all (no
+     *  `statusNamesOf` supplied — DPS/unit fixtures) never satisfies the gate, mirroring
+     *  `matchesRoleCategory`'s unknown-never-matches rule rather than
+     *  `requireDamagedAllyAdjacent`'s helper-absent-allows one: a status gate that silently
+     *  opened would reproduce the very defect this field fixes.
+     *
+     *  Being hit does NOT consume Stealth (owner-ruled 2026-08-22), so there is no pre/post-hit
+     *  ordering question — the damaged ally still holds the status when the reaction resolves,
+     *  and the reaction may fire on EVERY qualifying hit (the clause states no cap). */
+    requireDamagedAllyStatus?: string;
     /** D-PR16 Tenacity: gate an `on-attacked` reaction on the per-attack aggregate damage
      *  exceeding this fraction of the owner's effective max HP (e.g. 0.25). Absent → no gate
      *  (byte-identical for every existing on-attacked ability). */
