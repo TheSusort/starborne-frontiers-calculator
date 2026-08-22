@@ -3734,6 +3734,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // already share), so an enemy-side Fuying gates on her enemy-side allies' Stealth with
             // no mirrored branch.
             statusNamesOf: (actorId: string) => selfBuffNamesForOwners(statusEngine, [actorId]),
+            // #363 Task 9: the owner's ACTIVE support footprint, for the `patternScoped` reactive
+            // family's affected-ally gate ("when an ally within the active pattern is directly
+            // damaged / has their shield destroyed"). Threaded exactly like `adjacentAllyIdsFor`
+            // above — one closure resolving the OWNER's own side, so an enemy-side owner gates on
+            // its own side's footprint with no mirrored branch. It is the SAME resolver the
+            // recipient-side narrowing (`footprintFilteredRecipients`) already consumes for these
+            // abilities, so the two layers can never disagree about who is inside the pattern.
+            footprintAllyIdsFor: (ownerId: string) =>
+                bySide(isEnemySide(ownerId) ? 'enemy' : 'player').footprintAllyIdsFor(ownerId),
             // D-PR16: owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
             // id-keyed and side-agnostic, so the same closure serves both side registrations.
             maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),

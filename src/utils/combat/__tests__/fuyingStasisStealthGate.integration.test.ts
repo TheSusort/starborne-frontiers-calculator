@@ -27,9 +27,11 @@
  *     already set and is untouched here.
  *
  * WHAT THIS FILE DOES *NOT* ASSERT: that a Stealthed ally OUTSIDE her footprint fails to trigger
- * the reaction. No footprint gate exists on the `on-ally-attacked` damaged-ally axis today, and
- * adding one is not this task. The footprint reads below are PRECONDITIONS documenting the
- * fixture's geometry, not behaviour claims.
+ * the reaction. That gate arrived in Task 9 (`affectedAllyOutsideActivePattern`, as a family rule
+ * over three ships) and its arms live in `reactivePatternScopeGate.integration.test.ts`. The
+ * footprint reads below are PRECONDITIONS documenting the fixture's geometry, not behaviour claims,
+ * and the listener harness declares "no active support pattern" so the STATUS gate stays the only
+ * decider here — see `footprintAllyIdsFor` in `enqueuedFor`.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { detectDamageReactionTrigger } from '../../skillTextParser';
@@ -241,6 +243,14 @@ function enqueuedFor(opts: {
                 ? (id: string) => enemySideIds.has(id)
                 : (id: string) => id === 'striker',
         ...(opts.statusNamesOf ? { statusNamesOf: opts.statusNamesOf } : {}),
+        // #363 Task 9: this reactive is also `patternScoped`, and the footprint gate added there
+        // is CONSERVATIVE — with no resolver supplied at all it never fires, which would make
+        // every arm below pass or fail for the wrong reason (the five positive arms went red the
+        // moment that gate landed). `() => undefined` is the resolver's real answer for "this
+        // owner has no active support pattern", so it narrows nothing and leaves the STATUS gate —
+        // the only thing this file is about — as the sole decider. The footprint gate's own arms
+        // live in reactivePatternScopeGate.integration.test.ts.
+        footprintAllyIdsFor: () => undefined,
     });
     handBus.emit({
         type: 'attacked',

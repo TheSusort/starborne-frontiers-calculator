@@ -432,6 +432,28 @@ export function registerReactiveListeners(args: {
      *  unknown-never-matches contract rather than `adjacentAllyIdsFor`'s absent-allows one — a
      *  status gate that silently opened would restore the very defect it exists to fix. */
     statusNamesOf?: (actorId: string) => string[];
+    /** #363 Task 9: living same-side ids on `ownerId`'s ACTIVE support-pattern footprint — the
+     *  owner's own cell included whenever its pattern covers it (every non-`Not-Self` support
+     *  pattern does), which is what lets an owner's OWN shield-destroyed still self-react.
+     *  Gates the `patternScoped` reactive family on the AFFECTED-ALLY axis
+     *  (`affectedAllyOutsideActivePattern` below). Side-agnostic by key: the engine resolves the
+     *  owner's own side, so one closure serves both registrations.
+     *
+     *  Two distinct answers, deliberately NOT collapsed (the `lowestHpAllyIdFor` lesson — a
+     *  missing delegate and a delegate's real "nothing" answer must not be the same value):
+     *   - The DELEGATE IS ABSENT (this arg omitted: DPS-less unit fixtures) → no positional view
+     *     was supplied at all, so "within the active pattern" cannot be AFFIRMED and the gate is
+     *     NOT satisfied. Conservative, mirroring `statusNamesOf`/`roleOf` rather than
+     *     `adjacentAllyIdsFor`'s absent-allows rule: a pattern gate that silently opened wherever
+     *     the resolver is unwired would restore the very defect it exists to close.
+     *   - The delegate RETURNS `undefined` → a real answer: this owner has no active SUPPORT
+     *     pattern (or the board is non-positional), so there is no footprint to be inside and
+     *     nothing to narrow by. Pass-through, byte-identical to `footprintFilteredRecipients`'s
+     *     handling of the same resolver — and required by the owner ruling recorded at
+     *     `supportRecipients.ts` ("`undefined` means DO NOT NARROW … do not split it into two
+     *     outcomes", 2026-08-21). A fixture that wants the legacy team-wide reach must therefore
+     *     supply `() => undefined` explicitly, which is a real answer rather than an omission. */
+    footprintAllyIdsFor?: (ownerId: string) => string[] | undefined;
     /** D-PR16: owner effective max HP resolver — gates Tenacity's incoming-damage-fraction
      *  filter. Optional: absent → the filter is skipped (no Tenacity in scope). */
     maxHpOf?: (ownerId: string) => number;
@@ -444,6 +466,7 @@ export function registerReactiveListeners(args: {
         roleOf,
         adjacentAllyIdsFor,
         statusNamesOf,
+        footprintAllyIdsFor,
         maxHpOf,
     } = args;
     // Same-side ally = NOT opposing AND not the owner itself (own events route to the
@@ -451,6 +474,33 @@ export function registerReactiveListeners(args: {
     // is byte-identical to the old pattern.
     const isSameSideAlly = (actorId: string, ownerId: string): boolean =>
         !isOpposing(actorId) && actorId !== ownerId;
+    /**
+     * #363 Task 9 — "within the active pattern" on the AFFECTED-ALLY axis.
+     *
+     * A reactive clause that names the pattern scopes its TRIGGER, not its recipient: "when an
+     * ally WITHIN THE ACTIVE PATTERN is directly damaged / has their shield destroyed …". So the
+     * unit whose damage/shield-loss is being watched must itself stand on the owner's support
+     * footprint. Owner-ruled 2026-08-22, as a FAMILY rule — no ship is named here.
+     *
+     * Opt-in on `patternScoped === true`, which the parser already sets from the clause's own
+     * words. Across all 149 corpus ships exactly four reactive abilities carry it on an
+     * affected-ally trigger (two on one supporter's `on-ally-attacked`, one on another's, two on a
+     * third's `on-ally-shield-destroyed`); every other reactive short-circuits on the first line
+     * and never even consults the resolver, so this is inert for them and costs them nothing.
+     *
+     * Reads only — the listener stays enqueue-only. Fallbacks: see `footprintAllyIdsFor`'s doc.
+     */
+    const affectedAllyOutsideActivePattern = (
+        ability: ReactiveAbility['ability'],
+        ownerId: string,
+        affectedId: string
+    ): boolean => {
+        if (ability.patternScoped !== true) return false; // opt-in: every other reactive untouched
+        if (footprintAllyIdsFor === undefined) return true; // no positional view → not satisfied
+        const footprint = footprintAllyIdsFor(ownerId);
+        if (footprint === undefined) return false; // no active support pattern → nothing to narrow
+        return !footprint.includes(affectedId);
+    };
     for (const { ownerId, reactiveAbilities } of perOwner) {
         for (const ra of reactiveAbilities) {
             const intent: Intent = { ability: ra.ability, sourceSlot: ra.sourceSlot, ownerId };
@@ -1040,11 +1090,18 @@ export function registerReactiveListeners(args: {
                         // filter (footprintFilteredRecipients) keeps it pattern-scoped, and the
                         // owner sits in its own pattern's origin cell. Route the grant/cleanse to
                         // that unit via damagedAllyId (reused from on-ally-debuffed/on-ally-crit).
-                        if (!isOpposing(e.victimId))
-                            enqueue({
-                                ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.victimId },
-                            });
+                        if (isOpposing(e.victimId)) return;
+                        // #363 Task 9: the clause scopes its TRIGGER — the unit whose shield was
+                        // destroyed must stand on the owner's own support footprint. The owner's
+                        // cell is part of that footprint for every non-`Not-Self` support pattern,
+                        // so the self-reaction the comment above describes is preserved.
+                        if (affectedAllyOutsideActivePattern(ra.ability, ownerId, e.victimId)) {
+                            return;
+                        }
+                        enqueue({
+                            ...intent,
+                            eventCtx: { ...intent.eventCtx, damagedAllyId: e.victimId },
+                        });
                     });
                     break;
                 case 'on-debuff-resisted':
@@ -1133,6 +1190,12 @@ export function registerReactiveListeners(args: {
                             requiredStatus !== undefined &&
                             !(statusNamesOf?.(e.targetId) ?? []).includes(requiredStatus)
                         ) {
+                            return;
+                        }
+                        // #363 Task 9: "…within the active pattern…" — the DAMAGED ally must stand
+                        // on the owner's own support footprint. Family-wide, opt-in on
+                        // `patternScoped`; see affectedAllyOutsideActivePattern.
+                        if (affectedAllyOutsideActivePattern(ra.ability, ownerId, e.targetId)) {
                             return;
                         }
                         // Per-event intent: counterTargetId routes counter-inflictions to the
@@ -2681,10 +2744,16 @@ export function reactiveRecipients(
  * by-design throw. So the three early returns are the guarantee; if you add a fourth caller, resolve
  * the selector there too.
  *
- * AEGIS/Cultivator caveat: in their wording the pattern scopes the TRIGGER ("when an ally within
- * the active pattern is …"), not the recipient. Filtering their recipients is an approximation —
- * but it is exactly the behaviour that shipped before this rule, so flagging them is status-quo,
- * not a new claim.
+ * AEGIS/Cultivator caveat, RESOLVED by #363 Task 9: in their wording the pattern scopes the
+ * TRIGGER ("when an ally within the active pattern is …"), not the recipient. Narrowing their
+ * recipients here was an approximation of that — an exact one, as it happens, because both
+ * abilities target the affected ally itself, so `baseRecipients` is `[damagedAllyId]` and
+ * intersecting it with the footprint answers precisely the trigger question. The gate now ALSO
+ * lives where the clause puts it (`affectedAllyOutsideActivePattern`, in the listener), reading the
+ * SAME footprint resolver, so the two layers agree by construction. This filter is kept, not
+ * replaced: it is what scopes the abilities whose clause names the pattern for their RECIPIENTS
+ * (Graphite's ally charge grant) and it stays the only line of defence for any future
+ * pattern-scoped reactive whose recipient is not the affected ally.
  */
 export function footprintFilteredRecipients(
     intent: Intent,
