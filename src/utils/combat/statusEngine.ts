@@ -1,5 +1,6 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
 import { Condition, SkillSlot } from '../../types/abilities';
+import type { FactionKey } from '../../constants/factions';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
 import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
@@ -73,6 +74,12 @@ interface AbilityStatusBase {
      *  statusEngine unit-test fixtures need not restate it. For attacker-only runs this is always
      *  ['attacker'] → zero churn vs the pre-Task-5 owner-routing. */
     recipients?: string[];
+    /** #363 (Fuying): recipient FACTION scope copied off the source `Ability.factionFilter`.
+     *  `recipients` above is resolved at actor CONSTRUCTION and knows nothing about factions, so
+     *  the filter rides the status and is intersected in at APPLICATION time (playerTurn's
+     *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
+     *  in scope. Absent → no faction narrowing, byte-identical for every other ship. */
+    factionFilter?: FactionKey[];
 }
 
 /**

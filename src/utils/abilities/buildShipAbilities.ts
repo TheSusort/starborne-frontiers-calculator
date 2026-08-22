@@ -18,6 +18,7 @@ import {
     ScalingRule,
     ControlEffect,
     IncomingCondition,
+    FACTION_FILTERABLE_TARGETS,
 } from '../../types/abilities';
 import { getShipSkillRows, getSkillRowForSlot } from '../ship/skillRows';
 import {
@@ -123,6 +124,7 @@ import {
     detectTransformToDot,
     detectProtectionTransformToDot,
     detectConvertDot,
+    detectGrantFactionScope,
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
     parseWhileShieldedFlatDefence,
@@ -3234,6 +3236,21 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const conditions = rowText ? detectGrantConditions(rowText, buff.buffName) : [];
         if (conditions.length) {
             ability.conditions = conditions;
+        }
+        // #363 (Fuying): recipient FACTION scope on an ally-scoped grant ("grants Tianchao allies
+        // Stealth"). Attached ONLY when the clause actually names one, so every other ship's
+        // ability object stays byte-identical (verified corpus-wide: the detector fires on Fuying
+        // alone). Gated on an ally-scoped target — a self-grant has no recipient set to narrow,
+        // and a faction predicate on it would either be a no-op or mute the caster's own buff.
+        //
+        // occurrenceIndex is left at its default 0: `mergeBuff` works from a deduped
+        // SelectedGameBuff (keyed name|target|source), so it has no per-<unit-skill>-segment
+        // occurrence to pass. That only matters for a buff name granted TWICE in one clause with
+        // two DIFFERENT faction scopes — no corpus clause does that (Fuying's Stealth appears once
+        // per row), and both grants of such a pair would read the first span's answer.
+        if (rowText && FACTION_FILTERABLE_TARGETS.has(target)) {
+            const factionFilter = detectGrantFactionScope(rowText, buff.buffName);
+            if (factionFilter) ability.factionFilter = factionFilter;
         }
         // Reactive trigger (crit / start-of-round / bomb-detonate) detected on this buff's
         // clause: route through the engine's trigger machinery instead of a gating condition.

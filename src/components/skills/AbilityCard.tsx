@@ -8,9 +8,11 @@ import {
     ModifierChannel,
     SkillSlot,
     LIVE_TRIGGERS,
+    FACTION_FILTERABLE_TARGETS,
 } from '../../types/abilities';
 import { DoTType, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { ShipRoleCategory } from '../../constants/shipTypes';
+import { FACTIONS, FACTION_KEYS, type FactionKey } from '../../constants/factions';
 import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
@@ -153,6 +155,13 @@ const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
     { value: 'DEBUFFER', label: 'Debuffer' },
     { value: 'SUPPORTER', label: 'Supporter' },
 ];
+
+// #363: recipient FACTION scope options for an ally-scoped grant ("grants Tianchao allies
+// Stealth"). Derived from FACTION_KEYS so a new faction cannot be forgotten here.
+const FACTION_FILTER_OPTIONS: { value: FactionKey; label: string }[] = FACTION_KEYS.map((key) => ({
+    value: key,
+    label: FACTIONS[key].name,
+}));
 
 const PRE_COMBAT_STAT_OPTIONS: { value: 'hp' | 'attack' | 'crit' | 'hacking'; label: string }[] = [
     { value: 'hp', label: 'HP' },
@@ -960,8 +969,41 @@ export const AbilityCard: React.FC<Props> = ({
                 label="Target"
                 value={ability.target}
                 options={TARGET_OPTIONS}
-                onChange={(value) => onChange({ ...ability, target: value as AbilityTarget })}
+                onChange={(value) => {
+                    // #363: factionFilter is a RECIPIENT scope, so it hangs off the TARGET axis
+                    // (not the trigger axis roleFilter uses). Strip it when the new target cannot
+                    // carry one — a faction predicate on 'self' or an enemy scope is meaningless,
+                    // and a stale key would silently narrow nothing while looking meaningful.
+                    const target = value as AbilityTarget;
+                    const { factionFilter, ...rest } = ability;
+                    onChange({
+                        ...rest,
+                        ...(FACTION_FILTERABLE_TARGETS.has(target) && factionFilter !== undefined
+                            ? { factionFilter }
+                            : {}),
+                        target,
+                    });
+                }}
             />
+
+            {FACTION_FILTERABLE_TARGETS.has(ability.target) && (
+                <CheckboxGroup
+                    label="Recipient faction filter"
+                    helpLabel="Empty = any ally. Otherwise only allies of the chosen factions receive this, on top of the ship's targeting pattern."
+                    options={FACTION_FILTER_OPTIONS}
+                    values={ability.factionFilter ?? []}
+                    onChange={(values) => {
+                        // Empty selection normalizes to an ABSENT key (any ally), never an empty
+                        // array, so the stored ability stays canonical — same rule as roleFilter.
+                        if (values.length === 0) {
+                            const { factionFilter: _removed, ...rest } = ability;
+                            onChange(rest as Ability);
+                        } else {
+                            onChange({ ...ability, factionFilter: values as FactionKey[] });
+                        }
+                    }}
+                />
+            )}
 
             {(ability.type === 'buff' ||
                 ability.type === 'debuff' ||

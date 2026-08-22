@@ -7,6 +7,7 @@ import {
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { matchesRoleCategory } from '../../constants/shipTypes';
+import type { FactionKey } from '../../constants/factions';
 import {
     TOXIC_OVERFLOW,
     SPREAD_CORROSION_TIER,
@@ -385,6 +386,12 @@ function registerActorAbilityStatuses(
                 conditions: liveGateConditions(ability.conditions),
                 casterId: ownerId,
                 recipients,
+                // #363 (Fuying): carry the recipient FACTION scope onto the status. `recipients`
+                // above is the roster-wide ally fan-out; the faction intersection happens at
+                // APPLICATION time in playerTurn (where the actor→faction map is in scope), not
+                // here — this function runs at actor construction. Attached only when the ability
+                // carries one, so every other ship's status object is byte-identical.
+                ...(ability.factionFilter ? { factionFilter: ability.factionFilter } : {}),
             } as const;
             let status: RegisteredAbilityStatus;
             if (accumulating) {
@@ -649,6 +656,11 @@ export interface EnemyActorInput {
      *  (Isha/Nayra reciprocal Override gate). Absent → not added to the name map → the gate
      *  falls back to assume-met (byte-identical). */
     name?: string;
+    /** #363: this enemy attacker's faction, for `factionFilter`'d ally scopes (factionByActorId).
+     *  Mirrors `role`'s contract: absent → unknown faction → never matches a filter
+     *  (conservative), so an enemy-side Fuying's Tianchao grant reaches only the enemy allies
+     *  whose faction the caller supplied. */
+    faction?: FactionKey;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -1294,6 +1306,10 @@ export interface CombatEngineInput {
     /** SP-F F4: FOCUS actor's ship name, for the live `ally-on-team` roster check (Isha/Nayra
      *  reciprocal Override gate). Absent → assume-met fallback (byte-identical). */
     name?: string;
+    /** #363: FOCUS actor's faction, for `factionFilter`'d ally scopes (factionByActorId). Team
+     *  actors carry their own `faction` on TeamActorInput. Absent (manual stats / no ship picked)
+     *  → unknown faction → the focus never matches a faction filter (conservative). */
+    faction?: FactionKey;
     /** The player actor id that heals/shields route to and consume against. Must be a player
      *  actor id (focus or a team actor). Required by `mode: 'healing'`; optional under
      *  `mode: 'battle'` (battle mode otherwise anchors the heal target to the focus actor, and
@@ -1391,6 +1407,9 @@ export interface CombatEngineInput {
         /** SP-F F4: this enemy attacker's ship name — see EnemyActorInput.name (live
          *  `ally-on-team` roster check). Absent → assume-met fallback. */
         name?: string;
+        /** #363: this enemy attacker's faction — see EnemyActorInput.faction (factionByActorId,
+         *  side-agnostic by key). Absent → unknown faction → never matches a filter. */
+        faction?: FactionKey;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
@@ -3601,6 +3620,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     if (input.name) nameByActorId.set(focusActorId, input.name);
     for (const t of teamActors) if (t.name) nameByActorId.set(t.id, t.name);
     for (const e of input.enemyAttackers ?? []) if (e.name) nameByActorId.set(e.id, e.name);
+    // #363: actor id → faction, for `factionFilter`'d ally scopes (Fuying's Tianchao Stealth
+    // grant). Side-agnostic BY KEY, exactly like roleByActorId/nameByActorId above: seeded from
+    // the focus actor, every walked team actor, and every enemy attacker, so an ENEMY-side Fuying
+    // scopes to enemy Tianchao allies with no mirrored branch and no `side` check. An actor absent
+    // from this map has an UNKNOWN faction and never matches a filter (conservative) — the same
+    // contract roleByActorId/matchesRoleCategory already run on. Populated only by callers that
+    // supply factions (the team sim); left empty in single-ship DPS / manual runs, where no ally
+    // exists to narrow anyway.
+    const factionByActorId = new Map<string, FactionKey>();
+    if (input.faction) factionByActorId.set(focusActorId, input.faction);
+    for (const t of teamActors) if (t.faction) factionByActorId.set(t.id, t.faction);
+    for (const e of input.enemyAttackers ?? [])
+        if (e.faction) factionByActorId.set(e.id, e.faction);
+    const factionOf = (id: string): FactionKey | undefined => factionByActorId.get(id);
     // Enemy-side reactive per-owner list (enemy-team PR1): every enemy ATTACKER's own reactive
     // abilities (e.g. Chakara's start-of-round self Attack Up) — before this they were
     // partitioned onto the enemy runtime but never listened for.
@@ -7815,6 +7848,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // adjacent enemies, team-symmetric for free (bySide handles both directions).
                 adjacentEnemyIdsFor: (anchorId: string): string[] =>
                     bySide(isEnemySide(anchorId) ? 'enemy' : 'player').adjacentAllyIdsFor(anchorId),
+                // #363: actor id → faction, for the recipient FACTION intersection on a
+                // `factionFilter`'d ally scope (Fuying's "grants Tianchao allies Stealth").
+                // The SAME side-agnostic map the roster is seeded into above — no `a.side`
+                // dispatch, so an enemy-side Fuying scopes to enemy Tianchao allies for free.
+                factionOf,
                 // SP-4c-2b: every victim-derived member lives in this ONE conditional spread.
                 // `tgt` is absent exactly when an ally-targeted cast resolved nobody on the
                 // opposing side (contract.md §B) — omitting these fields (rather than emitting

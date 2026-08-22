@@ -9,6 +9,7 @@ import {
 } from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import type { AffinityName } from '../../types/ship';
+import type { FactionKey } from '../../constants/factions';
 import type { ParsedPattern } from '../targetingParser';
 import type { ConditionContext } from '../abilities/evaluateConditions';
 import {
@@ -736,6 +737,15 @@ export interface PlayerTurnArgs {
      *  itself inert without a resolved `targetId`, which only a positional/engine-scoped caller ever
      *  supplies in production, so the fallback is exercised only by tests that hand-build args. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    /** #363 (Fuying): actor id → faction, for the recipient FACTION intersection applied to a
+     *  `factionFilter`'d ally scope ("grants Tianchao allies Stealth"). Supplied by engine.ts's
+     *  `buildTurnArgs` from the side-agnostic `factionByActorId` map, so an ENEMY-side caster
+     *  narrows to its OWN side's matching allies with no mirrored branch. Returns `undefined` for
+     *  an actor whose faction the caller never supplied — an unknown faction NEVER matches a
+     *  filter (conservative, mirroring `roleOf`/`matchesRoleCategory`). Absent entirely
+     *  (standalone/unit-test callers, single-ship DPS) → byte-identical for every ability with no
+     *  `factionFilter`, which today is every ability but Fuying's Stealth grant. */
+    factionOf?: (id: string) => FactionKey | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,7 +1384,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         target: Ability['target'],
         base: string[],
         // Omitted ⇒ cast-slot (always footprint-scoped), matching every pre-existing caller.
-        source?: { ability: Ability; fromPassive: boolean }
+        source?: { ability: Ability; fromPassive: boolean },
+        // #363: recipient faction scope for a caller that has NO `Ability` object in hand. The
+        // per-slot timed-status loop is one: it carries the filter on the STATUS (copied off the
+        // source ability at registration — see engine.ts's `registerActorAbilityStatuses`),
+        // because by application time the ability itself is no longer in scope there. When both
+        // are supplied the explicit one wins; in practice exactly one is ever present.
+        factionFilter?: FactionKey[]
     ): string[] =>
         resolveSupportRecipients({
             target,
@@ -1384,6 +1400,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 source === undefined || scopedByFootprint(source.ability, source.fromPassive)
                     ? footprintAllyIds
                     : undefined,
+            // #363: the faction predicate is INDEPENDENT of the footprint axis above — a passive
+            // that escapes the pattern still honours its faction scope, and vice versa.
+            factionFilter: factionFilter ?? source?.ability.factionFilter,
+            factionOf: args.factionOf,
         });
 
     // SP-4e: live HP fraction of a same-side actor, bound to this turn's healing ctx / live
@@ -2358,7 +2378,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
-        for (const rid of supportRecipients('all-allies', status.recipients ?? [actor.id])) {
+        // #363: the status's own recipient FACTION scope, copied off the source ability at
+        // registration. This is the CAST path for a faction-scoped grant (Fuying's "grants
+        // Tianchao allies Stealth" is a finite-duration buff → a timed-by-slot status), so the
+        // intersection has to happen HERE — the ability object is out of scope by now, which is
+        // why the filter rides the status rather than being read through `source`.
+        for (const rid of supportRecipients(
+            'all-allies',
+            status.recipients ?? [actor.id],
+            undefined,
+            status.factionFilter
+        )) {
             // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
             // single-ally grants, and all-allies grants (each recipient guarded independently);
             // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.

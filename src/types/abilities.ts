@@ -1,4 +1,5 @@
 import type { ShipRoleCategory } from '../constants/shipTypes';
+import type { FactionKey } from '../constants/factions';
 import { EnemyBaseClass, DoTType, StackTrigger, ParsedBuffEffects } from './calculator';
 
 export type SkillSlot = 'active' | 'charged' | 'passive';
@@ -112,6 +113,20 @@ export type AbilityTarget =
 //                           live effective speed (global selector, resolved LIVE at drain — no
 //                           memo needed, Chakara's co-located clause is a self-buff that never
 //                           changes an enemy's speed).
+
+/** #363: the ally-scoped targets a recipient `factionFilter` can meaningfully narrow — the
+ *  plural ally scopes plus plain `'ally'` (which resolves to the caster's whole footprint on the
+ *  cast path, see `recipientsFor` in playerTurn.ts). Deliberately EXCLUDES `'self'` (the caster
+ *  is its own recipient; a faction predicate on it is either a no-op or a self-mute) and
+ *  `'lowest-hp-ally'` (a single TEXT-NAMED recipient — no corpus clause combines a named
+ *  selector with a faction word, and that path never routes through the faction intersection).
+ *  Shared by the parser/build wiring and the skill editor so both agree on which targets can
+ *  carry the key. */
+export const FACTION_FILTERABLE_TARGETS: ReadonlySet<AbilityTarget> = new Set<AbilityTarget>([
+    'ally',
+    'all-allies',
+    'adjacent-allies',
+]);
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
@@ -1080,6 +1095,19 @@ export interface Ability {
      *  ShipTypeName — 'DEBUFFER' matches every DEBUFFER_* variant). Absent → any
      *  ally. A filter with an UNKNOWN ally role never matches (conservative). */
     roleFilter?: ShipRoleCategory[];
+    /** #363 (Fuying): recipient FACTION filter for an ally-scoped grant — "grants Tianchao
+     *  allies Stealth". Applied as an INTERSECTION after footprint narrowing
+     *  (`resolveSupportRecipients`), so it composes with the pattern rather than replacing it.
+     *  Absent → any ally.
+     *
+     *  An actor whose faction is UNKNOWN never matches (conservative — owner-approved
+     *  2026-08-22, mirroring `matchesRoleCategory`). Only manually-configured actors lack a
+     *  faction; single-ship DPS has no allies at all, and every team-sim actor is derived from
+     *  a picked ship.
+     *
+     *  Typed `FactionKey`, NOT `FactionName` — the latter is `string` (see factions.ts), so a
+     *  typo'd 'TIANCHOA' would compile and, under the rule above, reach nobody. */
+    factionFilter?: FactionKey[];
     /** D-PR14 Bulwark: this reactive applies at most once per round per (owner, ability).
      *  Gated executor-side via IntentExecContext.oncePerRoundConsumed (check BEFORE the
      *  proc draw, mark only on a successful proc). Absent → no per-round limit.

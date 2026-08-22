@@ -20,6 +20,7 @@ import {
     ReactiveScalingCountSource,
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
+import { FACTIONS, FACTION_KEYS, type FactionKey } from '../constants/factions';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 
@@ -5696,6 +5697,46 @@ function detectGrantScope(
     }
     if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
     return 'self';
+}
+
+// #363 (Fuying): faction words appear in the corpus in TWO roles, and only one is a recipient
+// scope. Measured over all 149 ships (docs/ship-skills.csv, 2026-08-22): 4 recipient-scoped
+// clauses (all Fuying — her active Stealth grant plus the three refit tiers of her damage-
+// reduction aura) vs 31 where the faction is part of a BUFF NAME ("Tianchao Precision II",
+// "XAOC Swiftness III", "Binderburg Resilience III", "Everliving Regeneration II",
+// "Gelecek Contagion II").
+//
+// The discriminator is the following noun: a scope reads "<Faction> allies", a name reads
+// "<Faction> <Something-else>". Requiring `all(y|ies)` IMMEDIATELY after the faction word keeps
+// all 31 buff-name clauses out with no ship-name special-casing. Note that "allies" appearing
+// anywhere later in the clause is NOT enough — Los's "grants XAOC Swiftness III to all allies"
+// carries both the faction-named buff and a team receiver, and must not read as a faction scope.
+const FACTION_SCOPE_RES: readonly (readonly [FactionKey, RegExp])[] = FACTION_KEYS.map(
+    (key) =>
+        [key, new RegExp(`\\b${escapeRegExp(FACTIONS[key].name)}\\s+all(?:y|ies)\\b`, 'i')] as const
+);
+
+/**
+ * Faction scope on a buff GRANT's recipient phrase, or undefined when the clause names none.
+ *
+ * Reads the SAME span `detectGrantScope` routes on (`resolveBuffClause` → `buffGrantSpan`), so
+ * the scope and its faction can never disagree about which clause they describe. Scanning the
+ * whole skill text instead would let a sibling sentence's faction leak onto this grant.
+ */
+export function detectGrantFactionScope(
+    skillText: string,
+    buffName: string,
+    occurrenceIndex = 0
+): FactionKey[] | undefined {
+    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    const clause = stripConditionClauses(resolved);
+    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), occurrenceIndex);
+    const { subject, object } = buffGrantSpan(clause, buffStart === -1 ? clause.length : buffStart);
+    // A bestowing verb names its receiver in the OBJECT; a receiving verb ("gains") in the
+    // SUBJECT. Scan both — which one carries it is the verb's business, not ours.
+    const span = `${subject} ${object}`;
+    const hits = FACTION_SCOPE_RES.filter(([, re]) => re.test(span)).map(([key]) => key);
+    return hits.length > 0 ? hits : undefined;
 }
 
 // "all enemies adjacent to X" must NOT match the plain all-enemies widen. Two flavours:

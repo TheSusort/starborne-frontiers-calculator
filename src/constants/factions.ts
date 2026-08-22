@@ -60,6 +60,20 @@ export type FactionKey = keyof typeof FACTION_DEFS;
 /** Runtime companion to `FactionKey`, for validation at trust boundaries. */
 export const FACTION_KEYS = Object.keys(FACTION_DEFS) as readonly FactionKey[];
 
+/**
+ * Narrows a loose faction string (`Ship.faction`, which is `FactionName` = `string`) to a real
+ * `FactionKey`, or `undefined` when it names no known faction.
+ *
+ * #363: the boundary where imported/stored ship data becomes engine input. An unrecognised value
+ * must NOT be cast through — a `factionFilter` treats an unknown faction as "never matches", so a
+ * blind cast would silently produce a scope that reaches nobody instead of an honest "unknown".
+ */
+export function asFactionKey(faction: string | undefined): FactionKey | undefined {
+    return faction !== undefined && (FACTION_KEYS as readonly string[]).includes(faction)
+        ? (faction as FactionKey)
+        : undefined;
+}
+
 // Unchanged, and deliberately not migrated by this task: `FactionName` is `string` because
 // FACTIONS is annotated. Its existing consumers keep working exactly as before.
 export type FactionName = keyof typeof FACTIONS;

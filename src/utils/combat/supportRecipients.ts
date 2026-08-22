@@ -1,8 +1,10 @@
 import type { AbilityTarget } from '../../types/abilities';
+import type { FactionKey } from '../../constants/factions';
 import type { CombatActor } from './state';
 
 /**
- * Narrow ally-targeted support recipients to a friendly pattern footprint.
+ * Narrow ally-targeted support recipients to a friendly pattern footprint, then (#363) to a
+ * recipient FACTION scope.
  *
  * When `footprintAllyIds` is omitted, returns `baseRecipients` unchanged (legacy /
  * non-positional callers). When supplied, every target type is intersected with the footprint.
@@ -12,6 +14,13 @@ export function resolveSupportRecipients(args: {
     casterId: string;
     baseRecipients: string[];
     footprintAllyIds?: string[];
+    /** #363: intersect with recipients of these factions. Absent (or empty) → no faction
+     *  narrowing, byte-identical to every pre-#363 caller. */
+    factionFilter?: FactionKey[];
+    /** Actor id → faction. `undefined` for an actor whose faction is unknown, which NEVER
+     *  matches a filter (conservative). Absent reader + present filter → nobody matches, which
+     *  is the same conservative answer. */
+    factionOf?: (id: string) => FactionKey | undefined;
 }): string[] {
     // SP-4e: a named single-recipient selector is resolved by the CALLER (it needs live HP, which
     // this helper has no access to) via `lowestHpAllyRecipients` below, and the caller USES that
@@ -36,7 +45,7 @@ export function resolveSupportRecipients(args: {
         );
     }
 
-    const { footprintAllyIds, baseRecipients } = args;
+    const { footprintAllyIds, baseRecipients, factionFilter, factionOf } = args;
     // ⚠️ `undefined` means "DO NOT NARROW", and it deliberately does NOT distinguish "this pattern
     // reaches no ally" from "no pattern was threaded here". Kept as-is by owner ruling 2026-08-21;
     // do not split it into two outcomes.
@@ -49,10 +58,22 @@ export function resolveSupportRecipients(args: {
     // placement-warning block) — an ally-targeted support clause reaches EVERY same-side actor,
     // the caster included. Intended for now; it narrows on its own once real team-actor patterns
     // are threaded into the adapter.
-    if (footprintAllyIds === undefined) return baseRecipients;
+    const afterFootprint =
+        footprintAllyIds === undefined
+            ? baseRecipients
+            : ((allowed) => baseRecipients.filter((id) => allowed.has(id)))(
+                  new Set(footprintAllyIds)
+              );
 
-    const allowed = new Set(footprintAllyIds);
-    return baseRecipients.filter((id) => allowed.has(id));
+    // #363: faction narrowing composes ON TOP of the footprint — the pattern says which allies
+    // the cast reaches, the faction says which of those qualify. An empty filter array is treated
+    // as absent (no narrowing), matching roleFilter's canonical-absent convention.
+    if (!factionFilter || factionFilter.length === 0) return afterFootprint;
+    const wanted = new Set<FactionKey>(factionFilter);
+    return afterFootprint.filter((id) => {
+        const f = factionOf?.(id);
+        return f !== undefined && wanted.has(f);
+    });
 }
 
 /**
