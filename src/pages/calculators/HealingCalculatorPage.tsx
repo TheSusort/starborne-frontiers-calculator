@@ -623,9 +623,17 @@ const HealingCalculatorPage: React.FC = () => {
                 // pressure on a spread board and making defensive placement inert against the enemy
                 // side. Undefined for a manual enemy (or an unparseable kit), and the adapter's
                 // synthetic front/base fallback then applies.
-                const targeting = targetingOf(e.shipId ? getShipById(e.shipId) : undefined);
+                const enemyShip = e.shipId ? getShipById(e.shipId) : undefined;
+                const targeting = targetingOf(enemyShip);
                 return {
                     id: e.id,
+                    // #363: this enemy's own faction — mirrors how the player-side team-ship/
+                    // target-ship branches above already thread `faction: asFactionKey(ship.
+                    // faction)`. Without this an ENEMY-side Fuying grants Stealth to nobody
+                    // (unknown faction never matches a filter), the opposite-direction defect
+                    // from those branches missing it. A manual enemy (no `shipId`) stays
+                    // unknown-faction, same as before.
+                    faction: asFactionKey(enemyShip?.faction),
                     stats: {
                         attack: e.attack,
                         crit: e.crit,

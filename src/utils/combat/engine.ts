@@ -112,7 +112,7 @@ import {
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
-import { allyHpFraction, lowestHpAllyRecipients } from './supportRecipients';
+import { allyHpFraction, lowestHpAllyRecipients, narrowByFaction } from './supportRecipients';
 import { consumeExposed, exposedIncomingPct } from './exposedStatus';
 import {
     HIT_MITIGATION_DOT_ROUNDS,
@@ -217,7 +217,12 @@ function registerActorAbilityStatuses(
     // carve-out falls back to [] — the owner is the one answer that selector forbids (see the
     // fence's own comment at the recipients computation below). Irrelevant for every
     // non-carve-out status.
-    healTargetId?: string
+    healTargetId?: string,
+    // #363: actor id → faction, for `factionFilter`'d ally scopes (site 3 of the four-site
+    // sweep — the aura/accumulating registration fan-out below). Optional so every caller that
+    // predates #363 (and every fixture that omits it) keeps the un-narrowed behaviour;
+    // `narrowByFaction` treats an absent reader the same as an absent filter.
+    factionOf?: (id: string) => FactionKey | undefined
 ): {
     timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
     timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
@@ -446,11 +451,22 @@ function registerActorAbilityStatuses(
             // only stores aura/accumulating internally; timed are no-ops there).
             if (side === 'enemy') {
                 // Enemy side: single registration (recipientId irrelevant — enemy maps singular).
+                // No faction narrowing here — an enemy-side status is a debuff on the OPPOSING
+                // side, not an ally-scoped grant, so `factionFilter` (which only ever appears on
+                // an ally-targeted buff) has nothing to intersect against on this branch.
                 pushFor('enemy', status);
             } else {
                 // `recipients` is the locally-computed list (always defined) — use it directly
                 // rather than status.recipients (typed optional through the union).
-                for (const rid of recipients) pushFor(rid, status);
+                // #363: narrow to `ability.factionFilter` (site 3 of the four-site sweep) —
+                // same semantics as playerTurn.ts's cast-path loop (site 1), intersecting AFTER
+                // the roster-wide fan-out computed above. This affects the aura/accumulating
+                // stores this function actually populates; the parallel `timedSelfBySlot` array
+                // built above still carries the UN-narrowed `recipients` on the status object —
+                // its own consumers (playerTurn's cast loop, seedPassiveTimedStatuses) apply the
+                // same narrowing themselves at their own application time.
+                for (const rid of narrowByFaction(recipients, ability.factionFilter, factionOf))
+                    pushFor(rid, status);
             }
         }
     }
@@ -476,7 +492,11 @@ function seedPassiveTimedStatuses(
     statusEngine: ReturnType<typeof createStatusEngine>,
     bus: CombatEventBus,
     enemyType: EnemyBaseClass | undefined,
-    round: number
+    round: number,
+    // #363: actor id → faction, for `factionFilter`'d ally scopes (Fuying-shaped passive-slot
+    // grant). Optional so test fixtures that omit it get the pre-#363 unnarrowed behaviour
+    // (`narrowByFaction` treats an absent filter as absent regardless of this reader).
+    factionOf?: (id: string) => FactionKey | undefined
 ): void {
     for (const rt of runtimes) {
         const seedCtx = buildActorConditionContext(statusEngine, rt.actor.id, {
@@ -492,7 +512,14 @@ function seedPassiveTimedStatuses(
             if (!conditionsMet(status.conditions, seedCtx)) continue;
             // recipients is populated by registerActorAbilityStatuses for every timed-by-slot
             // status; the [rt.actor.id] fallback only guards test fixtures that omit it.
-            for (const rid of status.recipients ?? [rt.actor.id]) {
+            // #363: narrow to the status's own recipient FACTION scope (site 2 of the
+            // four-site sweep) — the same intersection playerTurn.ts's cast-path loop applies,
+            // here for a passive-slot grant seeded at combat start instead of a firing cast.
+            for (const rid of narrowByFaction(
+                status.recipients ?? [rt.actor.id],
+                status.factionFilter,
+                factionOf
+            )) {
                 // Barrier Recharging: same gate as the cast-path loop (playerTurn.ts) and the
                 // reactive path (triggers.ts), for symmetry. Corpus-unreachable today — no
                 // passive-slot grant currently applies Barrier Recharging before this seed runs
@@ -676,9 +703,12 @@ export function buildEnemyPlayerActorRuntime(
         // of leaking onto the player team.
         enemyIds: string[];
         enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
+        /** #363: actor id → faction (side-agnostic by key — the same map runCombat threads to
+         *  the player-side registration calls), for this enemy's `factionFilter`'d ally scopes. */
+        factionOf?: (id: string) => FactionKey | undefined;
     }
 ): PlayerActorRuntime {
-    const { statusEngine, enemyIds, enemyDebuffLookup } = ctx;
+    const { statusEngine, enemyIds, enemyDebuffLookup, factionOf } = ctx;
 
     // Manual flat-card enemy (no shipSkills): synthesize a single basic-attack active slot
     // (100% multiplier, 1 hit, crit-eligible) so the runPlayerTurn walk produces byte-identical
@@ -717,7 +747,9 @@ export function buildEnemyPlayerActorRuntime(
         castSkills,
         statusEngine,
         e.id,
-        enemyIds
+        enemyIds,
+        undefined, // healTargetId: not applicable on the enemy side
+        factionOf
     );
 
     // Shared with the player focus and walked-team paths — see hasUsableChargedSkill. Deriving
@@ -2061,6 +2093,27 @@ export function runCombat(rawInput: CombatEngineInput): {
     // recipient of another actor's all-allies buff (status maps are lazy-created per owner).
     const playerIds = [focusActorId, ...teamActors.map((t) => t.id)];
 
+    // #363: actor id → faction, for `factionFilter`'d ally scopes (Fuying's Tianchao Stealth
+    // grant). Side-agnostic BY KEY, exactly like roleByActorId/nameByActorId (built further
+    // down): seeded from the focus actor, every walked team actor, and every enemy attacker, so
+    // an ENEMY-side Fuying scopes to enemy Tianchao allies with no mirrored branch and no `side`
+    // check. An actor absent from this map has an UNKNOWN faction and never matches a filter
+    // (conservative) — the same contract roleByActorId/matchesRoleCategory already run on.
+    // Populated only by callers that supply factions (the team sim); left empty in single-ship
+    // DPS / manual runs, where no ally exists to narrow anyway.
+    //
+    // Hoisted here (rather than built alongside roleByActorId/nameByActorId, its siblings) so it
+    // exists BEFORE the attacker/team-actor `registerActorAbilityStatuses` calls and the
+    // `buildEnemyPlayerActorRuntime` call below — all three now thread it through so the
+    // aura/accumulating registration fan-out and the passive combat-start seed also honour
+    // `factionFilter`, not just the timed cast-path loop in playerTurn.ts.
+    const factionByActorId = new Map<string, FactionKey>();
+    if (input.faction) factionByActorId.set(focusActorId, input.faction);
+    for (const t of teamActors) if (t.faction) factionByActorId.set(t.id, t.faction);
+    for (const e of input.enemyAttackers ?? [])
+        if (e.faction) factionByActorId.set(e.id, e.faction);
+    const factionOf = (id: string): FactionKey | undefined => factionByActorId.get(id);
+
     // Team actors (Phase 2). Real speed-ordered actors carrying their own charge cadence;
     // they deal no damage and hold no DoTs/statuses (their buff grants sit on the attacker/
     // enemy via the status engine's per-source timed sets). For a WALKED team actor the real
@@ -2299,7 +2352,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         playerIds,
         // Heal target (healing mode) — narrows a single-`ally` Cheat-Death-family firing-slot
         // grant to the tank (Hermes). Undefined in DPS mode → falls back to the caster.
-        input.healTargetId
+        input.healTargetId,
+        factionOf
     );
 
     // Lookup maps (moved from simulateDPS) — expand the snapshot's buff names back
@@ -2387,7 +2441,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             playerIds,
             // Same carve-out narrowing as the attacker — a walked healer's single-`ally`
             // Cheat-Death-family grant lands on the heal target.
-            input.healTargetId
+            input.healTargetId,
+            factionOf
         );
         const teamAffinityDisadvantage = w.affinityDamageModifier < 0;
         // Own gate instances — separate draw streams so a team actor's crit/landing/extend
@@ -2696,6 +2751,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             statusEngine,
             enemyIds: enemyRecipientIds,
             enemyDebuffLookup,
+            factionOf,
         })
     );
     const enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor);
@@ -3620,20 +3676,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     if (input.name) nameByActorId.set(focusActorId, input.name);
     for (const t of teamActors) if (t.name) nameByActorId.set(t.id, t.name);
     for (const e of input.enemyAttackers ?? []) if (e.name) nameByActorId.set(e.id, e.name);
-    // #363: actor id → faction, for `factionFilter`'d ally scopes (Fuying's Tianchao Stealth
-    // grant). Side-agnostic BY KEY, exactly like roleByActorId/nameByActorId above: seeded from
-    // the focus actor, every walked team actor, and every enemy attacker, so an ENEMY-side Fuying
-    // scopes to enemy Tianchao allies with no mirrored branch and no `side` check. An actor absent
-    // from this map has an UNKNOWN faction and never matches a filter (conservative) — the same
-    // contract roleByActorId/matchesRoleCategory already run on. Populated only by callers that
-    // supply factions (the team sim); left empty in single-ship DPS / manual runs, where no ally
-    // exists to narrow anyway.
-    const factionByActorId = new Map<string, FactionKey>();
-    if (input.faction) factionByActorId.set(focusActorId, input.faction);
-    for (const t of teamActors) if (t.faction) factionByActorId.set(t.id, t.faction);
-    for (const e of input.enemyAttackers ?? [])
-        if (e.faction) factionByActorId.set(e.id, e.faction);
-    const factionOf = (id: string): FactionKey | undefined => factionByActorId.get(id);
+    // #363: `factionByActorId`/`factionOf` (actor id → faction, for `factionFilter`'d ally
+    // scopes) is built further up this function, right after `playerIds` — it has to exist
+    // BEFORE the attacker/team-actor `registerActorAbilityStatuses` calls and the
+    // `buildEnemyPlayerActorRuntime` call, all of which now consult it (site 2/3 of #363's
+    // four-site faction-filter sweep). See that construction site's comment for the map's
+    // contract (side-agnostic by key, unknown-faction-never-matches).
     // Enemy-side reactive per-owner list (enemy-team PR1): every enemy ATTACKER's own reactive
     // abilities (e.g. Chakara's start-of-round self Attack Up) — before this they were
     // partitioned onto the enemy runtime but never listened for.
@@ -4505,8 +4553,22 @@ export function runCombat(rawInput: CombatEngineInput): {
         // enemy's class. Enemy-attacker runtimes face the player heal target (which has no
         // EnemyBaseClass), so their `enemy-type` gate must resolve against undefined.
         if (r === 1) {
-            seedPassiveTimedStatuses([...runtimesById.values()], statusEngine, bus, enemyType, r);
-            seedPassiveTimedStatuses(enemyPlayerRuntimes, statusEngine, bus, undefined, r);
+            seedPassiveTimedStatuses(
+                [...runtimesById.values()],
+                statusEngine,
+                bus,
+                enemyType,
+                r,
+                factionOf
+            );
+            seedPassiveTimedStatuses(
+                enemyPlayerRuntimes,
+                statusEngine,
+                bus,
+                undefined,
+                r,
+                factionOf
+            );
             // Epic PR4: one-time "at the start of combat" passive shields (Crucialis/FrontLine)
             // — seeded silently ONCE here, never on cast (the cast path skips pre-combat
             // abilities). Same both-collections call shape as the timed seeding above.
@@ -8927,6 +8989,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the correct scoping for a drain whose intents can carry either side's
                         // owner id, and it shares the cast path's single ranking.
                         lowestHpAllyIdFor: lowestHpAllyIdForOwner,
+                        // #363: actor id → faction, for a reactive `factionFilter`'d ally scope
+                        // (site 4 of the four-site sweep — `footprintFilteredRecipients` in
+                        // triggers.ts). The same side-agnostic map every other #363 site shares —
+                        // no `sideCtx`/bySide dispatch needed, exactly like the cast-path's
+                        // `buildTurnArgs` spread above.
+                        factionOf,
                     });
                 }
             }

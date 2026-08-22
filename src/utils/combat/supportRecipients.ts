@@ -66,11 +66,29 @@ export function resolveSupportRecipients(args: {
               );
 
     // #363: faction narrowing composes ON TOP of the footprint — the pattern says which allies
-    // the cast reaches, the faction says which of those qualify. An empty filter array is treated
-    // as absent (no narrowing), matching roleFilter's canonical-absent convention.
-    if (!factionFilter || factionFilter.length === 0) return afterFootprint;
+    // the cast reaches, the faction says which of those qualify.
+    return narrowByFaction(afterFootprint, factionFilter, factionOf);
+}
+
+/**
+ * #363: intersect `ids` with a recipient FACTION scope. Shared by every one of the four sites
+ * that apply `Ability.factionFilter` (the timed cast-path loop via `resolveSupportRecipients`
+ * above, the aura/accumulating registration fan-out, the passive combat-start seed, and the
+ * reactive support-recipient resolver) so all four narrow identically.
+ *
+ * An absent-or-empty filter means no narrowing (byte-identical to every pre-#363 caller). An
+ * actor whose faction is unknown (`factionOf` returns `undefined`, or `factionOf` itself is
+ * absent) NEVER matches a filter — conservative: a faction-scoped grant can only under-reach,
+ * never over-reach, when faction data is missing.
+ */
+export function narrowByFaction(
+    ids: string[],
+    factionFilter: FactionKey[] | undefined,
+    factionOf: ((id: string) => FactionKey | undefined) | undefined
+): string[] {
+    if (!factionFilter || factionFilter.length === 0) return ids;
     const wanted = new Set<FactionKey>(factionFilter);
-    return afterFootprint.filter((id) => {
+    return ids.filter((id) => {
         const f = factionOf?.(id);
         return f !== undefined && wanted.has(f);
     });

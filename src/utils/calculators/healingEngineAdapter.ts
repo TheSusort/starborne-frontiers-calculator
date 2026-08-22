@@ -99,6 +99,12 @@ export interface EnemyAttackerInput {
     /** Charged-axis targeting when it differs from active. Falls back to `target` / `pattern`. */
     chargedTarget?: ParsedTarget;
     chargedPattern?: ParsedPattern;
+    /** #363: this enemy attacker's faction — maps to the engine's `enemyAttackers[].faction`,
+     *  seeding the actor→faction map that a faction-scoped ally grant intersects against
+     *  (Fuying's "grants Tianchao allies Stealth"). Absent → unknown faction → an enemy-side
+     *  faction-scoped grant never reaches this enemy (conservative). Spread straight through by
+     *  `engineEnemyAttackers` below, same as every other passthrough field on this interface. */
+    faction?: FactionKey;
 }
 
 export interface HealingSimulationInput {

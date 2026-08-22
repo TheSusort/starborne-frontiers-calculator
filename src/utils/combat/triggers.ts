@@ -7,6 +7,7 @@ import {
 } from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName, ShipRoleCategory } from '../../constants/shipTypes';
+import type { FactionKey } from '../../constants/factions';
 import {
     DoTType,
     EnemyBaseClass,
@@ -33,7 +34,7 @@ import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 // eslint-disable-next-line import/no-cycle
 import { holdsBarrierRecharging, BARRIER_RECHARGING } from './barrierRecharging';
 import { BARRIER_BUFFS } from './barrierBuffs';
-import { resolveSupportRecipients } from './supportRecipients';
+import { resolveSupportRecipients, narrowByFaction } from './supportRecipients';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType } from './events';
@@ -1595,6 +1596,13 @@ export interface IntentExecContext {
     /** Living ally ids on the owner's ACTIVE support pattern footprint (reactives). Absent when
      *  non-positional or the owner has no support pattern → legacy team-wide routing. */
     footprintAllyIdsFor?: (ownerId: string) => string[] | undefined;
+    /** #363 (Fuying): actor id → faction, for the recipient FACTION intersection applied to a
+     *  reactive `factionFilter`'d ally scope, in `footprintFilteredRecipients`. Side-agnostic by
+     *  key (mirrors the cast-path `PlayerTurnArgs.factionOf`) — an ENEMY-side owner's grant scopes
+     *  to its own side's matching allies with no mirrored branch. `undefined` for an actor whose
+     *  faction is unknown, which NEVER matches a filter (conservative). Absent entirely (unit-test
+     *  ctx / no factions supplied) → byte-identical for every ability with no `factionFilter`. */
+    factionOf?: (id: string) => FactionKey | undefined;
     /** SP-4e: the `'lowest-hp-ally'` selector, resolved by the ENGINE (it owns live HP and
      *  buff-aware max HP) over the OWNER's OWN side — the lowest currentHp/maxHp living same-side
      *  ally, owner EXCLUDED, ties broken by source order. `undefined` means NO recipient (the
@@ -2647,14 +2655,24 @@ export function footprintFilteredRecipients(
     ctx: IntentExecContext,
     baseRecipients: string[]
 ): string[] {
-    if (intent.ability.patternScoped !== true) return baseRecipients;
+    // #363: the recipient FACTION scope narrows regardless of pattern-scoping — a
+    // `factionFilter`'d ally scope on a reactive ability is not gated on `patternScoped` (that
+    // flag governs footprint narrowing only), so both early-return branches below still apply it.
+    const factionFilter = intent.ability.factionFilter;
+    if (intent.ability.patternScoped !== true) {
+        return narrowByFaction(baseRecipients, factionFilter, ctx.factionOf);
+    }
     const footprint = ctx.footprintAllyIdsFor?.(intent.ownerId);
-    if (footprint === undefined) return baseRecipients;
+    if (footprint === undefined) {
+        return narrowByFaction(baseRecipients, factionFilter, ctx.factionOf);
+    }
     return resolveSupportRecipients({
         target: intent.ability.target,
         casterId: intent.ownerId,
         baseRecipients,
         footprintAllyIds: footprint,
+        factionFilter,
+        factionOf: ctx.factionOf,
     });
 }
 

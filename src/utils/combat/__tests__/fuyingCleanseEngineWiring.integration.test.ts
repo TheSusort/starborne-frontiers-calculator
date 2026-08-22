@@ -18,17 +18,21 @@
  * countScaling: { stat: 'critDamage', per: 50 }`, target `'all-allies'` — which must remove
  * 1 × floor(150/50) = 3 of the 4 debuffs, leaving exactly 1.
  *
- * SCOPING NOTE — read before "simplifying" this back to a total: a separate, already-planned
- * task adds Fuying's missing real targeting data, which will narrow her `'all-allies'` recipients
- * from "her whole own side" to `Pattern-Wings-Support-Not-Self-Range-2` — a footprint that
- * EXCLUDES the caster herself. This file's focus kit deliberately carries NO support-scoped
- * pattern (so today's un-narrowed "whole side" reach is exercised, matching production before
- * that data lands), and the assertion is scoped to ONE NAMED ALLY (`'ally-wing'`, a team actor,
- * never the caster) rather than a cross-ally total. `'ally-wing'` sits inside a wings-support
- * footprint just as much as it does inside "whole own side" — a caster-excluding pattern still
- * reaches every OTHER ally — so this assertion survives the narrowing unchanged. A total across
- * every recipient (which would include Fuying herself) would silently drop once she is excluded
- * from her own footprint. Do not assert anything about Fuying's own recipient status here.
+ * SCOPING NOTE — read before "simplifying" this back to a total: in production, Fuying now HAS
+ * real targeting data (`activeTarget: 'other-allies'`, `activePattern:
+ * 'Pattern-Wings-Support-Not-Self-Range-2'`) that narrows her `'all-allies'` recipients to a
+ * footprint EXCLUDING the caster herself. This file's focus kit deliberately carries NO
+ * support-scoped pattern instead — it is not trying to reproduce Fuying's live footprint, only
+ * to isolate the count-scaling call site (`playerTurn.ts` feeding `statusEngine.cleanse` the
+ * SCALED count) from footprint narrowing, which other tests already cover. Because of that
+ * choice, the assertion is scoped to ONE NAMED ALLY (`'ally-wing'`, a team actor, never the
+ * caster) rather than a cross-ally total. `'ally-wing'` sits inside a wings-support footprint
+ * just as much as it does inside this file's un-narrowed "whole side" stand-in — a
+ * caster-excluding pattern still reaches every OTHER ally — so this assertion is unaffected by
+ * which pattern the kit actually carries. A total across every recipient (which would include
+ * Fuying herself under this file's un-narrowed stand-in pattern) would silently drop if the kit
+ * ever switched to a caster-excluding pattern. Do not assert anything about Fuying's own
+ * recipient status here.
  *
  * Determinism: every debuff uses `application: 'apply'` (always lands, no RNG draw — see the
  * reference file above), the focus's own crit rate is 0, and nothing deals damage. No seeding
@@ -38,7 +42,7 @@ import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import { parseTarget, parsePattern } from '../../targetingParser';
-import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import type { ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { StatusEngine } from '../statusEngine';
 
@@ -54,15 +58,11 @@ const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => 
     ...p,
 });
 
-const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
-    raw: selection,
-    side: 'enemy',
-    selection,
-});
-
 // A plain, NON-support pattern — deliberately so `recipientsFor`'s footprint narrowing stays
-// OFF (`supportFootprintAllyIds` returns undefined for a pattern with no `modifiers.support`),
-// matching Fuying's current (pre-targeting-data) un-narrowed reach.
+// OFF (`supportFootprintAllyIds` returns undefined for a pattern with no `modifiers.support`).
+// This is a synthetic stand-in, not a reproduction of Fuying's real (now-live) narrowed
+// footprint — see the file-header SCOPING NOTE for why this file isolates the count-scaling
+// call site instead of exercising footprint narrowing.
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
 // A distinct, removable, non-stacking timed debuff — landed via `application: 'apply'`, which
