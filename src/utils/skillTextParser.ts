@@ -4930,6 +4930,7 @@ export function parseCleanse(text: string | null | undefined): {
     target: 'self' | 'ally' | 'all-allies';
     explicitTarget: boolean;
     debuffType?: 'bomb' | 'dot';
+    countScaling?: { stat: 'critDamage'; per: number };
 }[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -4938,6 +4939,7 @@ export function parseCleanse(text: string | null | undefined): {
         target: 'self' | 'ally' | 'all-allies';
         explicitTarget: boolean;
         debuffType?: 'bomb' | 'dot';
+        countScaling?: { stat: 'critDamage'; per: number };
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -4963,7 +4965,20 @@ export function parseCleanse(text: string | null | undefined): {
         let debuffType: 'bomb' | 'dot' | undefined;
         if (/^\s*bombs?\b/i.test(filterSpan)) debuffType = 'bomb';
         else if (/^\s*damage\s+over\s+time\b|^\s*dots?\b/i.test(filterSpan)) debuffType = 'dot';
-        results.push({ count, target, explicitTarget, ...(debuffType ? { debuffType } : {}) });
+        // #363 (Fuying): "cleanses 1 debuff for every 50% crit power" — same crit-power scaling
+        // shape as parsePurge's identically-worded Amartya clause. Mirrored verbatim.
+        const scaleMatch = CRIT_POWER_SCALING_RE.exec(sentence);
+        const countScaling =
+            scaleMatch && typeof count === 'number'
+                ? { stat: 'critDamage' as const, per: parseInt(scaleMatch[1], 10) }
+                : undefined;
+        results.push({
+            count,
+            target,
+            explicitTarget,
+            ...(debuffType ? { debuffType } : {}),
+            ...(countScaling ? { countScaling } : {}),
+        });
     }
     return results;
 }

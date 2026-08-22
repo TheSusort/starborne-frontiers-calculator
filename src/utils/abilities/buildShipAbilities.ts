@@ -2415,6 +2415,7 @@ function abilitiesFromText(
                     type: 'cleanse',
                     count: c.count,
                     ...(c.debuffType ? { debuffType: c.debuffType } : {}),
+                    ...(c.countScaling ? { countScaling: c.countScaling } : {}),
                 },
                 ...(cleanseOncePerRound ? { oncePerRound: true } : {}),
                 autoFilled: true,

@@ -87,6 +87,8 @@ import {
     payloadToSelectedBuff,
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
+import { scaledStatusCount } from './statusCountScaling';
+export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
@@ -3675,24 +3677,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         : ab.target === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
                           ? [enemyMostBuffsId]
                           : [targetId];
-                // E4: when the purge scales on crit power, total purged per victim =
-                // count × floor(live effectiveCritDamage / per). effectiveCritDamage (~line 1104 =
-                // dmgStats.critDamage) is the caster's LIVE crit power (buffs/debuffs folded),
-                // integer percent (e.g. 150). Hoisted out of the victim loop — constant within a cast.
-                const scaling = ab.config.countScaling;
-                // Guard `per` (defensive: the parser only emits per≥1 from `\d+`, but a
-                // hand-built config with per<=0/non-finite would make floor(x/per) Infinity/NaN).
-                let purgeCount: number | 'all' = ab.config.count;
-                if (
-                    scaling &&
-                    typeof ab.config.count === 'number' &&
-                    Number.isFinite(scaling.per) &&
-                    scaling.per > 0
-                ) {
-                    purgeCount =
-                        ab.config.count *
-                        Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
-                }
+                // E4/#363: when the purge (or cleanse, Fuying) scales on crit power, total
+                // removed per victim = count × floor(live effectiveCritDamage / per).
+                // effectiveCritDamage (~line 2555 = dmgStats.critDamage) is the caster's LIVE
+                // crit power (buffs/debuffs folded), integer percent (e.g. 150). Hoisted out of
+                // the victim loop — constant within a cast. Shared with the cleanse branch below
+                // via scaledStatusCount (./statusCountScaling) — see that helper for the guards.
+                const purgeCount = scaledStatusCount(
+                    ab.config.count,
+                    ab.config.countScaling,
+                    effectiveCritDamage
+                );
                 for (const vid of recipients) {
                     const removed = statusEngine.purge(vid, purgeCount);
                     if (removed > 0) {
@@ -4361,9 +4356,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // (guarded `> 0`) now fires only on real removal — symmetric to the E5 heal lift and
                     // the #166 shield lift. The ONLY side-difference is the player-facing cleanseCount
                     // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
+                    // #363 (Fuying): "cleanses 1 debuff for every 50% crit power" scales the
+                    // same way as Amartya's purge — total = count × floor(effectiveCritDamage /
+                    // per), via the shared scaledStatusCount helper. Hoisted outside the
+                    // recipient loop: it is constant within a cast (recomputing it per recipient
+                    // would be wasteful and could read a mutating value).
+                    const cleanseCount = scaledStatusCount(
+                        cfg.count,
+                        cfg.countScaling,
+                        effectiveCritDamage
+                    );
                     let removed = 0;
                     for (const rid of recipientsFor(ability, fromPassive)) {
-                        const removedForRid = statusEngine.cleanse(rid, cfg.count);
+                        const removedForRid = statusEngine.cleanse(rid, cleanseCount);
                         removed += removedForRid;
                         // Phase 3 PR-H: only recipients with a REAL removal are on-own-cleanse's
                         // ally-routing candidates (mirrors shieldRecipientIds' granted>0 gate) — a

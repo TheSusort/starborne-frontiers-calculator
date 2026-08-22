@@ -855,10 +855,10 @@ export type AbilityConfig =
     | {
           type: 'cleanse' | 'purge';
           count: number | 'all';
-          /** E4: purge count scales with a caster stat — total purged =
-           *  count × floor(effectiveStat / per). Only `critDamage` (crit power) is
-           *  used today (Amartya: "purges 1 buff … for every 50% crit power").
-           *  Absent → static `count`. cleanse never sets this. */
+          /** E4/#363: cleanse+purge count scales with a caster stat — total = count ×
+           *  floor(effectiveStat / per). Only `critDamage` (crit power) today: Amartya
+           *  ("purges 1 buff … for every 50% crit power") and Fuying ("cleanses 1 debuff for
+           *  every 50% crit power"). Absent → static `count`. Never applies to count 'all'. */
           countScaling?: { stat: 'critDamage'; per: number };
           /** Reactive Ward: debuffs to cleanse when the triggering hit was a crit (else `count`).
            *  Read from intent.eventCtx.didCrit by the reactive cleanse executor. cleanse-only. */
