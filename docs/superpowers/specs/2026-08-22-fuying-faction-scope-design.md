@@ -106,7 +106,7 @@ A recipient-attribute filter, mirroring the existing `roleFilter` at every layer
 
 | Layer | `roleFilter` (existing) | `factionFilter` (new) |
 | --- | --- | --- |
-| Type | `Ability.roleFilter?: ShipRoleCategory[]` | `Ability.factionFilter?: FactionName[]` |
+| Type | `Ability.roleFilter?: ShipRoleCategory[]` | `Ability.factionFilter?: FactionKey[]` |
 | Engine map | `roleByActorId` (`engine.ts:3592`) | `factionByActorId` |
 | Engine lookup | `roleOf: (id) => …` | `factionOf: (id) => …` |
 | Actor input | `TeamActorInput.role?` | `TeamActorInput.faction?` |
@@ -125,6 +125,38 @@ actor inputs lack the field.
 **Applied after footprint narrowing**, as an intersection, inside the support-recipient resolution
 — not at parse time. The footprint is positional and live; the faction is static. Composing them
 at the resolution site keeps one place where "who receives this" is decided.
+
+### 2.1a `FactionName` is a fake type, and this change cannot rely on it
+
+`FactionName` provides **no** compile-time protection today:
+
+```ts
+export const FACTIONS: Record<string, Faction> = { … } satisfies Record<string, Faction>;
+export type FactionName = keyof typeof FACTIONS;   // ⇒ `string`, not a literal union
+```
+
+The explicit `Record<string, Faction>` annotation defeats `keyof typeof`. Verified by compiling
+`const probe: FactionName = 'NOT_A_REAL_FACTION'` — clean, exit 0.
+
+This is the same defect class as `STAT_NORMALIZERS` (#295), where a `Record<string, number>`
+annotation let two dead keys (`defense`, `critChance`) sit unused for months. It is *worse* here
+because of §2.2: a typo'd `factionFilter: ['TIANCHOA']` would compile, match nothing, and — under
+unknown-never-matches — grant Stealth to **nobody**. Silent under-grant instead of the current
+silent over-grant.
+
+Tightening `FACTIONS` itself is **out of scope**: 15 call sites index it with a plain `string`
+(`SquadLeaderPicker`'s `factionLabel(faction: string)`, `ArenaModifiersTab`'s `rule.factions.map`,
+`ShipInventory`, `ShipSelector`, `ShipIndexPage`, …) and would all need narrowing. Contained fix
+instead — one new literal union, no duplicated key list, zero churn at those sites:
+
+```ts
+const FACTION_DEFS = { ATLAS_SYNDICATE: { … }, … } satisfies Record<string, Faction>;
+export const FACTIONS: Record<string, Faction> = FACTION_DEFS;  // loose indexing preserved
+export type FactionKey = keyof typeof FACTION_DEFS;             // a REAL literal union
+```
+
+`factionFilter` and `factionOf` use `FactionKey`. `FactionName` is left exactly as it is — this
+spec does not migrate its existing consumers.
 
 ### 2.2 Unknown faction → never matches (owner-approved)
 
@@ -274,8 +306,26 @@ always narrowed by `footprintAllyIds`, and the charged slot inherits the active 
 **This is not `buff-duration-extension`.** That config exists, but it is the Boost gear set's
 always-on caster-side marker for buffs the wearer *applies* — collected into a per-owner map and
 never executed through the ability fold. Fuying's clause extends an **existing** named status on
-**existing holders** at cast time. Different mechanic; it needs its own config variant and a real
-executor branch that finds live `Stealth` entries on each recipient and adds a turn.
+**existing holders** at cast time.
+
+**It is, however, `extend-status`** — a config that already exists and already does almost all of
+this. Found while planning; it is a much smaller change than "a new config variant":
+
+```ts
+| { type: 'extend-status'; statusKind: 'buff' | 'debuff'; turns: number }
+```
+
+Its executor (`playerTurn.ts:3780-3812`) already handles the `statusKind: 'buff'` +
+`target: 'all-allies'` case for Ripper, **already narrows through `supportRecipients`** (so the
+pattern scoping is free), and already runs side-symmetrically outside the healing gate. Its
+`StatusEngine.extendAllBuffsDuration` (`statusEngine.ts:1341`) iterates the recipient's `selfMaps`
+entries, each carrying a `buffName`.
+
+So gap 4 is: an optional `buffName?: string` on the config (absent → today's extend-everything),
+a `buffName` filter in the StatusEngine method, a parser regex for the named phrasing, and the
+executor passing the name through. Fuying does not match the existing
+`EXTEND_STATUS_ACTIVE_RE`/`_PASSIVE_RE`, which both require a literal `buffs`/`debuffs` token, so
+adding a named-status regex cannot disturb Sokol, Ripper, or Lev.
 
 Consequence worth stating: the extension composes with the aura. An ally whose Stealth would have
 expired keeps the 15%/30% reduction one round longer.
