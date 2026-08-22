@@ -4904,10 +4904,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Shared damage-intake core (Phase 4 PR 1, Task 2): the byte-identical body of the
         // legacy applyIncomingToTarget closure with the four side-specific accounting bits
         // hoisted into `sink`. Everything keyed off `victim` (Barrier full-immunity, shield
-        // drain, HP decrement, Cheat-Death intercept, recordDestroyed, hp-changed) is moved
-        // verbatim. Kept inside runCombat — it captures statusEngine/bus/r/recipientMaxHp/
-        // cheatDeathConsumed/cheatDeathConsumedRound/recordDestroyed/BARRIER_BUFFS/
-        // CHEAT_DEATH_BUFFS/selfBuffNamesForOwners exactly as before.
+        // drain, HP decrement, hp-changed) stays inline here, moved verbatim. Kept inside
+        // runCombat — it still captures statusEngine/bus/r/recipientMaxHp/BARRIER_BUFFS/
+        // selfBuffNamesForOwners for the Barrier check that remains in this closure. The
+        // Cheat-Death intercept and recordDestroyed now live in `resolveLethalHp` (lethalHp.ts)
+        // — this closure FORWARDS cheatDeathConsumed/cheatDeathConsumedRound/bus/statusEngine/r
+        // to it as opts rather than capturing them for that purpose.
         //
         // Task 3 (combat-log) — deferred reflect log emit. Reflect thorns fire from INSIDE
         // applyVictimDamage. On the POSITIONAL path they run DURING drivePositionalApply, BEFORE
@@ -5072,8 +5074,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // .incoming increments below) but its effect is nullified; the blocked amount is
             // tracked SEPARATELY as the bucket's .barrierAbsorbed (NOT .shieldAbsorbed — Barrier
             // never touches the shield).
-            // Detection mirrors the Cheat-Death check (selfBuffNamesForOwners aggregates snapshot +
-            // timed + active ability self statuses).
+            // Detection mirrors the Cheat-Death check in lethalHp.ts (selfBuffNamesForOwners
+            // aggregates snapshot + timed + active ability self statuses).
             const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
                 BARRIER_BUFFS.has(n)
             );
@@ -5804,7 +5806,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // NO affinity (bombs aren't affinity-scaled). Bomb-like: full shield drain, no
                     // penetration (bombPortion = full). Credited to the bomb applier (sourceId).
                     // Chains: a splash that kills an adjacent bombed ally re-enters this same
-                    // recordDestroyed else-branch for that ally, firing its splash — naturally finite
+                    // `outcome === 'destroyed'` arm for that ally, firing its splash — naturally finite
                     // (each ship dies once; bombs consumed up-front). Guarded against double-fire on a
                     // second hit to a corpse by (a) the wasAliveBeforeThisCall check and (b) consuming
                     // the bombs before splashing.
