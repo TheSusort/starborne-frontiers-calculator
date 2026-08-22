@@ -23,6 +23,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
+import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
@@ -169,6 +170,70 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
         const round = result.rounds[0];
         expect(round.perActorSplash).toBeUndefined();
         expect(round.perTargetDamage?.['enemy-far']).toBeUndefined();
+    });
+
+    // ─── LOCKED GAME RULE (#355 B2, confirmed by in-game observation) ─────────
+    // A bomb that DETONATES and kills its own carrier ALSO death-splashes to the carrier's
+    // adjacent allies, using that same just-burst bomb's splash value. So a lethal detonation
+    // pays out TWICE from one bomb: the burst on the carrier, then the splash on its neighbours.
+    //
+    // That is not an accident of ordering, it is the game's behaviour. Both burst paths splice the
+    // bomb out of `pendingBombs` AFTER the burst (`processBombs` in engine.ts and
+    // `reduceBombsOnVictim` in bombCountdown.ts), so `recordDestroyed` — which fires from inside
+    // the burst's own `applyVictimDamage` — still sees the bomb and splashes it. #355 raised
+    // "should it?" as an open game-rule question; the answer is yes, verified in game, so this
+    // test exists to STOP anyone from "fixing" it by reordering either splice.
+    it('LOCKED: a bomb that detonates LETHALLY also death-splashes its carrier’s adjacent ally', () => {
+        idc = 0;
+        // The focus is inert (no offence) so the ONLY damage in the run is the burst and its
+        // splash — a direct-hit kill is the already-covered case above and would make this
+        // vacuous with respect to the lethal-DETONATION rule.
+        const lethalBomb: PendingBomb = {
+            countdown: 1, // bursts on the carrier's own turn, this round
+            damagePerStack: 500,
+            stacks: 2,
+            tier: 100,
+            sourceId: 'attacker',
+            affinityMult: 1,
+            detonationDamageModifier: 0,
+            splashModifier: 0,
+        };
+        const BURST = lethalBomb.stacks * lethalBomb.damagePerStack; // 1000
+        const SPLASH = splashDamageForBomb(lethalBomb); // 2 × 500 × 0.25 = 250
+
+        const input = BASE({
+            attack: 0,
+            shipSkills: { slots: [] }, // focus deals no offence
+            enemyAttackers: [
+                enemyAt('enemy-carrier', 'M3', BURST - 100), // 900 HP < 1000 burst → dies to it
+                enemyAt('enemy-mid', 'M2', 1_000_000_000), // adjacent to M3, survives the splash
+            ],
+            __testTapActors: (actors) => {
+                actors.find((a) => a.id === 'enemy-carrier')?.pendingBombs.push(lethalBomb);
+            },
+        });
+
+        // Tapped off the bus: the run result carries no destroyed-ship list, and an optional-chained
+        // read of a field that does not exist yields `undefined` — an assertion that can only ever
+        // fail, never confirm. The events are the real observable.
+        const bus = createEventBus();
+        const bursts: CombatEvent[] = [];
+        const deaths: CombatEvent[] = [];
+        bus.on('bomb-detonated', (e) => bursts.push(e as CombatEvent));
+        bus.on('ship-destroyed', (e) => deaths.push(e as CombatEvent));
+        const result = runCombat({ ...input, bus });
+        const round = result.rounds[0];
+
+        // The bomb genuinely BURST, and the burst genuinely KILLED the carrier. Without both, the
+        // splash below could come from some other death path and this would not be a test about a
+        // lethal DETONATION at all.
+        expect(bursts).toHaveLength(1);
+        expect(bursts[0]).toMatchObject({ victimId: 'enemy-carrier', damage: BURST });
+        // `ship-destroyed` keys the dying ship as `actorId` (not `targetId` — that is `hp-changed`).
+        expect(deaths.map((d) => (d as { actorId: string }).actorId)).toContain('enemy-carrier');
+
+        // THE RULE: the neighbour takes the dying carrier's bomb splash.
+        expect(round.perActorSplash?.['enemy-mid']).toBe(SPLASH);
     });
 
     it('a bombed enemy that SURVIVES the hit does not splash (no death = no splash)', () => {
