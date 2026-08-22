@@ -90,6 +90,7 @@ import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEvent, CombatEventBus, createEventBus } from './events';
 import { resolveLethalHp } from './lethalHp';
+import { hasReversedRepairs } from './reversedRepairs';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -3537,13 +3538,81 @@ export function runCombat(rawInput: CombatEngineInput): {
               // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
-              // `repairSourceId` (Task 4, #362): not read yet — Task 5 wires the R7 reversal-kill
-              // credit off this id. Accepted here only so every call site is forced to supply it.
-              applyHealToTarget: (raw, victim, _repairSourceId) => {
-                  // Dead target → all overheal. Otherwise consume up to the deficit against
-                  // the target's CURRENT effective max HP (live ctx via recipientMaxHp).
-                  // (_repairSourceId: not read yet — Task 5 reads it for R7 reversal-kill credit)
+              // `repairSourceId` (Task 4, #362): the actor credited with this repair — the caster
+              // for a cast repair, the holder for a HoT/leech. Read below for the R7 reversal-kill
+              // credit; every call site is required to supply it.
+              applyHealToTarget: (raw, victim, repairSourceId) => {
+                  // Dead target → all overheal, and NO reversal: a corpse takes no reversed repair.
                   if (victim.currentHp <= 0) {
+                      return { consumed: 0, overheal: raw };
+                  }
+                  // ── #362 Reversed Repairs ────────────────────────────────────────────────
+                  // "Incoming repairs damage this unit instead" (Zosimos's charged skill).
+                  //
+                  // WHY THIS LINE. `raw` arriving here is already post-crit, post-healModifier,
+                  // post-outgoingHealBuff and post-`incomingHealPct` — which is where
+                  // `Inc. Repair Down` lives — and it is PRE-deficit-clamp (the clamp is three
+                  // lines below). So three of the rulings are satisfied by POSITION alone and
+                  // must not be recomputed here:
+                  //   R3 — a target at full HP takes the FULL amount (pre-clamp),
+                  //   R4 — the repair's crit carries into the burn (post-crit),
+                  //   R6 — Inc. Repair Down applies FIRST and the reduced amount reverses.
+                  // And because this closure is the ONLY line in the engine where HP goes up,
+                  // R2 ("every repair, any source") is satisfied by position too: cast repairs,
+                  // HoT ticks, leech self-repairs and reactive repairs all funnel through here.
+                  // Shield GRANTS are not repairs and go through grantShieldToTarget, untouched.
+                  if (hasReversedRepairs(statusEngine, victim)) {
+                      // R1: a raw HP burn at face value. No shield drain, no Protection redirect,
+                      // no defence mitigation, no Barrier — `applyVictimDamage` owns all four and
+                      // is deliberately NOT entered. R5 ("nothing reacts") follows from the same
+                      // choice: no counterattack, no Reflect thorns, no incoming-leech proc, no
+                      // on-damaged passives, because none of those live on this path. A kill by
+                      // reversal likewise fires no bomb death-splash — the splash block is at the
+                      // `applyVictimDamage` call site, gated on ITS `'destroyed'` outcome, and
+                      // this path deliberately has no such block.
+                      victim.currentHp = Math.max(0, victim.currentHp - raw);
+                      // R7: the kill belongs to the HEALER whose repair was reversed, not to the
+                      // Zosimos that applied the debuff — hence `repairSourceId`, not
+                      // `actingActorId`. `byDirectDamage: false` because a reversed repair is not
+                      // a hit: the consumables that spend on a direct hit (Barrier charges,
+                      // Ironclad's nth-hit counter) must not see one. R8: Cheat Death still
+                      // intercepts, through the ONE shared death path the damage funnel uses —
+                      // and it is the only survival layer that reaches a reversed repair.
+                      //
+                      // `currentRound`, `actingActorId` and `emitConsequenceLog` are engine-scope
+                      // `let`s declared BELOW this ctx. Reading them at CALL time is safe (the run
+                      // loop has long since assigned them); copying their values into the ctx
+                      // literal at construction time would not be. Route through the bindings.
+                      //
+                      // `currentRound`, NOT the round loop's `r`: `r` is block-scoped to
+                      // `for (let r = 1; …)` and is simply not in scope here — this ctx is built
+                      // above the loop. `currentRound` is the engine-scope mirror maintained for
+                      // exactly this reason ("so closures defined once outside the loop can stamp
+                      // the correct round"), and the charge-changed emitters just above already
+                      // read it the same way.
+                      resolveLethalHp(victim, {
+                          round: currentRound,
+                          statusEngine,
+                          cheatDeathConsumed,
+                          cheatDeathConsumedRound,
+                          bus,
+                          emitConsequenceLog,
+                          actingActorId,
+                          killerId: repairSourceId,
+                          byDirectDamage: false,
+                      });
+                      // Deliberately NOT `repairedThisRound.add(...)` — nothing was repaired, so
+                      // the target-repaired gate must stay shut. (Unrelated to R9: Zosimos's own
+                      // charge passive keys off an enemy CASTING a repair, upstream of this
+                      // closure, and is untouched by any of this.)
+                      //
+                      // R10: the reversal surfaces as the healer's OVERHEALING. Returning the
+                      // EXISTING result shape is what delivers that with no change to the
+                      // accounting contract — every call site already credits `overheal` with
+                      // this value — and it keeps the `raw = effective + overheal` identity. It
+                      // is also why the naive `incomingHealPct: -200` sign flip fails: that fold
+                      // is unclamped, so it books `consumed: 0` plus a NEGATIVE overheal — no
+                      // damage, no healing, garbage statistics, green tests throughout.
                       return { consumed: 0, overheal: raw };
                   }
                   const targetMaxHp = recipientMaxHp(victim.id);
