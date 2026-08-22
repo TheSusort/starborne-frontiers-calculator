@@ -77,6 +77,22 @@ export const TRIAGED_AS_SEED_NOISE: readonly TriagedNoiseEntry[] = [
             'is exactly why a K=15 union catches enemy and misses the other two. Pinned by ' +
             'src/utils/combat/audit/__tests__/enforcerDebuffResistedNoise.test.ts.',
     },
+    {
+        shipName: 'Apex',
+        kind: 'shield-destroyed',
+        note:
+            'Apex self-grants a 355 Shield (3% max HP) on every enemy debuff and inflicts two ' +
+            'debuffs per cast, so the pool GROWS faster than the board drains it. ' +
+            '`shield-destroyed` needs a direct hit to take a non-empty pool to exactly 0, which ' +
+            'here requires a round where Apex lands NO debuff — a landing roll, drawn off the ' +
+            'ownerId-keyed stream. Measured over 180 seeds from base 20260805, all three ' +
+            'scenarios (hits/540): focus 3, team 12, enemy 21; every hit reproduced in all three ' +
+            'scenarios, so the scenario tap does not move this draw. `plain`-only first hit at ' +
+            'offset +45 / +94 / +20 respectively — focus lands ONE seed past the K=45 window the ' +
+            'finding was filed at, which is the whole finding. The firing trajectories match ' +
+            'shape across sides (grant r1, no grant r2, destroy r3, on mirrored turn orders). ' +
+            'Pinned by src/utils/combat/audit/__tests__/apexShieldDestroyedNoise.test.ts.',
+    },
 ];
 
 function triagedNoiseFor(d: PlacementDiff, kind: string): TriagedNoiseEntry | undefined {
