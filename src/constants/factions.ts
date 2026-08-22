@@ -1,6 +1,14 @@
 import type { Faction } from '../types/ship';
 
-export const FACTIONS: Record<string, Faction> = {
+// The object literal is bound WITHOUT a `Record<string, Faction>` annotation so `keyof typeof`
+// yields a real literal union. `FACTIONS` below re-exports it under the loose type that the 15
+// existing `FACTIONS[someString]` call sites (SquadLeaderPicker, ArenaModifiersTab, ShipInventory,
+// ShipSelector, ShipIndexPage, …) rely on, so none of them move.
+//
+// Do NOT annotate FACTION_DEFS — an explicit `Record<string, Faction>` is exactly what made
+// `FactionName` widen to `string` (same defect class as STAT_NORMALIZERS, #295). `satisfies`
+// gives the shape check without collapsing the keys.
+const FACTION_DEFS = {
     ATLAS_SYNDICATE: {
         name: 'Atlas Syndicate',
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426145023492116.webp',
@@ -43,4 +51,15 @@ export const FACTIONS: Record<string, Faction> = {
     },
 } satisfies Record<string, Faction>;
 
+export const FACTIONS: Record<string, Faction> = FACTION_DEFS;
+
+/** A real literal union of the faction keys. Prefer this over `FactionName` (which is `string`)
+ *  anywhere a typo must be a compile error — e.g. `Ability.factionFilter`. */
+export type FactionKey = keyof typeof FACTION_DEFS;
+
+/** Runtime companion to `FactionKey`, for validation at trust boundaries. */
+export const FACTION_KEYS = Object.keys(FACTION_DEFS) as readonly FactionKey[];
+
+// Unchanged, and deliberately not migrated by this task: `FactionName` is `string` because
+// FACTIONS is annotated. Its existing consumers keep working exactly as before.
 export type FactionName = keyof typeof FACTIONS;
