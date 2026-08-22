@@ -20,6 +20,7 @@ import {
     ReactiveScalingCountSource,
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
+import { FACTIONS, FACTION_KEYS, type FactionKey } from '../constants/factions';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 
@@ -1887,15 +1888,47 @@ const EXTEND_STATUS_ACTIVE_RE =
 const EXTEND_STATUS_PASSIVE_RE =
     /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 
+// #363 (Fuying): "extends <unit-skill>Stealth</unit-skill> by 1 turn" — a NAMED status, where the
+// two arms above require a literal 'buffs'/'debuffs' token. Matched against the TAGGED text so the
+// <unit-skill> boundary identifies the status name exactly, rather than guessing where a bare
+// capitalised phrase ends. (Same reasoning as maskStatusNameRepairs in #362: the tag boundary is
+// information, and stripping tags first throws it away.)
+const EXTEND_NAMED_STATUS_RE =
+    /extends?\s+<unit-skill>([^<]+)<\/unit-skill>\s+by\s+(\d+)\s+turns?/i;
+
 /**
  * Parses a generic buff/debuff duration-extension clause into its turns + statusKind, or null
  * when absent. Runs over stripUnitTags(text) so both the `<unit-aid>`-wrapped active-voice form
  * (Sokol/Ripper) and the plain passive-voice form (Lev) match. Reference: docs/ship-skills.csv.
+ *
+ * #363 (Fuying): a NAMED arm ("extends <unit-skill>Stealth</unit-skill> by 1 turn") is tried
+ * FIRST, against the ORIGINAL (tagged) text — it is strictly more specific than the two generic
+ * arms below, which require a literal 'buffs'/'debuffs' token and so can never match it.
+ *
+ * The named arm's captured phrase is resolved through `resolveBuffName`, so an UNRECOGNISED name
+ * emits NO `buffName` at all rather than a literal one. That is not cosmetic. `buffName` is matched
+ * by exact name against the target's live statuses in `extendAllBuffsDuration`, so a name that is
+ * not in `BUFFS` can never match anything and the clause silently extends NOTHING — strictly worse
+ * than the absent-`buffName` fallback, which extends every standing buff (Sokol/Ripper/Lev's
+ * behaviour). Unreachable today (Fuying's "Stealth" resolves exactly), but it is the trap waiting
+ * for the next named-extend ship, and it mirrors the precedent `DR_ALLY_STATUS_RE` already set for
+ * `detectDamageReactionTrigger`'s `allyStatusName`.
  */
 export function parseExtendStatus(
     text: string | null | undefined
-): { turns: number; statusKind: 'buff' | 'debuff' } | null {
+): { turns: number; statusKind: 'buff' | 'debuff'; buffName?: string } | null {
     if (!text) return null;
+    const named = EXTEND_NAMED_STATUS_RE.exec(text);
+    if (named) {
+        const canonical = resolveBuffName(named[1]);
+        return {
+            turns: parseInt(named[2], 10),
+            statusKind: 'buff',
+            // Unresolved → omit the field entirely, falling back to the safe extend-everything
+            // behaviour instead of a name that can never match a real applied status.
+            ...(canonical !== undefined ? { buffName: canonical } : {}),
+        };
+    }
     const plain = stripUnitTags(text);
     const m = EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? EXTEND_STATUS_PASSIVE_RE.exec(plain);
     if (!m) return null;
@@ -2836,6 +2869,16 @@ const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
 // UNDER-fire — widen the repetition group if such a CSV variant ever lands.
 const DR_ALLY_ROLES_RE =
     /when\s+an(?:other)?\s+ally\s+((?:attacker|defender|debuffer|supporter)s?(?:\s+or\s+(?:attacker|defender|debuffer|supporter)s?)*)\b/i;
+// #363 (Fuying R3/R4): a NAMED-STATUS precondition on the damaged ally — "When an ally IN
+// <unit-skill>Stealth</unit-skill> … is directly damaged". Matched against the TAGGED sentence so
+// the `<unit-skill>` boundary delimits the status name exactly, rather than guessing where a bare
+// capitalised phrase ends (the same reasoning as `maskStatusNameRepairs` in #362 and
+// EXTEND_NAMED_STATUS_RE above: the tag is information, and stripping it throws that away).
+// "with" is accepted alongside "in" because the corpus uses both prepositions for the same
+// standing-status idea ("allies with Stealth" in Fuying's own DR-aura sentence); no corpus
+// ally-reaction sentence uses "with" today, so this arm is purely defensive.
+const DR_ALLY_STATUS_RE =
+    /when\s+an(?:other)?\s+ally\s+(?:in|with)\s+<unit-skill>([^<]+)<\/unit-skill>/i;
 const ROLE_WORD_TO_CATEGORY: Record<string, ShipRoleCategory> = {
     attacker: 'ATTACKER',
     defender: 'DEFENDER',
@@ -2897,8 +2940,16 @@ const DR_HP_BELOW_RE = /while\s+below\s+(\d+)\s*%\s*hp/i;
  * condition so the executor evaluates the gate at drain time rather than firing on every
  * received attack. Ally-subject sentences never get it: DR_HP_BELOW_RE reads the OWNER's
  * HP, and no corpus ally-reaction carries an HP gate.
+ *
+ * `allyStatusName` (#363, Fuying R3/R4) is set when an ALLY-subject sentence names a standing
+ * status the damaged ally must hold — "When an ally in <unit-skill>Stealth</unit-skill> … is
+ * directly damaged". It is the canonical `BUFFS` name, resolved through `resolveBuffName` so an
+ * unrecognised phrase yields NO gate (leaving the pre-#363 un-gated behaviour) rather than a gate
+ * that can never match. Ally-subject only: a self-subject "while in Stealth" gate is
+ * `detectGrantConditions`' job and already has its own channel.
+ *
  * Reference data: docs/ship-skills.csv (Warden, Guardian, Shepherd, Opal, Flamel, Iridium,
- * Panguan, Stalwart, Makoli; ally-subject: Guardian, Refine, Graphite).
+ * Panguan, Stalwart, Makoli; ally-subject: Guardian, Refine, Graphite, Fuying).
  */
 export function detectDamageReactionTrigger(
     text: string,
@@ -2909,6 +2960,7 @@ export function detectDamageReactionTrigger(
           critFilter?: 'crit';
           hpBelowPct?: number;
           roleFilter?: ShipRoleCategory[];
+          allyStatusName?: string;
       }
     | undefined {
     const sentence = rawSentenceAround(text, pos);
@@ -2922,6 +2974,10 @@ export function detectDamageReactionTrigger(
               .split(/\s+or\s+/)
               .map((w) => ROLE_WORD_TO_CATEGORY[w.replace(/s$/, '')])
         : undefined;
+    // Read from the TAGGED sentence (tags are still present — rawSentenceAround only masks
+    // abbreviation periods), so the `<unit-skill>` boundary delimits the name exactly.
+    const statusM = allySubject ? DR_ALLY_STATUS_RE.exec(sentence) : null;
+    const allyStatusName = statusM ? resolveBuffName(statusM[1]) : undefined;
     const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
     if (allySubject ? DR_ALLY_CRIT_HIT_RE.test(scrubbed) : DR_CRIT_HIT_RE.test(scrubbed)) {
         const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
@@ -2930,6 +2986,7 @@ export function detectDamageReactionTrigger(
             critFilter: 'crit',
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
+            ...(allyStatusName ? { allyStatusName } : {}),
         };
     }
     if (
@@ -2941,6 +2998,7 @@ export function detectDamageReactionTrigger(
             trigger,
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
+            ...(allyStatusName ? { allyStatusName } : {}),
         };
     }
     return undefined;
@@ -4930,6 +4988,7 @@ export function parseCleanse(text: string | null | undefined): {
     target: 'self' | 'ally' | 'all-allies';
     explicitTarget: boolean;
     debuffType?: 'bomb' | 'dot';
+    countScaling?: { stat: 'critDamage'; per: number };
 }[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -4938,6 +4997,7 @@ export function parseCleanse(text: string | null | undefined): {
         target: 'self' | 'ally' | 'all-allies';
         explicitTarget: boolean;
         debuffType?: 'bomb' | 'dot';
+        countScaling?: { stat: 'critDamage'; per: number };
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -4963,7 +5023,20 @@ export function parseCleanse(text: string | null | undefined): {
         let debuffType: 'bomb' | 'dot' | undefined;
         if (/^\s*bombs?\b/i.test(filterSpan)) debuffType = 'bomb';
         else if (/^\s*damage\s+over\s+time\b|^\s*dots?\b/i.test(filterSpan)) debuffType = 'dot';
-        results.push({ count, target, explicitTarget, ...(debuffType ? { debuffType } : {}) });
+        // #363 (Fuying): "cleanses 1 debuff for every 50% crit power" — same crit-power scaling
+        // shape as parsePurge's identically-worded Amartya clause. Mirrored verbatim.
+        const scaleMatch = CRIT_POWER_SCALING_RE.exec(sentence);
+        const countScaling =
+            scaleMatch && typeof count === 'number'
+                ? { stat: 'critDamage' as const, per: parseInt(scaleMatch[1], 10) }
+                : undefined;
+        results.push({
+            count,
+            target,
+            explicitTarget,
+            ...(debuffType ? { debuffType } : {}),
+            ...(countScaling ? { countScaling } : {}),
+        });
     }
     return results;
 }
@@ -5681,6 +5754,46 @@ function detectGrantScope(
     }
     if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
     return 'self';
+}
+
+// #363 (Fuying): faction words appear in the corpus in TWO roles, and only one is a recipient
+// scope. Measured over all 149 ships (docs/ship-skills.csv, 2026-08-22): 4 recipient-scoped
+// clauses (all Fuying — her active Stealth grant plus the three refit tiers of her damage-
+// reduction aura) vs 31 where the faction is part of a BUFF NAME ("Tianchao Precision II",
+// "XAOC Swiftness III", "Binderburg Resilience III", "Everliving Regeneration II",
+// "Gelecek Contagion II").
+//
+// The discriminator is the following noun: a scope reads "<Faction> allies", a name reads
+// "<Faction> <Something-else>". Requiring `all(y|ies)` IMMEDIATELY after the faction word keeps
+// all 31 buff-name clauses out with no ship-name special-casing. Note that "allies" appearing
+// anywhere later in the clause is NOT enough — Los's "grants XAOC Swiftness III to all allies"
+// carries both the faction-named buff and a team receiver, and must not read as a faction scope.
+const FACTION_SCOPE_RES: readonly (readonly [FactionKey, RegExp])[] = FACTION_KEYS.map(
+    (key) =>
+        [key, new RegExp(`\\b${escapeRegExp(FACTIONS[key].name)}\\s+all(?:y|ies)\\b`, 'i')] as const
+);
+
+/**
+ * Faction scope on a buff GRANT's recipient phrase, or undefined when the clause names none.
+ *
+ * Reads the SAME span `detectGrantScope` routes on (`resolveBuffClause` → `buffGrantSpan`), so
+ * the scope and its faction can never disagree about which clause they describe. Scanning the
+ * whole skill text instead would let a sibling sentence's faction leak onto this grant.
+ */
+export function detectGrantFactionScope(
+    skillText: string,
+    buffName: string,
+    occurrenceIndex = 0
+): FactionKey[] | undefined {
+    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    const clause = stripConditionClauses(resolved);
+    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), occurrenceIndex);
+    const { subject, object } = buffGrantSpan(clause, buffStart === -1 ? clause.length : buffStart);
+    // A bestowing verb names its receiver in the OBJECT; a receiving verb ("gains") in the
+    // SUBJECT. Scan both — which one carries it is the verb's business, not ours.
+    const span = `${subject} ${object}`;
+    const hits = FACTION_SCOPE_RES.filter(([, re]) => re.test(span)).map(([key]) => key);
+    return hits.length > 0 ? hits : undefined;
 }
 
 // "all enemies adjacent to X" must NOT match the plain all-enemies widen. Two flavours:

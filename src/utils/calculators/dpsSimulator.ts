@@ -11,6 +11,7 @@ import {
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { AffinityName } from '../../types/ship';
+import type { FactionKey } from '../../constants/factions';
 import type { ActiveBuff } from '../combat/statusEngine';
 import { runCombat, TeamActorEngineInput, CombatEngineInput } from '../combat/engine';
 import type { Position } from '../../types/encounters';
@@ -98,6 +99,12 @@ export interface DPSSimulationInput {
     speed?: number;
     /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
     enemySpeed?: number;
+    /** #363 follow-up: the focus attacker's own ship faction, for `factionFilter`'d ally scopes
+     *  (Fuying's "grants Tianchao allies Stealth"). Team actors carry their own `faction` on
+     *  `TeamActorInput` (already threaded — `deriveTeamEngineActors` spreads it through
+     *  unchanged). Absent (manual config, no ship picked) → unknown faction → the focus never
+     *  matches a faction filter (conservative), mirroring the healing adapter's `healerFaction`. */
+    faction?: FactionKey;
     /** Skill model. When omitted, derived from the flat fields via flatInputToAbilities. */
     shipSkills?: ShipSkills;
     /** Team ships as real speed-ordered actors (Phase 2). When present, their buffs enter
@@ -634,6 +641,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         // RAW focus affinity — same matchup as the pre-resolved affinityDamageModifier above
         // (positional plumbing; the engine threads it onto the focus runtime's attackerAffinity).
         affinity: input.affinity,
+        // #363 follow-up: the focus's own faction, mirroring how `affinity` is threaded above —
+        // this was missing entirely before, so a Fuying focus attacker's faction-scoped grant
+        // could never include herself as a recipient (see DPSSimulationInput.faction's doc).
+        faction: input.faction,
         defence,
         hp,
         // Base hacking/security (A2 Task 2) — the OLD landing-formula defaults (200 / 100) applied at

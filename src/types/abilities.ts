@@ -1,4 +1,5 @@
 import type { ShipRoleCategory } from '../constants/shipTypes';
+import type { FactionKey } from '../constants/factions';
 import { EnemyBaseClass, DoTType, StackTrigger, ParsedBuffEffects } from './calculator';
 
 export type SkillSlot = 'active' | 'charged' | 'passive';
@@ -112,6 +113,20 @@ export type AbilityTarget =
 //                           live effective speed (global selector, resolved LIVE at drain — no
 //                           memo needed, Chakara's co-located clause is a self-buff that never
 //                           changes an enemy's speed).
+
+/** #363: the ally-scoped targets a recipient `factionFilter` can meaningfully narrow — the
+ *  plural ally scopes plus plain `'ally'` (which resolves to the caster's whole footprint on the
+ *  cast path, see `recipientsFor` in playerTurn.ts). Deliberately EXCLUDES `'self'` (the caster
+ *  is its own recipient; a faction predicate on it is either a no-op or a self-mute) and
+ *  `'lowest-hp-ally'` (a single TEXT-NAMED recipient — no corpus clause combines a named
+ *  selector with a faction word, and that path never routes through the faction intersection).
+ *  Shared by the parser/build wiring and the skill editor so both agree on which targets can
+ *  carry the key. */
+export const FACTION_FILTERABLE_TARGETS: ReadonlySet<AbilityTarget> = new Set<AbilityTarget>([
+    'ally',
+    'all-allies',
+    'adjacent-allies',
+]);
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
@@ -807,7 +822,15 @@ export type AbilityConfig =
     // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
     // `turns`. See src/utils/combat/statusEngine.ts extendAllBuffsDuration/
     // extendAllDebuffsDuration.
-    | { type: 'extend-status'; statusKind: 'buff' | 'debuff'; turns: number }
+    | {
+          type: 'extend-status';
+          statusKind: 'buff' | 'debuff';
+          turns: number;
+          /** #363 (Fuying): restrict the extension to statuses with this exact name
+           *  ("extends Stealth by 1 turn"). Absent → extend EVERY eligible timed status of
+           *  `statusKind`, which is what Sokol/Ripper/Lev do. */
+          buffName?: string;
+      }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
     // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy while
     // active (`turns`), then detonates for `pct`% of the accumulated total on expiry.
@@ -855,10 +878,10 @@ export type AbilityConfig =
     | {
           type: 'cleanse' | 'purge';
           count: number | 'all';
-          /** E4: purge count scales with a caster stat — total purged =
-           *  count × floor(effectiveStat / per). Only `critDamage` (crit power) is
-           *  used today (Amartya: "purges 1 buff … for every 50% crit power").
-           *  Absent → static `count`. cleanse never sets this. */
+          /** E4/#363: cleanse+purge count scales with a caster stat — total = count ×
+           *  floor(effectiveStat / per). Only `critDamage` (crit power) today: Amartya
+           *  ("purges 1 buff … for every 50% crit power") and Fuying ("cleanses 1 debuff for
+           *  every 50% crit power"). Absent → static `count`. Never applies to count 'all'. */
           countScaling?: { stat: 'critDamage'; per: number };
           /** Reactive Ward: debuffs to cleanse when the triggering hit was a crit (else `count`).
            *  Read from intent.eventCtx.didCrit by the reactive cleanse executor. cleanse-only. */
@@ -1080,6 +1103,19 @@ export interface Ability {
      *  ShipTypeName — 'DEBUFFER' matches every DEBUFFER_* variant). Absent → any
      *  ally. A filter with an UNKNOWN ally role never matches (conservative). */
     roleFilter?: ShipRoleCategory[];
+    /** #363 (Fuying): recipient FACTION filter for an ally-scoped grant — "grants Tianchao
+     *  allies Stealth". Applied as an INTERSECTION after footprint narrowing
+     *  (`resolveSupportRecipients`), so it composes with the pattern rather than replacing it.
+     *  Absent → any ally.
+     *
+     *  An actor whose faction is UNKNOWN never matches (conservative — owner-approved
+     *  2026-08-22, mirroring `matchesRoleCategory`). Only manually-configured actors lack a
+     *  faction; single-ship DPS has no allies at all, and every team-sim actor is derived from
+     *  a picked ship.
+     *
+     *  Typed `FactionKey`, NOT `FactionName` — the latter is `string` (see factions.ts), so a
+     *  typo'd 'TIANCHOA' would compile and, under the rule above, reach nobody. */
+    factionFilter?: FactionKey[];
     /** D-PR14 Bulwark: this reactive applies at most once per round per (owner, ability).
      *  Gated executor-side via IntentExecContext.oncePerRoundConsumed (check BEFORE the
      *  proc draw, mark only on a successful proc). Absent → no per-round limit.
@@ -1132,6 +1168,24 @@ export interface Ability {
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →
      *  any ally (existing behavior). */
     requireDamagedAllyAdjacent?: boolean;
+    /** #363 (Fuying R3/R4): an on-ally-attacked reactive fires only when the DAMAGED ally is
+     *  currently holding this NAMED status — "When an ally in Stealth within the active pattern
+     *  is directly damaged, this Unit inflicts Stasis". The name is a canonical `BUFFS` entry
+     *  (the parser resolves it from the trigger phrase's `<unit-skill>` tag and emits nothing
+     *  for an unrecognised name, so an absent field means today's un-gated behaviour).
+     *
+     *  Matched EXACTLY (not by substring) against the ally's live self-status names in the
+     *  listener, via registerReactiveListeners' `statusNamesOf`: 'Attack Up I' must not be
+     *  satisfied by 'Attack Up II'. An ally whose statuses cannot be read at all (no
+     *  `statusNamesOf` supplied — DPS/unit fixtures) never satisfies the gate, mirroring
+     *  `matchesRoleCategory`'s unknown-never-matches rule rather than
+     *  `requireDamagedAllyAdjacent`'s helper-absent-allows one: a status gate that silently
+     *  opened would reproduce the very defect this field fixes.
+     *
+     *  Being hit does NOT consume Stealth (owner-ruled 2026-08-22), so there is no pre/post-hit
+     *  ordering question — the damaged ally still holds the status when the reaction resolves,
+     *  and the reaction may fire on EVERY qualifying hit (the clause states no cap). */
+    requireDamagedAllyStatus?: string;
     /** D-PR16 Tenacity: gate an `on-attacked` reaction on the per-attack aggregate damage
      *  exceeding this fraction of the owner's effective max HP (e.g. 0.25). Absent → no gate
      *  (byte-identical for every existing on-attacked ability). */

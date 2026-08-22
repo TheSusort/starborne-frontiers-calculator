@@ -1,4 +1,5 @@
 import type { ShipTypeName } from '../constants/shipTypes';
+import type { FactionKey } from '../constants/factions';
 import type { ParsedTarget, ParsedPattern } from '../utils/targetingParser';
 import { AffinityName } from './ship';
 import type { Condition, ShipSkills } from './abilities';
@@ -215,6 +216,11 @@ export interface DPSShipConfig {
     /** Board slot this config fights from. The DPS run is positional (the enemy must be a real,
      *  targetable actor), so every player-side ship needs one. Absent → DEFAULT_ATTACKER_SLOT. */
     slot?: Position;
+    /** #363 follow-up: this config's ship faction — auto-filled on ship pick, threaded to
+     *  `DPSSimulationInput.faction` for faction-scoped ally grants (Fuying's "grants Tianchao
+     *  allies Stealth"). Absent for a manual config → unknown faction → never matches a faction
+     *  filter (conservative, mirroring `TeamShipConfig.faction`'s contract). */
+    faction?: FactionKey;
 }
 
 export type DPSShipConfigUpdateableField =
@@ -353,6 +359,10 @@ export interface TeamShipConfig {
     /** Ship role (Ship.type) — auto-filled on ship pick, threaded to TeamActorInput.role for
      *  role-filtered ally-damage reactions (Graphite). Absent for manual slots (conservative). */
     role?: ShipTypeName;
+    /** #363: ship faction — auto-filled on ship pick, threaded to TeamActorInput.faction for
+     *  faction-scoped ally grants (Fuying's "grants Tianchao allies Stealth"). Absent for manual
+     *  slots → unknown faction → never matches a faction filter (conservative). */
+    faction?: FactionKey;
 }
 
 /** A team ship as a real combat actor (Phase 2). Buff lists are the existing
@@ -398,4 +408,9 @@ export interface TeamActorInput {
      *  Affinity Override gate). Auto-filled from ship data in the team sim; absent → the gate
      *  falls back to assume-met (byte-identical, single-ship DPS). */
     name?: string;
+    /** #363: ship faction, for faction-scoped ally grants (Fuying's "grants Tianchao allies
+     *  Stealth" → `Ability.factionFilter`, intersected in `resolveSupportRecipients`). Auto-filled
+     *  from ship data in the team sim; absent → unknown faction → this actor never receives a
+     *  faction-scoped grant (conservative, mirroring `role`'s contract). */
+    faction?: FactionKey;
 }

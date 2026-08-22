@@ -54,7 +54,7 @@ import { hasUsableChargedSkill } from '../abilities/applyAbilities';
 import { parseShipTargeting, SkillTargeting, ParsedTarget } from '../targetingParser';
 import { buildCombatLog } from '../combat/log/buildCombatLog';
 import type { CombatLogRound } from '../combat/log/types';
-import type { FactionName } from '../../constants/factions';
+import { asFactionKey, type FactionName } from '../../constants/factions';
 import {
     runPreFight,
     squadLeaderPass,
@@ -932,6 +932,10 @@ export function simulateBattle(
             // SP-F F5 (Meatshield defense-substitution): thread the ship role (Ship.type) for
             // role-filtered classification ("non-defender ally" gate).
             role: plan.role,
+            // #363: thread the ship faction for faction-scoped ally grants (Fuying's "grants
+            // Tianchao allies Stealth"). Narrowed at this boundary rather than cast — an
+            // unrecognised value must read as UNKNOWN, not as a key that matches nothing.
+            faction: asFactionKey(plan.faction),
             // SP-F F4: thread the ship name for the live `ally-on-team` roster check
             // (Isha/Nayra reciprocal Affinity Override gate).
             name: plan.name,
@@ -974,6 +978,9 @@ export function simulateBattle(
                 // (Meatshield defense-substitution's "non-defender ally" gate). Team symmetry
                 // with the teamActors branch above.
                 role: plan.role,
+                // #363: thread the ship faction (team symmetry with the teamActors branch) so an
+                // ENEMY-side Fuying scopes her Stealth grant to enemy Tianchao allies.
+                faction: asFactionKey(plan.faction),
                 // SP-F F4: thread the ship name for the live `ally-on-team` roster check.
                 name: plan.name,
                 // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills into the
@@ -1058,6 +1065,8 @@ export function simulateBattle(
         // classification (Meatshield defense-substitution's "non-defender ally" gate). Team
         // symmetry with the teamActors/enemyAttackers branches above.
         role: focus.role,
+        // #363: thread the focus actor's ship faction (team symmetry with the branches above).
+        faction: asFactionKey(focus.faction),
         // SP-F F4: thread the focus actor's ship name for the live `ally-on-team` roster check.
         name: focus.name,
         // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.

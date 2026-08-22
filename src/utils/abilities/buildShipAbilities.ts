@@ -18,6 +18,7 @@ import {
     ScalingRule,
     ControlEffect,
     IncomingCondition,
+    FACTION_FILTERABLE_TARGETS,
 } from '../../types/abilities';
 import { getShipSkillRows, getSkillRowForSlot } from '../ship/skillRows';
 import {
@@ -123,6 +124,7 @@ import {
     detectTransformToDot,
     detectProtectionTransformToDot,
     detectConvertDot,
+    detectGrantFactionScope,
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
     parseWhileShieldedFlatDefence,
@@ -140,6 +142,7 @@ import {
 } from '../calculators/skillBuffAutoFill';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
+import { FACTIONS, FACTION_KEYS, type FactionKey } from '../../constants/factions';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -807,6 +810,17 @@ interface ParsedIncomingDamageReduction {
     pct?: number;
     hpScaling?: { perUnit: number; cap: number };
     matchIndex: number;
+    /** #363 (Fuying): the reduction applies to ALLIES, not the carrier. Absent → 'self', which
+     *  is what all six pre-existing phrasings (Iridium/Anemone/Panon/Wusheng/Tormenter/Voron)
+     *  are. */
+    target?: 'self' | 'all-allies';
+    /** #363: restrict ally recipients to these factions. Only meaningful with target
+     *  'all-allies'. */
+    factionFilter?: FactionKey[];
+    /** #363: the emitted ability carries `Ability.patternScoped`, so the engine narrows its
+     *  recipients to the carrier's ACTIVE support footprint. OWNER-RULED 2026-08-22 — see the
+     *  ally-aura arm below for why this is set despite the clause not naming the pattern. */
+    patternScoped?: boolean;
 }
 
 /**
@@ -917,6 +931,45 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
             pct: parseFloat(malvexM[1]),
             matchIndex: malvexM.index,
         });
+    }
+
+    // Fuying (#363): "All Tianchao allies with Stealth take N% less direct damage." The corpus's
+    // first ALLY-scoped reduction — every arm above reduces damage on the CARRIER. The faction is
+    // captured from the recipient phrase, so 'Tianchao Precision II' (a buff NAME) cannot reach
+    // this arm: the pattern requires 'allies' right after the faction word.
+    //
+    // The gate is the EXISTING `self-stealth` condition (Wusheng already uses it from skill text):
+    // "with Stealth" is a property of the VICTIM of the incoming hit, which is what that condition
+    // reads. Nothing new is needed for it.
+    const allyAuraM =
+        /all\s+([a-z]+(?:\s+[a-z]+)?)\s+allies\s+with\s+stealth\s+take\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage/i.exec(
+            plain
+        );
+    if (allyAuraM) {
+        const key = FACTION_KEYS.find(
+            (k) => FACTIONS[k].name.toLowerCase() === allyAuraM[1].trim().toLowerCase()
+        );
+        // Unrecognised faction word → emit NOTHING, so audit:skills keeps reporting the clause
+        // rather than silently applying an unfiltered ally-wide aura. Same closed-alternation
+        // discipline as Prophet's 'Nx its <stat>' arm (#361).
+        if (key) {
+            out.push({
+                scopes: ['direct'],
+                condition: 'self-stealth',
+                pct: parseFloat(allyAuraM[2]),
+                target: 'all-allies',
+                factionFilter: [key],
+                // OWNER-RULED 2026-08-22: the aura IS pattern-limited — a Stealthed Tianchao ally
+                // standing OUTSIDE Fuying's active pattern takes FULL damage. The limit is
+                // MECHANICAL, not textual: it governs the whole passive even though the words
+                // "within the active pattern" sit only in the passive's SECOND sentence (the
+                // Stasis reactive), and at R2 the aura ships alone with no pattern phrase at all.
+                // That is why it is set here rather than left to `markPatternScoped`, which reads
+                // the ability's OWN sentence and would (correctly, by the text) never flag it.
+                patternScoped: true,
+                matchIndex: allyAuraM.index,
+            });
+        }
     }
 
     return out;
@@ -1784,11 +1837,19 @@ function abilitiesFromText(
         const localVerbIdx = extendSentence.search(/\bextend(?:s|ed)?\b/i);
         const extendSubjectPrefix =
             localVerbIdx >= 0 ? extendSentence.slice(0, localVerbIdx) : extendSentence;
+        // #363 (Fuying): the named arm carries no "all allies"/"all enemies" subject in its
+        // own clause ("...and extends Stealth by 1 turn" — the subject is inherited, not
+        // restated), so the no-subject fallback for a BUFF-kind extension is 'all-allies' —
+        // matching Ripper's explicit "All allies extend..." semantics and letting the runtime's
+        // existing allyRoster + supportRecipients pattern-scoping apply. A DEBUFF-kind
+        // extension's no-subject fallback stays 'enemy' (Sokol, unchanged: a single hit target).
         const extendTarget: AbilityTarget = /\ball\s+allies\b/i.test(extendSubjectPrefix)
             ? 'all-allies'
             : /\ball\s+(?:hit\s+)?enemies\b/i.test(extendSubjectPrefix)
               ? 'all-enemies'
-              : 'enemy';
+              : extendStatus.statusKind === 'buff'
+                ? 'all-allies'
+                : 'enemy';
         const extendCritGated = /\bcritical\s+hit\s+occurs\b/i.test(extendSentence);
         const extendStatusPos = text.search(/extend/i);
         out.push({
@@ -1802,6 +1863,7 @@ function abilitiesFromText(
                     type: 'extend-status',
                     statusKind: extendStatus.statusKind,
                     turns: extendStatus.turns,
+                    ...(extendStatus.buffName ? { buffName: extendStatus.buffName } : {}),
                 },
                 autoFilled: true,
             },
@@ -2415,6 +2477,7 @@ function abilitiesFromText(
                     type: 'cleanse',
                     count: c.count,
                     ...(c.debuffType ? { debuffType: c.debuffType } : {}),
+                    ...(c.countScaling ? { countScaling: c.countScaling } : {}),
                 },
                 ...(cleanseOncePerRound ? { oncePerRound: true } : {}),
                 autoFilled: true,
@@ -2863,15 +2926,18 @@ function abilitiesFromText(
     // Epic PR12(C): the four incoming-damage-reduction phrasings (Anemone/Panon/Wusheng/
     // Tormenter). One or two abilities per directive (one per `scopes` entry — "all incoming
     // damage"/unscoped phrasings emit both 'direct' and 'dot').
+    // #363: plus Fuying's ALLY-scoped aura, the first in the family whose `target` is not 'self'.
     for (const dir of parseIncomingDamageReductionPhrasings(text)) {
         for (const scope of dir.scopes) {
             out.push({
                 ability: {
                     id: nextId(),
                     type: 'incoming-reduction',
-                    target: 'self',
+                    target: dir.target ?? 'self',
                     trigger: 'on-cast',
                     conditions: [],
+                    ...(dir.factionFilter ? { factionFilter: dir.factionFilter } : {}),
+                    ...(dir.patternScoped ? { patternScoped: true } : {}),
                     config: {
                         type: 'incoming-reduction',
                         scope,
@@ -3234,6 +3300,21 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (conditions.length) {
             ability.conditions = conditions;
         }
+        // #363 (Fuying): recipient FACTION scope on an ally-scoped grant ("grants Tianchao allies
+        // Stealth"). Attached ONLY when the clause actually names one, so every other ship's
+        // ability object stays byte-identical (verified corpus-wide: the detector fires on Fuying
+        // alone). Gated on an ally-scoped target — a self-grant has no recipient set to narrow,
+        // and a faction predicate on it would either be a no-op or mute the caster's own buff.
+        //
+        // occurrenceIndex is left at its default 0: `mergeBuff` works from a deduped
+        // SelectedGameBuff (keyed name|target|source), so it has no per-<unit-skill>-segment
+        // occurrence to pass. That only matters for a buff name granted TWICE in one clause with
+        // two DIFFERENT faction scopes — no corpus clause does that (Fuying's Stealth appears once
+        // per row), and both grants of such a pair would read the first span's answer.
+        if (rowText && FACTION_FILTERABLE_TARGETS.has(target)) {
+            const factionFilter = detectGrantFactionScope(rowText, buff.buffName);
+            if (factionFilter) ability.factionFilter = factionFilter;
+        }
         // Reactive trigger (crit / start-of-round / bomb-detonate) detected on this buff's
         // clause: route through the engine's trigger machinery instead of a gating condition.
         // The trigger IS the gate, so drop the now-redundant self-crit condition (start-of-round
@@ -3406,6 +3487,13 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 // engine's on-ally-attacked listener fires only when the damaged ally's
                 // role matches one of them.
                 if (reaction.roleFilter) ability.roleFilter = reaction.roleFilter;
+                // #363 (Fuying R3/R4): a named standing status the DAMAGED ally must hold
+                // ("when an ally IN Stealth … is directly damaged") → requireDamagedAllyStatus,
+                // enforced in the on-ally-attacked listener against that ally's live statuses.
+                // The parser only emits a canonical BUFFS name, so an unrecognised phrase leaves
+                // the field absent (un-gated, pre-#363 behaviour) rather than never firing.
+                if (reaction.allyStatusName)
+                    ability.requireDamagedAllyStatus = reaction.allyStatusName;
                 // Ally-damage-reaction BUFF grants land on the DAMAGED ally (spec-locked):
                 // Refine's recipient-less "grants Inc. Damage Down I" and Graphite's
                 // "grants the ally Repair Over Time III" both resolve via

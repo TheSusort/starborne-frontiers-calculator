@@ -970,6 +970,81 @@ describe('AbilityCard', () => {
         });
     });
 
+    describe('Recipient faction filter (#363)', () => {
+        const buffAllAllies: Ability = {
+            id: 'a10',
+            type: 'buff',
+            target: 'all-allies',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: '',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+            },
+        };
+
+        it('renders the control for an ally-plural target', () => {
+            render(<AbilityCard ability={buffAllAllies} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByText('Recipient faction filter')).toBeInTheDocument();
+            expect(screen.getByLabelText('Tianchao')).toBeInTheDocument();
+            expect(screen.getByLabelText('XAOC')).toBeInTheDocument();
+        });
+
+        it('does NOT render the control for a charge ability, even with an ally-plural target', () => {
+            const chargeAllAllies: Ability = {
+                id: 'a11',
+                type: 'charge',
+                target: 'all-allies',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            };
+            render(<AbilityCard ability={chargeAllAllies} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.queryByText('Recipient faction filter')).not.toBeInTheDocument();
+        });
+
+        it('does NOT render the control for a non-ally target', () => {
+            const damageAllEnemies: Ability = { ...damageAbility, target: 'all-enemies' };
+            render(
+                <AbilityCard ability={damageAllEnemies} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            expect(screen.queryByText('Recipient faction filter')).not.toBeInTheDocument();
+        });
+
+        it('unchecking the only selected faction calls onChange WITHOUT a factionFilter key (absent, not [])', () => {
+            const onChange = vi.fn();
+            const ability: Ability = { ...buffAllAllies, factionFilter: ['TIANCHAO'] };
+            render(<AbilityCard ability={ability} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Tianchao'));
+            const updated = onChange.mock.calls[0][0] as Ability;
+            expect(updated.factionFilter).toBeUndefined();
+            expect(Object.prototype.hasOwnProperty.call(updated, 'factionFilter')).toBe(false);
+        });
+
+        it('checking a faction calls onChange with that faction added to factionFilter', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={buffAllAllies} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Tianchao'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({ factionFilter: ['TIANCHAO'] })
+            );
+        });
+
+        it('strips factionFilter when the target changes to one that cannot carry it', () => {
+            const onChange = vi.fn();
+            const ability: Ability = { ...buffAllAllies, factionFilter: ['TIANCHAO'] };
+            render(<AbilityCard ability={ability} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Target'));
+            fireEvent.click(screen.getByText('Self'));
+            const updated = onChange.mock.calls[0][0] as Ability;
+            expect(updated.target).toBe('self');
+            expect(Object.prototype.hasOwnProperty.call(updated, 'factionFilter')).toBe(false);
+        });
+    });
+
     it('reconstructs picker value from config.buffName and shows selected buff', () => {
         const buffAbilityWithName: Ability = {
             ...buffAbility,

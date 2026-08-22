@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { incomingReductionForHit, incomingBlockForIntake } from '../incomingEffects';
+import {
+    incomingReductionForHit,
+    incomingBlockForIntake,
+    addIncomingAbilityDeduped,
+    withLiveAllyScopedOwners,
+} from '../incomingEffects';
 import { Ability, IncomingCondition, IncomingHitContext } from '../../../types/abilities';
 
 const ctx = (over: Partial<IncomingHitContext> = {}): IncomingHitContext => ({
@@ -208,5 +213,132 @@ describe('incomingBlockForIntake', () => {
     });
     it('returns 0 with no block abilities', () => {
         expect(incomingBlockForIntake([], ctx({ hitIndexThisRound: 2 }), yes)).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// #363 item 5 — addIncomingAbilityDeduped, the id-keyed dedupe for the ally-scoped fan-out pass.
+// A DIRECT unit test rather than an engine scenario: the double-add this guards against needs an
+// actor present in BOTH runtime maps with two DISTINCT Ability objects for the same underlying
+// ability, which is not reachable through any real fixture today (the per-actor OWN-abilities
+// pass already guards the one known path that could put an actor in both maps). The guard itself
+// is still worth pinning directly, since object-identity dedupe (`list.includes(a)`) would have
+// looked identical on every test that only ever pushes ONE object per id.
+// ---------------------------------------------------------------------------
+describe('addIncomingAbilityDeduped (#363 item 5)', () => {
+    // Two DISTINCT objects sharing the same id — exactly the shape two different runtimes for one
+    // actor id would hand back for "the same" underlying ability.
+    const auraCopy = (): Ability => ({
+        id: 'fuying-aura',
+        type: 'incoming-reduction',
+        target: 'all-allies',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 30,
+            critFamily: false,
+        },
+    });
+
+    it('does not add a second entry sharing the first entry’s id', () => {
+        const list: Ability[] = [];
+        const first = auraCopy();
+        const second = auraCopy();
+        addIncomingAbilityDeduped(list, first);
+        addIncomingAbilityDeduped(list, second);
+        expect(list).toHaveLength(1);
+        expect(list[0]).toBe(first); // the FIRST object wins; the duplicate is dropped, not merged
+    });
+
+    it(
+        'PROVE THE INSTRUMENT: without id-keyed dedupe, two distinct objects for the same id would ' +
+            'both land and DOUBLE the reduction (30% -> 60%)',
+        () => {
+            const first = auraCopy();
+            const second = auraCopy();
+            // The OLD object-identity dedupe this replaces (`list.includes(a)`) — proves a naive
+            // rewrite back to identity-based dedupe would silently reopen the gap.
+            const identityDedupedList: Ability[] = [];
+            for (const a of [first, second])
+                if (!identityDedupedList.includes(a)) identityDedupedList.push(a);
+            expect(identityDedupedList).toHaveLength(2); // both land — the bug this item closes
+
+            const ctxStealthed = ctx({ victimStealthed: true });
+            expect(incomingReductionForHit(identityDedupedList, ctxStealthed)).toBe(60);
+
+            // The id-keyed dedupe this item introduces closes it.
+            const dedupedList: Ability[] = [];
+            addIncomingAbilityDeduped(dedupedList, first);
+            addIncomingAbilityDeduped(dedupedList, second);
+            expect(incomingReductionForHit(dedupedList, ctxStealthed)).toBe(30);
+        }
+    );
+
+    it('adds abilities with different ids independently', () => {
+        const list: Ability[] = [];
+        addIncomingAbilityDeduped(list, auraCopy());
+        addIncomingAbilityDeduped(list, { ...auraCopy(), id: 'some-other-ability' });
+        expect(list).toHaveLength(2);
+    });
+
+    it('returns the same list instance it mutates', () => {
+        const list: Ability[] = [];
+        const returned = addIncomingAbilityDeduped(list, auraCopy());
+        expect(returned).toBe(list);
+    });
+});
+
+describe('withLiveAllyScopedOwners (#363 review Fix 1)', () => {
+    const aura: Ability = {
+        id: 'fuying-aura',
+        type: 'incoming-reduction',
+        target: 'all-allies',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 30,
+            critFamily: false,
+        },
+    };
+    const selfScoped: Ability = { ...aura, id: 'iridium-self', target: 'self' };
+    const alwaysAlive = () => true;
+    const neverAlive = () => false;
+
+    it('returns the SAME ARRAY REFERENCE when the recipient has no ally-scoped entries', () => {
+        // The self-scoped family's byte-identical path: no owner map at all, and an empty one.
+        const list = [selfScoped];
+        expect(withLiveAllyScopedOwners(list, undefined, neverAlive)).toBe(list);
+        expect(withLiveAllyScopedOwners(list, new Map(), neverAlive)).toBe(list);
+    });
+
+    it('keeps an ally-scoped entry while its owner lives and drops it once the owner is dead', () => {
+        const owners = new Map([['fuying-aura', 'fuying']]);
+        expect(withLiveAllyScopedOwners([aura], owners, alwaysAlive)).toEqual([aura]);
+        expect(withLiveAllyScopedOwners([aura], owners, neverAlive)).toEqual([]);
+    });
+
+    it('leaves a SELF-scoped entry alone even when the ally-scoped owner beside it is dead', () => {
+        // The lookup MISS is what preserves it — the filter never consults liveness for an id the
+        // fan-out pass did not record, so Iridium/Anemone/Wusheng/Panon/Tormenter/Voron cannot be
+        // collaterally silenced by a dead teammate's aura sharing their list.
+        const owners = new Map([['fuying-aura', 'fuying']]);
+        expect(withLiveAllyScopedOwners([selfScoped, aura], owners, neverAlive)).toEqual([
+            selfScoped,
+        ]);
+    });
+
+    it('asks liveness about the OWNER id, not the ability id', () => {
+        const asked: string[] = [];
+        withLiveAllyScopedOwners([aura], new Map([['fuying-aura', 'fuying']]), (id) => {
+            asked.push(id);
+            return true;
+        });
+        expect(asked).toEqual(['fuying']);
     });
 });

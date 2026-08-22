@@ -2,6 +2,7 @@ import { ShipSkills } from '../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import { AffinityName } from '../../types/ship';
 import type { ShipTypeName } from '../../constants/shipTypes';
+import type { FactionKey } from '../../constants/factions';
 import type { Position } from '../../types/encounters';
 import type { ActiveBuff } from '../combat/statusEngine';
 import type { CombatEventBus } from '../combat/events';
@@ -98,6 +99,12 @@ export interface EnemyAttackerInput {
     /** Charged-axis targeting when it differs from active. Falls back to `target` / `pattern`. */
     chargedTarget?: ParsedTarget;
     chargedPattern?: ParsedPattern;
+    /** #363: this enemy attacker's faction — maps to the engine's `enemyAttackers[].faction`,
+     *  seeding the actor→faction map that a faction-scoped ally grant intersects against
+     *  (Fuying's "grants Tianchao allies Stealth"). Absent → unknown faction → an enemy-side
+     *  faction-scoped grant never reaches this enemy (conservative). Spread straight through by
+     *  `engineEnemyAttackers` below, same as every other passthrough field on this interface. */
+    faction?: FactionKey;
 }
 
 export interface HealingSimulationInput {
@@ -118,6 +125,12 @@ export interface HealingSimulationInput {
      *  team walk). Absent (manual stats / no ship picked) → the focus actor never matches a
      *  role filter — the reaction stays dormant for hits on it (conservative). */
     healerRole?: ShipTypeName;
+    /** #363: the HEALER ship's faction — maps to the engine's focus-actor `faction`, seeding the
+     *  actor→faction map that a faction-scoped ally grant intersects against (Fuying's "grants
+     *  Tianchao allies Stealth"). Team actors carry their own `faction` on TeamActorInput (passed
+     *  through untouched). Absent (manual config, no ship picked) → unknown faction → the healer
+     *  never receives a faction-scoped grant. */
+    healerFaction?: FactionKey;
     /** The heal target's security stat. Deprecated — reserved for future per-target live landing
      *  recompute; currently unused by the adapter (inbound enemy landing is driven by the live
      *  hacking-vs-security recompute from enemy.hacking / heal-target's effective security). */
@@ -677,6 +690,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         hacking: healer.hacking,
         healModifier: healer.healModifier,
         role: input.healerRole,
+        faction: input.healerFaction,
         healTargetId,
         enemyAttackers: engineEnemyAttackers,
         mode: 'healing',

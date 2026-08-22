@@ -8,9 +8,11 @@ import {
     ModifierChannel,
     SkillSlot,
     LIVE_TRIGGERS,
+    FACTION_FILTERABLE_TARGETS,
 } from '../../types/abilities';
 import { DoTType, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { ShipRoleCategory } from '../../constants/shipTypes';
+import { FACTIONS, FACTION_KEYS, type FactionKey } from '../../constants/factions';
 import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
@@ -154,6 +156,13 @@ const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
     { value: 'SUPPORTER', label: 'Supporter' },
 ];
 
+// #363: recipient FACTION scope options for an ally-scoped grant ("grants Tianchao allies
+// Stealth"). Derived from FACTION_KEYS so a new faction cannot be forgotten here.
+const FACTION_FILTER_OPTIONS: { value: FactionKey; label: string }[] = FACTION_KEYS.map((key) => ({
+    value: key,
+    label: FACTIONS[key].name,
+}));
+
 const PRE_COMBAT_STAT_OPTIONS: { value: 'hp' | 'attack' | 'crit' | 'hacking'; label: string }[] = [
     { value: 'hp', label: 'HP' },
     { value: 'attack', label: 'Attack' },
@@ -235,6 +244,12 @@ export const AbilityCard: React.FC<Props> = ({
     slot,
 }) => {
     const updateConfig = (config: AbilityConfig) => onChange({ ...ability, config });
+
+    // #363: `FACTION_FILTERABLE_TARGETS` narrows on the TARGET axis only; this narrows on the
+    // ABILITY TYPE axis, for the one type whose ally-targeted call site does not honour
+    // `factionFilter` at all — see the "Recipient faction filter" control's own comment below for
+    // why `charge` is excluded rather than wired up.
+    const factionFilterHonoredForType = ability.type !== 'charge';
 
     // "Scales per condition": per-unit bonus × the count from conditions[conditionIndex],
     // capped. Shared by damage and modifier abilities (e.g. "7.5% defPen per buff, up to 45%").
@@ -956,12 +971,62 @@ export const AbilityCard: React.FC<Props> = ({
                 <p className="text-xs text-theme-text-secondary">{NOT_SIMULATED_NOTE}</p>
             )}
 
+            {/* #363: `FACTION_FILTERABLE_TARGETS` gates on the TARGET axis only, but recipient
+                faction narrowing is honoured on the RECIPIENT-status path (a timed/aura/
+                accumulating buff — the four-site sweep in engine.ts/playerTurn.ts/triggers.ts),
+                not on every ability type that can carry an ally-scoped target. An ally-targeted
+                `charge` grant (playerTurn.ts's `supportRecipients('all-allies', allyRoster)` ally-
+                charge call site) sums its amount across the active+passive slots into one scalar
+                per actor before applying it to a roster — there is no single ability object left
+                by then to read a factionFilter off, so threading it through would mean
+                restructuring that scalar-sum call site to carry a per-ability filtered list
+                instead. Gating the control off for `charge` (rather than that restructuring) is
+                the fix here: offering a control that provably does nothing is worse than not
+                offering it, and `charge` is corpus-cold on this path today (every shipped
+                passive ally-charge grant is reactive, not this cast-path branch — see that call
+                site's own comment). Revisit if a non-reactive ally-charge grant ever needs
+                faction scoping. */}
             <Select
                 label="Target"
                 value={ability.target}
                 options={TARGET_OPTIONS}
-                onChange={(value) => onChange({ ...ability, target: value as AbilityTarget })}
+                onChange={(value) => {
+                    // #363: factionFilter is a RECIPIENT scope, so it hangs off the TARGET axis
+                    // (not the trigger axis roleFilter uses). Strip it when the new target cannot
+                    // carry one — a faction predicate on 'self' or an enemy scope is meaningless,
+                    // and a stale key would silently narrow nothing while looking meaningful.
+                    const target = value as AbilityTarget;
+                    const { factionFilter, ...rest } = ability;
+                    onChange({
+                        ...rest,
+                        ...(FACTION_FILTERABLE_TARGETS.has(target) &&
+                        factionFilterHonoredForType &&
+                        factionFilter !== undefined
+                            ? { factionFilter }
+                            : {}),
+                        target,
+                    });
+                }}
             />
+
+            {FACTION_FILTERABLE_TARGETS.has(ability.target) && factionFilterHonoredForType && (
+                <CheckboxGroup
+                    label="Recipient faction filter"
+                    helpLabel="Empty = any ally. Otherwise only allies of the chosen factions receive this, on top of the ship's targeting pattern."
+                    options={FACTION_FILTER_OPTIONS}
+                    values={ability.factionFilter ?? []}
+                    onChange={(values) => {
+                        // Empty selection normalizes to an ABSENT key (any ally), never an empty
+                        // array, so the stored ability stays canonical — same rule as roleFilter.
+                        if (values.length === 0) {
+                            const { factionFilter: _removed, ...rest } = ability;
+                            onChange(rest as Ability);
+                        } else {
+                            onChange({ ...ability, factionFilter: values as FactionKey[] });
+                        }
+                    }}
+                />
+            )}
 
             {(ability.type === 'buff' ||
                 ability.type === 'debuff' ||
@@ -981,20 +1046,31 @@ export const AbilityCard: React.FC<Props> = ({
                         options={TRIGGER_OPTIONS}
                         onChange={(value) => {
                             // triggerCritFilter applies to the attacked family (on-attacked +
-                            // on-ally-attacked, same engine contract); roleFilter only to
-                            // on-ally-attacked. Strip whatever the new trigger doesn't support
-                            // so the stored ability stays canonical.
+                            // on-ally-attacked, same engine contract); roleFilter and
+                            // requireDamagedAllyStatus (#363, Fuying's "when an ally in Stealth
+                            // is directly damaged") only to on-ally-attacked — both filter on the
+                            // DAMAGED ally, which no other trigger has. Strip whatever the new
+                            // trigger doesn't support so the stored ability stays canonical.
                             const trigger = value as AbilityTrigger;
-                            const { triggerCritFilter, roleFilter, ...rest } = ability;
+                            const {
+                                triggerCritFilter,
+                                roleFilter,
+                                requireDamagedAllyStatus,
+                                ...rest
+                            } = ability;
                             const keepCritFilter =
                                 trigger === 'on-attacked' || trigger === 'on-ally-attacked';
+                            const keepAllyFilters = trigger === 'on-ally-attacked';
                             onChange({
                                 ...rest,
                                 ...(keepCritFilter && triggerCritFilter !== undefined
                                     ? { triggerCritFilter }
                                     : {}),
-                                ...(trigger === 'on-ally-attacked' && roleFilter !== undefined
+                                ...(keepAllyFilters && roleFilter !== undefined
                                     ? { roleFilter }
+                                    : {}),
+                                ...(keepAllyFilters && requireDamagedAllyStatus !== undefined
+                                    ? { requireDamagedAllyStatus }
                                     : {}),
                                 trigger,
                             });

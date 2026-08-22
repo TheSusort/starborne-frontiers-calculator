@@ -9,6 +9,7 @@ import {
 } from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import type { AffinityName } from '../../types/ship';
+import type { FactionKey } from '../../constants/factions';
 import type { ParsedPattern } from '../targetingParser';
 import type { ConditionContext } from '../abilities/evaluateConditions';
 import {
@@ -87,6 +88,8 @@ import {
     payloadToSelectedBuff,
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
+import { scaledStatusCount } from './statusCountScaling';
+export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
@@ -734,6 +737,15 @@ export interface PlayerTurnArgs {
      *  itself inert without a resolved `targetId`, which only a positional/engine-scoped caller ever
      *  supplies in production, so the fallback is exercised only by tests that hand-build args. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    /** #363 (Fuying): actor id → faction, for the recipient FACTION intersection applied to a
+     *  `factionFilter`'d ally scope ("grants Tianchao allies Stealth"). Supplied by engine.ts's
+     *  `buildTurnArgs` from the side-agnostic `factionByActorId` map, so an ENEMY-side caster
+     *  narrows to its OWN side's matching allies with no mirrored branch. Returns `undefined` for
+     *  an actor whose faction the caller never supplied — an unknown faction NEVER matches a
+     *  filter (conservative, mirroring `roleOf`/`matchesRoleCategory`). Absent entirely
+     *  (standalone/unit-test callers, single-ship DPS) → byte-identical for every ability with no
+     *  `factionFilter`, which today is every ability but Fuying's Stealth grant. */
+    factionOf?: (id: string) => FactionKey | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -1372,7 +1384,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         target: Ability['target'],
         base: string[],
         // Omitted ⇒ cast-slot (always footprint-scoped), matching every pre-existing caller.
-        source?: { ability: Ability; fromPassive: boolean }
+        source?: { ability: Ability; fromPassive: boolean },
+        // #363: recipient faction scope for a caller that has NO `Ability` object in hand. The
+        // per-slot timed-status loop is one: it carries the filter on the STATUS (copied off the
+        // source ability at registration — see engine.ts's `registerActorAbilityStatuses`),
+        // because by application time the ability itself is no longer in scope there. When both
+        // are supplied the explicit one wins; in practice exactly one is ever present.
+        factionFilter?: FactionKey[]
     ): string[] =>
         resolveSupportRecipients({
             target,
@@ -1382,6 +1400,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 source === undefined || scopedByFootprint(source.ability, source.fromPassive)
                     ? footprintAllyIds
                     : undefined,
+            // #363: the faction predicate is INDEPENDENT of the footprint axis above — a passive
+            // that escapes the pattern still honours its faction scope, and vice versa.
+            factionFilter: factionFilter ?? source?.ability.factionFilter,
+            factionOf: args.factionOf,
         });
 
     // SP-4e: live HP fraction of a same-side actor, bound to this turn's healing ctx / live
@@ -2356,7 +2378,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
-        for (const rid of supportRecipients('all-allies', status.recipients ?? [actor.id])) {
+        // #363: the status's own recipient FACTION scope, copied off the source ability at
+        // registration. This is the CAST path for a faction-scoped grant (Fuying's "grants
+        // Tianchao allies Stealth" is a finite-duration buff → a timed-by-slot status), so the
+        // intersection has to happen HERE — the ability object is out of scope by now, which is
+        // why the filter rides the status rather than being read through `source`.
+        for (const rid of supportRecipients(
+            'all-allies',
+            status.recipients ?? [actor.id],
+            undefined,
+            status.factionFilter
+        )) {
             // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
             // single-ally grants, and all-allies grants (each recipient guarded independently);
             // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
@@ -3675,24 +3707,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         : ab.target === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
                           ? [enemyMostBuffsId]
                           : [targetId];
-                // E4: when the purge scales on crit power, total purged per victim =
-                // count × floor(live effectiveCritDamage / per). effectiveCritDamage (~line 1104 =
-                // dmgStats.critDamage) is the caster's LIVE crit power (buffs/debuffs folded),
-                // integer percent (e.g. 150). Hoisted out of the victim loop — constant within a cast.
-                const scaling = ab.config.countScaling;
-                // Guard `per` (defensive: the parser only emits per≥1 from `\d+`, but a
-                // hand-built config with per<=0/non-finite would make floor(x/per) Infinity/NaN).
-                let purgeCount: number | 'all' = ab.config.count;
-                if (
-                    scaling &&
-                    typeof ab.config.count === 'number' &&
-                    Number.isFinite(scaling.per) &&
-                    scaling.per > 0
-                ) {
-                    purgeCount =
-                        ab.config.count *
-                        Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
-                }
+                // E4/#363: when the purge (or cleanse, Fuying) scales on crit power, total
+                // removed per victim = count × floor(live effectiveCritDamage / per).
+                // effectiveCritDamage (~line 2555 = dmgStats.critDamage) is the caster's LIVE
+                // crit power (buffs/debuffs folded), integer percent (e.g. 150). Hoisted out of
+                // the victim loop — constant within a cast. Shared with the cleanse branch below
+                // via scaledStatusCount (./statusCountScaling) — see that helper for the guards.
+                const purgeCount = scaledStatusCount(
+                    ab.config.count,
+                    ab.config.countScaling,
+                    effectiveCritDamage
+                );
                 for (const vid of recipients) {
                     const removed = statusEngine.purge(vid, purgeCount);
                     if (removed > 0) {
@@ -3789,6 +3814,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             continue;
         }
         const { statusKind, turns } = ab.config;
+        // #363 (Fuying): a NAMED extension ("extends Stealth by 1 turn") restricts the buff
+        // branch below to that exact status name. Absent (Ripper) → extend-everything, unchanged.
+        const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
             // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
             // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
@@ -3829,7 +3857,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                           fromPassive,
                       });
             for (const rid of recipients) {
-                statusEngine.extendAllBuffsDuration(rid, turns);
+                statusEngine.extendAllBuffsDuration(rid, turns, namedBuff);
             }
         }
     }
@@ -4361,9 +4389,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // (guarded `> 0`) now fires only on real removal — symmetric to the E5 heal lift and
                     // the #166 shield lift. The ONLY side-difference is the player-facing cleanseCount
                     // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
+                    // #363 (Fuying): "cleanses 1 debuff for every 50% crit power" scales the
+                    // same way as Amartya's purge — total = count × floor(effectiveCritDamage /
+                    // per), via the shared scaledStatusCount helper. Hoisted outside the
+                    // recipient loop: it is constant within a cast (recomputing it per recipient
+                    // would be wasteful and could read a mutating value).
+                    const cleanseCount = scaledStatusCount(
+                        cfg.count,
+                        cfg.countScaling,
+                        effectiveCritDamage
+                    );
                     let removed = 0;
                     for (const rid of recipientsFor(ability, fromPassive)) {
-                        const removedForRid = statusEngine.cleanse(rid, cfg.count);
+                        const removedForRid = statusEngine.cleanse(rid, cleanseCount);
                         removed += removedForRid;
                         // Phase 3 PR-H: only recipients with a REAL removal are on-own-cleanse's
                         // ally-routing candidates (mirrors shieldRecipientIds' granted>0 gate) — a

@@ -1,5 +1,6 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
 import { Condition, SkillSlot } from '../../types/abilities';
+import type { FactionKey } from '../../constants/factions';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
 import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
@@ -73,6 +74,12 @@ interface AbilityStatusBase {
      *  statusEngine unit-test fixtures need not restate it. For attacker-only runs this is always
      *  ['attacker'] → zero churn vs the pre-Task-5 owner-routing. */
     recipients?: string[];
+    /** #363 (Fuying): recipient FACTION scope copied off the source `Ability.factionFilter`.
+     *  `recipients` above is resolved at actor CONSTRUCTION and knows nothing about factions, so
+     *  the filter rides the status and is intersected in at APPLICATION time (playerTurn's
+     *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
+     *  in scope. Absent → no faction narrowing, byte-identical for every other ship. */
+    factionFilter?: FactionKey[];
 }
 
 /**
@@ -262,8 +269,11 @@ export interface StatusEngine {
     extendAllDebuffsDuration(actorId: string, turns: number): number;
     /** Wave 4 (Ripper): the self-buff sibling of extendAllDebuffsDuration — extends EVERY
      *  eligible timed buff on `actorId` (per-owner `selfMaps`) by `turns`. Same eligibility
-     *  rules and never expires an entry. Returns the number of buffs affected. Unknown id → 0. */
-    extendAllBuffsDuration(actorId: string, turns: number): number;
+     *  rules and never expires an entry. Returns the number of buffs affected. Unknown id → 0.
+     *  #363 (Fuying): when `buffName` is given, restricts the extension to statuses with that
+     *  exact name (e.g. "Stealth") — every other eligible buff is left untouched. Absent →
+     *  extend-everything (Sokol/Ripper/Lev behaviour, unchanged). */
+    extendAllBuffsDuration(actorId: string, turns: number, buffName?: string): number;
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
@@ -1337,8 +1347,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     /** Wave 4 (Ripper): the self-buff sibling of extendAllDebuffsDuration — extends EVERY
      *  eligible timed buff on `actorId` (per-owner `selfMaps`) by `turns`. Same eligibility
      *  rules and never expires an entry. Returns the count of buffs affected; a
-     *  non-positive/non-finite `turns` or unknown id returns 0. */
-    const extendAllBuffsDuration = (actorId: string, turns: number): number => {
+     *  non-positive/non-finite `turns` or unknown id returns 0.
+     *  #363 (Fuying): an optional `buffName` restricts the extension to statuses with that
+     *  exact name — a NAMED extension touches only that status; absent → every eligible
+     *  buff (Sokol/Ripper/Lev, unchanged). */
+    const extendAllBuffsDuration = (actorId: string, turns: number, buffName?: string): number => {
         const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
         if (delta <= 0) return 0;
         const timedMap = selfMaps.get(actorId);
@@ -1347,6 +1360,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         for (const [, s] of timedMap) {
             if (typeof s.turnsRemaining !== 'number') continue;
             if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+            if (buffName !== undefined && s.buffName !== buffName) continue;
             s.turnsRemaining += delta;
             affected++;
         }

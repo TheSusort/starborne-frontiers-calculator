@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
 import { Ship, AffinityName } from '../../types/ship';
 import type { ShipTypeName } from '../../constants/shipTypes';
+import { asFactionKey, type FactionKey } from '../../constants/factions';
 import {
     HealerShipConfig,
     HealerShipConfigUpdateableField,
@@ -245,6 +246,10 @@ const HealingCalculatorPage: React.FC = () => {
     // the reaction stays dormant for hits on it (conservative). Self-heal resolves from the
     // healer ship instead (healerRole below).
     const [targetRole, setTargetRole] = useState<ShipTypeName | undefined>(undefined);
+    // #363: selected heal-target ship's faction (explicit-target case). Decides whether a
+    // faction-scoped ally grant reaches it (Fuying's "grants Tianchao allies Stealth"). Undefined
+    // → no ship picked → unknown faction → never a recipient of one (conservative).
+    const [targetFaction, setTargetFaction] = useState<FactionKey | undefined>(undefined);
     const [targetCombatStats, setTargetCombatStats] = useState<CombatStatBlock | undefined>(
         undefined
     );
@@ -343,6 +348,7 @@ const HealingCalculatorPage: React.FC = () => {
         setTargetStartCharged(detectShipCharged(ship));
         setTargetAffinity(ship.affinity);
         setTargetRole(ship.type);
+        setTargetFaction(asFactionKey(ship.faction));
         setTargetCombatStats({
             attack: Math.round(final.attack ?? 0),
             crit: Math.round(final.crit ?? 0),
@@ -491,6 +497,9 @@ const HealingCalculatorPage: React.FC = () => {
                     },
                     affinity: ship.affinity,
                     role: ship.type,
+                    // #363: faction-scoped ally grants (Fuying's Tianchao Stealth) resolve the
+                    // recipient's faction from here.
+                    faction: asFactionKey(ship.faction),
                     buffs: t.buffs.filter((b) => !b.autoFilled),
                     enemyDebuffs: t.enemyDebuffs.filter((b) => !b.autoFilled),
                 };
@@ -544,6 +553,7 @@ const HealingCalculatorPage: React.FC = () => {
                 stats: t.stats,
                 affinity: t.affinity,
                 role: t.role,
+                faction: t.faction,
                 // Board cell, ONLY when the user actually picked one — the same shape `targetActor`
                 // uses below, and for the same reason. Left absent, the adapter applies
                 // `defaultHealingTeamSlot(index)` itself (identical to what `teamShipSlot` displays)
@@ -582,6 +592,8 @@ const HealingCalculatorPage: React.FC = () => {
             stats: { ...baseStats, defence: target.defence, hp: target.hp },
             // Role-filtered on-ally-attacked reactions resolve the damaged target's role here.
             role: targetRole,
+            // #363: faction-scoped ally grants resolve the recipient's faction here.
+            faction: targetFaction,
             // ONLY when the user chose a cell. Left absent, the adapter applies its coverage-aware
             // `defaultHealTargetSlot` — which knows the healer's support footprint and therefore
             // whether the target gets healed at all. Passing a cell here overrides that.
@@ -598,6 +610,7 @@ const HealingCalculatorPage: React.FC = () => {
         targetShipSkills,
         targetCombatStats,
         targetRole,
+        targetFaction,
     ]);
 
     const enemyInputs = useMemo<EnemyAttackerInput[]>(
@@ -610,9 +623,17 @@ const HealingCalculatorPage: React.FC = () => {
                 // pressure on a spread board and making defensive placement inert against the enemy
                 // side. Undefined for a manual enemy (or an unparseable kit), and the adapter's
                 // synthetic front/base fallback then applies.
-                const targeting = targetingOf(e.shipId ? getShipById(e.shipId) : undefined);
+                const enemyShip = e.shipId ? getShipById(e.shipId) : undefined;
+                const targeting = targetingOf(enemyShip);
                 return {
                     id: e.id,
+                    // #363: this enemy's own faction — mirrors how the player-side team-ship/
+                    // target-ship branches above already thread `faction: asFactionKey(ship.
+                    // faction)`. Without this an ENEMY-side Fuying grants Stealth to nobody
+                    // (unknown faction never matches a filter), the opposite-direction defect
+                    // from those branches missing it. A manual enemy (no `shipId`) stays
+                    // unknown-faction, same as before.
+                    faction: asFactionKey(enemyShip?.faction),
                     stats: {
                         attack: e.attack,
                         crit: e.crit,
@@ -656,6 +677,11 @@ const HealingCalculatorPage: React.FC = () => {
             // configs have none. Drives role-filtered ally-damage reactions when the healer
             // is the heal target (engine focus-actor role).
             const healerRole = config.shipId ? getShipById(config.shipId)?.type : undefined;
+            // #363: the healer's own faction — decides whether its OWN faction-scoped grant can
+            // reach it, and (as the focus actor) seeds the engine's actor→faction map.
+            const healerFaction = config.shipId
+                ? asFactionKey(getShipById(config.shipId)?.faction)
+                : undefined;
             // The heal target's security drives each enemy's inbound debuff landing chance
             // (enemy hacking − security). Self-heal uses the healer config's own security
             // (auto-filled from the ship, 0 for manual configs); otherwise the manual target.
@@ -682,6 +708,7 @@ const HealingCalculatorPage: React.FC = () => {
                     healTargetAffinity,
                     healTargetSecurity,
                     healerRole,
+                    healerFaction,
                     teamActors: allTeamActors,
                     enemies: enemyInputs,
                     rounds,
