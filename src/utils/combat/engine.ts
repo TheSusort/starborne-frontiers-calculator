@@ -3539,9 +3539,10 @@ export function runCombat(rawInput: CombatEngineInput): {
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
               // `repairSourceId` (Task 4, #362): not read yet — Task 5 wires the R7 reversal-kill
               // credit off this id. Accepted here only so every call site is forced to supply it.
-              applyHealToTarget: (raw, victim, repairSourceId) => {
+              applyHealToTarget: (raw, victim, _repairSourceId) => {
                   // Dead target → all overheal. Otherwise consume up to the deficit against
                   // the target's CURRENT effective max HP (live ctx via recipientMaxHp).
+                  // (_repairSourceId: not read yet — Task 5 reads it for R7 reversal-kill credit)
                   if (victim.currentHp <= 0) {
                       return { consumed: 0, overheal: raw };
                   }
@@ -4343,7 +4344,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // per-victim `damage`).
     //
     // It REUSES procStandingLeeches's fold math (pct → raw, healModifier, heal-crit draw) but does
-    // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor) /
+    // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor, repairSourceId) /
     // grantShieldToTarget(raw, actor)), resolving each recipient's actor — so a covered enemy's
     // leech can repair the right ally, not just the heal target.
     //
