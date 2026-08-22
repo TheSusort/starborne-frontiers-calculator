@@ -42,7 +42,6 @@ import {
     MAX_SELECTION_TICKS,
     emptyActorDamage,
     emptyActorHealing,
-    recordDestroyed,
 } from './state';
 import {
     ActiveBuff,
@@ -90,6 +89,7 @@ import { highestAttackAmong } from './highestAttack';
 import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEvent, CombatEventBus, createEventBus } from './events';
+import { resolveLethalHp } from './lethalHp';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -3503,6 +3503,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // a self-rider once, while a later attack (a different turn) applies it again.
     const reactionFiredThisAttack = new Set<string>();
 
+    // Installed per turn (below, where the deferral flags live). Engine scope so the healing ctx —
+    // built at :3514, above the per-turn scope — can route a reversal's consequence log through the
+    // same buffer. Default is a direct emit: a reversal that somehow fires before the first turn
+    // installs one still logs, it just cannot be deferred (there is no window open to defer into).
+    let emitConsequenceLog: (ev: CombatEvent) => void = (ev) => bus.emit(ev);
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Constructed whenever `healTarget` is set — which
     // includes `'battle'` runs (battle mode anchors `healTarget` to the focus actor above), NOT
@@ -4973,6 +4978,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         // they buffer instead; triggers.ts flushes them via `ctx.flushConsequenceLogs` immediately
         // after the attack row is emitted, so cause precedes consequence.
         let deferConsequenceLogs = false;
+        // Install the real emitter for this turn now that the deferral flags/buffer/sub-attack
+        // index it reads all exist. Reassigns the engine-scope `let` declared above healingCtx —
+        // never captured into a copy — so healingCtx's closures (built before the round loop)
+        // read this turn's live routing at call time, not the pre-turn direct-emit default.
+        emitConsequenceLog = (ev: CombatEvent) => {
+            if (deferReflectLogs || deferConsequenceLogs)
+                pendingConsequenceLogs.push({ ev, subAttack: currentSubAttackIndex });
+            else bus.emit(ev);
+        };
         // PR2 Task 3: `subAttack` filters exactly as flushConsequenceLogs above — see its note.
         const flushReflectLogs = (subAttack?: number): void => {
             const kept: typeof pendingReflectLogs = [];
@@ -5569,12 +5583,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         duringTurnOf: actingActorId,
                         triggerActorId: actingActorId,
                     };
-                    if (deferReflectLogs || deferConsequenceLogs)
-                        pendingConsequenceLogs.push({
-                            ev: shieldConverterGrantLogEv,
-                            subAttack: currentSubAttackIndex,
-                        });
-                    else bus.emit(shieldConverterGrantLogEv);
+                    emitConsequenceLog(shieldConverterGrantLogEv);
                 }
             }
             // The post-block, non-transformed instant portion of this hit — captured HERE, right
@@ -5726,12 +5735,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             duringTurnOf: actingActorId,
                             triggerActorId: actingActorId,
                         };
-                        if (deferReflectLogs || deferConsequenceLogs)
-                            pendingConsequenceLogs.push({
-                                ev: grantLogEv,
-                                subAttack: currentSubAttackIndex,
-                            });
-                        else bus.emit(grantLogEv);
+                        emitConsequenceLog(grantLogEv);
                     }
                 }
             }
@@ -5767,84 +5771,31 @@ export function runCombat(rawInput: CombatEngineInput): {
                     duringTurnOf: actingActorId,
                     triggerActorId: actingActorId,
                 };
-                if (deferReflectLogs || deferConsequenceLogs)
-                    pendingConsequenceLogs.push({ ev: logEv, subAttack: currentSubAttackIndex });
-                else bus.emit(logEv);
+                emitConsequenceLog(logEv);
             }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
-            // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
-            // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
-            // it is never stored/timed — consumption is the per-actor cheatDeathConsumed flag
-            // (NOT a store mutation). On intercept we floor HP at 1 (overriding the Math.max(0, …)
-            // above), mark consumed, wipe the actor's REMOVABLE timed statuses (DoTs/timed
-            // self-buffs; persistent-stack + unremovable preserved), emit cheat-death-activated,
-            // and DO NOT record a destroy.
-            //
-            // Detection MUST go through selfBuffNamesForOwners, NOT snapshot().activeSelfBuffs:
-            // a real (Yazid/Tycho/Hayyan-granted) Cheat Death is an ability-sourced recurring
-            // self-buff that surfaces via activeAbilityStatuses('self', …, ownerId) — snapshot's
-            // activeSelfBuffs only carries SCHEDULED always-active buffs, and only for the
-            // 'attacker' owner (empty for any other owner). Since the heal target's owner id is
-            // often a team-actor id (not 'attacker'), snapshot alone misses both the
-            // ability-sourced case AND the non-attacker-owner case. selfBuffNamesForOwners
-            // aggregates snapshot + timed + active ability self statuses keyed by the actor's
-            // own id, covering every Cheat Death source.
+            // At the lethal moment: Cheat-Death intercept, else record the destroy. ONE shared
+            // path (`resolveLethalHp`, lethalHp.ts) for the whole engine — the Reversed Repairs
+            // reversal (#362) calls the SAME function rather than hand-copying this block, which
+            // is the shape that produced the one-directional defects in #306. See lethalHp.ts for
+            // the Cheat-Death detection/intercept rationale and the DoT-wipe rules.
             if (victim.currentHp <= 0) {
-                const targetId = victim.id;
-                // Captured BEFORE recordDestroyed (which sets destroyedRound): the death `else`
-                // can RE-ENTER on a corpse hit again (currentHp ≤ 0 → recordDestroyed idempotent),
-                // so this gate + the up-front bomb-consume below make the splash fire exactly once.
+                // Captured BEFORE resolveLethalHp (which stamps destroyedRound): the destroyed
+                // branch can RE-ENTER on a corpse hit, so this gate + the up-front bomb consume
+                // make the splash fire once.
                 const wasAliveBeforeThisCall = victim.destroyedRound === undefined;
-                const carriesCheatDeath = selfBuffNamesForOwners(statusEngine, [targetId]).some(
-                    (n) => CHEAT_DEATH_BUFFS.has(n)
-                );
-                if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
-                    victim.currentHp = 1;
-                    cheatDeathConsumed.add(targetId);
-                    // Display-only: remember the round it was spent so the chip is dropped
-                    // from rounds AFTER this one (see hideSpentCheatDeath). First write wins —
-                    // the flag above already blocks any second intercept, so this set-once.
-                    if (!cheatDeathConsumedRound.has(targetId)) {
-                        cheatDeathConsumedRound.set(targetId, r);
-                    }
-                    statusEngine.clearRemovable(targetId);
-                    // The tank's enemy-applied Corrosion/Inferno/generic DoTs are actor-state
-                    // stacks (NOT StatusEngine entries), so clearRemovable doesn't touch them —
-                    // wipe them here so the survivor takes no further ticks. These are the SAME
-                    // arrays the turn-start DoT-tick intake reads (healTarget.corrosion/inferno/
-                    // genericDoTEntries). SP-E: an `unremovable` stack (Acidic Decay) survives
-                    // this wipe — filter, don't clear, so those entries keep ticking. Bombs
-                    // (Blast, treated as persistent here) and accumulators are intentionally left
-                    // untouched.
-                    victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
-                    victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
-                    victim.genericDoTEntries = victim.genericDoTEntries.filter(
-                        (e) => e.unremovable
-                    );
-                    // Real event — INLINE for its combat listener (Yazid on-cheat-death-activated),
-                    // keeping listener timing byte-identical; the LOG-ONLY twin carries the nesting.
-                    bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
-                    const cheatDeathLogEv: CombatEvent = {
-                        type: 'cheat-death-log',
-                        actorId: targetId,
-                        round: r,
-                        reactive: true,
-                        duringTurnOf: actingActorId,
-                        triggerActorId: actingActorId,
-                    };
-                    if (deferReflectLogs || deferConsequenceLogs)
-                        pendingConsequenceLogs.push({
-                            ev: cheatDeathLogEv,
-                            subAttack: currentSubAttackIndex,
-                        });
-                    else bus.emit(cheatDeathLogEv);
-                } else {
-                    // First reach 0 (no intercept) → record the destroyed round + emit
-                    // ship-destroyed once (shared helper; idempotent via the per-actor
-                    // destroyedRound field). The healing result reads the destroyed round back
-                    // off the heal target's runtime `destroyedRound` field at the result site —
-                    // no side-specific scalar write is needed here.
-                    recordDestroyed(victim, r, bus, cause?.killerId, cause?.byDirectDamage);
+                const outcome = resolveLethalHp(victim, {
+                    round: r,
+                    statusEngine,
+                    cheatDeathConsumed,
+                    cheatDeathConsumedRound,
+                    bus,
+                    emitConsequenceLog,
+                    actingActorId,
+                    killerId: cause?.killerId,
+                    byDirectDamage: cause?.byDirectDamage,
+                });
+                if (outcome === 'destroyed') {
                     // Bomb-splash-on-death: a ship that dies with un-detonated bombs splashes a
                     // tier-scaled fraction (tier/4%: 100→25,200→50,300→75) of each bomb's damage to
                     // its LIVING same-side adjacent allies (positional only — victim.position gate
