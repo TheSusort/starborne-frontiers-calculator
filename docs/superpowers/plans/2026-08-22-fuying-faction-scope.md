@@ -557,7 +557,7 @@ describe('Fuying faction-scoped Stealth grant (#363)', () => {
     });
 
     it('builds the Stealth grant with factionFilter, through PRODUCTION slot routing', () => {
-        const built = buildShipAbilities(getShipSkillRows(fuyingShip()));
+        const built = buildShipAbilities(fuyingShip());
         const stealth = built.slots
             .flatMap((s) => s.abilities)
             .find((a) => a.config.type === 'buff' && a.config.buffName === 'Stealth');
@@ -861,14 +861,16 @@ describe('Fuying Stealth DR aura (#363)', () => {
         // buildTraceShip defaults to refitLevel 4 and getShipSkillRows returns only the
         // refit-active passive, so this is the R4 row → 30, not R2/R3's 15. No per-refit
         // branching is needed in the parser.
-        const built = buildShipAbilities(getShipSkillRows(fuyingShip()));
+        const built = buildShipAbilities(fuyingShip());
         const aura = built.slots
             .flatMap((s) => s.abilities)
             .find((a) => a.config.type === 'incoming-reduction');
         expect(aura).toBeDefined();
         expect(aura!.target).toBe('all-allies');
         expect(aura!.factionFilter).toEqual(['TIANCHAO']);
-        expect(aura!.patternScoped).toBeUndefined(); // a passive that does not name the pattern
+        // OWNER-RULED 2026-08-22: the aura IS pattern-limited (a Stealthed Tianchao ally
+        // standing OUTSIDE her pattern takes FULL damage). Reverses this spec's first draft.
+        expect(aura!.patternScoped).toBe(true);
         expect(aura!.config).toMatchObject({
             type: 'incoming-reduction',
             scope: 'direct',
@@ -1066,7 +1068,7 @@ reduction stops with it.
 
 Gate reuse only: 'self-stealth' already existed and is already used by
 Wusheng, so no new IncomingCondition. scope:'direct' means DoT ticks are
-unreduced, matching 'direct damage'. Not patternScoped — a passive that does
+unreduced, matching 'direct damage'. patternScoped: true — OWNER-RULED, a passive that does
 not name the pattern reaches allies wherever they stand.
 
 The fan-out deliberately INCLUDES the owner. Fuying is a Tianchao ally and the

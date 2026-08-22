@@ -225,12 +225,21 @@ used by Voidshade and Wusheng — the *gate* needs no new work.
   `(scope === 'dot') !== isDot` guard in `incomingReductionForHit` enforces that for free.
 - `critFamily: false` — additive with other non-crit reductions, per that function's composition
   rule (`max(crit-family) + sum(non-crit)`).
-- **Not `patternScoped`.** It is a passive whose clause does not name the pattern, so the locked
-  rule applies: passive-slot support is not narrowed to the firing skill's footprint. It reaches
-  all Tianchao allies wherever they stand. (Her *other* passive — the reactive Stasis — does say
-  "within the active pattern" and already parses with `patternScoped: true`; no change there.)
-- Refit resolution is free: `getShipSkillRows` returns only the refit-active passive, so a
-  below-threshold refit count yields 15 and R4 yields 30 with no per-refit branching.
+- **`patternScoped: true`. OWNER-RULED 2026-08-22 — do not re-derive this from the locked rule.**
+  Asked directly with an in-fight example (Anjian Stealthed INSIDE her pattern, Wusheng Stealthed
+  OUTSIDE it, both hit): **Wusheng takes FULL damage.** The aura is footprint-scoped.
+
+  This REVERSES what this spec originally said. The earlier text argued "not patternScoped" from
+  the locked rule that a passive not naming the pattern is never footprint-narrowed. That was a
+  GUESS: the locked rule records owner rulings about *other* ships' clauses and does not settle a
+  new mechanic. The clause's own wording ("All Tianchao allies with Stealth", no pattern words)
+  genuinely reads the other way — so the text is not self-evident and had to be asked.
+  See [[feedback_ask_game_examples_dont_guess]].
+
+  Consequence: the aura's recipients are `footprint ∩ Tianchao`, the same composition the Stealth
+  GRANT uses — not a team-wide aura. (Her sibling reactive Stasis clause says "within the active
+  pattern" explicitly and already carries `patternScoped: true`; both clauses in this passive are
+  therefore pattern-limited, one by wording and one by ruling.)
 
 ### The plumbing that is actually new
 
@@ -387,6 +396,39 @@ Gap 3 is independent of all of it and can land in any position.
   excludes her. Assert the **recipient set** directly, or the wrong implementation ships green.
 
 ---
+
+## 7a. LOCKED Stealth mechanics — owner-ruled 2026-08-22, do not re-derive
+
+All three were asked with concrete in-fight examples after an earlier draft of this spec guessed
+one of them wrong. Read these before touching anything Stealth-gated.
+
+1. **Stealth affects only being CHOSEN as a target. Damage lands normally.** A Stealthed ally is
+   removed from the enemy's target-selection pool, but anything that resolves onto them hurts them
+   at the full rate unless something reduces it — including a single-target attack forced there.
+   So a "takes N% less direct damage while Stealthed" aura is **frequently live**, not a corner
+   case. (This is why the DR aura is worth modelling at all; had Stealth meant damage immunity it
+   would have been near-dead weight.)
+
+2. **The DR aura is PATTERN-LIMITED** — see §3. Anjian Stealthed inside her pattern gets the
+   reduction; Wusheng Stealthed outside it takes FULL damage.
+
+3. **Being hit does NOT consume Stealth.** It ends by expiry (or the holder's own action), not by
+   taking damage. Two consequences: the reactive "when an ally in Stealth … is directly damaged"
+   gate needs no pre/post-hit ordering rule — the ally simply still holds Stealth — and the
+   reaction can fire on **every** qualifying hit within the window, so any once-per-round or
+   once-per-ally cap must come from the ability's own TEXT, never be invented to tame it.
+
+### Consequence: an unenforced gate, measured
+
+Fuying's R3/R4 passive reactive — "When an ally in Stealth within the active pattern is directly
+damaged, this Unit inflicts Stasis for 1 turn onto the enemy" — **does not check Stealth at all.**
+Measured at Task 3's HEAD in the `plain` fingerprint scenario: **40 `Stasis` log mentions, 0
+`Stealth`.** It fires with nobody Stealthed anywhere.
+
+Not introduced by any task here, and the faction fix makes it *more* visibly wrong (on a team with
+no Tianchao ally, nobody is ever Stealthed and it still fires). Ruling 3 above makes it fully
+specifiable now: gate on the damaged ally holding Stealth, pattern-scoped, no invented cap.
+**Owner decision needed on scope** — widen this branch, or file as its own issue.
 
 ## 8. Not gaps — do not re-open
 
