@@ -13,17 +13,18 @@
  * CALLER, the third by the funnel), so any caller that books the amount it PASSED IN rather than
  * the amount the funnel RECORDED double-counts whatever the funnel moved or dropped.
  *
- * The bomb / accumulator / detonation booking sites were left unswept. Four of them book their own
+ * The bomb / accumulator / detonation booking sites were left unswept. FIVE of them book their own
  * pre-funnel amount into `roundPerTargetDamage` + `creditDealt` (+ `perActorDetonation`, and at the
- * timed-burst sites a standing leech payout):
+ * timed-burst sites a standing leech payout) — #355 named only the first two:
  *
- *   1. `applyPerVictimDetonation`  — bomb portion            (engine.ts, `bombPortion: result.bomb`)
+ *   1. `applyPerVictimDetonation`  — bomb portion             (`bombPortion: result.bomb`)
  *   2. `applyPerVictimDetonation`  — inferno/corrosion bypass (`byDirectDamage: false`)
  *   3. `forceDetonateBombOnVictim` — a countdown-reduce forcing a burst (Lingshe)
- *   4. `applyPositionedTimedBurst` — `processBombs` / `processAccumulators` creditDetonation
+ *   4. `applyPositionedTimedBurst` — `processBombs` creditDetonation
+ *   5. `applyPositionedTimedBurst` — `processAccumulators` creditDetonation
  *
  * #355 predicted "only the proc-block path can diverge, so the expected outcome is a tripwire, not
- * a fix". That premise is WRONG for the three `byDirectDamage: true` sites. A bomb burst arrives
+ * a fix". That premise is WRONG for the FOUR `byDirectDamage: true` sites (every one but 2). A bomb burst arrives
  * stamped `byDirectDamage: true` with the whole amount in `bombPortion`, and only the two
  * CONSUMABLE steps (Hit Mitigation, Shield Converter) carry a `bombPortion === 0` guard. The
  * incoming-block step, the Protection cascade, and the standing Voron/Orel transform have no such
@@ -48,6 +49,30 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { ActiveDoTStack, CombatActor, PendingAccumulator, PendingBomb } from '../state';
 import type { Position } from '../../../types/encounters';
+import type { RoundData } from '../../calculators/dpsSimulator';
+
+/** The three reconciliation channels for one round, read the SAME way at every call site.
+ *
+ *  `dealtSum` walks EVERY attacker's dealt map rather than one hard-coded row: a Protection-
+ *  redirected chunk is credited to the original `cause.killerId`, and a single hard-coded attacker
+ *  row would silently miss a chunk booked under a different id — which is precisely the
+ *  double-count these tests exist to catch. */
+const readChannels = (r1: RoundData) => {
+    const taken = r1.perTargetDamage ?? {};
+    const incoming = r1.perActorIncoming ?? {};
+    const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
+    return {
+        taken,
+        incoming,
+        detonation: r1.perActorDetonation ?? {},
+        takenSum: sum(taken),
+        dealtSum: Object.values(r1.perTargetDealt ?? {}).reduce(
+            (s, byVictim) => s + sum(byVictim),
+            0
+        ),
+        incomingSum: Object.values(incoming).reduce((s, v) => s + v.incoming, 0),
+    };
+};
 
 const BOMB_DAMAGE = 1000; // stacks × damagePerStack, neutral affinity/detonation mults
 const PROTECTOR_DEFENCE = 300; // < the victim's 0 defence, so the redirected chunk is amplified
@@ -204,26 +229,7 @@ const channels = (input: CombatEngineInput) => {
     const bursts: CombatEvent[] = [];
     bus.on('bomb-detonated', (e) => bursts.push(e as CombatEvent));
     const r1 = runCombat({ ...input, bus }).rounds[0];
-    const taken = r1.perTargetDamage ?? {};
-    const incoming = r1.perActorIncoming ?? {};
-    const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
-    // Every actor's dealt map, not just one attacker's: a redirected chunk is credited to the
-    // original `cause.killerId`, and reading a single hard-coded attacker row would silently miss a
-    // chunk booked under a different id.
-    const dealtSum = Object.values(r1.perTargetDealt ?? {}).reduce(
-        (s, byVictim) => s + sum(byVictim),
-        0
-    );
-    return {
-        taken,
-        incoming,
-        bursts,
-        takenSum: sum(taken),
-        dealtSum,
-        incomingSum: sum(
-            Object.fromEntries(Object.entries(incoming).map(([k, v]) => [k, v.incoming]))
-        ),
-    };
+    return { ...readChannels(r1), bursts };
 };
 
 describe('timed bomb burst booking reconciles with what the funnel recorded', () => {
@@ -395,25 +401,7 @@ const detonateChannels = (input: CombatEngineInput) => {
     bus.on('bomb-detonated', (e) => bombEvents.push(e as CombatEvent));
     bus.on('dot-detonated', (e) => dotEvents.push(e as CombatEvent));
     const r1 = runCombat({ ...input, bus }).rounds[0];
-    const taken = r1.perTargetDamage ?? {};
-    const incoming = r1.perActorIncoming ?? {};
-    const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
-    const dealtSum = Object.values(r1.perTargetDealt ?? {}).reduce(
-        (s, byVictim) => s + sum(byVictim),
-        0
-    );
-    return {
-        taken,
-        incoming,
-        bombEvents,
-        dotEvents,
-        detonation: r1.perActorDetonation ?? {},
-        takenSum: sum(taken),
-        dealtSum,
-        incomingSum: sum(
-            Object.fromEntries(Object.entries(incoming).map(([k, v]) => [k, v.incoming]))
-        ),
-    };
+    return { ...readChannels(r1), bombEvents, dotEvents };
 };
 
 describe('skill-triggered per-victim detonation booking (applyPerVictimDetonation)', () => {
@@ -536,23 +524,7 @@ describe('accumulator burst booking (processAccumulators creditDetonation)', () 
                 }),
                 bus,
             }).rounds[0];
-            const taken = r1.perTargetDamage ?? {};
-            const incoming = r1.perActorIncoming ?? {};
-            const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
-            return {
-                bursts,
-                taken,
-                incoming,
-                takenSum: sum(taken),
-                dealtSum: Object.values(r1.perTargetDealt ?? {}).reduce(
-                    (s, byVictim) => s + sum(byVictim),
-                    0
-                ),
-                incomingSum: sum(
-                    Object.fromEntries(Object.entries(incoming).map(([k, v]) => [k, v.incoming]))
-                ),
-                detonation: r1.perActorDetonation ?? {},
-            };
+            return { ...readChannels(r1), bursts };
         };
 
         // CONTROL: no protector → nothing to diverge, all three channels agree, and the burst is
@@ -646,22 +618,7 @@ describe('forced bomb detonation booking (forceDetonateBombOnVictim)', () => {
                 },
                 bus,
             }).rounds[0];
-            const taken = r1.perTargetDamage ?? {};
-            const incoming = r1.perActorIncoming ?? {};
-            const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
-            return {
-                bursts,
-                taken,
-                incoming,
-                takenSum: sum(taken),
-                dealtSum: Object.values(r1.perTargetDealt ?? {}).reduce(
-                    (s, byVictim) => s + sum(byVictim),
-                    0
-                ),
-                incomingSum: sum(
-                    Object.fromEntries(Object.entries(incoming).map(([k, v]) => [k, v.incoming]))
-                ),
-            };
+            return { ...readChannels(r1), bursts };
         };
 
         // CONTROL: the forced burst fires and books identically on all three channels.

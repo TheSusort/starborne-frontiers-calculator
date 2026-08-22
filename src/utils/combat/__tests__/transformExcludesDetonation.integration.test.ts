@@ -150,26 +150,44 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     ...overrides,
 });
 
-/** Round-1 intake for one actor, plus the burst/splash evidence. A transformed hit nets to ~0. */
+/** Round-1 intake for one actor, plus the burst/splash evidence and any DoT ticks it took across
+ *  the whole run. A transformed hit nets `.incoming` to ~0 AND shows up later as generic ticks —
+ *  both halves matter, because a hit that never landed at all also nets to ~0. */
 const intake = (input: CombatEngineInput, id: string) => {
     const bus = createEventBus();
     const bursts: CombatEvent[] = [];
+    const ticks: CombatEvent[] = [];
     bus.on('bomb-detonated', (e) => bursts.push(e as CombatEvent));
+    bus.on('dot-ticked', (e) => ticks.push(e as CombatEvent));
     const r1 = runCombat({ ...input, bus }).rounds[0];
+    const genericTicks = ticks.filter(
+        (e) =>
+            (e as { targetId: string; dotType: string }).targetId === id &&
+            (e as { dotType: string }).dotType === 'generic'
+    );
     return {
         incoming: r1.perActorIncoming?.[id]?.incoming ?? 0,
         splash: r1.perActorSplash?.[id] ?? 0,
         bursts,
+        genericTicks,
+        genericTickTotal: genericTicks.reduce((t, e) => t + (e as { damage: number }).damage, 0),
     };
 };
 
 describe('the damage→DoT transform excludes detonation damage (owner ruling, #355)', () => {
     it('CONTROL: a DIRECT hit on the same actor IS transformed — the passive is armed', () => {
         // The enemy's 1000 direct hit lands on 'voron' at M4 (the front-most player). Transformed →
-        // reversed out of `.incoming`. If this reads 1000 the passive never attached and every
-        // "not transformed" assertion below would be vacuous.
+        // reversed out of `.incoming`. If this read 1000 the passive never attached and every "not
+        // transformed" assertion below would be vacuous.
+        //
+        // Two rounds, and BOTH halves asserted. `.incoming ≈ 0` alone only proves the immediate
+        // intake was reversed — it is equally consistent with the hit never landing at all (a
+        // mis-positioned victim, an enemy that never fired), which is exactly the vacuity this
+        // control exists to rule out. The generic DoT ticking in round 2 is the positive evidence
+        // that the hit landed AND was converted.
         const c = intake(
             BASE({
+                numRounds: 2,
                 teamActors: [
                     teamActor('voron', 'M4', [{ slot: 'passive', abilities: [voronTransform] }]),
                 ],
@@ -177,7 +195,9 @@ describe('the damage→DoT transform excludes detonation damage (owner ruling, #
             }),
             'voron'
         );
-        expect(c.incoming).toBeCloseTo(0, 6);
+        expect(c.incoming).toBeCloseTo(0, 6); // deferred out of round 1
+        expect(c.genericTicks.length).toBeGreaterThan(0); // and it really became a DoT
+        expect(c.genericTickTotal).toBeGreaterThan(0);
     });
 
     it('a bomb DETONATION on a transform carrier is NOT transformed — it lands in full', () => {
@@ -197,8 +217,9 @@ describe('the damage→DoT transform excludes detonation damage (owner ruling, #
         expect(c.bursts).toHaveLength(1);
         expect(c.bursts[0]).toMatchObject({ victimId: 'voron', damage: BURST });
         // Detonation damage, so no transform: the whole burst is recorded as intake NOW rather than
-        // deferred into a DoT. Before the ruling this read ~0.
+        // deferred into a DoT. Before the ruling this read ~0 with the amount ticking later.
         expect(c.incoming).toBeCloseTo(BURST, 6);
+        expect(c.genericTicks).toHaveLength(0); // the mirror of the control's positive tick
     });
 
     it('a bomb SPLASH on a transform carrier is NOT transformed either', () => {
@@ -231,5 +252,6 @@ describe('the damage→DoT transform excludes detonation damage (owner ruling, #
         // always reported the full throw; `.incoming` is what the transform would have zeroed.
         expect(c.incoming).toBeCloseTo(c.splash, 6);
         expect(c.incoming).toBeGreaterThanOrEqual(SPLASH);
+        expect(c.genericTicks).toHaveLength(0);
     });
 });
