@@ -3814,6 +3814,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             continue;
         }
         const { statusKind, turns } = ab.config;
+        // #363 (Fuying): a NAMED extension ("extends Stealth by 1 turn") restricts the buff
+        // branch below to that exact status name. Absent (Ripper) → extend-everything, unchanged.
+        const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
             // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
             // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
@@ -3854,7 +3857,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                           fromPassive,
                       });
             for (const rid of recipients) {
-                statusEngine.extendAllBuffsDuration(rid, turns);
+                statusEngine.extendAllBuffsDuration(rid, turns, namedBuff);
             }
         }
     }

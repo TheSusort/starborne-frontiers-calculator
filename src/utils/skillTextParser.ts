@@ -1888,15 +1888,35 @@ const EXTEND_STATUS_ACTIVE_RE =
 const EXTEND_STATUS_PASSIVE_RE =
     /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 
+// #363 (Fuying): "extends <unit-skill>Stealth</unit-skill> by 1 turn" — a NAMED status, where the
+// two arms above require a literal 'buffs'/'debuffs' token. Matched against the TAGGED text so the
+// <unit-skill> boundary identifies the status name exactly, rather than guessing where a bare
+// capitalised phrase ends. (Same reasoning as maskStatusNameRepairs in #362: the tag boundary is
+// information, and stripping tags first throws it away.)
+const EXTEND_NAMED_STATUS_RE =
+    /extends?\s+<unit-skill>([^<]+)<\/unit-skill>\s+by\s+(\d+)\s+turns?/i;
+
 /**
  * Parses a generic buff/debuff duration-extension clause into its turns + statusKind, or null
  * when absent. Runs over stripUnitTags(text) so both the `<unit-aid>`-wrapped active-voice form
  * (Sokol/Ripper) and the plain passive-voice form (Lev) match. Reference: docs/ship-skills.csv.
+ *
+ * #363 (Fuying): a NAMED arm ("extends <unit-skill>Stealth</unit-skill> by 1 turn") is tried
+ * FIRST, against the ORIGINAL (tagged) text — it is strictly more specific than the two generic
+ * arms below, which require a literal 'buffs'/'debuffs' token and so can never match it.
  */
 export function parseExtendStatus(
     text: string | null | undefined
-): { turns: number; statusKind: 'buff' | 'debuff' } | null {
+): { turns: number; statusKind: 'buff' | 'debuff'; buffName?: string } | null {
     if (!text) return null;
+    const named = EXTEND_NAMED_STATUS_RE.exec(text);
+    if (named) {
+        return {
+            turns: parseInt(named[2], 10),
+            statusKind: 'buff',
+            buffName: named[1].trim(),
+        };
+    }
     const plain = stripUnitTags(text);
     const m = EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? EXTEND_STATUS_PASSIVE_RE.exec(plain);
     if (!m) return null;

@@ -822,7 +822,15 @@ export type AbilityConfig =
     // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
     // `turns`. See src/utils/combat/statusEngine.ts extendAllBuffsDuration/
     // extendAllDebuffsDuration.
-    | { type: 'extend-status'; statusKind: 'buff' | 'debuff'; turns: number }
+    | {
+          type: 'extend-status';
+          statusKind: 'buff' | 'debuff';
+          turns: number;
+          /** #363 (Fuying): restrict the extension to statuses with this exact name
+           *  ("extends Stealth by 1 turn"). Absent → extend EVERY eligible timed status of
+           *  `statusKind`, which is what Sokol/Ripper/Lev do. */
+          buffName?: string;
+      }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
     // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy while
     // active (`turns`), then detonates for `pct`% of the accumulated total on expiry.

@@ -1837,11 +1837,19 @@ function abilitiesFromText(
         const localVerbIdx = extendSentence.search(/\bextend(?:s|ed)?\b/i);
         const extendSubjectPrefix =
             localVerbIdx >= 0 ? extendSentence.slice(0, localVerbIdx) : extendSentence;
+        // #363 (Fuying): the named arm carries no "all allies"/"all enemies" subject in its
+        // own clause ("...and extends Stealth by 1 turn" — the subject is inherited, not
+        // restated), so the no-subject fallback for a BUFF-kind extension is 'all-allies' —
+        // matching Ripper's explicit "All allies extend..." semantics and letting the runtime's
+        // existing allyRoster + supportRecipients pattern-scoping apply. A DEBUFF-kind
+        // extension's no-subject fallback stays 'enemy' (Sokol, unchanged: a single hit target).
         const extendTarget: AbilityTarget = /\ball\s+allies\b/i.test(extendSubjectPrefix)
             ? 'all-allies'
             : /\ball\s+(?:hit\s+)?enemies\b/i.test(extendSubjectPrefix)
               ? 'all-enemies'
-              : 'enemy';
+              : extendStatus.statusKind === 'buff'
+                ? 'all-allies'
+                : 'enemy';
         const extendCritGated = /\bcritical\s+hit\s+occurs\b/i.test(extendSentence);
         const extendStatusPos = text.search(/extend/i);
         out.push({
@@ -1855,6 +1863,7 @@ function abilitiesFromText(
                     type: 'extend-status',
                     statusKind: extendStatus.statusKind,
                     turns: extendStatus.turns,
+                    ...(extendStatus.buffName ? { buffName: extendStatus.buffName } : {}),
                 },
                 autoFilled: true,
             },
