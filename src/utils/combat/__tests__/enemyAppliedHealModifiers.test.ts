@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { createStatusEngine } from '../statusEngine';
 import { victimOwnEnemyHealModifiers } from '../triggers';
 import type { RegisteredAbilityStatus } from '../statusEngine';
+import type { ParsedBuffEffects } from '../../../types/calculator';
 
 // A timed enemy-side ability debuff carrying a parsed heal-channel effect. `side: 'enemy'` is
 // what routes it into the per-victim enemy store keyed by the targetId passed to
 // applyTimedAbilityStatus.
 const timedEnemyDebuff = (
     buffName: string,
-    parsedEffects: Record<string, number>,
+    parsedEffects: ParsedBuffEffects,
     stacks = 1
 ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
     kind: 'timed',

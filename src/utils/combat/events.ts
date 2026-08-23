@@ -290,6 +290,19 @@ export type CombatEvent =
      *  log): NO combat listener subscribes to it, so it can never chain. `casterId` = the reacting
      *  owner; `perTarget` = per-recipient count of debuffs ACTUALLY removed (only recipients with
      *  >= 1 removal are listed). */
+    | ({
+          type: 'reactive-cleanse-performed';
+          casterId: string;
+          round: number;
+          perTarget: { targetId: string; count: number }[];
+          /** Present ONLY for a duration-SHRINK reaction (Heliodor/Pestilence/Warpstrike's
+           *  "reduces the duration of all active Debuffs … by 1 turn"). Absent → the default
+           *  `remove` mode, where `count` is debuffs actually removed. When present, `count` is
+           *  instead the number of debuffs whose duration was SHRUNK, and `durationTurns` is by
+           *  how much — the log renders the two differently ("cleansed 2" vs "-1 turn on 2"). */
+          mode?: 'reduce-duration';
+          durationTurns?: number;
+      } & ReactiveStamp)
     /** ASSEMBLER-ONLY: one `Repair Over Time` tick restored HP to its holder (playerTurn's
      *  `tickHot`). NOT a repair event and NOT a log event — it exists for exactly one consumer,
      *  `battleSimulator.ts`'s `healReceived` fold, and has NO subscriber anywhere in the engine.
@@ -336,19 +349,6 @@ export type CombatEvent =
           round: number;
           amount: number;
       }
-    | ({
-          type: 'reactive-cleanse-performed';
-          casterId: string;
-          round: number;
-          perTarget: { targetId: string; count: number }[];
-          /** Present ONLY for a duration-SHRINK reaction (Heliodor/Pestilence/Warpstrike's
-           *  "reduces the duration of all active Debuffs … by 1 turn"). Absent → the default
-           *  `remove` mode, where `count` is debuffs actually removed. When present, `count` is
-           *  instead the number of debuffs whose duration was SHRUNK, and `durationTurns` is by
-           *  how much — the log renders the two differently ("cleansed 2" vs "-1 turn on 2"). */
-          mode?: 'reduce-duration';
-          durationTurns?: number;
-      } & ReactiveStamp)
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the number of
      *  debuffs ACTUALLY removed. Team-symmetric (the enemy-cleanse-lift, #166-era): BOTH the
      *  player path and the enemy (event-only) path perform REAL removal via the side-agnostic

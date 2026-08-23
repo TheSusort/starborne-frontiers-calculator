@@ -433,6 +433,12 @@ In `src/utils/combat/engine.ts`, replace `recipientIncomingHealPct` (~3329-3332)
     };
 ```
 
+> **SUPERSEDED DURING IMPLEMENTATION.** Two things below did not survive contact with the code.
+> (a) The `??` rationale is wrong — `0 ?? x` is `0`, so it never falls through on a legitimate
+> zero; that is `||`. (b) A published ctx is only as fresh as its actor's last turn, so the shipped
+> `liveHealChannelPct` subtracts the ctx's stale enemy portion and re-adds a live read on the
+> ctx-PRESENT arm too, not just the fallback. See the spec's §3.2 note for the full correction.
+
 ⚠️ Note the semantics change from `??` to an explicit `ctx !== undefined` check. `??` would fall
 through when `incomingHealPct` is `0`, which is a legitimate value — the old chain happened to
 give the same answer only because the fallback was also `0`. With a non-zero enemy term in arm 2,

@@ -196,6 +196,25 @@ recipientIncomingHealPct = (id) =>
 Note the precedence: the enemy term is added **outside** the `??` chain's first arm, so it
 applies when and only when no ctx exists.
 
+> **SUPERSEDED DURING IMPLEMENTATION — read this before trusting the sketch above.** The shipped
+> shape is not a plain ctx-or-fallback. Two corrections were found after this spec was written:
+>
+> 1. **The `??` rationale in this section was wrong.** `??` is nullish coalescing — `0 ?? x` is
+>    `0`, so it does NOT fall through on a legitimate zero. That is `||` behaviour. The shipped
+>    code still writes the branch out explicitly, but because the two arms are *asymmetric in what
+>    they add*, not because `??` was unsafe.
+> 2. **A ctx is only as fresh as its actor's last turn**, which this section does not consider at
+>    all. When the applier is SLOWER than the victim, the debuff lands *after* the victim's turn
+>    and a repair later that same round reads a ctx that predates it — so a one-turn
+>    `Inc. Repair Down` (Larkspur, Ripper, Sha Xing; Sansi's `III`) could expire having reduced
+>    nothing. The fix is `liveHealChannelPct` (`src/utils/combat/triggers.ts`), which on the
+>    ctx-present arm computes `ctx[channel] − (ctx.enemyAppliedXPct ?? 0) + live`: it subtracts the
+>    ctx's own published enemy-applied portion and re-adds a live read. The subtraction cancels by
+>    construction, because the published field carries exactly the number the fold consumed.
+>
+> The pre-first-turn arm below is still real and still needed; it is now one of two arms rather
+> than the only place the term enters.
+
 That fallback arm is not a formality: it is a **real hole**. Seven of the eight appliers inflict
 from a damage clause, which can land in round 1 **before the victim has taken a turn**, so no ctx
 exists yet and the term would otherwise be silently dropped for that window. The fix must cover
