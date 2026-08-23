@@ -42,7 +42,6 @@ import {
     MAX_SELECTION_TICKS,
     emptyActorDamage,
     emptyActorHealing,
-    recordDestroyed,
 } from './state';
 import {
     ActiveBuff,
@@ -90,6 +89,8 @@ import { highestAttackAmong } from './highestAttack';
 import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEvent, CombatEventBus, createEventBus } from './events';
+import { resolveLethalHp } from './lethalHp';
+import { reversedRepairsOn } from './reversedRepairs';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -3503,6 +3504,26 @@ export function runCombat(rawInput: CombatEngineInput): {
     // a self-rider once, while a later attack (a different turn) applies it again.
     const reactionFiredThisAttack = new Set<string>();
 
+    // Installed per ROUND (below, where the deferral flags live — inside the `for (let r …)` body,
+    // above the turn loop, so one install serves every turn of that round). Engine scope so the
+    // healing ctx — built above the round loop — can route a reversal's consequence log through the
+    // same buffer. Default is a direct emit: a reversal that somehow fires before the first round
+    // installs one still logs, it just cannot be deferred (there is no window open to defer into).
+    let emitConsequenceLog: (ev: CombatEvent) => void = (ev) => bus.emit(ev);
+    // Installed per ROUND (below, next to `creditDealt`), for the same reason and by the same
+    // pattern as `emitConsequenceLog` above: the reversal branch inside `applyHealToTarget` has to
+    // book its burn on the round accumulators (`roundPerTargetDamage` / `roundPerTargetDealt`),
+    // and those are declared fresh each round BELOW this ctx. Read through the binding at call
+    // time; never copy its value into the healingCtx object literal.
+    //
+    // Default is a NO-OP, unlike emitConsequenceLog's default direct-emit: a reversal firing before
+    // the first round installed one has no round accumulator to book into, so there is nothing
+    // meaningful to fall back to.
+    let bookReversalDamage: (
+        victimId: string,
+        applierId: string | undefined,
+        amount: number
+    ) => void = () => {};
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Constructed whenever `healTarget` is set — which
     // includes `'battle'` runs (battle mode anchors `healTarget` to the focus actor above), NOT
@@ -3532,11 +3553,185 @@ export function runCombat(rawInput: CombatEngineInput): {
               // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
-              applyHealToTarget: (raw, victim = healTarget) => {
-                  // Dead target → all overheal. Otherwise consume up to the deficit against
-                  // the target's CURRENT effective max HP (live ctx via recipientMaxHp).
+              // `repairSourceId` (Task 4, #362): the actor credited with this repair — the caster
+              // for a cast repair, the applier for a HoT tick, the leeching actor for a leech.
+              // Every call site is still REQUIRED to supply it (the parameter is not optional, so
+              // `tsc` reports an arity error at any site that forgets).
+              //
+              // Un-parked (#362 fix-wave-1): it went unread for one revision after R7′ moved the
+              // reversal's KILL credit to the debuff's applier (`repairSourceId` was that credit's
+              // one consumer under the retracted R7). It has a reader again — R11's log row names
+              // it as `healerId`, DISPLAY ONLY (see the reversal branch below and the
+              // `reversed-repair-log` doc comment in `events.ts`). Do NOT wire it back into the
+              // damage/kill attribution: that is the healer-fallback R7′ rejects.
+              applyHealToTarget: (raw, victim, repairSourceId) => {
+                  // Dead target → all overheal, and NO reversal: a corpse takes no reversed repair.
                   if (victim.currentHp <= 0) {
-                      return { consumed: 0, overheal: raw };
+                      return { reversed: false, consumed: 0, overheal: raw };
+                  }
+                  // ── #362 Reversed Repairs ────────────────────────────────────────────────
+                  // "Incoming repairs damage this unit instead" (Zosimos's charged skill).
+                  //
+                  // WHY THIS LINE. `raw` arriving here is already post-crit, post-healModifier,
+                  // post-outgoingHealBuff and post-`incomingHealPct` — which is where
+                  // `Inc. Repair Down` lives — and it is PRE-deficit-clamp (the clamp is three
+                  // lines below). So three of the rulings are satisfied by POSITION alone and
+                  // must not be recomputed here:
+                  //   R3 — a target at full HP takes the FULL amount (pre-clamp),
+                  //   R4 — the repair's crit carries into the burn (post-crit),
+                  //   R6 — Inc. Repair Down applies FIRST and the reduced amount reverses.
+                  // And because this closure is the ONLY line in the engine where HP goes up,
+                  // R2 ("every repair, any source") is satisfied by position too: cast repairs,
+                  // HoT ticks, leech self-repairs and reactive repairs all funnel through here.
+                  // Shield GRANTS are not repairs and go through grantShieldToTarget, untouched.
+                  const reversal = reversedRepairsOn(statusEngine, victim);
+                  if (reversal) {
+                      // R1: a raw HP burn at face value. No shield drain, no Protection redirect,
+                      // no defence mitigation, no Barrier — `applyVictimDamage` owns all four and
+                      // is deliberately NOT entered. R5 ("nothing reacts") follows from the same
+                      // choice: no counterattack, no Reflect thorns, no incoming-leech proc, no
+                      // on-damaged passives, because none of those live on this path. A kill by
+                      // reversal likewise fires no bomb death-splash — the splash block is at the
+                      // `applyVictimDamage` call site, gated on ITS `'destroyed'` outcome, and
+                      // this path deliberately has no such block.
+                      //
+                      // NO `hp-changed` EMIT, DELIBERATELY (#362 fix-wave-2, M-2). `hp-changed` is
+                      // the trigger `on-hp-threshold-crossed` subscribes to (`triggers.ts`, the
+                      // "when this unit drops below N% HP" passives), so emitting one here would
+                      // arm a reaction off the burn. R5 says NOTHING reacts to a reversal, and
+                      // this is that ruling applied to the one reaction that does not live inside
+                      // `applyVictimDamage` — every other one is fenced by simply not entering the
+                      // funnel. Consistent, not an oversight: a player whose ship drops past 50%
+                      // to a reversed repair does not get the low-HP passive, exactly as they get
+                      // no counterattack, no Reflect and no on-damaged rider. The BAR still moves
+                      // (the intake booking below is what the report reads); only the trigger is
+                      // withheld. Do not "fix" this by emitting one without re-opening R5.
+                      //
+                      // `burn` clamps `raw` at 0: a reversal only ever REMOVES HP. The normal
+                      // (non-reversed) path below floors its own effect at 0 via the deficit
+                      // clamp (`Math.max(0, Math.min(raw, targetMaxHp - victim.currentHp))`), and
+                      // this path owes that same guarantee — `incomingHealPct` is unclamped
+                      // upstream, so `raw` can already be negative by the time it reaches here,
+                      // and a negative `raw` here would silently RAISE `currentHp`, uncapped by
+                      // max HP, with no log row and no booked amount.
+                      const burn = Math.max(0, raw);
+                      victim.currentHp = Math.max(0, victim.currentHp - burn);
+                      // ── R7′ ATTRIBUTION: the APPLIER, never the healer ───────────────────────
+                      // The damage AND the kill belong to the Zosimos that inflicted the status,
+                      // exactly the way a DoT's damage and kills belong to whoever applied the DoT.
+                      // `repairSourceId` (the healer whose repair was reversed) is deliberately NOT
+                      // used for the damage credit or the kill below — only for the log row's
+                      // `healerId`, which is DISPLAY ONLY (see the `emitConsequenceLog` call below).
+                      // Naming the healer in the log does not put the healer back in the attribution
+                      // path: `applierId` stays the sole `actorId`/`creditDealt`/`killerId` — R7′ is
+                      // unaffected by a reader who merely SHOWS who cast the undone repair.
+                      //
+                      // ⚠️ AN EARLIER RULING SAID THE OPPOSITE and was RETRACTED by the owner. The
+                      // healer did not choose this; it cast a repair. Crediting it damage — and a
+                      // kill on its own ally — would put an enemy's debuff on a support ship's
+                      // damage line and, worse, name a medic as its own team-mate's killer. If you
+                      // are here because "the healer caused it", that is the argument that was
+                      // already rejected: do not flip it back.
+                      //
+                      // `applierId` is undefined when the status came from the scheduled channel
+                      // (a debuff hand-ticked in the calculator's enemy-debuff picker was never
+                      // cast by anyone). NO FALLBACK TO THE HEALER — that is the very attribution
+                      // R7′ rejects. No credit, and `killerId: undefined` on the death event, which
+                      // `recordDestroyed` already tolerates (a DoT-tick batch has no killer either).
+                      //
+                      // `byDirectDamage: false` is REQUIRED, not merely defensible: `triggers.ts`
+                      // gates the killer-targeted on-destroyed reactions (Faust's purge,
+                      // Martyrdom, Paracelsus) on it, so a `true` here would make those triggers
+                      // spend on a kill their owner never chose. It is also correct on its own
+                      // terms — a reversed repair is not a hit, so the consumables that spend on a
+                      // direct hit (Barrier charges, Ironclad's nth-hit counter) must not see one.
+                      //
+                      // R8: Cheat Death still intercepts, through the ONE shared death path the
+                      // damage funnel uses — the only survival layer that reaches a reversed repair.
+                      //
+                      // The burn's numeric booking (R7′'s damage half) mirrors what the DoT tick
+                      // path does — victim-keyed intake plus a per-applier dealt credit — and is
+                      // written by `bookReversalDamage`, installed per round below.
+                      //
+                      // `currentRound`, `actingActorId` and `emitConsequenceLog` are engine-scope
+                      // `let`s declared BELOW this ctx. Reading them at CALL time is safe (the run
+                      // loop has long since assigned them); copying their values into the ctx
+                      // literal at construction time would not be. Route through the bindings.
+                      //
+                      // `currentRound`, NOT the round loop's `r`: `r` is block-scoped to
+                      // `for (let r = 1; …)` and is simply not in scope here — this ctx is built
+                      // above the loop. `currentRound` is the engine-scope mirror maintained for
+                      // exactly this reason ("so closures defined once outside the loop can stamp
+                      // the correct round"), and the charge-changed emitters just above already
+                      // read it the same way.
+                      bookReversalDamage(victim.id, reversal.applierId, burn);
+                      // R11: every reversal writes its own combat-log row, lethal or not. Without
+                      // it a non-lethal reversal emits NOTHING — the player watches a repair land,
+                      // achieve nothing, and HP drop, with no line connecting the three. Routed
+                      // through `emitConsequenceLog` so a reversal firing inside a deferral window
+                      // (a reactive repair during a positional apply does exactly that) nests under
+                      // the attack that caused it instead of printing above it.
+                      //
+                      // `burn > 0` (#362 fix-wave-2, M-8): "every reversal" means every reversal
+                      // that BURNED something. A 0-magnitude repair reverses into a 0-magnitude
+                      // burn — `bookReversalDamage` already drops it on its own `amount <= 0`
+                      // guard and `victim.currentHp` does not move — so a row here would announce
+                      // "repairs reversed 0" for an event with no observable consequence. The gate
+                      // is the same one the CAST path applies upstream (`healRawSum > 0` in
+                      // playerTurn.ts silences a repair that resolved to nothing at all); this
+                      // extends it to the channels that have no such upstream gate (HoT ticks,
+                      // leech self-repairs, reactive repairs).
+                      if (burn > 0) {
+                          emitConsequenceLog({
+                              type: 'reversed-repair-log',
+                              victimId: victim.id,
+                              ...(reversal.applierId !== undefined
+                                  ? { applierId: reversal.applierId }
+                                  : {}),
+                              // `healerId` (#362 fix-wave-1): the repair's source, for DISPLAY only
+                              // — see the guardrail above and the `reversed-repair-log` doc comment
+                              // in `events.ts`. `repairSourceId` is always a real id here (the
+                              // parameter is required at every `applyHealToTarget` call site), so
+                              // this is unconditional, unlike `applierId` which the scheduled
+                              // channel can leave undefined.
+                              healerId: repairSourceId,
+                              amount: burn,
+                              round: currentRound,
+                          });
+                      }
+                      resolveLethalHp(victim, {
+                          round: currentRound,
+                          statusEngine,
+                          cheatDeathConsumed,
+                          cheatDeathConsumedRound,
+                          bus,
+                          emitConsequenceLog,
+                          actingActorId,
+                          killerId: reversal.applierId,
+                          byDirectDamage: false,
+                      });
+                      // Deliberately NOT `repairedThisRound.add(...)` — nothing was repaired, so
+                      // the target-repaired gate must stay shut. (Unrelated to R9: Zosimos's own
+                      // charge passive keys off an enemy CASTING a repair, upstream of this
+                      // closure, and is untouched by any of this.)
+                      //
+                      // ── R10′: NOTHING books on the healer ────────────────────────────────────
+                      // Not repairs cast, not effective healing, not overhealing. "We don't need
+                      // to book it as anything other than damage from a debuff" — and that damage
+                      // is booked above, on the applier.
+                      //
+                      // ⚠️ A RETRACTED EARLIER RULING surfaced it as the healer's OVERHEALING, and
+                      // this branch used to deliver that by returning `{consumed: 0, overheal: raw}`
+                      // — a shape every call site already credited. Returning that today would be
+                      // WORSE than useless: it books the raw as overheal, and the call sites' gross
+                      // `directHeal`/`hotHeal` credit (written BEFORE this call) would stand too.
+                      // Hence the `{ reversed: true }` arm carrying no numbers at all: it makes
+                      // every site fail to compile until it moves its gross credit below the call.
+                      //
+                      // This is also still why the naive `incomingHealPct: -200` sign flip fails:
+                      // that fold is unclamped, so it books `consumed: 0` plus a NEGATIVE overheal
+                      // — no damage, no healing, garbage statistics, green tests throughout.
+                      return { reversed: true };
                   }
                   const targetMaxHp = recipientMaxHp(victim.id);
                   // Clamp the deficit at 0: a max-HP buff expiring can shrink effectiveMaxHp
@@ -3546,7 +3741,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                   const consumed = Math.max(0, Math.min(raw, targetMaxHp - victim.currentHp));
                   victim.currentHp += consumed;
                   if (consumed > 0) repairedThisRound.add(victim.id);
-                  return { consumed, overheal: raw - consumed };
+                  return { reversed: false, consumed, overheal: raw - consumed };
               },
               grantShieldToTarget: (raw, victim = healTarget) => {
                   if (victim.currentHp <= 0) return 0; // dead → no-op
@@ -4292,23 +4487,45 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const selectorActor =
                     selectorRecipientId !== undefined ? healingCtx.recipientActor(rid) : undefined;
                 if (e.kind === 'heal') {
-                    healingCtx.credit(sourceId, 'directHeal', raw);
-                    if (selectorActor) {
-                        const { consumed, overheal } = healingCtx.applyHealToTarget(
+                    // R10′ (#362): the gross `directHeal` credit moved BELOW the apply, so a
+                    // reversed repair can suppress it. Above the call it was unretractable — the
+                    // closure cannot un-credit — and the source would have kept its gross repairs
+                    // for a repair that healed nobody.
+                    //
+                    // `undefined` = this recipient was never POOL-APPLIED at all, which is a third
+                    // case and not a reversal: an all-allies leech credits the source's raw for
+                    // every ally but applies to none of the non-anchor ones. Those keep their gross
+                    // credit exactly as before — nothing reversed there because nothing landed.
+                    //
+                    // ⚠️ UNEXERCISED (#362 fix-wave-1 review): a reviewer probe planted a throw
+                    // immediately before this call (and the sibling one at the non-positional
+                    // taken-leech site), ran the full suite (3801 tests), and neither fired. This
+                    // branch's R10′ credit move is corpus-DEAD — pre-existing, not introduced by
+                    // this pass — so an unconditional double-credit bug here would be invisible to
+                    // every test in the repository. Do not build fixtures for it now; this comment
+                    // only records that the branch rests on review, not on coverage.
+                    const applied = selectorActor
+                        ? healingCtx.applyHealToTarget(raw, selectorActor, sourceId)
+                        : rid === healTarget!.id
+                          ? healingCtx.applyHealToTarget(raw, healTarget!, sourceId)
+                          : undefined;
+                    if (applied === undefined) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                    } else if (!applied.reversed) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                        healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
+                        healingCtx.credit(sourceId, 'overheal', applied.overheal);
+                        // Recipient axis (SP-3b Task 7): only a recipient whose pool this loop
+                        // actually touched LANDS here — an all-allies leech credits the source's
+                        // raw for every ally but applies to none of the others, so only the
+                        // applied case may mirror.
+                        creditLandedRepair(
+                            rid,
+                            'directHeal',
                             raw,
-                            selectorActor
+                            applied.consumed,
+                            applied.overheal
                         );
-                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
-                        healingCtx.credit(sourceId, 'overheal', overheal);
-                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
-                    } else if (rid === healTarget!.id) {
-                        const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
-                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
-                        healingCtx.credit(sourceId, 'overheal', overheal);
-                        // Recipient axis (SP-3b Task 7): only the heal target's share LANDS here —
-                        // an all-allies leech credits the source's raw for every ally but applies
-                        // to none of the others, so only this branch may mirror.
-                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
@@ -4331,7 +4548,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // per-victim `damage`).
     //
     // It REUSES procStandingLeeches's fold math (pct → raw, healModifier, heal-crit draw) but does
-    // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor) /
+    // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor, repairSourceId) /
     // grantShieldToTarget(raw, actor)), resolving each recipient's actor — so a covered enemy's
     // leech can repair the right ally, not just the heal target.
     //
@@ -4483,17 +4700,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // take an explicit victim). Runtime maps, not allActorsById: the focus is 'attacker'.
                 const recipientActor = allRuntimesById.get(rid)?.actor;
                 if (e.kind === 'heal') {
-                    healingCtx.credit(sourceId, 'directHeal', raw);
-                    if (recipientActor) {
-                        const { consumed, overheal } = healingCtx.applyHealToTarget(
-                            raw,
-                            recipientActor
-                        );
-                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
-                        healingCtx.credit(sourceId, 'overheal', overheal);
+                    // R10′ (#362): the gross `directHeal` credit moved BELOW the apply so a
+                    // reversed repair suppresses it too. An UNRESOLVABLE recipient still credits
+                    // gross (unchanged) — nothing was applied there, so nothing was reversed.
+                    const applied = recipientActor
+                        ? healingCtx.applyHealToTarget(raw, recipientActor, sourceId)
+                        : undefined;
+                    if (applied === undefined) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                    } else if (!applied.reversed) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                        healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
+                        healingCtx.credit(sourceId, 'overheal', applied.overheal);
                         // Recipient axis (SP-3b Task 7) — this per-victim path repairs whichever
                         // ally it resolved, so the landing id is `rid`, not the heal target.
-                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
+                        creditLandedRepair(
+                            rid,
+                            'directHeal',
+                            raw,
+                            applied.consumed,
+                            applied.overheal
+                        );
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
@@ -4551,13 +4778,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             }
             if (e.kind === 'heal') {
-                healingCtx.credit(victim.id, 'directHeal', raw);
-                const { consumed, overheal } = healingCtx.applyHealToTarget(raw, victim);
-                healingCtx.credit(victim.id, 'effectiveHeal', consumed);
-                healingCtx.credit(victim.id, 'overheal', overheal);
-                // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
-                // source and recipient coincide here — the axes still differ in meaning.
-                creditLandedRepair(victim.id, 'directHeal', raw, consumed, overheal);
+                // R10′ (#362): every bucket, gross included, is booked BELOW the apply and only
+                // when the repair was not reversed. This site always applies (the victim is
+                // resolved), so there is no third case here.
+                const applied = healingCtx.applyHealToTarget(raw, victim, victim.id);
+                if (!applied.reversed) {
+                    healingCtx.credit(victim.id, 'directHeal', raw);
+                    healingCtx.credit(victim.id, 'effectiveHeal', applied.consumed);
+                    healingCtx.credit(victim.id, 'overheal', applied.overheal);
+                    // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
+                    // source and recipient coincide here — the axes still differ in meaning.
+                    creditLandedRepair(
+                        victim.id,
+                        'directHeal',
+                        raw,
+                        applied.consumed,
+                        applied.overheal
+                    );
+                }
             } else {
                 healingCtx.credit(victim.id, 'shield', raw);
                 // H3.6: this engine standing-leech shield site intentionally does NOT emit
@@ -4731,19 +4969,27 @@ export function runCombat(rawInput: CombatEngineInput): {
         // facts about the same hit (who dealt it vs who took it); E5 does NOT merge them.
         const roundDamage = new Map<string, ActorDamage>();
         // Per-round per-victim positional damage accumulator (victim actor id → summed damage
-        // dealt to it this round). Populated ONLY by the positional apply path's emitHit
-        // callback (all three attack sites); stays EMPTY on non-positional rounds, so the
+        // dealt to it this round). Populated by the positional apply path's emitHit callback (all
+        // three attack sites) — and, since #362, by `bookReversalDamage` below, the SECOND writer:
+        // a Reversed Repairs burn writes this victim-keyed intake unconditionally, whether or not
+        // the debuff's applier is known (see `bookReversalDamage`'s own comment for why an
+        // unknown-applier burn still lands here). Stays EMPTY on a round with neither, so the
         // RoundData.perTargetDamage field is set only when non-empty → goldens byte-identical.
         const roundPerTargetDamage = new Map<string, number>();
         // SP-F F1: per-attacker×victim dealt attribution channel — attacker id → victim id →
         // damage dealt THIS round. Mirrors EVERY `roundPerTargetDamage.set` write above with an
         // equal-amount entry keyed to that increment's CORRECT source-attacker (not always
         // `actingActorId` — reflect's source is the reflector, counter's is the counter owner,
-        // etc; see the per-site comments at each write). Σ over victims for one attacker ==
-        // that attacker's `damageDealt`; Σ over attackers for one victim == `roundPerTargetDamage`
-        // for that victim — so `damageDealt`/`damageTaken` reconcile BY CONSTRUCTION once every
-        // site mirrors correctly. Stays EMPTY when roundPerTargetDamage is empty (non-positional
-        // rounds), so RoundData.perTargetDealt is set only when non-empty → goldens byte-identical.
+        // etc; see the per-site comments at each write) — WITH ONE EXCEPTION, since #362: an
+        // applier-less Reversed Repairs burn (the scheduled channel has no caster) writes
+        // `roundPerTargetDamage` via `bookReversalDamage` but deliberately skips this map, the same
+        // way a redirected DoT-tick chunk with no single attacker does at the Protection-redirect
+        // site. Σ over victims for one attacker == that attacker's `damageDealt`; Σ over attackers
+        // for one victim == `roundPerTargetDamage` for that victim MINUS any applier-less burns on
+        // that victim — so `damageDealt`/`damageTaken` reconcile BY CONSTRUCTION once every site
+        // mirrors correctly, short by exactly that one documented gap. Stays EMPTY when
+        // roundPerTargetDamage is empty (non-positional rounds), so RoundData.perTargetDealt is set
+        // only when non-empty → goldens byte-identical.
         const roundPerTargetDealt = new Map<string, Map<string, number>>();
         const creditDealt = (attackerId: string, victimId: string, amount: number): void => {
             let byVictim = roundPerTargetDealt.get(attackerId);
@@ -4752,6 +4998,57 @@ export function runCombat(rawInput: CombatEngineInput): {
                 roundPerTargetDealt.set(attackerId, byVictim);
             }
             byVictim.set(victimId, (byVictim.get(victimId) ?? 0) + amount);
+        };
+        // #362 R7′: book a Reversed Repairs burn on this round's accumulators. Reassigns the
+        // engine-scope `let` declared above `healingCtx` (which is built before the round loop and
+        // therefore cannot see `creditDealt`/`roundPerTargetDamage` directly) — never captured into
+        // a copy, so the ctx's closure reads THIS round's accumulators at call time.
+        //
+        // ALL THREE channels, matching the DoT-tick path (~:9880) — which reaches them by routing
+        // through `applyVictimDamage`, and which is the attribution shape R7′ names:
+        //   1. `roundPerTargetDamage` — the victim-keyed per-round total (→ `RoundData.perTargetDamage`
+        //      → `ShipRoundState.damageTaken`).
+        //   2. `creditDealt`          — the per-applier dealt credit (→ `perTargetDealt` →
+        //      `ShipRoundState.damageDealt`).
+        //   3. `intakeFor(victim).incoming` — the per-victim INTAKE bucket (→ `perActorIncoming` →
+        //      `ShipRoundState.incomingDamage` and, through `hpLost`, the HP BAR).
+        //
+        // (3) was missing for one revision and the omission was NOT cosmetic: `battleSimulator`
+        // derives `hpPct` from `maxHp − hpLost + healed`, and `hpLost` accumulates
+        // `incoming.incoming − shieldAbsorbed − barrierAbsorbed − convertedToShield` whenever the
+        // victim has an intake entry this round (falling back to `damageTaken` only when it has
+        // none). A victim that also took an ordinary attack therefore HAS an entry, and the burn
+        // vanished from it — the bar read high by exactly the burn, every round, and a ship killed
+        // by a reversal rendered as destroyed at a healthy HP%.
+        //
+        // TDZ NOTE: `intakeFor` is a `const` declared BELOW this assignment in the same round block.
+        // Only the closure BODY names it, and the body cannot run until a turn does — long after
+        // the whole round block has been evaluated. Same discipline as `creditDealt` above: read
+        // through the binding at call time, never hoist a copy.
+        //
+        // An UNKNOWN applier writes the intake and skips the dealt credit — the same rule, and the
+        // same wording, the Protection-redirect site uses for a redirected DoT-tick chunk with no
+        // single attacker ("nothing to attribute there, so skip silently; the victim-keyed
+        // roundPerTargetDamage write above is unaffected"). The victim demonstrably lost the HP
+        // either way; inventing a dealer for it would be the fallback R7′ forbids.
+        //
+        // ⚠️ KNOWN ASYMMETRY (#362 fix-wave-1): this deliberately does NOT call `creditDamage`
+        // (below), the scalar `roundDamage`/`ActorDamage` channel that DPS-mode rows are built
+        // from. `ShipRoundState.damageDealt` and `damageTaken` — the BATTLE report's damage
+        // numbers — derive from `perTargetDealt`/`perTargetDamage`, which this DOES write, so the
+        // battle report's damage columns are complete. What is NOT complete is DPS mode: an
+        // applier standing in DPS-mode's focus-ship seat gets a round-total row computed off the
+        // scalar channel, so a Zosimos burn is absent from that one row. Not fixed here: wiring
+        // `creditDamage` in would need the same consideration `perTargetDealt`'s Task-1 mirroring
+        // got (every existing scalar-channel fixture would move), which is outside this pass's scope.
+        bookReversalDamage = (victimId, applierId, amount) => {
+            if (amount <= 0) return;
+            roundPerTargetDamage.set(victimId, (roundPerTargetDamage.get(victimId) ?? 0) + amount);
+            // The HP the victim actually lost, on the same bucket an ordinary hit's HP portion
+            // lands in. NO `shieldAbsorbed`/`barrierAbsorbed`/`convertedToShield` write: R1 says
+            // the burn passes none of those layers, so all of `incoming` is HP loss by construction.
+            intakeFor(victimId).incoming += amount;
+            if (applierId !== undefined) creditDealt(applierId, victimId, amount);
         };
         // D-PR3: per-victim direct-damage intake index (Ironclad nth-hit) + once-per-round block flags.
         const directIntakeIndex = new Map<string, number>();
@@ -4899,10 +5196,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Shared damage-intake core (Phase 4 PR 1, Task 2): the byte-identical body of the
         // legacy applyIncomingToTarget closure with the four side-specific accounting bits
         // hoisted into `sink`. Everything keyed off `victim` (Barrier full-immunity, shield
-        // drain, HP decrement, Cheat-Death intercept, recordDestroyed, hp-changed) is moved
-        // verbatim. Kept inside runCombat — it captures statusEngine/bus/r/recipientMaxHp/
-        // cheatDeathConsumed/cheatDeathConsumedRound/recordDestroyed/BARRIER_BUFFS/
-        // CHEAT_DEATH_BUFFS/selfBuffNamesForOwners exactly as before.
+        // drain, HP decrement, hp-changed) stays inline here, moved verbatim. Kept inside
+        // runCombat — it still captures statusEngine/bus/r/recipientMaxHp/BARRIER_BUFFS/
+        // selfBuffNamesForOwners for the Barrier check that remains in this closure. The
+        // Cheat-Death intercept and recordDestroyed now live in `resolveLethalHp` (lethalHp.ts)
+        // — this closure FORWARDS cheatDeathConsumed/cheatDeathConsumedRound/bus/statusEngine/r
+        // to it as opts rather than capturing them for that purpose.
         //
         // Task 3 (combat-log) — deferred reflect log emit. Reflect thorns fire from INSIDE
         // applyVictimDamage. On the POSITIONAL path they run DURING drivePositionalApply, BEFORE
@@ -4973,6 +5272,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         // they buffer instead; triggers.ts flushes them via `ctx.flushConsequenceLogs` immediately
         // after the attack row is emitted, so cause precedes consequence.
         let deferConsequenceLogs = false;
+        // Install the real emitter for this ROUND now that the deferral flags/buffer/sub-attack
+        // index it reads all exist. (This block sits inside the round loop, above the turn loop —
+        // the flags and buffer it closes over are per-round state, and every turn of the round
+        // shares this one emitter.) Reassigns the engine-scope `let` declared above healingCtx —
+        // never captured into a copy — so healingCtx's closures (built before the round loop)
+        // read this round's live routing at call time, not the pre-round direct-emit default.
+        emitConsequenceLog = (ev: CombatEvent) => {
+            if (deferReflectLogs || deferConsequenceLogs)
+                pendingConsequenceLogs.push({ ev, subAttack: currentSubAttackIndex });
+            else bus.emit(ev);
+        };
         // PR2 Task 3: `subAttack` filters exactly as flushConsequenceLogs above — see its note.
         const flushReflectLogs = (subAttack?: number): void => {
             const kept: typeof pendingReflectLogs = [];
@@ -5058,8 +5368,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // .incoming increments below) but its effect is nullified; the blocked amount is
             // tracked SEPARATELY as the bucket's .barrierAbsorbed (NOT .shieldAbsorbed — Barrier
             // never touches the shield).
-            // Detection mirrors the Cheat-Death check (selfBuffNamesForOwners aggregates snapshot +
-            // timed + active ability self statuses).
+            // Detection mirrors the Cheat-Death check in lethalHp.ts (selfBuffNamesForOwners
+            // aggregates snapshot + timed + active ability self statuses).
             const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
                 BARRIER_BUFFS.has(n)
             );
@@ -5569,12 +5879,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         duringTurnOf: actingActorId,
                         triggerActorId: actingActorId,
                     };
-                    if (deferReflectLogs || deferConsequenceLogs)
-                        pendingConsequenceLogs.push({
-                            ev: shieldConverterGrantLogEv,
-                            subAttack: currentSubAttackIndex,
-                        });
-                    else bus.emit(shieldConverterGrantLogEv);
+                    emitConsequenceLog(shieldConverterGrantLogEv);
                 }
             }
             // The post-block, non-transformed instant portion of this hit — captured HERE, right
@@ -5726,12 +6031,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             duringTurnOf: actingActorId,
                             triggerActorId: actingActorId,
                         };
-                        if (deferReflectLogs || deferConsequenceLogs)
-                            pendingConsequenceLogs.push({
-                                ev: grantLogEv,
-                                subAttack: currentSubAttackIndex,
-                            });
-                        else bus.emit(grantLogEv);
+                        emitConsequenceLog(grantLogEv);
                     }
                 }
             }
@@ -5767,84 +6067,31 @@ export function runCombat(rawInput: CombatEngineInput): {
                     duringTurnOf: actingActorId,
                     triggerActorId: actingActorId,
                 };
-                if (deferReflectLogs || deferConsequenceLogs)
-                    pendingConsequenceLogs.push({ ev: logEv, subAttack: currentSubAttackIndex });
-                else bus.emit(logEv);
+                emitConsequenceLog(logEv);
             }
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
-            // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
-            // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
-            // it is never stored/timed — consumption is the per-actor cheatDeathConsumed flag
-            // (NOT a store mutation). On intercept we floor HP at 1 (overriding the Math.max(0, …)
-            // above), mark consumed, wipe the actor's REMOVABLE timed statuses (DoTs/timed
-            // self-buffs; persistent-stack + unremovable preserved), emit cheat-death-activated,
-            // and DO NOT record a destroy.
-            //
-            // Detection MUST go through selfBuffNamesForOwners, NOT snapshot().activeSelfBuffs:
-            // a real (Yazid/Tycho/Hayyan-granted) Cheat Death is an ability-sourced recurring
-            // self-buff that surfaces via activeAbilityStatuses('self', …, ownerId) — snapshot's
-            // activeSelfBuffs only carries SCHEDULED always-active buffs, and only for the
-            // 'attacker' owner (empty for any other owner). Since the heal target's owner id is
-            // often a team-actor id (not 'attacker'), snapshot alone misses both the
-            // ability-sourced case AND the non-attacker-owner case. selfBuffNamesForOwners
-            // aggregates snapshot + timed + active ability self statuses keyed by the actor's
-            // own id, covering every Cheat Death source.
+            // At the lethal moment: Cheat-Death intercept, else record the destroy. ONE shared
+            // path (`resolveLethalHp`, lethalHp.ts) for the whole engine — the Reversed Repairs
+            // reversal (#362) calls the SAME function rather than hand-copying this block, which
+            // is the shape that produced the one-directional defects in #306. See lethalHp.ts for
+            // the Cheat-Death detection/intercept rationale and the DoT-wipe rules.
             if (victim.currentHp <= 0) {
-                const targetId = victim.id;
-                // Captured BEFORE recordDestroyed (which sets destroyedRound): the death `else`
-                // can RE-ENTER on a corpse hit again (currentHp ≤ 0 → recordDestroyed idempotent),
-                // so this gate + the up-front bomb-consume below make the splash fire exactly once.
+                // Captured BEFORE resolveLethalHp (which stamps destroyedRound): the destroyed
+                // branch can RE-ENTER on a corpse hit, so this gate + the up-front bomb consume
+                // make the splash fire once.
                 const wasAliveBeforeThisCall = victim.destroyedRound === undefined;
-                const carriesCheatDeath = selfBuffNamesForOwners(statusEngine, [targetId]).some(
-                    (n) => CHEAT_DEATH_BUFFS.has(n)
-                );
-                if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
-                    victim.currentHp = 1;
-                    cheatDeathConsumed.add(targetId);
-                    // Display-only: remember the round it was spent so the chip is dropped
-                    // from rounds AFTER this one (see hideSpentCheatDeath). First write wins —
-                    // the flag above already blocks any second intercept, so this set-once.
-                    if (!cheatDeathConsumedRound.has(targetId)) {
-                        cheatDeathConsumedRound.set(targetId, r);
-                    }
-                    statusEngine.clearRemovable(targetId);
-                    // The tank's enemy-applied Corrosion/Inferno/generic DoTs are actor-state
-                    // stacks (NOT StatusEngine entries), so clearRemovable doesn't touch them —
-                    // wipe them here so the survivor takes no further ticks. These are the SAME
-                    // arrays the turn-start DoT-tick intake reads (healTarget.corrosion/inferno/
-                    // genericDoTEntries). SP-E: an `unremovable` stack (Acidic Decay) survives
-                    // this wipe — filter, don't clear, so those entries keep ticking. Bombs
-                    // (Blast, treated as persistent here) and accumulators are intentionally left
-                    // untouched.
-                    victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
-                    victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
-                    victim.genericDoTEntries = victim.genericDoTEntries.filter(
-                        (e) => e.unremovable
-                    );
-                    // Real event — INLINE for its combat listener (Yazid on-cheat-death-activated),
-                    // keeping listener timing byte-identical; the LOG-ONLY twin carries the nesting.
-                    bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
-                    const cheatDeathLogEv: CombatEvent = {
-                        type: 'cheat-death-log',
-                        actorId: targetId,
-                        round: r,
-                        reactive: true,
-                        duringTurnOf: actingActorId,
-                        triggerActorId: actingActorId,
-                    };
-                    if (deferReflectLogs || deferConsequenceLogs)
-                        pendingConsequenceLogs.push({
-                            ev: cheatDeathLogEv,
-                            subAttack: currentSubAttackIndex,
-                        });
-                    else bus.emit(cheatDeathLogEv);
-                } else {
-                    // First reach 0 (no intercept) → record the destroyed round + emit
-                    // ship-destroyed once (shared helper; idempotent via the per-actor
-                    // destroyedRound field). The healing result reads the destroyed round back
-                    // off the heal target's runtime `destroyedRound` field at the result site —
-                    // no side-specific scalar write is needed here.
-                    recordDestroyed(victim, r, bus, cause?.killerId, cause?.byDirectDamage);
+                const outcome = resolveLethalHp(victim, {
+                    round: r,
+                    statusEngine,
+                    cheatDeathConsumed,
+                    cheatDeathConsumedRound,
+                    bus,
+                    emitConsequenceLog,
+                    actingActorId,
+                    killerId: cause?.killerId,
+                    byDirectDamage: cause?.byDirectDamage,
+                });
+                if (outcome === 'destroyed') {
                     // Bomb-splash-on-death: a ship that dies with un-detonated bombs splashes a
                     // tier-scaled fraction (tier/4%: 100→25,200→50,300→75) of each bomb's damage to
                     // its LIVING same-side adjacent allies (positional only — victim.position gate
@@ -5853,7 +6100,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // NO affinity (bombs aren't affinity-scaled). Bomb-like: full shield drain, no
                     // penetration (bombPortion = full). Credited to the bomb applier (sourceId).
                     // Chains: a splash that kills an adjacent bombed ally re-enters this same
-                    // recordDestroyed else-branch for that ally, firing its splash — naturally finite
+                    // `outcome === 'destroyed'` arm for that ally, firing its splash — naturally finite
                     // (each ship dies once; bombs consumed up-front). Guarded against double-fire on a
                     // second hit to a corpse by (a) the wasAliveBeforeThisCall check and (b) consuming
                     // the bombs before splashing.
@@ -11327,24 +11574,52 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             }
                                         }
                                         if (e.kind === 'heal') {
-                                            healingCtx.credit(healTarget!.id, 'directHeal', raw);
-                                            const { consumed, overheal } =
-                                                healingCtx.applyHealToTarget(raw);
-                                            healingCtx.credit(
-                                                healTarget!.id,
-                                                'effectiveHeal',
-                                                consumed
-                                            );
-                                            healingCtx.credit(healTarget!.id, 'overheal', overheal);
-                                            // Recipient axis (SP-3b Task 7): the non-positional
-                                            // taken-leech always lands on the heal target.
-                                            creditLandedRepair(
-                                                healTarget!.id,
-                                                'directHeal',
+                                            // R10′ (#362): all four credits, gross included, sit
+                                            // BELOW the apply and are skipped on a reversal. This
+                                            // site always applies (to the heal target), so there
+                                            // is no unapplied third case here.
+                                            //
+                                            // ⚠️ UNEXERCISED (#362 fix-wave-1 review): a reviewer
+                                            // probe planted a throw immediately before this call
+                                            // (and the sibling aggregate-leech site above), ran the
+                                            // full suite (3801 tests), and neither fired. This
+                                            // non-positional taken-leech branch's R10′ credit move is
+                                            // corpus-DEAD — pre-existing, not introduced by this
+                                            // pass — so an unconditional double-credit bug here would
+                                            // be invisible to every test in the repository. Do not
+                                            // build fixtures for it now; this comment only records
+                                            // that the branch rests on review, not on coverage.
+                                            const applied = healingCtx.applyHealToTarget(
                                                 raw,
-                                                consumed,
-                                                overheal
+                                                healTarget!,
+                                                healTarget!.id
                                             );
+                                            if (!applied.reversed) {
+                                                healingCtx.credit(
+                                                    healTarget!.id,
+                                                    'directHeal',
+                                                    raw
+                                                );
+                                                healingCtx.credit(
+                                                    healTarget!.id,
+                                                    'effectiveHeal',
+                                                    applied.consumed
+                                                );
+                                                healingCtx.credit(
+                                                    healTarget!.id,
+                                                    'overheal',
+                                                    applied.overheal
+                                                );
+                                                // Recipient axis (SP-3b Task 7): the non-positional
+                                                // taken-leech always lands on the heal target.
+                                                creditLandedRepair(
+                                                    healTarget!.id,
+                                                    'directHeal',
+                                                    raw,
+                                                    applied.consumed,
+                                                    applied.overheal
+                                                );
+                                            }
                                         } else {
                                             healingCtx.credit(healTarget!.id, 'shield', raw);
                                             healingCtx.grantShieldToTarget(raw);
@@ -11912,14 +12187,19 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
             // extraTurns set ONLY when ≥ 1 (undefined preserves legacy RoundData shape).
             ...(focusTurns.length > 1 ? { extraTurns: focusTurns.length - 1 } : {}),
-            // perTargetDamage set ONLY when the positional path recorded victim damage this
-            // round (map non-empty). Non-positional rounds leave it absent → goldens byte-identical.
+            // perTargetDamage set ONLY when the positional path OR a #362 Reversed Repairs burn
+            // (`bookReversalDamage`, the second writer — see its declaration above) recorded victim
+            // damage this round (map non-empty). A round with neither leaves it absent → goldens
+            // byte-identical.
             ...(roundPerTargetDamage.size > 0
                 ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
                 : {}),
             // perTargetDealt (SP-F F1): attacker id -> victim id -> dealt, mirroring EVERY
-            // roundPerTargetDamage increment above to its correct source-attacker. Set ONLY when
-            // non-empty — mirrors perTargetDamage's "absent when empty" rule, goldens byte-identical.
+            // roundPerTargetDamage increment above to its correct source-attacker — EXCEPT an
+            // applier-less #362 reversal, which writes perTargetDamage but has no attacker to
+            // mirror to here (same documented exception as a redirected DoT-tick chunk with no
+            // single attacker). Set ONLY when non-empty — mirrors perTargetDamage's "absent when
+            // empty" rule, goldens byte-identical.
             ...(roundPerTargetDealt.size > 0
                 ? {
                       perTargetDealt: Object.fromEntries(

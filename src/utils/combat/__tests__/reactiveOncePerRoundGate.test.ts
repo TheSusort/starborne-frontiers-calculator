@@ -165,7 +165,7 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
         const healing: IntentExecContext['healing'] = {
             targetId: OWNER_ID,
             credit: () => {},
-            applyHealToTarget: () => ({ consumed: 0, overheal: 0 }),
+            applyHealToTarget: () => ({ reversed: false as const, consumed: 0, overheal: 0 }),
             grantShieldToTarget: shieldSpy,
             recipientMaxHp: () => 10000,
             recipientIncomingHealPct: () => 0,
@@ -195,7 +195,7 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
         const healing: IntentExecContext['healing'] = {
             targetId: OWNER_ID,
             credit: () => {},
-            applyHealToTarget: () => ({ consumed: 0, overheal: 0 }),
+            applyHealToTarget: () => ({ reversed: false as const, consumed: 0, overheal: 0 }),
             grantShieldToTarget: shieldSpy,
             recipientMaxHp: () => 10000,
             recipientIncomingHealPct: () => 0,

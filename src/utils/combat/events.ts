@@ -181,7 +181,17 @@ export type CombatEvent =
      *  `critHits` present only when >= 1 (single-draw heals: 0 or 1 per heal ability;
      *  summed across the cast's heal abilities). `perTarget` carries the actually-applied
      *  amount per recipient (raw heal); `overheal` and `didCrit` are present when the
-     *  engine tracks them for that recipient. */
+     *  engine tracks them for that recipient.
+     *
+     *  ⚠️ `amount` IS NOT "HEALING DONE" (#362). A recipient carrying `Reversed Repairs`
+     *  takes the repair as raw HP damage instead, and R10′ books the healer NOTHING for it —
+     *  yet the event still fires, because it is also the signal every on-repair TRIGGER keys
+     *  off (R9, Zosimos's own charge passive: "when an enemy performs a repair"; Ruiner's
+     *  Bomb; Overload; Amartya). The repair was cast; it simply did not repair. So the
+     *  reversed portion is MARKED rather than removed: `reversedAmount` at the top level and
+     *  `reversed: true` per entry. Any consumer computing HEALING must subtract it — see
+     *  `battleSimulator.ts`'s healDone/healReceived fold. Any consumer asking "did a repair
+     *  happen" must keep ignoring it. */
     | ({
           type: 'heal-performed';
           casterId: string;
@@ -189,6 +199,11 @@ export type CombatEvent =
           round: number;
           amount: number;
           critHits?: number;
+          /** #362 R10′: the portion of `amount` that was REVERSED into damage on its recipient
+           *  and therefore healed nobody. Present only when > 0. `amount − reversedAmount` is
+           *  the healing this cast actually did; when they are equal the cast healed nothing at
+           *  all and still legitimately emitted (the triggers above need it). */
+          reversedAmount?: number;
           /** Summed CLIPPED EXCESS of this cast's repair on the heal target (heal raw minus
            *  the HP actually consumed). Present only when > 0. Consumed by the
            *  on-own-repair-to-ally listener to scale an `overheal`-basis reactive shield
@@ -197,9 +212,18 @@ export type CombatEvent =
           /** Per-recipient breakdown: one entry per recipient in application order.
            *  `amount` is the raw heal applied to that recipient; `overheal` is the
            *  wasted portion (present only when > 0, player-side heal target only);
-           *  `didCrit` is present when the ability crit (player/enemy-side heal).
-           *  Always populated by the engine; absent only in hand-crafted test emits. */
-          perTarget?: { targetId: string; amount: number; overheal?: number; didCrit?: boolean }[];
+           *  `didCrit` is present when the ability crit (player/enemy-side heal);
+           *  `reversed` (#362) marks an entry whose `amount` was burned off that
+           *  recipient's HP rather than restored to it — present only when true, and
+           *  mutually exclusive with `overheal` (a reversed repair wastes nothing, it
+           *  damages). Always populated by the engine; absent only in hand-crafted test emits. */
+          perTarget?: {
+              targetId: string;
+              amount: number;
+              overheal?: number;
+              didCrit?: boolean;
+              reversed?: true;
+          }[];
       } & ReactiveStamp)
     /** A shield-application cast resolved (one event per cast, not per recipient).
      *  `granterId` is the acting actor that applied the shield(s) — named granter (not
@@ -500,6 +524,33 @@ export type CombatEvent =
      *  buildCombatLog. NO combat listener subscribes to it (cannot chain). Buffered on the
      *  positional path (defer-flush) to nest under the triggering attack. */
     | ({ type: 'cheat-death-log'; actorId: string; round: number } & ReactiveStamp)
+    /** LOG-ONLY (#362 R11): a `Reversed Repairs` carrier took an incoming repair as raw HP damage.
+     *  Emitted on EVERY reversal, lethal or not — a non-lethal one otherwise produces no event at
+     *  all, leaving the player to watch a repair land, achieve nothing and HP drop with nothing
+     *  connecting the three. NO combat listener subscribes (cannot chain); it exists solely for
+     *  buildCombatLog. Buffered through `emitConsequenceLog` so a reversal inside a deferral window
+     *  nests under the attack that raised it.
+     *
+     *  `applierId` is the actor that inflicted the status — the same actor the burn's damage and
+     *  any resulting kill are credited to (R7′), NOT the healer whose repair was reversed. Absent
+     *  when the status came from the calculator's hand-selected enemy-debuff picker, which carries
+     *  no applier identity. `amount` is the full face value burned (pre-clamp, post-crit).
+     *
+     *  `healerId` (#362 fix-wave-1) is the actor whose repair got reversed — `repairSourceId` at
+     *  the `applyHealToTarget` call site. It is carried SOLELY so the log line can name the repair
+     *  that was undone ("Zosimos → Nova: Medic's repair reversed 10,000"); it is a DISPLAY field
+     *  ONLY. `applierId` remains this entry's attribution — the sole id credited via `creditDealt`
+     *  and the sole candidate for `killerId` — and nothing about R7′ changes: the healer's identity
+     *  does not re-enter the damage/kill attribution through this field. Do not read `healerId` for
+     *  anything but rendering. */
+    | ({
+          type: 'reversed-repair-log';
+          victimId: string;
+          applierId?: string;
+          healerId?: string;
+          amount: number;
+          round: number;
+      } & ReactiveStamp)
     /** Emitted at every actor.charges mutation so the log can show charge state and
      *  manipulation. `oldCharge`/`newCharge` bracket the mutation; `reason` distinguishes
      *  the three mutation paths:

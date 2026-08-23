@@ -4149,7 +4149,6 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             if (cfg.type === 'heal')
                 raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
             if (cfg.type === 'heal') {
-                ctx.healing.credit(intent.ownerId, 'directHeal', raw);
                 healPerTarget.push({ targetId: rid, amount: raw });
                 healSum += raw;
                 // SP-4e: apply to the RESOLVED recipient's own pool, mirroring the reactive
@@ -4158,21 +4157,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // restored HP only to the anchor — invisible while every reactive 'ally' heal
                 // routed to the anchor anyway, a silent no-op the moment one does not.
                 const recipientActor = ctx.healing.recipientActor(rid);
-                if (recipientActor) {
-                    const { consumed, overheal } = ctx.healing.applyHealToTarget(
-                        raw,
-                        recipientActor
-                    );
-                    ctx.healing.credit(intent.ownerId, 'effectiveHeal', consumed);
-                    ctx.healing.credit(intent.ownerId, 'overheal', overheal);
+                // R10′ (#362): the owner's gross `directHeal` credit moved below the apply so a
+                // reversed reactive repair books nothing on its owner. An UNRESOLVABLE recipient
+                // still credits gross, unchanged — nothing landed, so nothing was reversed.
+                const applied = recipientActor
+                    ? ctx.healing.applyHealToTarget(raw, recipientActor, intent.ownerId)
+                    : undefined;
+                if (applied === undefined) {
+                    ctx.healing.credit(intent.ownerId, 'directHeal', raw);
+                } else if (!applied.reversed) {
+                    ctx.healing.credit(intent.ownerId, 'directHeal', raw);
+                    ctx.healing.credit(intent.ownerId, 'effectiveHeal', applied.consumed);
+                    ctx.healing.credit(intent.ownerId, 'overheal', applied.overheal);
                     // Recipient axis (SP-3b Task 7): mirror where the repair LANDED — which, since
                     // SP-4e, is every recipient whose pool this loop actually touched, not just the
                     // anchor. Gated on `perRecipientApply` to keep a legacy run's `perRecipient`
                     // empty.
                     if (ctx.healing.perRecipientApply) {
                         ctx.healing.creditRecipient?.(rid, 'directHeal', raw);
-                        ctx.healing.creditRecipient?.(rid, 'effectiveHeal', consumed);
-                        ctx.healing.creditRecipient?.(rid, 'overheal', overheal);
+                        ctx.healing.creditRecipient?.(rid, 'effectiveHeal', applied.consumed);
+                        ctx.healing.creditRecipient?.(rid, 'overheal', applied.overheal);
                     }
                 }
             } else {

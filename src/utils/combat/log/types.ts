@@ -51,7 +51,10 @@ export type CombatLogEntryKind =
     | 'buff-expired'
     | 'debuff-resisted'
     | 'shield-destroyed'
-    | 'cheat-death';
+    | 'cheat-death'
+    /** #362 R11: an incoming repair was turned into raw HP damage on its recipient. Booked to the
+     *  DEBUFF'S APPLIER (the actor credited with the damage), with the burned ship in `targets`. */
+    | 'reversed-repair';
 
 export interface CombatLogEntry {
     kind: CombatLogEntryKind;
@@ -61,6 +64,22 @@ export interface CombatLogEntry {
     targets: CombatLogTarget[]; // 1 = single-target, N = AoE
     reactions: CombatLogEntry[]; // reactions triggered BY this entry (filled by a later task; [] for now)
     note?: string;
+    /** #362 fix-wave-1, `reversed-repair` ONLY: the healer whose repair was reversed, for DISPLAY
+     *  alone ("Zosimos → Nova: Medic's repair reversed 10,000"). A dedicated field rather than
+     *  folded into `note` — `note` is already spoken for by `debuff-resisted`. Carrying no
+     *  attribution weight: `actorId` is the debuff's APPLIER and stays the entry's sole credited
+     *  actor (R7′).
+     *
+     *  PRESENT ON EVERY PRODUCED `reversed-repair` ENTRY (#362 fix-wave-2, I-2). An earlier
+     *  revision of this doc said it was "absent when the applier is unknown (scheduled channel)",
+     *  which was simply false in two ways: `engine.ts` sets `healerId` unconditionally (the repair
+     *  source is a REQUIRED parameter at every `applyHealToTarget` call site, so there is always
+     *  one), and `buildCombatLog` copies it independently of `applierId` — the two ids are on
+     *  different axes and an absent applier does not suppress the healer. Optional here only
+     *  because the field lives on the shared `CombatLogEntry`, which every OTHER entry kind
+     *  leaves unset; the formatter's healer-less fallback string is therefore defensive, not a
+     *  shape production reaches. Never falls back to the applier. */
+    healerId?: string;
 }
 
 export interface CombatLogTarget {

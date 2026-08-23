@@ -50,9 +50,18 @@ const makeHealing = (
      *  mis-routing the executor to `recipientActor(ctx.healing.targetId)`; the effectiveHeal
      *  assertion below stayed green. This array is what makes it go red. */
     appliedTo: string[];
+    /** Task 4 (#362): the `repairSourceId` handed to each `applyHealToTarget` call, alongside
+     *  `appliedTo`. Its original purpose (crediting a reversal KILL to this id) was retracted by
+     *  R7′ — that credit now goes to the debuff's applier instead, read off `reversedRepairsOn`,
+     *  never off this parameter. Its current purpose (#362 fix-wave-1) is display-only: it becomes
+     *  `reversed-repair-log`'s `healerId`, which names the repair's caster inside the combat-log
+     *  line ("Zosimos → Nova: Medic's repair reversed N"). A future bug here would show up as the
+     *  WRONG SHIP NAMED in that line, not as a misattributed kill or credit. */
+    appliedSourceIds: string[];
 } => {
     const credits = new Map<string, ActorHealing>();
     const appliedTo: string[] = [];
+    const appliedSourceIds: string[] = [];
     const healing: HealingRuntimeCtx = {
         targetId,
         credit: (actorId, bucket, amount) => {
@@ -64,10 +73,11 @@ const makeHealing = (
         recipientIncomingHealPct: () => 0,
         applierMaxHp: () => undefined,
         // Live target starts missing 500 HP → first 500 of raw is effective, rest overheals.
-        applyHealToTarget: (raw, victim) => {
-            appliedTo.push(victim?.id ?? '<unresolved>');
+        applyHealToTarget: (raw, victim, repairSourceId) => {
+            appliedTo.push(victim.id);
+            appliedSourceIds.push(repairSourceId);
             const consumed = Math.min(raw, 500);
-            return { consumed, overheal: raw - consumed };
+            return { reversed: false, consumed, overheal: raw - consumed };
         },
         grantShieldToTarget: () => 0,
         playerIds,
@@ -79,7 +89,7 @@ const makeHealing = (
         recipientActor: (id) =>
             playerIds.includes(id) ? ({ id } as unknown as CombatActor) : undefined,
     };
-    return { healing, credits, appliedTo };
+    return { healing, credits, appliedTo, appliedSourceIds };
 };
 
 const buildCtx = (
@@ -157,7 +167,7 @@ describe('Phase 4 PR 2 Task 3 — Salvation dead-recipient gross-heal filtering'
             ['ally1', runtime('ally1', 1000)],
             ['ally2', runtime('ally2', 1000)],
         ]);
-        const { healing, credits, appliedTo } = makeHealing('ally1', playerIds);
+        const { healing, credits, appliedTo, appliedSourceIds } = makeHealing('ally1', playerIds);
         const ctx = buildCtx(runtimes, healing, playerIds);
 
         executeIntent(salvationHeal('caster'), ctx);
@@ -168,6 +178,9 @@ describe('Phase 4 PR 2 Task 3 — Salvation dead-recipient gross-heal filtering'
         // dead caster is still excluded (THIS file's subject, pinned by the first test): the list
         // is ['ally1', 'ally2'] in playerIds order, NOT ['ally1', 'ally1'].
         expect(appliedTo).toEqual(['ally1', 'ally2']);
+        // Task 4 (#362): the reactive executor passes `intent.ownerId` as `repairSourceId` — the
+        // dead Salvation caster, not either living recipient.
+        expect(appliedSourceIds).toEqual(['caster', 'caster']);
         // The bucket totals agree, but only the list above can tell two distinct recipients apart
         // from the anchor being repaired twice: this double's `applyHealToTarget` splits every raw
         // 50 consumed / 0 overheal regardless of victim, so these count APPLICATIONS, not HP.

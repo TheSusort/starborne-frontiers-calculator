@@ -4026,25 +4026,28 @@ exports[`kit fingerprints > Zeolite 1`] = `
 exports[`kit fingerprints > Zosimos 1`] = `
 {
   "plain": [
+    "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "debuff:charged",
   ],
   "richEnemy": [
+    "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "debuff:charged",
   ],
   "wounded": [
+    "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "debuff:charged",
   ],
 }
 `;

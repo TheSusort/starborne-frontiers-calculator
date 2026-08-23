@@ -314,7 +314,7 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             applierMaxHp: () => 10000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: (raw) => shields.push(raw),
             playerIds: ['enemy1', 'tank'],
@@ -619,7 +619,7 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
             applierMaxHp: () => 10000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: (raw) => shields.push(raw),
             playerIds: ['attacker', 'tank'],

@@ -2649,3 +2649,63 @@ describe('buildCombatLog — target-less rows from a non-roster-bound cast', () 
         }
     });
 });
+
+/**
+ * #362 R11 — "EVERY reversal writes its own combat-log row", the APPLIER-LESS one included.
+ *
+ * `reversed-repair-log` books to `e.applierId ?? e.victimId`. The `?? e.victimId` half is the
+ * SCHEDULED channel: a Reversed Repairs hand-ticked in the calculator's enemy-debuff picker was
+ * never cast by anyone, so the event carries no `applierId` (`reversedRepairs.ts` models that as a
+ * legitimate state, not an error). Before #362 fix-wave-2 that fallback was executed by zero tests
+ * — mutating it to `e.applierId!` left the whole suite green — so R11's own coverage stopped at
+ * the rows that HAVE an applier.
+ *
+ * The two shapes are asserted side by side so the fallback is measured against the normal path
+ * rather than in isolation: same victim, same amount, same healer, differing only in `applierId`.
+ */
+describe('buildCombatLog: reversed-repair rows (#362 R11)', () => {
+    const reversalEvents = (applierId?: string): CombatEvent[] => [
+        ev({ type: 'round-started', round: 1 }),
+        ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+        ev({
+            type: 'reversed-repair-log',
+            victimId: 'B',
+            ...(applierId !== undefined ? { applierId } : {}),
+            healerId: 'A',
+            amount: 4321,
+            round: 1,
+        }),
+        ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+        ev({ type: 'round-ended', round: 1 }),
+    ];
+
+    const rowFrom = (applierId?: string) =>
+        buildCombatLog(reversalEvents(applierId), roster, initialCharge)[0].turns[0].entries.find(
+            (e) => e.kind === 'reversed-repair'
+        );
+
+    // THE INSTRUMENT: with an applier, the row books to it — this is the shape every other R11
+    // test in the branch exercises, and it is what makes the applier-less assertion below a
+    // measurement of the fallback rather than of the handler existing at all.
+    it('books to the APPLIER when the status has one', () => {
+        const row = rowFrom('A');
+        expect(row).toBeDefined();
+        expect(row!.actorId).toBe('A');
+        expect(row!.targets).toEqual([{ targetId: 'B', amount: 4321 }]);
+        expect(row!.healerId).toBe('A');
+    });
+
+    // THE FALLBACK: no applier, and the row still exists — R11 admits no silent reversal — booked
+    // to the VICTIM so the formatter renders the self-line rather than a source → target line
+    // with an undefined source. It must NOT fall back to the healer: that is the attribution R7′
+    // rejects, and `healerId` carries the healer already, on its own display-only axis.
+    it('falls back to the VICTIM when the scheduled channel supplies no applier', () => {
+        const row = rowFrom(undefined);
+        expect(row).toBeDefined();
+        expect(row!.actorId).toBe('B');
+        expect(row!.actorId).not.toBe('A'); // explicitly not the healer
+        expect(row!.targets).toEqual([{ targetId: 'B', amount: 4321 }]);
+        // The healer survives the applier's absence — the two ids are on different axes.
+        expect(row!.healerId).toBe('A');
+    });
+});

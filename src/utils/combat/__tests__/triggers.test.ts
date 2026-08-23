@@ -2716,7 +2716,7 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             applierMaxHp: () => 1000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
@@ -3240,7 +3240,7 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             applierMaxHp: () => 1000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
@@ -3492,7 +3492,7 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
 
     const buildHealCtx = (): {
         ctx: IntentExecContext;
-        applied: Array<{ raw: number; id: string | undefined }>;
+        applied: Array<{ raw: number; id: string | undefined; sourceId: string }>;
         credits: Array<{ bucket: string; amount: number }>;
     } => {
         // SP-4e fix wave 1: `applied` records the RECIPIENT, not just the amount. As a bare
@@ -3500,7 +3500,9 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
         // instead of the resolved recipient left every assertion below green — the reviewer proved
         // it by rewriting the executor's `recipientActor(rid)` to `recipientActor(targetId)` and
         // watching all four recipient-routing tests still pass. The id is the discriminator.
-        const applied: Array<{ raw: number; id: string | undefined }> = [];
+        // Task 4 (#362): `sourceId` records the `repairSourceId` the executor passed — the
+        // reactive branch always passes `intent.ownerId` ('healer' here).
+        const applied: Array<{ raw: number; id: string | undefined; sourceId: string }> = [];
         const credits: Array<{ bucket: string; amount: number }> = [];
         const healing: HealingRuntimeCtx = {
             targetId: 'tank',
@@ -3508,9 +3510,9 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => 1000,
-            applyHealToTarget: (raw, victim) => {
-                applied.push({ raw, id: victim?.id });
-                return { consumed: raw, overheal: 0 };
+            applyHealToTarget: (raw, victim, repairSourceId) => {
+                applied.push({ raw, id: victim?.id, sourceId: repairSourceId });
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: PLAYER_IDS,
@@ -3533,7 +3535,7 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
 
         // 10% of owner hp (1000) = 100, consumed by the heal target — and it is the ANCHOR's
         // pool that is drained, because here the damaged ally IS the anchor.
-        expect(applied).toEqual([{ raw: 100, id: 'tank' }]);
+        expect(applied).toEqual([{ raw: 100, id: 'tank', sourceId: 'healer' }]);
         expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
         expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });
@@ -3554,7 +3556,7 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
         // Repair Over Time" and Cultivator's "that ally" now actually repair that ally.
         // The recipient id is the load-bearing half: `[{ raw: 100 }]` alone would also be
         // produced by a regression that repaired the ANCHOR ('tank') instead of 'team1'.
-        expect(applied).toEqual([{ raw: 100, id: 'team1' }]);
+        expect(applied).toEqual([{ raw: 100, id: 'team1', sourceId: 'healer' }]);
         expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
         expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
     });

@@ -111,12 +111,20 @@ export interface ShipRoundState {
      * for the invariant and its Protection-redirect caveat.
      */
     damageTaken: number;
+    /**
+     * Healing this actor actually did this round: summed `heal-performed.amount` MINUS the
+     * portion that was reversed into damage (#362 R10′ — `heal-performed.reversedAmount`). A
+     * repair whose recipient carried `Reversed Repairs` healed nobody, so it books nothing here
+     * even though the cast happened and the event fired.
+     */
     healingDone: number;
     /**
      * SP-F F2: per-recipient raw heal amount actually applied to this actor, sourced from
      * `heal-performed.perTarget` (the engine's real per-recipient breakdown — see that event's
      * doc in events.ts). An even split of `amount` across `targets` is only a FALLBACK for
      * hand-crafted test emits that omit `perTarget`; the engine itself always populates it.
+     * Entries flagged `reversed` (#362) are EXCLUDED: that recipient lost the HP instead of
+     * gaining it, and the loss is already on its `damageTaken`/`incomingDamage` axis.
      * CAVEAT (pre-existing, out of F2 scope): HoT-tick and reactive-heal channels are not
      * `heal-performed` casts and are not included here.
      */
@@ -131,7 +139,9 @@ export interface ShipRoundState {
      * Per-victim incoming damage-taken this round (HP damage actually landed), from
      * `perRoundPerIncoming[round][victimId].incoming`. Parallel to the shield fields and sourced
      * from the engine's per-victim `perActorIncoming` map. Covered AoE victims carry their own
-     * bucket. 0 when the actor took no recorded intake this round.
+     * bucket. 0 when the actor took no recorded intake this round. A `Reversed Repairs` burn
+     * (#362) lands here in full — it passes no shield, Barrier or defence layer, so all of it is
+     * HP loss.
      */
     incomingDamage: number;
     /** Shield drained by this round's incoming damage (perActorIncoming.shieldAbsorbed). */
@@ -240,6 +250,7 @@ export const LOG_EVENT_TYPES = [
     'shield-applied-log',
     'shield-destroyed-log',
     'cheat-death-log',
+    'reversed-repair-log',
     'buff-applied',
     'buff-expired',
     'debuff-applied',
@@ -422,16 +433,29 @@ export function assembleBattleResult(args: {
         const healReceived = new Map<string, number>();
         for (const e of roundEvents) {
             if (e.type === 'heal-performed') {
-                healDone.set(e.casterId, (healDone.get(e.casterId) ?? 0) + e.amount);
+                // #362 R10′: `amount` is the repair CAST, which is not the same thing as healing
+                // DONE. A recipient carrying `Reversed Repairs` took its share as raw HP damage
+                // and was healed for nothing, so the reversed portion comes off both axes here.
+                // The event itself still fires and is still counted as "a repair happened" by the
+                // on-repair triggers — see the `heal-performed` doc in events.ts.
+                const healedAmount = e.amount - (e.reversedAmount ?? 0);
+                healDone.set(e.casterId, (healDone.get(e.casterId) ?? 0) + healedAmount);
                 if (e.perTarget && e.perTarget.length > 0) {
                     for (const pt of e.perTarget) {
+                        // A reversed entry credits its recipient nothing: it lost that HP, and the
+                        // loss is already on its damage-taken/intake axis (engine.ts
+                        // `bookReversalDamage`). Crediting it here would cancel the loss out of the
+                        // HP bar, which reads `maxHp − hpLost + healed`.
+                        if (pt.reversed) continue;
                         healReceived.set(
                             pt.targetId,
                             (healReceived.get(pt.targetId) ?? 0) + pt.amount
                         );
                     }
                 } else {
-                    const per = e.targets.length > 0 ? e.amount / e.targets.length : 0;
+                    // Fallback for hand-crafted emits with no perTarget (the engine always
+                    // populates it). Splits the HEALED amount, not the gross.
+                    const per = e.targets.length > 0 ? healedAmount / e.targets.length : 0;
                     for (const tid of e.targets) {
                         healReceived.set(tid, (healReceived.get(tid) ?? 0) + per);
                     }

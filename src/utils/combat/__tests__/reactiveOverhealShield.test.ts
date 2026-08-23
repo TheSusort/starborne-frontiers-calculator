@@ -87,7 +87,7 @@ function makeShieldCtx(grantShieldToTarget: (raw: number, actor: CombatActor) =>
         // healing.targetId, so the shield must land on ALLY_ID.
         targetId: ALLY_ID,
         credit: () => {},
-        applyHealToTarget: () => ({ consumed: 0, overheal: 0 }),
+        applyHealToTarget: () => ({ reversed: false as const, consumed: 0, overheal: 0 }),
         grantShieldToTarget,
         recipientMaxHp: () => MAX_HP,
         recipientIncomingHealPct: () => 0,
