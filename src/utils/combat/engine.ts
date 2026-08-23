@@ -1702,18 +1702,26 @@ export interface HealingRoundEngine {
      *  `perRecipientApply` (or `mode: 'battle'`) is set; **empty otherwise**, which is what
      *  keeps every legacy healing result byte-identical.
      *
-     *  EVERY repair whose pool application succeeds is on this axis (SP-3b Task 7): the direct cast
-     *  site (playerTurn.ts), HoT ticks (playerTurn.ts `tickHot` — raw into the HOLDER's `hotHeal`),
-     *  the per-victim standing and taken leeches (engine.ts, both via `creditLandedRepair`), and
-     *  reactive repairs (triggers.ts). That completeness is
-     *  load-bearing: the healing report's `effectiveHealing`/`overheal` read this axis, so a source
-     *  that credited only `perActor` would silently vanish from the reported consumption.
+     *  EVERY repair whose pool application succeeds is on this axis (SP-3b Task 7): the cast site
+     *  (playerTurn.ts — BOTH arms, the player one and the `healEventOnly` enemy one), HoT ticks
+     *  (playerTurn.ts `tickHot` — raw into the HOLDER's `hotHeal`), the per-victim standing and
+     *  taken leeches (engine.ts, both via `creditLandedRepair`), and reactive repairs (triggers.ts).
+     *  That completeness is load-bearing twice over: the healing report's
+     *  `effectiveHealing`/`overheal` read this axis, and since #375 so does the Simulator's
+     *  `healingReceived` (via `hp-snapshot.repairReceived`) — so a source that credited only
+     *  `perActor` would silently vanish from both.
      *
-     *  `creditLandedRepair` is a `runCombat`-local closure, not an export — `tickHot`
-     *  (playerTurn.ts) and the reactive executor (triggers.ts) live in OTHER modules and cannot
+     *  SIDE-AGNOSTIC, and that is the point (#375). This axis records where HP LANDED, which has no
+     *  side to it — an enemy repairing an enemy ally is on it exactly like a player healer. That is
+     *  a deliberate asymmetry with `perActor`, which is PLAYER-ONLY by design (E5 §4.1), and it is
+     *  why `healingEngineAdapter` filters this axis through `playerRecipientIds` before reporting
+     *  it. Do not "fix" an enemy key appearing here; filter it at the consumer.
+     *
+     *  `creditLandedRepair` is a `runCombat`-local closure, not an export — `tickHot` and the cast
+     *  path (playerTurn.ts) and the reactive executor (triggers.ts) live in OTHER modules and cannot
      *  reach it, so each duplicates the `perRecipientApply` gate check inline instead of calling
-     *  through. A future (seventh) cross-module credit site has nothing to reach for either — it
-     *  must add its own inline gate, the same way those two do.
+     *  through. A future cross-module credit site has nothing to reach for either — it must add its
+     *  own inline gate, the same way those do.
      *
      *  `shield` and `cleanseCount` are still SOURCE-ONLY and deliberately so — the shield pool lands
      *  per-recipient via `grantShieldToTarget`, but no recipient-side shield TOTAL is computed, and
@@ -12088,13 +12096,21 @@ export function runCombat(rawInput: CombatEngineInput): {
             // not re-derive it. Every actor in `allActors` is read the same way, so this is
             // team-symmetric by construction.
             //
-            // DELIBERATELY HP ONLY. `healingReceived` still accumulates from events, and this
-            // snapshot could NOT fix it: the natural source, the round's per-recipient healing axis
-            // (`currentRoundRecipientHealing`), is PLAYER-SIDE ONLY. Measured — on the enemy-side
-            // arm of `reversedRepairs.engine.test.ts` that map is empty for every actor even when an
-            // enemy medic really repaired an enemy victim for 10 000. Substituting it here regressed
-            // the enemy side from correct to 0. See the follow-up issue; that axis has to become
-            // team-symmetric before this snapshot can carry repair too.
+            // #375 ADDED THE REPAIR HALF. `healingReceived` used to accumulate from events, which
+            // reaches only the channels that emit one (`heal-performed`, cast-only; `hot-ticked`) —
+            // so a ship kept alive all fight by a leech reported 0. This reads the engine's own
+            // per-recipient healing axis instead, which every repair channel credits.
+            //
+            // The axis could not be read here before: its two `healEventOnly` credit arms in
+            // `playerTurn.ts` were missing, so it was empty for every enemy and substituting it
+            // regressed the enemy rows from correct to 0. #375 lifted both arms first
+            // (`recipientAxisTeamSymmetry.test.ts` pins the lift on both sides).
+            //
+            // GROSS — `directHeal + hotHeal`, pre-overheal-clipping — because that is the contract
+            // this axis has always been held to; see the `hp-snapshot` doc in events.ts. OMITTED
+            // rather than zeroed when per-recipient accounting is off, so the assembler can tell
+            // "not measured" from "measured, none landed".
+            const roundRepair = currentRoundRecipientHealing.get(a.id);
             bus.emit({
                 type: 'hp-snapshot',
                 actorId: a.id,
@@ -12102,6 +12118,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 currentHp: a.currentHp,
                 maxHp: recipientMaxHp(a.id),
                 shieldPool: a.shieldPool,
+                ...(healingCtx?.perRecipientApply
+                    ? {
+                          repairReceived: roundRepair
+                              ? roundRepair.directHeal + roundRepair.hotHeal
+                              : 0,
+                      }
+                    : {}),
             });
         }
 

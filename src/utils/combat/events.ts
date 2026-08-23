@@ -307,6 +307,15 @@ export type CombatEvent =
      *  `tickHot`). NOT a repair event and NOT a log event — it exists for exactly one consumer,
      *  `battleSimulator.ts`'s `healReceived` fold, and has NO subscriber anywhere in the engine.
      *
+     *  ⚠️ THAT CONSUMER IS NOW THE FALLBACK ARM (#375). `healingReceived` is READ from
+     *  `hp-snapshot.repairReceived` whenever the engine supplies it, which every real run does; the
+     *  `healReceived` fold below survives for hand-built event streams alone. So on a real run this
+     *  event feeds nothing — it is kept because that fallback arm is still reachable, and because
+     *  it is still the only signal a tick produces at all. Everything the next paragraphs say about
+     *  the derived path therefore describes the fallback, not what the Simulator shows. In
+     *  particular the GROSS/consumed difference is now visible: the axis books the tick's gross,
+     *  this event books what landed, so an over-repairing HoT reports differently on the two arms.
+     *
      *  WHY IT EXISTS. `assembleBattleResult` does not read `currentHp`; it DERIVES each ship's
      *  `hpPct` as `maxHp − hpLost + healed`, and `healed` was accumulated exclusively from
      *  `heal-performed.perTarget`. A HoT tick emits no `heal-performed` (see R2 below) and
@@ -658,12 +667,20 @@ export type CombatEvent =
      *  same contract `status-snapshot` has. The derived path remains as a fallback purely for
      *  hand-built event streams (see `battleAssemble.test.ts`), which name no actor here.
      *
-     *  HP ONLY, deliberately. It does NOT carry the round's repair, so the row's `healingReceived`
-     *  is still event-derived and still blind to a leech. The natural source — the round's
-     *  per-recipient healing axis — is PLAYER-SIDE ONLY (measured: empty for every actor on the
-     *  enemy-side arm of `reversedRepairs.engine.test.ts`, even where an enemy medic really
-     *  repaired an enemy victim), so carrying it here regressed the enemy side from correct to 0.
-     *  That axis needs to become team-symmetric first. */
+     *  `repairReceived` (#375) closes the SECOND axis the same way: the HP repaired ONTO this actor
+     *  this round, READ off the engine's per-recipient healing axis
+     *  (`currentRoundRecipientHealing`) instead of re-accumulated from events. That axis covers
+     *  every repair channel — cast, HoT tick, both per-victim leeches, reactive — on both sides,
+     *  once #375 lifted the two enemy-side credit arms that were missing from it.
+     *
+     *  GROSS, deliberately: `directHeal + hotHeal`, the repair that ARRIVED, before overheal
+     *  clipping. A full-HP ally repaired for 10k reports 10,000 received and 10,000 wasted — the
+     *  contract `healingReceived` has always been held to (pinned on BOTH sides in
+     *  `reversedRepairs.engine.test.ts`). `effectiveHeal` would read 0 for every wasted repair.
+     *
+     *  ABSENT (not 0) when the run has per-recipient accounting off — a legacy single-target
+     *  healing run, where the axis is empty by design. The assembler falls back to its event
+     *  accumulation there, so absent means "not measured" while 0 means "measured, none landed". */
     | {
           type: 'hp-snapshot';
           actorId: string;
@@ -671,6 +688,7 @@ export type CombatEvent =
           currentHp: number;
           maxHp: number;
           shieldPool: number;
+          repairReceived?: number;
       }
     /** LOG-ONLY: an end-of-round snapshot of the statuses one actor actually still carries,
      *  read live from the StatusEngine (`statusNames`). Emitted once per actor at the round

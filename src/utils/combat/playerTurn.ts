@@ -4240,6 +4240,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     round: r,
                 });
             }
+            // Recipient axis (SP-3b Task 7): the tick lands on the HOLDER (this acting actor),
+            // whoever applied it — so the raw goes to the holder's `hotHeal` bucket while the
+            // source axis keeps crediting the APPLIER. Gated on `perRecipientApply` so a legacy
+            // single-target run still leaves `perRecipient` empty.
+            //
+            // #375 MOVED THIS ABOVE THE `healEventOnly` RETURN, for the same reason `hot-ticked` is
+            // emitted above it: the recipient axis answers "what landed on this actor", which has
+            // no side to it, and an enemy holder's HP moved just as much as a player one's. While
+            // it sat below, #369's lift moved the HP without booking where it went — so the axis,
+            // the only per-actor repair total the engine keeps, read 0 for every enemy. The SOURCE
+            // credit below stays gated: that one really is player-only (E5 §4.1). Carries its own
+            // `applied.reversed` guard because the shared one is still below (R10′ — a reversed
+            // tick restored nothing, so nothing landed to book).
+            if (!applied.reversed && healing.perRecipientApply) {
+                healing.creditRecipient?.(actor.id, 'hotHeal', raw);
+                healing.creditRecipient?.(actor.id, 'effectiveHeal', applied.consumed);
+                healing.creditRecipient?.(actor.id, 'overheal', applied.overheal);
+            }
             // `healEventOnly` gates CREDIT, never APPLICATION (E5 §4.1) — the same split the
             // enemy cast-heal arm below already uses. An enemy holder's tick moves its own HP and
             // contributes NOTHING to the player healing buckets, which is the actual invariant the
@@ -4250,15 +4268,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             healing.credit(creditId, 'hotHeal', raw);
             healing.credit(creditId, 'effectiveHeal', applied.consumed);
             healing.credit(creditId, 'overheal', applied.overheal);
-            // Recipient axis (SP-3b Task 7): the tick lands on the HOLDER (this acting actor),
-            // whoever applied it — so the raw goes to the holder's `hotHeal` bucket while the
-            // source axis keeps crediting the APPLIER. Gated on `perRecipientApply` so a legacy
-            // single-target run still leaves `perRecipient` empty.
-            if (healing.perRecipientApply) {
-                healing.creditRecipient?.(actor.id, 'hotHeal', raw);
-                healing.creditRecipient?.(actor.id, 'effectiveHeal', applied.consumed);
-                healing.creditRecipient?.(actor.id, 'overheal', applied.overheal);
-            }
         };
         // #369: BOTH sides tick. The gate that used to wrap this whole block was suppressing the
         // tick itself in order to suppress its CREDIT — `tickHot` now separates the two, so an
@@ -4423,15 +4432,36 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                     recipientActor,
                                     actor.id
                                 );
-                                // R10′ (#362): NO credit to move here — an enemy heal contributes
-                                // nothing to the player healing buckets by design (E5 §4.1), which
-                                // is why this branch never called `healing.credit`. The branch is
-                                // still required for `perTargetOverheal`: a reversed repair is not
-                                // over-repair, so the field must stay absent rather than report
-                                // the burned amount as wasted healing.
+                                // R10′ (#362): NO SOURCE credit to move here — an enemy heal
+                                // contributes nothing to the player healing buckets by design
+                                // (E5 §4.1), which is why this branch never called
+                                // `healing.credit`. The branch is also required for
+                                // `perTargetOverheal`: a reversed repair is not over-repair, so
+                                // the field must stay absent rather than report the burned amount
+                                // as wasted healing.
                                 if (!applied.reversed && applied.overheal > 0)
                                     perTargetOverheal = applied.overheal;
                                 if (applied.reversed) wasReversed = true;
+                                // #375: the RECIPIENT axis is a different question from the source
+                                // axis above, and it DOES cross the line. It records where HP
+                                // landed, and this pool application is as real as the player arm's
+                                // — an enemy medic repairing an enemy ally for 10,000 left that
+                                // ally's entry empty, so the axis (the only per-actor repair total
+                                // the engine keeps) read 0 for every enemy row. Same three buckets,
+                                // same gross-`raw`/consumed/overheal split, same `perRecipientApply`
+                                // gate as the player branch below. Enemy keys never reach the
+                                // healing report: `healingEngineAdapter` already filters this axis
+                                // through `playerRecipientIds`, for exactly this reason (an enemy's
+                                // own leech has always landed here).
+                                if (!applied.reversed && healing.perRecipientApply) {
+                                    healing.creditRecipient?.(rid, 'directHeal', raw);
+                                    healing.creditRecipient?.(
+                                        rid,
+                                        'effectiveHeal',
+                                        applied.consumed
+                                    );
+                                    healing.creditRecipient?.(rid, 'overheal', applied.overheal);
+                                }
                             }
                             healTargets.push(rid);
                             healRawSum += raw;
