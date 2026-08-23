@@ -141,8 +141,17 @@ export interface ShipRoundState {
      * (`reactive-heal-performed`, which this assembler does not read) and standing-leech
      * self-repairs (which emit nothing at all). Those are real HP the derived `hpPct` cannot see.
      * `hot-ticked` closed the HoT channel because #369 made it the one that affects every holder
-     * on both sides; the general hole is filed separately. Do not read this field as "all HP
-     * restored".
+     * on both sides; the general hole is filed separately as **#372**.
+     *
+     * ⚠️ THE TWO HALVES ALSO USE DIFFERENT BASES, and #372 is where that is tracked too. The
+     * `heal-performed` half books `perTarget[].amount`, which is GROSS — `playerTurn` sets it to
+     * the pre-clamp `raw` and carries the clipped portion separately as `pt.overheal`, which this
+     * fold does NOT subtract. The `hot-ticked` half books the HP that LANDED. So the HoT half is
+     * the more correct of the two, and it is the GROSS basis that makes the derived `hpPct` below
+     * over-report: `healed` is cumulative across rounds, so every over-repaired cast pushes the
+     * derived bar further above the engine's real `currentHp` until `clampPct` pins it at 100%. Do
+     * NOT read a raised bar as evidence of missing channels — that is #372's other half, and the
+     * two errors point in OPPOSITE directions on the same number.
      */
     healingReceived: number;
     /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */

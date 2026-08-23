@@ -298,8 +298,13 @@ export type CombatEvent =
      *  `hpPct` as `maxHp − hpLost + healed`, and `healed` was accumulated exclusively from
      *  `heal-performed.perTarget`. A HoT tick emits no `heal-performed` (see R2 below) and
      *  `RoundData` carries no healing buckets, so before this event every HoT tick was HP the
-     *  Simulator's bar, its low-HP colour, its `N% HP` aria-label and the round card's "HP"/
-     *  "Healing received" figures could not see. #369 made that hole general: while the HoT block
+     *  Simulator's bar, its low-HP colour, its `N% HP` aria-label, the round card's "HP"/
+     *  "Healing received" figures — and its BOARD-CELL EFFECT MARKER — could not see.
+     *  `boardOverlays.ts`'s `effect` is a 3-way priority — `damageTaken` → `healingReceived` →
+     *  `shieldsAbsorbed` — so a holder that ticked and took NO damage that round now shows a HEAL
+     *  marker on its cell, where before it showed a shield marker or none at all. (A holder that
+     *  also took damage is unaffected: damage still wins.) Correct, and listed here because it is a
+     *  consumer this doc's enumeration originally missed. #369 made that hole general: while the HoT block
      *  was wrapped in `if (!healEventOnly)` and `tickHot` returned early off-anchor, only the
      *  player-side ANCHOR holder ever gained HP from a tick, so the derived bar diverged for
      *  exactly one ship; once every holder on both sides ticks, it diverges for every one of them.
