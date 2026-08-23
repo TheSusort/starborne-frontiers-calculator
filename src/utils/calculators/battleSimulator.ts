@@ -17,7 +17,8 @@
  *     symmetric source for BOTH sides; we do NOT use `hp-changed`).
  *   - heals = `heal-performed` { casterId, targets[], amount } (healing mode only), PLUS
  *     `hot-ticked` { holderId, amount } for the HP a `Repair Over Time` tick restored — a tick
- *     emits no `heal-performed` (R2) and would otherwise be invisible to the derived HP below.
+ *     emits no `heal-performed` (R2), so nothing else on the `healingReceived` axis reports it.
+ *   - HP = `hp-snapshot` { actorId, currentHp, maxHp } — the engine's own end-of-round read.
  *   - death = `ship-destroyed` { actorId }.
  *   - buffs = `buff-applied` / `buff-expired` / `debuff-applied` / `dot-applied`.
  *
@@ -30,12 +31,17 @@
  * player cast resolve no victim and SP-4c-2d deleted the actor, and `runPlayerTurn` emits no
  * `ability-performed` at all for a turn with no victim.)
  *
- * HP% is DERIVED, never read off `currentHp`: maxHp minus cumulative actual HP loss (from
- * perRoundPerIncoming when present — post-shield/barrier HP damage — plus healing received),
- * falling back to raw perTargetDamage only when no incoming bucket exists for that actor (legacy
- * goldens). Because it is derived, any HP restoration this assembler is not told about is HP the
- * bar simply never shows — see `ShipRoundState.healingReceived` for which repair channels reach it
- * today and which are still missing.
+ * HP% is REPORTED, not derived (#372): it comes from `hp-snapshot`, the engine's own end-of-round
+ * `currentHp`/`maxHp` read, emitted once per actor and authoritative for the actors it names. Every
+ * real run names all of them.
+ *
+ * The old derivation — maxHp minus cumulative actual HP loss (from perRoundPerIncoming when
+ * present, post-shield/barrier HP damage, plus healing received), falling back to raw
+ * perTargetDamage when no incoming bucket exists — survives ONLY as the fallback for hand-built
+ * event streams that emit no snapshot (`battleAssemble.test.ts`). It was wrong in both directions
+ * at once: blind to any repair channel emitting no `heal-performed` (every leech, reactive repairs,
+ * Cheat Death at 1 HP), while GROSS healing pushed over-repaired ships above their real HP until
+ * `clampPct` pinned them at 100%.
  *
  * Debuff persistence: `activeDebuffs` is infliction-only — there is no `debuff-expired`
  * event in the stream, so once a debuff is added it accumulates and persists for the rest
@@ -132,26 +138,29 @@ export interface ShipRoundState {
      * gaining it, and the loss is already on its `damageTaken`/`incomingDamage` axis.
      *
      * PLUS `Repair Over Time` ticks, via `hot-ticked` (final-review FIX 1). A tick is not a
-     * `heal-performed` cast — R2 — but it does restore HP, and this figure feeds the DERIVED
-     * `hpPct` below, so excluding it made every HoT holder's bar under-report. Unlike the
-     * `heal-performed` half, a `hot-ticked` amount is already the HP that LANDED (post-overheal).
+     * `heal-performed` cast — R2 — but it does restore HP. Unlike the `heal-performed` half, a
+     * `hot-ticked` amount is already the HP that LANDED (post-overheal).
      *
-     * ⚠️ STILL INCOMPLETE, and the remainder is a known follow-up, not an oversight: every OTHER
-     * repair channel that emits no `heal-performed` is still missing here — reactive heals
-     * (`reactive-heal-performed`, which this assembler does not read) and standing-leech
-     * self-repairs (which emit nothing at all). Those are real HP the derived `hpPct` cannot see.
-     * `hot-ticked` closed the HoT channel because #369 made it the one that affects every holder
-     * on both sides; the general hole is filed separately as **#372**.
+     * ⚠️ STILL INCOMPLETE — this is **#375**, and it is a known follow-up rather than an oversight.
+     * Every other repair channel that emits no `heal-performed` is missing here: reactive heals
+     * (`reactive-heal-performed`, which this assembler does not read) and leech self-repairs (which
+     * emit nothing at all). So a ship kept alive all fight by Magnolia's or Valerian's passive
+     * reports 0 healing received. `hot-ticked` closed the HoT channel only because #369 made it the
+     * one affecting every holder on both sides.
      *
-     * ⚠️ THE TWO HALVES ALSO USE DIFFERENT BASES, and #372 is where that is tracked too. The
-     * `heal-performed` half books `perTarget[].amount`, which is GROSS — `playerTurn` sets it to
-     * the pre-clamp `raw` and carries the clipped portion separately as `pt.overheal`, which this
-     * fold does NOT subtract. The `hot-ticked` half books the HP that LANDED. So the HoT half is
-     * the more correct of the two, and it is the GROSS basis that makes the derived `hpPct` below
-     * over-report: `healed` is cumulative across rounds, so every over-repaired cast pushes the
-     * derived bar further above the engine's real `currentHp` until `clampPct` pins it at 100%. Do
-     * NOT read a raised bar as evidence of missing channels — that is #372's other half, and the
-     * two errors point in OPPOSITE directions on the same number.
+     * It is NOT fixable by reading the engine's per-recipient healing axis, which is the obvious
+     * move and was tried: that axis is PLAYER-SIDE ONLY (measured empty for every actor on the
+     * enemy-side arm of `reversedRepairs.engine.test.ts`, even where an enemy medic really repaired
+     * an enemy victim for 10 000), so substituting it regressed the enemy side from correct to 0.
+     * That axis has to become team-symmetric first.
+     *
+     * ⚠️ THE TWO HALVES USE DIFFERENT BASES. The `heal-performed` half books `perTarget[].amount`,
+     * which is GROSS — `playerTurn` sets it to the pre-clamp `raw` and carries the clipped portion
+     * separately as `pt.overheal`, which this fold does NOT subtract. The `hot-ticked` half books
+     * the HP that LANDED. GROSS is the contract this axis is held to (`reversedRepairs.engine.test.ts`
+     * pins a full-HP ally repaired for 10k as reporting 10k received), so the `hot-ticked` half is
+     * the deviation. This no longer touches the bar: since #372 `hpPct` reads `hp-snapshot`, so a
+     * wasted repair can no longer push it above the ship's real HP.
      */
     healingReceived: number;
     /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */
@@ -173,7 +182,9 @@ export interface ShipRoundState {
     incomingShieldAbsorbed: number;
     /** Barrier drained by this round's incoming damage (perActorIncoming.barrierAbsorbed). */
     incomingBarrierAbsorbed: number;
-    /** End-of-round HP%, from maxHp minus cumulative HP loss (incoming HP damage, net of healing). */
+    /** End-of-round HP%, READ from the engine via `hp-snapshot` (#372) — `100 * currentHp / maxHp`.
+     *  Falls back to the old derivation (maxHp minus cumulative HP loss, net of healing received)
+     *  only for hand-built event streams that emit no snapshot. */
     hpPct: number;
     shieldPct: number;
     alive: boolean;
@@ -245,14 +256,14 @@ const clampPct = (value: number): number => Math.max(0, Math.min(100, value));
 export const ASSEMBLED_EVENT_TYPES = [
     'ability-performed',
     'heal-performed',
-    // A `Repair Over Time` tick's landed HP. Read for the SAME reason `heal-performed` is: this
-    // assembler derives `hpPct` rather than reading `currentHp`, and a HoT tick emits no
-    // `heal-performed` (R2 — it is not a "performed repair"). Without it every HoT holder's bar
-    // under-reports by every tick it ever received. See the `hot-ticked` doc in combat/events.ts.
+    // A `Repair Over Time` tick's landed HP. Added when `hpPct` was still derived, to stop every
+    // HoT holder's bar under-reporting by each tick. Since #372 the bar reads `hp-snapshot`, so this
+    // no longer feeds it — it still feeds `healingReceived`, which is the axis #375 tracks. A tick
+    // emits no `heal-performed` (R2 — it is not a "performed repair"), so nothing else reports it.
     'hot-ticked',
-    // #372: the engine's own end-of-round HP / shield / repaired-this-round read. AUTHORITATIVE
-    // for the actors it names — everything below prefers it over the derived accumulation, which
-    // survives only as a fallback for hand-built streams that emit no snapshot.
+    // #372: the engine's own end-of-round HP read. AUTHORITATIVE for the actors it names — the
+    // row's `hpPct` prefers it over the derived accumulation, which survives only as a fallback for
+    // hand-built streams that emit no snapshot. Carries no repair figure; see #375.
     'hp-snapshot',
     'ship-destroyed',
     'buff-applied',

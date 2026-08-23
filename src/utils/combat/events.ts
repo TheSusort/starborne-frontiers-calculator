@@ -640,8 +640,8 @@ export type CombatEvent =
               shieldPool: number;
           };
       }
-    /** LOG-ONLY: an end-of-round snapshot of one actor's REAL HP, shield pool and the repair it
-     *  received this round. Emitted once per actor at the round tail, in the same loop as
+    /** LOG-ONLY: an end-of-round snapshot of one actor's REAL HP and shield pool. Emitted once
+     *  per actor at the round tail, in the same loop as
      *  `status-snapshot` and under the same log-only contract: no `ReactiveStamp`, and no combat
      *  listener subscribes to it.
      *
@@ -651,8 +651,8 @@ export type CombatEvent =
      *  every other channel that restores HP was invisible to the Simulator's HP bar, its low-HP
      *  colour, its aria-label and its "Healing received" figure — reactive repairs, every leech
      *  site, and Cheat Death survival at 1 HP (which rendered as 0%). `hot-ticked` was added to
-     *  patch one instance of that hole; this event closes the class by reporting the engine's own
-     *  numbers instead of re-deriving them, which is why it carries `repairedThisRound` too.
+     *  patch one instance of that hole; this event closes it for the BAR by reporting the engine's
+     *  own `currentHp` instead of re-deriving it.
      *
      *  AUTHORITATIVE for the actors it names — the assembler PREFERS it over its accumulation, the
      *  same contract `status-snapshot` has. The derived path remains as a fallback purely for
