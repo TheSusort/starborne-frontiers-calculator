@@ -40,6 +40,7 @@ import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
 import {
+    ActiveAbilityStatus,
     ActiveBuff,
     AbilityStatusPayload,
     DEFAULT_ENEMY_TARGET,
@@ -2529,6 +2530,55 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
         names.add(s.active.buffName);
     }
     return [...names];
+}
+
+/** Enemy-APPLIED heal-channel modifiers carried by `victimId` in its OWN per-victim enemy store
+ *  (#367). Returns additive percentage points for the two channels an enemy debuff can move:
+ *  `incomingHealPct` (`Inc. Repair Down/Up` — repairs LANDING on this actor) and
+ *  `outgoingHealPct` (`Out. Repair Down` — repairs this actor PERFORMS).
+ *
+ *  PAYLOAD CHANNELS ONLY, deliberately — the two per-victim ability stores (timed, where all ten
+ *  corpus appliers land, and aura/accumulating). The SCHEDULED channel is excluded for two
+ *  reasons: (1) `upsertBuff` is hardcoded to the global `__enemy__` key, so the per-victim
+ *  scheduled store is empty in every run today; (2) reading the GLOBAL `__enemy__` bucket here —
+ *  as `victimEnemyBuffs` does for the DAMAGE channel — would be actively WRONG for this purpose:
+ *  for a PLAYER victim that bucket holds the debuffs the PLAYER side inflicted on ENEMIES, so a
+ *  player ship would have its own team's inflicted `Inc. Repair Down` applied to itself. Do not
+ *  "unify" this with `victimEnemyBuffs` without re-reading that function's jsdoc.
+ *
+ *  TIER SHADOWING IS INHERITED, NOT IMPLEMENTED. `applyTimedAbilityStatus` already family-keys
+ *  and tier-upserts (`deriveFamilyKey`), so an `Inc. Repair Down I` is already absent from the
+ *  store whenever an `Inc. Repair Down II` is live. The fold is therefore a plain additive sum,
+ *  which is the locked game rule (spec R1: same-family statuses overwrite by highest tier, then
+ *  survivors add).
+ *
+ *  Team-agnostic: the enemy store is keyed by targetId regardless of which side the victim is on,
+ *  so this reads a player-inflicted debuff on an enemy ship identically.
+ *
+ *  Carries the same NEUTRAL-ctx approximation as `victimEnemyBuffs`/`ownerDebuffNamesFor` on the
+ *  aura/accumulating branch. It does not bite here: every corpus status in these two channels
+ *  (`Inc. Repair Down I/II/III`, `Out. Repair Down II`) is TIMED, and the timed channel is gated
+ *  at application time, before this read. */
+export function victimOwnEnemyHealModifiers(
+    statusEngine: StatusEngine,
+    victimId: string
+): { incomingHealPct: number; outgoingHealPct: number } {
+    let incomingHealPct = 0;
+    let outgoingHealPct = 0;
+    const fold = (s: ActiveAbilityStatus): void => {
+        const { parsedEffects, stacks } = s.payload;
+        incomingHealPct += (parsedEffects.incomingHeal ?? 0) * stacks;
+        outgoingHealPct += (parsedEffects.outgoingHeal ?? 0) * stacks;
+    };
+    for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, victimId)) fold(s);
+    for (const s of statusEngine.activeAbilityStatuses(
+        'enemy',
+        () => NEUTRAL_NAMES_CTX,
+        undefined,
+        victimId
+    ))
+        fold(s);
+    return { incomingHealPct, outgoingHealPct };
 }
 
 // DEFAULT_ENEMY_TARGET is imported from statusEngine.ts — single source of truth.
