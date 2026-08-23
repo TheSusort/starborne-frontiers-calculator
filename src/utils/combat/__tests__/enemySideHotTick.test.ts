@@ -761,8 +761,9 @@ interface ReportedRun {
     /** The holder's reported HP percentage in round 1 — the number `BattleBoard`/`ShipRoundCard`
      *  render, straight out of the production assembler. */
     reportedHpPct: number;
-    /** The holder's reported cumulative HP loss basis for round 1, so the two runs of a pair can be
-     *  shown to have taken the SAME damage. */
+    /** The holder's reported HP damage for round 1 (`ShipRoundState.incomingDamage`, per-round —
+     *  which is also the cumulative figure here, since these fixtures run a single round). Compared
+     *  across a pair to show both runs took the SAME damage. */
     reportedDamageTaken: number;
     /** The engine's live HP for the holder — the ground truth `reportedHpPct` must agree with. */
     liveHp: number;
@@ -957,6 +958,197 @@ describe('#369 final review — a HoT tick reaches the REPORTED HP percentage on
             // ── 4. The RECEIVED axis the round card shows moves with it (same fold) ──────────
             const receivedTicked = ticked.hotTicks.reduce((s, e) => s + e.amount, 0);
             expect(receivedTicked).toBe(EXPECTED_TICK);
+        });
+    }
+});
+
+// ══ 9: the #367 × #369 COMPOSITION — an enemy-applied Inc. Repair Down reduces a HoT tick ═════
+//
+// This path is reachable ONLY because of this branch, which is why nothing covered it. Before #369
+// an enemy holder never ticked at all, so there was no enemy-side tick for a debuff to reduce;
+// before #367 the enemy-applied term never reached ANY actor's totals, so no tick on either side
+// could be reduced by one. `playerTurn.ts`'s `holderIncomingFactor =
+// incomingHealFactor(dmgStats.totals.incomingHealBuff)` is the single line where the two meet, and
+// neither issue's test file mentions the other's mechanic.
+//
+// THE CLAIM: `Inc. Repair Down II` (-50% incoming repair) standing on a HoT holder halves that
+// holder's tick — on EITHER side of the board. The debuff is applied by the OPPOSING side, i.e. it
+// really is enemy-applied relative to the holder, which is the whole point of #367: it lands in the
+// per-victim ENEMY store, not in anything the holder's own self-side fold would have seen.
+//
+// FIXTURE: a DEBUFFER on the side opposing the holder, speed 950 so its status is standing before
+// the holder's turn (a slower applier is section 7 of `enemyAppliedIncomingRepair.test.ts`'s
+// freshness case, a different claim). `application: 'apply'` so the hacking-vs-security landing roll
+// cannot explain any result. The holder's HoT is SELF-applied, so no applier turn ctx is needed and
+// the tick's magnitude is `holderMaxHp × hotPct%` before the factor.
+//
+// DIFFERENTIAL, per this branch's convention: the identical fixture runs with the payload and with
+// an inert marker carrying no effects at all, and the assertion is the RATIO. A nominal 5,000 would
+// pass just as happily on a fixture that ticked for 5,000 for some unrelated reason. Existence is
+// asserted FIRST on the live store, so a debuff that never landed shows up as an empty store rather
+// than as a silently green ratio.
+
+/** The inert control name: lands through the identical cast path carrying NO effects, so the only
+ *  difference between the two runs is the `incomingHeal` payload. */
+const INERT_MARKER = 'Inert Marker';
+const DEBUFFER_ID = 'debuffer';
+/** `Inc. Repair Down II` — -50 percentage points of incoming repair (integers, not fractions). */
+const INC_REPAIR_DOWN_II = -50;
+
+/** An on-cast enemy debuff landing in the target's per-victim ENEMY store, the channel #367 reads.
+ *  `application: 'apply'` always lands. */
+const castEnemyStatus = (buffName: string, incomingHeal?: number): Ability => ({
+    id: `cast-${buffName}`,
+    type: 'debuff',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'debuff',
+        buffName,
+        parsedEffects: incomingHeal === undefined ? {} : { incomingHeal },
+        stacks: 1,
+        isStackable: false,
+        duration: 5,
+        application: 'apply',
+    },
+});
+
+interface ComposedRun {
+    /** The holder's HP gain over its seeded start — one tick, post-factor. */
+    tick: number;
+    /** The buff names standing in the holder's own per-victim ENEMY store at run end: the exact
+     *  store `victimOwnEnemyHealModifiers` folds from, so this is a direct existence check on the
+     *  thing under test rather than a proxy for it. */
+    holderEnemyDebuffNames: string[];
+}
+
+function runComposedFixture(args: {
+    holderSide: 'player' | 'enemy';
+    /** `undefined` → the inert-marker control run. */
+    incomingHeal?: number;
+}): ComposedRun {
+    const bus = createEventBus();
+    let holder: CombatActor | undefined;
+    const seed = (actors: CombatActor[]): void => {
+        holder = actors.find((a) => a.id === HOLDER_ID);
+        if (holder) holder.currentHp = START;
+    };
+    let statusEngine: StatusEngine | undefined;
+
+    const debuffAbility =
+        args.incomingHeal === undefined
+            ? castEnemyStatus(INERT_MARKER)
+            : castEnemyStatus('Inc. Repair Down II', args.incomingHeal);
+
+    const holderShape: RoleShape = {
+        id: HOLDER_ID,
+        position: 'M4' as Position,
+        speed: 500,
+        hp: HOLDER_MAX_HP,
+        slots: [activeSlot([selfHotBuff(HOT_PCT)])],
+    };
+
+    const common = {
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        defensePenetration: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        healTargetId: FOCUS_ID,
+        mode: 'healing' as const,
+        perRecipientHealApply: true,
+        // High hacking on every actor; the debuff also carries `application: 'apply'`, so landing is
+        // certain twice over and cannot be what differs between the two runs.
+        hacking: 100_000,
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        __testTapActors: seed,
+        __testTapStatusEngine: (e: StatusEngine) => {
+            statusEngine = e;
+        },
+        bus,
+        chargeCount: 0,
+        target: parseTarget('front'),
+        pattern: parsePattern('Pattern-Base'),
+    };
+
+    const input: CombatEngineInput =
+        args.holderSide === 'enemy'
+            ? {
+                  // The player FOCUS is the DEBUFFER (and the anchor — it holds no HoT and is never
+                  // repaired). The enemy side is the holder alone, so `front` can only bind to it.
+                  ...common,
+                  hp: INERT_HP,
+                  speed: 950,
+                  position: 'M1' as const,
+                  shipSkills: { slots: [activeSlot([debuffAbility])] },
+                  teamActors: [],
+                  enemyAttackers: [enemyShip(holderShape)],
+              }
+            : {
+                  // Off-anchor PLAYER holder at M4 (the front column) with the inert focus/anchor at
+                  // M1, and the debuffer as the lone enemy — so `front` binds to the holder, not to
+                  // the anchor. The positive arm's own pass is the proof: the focus never holds a
+                  // HoT, so a debuff landing on it instead would leave both runs at a full tick.
+                  ...common,
+                  hp: INERT_HP,
+                  speed: 1,
+                  position: 'M1' as const,
+                  shipSkills: { slots: [activeSlot([])] },
+                  teamActors: [walkedAlly(holderShape)],
+                  enemyAttackers: [
+                      enemyShip({
+                          id: DEBUFFER_ID,
+                          position: 'M1',
+                          speed: 950,
+                          hp: INERT_HP,
+                          slots: [activeSlot([debuffAbility])],
+                      }),
+                  ],
+              };
+
+    runCombat(input);
+    return {
+        tick: holder!.currentHp - START,
+        holderEnemyDebuffNames: statusEngine!
+            .timedAbilityStatuses('enemy', undefined, HOLDER_ID)
+            .map((s) => s.payload.buffName),
+    };
+}
+
+describe('#367 × #369 — an enemy-applied Inc. Repair Down halves a HoT tick, on both sides', () => {
+    for (const holderSide of ['player', 'enemy'] as const) {
+        it(`${holderSide}-side holder: the tick lands at exactly half`, () => {
+            const debuffed = runComposedFixture({
+                holderSide,
+                incomingHeal: INC_REPAIR_DOWN_II,
+            });
+            const control = runComposedFixture({ holderSide });
+
+            // EXISTENCE FIRST, on the live store the fold reads: the debuff really is standing on
+            // the HOLDER when it ticks, and the control's store carries only the inert marker. A
+            // debuff that never landed would show up here rather than as a green ratio below.
+            expect(debuffed.holderEnemyDebuffNames).toContain('Inc. Repair Down II');
+            expect(control.holderEnemyDebuffNames).toEqual([INERT_MARKER]);
+
+            // NON-VACUITY: the control really ticks for the full amount, so a halved figure below
+            // is a reduction and not a missing tick.
+            expect(control.tick).toBe(EXPECTED_TICK);
+
+            // THE COMPOSITION: -50 percentage points of incoming repair, applied by the opposing
+            // side, halve the tick. Differential AND nominal — the ratio is the claim, and the
+            // absolute pins which half.
+            expect(debuffed.tick).toBeCloseTo(control.tick * 0.5, 9);
+            expect(debuffed.tick).toBe(EXPECTED_TICK / 2);
         });
     }
 });

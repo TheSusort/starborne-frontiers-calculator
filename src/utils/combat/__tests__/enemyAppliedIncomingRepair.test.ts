@@ -30,6 +30,11 @@
  *   - the OUTGOING channel (`Out. Repair Down II` on the HEALER) — section 6;
  *   - and, once a published ctx is involved at all, whether it is FRESH — section 7.
  *
+ * Sections 8 and 9 are a different kind of test: TRIPWIRES for the §3.4 zero-floor, at the CAST
+ * consumption sites and at the REACTIVE one respectively. Both reach a combination the corpus
+ * cannot (a synthetic second reducer) and both state their own departure from the differential
+ * convention below, because a claim whose value is 0 has no ratio to take.
+ *
  * ⚠️ THE DOUBLE-COUNT TRAP, and why section 3/4's two tests differ by ONE number. The victim's
  * published `turnCtx` already contains the enemy-applied term, so a cross-actor reader that simply
  * ADDED it again would make -50% read as -100% and zero the repair outright. What the reader does
@@ -342,6 +347,12 @@ interface FixtureRun {
      *  REPORTED numbers `incomingHealFactor` protects: `applyHealToTarget` already floors HP on
      *  both its paths, so a bug here would be invisible on `healedAmount` and visible ONLY here. */
     healPerfs: Extract<CombatEvent, { type: 'heal-performed' }>[];
+    /** The engine's healing report, when the run produced one. Section 9's floor test is the only
+     *  reader: the reactive executor's `directHeal` credit is booked from the pre-apply RAW and is
+     *  UNGATED, which makes it the one place an unclamped negative factor is observable — the
+     *  `reactive-heal-performed` emit is gated on `healSum > 0` and simply does not fire in either
+     *  state, and HP is floored by `applyHealToTarget` on both its paths. */
+    healing: ReturnType<typeof runCombat>['healing'];
 }
 
 /**
@@ -384,6 +395,26 @@ function runFixture(opts: FixtureOpts): FixtureRun {
     const victimPosition: Position = onMedic ? 'M1' : 'M4';
     const medicPosition: Position = onMedic ? 'M4' : 'M1';
 
+    // ONE passive slot, holding BOTH passive-sourced options — a real ship has exactly one, and
+    // the engine's slot consumers are SPLIT on how they read it:
+    //   - most iterate every slot (`for (const slot of …slots)`): combat-start status seeding
+    //     (`engine.ts`'s `seedPassiveTimedStatuses`) and reactive registration, which is what
+    //     `victimSelfBuff` and `victimReactiveAbilities` respectively go through;
+    //   - two take only the FIRST match (`slots.find((s) => s.slot === 'passive')`):
+    //     `playerTurn.ts`'s `passiveSkill` — the self-modifier fold, heal-amplification and the
+    //     modifier/gating ability lists — and `engine.ts`'s all-allies modifier auras.
+    // So this is HARDENING, not a live-bug fix, and the honest scope matters: MEASURED, by running
+    // section 9 (the only test that sets both) against the previous two-spread version — both arms
+    // pass identically, because neither of today's two options is read through a `find`. What the
+    // merge removes is the trap for the NEXT passive-sourced option: a `modifier`- or
+    // `heal-amplification`-typed ability added as a third spread would land in a second
+    // `slot: 'passive'` entry and be silently dropped, with the fixture reporting a clean green.
+    const victimPassiveAbilities: Ability[] = [
+        ...(opts.victimReactiveAbilities ?? []),
+        ...(opts.victimSelfBuff
+            ? [selfIncomingBuff(opts.victimSelfBuff.name, opts.victimSelfBuff.incomingHeal)]
+            : []),
+    ];
     const victimShape: RoleShape = {
         id: VICTIM_ID,
         position: victimPosition,
@@ -391,17 +422,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         hp: VICTIM_MAX_HP,
         slots: [
             ...(opts.victimAbilities ? [activeSlot(opts.victimAbilities)] : []),
-            ...(opts.victimReactiveAbilities ? [passiveSlot(opts.victimReactiveAbilities)] : []),
-            ...(opts.victimSelfBuff
-                ? [
-                      passiveSlot([
-                          selfIncomingBuff(
-                              opts.victimSelfBuff.name,
-                              opts.victimSelfBuff.incomingHeal
-                          ),
-                      ]),
-                  ]
-                : []),
+            ...(victimPassiveAbilities.length > 0 ? [passiveSlot(victimPassiveAbilities)] : []),
         ],
     };
 
@@ -496,10 +517,11 @@ function runFixture(opts: FixtureOpts): FixtureRun {
                   ],
               };
 
-    runCombat(input);
+    const result = runCombat(input);
 
     const medicId = opts.victimSide === 'player' ? FOCUS_ID : MEDIC_ID;
     return {
+        healing: result.healing,
         healedAmount: victim!.currentHp - START_HP,
         medicDebuffNames: statusEngine!
             .timedAbilityStatuses('enemy', undefined, medicId)
@@ -957,6 +979,89 @@ describe('#367 §3.4 — the incoming-repair factor is floored at zero', () => {
                 .flatMap((p) => p.perTarget ?? [])
                 .find((t) => t.targetId === VICTIM_ID);
             expect(victimEntry?.amount).toBe(0);
+        });
+    }
+});
+
+// ══ 9 — THE REACTIVE SITE IS FLOORED TOO (#367 final review) ════════════════════════════════
+// Section 8 fences the floor at the CAST sites. It could not fence the fourth consumption site:
+// `triggers.ts`'s reactive-heal executor computed `(1 + incomingPctFor(rid) / 100)` by hand, and
+// the helper's own doc scoped itself to "this file's three sites" — an INCOMPLETE tripwire rather
+// than a false one. #367 is what made the omission matter: routing `incomingPctFor` through
+// `liveHealChannelPct` (section 7) means this site can see an ENEMY-APPLIED reduction for the first
+// time, so the branch widened what can reach an unclamped factor while clamping elsewhere.
+//
+// SAME SYNTHETIC COMBINATION as section 8 (-50 self + -75 enemy = -125%), and the same disclaimer:
+// unreachable in the corpus today under the tier rule, so this is the guard for whoever adds the
+// next reducer. Reaching it needs BOTH a reactive ability and a self-side reducer on the victim,
+// which makes this the first test in the file to set both passive-sourced options at once — see
+// `victimPassiveAbilities` in `runFixture` for why they now share ONE slot, and for the measurement
+// showing this section behaves identically either way (both options go through slot consumers that
+// iterate every slot; the merge guards the next option, which may not).
+//
+// WHAT IS OBSERVABLE HERE, and why it is not the channel section 8 used:
+//   - HP is floored either way (`applyHealToTarget` floors both its paths), so `healedAmount`
+//     cannot distinguish a floored repair from an unclamped negative one.
+//   - `reactive-heal-performed` is gated on `healSum > 0` and fires in NEITHER state (0 and
+//     negative both fail the gate), so the event cannot distinguish them either. (This is the same
+//     masking section 8 had to route around with an `'all-allies'` cast; the reactive executor has
+//     no such multi-recipient escape here, because the reaction is a SELF-repair.)
+//   - the executor's `directHeal` credit IS booked from the pre-apply `raw`, per recipient, with no
+//     gate at all — so an unclamped factor lands as a NEGATIVE `directHeal` on the reacting owner's
+//     row in the healing report. That is the one reported number that moves, and it is the
+//     assertion below. Measured: with the floor removed the row reads -2,500 on BOTH side arms.
+//
+// TEAM SYMMETRY: identical assertions on both arms. The reactive executor credits its owner's row
+// regardless of side (it is not on the `healEventOnly` cast path), so the enemy arm is observable
+// too — verified by its own control run, which shows the reaction really fires and is credited in
+// full there. Each arm carries that control so a floored 0 can never be confused with a reaction
+// that never happened: the file's differential convention, adapted to a claim whose value is 0
+// (there is no RATIO to take against zero — the control supplies the non-vacuity instead).
+
+describe('#367 final review — the reactive-heal site floors the incoming factor at zero', () => {
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side victim: a fold below -100% credits 0 repair, never a negative one`, () => {
+            const shared = {
+                victimSide,
+                victimReactiveAbilities: [reactiveSelfRepair(REPAIR_PCT)],
+                victimSelfBuff: { name: 'FixtureRepairDown', incomingHeal: -50 },
+                applierSpeed: 400,
+            };
+            const run = runFixture({
+                ...shared,
+                enemyStatuses: [{ name: 'Inc. Repair Down III', incomingHeal: -75 }],
+            });
+            const baseline = control(shared);
+
+            // EXISTENCE FIRST: both reducers really landed, in the two separate stores the two
+            // channels read — so the fold really did reach -125% and this is not a -75%-only run
+            // dressed up as one. (Both land either way; see `victimPassiveAbilities` for why the
+            // slots were merged regardless.)
+            expect(run.victimDebuffNames).toContain('Inc. Repair Down III');
+            expect(run.victimSelfBuffNames).toContain('FixtureRepairDown');
+            // The control's enemy store carries ONLY the inert marker, so its own -50% self-side
+            // reducer is the only thing reducing it.
+            expect(baseline.victimDebuffNames).toEqual([CONTROL]);
+
+            // NON-VACUITY: the reaction really fires on this side and is credited in full — the
+            // control's gross is the RAW halved by its self-side -50% and nothing else. A fixture
+            // whose reaction never ran would report 0 here and make every assertion below hollow.
+            const baselineRow = baseline.healing!.rounds[0].perActor.get(VICTIM_ID);
+            expect(baselineRow!.directHeal).toBeCloseTo(RAW * 0.5, 5);
+            expect(baseline.healedAmount).toBeCloseTo(RAW * 0.5, 5);
+
+            // HP was already safe pre-fix (`applyHealToTarget` floors both of its paths) — a
+            // baseline, not the evidence this test exists to add.
+            expect(run.healedAmount).toBe(0);
+
+            // THE EVIDENCE: the reacting owner's reported gross repair floors to EXACTLY 0.
+            // Unclamped it is -2,500 (RAW × (1 - 1.25)) — a negative repair on a healing report.
+            const row = run.healing!.rounds[0].perActor.get(VICTIM_ID);
+            expect(row!.directHeal).toBe(0);
+            // …and nothing else on that row went negative either: the consumption split is built
+            // from the same `raw`, so an unclamped factor corrupts all three together.
+            expect(row!.effectiveHeal).toBeGreaterThanOrEqual(0);
+            expect(row!.overheal).toBeGreaterThanOrEqual(0);
         });
     }
 });
