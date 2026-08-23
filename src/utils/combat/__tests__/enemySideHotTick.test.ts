@@ -39,18 +39,24 @@
  *     fixture, and it is two-armed (1 round: skipped; 2 rounds: ticks once) so "no HP moved"
  *     cannot pass vacuously.
  *
- * Sections 6 and 7 need shapes `runFixture` cannot express and build their own inputs inline:
+ * Sections 6, 7 and 8 need shapes `runFixture` cannot express and build their own inputs inline:
  * section 6 puts a SELF-applied HoT on a holder on EACH side at different percentages (cross-side
- * source scoping), and section 7 adds an OBSERVER on the side opposing the holder, carrying an
- * ability gated on `'target-repaired-this-round'`. Both reuse this file's roster builders and its
- * `activeSlot` helper; neither uses the MEDIC role, because a self-applied HoT needs no applier ctx.
+ * source scoping), section 7 adds an OBSERVER on the side opposing the holder, carrying an
+ * ability gated on `'target-repaired-this-round'`, and section 8 (the final-review REPORTING fix)
+ * runs the holder's tick all the way through the production assembler. All three reuse this file's
+ * roster builders and its `activeSlot` helper; none uses the MEDIC role, because a self-applied HoT
+ * needs no applier ctx.
  *
- * NO RNG SEEDING, and nothing in this file needs any: every actor has `crit: 0` and `attack: 0`,
- * so no rate gate has a live stream and no damage confounds the holder's HP.
+ * NO RNG SEEDING, and nothing in this file needs any: every actor has `crit: 0`, so no rate gate
+ * has a live stream. Sections 1–7 also have `attack: 0` everywhere, so no damage confounds the
+ * holder's HP; section 8 deliberately adds ONE attacker (its BRUISER, still `crit: 0`) because the
+ * assembler's DERIVED HP percentage needs a real deficit to be measurable at all — see its own
+ * header for why, and note that it compares two runs which take identical damage.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
+import { assembleBattleResult, LOG_EVENT_TYPES } from '../../calculators/battleSimulator';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { CombatActor } from '../state';
@@ -117,6 +123,10 @@ interface RoleShape {
     speed: number;
     hp: number;
     slots?: ShipSkills['slots'];
+    /** Default 0 — every role in sections 1–7 is inert. Section 8's BRUISER is the only actor in
+     *  this file that attacks; both builders honour it so the field cannot be set on the wrong
+     *  side and silently ignored. */
+    attack?: number;
 }
 
 const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
@@ -132,7 +142,7 @@ const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
     walk: {
         shipSkills: { slots: args.slots ?? [] },
         stats: {
-            attack: 0,
+            attack: args.attack ?? 0,
             crit: 0,
             critDamage: 0,
             defensePenetration: 0,
@@ -153,7 +163,7 @@ const enemyShip = (args: RoleShape): EnemyAttackerInput =>
     ({
         id: args.id,
         stats: {
-            attack: 0,
+            attack: args.attack ?? 0,
             crit: 0,
             critDamage: 0,
             defence: 0,
@@ -682,6 +692,271 @@ describe("#369 — a HoT tick counts as being repaired this round ('target-repai
             // …and the gate really is the thing being measured: the identical fixture with no HoT
             // leaves it shut. Without this arm an always-firing buff would look like a pass.
             expect(control.observerSelfBuffNames).not.toContain(WITNESS);
+        });
+    }
+});
+
+// ══ 8: the tick reaches the REPORTED HP percentage, not just `currentHp` ══════════════════════
+//
+// WHAT WAS BROKEN (final-review FIX 1). `assembleBattleResult` — the assembler behind the
+// Simulator's board and round cards — never reads `currentHp`. It DERIVES each ship's `hpPct` as
+// `maxHp − hpLost + healed`, and `healed` was accumulated exclusively from
+// `heal-performed.perTarget`. This block emits no `heal-performed` (R2, asserted in sections 1–4)
+// and `RoundData` carries no healing buckets, so a HoT tick moved the engine's HP and moved
+// NOTHING the UI shows: the bar width, its low-HP colour (`boardOverlays.ts` → `BattleBoard.tsx`),
+// its `N% HP` aria-label and the round card's HP figure all stayed at the damaged value.
+//
+// #369 is what made that general. While the block was wrapped in `if (!healEventOnly)` and
+// `tickHot` returned early off-anchor, only the player-side ANCHOR holder gained HP from a tick —
+// one ship diverged. With every holder on both sides ticking, every holder diverged.
+//
+// WHAT THIS FIXTURE MEASURES. The REPORTED number, through the production assembler, subscribed
+// from the production `LOG_EVENT_TYPES` list — so a `hot-ticked` missing from that list (the
+// defect class `combatLogVisibility.test.ts` was written for: a handler the bus never feeds) fails
+// here rather than passing quietly. Asserting `holder.currentHp` instead would be the mistake the
+// fix is about: the engine's HP was never the broken half.
+//
+// WHY THE HOLDER MUST TAKE A HIT. The assembler starts every ship at its roster `maxHp`; it knows
+// nothing about `__testTapActors` seeding. A holder at full HP therefore reports 100% before AND
+// after (the tick is pure overheal, `consumed` is 0, and `clampPct` hides the rest), so the fixture
+// would be blind. A BRUISER on the opposing side opens a real deficit first — hence the one
+// actor in this file with `attack > 0`. Its damage does not need to be predicted: every assertion
+// below is either differential between two otherwise-identical runs or a comparison of the
+// reported percentage against the engine's own live HP.
+//
+// DETERMINISM: the bruiser has `crit: 0` like everything else here, so it draws from no rate
+// stream and its damage is the same in both arms of each pair. Verified as such — the control and
+// HoT runs report identical `hpLost` for the holder (asserted below), which is what makes the
+// difference between them attributable to the tick alone.
+//
+// `mode: 'battle'`, not this file's usual `mode: 'healing'`: 'battle' is the run kind the Simulator
+// page itself uses (`simulateBattle`), and it anchors the heal target to the focus, so the holder
+// is off-anchor here without a `healTargetId` of its own. The HoT block is mode-independent —
+// sections 1–7 exercise it under 'healing' and it behaves identically here.
+//
+// MEASURED AS AN INSTRUMENT, not assumed: with the assembler's `hot-ticked` fold disabled, the HoT
+// arm reports 70% on both sides while the engine holds 80,000/100,000 — the exact 10-point
+// under-report FIX 1 removes. Every assertion below fails in that state.
+
+/** The one attacking actor in this file. Speed 900 → hits the holder (speed 500) BEFORE it ticks,
+ *  so the tick has a deficit to land in. Attack 30,000 against defence 0 opens a deficit well
+ *  clear of one 10,000 tick, so nothing here overheals or clamps. */
+const BRUISER_ID = 'bruiser';
+const BRUISER_ATTACK = 30_000;
+
+/** A plain 100%-of-attack hit on the front enemy. Needed EXPLICITLY: an actor whose active slot is
+ *  present but empty (`activeSlot([])`, as every inert role in this file uses) performs no attack
+ *  at all — the engine only synthesizes a basic hit for an actor with NO shipSkills. Measured, not
+ *  assumed: without this ability the bruiser dealt 0 and the fixture reported a clamped 100%. */
+const basicHit = (): Ability => ({
+    id: 'ab-basic-hit',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100 },
+});
+
+interface ReportedRun {
+    /** The holder's reported HP percentage in round 1 — the number `BattleBoard`/`ShipRoundCard`
+     *  render, straight out of the production assembler. */
+    reportedHpPct: number;
+    /** The holder's reported cumulative HP loss basis for round 1, so the two runs of a pair can be
+     *  shown to have taken the SAME damage. */
+    reportedDamageTaken: number;
+    /** The engine's live HP for the holder — the ground truth `reportedHpPct` must agree with. */
+    liveHp: number;
+    /** Every `hot-ticked` the run emitted, collected through the PRODUCTION subscription list. */
+    hotTicks: Extract<CombatEvent, { type: 'hot-ticked' }>[];
+}
+
+function runReportedFixture(args: {
+    holderSide: 'player' | 'enemy';
+    /** `false` gives the holder an empty active slot instead of the HoT — the control arm. */
+    hot: boolean;
+}): ReportedRun {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    // EXACTLY the production surface `simulateBattle` subscribes. Not a hand-picked list: that is
+    // what makes "the assembler can see the tick" a claim about production wiring.
+    for (const t of LOG_EVENT_TYPES) bus.on(t, (e) => events.push(e as CombatEvent));
+
+    let holder: CombatActor | undefined;
+    const seed = (actors: CombatActor[]): void => {
+        holder = actors.find((a) => a.id === HOLDER_ID);
+    };
+
+    const holderShape: RoleShape = {
+        id: HOLDER_ID,
+        position: 'M4' as Position,
+        speed: 500,
+        hp: HOLDER_MAX_HP,
+        slots: args.hot ? [activeSlot([selfHotBuff(HOT_PCT)])] : [activeSlot([])],
+    };
+
+    const common = {
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        defensePenetration: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        mode: 'battle' as const,
+        perRecipientHealApply: true,
+        hacking: 100_000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        __testTapActors: seed,
+        bus,
+        chargeCount: 0,
+        target: parseTarget('front'),
+        pattern: parsePattern('Pattern-Base'),
+    };
+
+    const input: CombatEngineInput =
+        args.holderSide === 'enemy'
+            ? {
+                  // The player FOCUS is the bruiser (and the anchor — it holds no HoT and is never
+                  // repaired). The enemy side is the holder alone, so `front` can only bind to it.
+                  ...common,
+                  attack: BRUISER_ATTACK,
+                  hp: INERT_HP,
+                  speed: 900,
+                  position: 'M4' as const,
+                  shipSkills: { slots: [activeSlot([basicHit()])] },
+                  teamActors: [],
+                  enemyAttackers: [enemyShip(holderShape)],
+              }
+            : {
+                  // Off-anchor PLAYER holder: the inert focus is the anchor at M1, the holder is a
+                  // walked team actor at M4 (the front column, so the enemy bruiser binds to it).
+                  ...common,
+                  attack: 0,
+                  hp: INERT_HP,
+                  speed: 1,
+                  position: 'M1' as const,
+                  shipSkills: { slots: [activeSlot([])] },
+                  teamActors: [walkedAlly(holderShape)],
+                  enemyAttackers: [
+                      enemyShip({
+                          id: BRUISER_ID,
+                          position: 'M1',
+                          speed: 900,
+                          hp: INERT_HP,
+                          slots: [activeSlot([basicHit()])],
+                          attack: BRUISER_ATTACK,
+                      }),
+                  ],
+              };
+
+    const engineRounds = runCombat(input).rounds;
+
+    // The same RoundData → assembler mapping `simulateBattle` performs (battleSimulator.ts).
+    const byRound = <T>(pick: (rd: (typeof engineRounds)[number]) => T | undefined) => {
+        const out: Record<number, T> = {};
+        for (const rd of engineRounds) out[rd.round] = pick(rd) ?? ({} as T);
+        return out;
+    };
+    const holderIsEnemy = args.holderSide === 'enemy';
+    const result = assembleBattleResult({
+        events,
+        perRoundPerTarget: byRound((rd) => rd.perTargetDamage),
+        perRoundPerShield: byRound((rd) => rd.perActorShield),
+        perRoundPerIncoming: byRound((rd) => rd.perActorIncoming),
+        perRoundPerDealt: byRound((rd) => rd.perTargetDealt),
+        roster: [
+            {
+                actorId: FOCUS_ID,
+                side: 'player',
+                name: 'Focus',
+                position: holderIsEnemy ? 'M4' : 'M1',
+                maxHp: INERT_HP,
+            },
+            {
+                actorId: HOLDER_ID,
+                side: holderIsEnemy ? 'enemy' : 'player',
+                name: 'Holder',
+                position: 'M4',
+                maxHp: HOLDER_MAX_HP,
+            },
+            ...(holderIsEnemy
+                ? []
+                : [
+                      {
+                          actorId: BRUISER_ID,
+                          side: 'enemy' as const,
+                          name: 'Bruiser',
+                          position: 'M1' as Position,
+                          maxHp: INERT_HP,
+                      },
+                  ]),
+        ],
+        numRounds: 1,
+    });
+
+    const reported = result.rounds[0].ships.find((s) => s.actorId === HOLDER_ID)!;
+    return {
+        reportedHpPct: reported.hpPct,
+        reportedDamageTaken: reported.incomingDamage,
+        liveHp: holder!.currentHp,
+        hotTicks: events.filter(
+            (e): e is Extract<CombatEvent, { type: 'hot-ticked' }> => e.type === 'hot-ticked'
+        ),
+    };
+}
+
+/** One tick as a percentage of the holder's max HP — 10 points, the size of the gap. */
+const TICK_PCT = (100 * EXPECTED_TICK) / HOLDER_MAX_HP;
+
+describe('#369 final review — a HoT tick reaches the REPORTED HP percentage on both sides', () => {
+    for (const holderSide of ['player', 'enemy'] as const) {
+        it(`${holderSide}-side holder: the reported hpPct includes the tick`, () => {
+            const ticked = runReportedFixture({ holderSide, hot: true });
+            const control = runReportedFixture({ holderSide, hot: false });
+
+            // ── PRECONDITIONS, so no assertion below can pass for the wrong reason ────────────
+            // (a) The tick really happened, and it is the ONLY difference between the two runs.
+            expect(ticked.liveHp - control.liveHp).toBe(EXPECTED_TICK);
+            // (b) A real deficit was opened, so nothing here is a clamped 100%. Without the
+            //     bruiser both runs would report 100 and the fixture would be blind.
+            expect(control.reportedHpPct).toBeLessThan(100);
+            expect(control.reportedDamageTaken).toBeGreaterThan(EXPECTED_TICK);
+            // (c) Both runs took the SAME damage, which is what makes (2) below attributable to
+            //     the tick rather than to a different hit landing.
+            expect(ticked.reportedDamageTaken).toBe(control.reportedDamageTaken);
+
+            // ── 1. THE REPORTING CHANNEL EXISTS and carries the LANDED HP ────────────────────
+            // Through the production `LOG_EVENT_TYPES` subscription: a `hot-ticked` absent from
+            // that list would leave this at length 0.
+            expect(ticked.hotTicks).toHaveLength(1);
+            expect(ticked.hotTicks[0]).toMatchObject({
+                holderId: HOLDER_ID,
+                amount: EXPECTED_TICK,
+                round: 1,
+            });
+            // The control emits none — the event tracks ticks, not turns.
+            expect(control.hotTicks).toHaveLength(0);
+
+            // ── 2. THE FIX: the reported percentage agrees with the engine's live HP ─────────
+            // This is the assertion that was red before FIX 1: the derived bar was short by the
+            // whole tick, i.e. it reported the CONTROL's percentage for a ship that had healed.
+            expect(ticked.reportedHpPct).toBeCloseTo((100 * ticked.liveHp) / HOLDER_MAX_HP, 9);
+            // …and the control's agreement too, so (2) is not passing because the derivation
+            // happens to be broken in a compensating direction.
+            expect(control.reportedHpPct).toBeCloseTo((100 * control.liveHp) / HOLDER_MAX_HP, 9);
+
+            // ── 3. DIFFERENTIAL: exactly one tick's worth of percentage points, no more ──────
+            expect(ticked.reportedHpPct - control.reportedHpPct).toBeCloseTo(TICK_PCT, 9);
+
+            // ── 4. The RECEIVED axis the round card shows moves with it (same fold) ──────────
+            const receivedTicked = ticked.hotTicks.reduce((s, e) => s + e.amount, 0);
+            expect(receivedTicked).toBe(EXPECTED_TICK);
         });
     }
 });

@@ -4172,8 +4172,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             return healing.applierMaxHp(applierId);
         };
         // Apply one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor) to the
-        // HOLDER, then — player side only — credit it to the applier's hotHeal bucket and route
-        // its consumption split to the applier's effectiveHeal/overheal.
+        // HOLDER, report the landed HP on `hot-ticked` (BOTH sides — that is the derived HP bar's
+        // only view of a tick), then — player side only — credit it to the applier's hotHeal bucket
+        // and route its consumption split to the applier's effectiveHeal/overheal.
         const tickHot = (applierId: string | undefined, hotPct: number, stacks: number): void => {
             if (hotPct <= 0 || stacks <= 0) return;
             const maxHp = hotApplierMaxHp(applierId);
@@ -4214,6 +4215,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // ever have answered wrongly: `allActorsById` is keyed by id with the enemy entries
             // built LAST, so a player/enemy id collision would have resolved to the enemy.
             const applied = healing.applyHealToTarget(raw, actor, creditId);
+            // REPORTING (final-review FIX 1). `assembleBattleResult` does not read `currentHp` — it
+            // derives each ship's `hpPct` from `maxHp − hpLost + healed`, and `healed` comes only
+            // from `heal-performed.perTarget`, which this block deliberately never emits (R2). So
+            // every tick applied above was HP the Simulator's bar could not see. `hot-ticked` is
+            // the reporting channel for it: assembler-only, NO subscriber, so R2 is untouched (see
+            // the event's doc in events.ts). Emitted ABOVE the `healEventOnly` return because the
+            // bar has to be right on BOTH sides — an enemy holder's HP moved just as much as a
+            // player one's — and above the reversal return because a reversed tick restored
+            // nothing. `applied.consumed`, not `raw`: overheal never moved the bar.
+            if (!applied.reversed && applied.consumed > 0) {
+                bus.emit({
+                    type: 'hot-ticked',
+                    holderId: actor.id,
+                    ...(applierId !== undefined ? { applierId } : {}),
+                    amount: applied.consumed,
+                    round: r,
+                });
+            }
             // `healEventOnly` gates CREDIT, never APPLICATION (E5 §4.1) — the same split the
             // enemy cast-heal arm below already uses. An enemy holder's tick moves its own HP and
             // contributes NOTHING to the player healing buckets, which is the actual invariant the
@@ -4241,6 +4260,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // R2 (unchanged by #369): this block emits NO `heal-performed`, on either side, and fires
         // NO on-repaired TRIGGER — a HoT tick is not a "performed repair", so nothing subscribed
         // to the repair event reacts to it.
+        //
+        // It DOES emit `hot-ticked` (final-review FIX 1, see the emit inside `tickHot`), which is
+        // not a counter-example to R2: nothing in the engine subscribes to that type, so it arms no
+        // trigger and can chain nothing. It exists only so `battleSimulator`'s DERIVED HP bar can
+        // see HP that this block really moved. Do not add a listener for it.
         //
         // R2 is NOT a claim about `repairedThisRound`, and the two must not be conflated: an
         // on-repaired trigger and the `'target-repaired-this-round'` ability CONDITION are
