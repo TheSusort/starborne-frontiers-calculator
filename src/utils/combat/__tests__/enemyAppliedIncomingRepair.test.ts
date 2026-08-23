@@ -705,6 +705,38 @@ describe('#367 — the OUTGOING channel: Out. Repair Down II on the healer', () 
             expect(withDebuff.healedAmount).toBeGreaterThan(0);
             expect(withDebuff.healedAmount).toBeCloseTo(baseline.healedAmount * 0.5, 5);
         });
+
+        // The direction check: `Out. Repair Down` belongs to the ship PERFORMING the repair, not
+        // to the one receiving it. This is the only assertion that can tell the implemented fold
+        // apart from one that mistakenly read `outgoingHealPct` off the RECIPIENT's own enemy
+        // store — an implementation like that would pass every other test in this file, including
+        // the one directly above (whose `victimDebuffNames` assertion only proves the fixture
+        // placed the debuff on the medic, not that the engine reads it from there).
+        it(`${victimSide}-side victim: placed on the RECIPIENT instead of the healer, does nothing`, () => {
+            const shared = {
+                victimSide,
+                medicAbilities: [allyRepair(REPAIR_PCT)],
+                debuffTarget: 'victim' as const,
+            };
+            const withDebuff = runFixture({
+                ...shared,
+                enemyStatuses: [{ name: 'Out. Repair Down II', outgoingHeal: -50 }],
+            });
+            const baseline = control(shared);
+
+            // EXISTENCE, and on the RIGHT actor: the debuff really landed on the VICTIM's store
+            // (this fixture deliberately misplaces it there) and the MEDIC's store carries
+            // nothing — the mirror image of the existence check in the test above.
+            expect(withDebuff.victimDebuffNames).toContain('Out. Repair Down II');
+            expect(withDebuff.medicDebuffNames).toEqual([]);
+
+            // LIVENESS: the un-debuffed repair really lands for RAW, so "no reduction" below is
+            // distinguishable from "no repair happened at all".
+            expect(baseline.healedAmount).toBe(RAW);
+            // Misplaced on the recipient, the debuff changes nothing: the repair still lands at
+            // the full baseline amount, not half of it.
+            expect(withDebuff.healedAmount).toBeCloseTo(baseline.healedAmount, 5);
+        });
     }
 });
 
